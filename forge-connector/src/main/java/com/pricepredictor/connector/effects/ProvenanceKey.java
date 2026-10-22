@@ -9,7 +9,6 @@ import forge.game.card.Card;
 import forge.game.card.CardState;
 import forge.card.GamePieceType;
 import forge.game.keyword.KeywordInterface;
-import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
@@ -53,16 +52,10 @@ import java.util.function.Predicate;
 public record ProvenanceKey(
         String scriptFile,
         int face,
-        String traitKind,
+        TraitKind traitKind,
         int indexWithinKind,
         Integer option
 ) {
-
-    public static final String KIND_KEYWORD = "keyword";
-    public static final String KIND_SPELL = "spell";
-    public static final String KIND_TRIGGER = "trigger";
-    public static final String KIND_STATIC = "static";
-    public static final String KIND_REPLACEMENT = "replacement";
 
     public ProvenanceKey {
         Objects.requireNonNull(scriptFile, "scriptFile");
@@ -73,7 +66,7 @@ public record ProvenanceKey(
     }
 
     /** A root key: the trait itself rather than one of its modes. */
-    public ProvenanceKey(String scriptFile, int face, String traitKind, int indexWithinKind) {
+    public ProvenanceKey(String scriptFile, int face, TraitKind traitKind, int indexWithinKind) {
         this(scriptFile, face, traitKind, indexWithinKind, null);
     }
 
@@ -89,7 +82,7 @@ public record ProvenanceKey(
     public String describe() {
         StringBuilder sb = new StringBuilder()
                 .append('(').append(scriptFile).append(") face").append(face)
-                .append('/').append(traitKind).append('[').append(indexWithinKind).append(']');
+                .append('/').append(traitKind.wireName()).append('[').append(indexWithinKind).append(']');
         if (option != null) {
             sb.append("/option").append(option);
         }
@@ -99,15 +92,6 @@ public record ProvenanceKey(
     /** The root this key names: itself, or the charm a mode key belongs to. */
     ProvenanceKey root() {
         return option == null ? this : new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind);
-    }
-
-    /** The trait kind a runtime object belongs to, or null if it is none of them. */
-    public static String kindOf(CardTraitBase trait) {
-        if (trait instanceof Trigger) return KIND_TRIGGER;
-        if (trait instanceof ReplacementEffect) return KIND_REPLACEMENT;
-        if (trait instanceof StaticAbility) return KIND_STATIC;
-        if (trait instanceof SpellAbility) return KIND_SPELL;
-        return null;
     }
 
     /**
@@ -121,13 +105,13 @@ public record ProvenanceKey(
      * {@code ability_unresolved}, which is collection metadata and never a
      * model input.
      */
-    public record Resolved(ProvenanceKey key, String reason) {
+    public record Resolved(ProvenanceKey key, UnresolvedReason reason) {
 
         /**
          * No line, for a trait that is none of the kinds a printed line can be,
          * or no trait at all.
          */
-        public static final Resolved UNKNOWN = new Resolved(null, UNRESOLVED_UNKNOWN_KIND);
+        public static final Resolved UNKNOWN = new Resolved(null, UnresolvedReason.UNKNOWN_KIND);
 
         public Resolved {
             if ((key == null) == (reason == null)) {
@@ -151,48 +135,6 @@ public record ProvenanceKey(
             return key == null ? List.of() : List.of(key);
         }
     }
-
-    /** The trait names no state, so there is nothing to index it against. */
-    public static final String UNRESOLVED_NO_CARD_STATE = "no_card_state";
-    /** The trait is none of the five kinds a printed line can be. */
-    public static final String UNRESOLVED_UNKNOWN_KIND = "unknown_kind";
-    /** The acting card is engine-built and has no script file in any tree. */
-    public static final String UNRESOLVED_ENGINE_EFFECT = "engine_effect";
-    /**
-     * The trait came from a keyword the card does not print, and the permanent
-     * that handed it out is no longer reachable.
-     *
-     * <p>Truthful rather than alarming: a keyword an anthem or a pump spell
-     * granted names no printed line <em>on the recipient</em>, so there is
-     * nothing to key even when nothing is broken. The static-granted case does
-     * key — through the grantor — so what is left here is the spell-granted
-     * one, where Forge keeps no back-reference to the ability that granted it.
-     */
-    public static final String UNRESOLVED_GRANTED_KEYWORD = "granted_keyword";
-
-    /**
-     * The trait was built at runtime from another card's script and lives on a
-     * card other than the one whose text it came from.
-     *
-     * <p>An aura's or an equipment's granted trigger, an {@code Animate}'s
-     * granted ability, and an effect card's own traits are all parsed from an
-     * SVar of the donor. Forge points them at the donor's {@code CardState},
-     * which is enough to name the donor's script file, but the SVar is not a
-     * member of any of that state's trait slices and nothing records which
-     * printed line named the SVar — so the card is known and the line is not.
-     * Distinct from {@link #UNRESOLVED_UNINDEXABLE} because it is a property of
-     * how Forge grants traits, not evidence of a resolver that regressed.
-     */
-    public static final String UNRESOLVED_GRANTED_TRAIT = "granted_trait";
-
-    /**
-     * A keyable kind, printed on the state it names, whose position in that
-     * state could not be established.
-     *
-     * <p>The alarm. Every shape that legitimately has no printed line now has a
-     * reason of its own, so this one means the resolver regressed.
-     */
-    public static final String UNRESOLVED_UNINDEXABLE = "unindexable";
 
     /** How many donor hops {@link #resolve} will take before giving up. */
     private static final int MAX_HOPS = 8;
@@ -297,7 +239,7 @@ public record ProvenanceKey(
         Set<CardTraitBase> seen =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         CardTraitBase t = trait;
-        String reason = UNRESOLVED_UNINDEXABLE;
+        UnresolvedReason reason = UnresolvedReason.UNINDEXABLE;
         for (int hop = 0; t != null && hop < MAX_HOPS && seen.add(t); hop++) {
             // 1. Unwrap to something that could be a slice member.
             if (t instanceof WrappedAbility wrapped) {
@@ -421,12 +363,8 @@ public record ProvenanceKey(
     /** The one printed line of {@code state} that names {@code svar}, or null. */
     private static CardTraitBase soleLineNaming(CardState state, String svar) {
         List<CardTraitBase> lines = new ArrayList<>();
-        for (String kind : List.of(
-                KIND_SPELL, KIND_TRIGGER, KIND_STATIC, KIND_REPLACEMENT)) {
-            Iterable<? extends CardTraitBase> slice = slice(state, kind);
-            if (slice != null) {
-                slice.forEach(lines::add);
-            }
+        for (TraitKind kind : TraitKind.values()) {
+            kind.slice(state).forEach(lines::add);
         }
         return sole(lines, line -> namesSVar(line, svar));
     }
@@ -514,25 +452,25 @@ public record ProvenanceKey(
      * own test for a trait living on a card other than the one whose script
      * text it came from.
      */
-    private static String reasonFor(CardTraitBase trait, CardState state, Card host) {
+    private static UnresolvedReason reasonFor(CardTraitBase trait, CardState state, Card host) {
         if (isScriptless(host)) {
-            return UNRESOLVED_ENGINE_EFFECT;
+            return UnresolvedReason.ENGINE_EFFECT;
         }
         if (state == null) {
-            return UNRESOLVED_NO_CARD_STATE;
+            return UnresolvedReason.NO_CARD_STATE;
         }
         if (trait.getKeyword() != null) {
             // keyFor refuses a keyword the state does not print, and the
             // grantor hop has already been tried, so this is the granted one.
-            return UNRESOLVED_GRANTED_KEYWORD;
+            return UnresolvedReason.GRANTED_KEYWORD;
         }
-        if (kindOf(trait) == null) {
-            return UNRESOLVED_UNKNOWN_KIND;
+        if (TraitKind.of(trait) == null) {
+            return UnresolvedReason.UNKNOWN_KIND;
         }
         if (trait.isCopiedTrait()) {
-            return UNRESOLVED_GRANTED_TRAIT;
+            return UnresolvedReason.GRANTED_TRAIT;
         }
-        return UNRESOLVED_UNINDEXABLE;
+        return UnresolvedReason.UNINDEXABLE;
     }
 
     /**
@@ -577,10 +515,10 @@ public record ProvenanceKey(
             return index < 0 ? null : new ProvenanceKey(
                     scriptFileOf(host),
                     faceIndex(host, state.getStateName()),
-                    KIND_KEYWORD,
+                    TraitKind.KEYWORD,
                     index);
         }
-        String kind = kindOf(trait);
+        TraitKind kind = TraitKind.of(trait);
         if (kind == null) return null;
         int index = indexWithin(state, trait, kind);
         if (index < 0) index = indexLike(state, trait, kind);
@@ -607,10 +545,9 @@ public record ProvenanceKey(
      * refuses: a record with no key is still trainable through its state and
      * payload, while a record with the wrong key silently trains the wrong line.
      */
-    private static int indexIfUnique(CardState state, CardTraitBase trait, String kind) {
-        Iterable<? extends CardTraitBase> slice = slice(state, kind);
-        return slice == null ? -1
-                : soleIndex(slice, candidate -> candidate.getClass() == trait.getClass());
+    private static int indexIfUnique(CardState state, CardTraitBase trait, TraitKind kind) {
+        return soleIndex(kind.slice(state),
+                candidate -> candidate.getClass() == trait.getClass());
     }
 
     /**
@@ -626,9 +563,8 @@ public record ProvenanceKey(
      * still trainable through its state and payload, while a record with the
      * wrong key silently trains the wrong line.
      */
-    private static int indexLike(CardState state, CardTraitBase trait, String kind) {
-        Iterable<? extends CardTraitBase> slice = slice(state, kind);
-        if (slice == null) return -1;
+    private static int indexLike(CardState state, CardTraitBase trait, TraitKind kind) {
+        Iterable<? extends CardTraitBase> slice = kind.slice(state);
         Map<String, String> want = trait.getOriginalMapParams();
         if (want == null || want.isEmpty()) return indexIfUnique(state, trait, kind);
         return soleIndex(slice, candidate -> candidate.getClass() == trait.getClass()
@@ -730,30 +666,10 @@ public record ProvenanceKey(
         }
     }
 
-    /**
-     * The state's trait list for one kind, in declaration order.
-     *
-     * <p>Printed traits occupy the head of every slice — a state builds each
-     * list from its own parsed traits and only then appends the keyword-derived
-     * and runtime-granted ones — which is why an index into a slice is stable
-     * across processes for a scripted line.
-     */
-    private static Iterable<? extends CardTraitBase> slice(CardState state, String kind) {
-        return switch (kind) {
-            case KIND_TRIGGER -> state.getTriggers();
-            case KIND_REPLACEMENT -> state.getReplacementEffects();
-            case KIND_STATIC -> state.getStaticAbilities();
-            case KIND_SPELL -> state.getSpellAbilities();
-            default -> null;
-        };
-    }
-
     /** Index of {@code trait} within its kind's slice of {@code state}'s trait list. */
-    private static int indexWithin(CardState state, CardTraitBase trait, String kind) {
-        Iterable<? extends CardTraitBase> slice = slice(state, kind);
-        if (slice == null) return -1;
+    private static int indexWithin(CardState state, CardTraitBase trait, TraitKind kind) {
         int index = 0;
-        for (CardTraitBase candidate : slice) {
+        for (CardTraitBase candidate : kind.slice(state)) {
             if (candidate == trait) return index;
             index++;
         }
@@ -836,7 +752,7 @@ public record ProvenanceKey(
     public String toJson() {
         return "{\"script_file\":" + Json.string(scriptFile)
                 + ",\"face\":" + face
-                + ",\"trait_kind\":" + Json.string(traitKind)
+                + ",\"trait_kind\":" + Json.string(traitKind.wireName())
                 + ",\"index_within_kind\":" + indexWithinKind
                 + optionJson() + "}";
     }
@@ -844,7 +760,7 @@ public record ProvenanceKey(
     /** The JSON object form used inside a sidecar, where the file is in the header. */
     public String toSidecarJson() {
         return "{\"face\":" + face
-                + ",\"trait_kind\":" + Json.string(traitKind)
+                + ",\"trait_kind\":" + Json.string(traitKind.wireName())
                 + ",\"index_within_kind\":" + indexWithinKind
                 + optionJson() + "}";
     }

@@ -11,7 +11,7 @@ import forge.game.phase.PhaseType;
  * the observed record it mirrors are written by different classes and have to
  * agree on that name, which is why it is spelled once, here.
  */
-enum DamageStep {
+public enum DamageStep {
     FIRST_STRIKE("first_strike"),
     REGULAR("regular");
 
@@ -22,7 +22,7 @@ enum DamageStep {
     }
 
     /** The {@code combat_substep} a record carries. */
-    String wireName() {
+    public String wireName() {
         return wireName;
     }
 

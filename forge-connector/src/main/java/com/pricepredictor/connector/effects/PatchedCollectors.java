@@ -278,7 +278,7 @@ public final class PatchedCollectors implements AutoCloseable {
                     args.length > 3 ? args[3] : null,
                     args.length > 4 ? args[4] : null);
             if (!allowDistinctRecord(
-                    "rewrite", record.payloadJson(), record.stateJson())) {
+                    RecordKind.REWRITE.wireName(), record.payloadJson(), record.stateJson())) {
                 return null;
             }
             emit(record);
@@ -343,7 +343,7 @@ public final class PatchedCollectors implements AutoCloseable {
         JVM_REWRITES.record(
                 RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
                 !ranKeys.isEmpty(), before, after);
-        return context.newRecord(EffectRecord.KIND_REWRITE)
+        return context.newRecord(RecordKind.REWRITE)
                 .actor(controllerOf(source))
                 .ability(ProvenanceKey.resolve(acting))
                 .state(snapshots.toJsonForTrait(source, referencedOf(source), incoming))
@@ -394,7 +394,7 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             EffectRecord record = triggerRecord(args[0], args[1], fired);
             if (!allowDistinctRecord(
-                    "trigger", record.payloadJson(), record.stateJson())
+                    RecordKind.TRIGGER.wireName(), record.payloadJson(), record.stateJson())
                     || !allowTriggerLine(record.abilityJson(), fired)) {
                 return null;
             }
@@ -545,7 +545,7 @@ public final class PatchedCollectors implements AutoCloseable {
         CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
         Card source = acting == null ? null : acting.getHostCard();
         EffectEvent event = RunParamNormalizer.describeParams(trait, runParams);
-        return context.newRecord(EffectRecord.KIND_TRIGGER)
+        return context.newRecord(RecordKind.TRIGGER)
                 .actor(controllerOf(source))
                 .ability(ProvenanceKey.resolve(acting))
                 .state(snapshots.toJsonForTrait(source, referencedOf(source), event))
@@ -691,11 +691,10 @@ public final class PatchedCollectors implements AutoCloseable {
         // playability record measured in the first corpus was this subkind:
         // the AI re-asks the same question about the same board, and the
         // answer repeats verbatim.
-        if (!allowDistinctRecord(EffectRecord.SUBKIND_DECISION, payload, state)) {
+        if (!allowDistinctRecord(PlayabilitySubkind.DECISION.wireName(), payload, state)) {
             return;
         }
-        emit(context.newRecord(EffectRecord.KIND_PLAYABILITY)
-                .subkind(EffectRecord.SUBKIND_DECISION)
+        emit(context.newPlayability(PlayabilitySubkind.DECISION)
                 .actor(playerIdOrActive(decider))
                 .state(state)
                 .payload(payload));
@@ -818,7 +817,7 @@ public final class PatchedCollectors implements AutoCloseable {
         }
         String payload = "{\"legal_attackers\":" + attackers
                 + ",\"forbidden\":" + forbidden + "}";
-        emitLegality(EffectRecord.SUBKIND_ATTACKERS, decider, payload);
+        emitLegality(PlayabilitySubkind.ATTACKERS, decider, payload);
     }
 
     /**
@@ -852,19 +851,18 @@ public final class PatchedCollectors implements AutoCloseable {
                 + ",\"legal_blockers\":" + blockers
                 + ",\"forbidden\":" + forbidden
                 + ",\"min_blockers\":" + minBlockers + "}";
-        emitLegality(EffectRecord.SUBKIND_BLOCKERS, decider, payload);
+        emitLegality(PlayabilitySubkind.BLOCKERS, decider, payload);
     }
 
-    private void emitLegality(String subkind, Player decider, String payload) {
+    private void emitLegality(PlayabilitySubkind subkind, Player decider, String payload) {
         String state = snapshots.toJson(null, List.of());
         // Keyed on the snapshot as well as the payload (FR-028): the same
         // answer on a board that moved is a second observation, which a
         // payload-only key would drop as a repeat of the first.
-        if (!allowDistinctRecord(subkind, payload, state)) {
+        if (!allowDistinctRecord(subkind.wireName(), payload, state)) {
             return;
         }
-        emit(context.newRecord(EffectRecord.KIND_PLAYABILITY)
-                .subkind(subkind)
+        emit(context.newPlayability(subkind)
                 .actor(playerIdOrActive(decider))
                 .whatIf(false)
                 .state(state)
@@ -1045,8 +1043,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // survived and were completed against the *regular* step's record.
             return;
         }
-        String substep = step.wireName();
-        discardStaleProbes(substep);
+        discardStaleProbes(step);
         // One keyword per game rather than whichever the battlefield order
         // reaches first. With eight probed keywords and a budget of two, the
         // first corpus probed lifelink and trample eight times each and
@@ -1054,11 +1051,11 @@ public final class PatchedCollectors implements AutoCloseable {
         // gate 2 is a per-keyword decision, so an unprobed keyword gets no
         // check whatever.
         String focus = probeFocus();
-        if (probeCombatants(focus, firstStrike, substep) == 0) {
+        if (probeCombatants(focus, step) == 0) {
             // The focus is a rotation, not a restriction: a game whose combat
             // carries none of it still spends its budget rather than saving it
             // for a keyword that is not there.
-            probeCombatants(null, firstStrike, substep);
+            probeCombatants(null, step);
         }
     }
 
@@ -1088,7 +1085,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * @param focus the one keyword to spend on, or null for any probed one
      * @return how many branches were taken
      */
-    private int probeCombatants(String focus, boolean firstStrike, String substep) {
+    private int probeCombatants(String focus, DamageStep step) {
         int taken = 0;
         for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
             if (!inCombat(card)) {
@@ -1109,7 +1106,7 @@ public final class PatchedCollectors implements AutoCloseable {
                     continue;
                 }
                 ForkCollector.HeldProbe held =
-                        forks.probe(original, card, firstStrike);
+                        forks.probe(original, card, step);
                 if (held != null) {
                     hold(held);
                     taken++;
@@ -1158,7 +1155,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * steps happen, and a first-strike branch is therefore completed against the
      * first-strike record and not against the regular one that follows it.
      * Naming the substep outright is one parameter better and is what
-     * {@link #writeHeldProbes(String, String)} is for.
+     * {@link #writeHeldProbes(String, DamageStep)} is for.
      */
     public void writeHeldProbes(String combatRecordId) {
         if (forks == null || heldProbes.isEmpty()) {
@@ -1176,7 +1173,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * against the regular step's record, so gate 2's real-versus-fork
      * difference compared a step that did not happen with one that did.
      */
-    public void writeHeldProbes(String combatRecordId, String substep) {
+    public void writeHeldProbes(String combatRecordId, DamageStep substep) {
         if (forks == null || heldProbes.isEmpty()) {
             return;
         }
@@ -1193,7 +1190,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * fork's budget is already spent either way, and a mispaired counterfactual
      * is read as a difference the keyword caused.
      */
-    public int discardStaleProbes(String substep) {
+    public int discardStaleProbes(DamageStep substep) {
         return heldProbes.discardOtherThan(substep);
     }
 
@@ -1652,8 +1649,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // until the game ends. The state is snapshotted here, at the moment
             // the mana was made, so a record that does survive describes the
             // board it was actually produced on.
-            EffectRecord record = context.newRecord(EffectRecord.KIND_RESOLUTION)
-                    .moment(EffectRecord.MOMENT_RESOLUTION)
+            EffectRecord record = context.newResolution(Moment.RESOLUTION)
                     .actor(player)
                     .ability(ProvenanceKey.resolve(ability))
                     .state(snapshots.toJson(null, List.of()))
@@ -1780,10 +1776,10 @@ public final class PatchedCollectors implements AutoCloseable {
             // two copies of one aura -- resolve to the same key, the same
             // contributions and the same suppressed board, so they render
             // identically and the board hash says they are different statics.
-            if (!allowDistinctRecord("continuous", payload, state)) {
+            if (!allowDistinctRecord(RecordKind.CONTINUOUS.wireName(), payload, state)) {
                 continue;
             }
-            emit(context.newRecord(EffectRecord.KIND_CONTINUOUS)
+            emit(context.newRecord(RecordKind.CONTINUOUS)
                     .actor(SnapshotBuilder.playerId(source.getHostCard().getController()))
                     .ability(acting)
                     .state(state)

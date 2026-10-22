@@ -136,14 +136,14 @@ class ForkCollectorTest {
     void theProbeBudgetIsSpentByTakingProbes() {
         // Spent even by a fork that fails: a null game makes every copy fail.
         ForkCollector collector = collector(caps(2, 1, List.of("wither")));
-        assertNull(collector.probe("wither", TestCards.build("Grizzly Bears"), false));
+        assertNull(collector.probe("wither", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
         assertFalse(collector.mayProbe("wither"));
     }
 
     @Test
     void aProbeForAnUnnamedKeywordSpendsNothing() {
         ForkCollector collector = collector(caps(2, 1, List.of("wither")));
-        assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), false));
+        assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
         assertTrue(collector.mayProbe("wither"));
         assertFalse(Files.exists(closedShard()));
     }
@@ -208,7 +208,7 @@ class ForkCollectorTest {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
         ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                DamageStep.REGULAR.wireName(), ForkCollector.TURN_UNKNOWN);
+                DamageStep.REGULAR, ForkCollector.TURN_UNKNOWN);
 
         assertEquals(ForkCollector.TURN_UNKNOWN, held.turn());
         assertTrue(collector.writeHeldProbe(held, "run.0-l1.9"));
@@ -218,7 +218,7 @@ class ForkCollectorTest {
     private static ForkCollector.HeldProbe branch(int turn) {
         return new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                DamageStep.REGULAR.wireName(), turn);
+                DamageStep.REGULAR, turn);
     }
 
     // ── a probe branch reads damage as the observed record does ─────────
@@ -253,7 +253,7 @@ class ForkCollectorTest {
         try {
             ForkCollector forks = new ForkCollector(
                     game, writer, "run.0-l1.0", caps(0, 1, List.of("trample")), 1L);
-            held = forks.probe("Trample", dreadmaw, false);
+            held = forks.probe("Trample", dreadmaw, DamageStep.REGULAR);
             assertNotNull(held, "the probe fork was discarded");
 
             BusBracketCollector observed = new BusBracketCollector(game, writer, "run.0-l1.0");

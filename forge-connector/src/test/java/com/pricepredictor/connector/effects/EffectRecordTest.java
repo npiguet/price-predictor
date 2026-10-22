@@ -6,6 +6,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -16,15 +17,27 @@ class EffectRecordTest {
 
     // ── the record envelope ─────────────────────────────────────────────
 
-    private EffectRecord record(String kind) {
+    private EffectRecord record(RecordKind kind) {
         return new EffectRecord(
                 "run.0.1", "run", "2026-09-07T00:00:00Z", "run.0.0", kind,
                 AttributionMode.DEGRADED);
     }
 
+    private EffectRecord resolution(Moment moment) {
+        return EffectRecord.resolution(
+                "run.0.1", "run", "2026-09-07T00:00:00Z", "run.0.0", moment,
+                AttributionMode.DEGRADED);
+    }
+
+    private EffectRecord playability(PlayabilitySubkind subkind) {
+        return EffectRecord.playability(
+                "run.0.1", "run", "2026-09-07T00:00:00Z", "run.0.0", subkind,
+                AttributionMode.DEGRADED);
+    }
+
     @Test
     void anEnvelopeCarriesEveryFrozenField() {
-        String json = record(EffectRecord.KIND_COMBAT).actor("P0").toJson();
+        String json = record(RecordKind.COMBAT).actor("P0").toJson();
         for (String key : List.of(
                 "record_id", "run_id", "timestamp", "game_id", "kind", "moment",
                 "subkind", "link_id", "mirror_of", "variant_of", "mode",
@@ -42,33 +55,55 @@ class EffectRecordTest {
      */
     @Test
     void randomSeatFollowsSyntheticOnEveryRecordAndWhatIfOnlyWhereSet() {
-        String plain = record(EffectRecord.KIND_RESOLUTION).toJson();
+        String plain = resolution(Moment.RESOLUTION).toJson();
         assertTrue(plain.contains("\"synthetic\":false,\"random_seat\":false,\"actor_player\":"),
                 plain);
         assertFalse(plain.contains("what_if"), plain);
 
-        String legality = record(EffectRecord.KIND_PLAYABILITY)
-                .subkind("attackers").randomSeat(true).whatIf(false).actor("P1").toJson();
+        String legality = playability(PlayabilitySubkind.ATTACKERS).randomSeat(true).whatIf(false).actor("P1").toJson();
         assertTrue(legality.contains(
                 "\"synthetic\":false,\"random_seat\":true,\"what_if\":false,\"actor_player\":\"P1\""),
                 legality);
     }
 
+    /**
+     * A resolution half is its moment and a legality verdict its subkind: the
+     * two kinds are made with them, and the plain constructor refuses both.
+     */
+    @Test
+    void theQualifiedKindsCarryTheirQualifierAndNoOther() {
+        String activation = resolution(Moment.ACTIVATION).toJson();
+        assertTrue(activation.contains(
+                "\"kind\":\"resolution\",\"moment\":\"activation\",\"subkind\":null"),
+                activation);
+        String blockers = playability(PlayabilitySubkind.BLOCKERS).toJson();
+        assertTrue(blockers.contains(
+                "\"kind\":\"playability\",\"moment\":null,\"subkind\":\"blockers\""),
+                blockers);
+        String combat = record(RecordKind.COMBAT).toJson();
+        assertTrue(combat.contains(
+                "\"kind\":\"combat\",\"moment\":null,\"subkind\":null"), combat);
+
+        for (RecordKind qualified : List.of(RecordKind.RESOLUTION, RecordKind.PLAYABILITY)) {
+            assertThrows(IllegalArgumentException.class, () -> record(qualified), qualified.wireName());
+        }
+    }
+
     @Test
     void theActorIsReadableForTheStampAtTheWrite() {
-        EffectRecord record = record(EffectRecord.KIND_COMBAT).actor("P0");
+        EffectRecord record = record(RecordKind.COMBAT).actor("P0");
         assertEquals("P0", record.actorPlayer());
     }
 
     @Test
     void aCombatRecordNamesNoActingLine() {
-        String json = record(EffectRecord.KIND_COMBAT).actor("P0").toJson();
+        String json = record(RecordKind.COMBAT).actor("P0").toJson();
         assertTrue(json.contains("\"ability\":null"), json);
     }
 
     @Test
     void anOrdinaryObservationCarriesNeitherFlag() {
-        String json = record(EffectRecord.KIND_RESOLUTION).toJson();
+        String json = resolution(Moment.RESOLUTION).toJson();
         assertTrue(json.contains("\"interventional\":false"));
         assertTrue(json.contains("\"fork\":false"));
         assertTrue(json.contains("\"synthetic\":false"));
@@ -76,7 +111,7 @@ class EffectRecordTest {
 
     @Test
     void aDamageStepProbeIsAForkThatIntervenedInNothing() {
-        String json = record(EffectRecord.KIND_COMBAT)
+        String json = record(RecordKind.COMBAT)
                 .fork(true).interventional(false).mirrorOf("run.0.9").toJson();
         assertTrue(json.contains("\"fork\":true"));
         assertTrue(json.contains("\"interventional\":false"));
@@ -85,7 +120,7 @@ class EffectRecordTest {
 
     @Test
     void anInterventionalResolutionIsBoth() {
-        String json = record(EffectRecord.KIND_RESOLUTION)
+        String json = resolution(Moment.RESOLUTION)
                 .interventional(true).fork(true).toJson();
         assertTrue(json.contains("\"interventional\":true"));
         assertTrue(json.contains("\"fork\":true"));
@@ -93,12 +128,11 @@ class EffectRecordTest {
 
     @Test
     void aPartnerlessHalfCarriesNoLinkId() {
-        String json = record(EffectRecord.KIND_RESOLUTION)
-                .moment(EffectRecord.MOMENT_ACTIVATION)
+        String json = resolution(Moment.ACTIVATION)
                 // No ability: a countered spell's costs are still readable in
                 // a real game, but the record's shape does not depend on them.
                 .payload(EffectRecord.costPayload(
-                        EffectRecord.costsJson(null), EffectRecord.OUTCOME_COUNTERED))
+                        EffectRecord.costsJson(null), ActivationOutcome.COUNTERED))
                 .toJson();
         assertTrue(json.contains("\"link_id\":null"), json);
         assertTrue(json.contains("\"outcome\":\"countered\""), json);
@@ -106,10 +140,10 @@ class EffectRecordTest {
 
     @Test
     void theModeIsStampedOnEveryRecord() {
-        assertTrue(record(EffectRecord.KIND_COMBAT).toJson()
+        assertTrue(record(RecordKind.COMBAT).toJson()
                 .contains("\"mode\":\"degraded\""));
         assertTrue(new EffectRecord(
-                "r", "r", "t", "g", EffectRecord.KIND_COMBAT,
+                "r", "r", "t", "g", RecordKind.COMBAT,
                 AttributionMode.PATCHED).toJson().contains("\"mode\":\"patched\""));
     }
 
@@ -123,10 +157,10 @@ class EffectRecordTest {
      */
     @Test
     void aTriggerRecordNamesItsActingLine() {
-        String json = record(EffectRecord.KIND_TRIGGER)
+        String json = record(RecordKind.TRIGGER)
                 .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
                         "cardsfolder/g/grave_titan.txt", 0,
-                        ProvenanceKey.KIND_TRIGGER, 0), null))
+                        TraitKind.TRIGGER, 0), null))
                 .toJson();
 
         assertFalse(json.contains("\"ability\":null"), json);
@@ -137,10 +171,10 @@ class EffectRecordTest {
     /** And a rewrite record names the replacement effect that rewrote. */
     @Test
     void aRewriteRecordNamesItsReplacement() {
-        String json = record(EffectRecord.KIND_REWRITE)
+        String json = record(RecordKind.REWRITE)
                 .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
                         "cardsfolder/p/paralyze.txt", 0,
-                        ProvenanceKey.KIND_REPLACEMENT, 0), null))
+                        TraitKind.REPLACEMENT, 0), null))
                 .toJson();
 
         assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
@@ -155,11 +189,11 @@ class EffectRecordTest {
      */
     @Test
     void anUnattributableLineIsEmptyRatherThanNull() {
-        assertTrue(record(EffectRecord.KIND_TRIGGER)
+        assertTrue(record(RecordKind.TRIGGER)
                 .ability(new ProvenanceKey.Resolved(
-                        null, ProvenanceKey.UNRESOLVED_ENGINE_EFFECT))
+                        null, UnresolvedReason.ENGINE_EFFECT))
                 .toJson().contains("\"ability\":[]"));
-        assertTrue(record(EffectRecord.KIND_COMBAT).toJson()
+        assertTrue(record(RecordKind.COMBAT).toJson()
                 .contains("\"ability\":null"));
     }
 
@@ -173,9 +207,9 @@ class EffectRecordTest {
      */
     @Test
     void anEmptyLineSaysWhyItIsEmpty() {
-        String json = record(EffectRecord.KIND_TRIGGER)
+        String json = record(RecordKind.TRIGGER)
                 .ability(new ProvenanceKey.Resolved(
-                        null, ProvenanceKey.UNRESOLVED_ENGINE_EFFECT))
+                        null, UnresolvedReason.ENGINE_EFFECT))
                 .toJson();
 
         assertTrue(json.contains("\"ability\":[]"), json);
@@ -184,10 +218,10 @@ class EffectRecordTest {
 
     @Test
     void aNamedLineCarriesNoReason() {
-        String json = record(EffectRecord.KIND_TRIGGER)
+        String json = record(RecordKind.TRIGGER)
                 .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
                         "cardsfolder/g/grave_titan.txt", 0,
-                        ProvenanceKey.KIND_TRIGGER, 0), null))
+                        TraitKind.TRIGGER, 0), null))
                 .toJson();
 
         assertTrue(json.contains("cardsfolder/g/grave_titan.txt"), json);
@@ -197,7 +231,7 @@ class EffectRecordTest {
     /** A caller that looked and got nothing back still owes a reason. */
     @Test
     void aLookupThatCameBackWithNothingAtAllStillNamesAReason() {
-        String json = record(EffectRecord.KIND_TRIGGER)
+        String json = record(RecordKind.TRIGGER)
                 .ability(null)
                 .toJson();
 
@@ -227,7 +261,7 @@ class EffectRecordTest {
     @Test
     void aContinuousOutcomeCarriesItsDuration() {
         String json = new EffectEvent(EffectEvent.PT_CHANGE)
-                .subject("E1").duration("end_of_turn").toJson();
+                .subject("E1").duration(EventDuration.END_OF_TURN).toJson();
         assertTrue(json.contains("\"duration\":\"end_of_turn\""), json);
     }
 

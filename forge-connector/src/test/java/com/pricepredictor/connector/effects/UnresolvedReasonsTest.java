@@ -2,6 +2,9 @@ package com.pricepredictor.connector.effects;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -13,11 +16,9 @@ class UnresolvedReasonsTest {
 
     @Test
     void theReasonsAreSpelledAsPythonSpellsThem() {
-        assertEquals("no_card_state", ProvenanceKey.UNRESOLVED_NO_CARD_STATE);
-        assertEquals("unknown_kind", ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
-        assertEquals("engine_effect", ProvenanceKey.UNRESOLVED_ENGINE_EFFECT);
-        assertEquals("granted_keyword", ProvenanceKey.UNRESOLVED_GRANTED_KEYWORD);
-        assertEquals("granted_trait", ProvenanceKey.UNRESOLVED_GRANTED_TRAIT);
-        assertEquals("unindexable", ProvenanceKey.UNRESOLVED_UNINDEXABLE);
+        assertEquals(
+                List.of("no_card_state", "unknown_kind", "engine_effect",
+                        "granted_keyword", "granted_trait", "unindexable"),
+                Arrays.stream(UnresolvedReason.values()).map(UnresolvedReason::wireName).toList());
     }
 }

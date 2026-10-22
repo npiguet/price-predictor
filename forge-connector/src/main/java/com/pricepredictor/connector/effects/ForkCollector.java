@@ -389,8 +389,7 @@ public final class ForkCollector {
     private EffectRecord forkedHalf(
             String actorId, ProvenanceKey.Resolved keys, String state,
             List<EffectEvent> events) {
-        return context.newRecord(EffectRecord.KIND_RESOLUTION)
-                .moment(EffectRecord.MOMENT_RESOLUTION)
+        return context.newResolution(Moment.RESOLUTION)
                 .interventional(true)
                 .fork(true)
                 .actor(actorId)
@@ -612,9 +611,10 @@ public final class ForkCollector {
      * is known. Reconstructing the pairing from board state instead would break
      * on two identical-looking combats in one turn.
      *
+     * @param step the damage step about to be dealt, which the fork deals too
      * @return the held branch, or null when the fork could not be taken
      */
-    public HeldProbe probe(String keyword, Card carrier, boolean firstStrike) {
+    public HeldProbe probe(String keyword, Card carrier, DamageStep step) {
         if (!mayProbe(keyword) || carrier == null) {
             return null;
         }
@@ -672,7 +672,7 @@ public final class ForkCollector {
                 // assignment only exists after. Both are read as the observed
                 // record reads them, so the branch and the record it mirrors agree.
                 shape = CombatShape.of(fork.getCombat());
-                if (fork.getCombat().assignCombatDamage(firstStrike)) {
+                if (fork.getCombat().assignCombatDamage(step == DamageStep.FIRST_STRIKE)) {
                     shape.addAssignment(fork.getCombat());
                     fork.getCombat().dealAssignedDamage();
                     // And then let the deaths happen. Damage alone kills nothing;
@@ -693,7 +693,7 @@ public final class ForkCollector {
                     PatchedCollectors.normalizeKeyword(keyword),
                     SnapshotBuilder.entityId(carrier), state, sink.events(),
                     SnapshotBuilder.playerId(perspective), shape.fields(),
-                    (firstStrike ? DamageStep.FIRST_STRIKE : DamageStep.REGULAR).wireName(),
+                    step,
                     // The *live* game's turn, which is also the fork's: the copier
                     // carries the counter across (GameCopier hands it to
                     // devModeSet), and the corpus agrees -- not one of the 1,788
@@ -712,8 +712,8 @@ public final class ForkCollector {
      * that is never completed still counted — the cost was the simulation, not
      * the write.
      *
-     * <p>{@code substep} names the damage step this branched from, spelled the
-     * way the bracket collector spells it. Without it a branch taken at the
+     * <p>{@code substep} names the damage step this branched from, the one
+     * the bracket collector's record names. Without it a branch taken at the
      * first-strike step was completed against whichever combat record came
      * next: in the first corpus that was the <b>regular</b> step's record, so
      * gate 2 was reading a counterfactual for a step that did not happen
@@ -722,7 +722,7 @@ public final class ForkCollector {
     public record HeldProbe(
             String keyword, String carrier, String state,
             List<EffectEvent> events, String actor, String combatFields,
-            String substep, int turn) {
+            DamageStep substep, int turn) {
 
         /**
          * The branch's payload, naming what was perturbed.
@@ -786,7 +786,7 @@ public final class ForkCollector {
                             + "; its own damage step wrote no record");
             return false;
         }
-        context.emit(context.newRecord(EffectRecord.KIND_COMBAT)
+        context.emit(context.newRecord(RecordKind.COMBAT)
                 .fork(true)
                 .interventional(false)
                 .mirrorOf(mirrorOfRecordId)

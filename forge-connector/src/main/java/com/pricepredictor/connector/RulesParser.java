@@ -22,6 +22,7 @@ import com.pricepredictor.connector.ability.TriggeredAbilityEntry;
 import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.ProvenanceKey;
 import com.pricepredictor.connector.effects.ProvenanceRecorder;
+import com.pricepredictor.connector.effects.TraitKind;
 import forge.card.CardRarity;
 import forge.card.CardRules;
 import forge.card.CardSplitType;
@@ -237,7 +238,7 @@ public class RulesParser {
          * when not recording. Every recorder call takes a null key as "nothing
          * to record", which is what lets the phases record unconditionally.
          */
-        ProvenanceKey key(String kind, int index) {
+        ProvenanceKey key(TraitKind kind, int index) {
             return scriptFile == null ? null
                     : new ProvenanceKey(scriptFile, faceIndex, kind, index);
         }
@@ -269,9 +270,9 @@ public class RulesParser {
         parseKeywords(p);
         parseSpellAbilities(p);
         parseTriggers(p);
-        parseTraits(p, card.getStaticAbilities(), ProvenanceKey.KIND_STATIC,
+        parseTraits(p, card.getStaticAbilities(), TraitKind.STATIC,
                 StaticAbilityEntry::of);
-        parseTraits(p, card.getReplacementEffects(), ProvenanceKey.KIND_REPLACEMENT,
+        parseTraits(p, card.getReplacementEffects(), TraitKind.REPLACEMENT,
                 ReplacementAbilityEntry::of);
         appendLandMana(p);
         postProcess(p);
@@ -309,7 +310,7 @@ public class RulesParser {
             }
             int keywordIndex = ProvenanceKey.keywordIndex(p.card.getCurrentState(), ki);
             p.recorder.attributeKeyword(p.since(before),
-                    keywordIndex < 0 ? null : p.key(ProvenanceKey.KIND_KEYWORD, keywordIndex),
+                    keywordIndex < 0 ? null : p.key(TraitKind.KEYWORD, keywordIndex),
                     ki.getOriginal());
         }
     }
@@ -357,7 +358,7 @@ public class RulesParser {
             // Declared before any route skips the trait, so a trait the parser
             // passes over lands in dropped_keys rather than failing the join:
             // it is still live at runtime and a record can still name it.
-            ProvenanceKey spellKey = p.key(ProvenanceKey.KIND_SPELL, spellIndex);
+            ProvenanceKey spellKey = p.key(TraitKind.SPELL, spellIndex);
             p.recorder.declare(spellKey);
             SpellRoute route = classifySpell(sa, p, isAlternateFace);
             switch (route) {
@@ -432,7 +433,7 @@ public class RulesParser {
         int triggerIndex = -1;
         for (Trigger t : p.card.getTriggers()) {
             triggerIndex++;
-            ProvenanceKey key = p.key(ProvenanceKey.KIND_TRIGGER, triggerIndex);
+            ProvenanceKey key = p.key(TraitKind.TRIGGER, triggerIndex);
             p.recorder.declare(key);
             String exec = t.getParam("Execute");
             boolean secondary = "True".equalsIgnoreCase(t.getParam("Secondary"));
@@ -452,7 +453,7 @@ public class RulesParser {
 
     /** Wrap each static or replacement trait directly in its entry. */
     private <T extends CardTraitBase> void parseTraits(FaceParse p, Iterable<T> traits,
-                                                       String kind,
+                                                       TraitKind kind,
                                                        Function<T, Ability> factory) {
         int index = -1;
         for (T trait : traits) {

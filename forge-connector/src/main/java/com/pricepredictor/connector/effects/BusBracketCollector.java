@@ -342,13 +342,13 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /** What became of a cast that has left the stack through a resolution. */
-    private String settledOutcome(
+    private ActivationOutcome settledOutcome(
             int abilityId, boolean fizzled, boolean declined, boolean bracketIsThisAbility) {
         if (fizzled) {
-            return EffectRecord.OUTCOME_FIZZLED;
+            return ActivationOutcome.FIZZLED;
         }
         if (declined) {
-            return EffectRecord.OUTCOME_DECLINED;
+            return ActivationOutcome.DECLINED;
         }
         return outcomeOf(
                 findPending(abilityId).map(PendingActivation::targetsAtCast).orElse(0),
@@ -569,9 +569,8 @@ public final class BusBracketCollector extends BusEventReader {
         HeldResolution writing = held;
         held = null;
         for (HeldHalf half : writing.halves()) {
-            context.emit(context.newRecord(
-                    EffectRecord.KIND_RESOLUTION, half.recordId(), half.timestamp())
-                    .moment(EffectRecord.MOMENT_RESOLUTION)
+            context.emit(context.newResolution(
+                    Moment.RESOLUTION, half.recordId(), half.timestamp())
                     .actor(writing.actor())
                     .ability(half.keys())
                     .linkId(writing.linkId())
@@ -743,7 +742,7 @@ public final class BusBracketCollector extends BusEventReader {
      * @return the link the effect half may claim, or null when there is to be
      *         no effect half or nothing was held for this ability
      */
-    String settleActivation(int abilityId, String outcome, boolean linked) {
+    String settleActivation(int abilityId, ActivationOutcome outcome, boolean linked) {
         Optional<PendingActivation> found = findPending(abilityId);
         if (found.isEmpty()) {
             return null;
@@ -755,10 +754,9 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     private void emitActivation(
-            PendingActivation activation, String outcome, boolean linked) {
-        context.emit(context.newRecord(
-                EffectRecord.KIND_RESOLUTION, activation.recordId(), activation.timestamp())
-                .moment(EffectRecord.MOMENT_ACTIVATION)
+            PendingActivation activation, ActivationOutcome outcome, boolean linked) {
+        context.emit(context.newResolution(
+                Moment.ACTIVATION, activation.recordId(), activation.timestamp())
                 .actor(activation.actor())
                 .ability(activation.ability())
                 .linkId(linked ? activation.linkId() : null)
@@ -782,14 +780,14 @@ public final class BusBracketCollector extends BusEventReader {
      * is the {@code CantFizzle} case (Gilded Drake), where the spell still does
      * what it does: that is {@code resolved} too.
      */
-    static String outcomeOf(int targetsAtCast, SpellAbility resolved) {
+    static ActivationOutcome outcomeOf(int targetsAtCast, SpellAbility resolved) {
         if (resolved == null) {
-            return EffectRecord.OUTCOME_RESOLVED;
+            return ActivationOutcome.RESOLVED;
         }
         int surviving = targetCount(resolved);
         return surviving > 0 && surviving < targetsAtCast
-                ? EffectRecord.OUTCOME_PARTIALLY_FIZZLED
-                : EffectRecord.OUTCOME_RESOLVED;
+                ? ActivationOutcome.PARTIALLY_FIZZLED
+                : ActivationOutcome.RESOLVED;
     }
 
     private static int targetCount(SpellAbility ability) {
@@ -845,7 +843,7 @@ public final class BusBracketCollector extends BusEventReader {
             PendingActivation activation = held.next();
             if (!onStack.contains(activation.abilityId())) {
                 held.remove();
-                emitActivation(activation, EffectRecord.OUTCOME_COUNTERED, false);
+                emitActivation(activation, ActivationOutcome.COUNTERED, false);
                 removed++;
             }
         }
@@ -1067,7 +1065,7 @@ public final class BusBracketCollector extends BusEventReader {
         var phase = game.getPhaseHandler();
         String actor = phase == null || phase.getPlayerTurn() == null
                 ? null : SnapshotBuilder.playerId(phase.getPlayerTurn());
-        EffectRecord record = context.newRecord(EffectRecord.KIND_COMBAT)
+        EffectRecord record = context.newRecord(RecordKind.COMBAT)
                 .actor(actor)
                 .state(combatState)
                 .payload(combatPayload());
@@ -1144,8 +1142,7 @@ public final class BusBracketCollector extends BusEventReader {
         if (resolving != null || bracketEvents.isEmpty()) {
             return;
         }
-        context.emit(context.newRecord(EffectRecord.KIND_RESOLUTION)
-                .moment(EffectRecord.MOMENT_RESOLUTION)
+        context.emit(context.newResolution(Moment.RESOLUTION)
                 .actor(resolvingActor)
                 .ability(resolvingKeys)
                 .state(snapshots.toJson(null, List.of()))

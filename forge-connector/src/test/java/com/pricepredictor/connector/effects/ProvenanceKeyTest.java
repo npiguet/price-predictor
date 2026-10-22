@@ -100,7 +100,7 @@ class ProvenanceKeyTest {
 
         assertNotNull(expected, "the pristine ability must key");
         assertEquals("cardsfolder/f/fountain_of_youth.txt", expected.scriptFile());
-        assertEquals(ProvenanceKey.KIND_SPELL, expected.traitKind());
+        assertEquals(TraitKind.SPELL, expected.traitKind());
         assertEquals(expected, ProvenanceKey.of(asStackCopy(printed)));
     }
 
@@ -179,7 +179,7 @@ class ProvenanceKeyTest {
 
             assertNotNull(key, "wrapped trigger " + i + " must key");
             assertEquals("cardsfolder/p/paralyze.txt", key.scriptFile());
-            assertEquals(ProvenanceKey.KIND_TRIGGER, key.traitKind(),
+            assertEquals(TraitKind.TRIGGER, key.traitKind(),
                     "a wrapped trigger keys to its trigger line, not to a spell");
             assertEquals(i, key.indexWithinKind());
         }
@@ -200,7 +200,7 @@ class ProvenanceKeyTest {
         ProvenanceKey key = ProvenanceKey.of(execute);
         assertNotNull(key);
         assertEquals("cardsfolder/b/brass_man.txt", key.scriptFile());
-        assertEquals(ProvenanceKey.KIND_TRIGGER, key.traitKind());
+        assertEquals(TraitKind.TRIGGER, key.traitKind());
         assertEquals(0, key.indexWithinKind());
     }
 
@@ -213,7 +213,7 @@ class ProvenanceKeyTest {
 
         assertNotNull(key);
         assertEquals("cardsfolder/p/paralyze.txt", key.scriptFile());
-        assertEquals(ProvenanceKey.KIND_REPLACEMENT, key.traitKind());
+        assertEquals(TraitKind.REPLACEMENT, key.traitKind());
         assertEquals(0, key.indexWithinKind());
     }
 
@@ -239,7 +239,7 @@ class ProvenanceKeyTest {
         assertEquals("cardsfolder/d/daybreak_ranger_nightfall_predator.txt",
                 key.scriptFile());
         assertEquals(1, key.face(), "the back face is ordinal 1");
-        assertEquals(ProvenanceKey.KIND_SPELL, key.traitKind());
+        assertEquals(TraitKind.SPELL, key.traitKind());
     }
 
     /** The front face of the same card stays ordinal 0. */
@@ -282,7 +282,7 @@ class ProvenanceKeyTest {
         assertNotNull(key);
         assertEquals("tokenscripts/c_a_food_sac.txt", key.scriptFile());
         assertEquals(0, key.face());
-        assertEquals(ProvenanceKey.KIND_SPELL, key.traitKind());
+        assertEquals(TraitKind.SPELL, key.traitKind());
     }
 
     /** And through the stack copy, which is how a token's ability resolves. */
@@ -388,7 +388,7 @@ class ProvenanceKeyTest {
 
         assertNull(resolved.key(),
                 "an engine-built card names no script file in any tree");
-        assertEquals(ProvenanceKey.UNRESOLVED_ENGINE_EFFECT, resolved.reason());
+        assertEquals(UnresolvedReason.ENGINE_EFFECT, resolved.reason());
     }
 
     /**
@@ -475,7 +475,7 @@ class ProvenanceKeyTest {
 
         ProvenanceKey key = ProvenanceKey.of(derived);
         assertNotNull(key, "a keyword-derived ability must key");
-        assertEquals(ProvenanceKey.KIND_KEYWORD, key.traitKind());
+        assertEquals(TraitKind.KEYWORD, key.traitKind());
         assertEquals(ProvenanceKey.keywordIndex(state, flashback),
                 key.indexWithinKind());
         assertEquals("cardsfolder/b/blast_from_the_past.txt", key.scriptFile());
@@ -493,7 +493,7 @@ class ProvenanceKeyTest {
 
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(detached);
         assertNull(resolved.key());
-        assertEquals(ProvenanceKey.UNRESOLVED_NO_CARD_STATE, resolved.reason());
+        assertEquals(UnresolvedReason.NO_CARD_STATE, resolved.reason());
     }
 
     /** A key that was found carries no reason, and the reverse. */
@@ -521,7 +521,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(null);
 
         assertNull(resolved.key());
-        assertEquals(ProvenanceKey.UNRESOLVED_UNKNOWN_KIND, resolved.reason());
+        assertEquals(UnresolvedReason.UNKNOWN_KIND, resolved.reason());
         assertTrue(resolved.keys().isEmpty());
     }
 
@@ -589,7 +589,7 @@ class ProvenanceKeyTest {
         // trigger, which is worse than naming no line at all.
         assertEquals("cardsfolder/v/virulent_sliver.txt", key.scriptFile());
         assertNotEquals(ProvenanceKey.scriptFileOf(recipient), key.scriptFile());
-        assertEquals(ProvenanceKey.KIND_STATIC, key.traitKind());
+        assertEquals(TraitKind.STATIC, key.traitKind());
         assertEquals(ProvenanceKey.of(grantor), key);
     }
 
@@ -622,7 +622,7 @@ class ProvenanceKeyTest {
 
         assertNotNull(key, "a delayed trigger must key to its spawner");
         assertEquals(ProvenanceKey.of(spawner), key);
-        assertEquals(ProvenanceKey.KIND_SPELL, key.traitKind());
+        assertEquals(TraitKind.SPELL, key.traitKind());
     }
 
     /**
@@ -643,7 +643,7 @@ class ProvenanceKeyTest {
 
         assertNotNull(key);
         assertEquals("cardsfolder/b/brass_man.txt", key.scriptFile());
-        assertEquals(ProvenanceKey.KIND_TRIGGER, key.traitKind());
+        assertEquals(TraitKind.TRIGGER, key.traitKind());
         assertEquals(0, key.indexWithinKind());
     }
 
@@ -674,7 +674,7 @@ class ProvenanceKeyTest {
         execute.setTrigger(reflexive);
 
         assertEquals(expected, ProvenanceKey.of(execute));
-        assertEquals(ProvenanceKey.KIND_TRIGGER, expected.traitKind());
+        assertEquals(TraitKind.TRIGGER, expected.traitKind());
     }
 
     /** Built the way {@code ImmediateTriggerEffect} builds it. */
@@ -771,7 +771,7 @@ class ProvenanceKeyTest {
         // Never the creature that received it, which prints no such line.
         assertEquals("cardsfolder/g/genju_of_the_fields.txt", key.scriptFile());
         assertNotEquals(ProvenanceKey.scriptFileOf(plains), key.scriptFile());
-        assertEquals(ProvenanceKey.KIND_SPELL, key.traitKind());
+        assertEquals(TraitKind.SPELL, key.traitKind());
     }
 
     /**
@@ -797,7 +797,7 @@ class ProvenanceKeyTest {
         assertNotNull(key);
         assertEquals(ProvenanceKey.of(grantor), key);
         assertEquals("cardsfolder/c/commanding_presence.txt", key.scriptFile());
-        assertEquals(ProvenanceKey.KIND_STATIC, key.traitKind());
+        assertEquals(TraitKind.STATIC, key.traitKind());
     }
 
     /**
@@ -816,7 +816,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
 
         assertNull(resolved.key(), "two SVars parse the same; neither is the answer");
-        assertEquals(ProvenanceKey.UNRESOLVED_GRANTED_TRAIT, resolved.reason());
+        assertEquals(UnresolvedReason.GRANTED_TRAIT, resolved.reason());
     }
 
     /**
@@ -839,7 +839,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
 
         assertNull(resolved.key(), "no SVar of the donor carries this text");
-        assertEquals(ProvenanceKey.UNRESOLVED_GRANTED_TRAIT, resolved.reason());
+        assertEquals(UnresolvedReason.GRANTED_TRAIT, resolved.reason());
     }
 
     /** A granted trait still names the donor's card, even when the line is lost. */
@@ -878,7 +878,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
 
         assertNull(resolved.key(), "the recipient prints no such keyword");
-        assertEquals(ProvenanceKey.UNRESOLVED_GRANTED_KEYWORD, resolved.reason());
+        assertEquals(UnresolvedReason.GRANTED_KEYWORD, resolved.reason());
     }
 
     /**
@@ -896,7 +896,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(stray);
 
         assertNull(resolved.key());
-        assertEquals(ProvenanceKey.UNRESOLVED_UNINDEXABLE, resolved.reason());
+        assertEquals(UnresolvedReason.UNINDEXABLE, resolved.reason());
     }
 
     // -- a charm mode's key: the root key plus its Choices$ position -----
@@ -909,7 +909,7 @@ class ProvenanceKeyTest {
     @Test
     void aModeKeyIsDistinctFromItsRootAndKnowsIt() {
         ProvenanceKey root = new ProvenanceKey(
-                "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+                "cardsfolder/c/cryptic_command.txt", 0, TraitKind.SPELL, 0);
         ProvenanceKey mode = root.withOption(2);
 
         assertNotEquals(root, mode);
@@ -929,7 +929,7 @@ class ProvenanceKeyTest {
     @Test
     void aModeKeyWritesItsOptionAndARootKeyDoesNot() {
         ProvenanceKey root = new ProvenanceKey(
-                "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+                "cardsfolder/c/cryptic_command.txt", 0, TraitKind.SPELL, 0);
 
         assertEquals("{\"face\":0,\"trait_kind\":\"spell\",\"index_within_kind\":0}",
                 root.toSidecarJson());
@@ -947,7 +947,7 @@ class ProvenanceKeyTest {
     @Test
     void aNegativeOptionIsRefused() {
         ProvenanceKey root = new ProvenanceKey(
-                "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+                "cardsfolder/c/cryptic_command.txt", 0, TraitKind.SPELL, 0);
         org.junit.jupiter.api.Assertions.assertThrows(
                 IllegalArgumentException.class, () -> root.withOption(-1));
     }
@@ -955,13 +955,8 @@ class ProvenanceKeyTest {
     /** Every reason is distinct, because a reason that collides says nothing. */
     @Test
     void theReasonVocabularyHasNoDuplicates() {
-        List<String> reasons = List.of(
-                ProvenanceKey.UNRESOLVED_NO_CARD_STATE,
-                ProvenanceKey.UNRESOLVED_UNKNOWN_KIND,
-                ProvenanceKey.UNRESOLVED_ENGINE_EFFECT,
-                ProvenanceKey.UNRESOLVED_GRANTED_KEYWORD,
-                ProvenanceKey.UNRESOLVED_GRANTED_TRAIT,
-                ProvenanceKey.UNRESOLVED_UNINDEXABLE);
+        List<String> reasons = java.util.Arrays.stream(UnresolvedReason.values())
+                .map(UnresolvedReason::wireName).toList();
 
         assertEquals(reasons.size(), new java.util.HashSet<>(reasons).size());
     }
@@ -970,10 +965,10 @@ class ProvenanceKeyTest {
     @Test
     void aResolutionIsALineOrAReason() {
         ProvenanceKey key = new ProvenanceKey(
-                "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+                "cardsfolder/c/cryptic_command.txt", 0, TraitKind.SPELL, 0);
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> new ProvenanceKey.Resolved(key, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND));
+                () -> new ProvenanceKey.Resolved(key, UnresolvedReason.UNKNOWN_KIND));
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> new ProvenanceKey.Resolved(null, null));
     }
@@ -982,7 +977,7 @@ class ProvenanceKeyTest {
     @Test
     void anOptionKeysTheModeOfALineAndLeavesAReasonAlone() {
         ProvenanceKey key = new ProvenanceKey(
-                "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+                "cardsfolder/c/cryptic_command.txt", 0, TraitKind.SPELL, 0);
         ProvenanceKey.Resolved line = new ProvenanceKey.Resolved(key, null);
 
         assertEquals(key.withOption(2), line.withOption(2).key());
