@@ -194,11 +194,7 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
         int start = idx + key.length();
         int end = svarText.indexOf(" |", start);
         String raw = end >= 0 ? svarText.substring(start, end).trim() : svarText.substring(start).trim();
-        if (raw.isEmpty()) return null;
-        String stripped = AbilityDescription.stripReminderText(raw);
-        String normalized = AbilityDescription.normalize(stripped);
-        if (normalized == null || normalized.isEmpty()) return null;
-        return AbilityDescription.applyCasing(normalized);
+        return AbilityDescription.normalize(raw);
     }
 
 }

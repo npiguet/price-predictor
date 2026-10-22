@@ -51,7 +51,7 @@ public final class HauntKeyword {
         if (!isCreature && effectDesc != null) {
             String normalized = AbilityDescription.normalize(effectDesc);
             if (normalized != null) {
-                result.add(new SpellEffect(AbilityDescription.applyCasing(normalized), List.of()));
+                result.add(new SpellEffect(normalized, List.of()));
             }
         }
 
@@ -72,10 +72,10 @@ public final class HauntKeyword {
                     CharmAbility.Expanded expanded =
                             CharmAbility.expandPlaceholder(tDesc, overrideSa, null);
                     String normalized2 = expanded.description();
-                    if (normalized2 == null || normalized2.isEmpty()) continue;
+                    if (normalized2 == null) continue;
                     if (!emitted.add(normalized2)) continue;
                     result.add(new TextAbility(AbilityType.forTrigger(t),
-                            AbilityDescription.applyCasing(normalized2), 0, expanded.options()));
+                            normalized2, 0, expanded.options()));
                     continue;
                 } else if (effectDesc != null) {
                     tDesc = tDesc.replace("ABILITY", effectDesc);
@@ -83,11 +83,10 @@ public final class HauntKeyword {
             }
 
             String normalized = AbilityDescription.normalize(tDesc);
-            if (normalized == null || normalized.isEmpty()) continue;
+            if (normalized == null) continue;
             if (!emitted.add(normalized)) continue; // skip duplicates
 
-            result.add(new TextAbility(AbilityType.forTrigger(t),
-                    AbilityDescription.applyCasing(normalized)));
+            result.add(new TextAbility(AbilityType.forTrigger(t), normalized));
         }
 
         return result;

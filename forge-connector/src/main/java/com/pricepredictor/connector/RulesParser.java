@@ -552,8 +552,7 @@ public class RulesParser {
                 }
             }
             if (header == null) continue;
-            visits.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED,
-                    AbilityDescription.applyCasing(header), children));
+            visits.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED, header, children));
         }
         return visits;
     }
@@ -588,8 +587,7 @@ public class RulesParser {
             if (revealSa != null) desc = revealSa.getParam("SpellDescription");
         }
         String normalized = AbilityDescription.normalize(desc);
-        return normalized == null ? null
-                : new TextAbility(AbilityType.TRIGGERED, AbilityDescription.applyCasing(normalized));
+        return normalized == null ? null : new TextAbility(AbilityType.TRIGGERED, normalized);
     }
 
     private List<Ability> applyClassPostProcessing(List<Ability> abilities,
