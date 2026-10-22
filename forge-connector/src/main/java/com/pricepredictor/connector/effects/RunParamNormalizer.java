@@ -6,6 +6,7 @@ import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -151,29 +152,29 @@ final class RunParamNormalizer {
      */
     private static Set<String> subjectsOf(Map<String, Object> byName) {
         for (String key : SUBJECT_KEYS) {
-            Object value = byName.get(key);
-            if (value == null) {
-                continue;
-            }
             Set<String> subjects = new LinkedHashSet<>();
-            if (value instanceof Iterable<?> members) {
-                for (Object member : members) {
-                    String id = subjectOf(member);
-                    if (id != null && subjects.size() < MAX_SUBJECTS) {
-                        subjects.add(id);
-                    }
-                }
-            } else {
-                String id = subjectOf(value);
-                if (id != null) {
-                    subjects.add(id);
-                }
-            }
+            refsIn(byName.get(key), subjects);
             if (!subjects.isEmpty()) {
                 return subjects;
             }
         }
         return Set.of();
+    }
+
+    /**
+     * Add what one parameter value names to {@code into}: the value itself, or
+     * each member of a collection, until {@code into} holds
+     * {@value #MAX_SUBJECTS}.
+     */
+    private static void refsIn(Object value, Set<String> into) {
+        Iterable<?> members = value instanceof Iterable<?> many
+                ? many : Collections.singletonList(value);
+        for (Object member : members) {
+            String ref = subjectOf(member);
+            if (ref != null && into.size() < MAX_SUBJECTS) {
+                into.add(ref);
+            }
+        }
     }
 
     /**
@@ -408,17 +409,10 @@ final class RunParamNormalizer {
     /** The first of these keys that names an entity, single or collection. */
     private static String firstRef(Map<String, Object> byName, String... keys) {
         for (String key : keys) {
-            String ref = subjectOf(byName.get(key));
-            if (ref != null) {
-                return ref;
-            }
-            if (byName.get(key) instanceof Iterable<?> members) {
-                for (Object member : members) {
-                    ref = subjectOf(member);
-                    if (ref != null) {
-                        return ref;
-                    }
-                }
+            Set<String> refs = new LinkedHashSet<>();
+            refsIn(byName.get(key), refs);
+            if (!refs.isEmpty()) {
+                return refs.iterator().next();
             }
         }
         return null;
@@ -428,20 +422,7 @@ final class RunParamNormalizer {
     private static List<String> refList(Map<String, Object> byName, String... keys) {
         Set<String> refs = new LinkedHashSet<>();
         for (String key : keys) {
-            Object value = byName.get(key);
-            if (value instanceof Iterable<?> members) {
-                for (Object member : members) {
-                    String ref = subjectOf(member);
-                    if (ref != null && refs.size() < MAX_SUBJECTS) {
-                        refs.add(ref);
-                    }
-                }
-            } else {
-                String ref = subjectOf(value);
-                if (ref != null && refs.size() < MAX_SUBJECTS) {
-                    refs.add(ref);
-                }
-            }
+            refsIn(byName.get(key), refs);
         }
         return refs.isEmpty() ? null : new ArrayList<>(refs);
     }
