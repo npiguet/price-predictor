@@ -328,7 +328,7 @@ The scorecard sets every gen-2 checkpoint against thirteen measures at once, and
 
 *Each row is coloured by rank among the checkpoints, darker better; ▲ marks a measure where higher is better and ▼ one where lower is better, and the best cell is bold. The last row is each checkpoint's mean rank over the rows above. The rows from blocking onward come from the probes record. Data: `checkpoints.csv`, `probe_ladder.csv`, `damage_grids.csv`, `sweeps.csv`, `sweep_records.csv`, `gate2.csv`, `evasion_ranking.csv`, `colour_pips_ranking.csv`, `zone_amounts.csv`, `zone_who.csv`, `target_flips.csv`.*
 
-A wider `e` spreads its variance over few more effective directions. Every checkpoint trained with lethality copies sits between 9 and 12 directions; arm `e64`, without copies, has 7.5. The 256-wide arm has about 9.4, and runs A256 and B256 between 10.5 and 11.9, the highest of them less than one direction above the best narrower checkpoint, so the vector's extra width goes almost unused. What a nonlinear probe reads from `e` against a random vector of the same width is in [the probes record](2026-09-19-effect-knowledge-probes-design.md#e-adds-far-more-than-a-random-vector-of-its-width-on-what-a-line-states-and-almost-nothing-on-what-the-board-decides). On the death rule, combat, gate 2 and the board-abilities subsets, the 256-wide arm lands inside or at the edge of the range of the other checkpoints.
+A wider `e` spreads its variance over few more effective directions. Every checkpoint trained with lethality copies sits between 9 and 12 directions; arm `e64`, without copies, has 7.5. The 256-wide arm has about 9.4, and runs A256 and B256 between 10.5 and 11.9, the highest of them less than one direction above the best narrower checkpoint, so the vector's extra width goes almost unused. What a nonlinear probe reads from `e` against a random vector of the same width is in [the probes record](2026-09-19-effect-knowledge-probes-design.md#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality). On the death rule, combat, gate 2 and the board-abilities subsets, the 256-wide arm lands inside or at the edge of the range of the other checkpoints.
 
 ### Gen-2's `e` spreads over two to three times gen-1's directions, and reads a line's kind and amounts far better
 
@@ -1512,7 +1512,7 @@ Three things keep the arms comparable.
 - **Measures that do not grow with the width of `e`.** A probe that reads a wider vector has more
   inputs and scores higher for that alone, so every probe on `e` is reported against a control of
   the same width, a fixed random vector per text
-  ([the probes record](2026-09-19-effect-knowledge-probes-design.md#the-width-control-keeps-arms-of-different-widths-comparable)). Concentration is compared by
+  ([the probes record](2026-09-19-effect-knowledge-probes-design.md#a-random-vector-of-es-width-separates-what-e-holds-from-what-its-width-buys)). Concentration is compared by
   participation ratio, the number of equally weighted directions that would give the same spread.
   The top component's share is not comparable across widths.
 
