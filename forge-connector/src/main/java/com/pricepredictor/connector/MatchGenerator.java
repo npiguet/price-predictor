@@ -427,7 +427,7 @@ public class MatchGenerator {
         // Delegated so that depletion has one implementation: this is the pool
         // every collected effect record is played from, and a second copy of
         // the redraw rule here would be the copy that silently stopped matching.
-        return new PoolGenerator().openPool(template, excludedCards);
+        return new PoolGenerator().openSinglePool(template, excludedCards);
     }
 
     /**

@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.zone.ZoneType;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventGameFinished;
@@ -517,9 +516,7 @@ public final class BusBracketCollector extends BusEventReader {
      *         case it goes nowhere else
      */
     private boolean holdAsConsequence(GameEventCardChangeZone event, EffectEvent moved) {
-        if (held == null || event.from() == null
-                || event.from().zoneType() != ZoneType.Battlefield
-                || !game.getTracker().isFrozen()) {
+        if (held == null || !isStateBasedLeave(event)) {
             return false;
         }
         List<Set<String>> touched = new ArrayList<>();
@@ -648,7 +645,7 @@ public final class BusBracketCollector extends BusEventReader {
         this.bracketDeclined = false;
         this.resolvingKeys = ProvenanceKey.resolve(ability);
         this.resolvingActor = actorOf(ability);
-        this.openBracketState = snapshots.toJson(ability, referencedOf(ability));
+        this.openBracketState = snapshots.toJson(ability, SnapshotBuilder.referencedOf(ability));
         this.bracketEvents.clear();
     }
 
@@ -691,7 +688,7 @@ public final class BusBracketCollector extends BusEventReader {
         }
         closeOpenMode();
         openMode = new ModeHalf(
-                option, snapshots.toJson(resolving, referencedOf(resolving)));
+                option, snapshots.toJson(resolving, SnapshotBuilder.referencedOf(resolving)));
     }
 
     /** Move the bracket's events into the open mode's half and file it. */
@@ -1043,24 +1040,6 @@ public final class BusBracketCollector extends BusEventReader {
             }
         }
         return true;
-    }
-
-    private static List<Card> referencedOf(SpellAbility ability) {
-        List<Card> referenced = new ArrayList<>();
-        if (ability == null) {
-            return referenced;
-        }
-        if (ability.getHostCard() != null) {
-            referenced.add(ability.getHostCard());
-        }
-        if (ability.getTargets() != null) {
-            for (Object target : ability.getTargets()) {
-                if (target instanceof Card card) {
-                    referenced.add(card);
-                }
-            }
-        }
-        return referenced;
     }
 
     /**

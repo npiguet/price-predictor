@@ -2,10 +2,12 @@ package com.pricepredictor.connector.effects;
 
 import com.google.common.eventbus.Subscribe;
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventLandPlayed;
@@ -20,7 +22,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -242,5 +246,101 @@ class ForkEventSinkTest {
 
         assertTrue(json.contains("\"combat\":true"), json);
         assertTrue(json.contains("\"cause\":\"E" + source.getId() + "\""), json);
+    }
+
+    // ── a repeat is read as the observed side reads it ──────────────────
+
+    private static List<String> types(ForkEventSink sink) {
+        List<String> types = new ArrayList<>();
+        for (EffectEvent event : sink.events()) {
+            types.add(event.type());
+        }
+        return types;
+    }
+
+    /**
+     * A state transition the engine publishes twice is filed once, as the
+     * bracket collector files it, so a fork and an observed record of the
+     * same outcome carry the same events.
+     */
+    @Test
+    void aRepeatedTransitionIsFiledOnce() {
+        ForkEventSink sink = ForkEventSink.forIntervention(null, null);
+        Card bears = TestCards.build("Grizzly Bears");
+
+        sink.onTapped(new GameEventCardTapped(bears, true));
+        sink.onTapped(new GameEventCardTapped(bears, true));
+
+        assertEquals(List.of(EffectEvent.TAPPED), types(sink));
+    }
+
+    /**
+     * Repeats are recognised within one chosen mode, as the live bracket
+     * recognises them within one mode's half: a transition repeated by the
+     * next mode is that mode's own event and is kept. What is filed before
+     * the first mode's clause shares the first mode's half, as it does live.
+     */
+    @Test
+    void aRepeatIsRecognisedWithinOneModeOnly() {
+        ForkEventSink sink = ForkEventSink.forIntervention(null, null);
+        Card bears = TestCards.build("Grizzly Bears");
+        GameEventCardTapped tap = new GameEventCardTapped(bears, true);
+
+        sink.onTapped(tap);
+        assertEquals(1, sink.beginMode());
+        sink.onTapped(tap);
+        assertEquals(1, sink.beginMode());
+        sink.onTapped(tap);
+        sink.onTapped(tap);
+
+        assertEquals(List.of(EffectEvent.TAPPED, EffectEvent.TAPPED), types(sink));
+    }
+
+    /** A quantitative repeat is two occurrences, and both are kept. */
+    @Test
+    void aRepeatedDamageIsKept() {
+        ForkEventSink sink = ForkEventSink.forIntervention(null, null);
+        Card bears = TestCards.build("Grizzly Bears");
+        Card source = TestCards.build("Prodigal Pyromancer");
+
+        for (int i = 0; i < 2; i++) {
+            sink.onCardDamaged(new GameEventCardDamaged(bears.getView(), source.getView(), 1,
+                    GameEventCardDamaged.DamageType.Normal));
+        }
+
+        assertEquals(List.of(EffectEvent.DAMAGE_DEALT, EffectEvent.DAMAGE_DEALT), types(sink));
+    }
+
+    /**
+     * A state-based leave's position names the event that was filed.
+     *
+     * <p>A repeat dropped before the leave shifts it down, and a repeat of the
+     * leave itself is no position at all: marked anyway, it would point at
+     * whatever is filed next, here an ordinary tap, which a modal fork would
+     * then file by the death rule.
+     */
+    @Test
+    void aStateBasedLeaveIsPlacedAmongTheEventsFiled() {
+        Game game = TestCards.game();
+        ForkEventSink sink = ForkEventSink.forIntervention(game, null);
+        Card bears = TestCards.build("Grizzly Bears");
+        Card elves = TestCards.build("Llanowar Elves");
+        GameEventCardChangeZone dies = new GameEventCardChangeZone(
+                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
+
+        sink.onTapped(new GameEventCardTapped(bears, true));
+        sink.onTapped(new GameEventCardTapped(bears, true));
+        game.getTracker().freeze();
+        try {
+            sink.onCardChangeZone(dies);
+            sink.onCardChangeZone(dies);
+        } finally {
+            game.getTracker().unfreeze();
+        }
+        sink.onTapped(new GameEventCardTapped(elves, true));
+
+        assertEquals(List.of(EffectEvent.TAPPED, EffectEvent.ZONE_CHANGE, EffectEvent.TAPPED),
+                types(sink));
+        assertEquals(Set.of(1), sink.stateBasedLeaves());
     }
 }

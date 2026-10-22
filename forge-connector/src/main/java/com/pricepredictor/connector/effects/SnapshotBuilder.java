@@ -130,6 +130,33 @@ public final class SnapshotBuilder {
     }
 
     /**
+     * An ability's tier-1 referenced list: its host and the cards it targets.
+     *
+     * <p>One list for every collector that snapshots an ability, observed or
+     * forked, because a target outside the zones the other tiers sweep — an
+     * exiled card, say — is in a snapshot only through this tier, and a
+     * collector that left it out wrote a record naming a target its own state
+     * did not hold.
+     */
+    static List<Card> referencedOf(SpellAbility ability) {
+        List<Card> referenced = new ArrayList<>();
+        if (ability == null) {
+            return referenced;
+        }
+        if (ability.getHostCard() != null) {
+            referenced.add(ability.getHostCard());
+        }
+        if (ability.getTargets() != null) {
+            for (Object target : ability.getTargets()) {
+                if (target instanceof Card card) {
+                    referenced.add(card);
+                }
+            }
+        }
+        return referenced;
+    }
+
+    /**
      * Render the snapshot for one record.
      *
      * @param acting the ability being recorded, or null for a combat record

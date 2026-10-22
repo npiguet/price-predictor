@@ -86,6 +86,21 @@ abstract class BusEventReader {
     abstract void fileMove(GameEventCardChangeZone event, EffectEvent moved);
 
     /**
+     * Whether this move is a permanent leaving the battlefield while a
+     * state-based check runs: a death some earlier action left behind.
+     *
+     * <p>The check is read as the game's view tracker being frozen, which
+     * {@code GameAction.checkStateEffects} holds for its whole loop. One
+     * reading for the bracket collector and the fork sink alike, so an
+     * observed death and a forced one are recognised by the same rule.
+     */
+    final boolean isStateBasedLeave(GameEventCardChangeZone event) {
+        return event.from() != null
+                && event.from().zoneType() == ZoneType.Battlefield
+                && game != null && game.getTracker().isFrozen();
+    }
+
+    /**
      * One damage, and the permanent that dealt it.
      *
      * <p>The cause comes off the event rather than off the bracket, because in

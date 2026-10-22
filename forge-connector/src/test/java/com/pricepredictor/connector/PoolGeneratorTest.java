@@ -131,6 +131,21 @@ class PoolGeneratorTest {
     @Test
     void generateThrowsForUnknownSetCode() {
         PoolGenerator generator = new PoolGenerator();
-        assertThrows(IllegalArgumentException.class, () -> generator.generate("XXXXUNKNOWN", 1, HoldoutCards.NONE));
+        IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
+                () -> generator.generate("XXXXUNKNOWN", 1, HoldoutCards.NONE));
+        assertEquals("Unknown or unsupported set code: XXXXUNKNOWN", thrown.getMessage());
+    }
+
+    /**
+     * A set named by its alias opens the set's packs, as the match and draft
+     * workers do: Forge resolves {@code CON} to Conflux, whose code is
+     * {@code CFX}.
+     */
+    @Test
+    void generateAcceptsASetsAlias() {
+        List<List<String>> pools = new PoolGenerator().generate("CON", 1, HoldoutCards.NONE);
+
+        assertEquals(1, pools.size());
+        assertTrue(pools.get(0).size() >= 70, "Pool too small: " + pools.get(0).size());
     }
 }

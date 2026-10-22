@@ -25,7 +25,7 @@ class DeckBuilderTest {
      * Generate a realistic pool from 6 boosters of the given set (no basic lands).
      */
     private static List<PaperCard> realPool(String setCode) {
-        return new PoolGenerator().openPool(
+        return new PoolGenerator().openSinglePool(
                 BoosterTemplates.forSet(setCode).orElseThrow(), HoldoutCards.NONE);
     }
 
