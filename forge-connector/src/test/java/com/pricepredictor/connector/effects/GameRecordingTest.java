@@ -64,6 +64,32 @@ class GameRecordingTest {
                 "the confirm hook outlived a close that threw");
     }
 
+    /**
+     * A close after an {@code open()} that threw part way takes down what was
+     * installed and does not trip over what never was, which is what lets the
+     * caller open inside the try whose finally closes.
+     */
+    @Test
+    void closeAfterAnOpenThatStoppedPartWayTakesDownWhatItInstalled() throws Exception {
+        Assumptions.assumeTrue(AttributionMode.detect() == AttributionMode.PATCHED
+                        && PatchHooks.MANA_LISTENER.present()
+                        && PatchHooks.CONFIRM_LISTENER.present(),
+                "../forge has no mana or confirm hook");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        GameRecording recording = new GameRecording(
+                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L, null);
+        // What an open() that threw after its first hook leaves behind.
+        PatchHooks.CONFIRM_LISTENER.install((proxy, method, args) -> null);
+        assertNotNull(installed(PlayerControllerAi.class, "CONFIRM_HOOK"));
+
+        recording.close();
+        writer.close();
+
+        assertNull(installed(PlayerControllerAi.class, "CONFIRM_HOOK"),
+                "the confirm hook outlived the close");
+        assertNull(installed(AbilityManaPart.class, "MANA_HOOK"));
+    }
+
     /** The listener a patched engine class's hook holds, or null when none is. */
     private static Object installed(Class<?> owner, String hookField) throws Exception {
         Field field;

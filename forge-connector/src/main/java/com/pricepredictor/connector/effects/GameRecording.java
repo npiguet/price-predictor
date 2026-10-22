@@ -106,7 +106,9 @@ public final class GameRecording implements AutoCloseable {
      * Stop recording: write what is still held and take every hook down.
      *
      * <p>Called once the game is over, which is the moment the mana reservoir
-     * is decided. Every hook comes down even when writing what is held throws.
+     * is decided. Every hook comes down even when writing what is held throws,
+     * and after an {@link #open()} that threw part way: taking down a hook that
+     * was never installed does nothing.
      */
     @Override
     public void close() {

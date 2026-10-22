@@ -226,21 +226,23 @@ public class GamePlayer {
         // what a fork clones and the controller is what a fork does not
         // attach.
         RandomSeatController seat = randomSeatOf(game);
-        GameRecording recording = null;
-        if (effectRecords != null) {
-            recording = new GameRecording(
-                    game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
-                    seat == null ? null : SnapshotBuilder.playerId(seat.getPlayer()));
-            recording.open();
-        }
-        if (seat != null) {
-            // Live from here: a fork's clone of this seat is never attached
-            // and plays as the ordinary AI. Without a recording the seat plays
-            // at random and reports nothing -- FR-026 keeps that combination
-            // out of a run.
-            seat.attach(game, recording == null ? null : recording.playability());
-        }
+        GameRecording recording = effectRecords == null ? null : new GameRecording(
+                game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
+                seat == null ? null : SnapshotBuilder.playerId(seat.getPlayer()));
         try {
+            // Inside the try: open() installs JVM-static hooks one by one, and
+            // a hook left behind by an open() that threw part way would hand
+            // the next game's callbacks to this game's collectors.
+            if (recording != null) {
+                recording.open();
+            }
+            if (seat != null) {
+                // Live from here: a fork's clone of this seat is never attached
+                // and plays as the ordinary AI. Without a recording the seat plays
+                // at random and reports nothing -- FR-026 keeps that combination
+                // out of a run.
+                seat.attach(game, recording == null ? null : recording.playability());
+            }
             match.startGame(game); // blocks until game is finished
         } finally {
             if (recording != null) {
