@@ -80,24 +80,11 @@ class MatchGeneratorTest {
     }
 
     @Test
-    void generateMatchUsesOnlyEligibleSets() {
-        MatchGenerator generator = sealedSelfPlay();
-
-        // Eligible sets: must have draft booster template, must not be FUNNY type.
-        // We don't know which set was chosen, but the generator should not throw.
-        // If an ineligible set (e.g. un-set) were picked, Forge would likely throw
-        // during pool generation.
-        assertDoesNotThrow(() -> {
-            for (int i = 0; i < 3; i++) {
-                generator.generateMatch();
-            }
-        });
-    }
-
-    @Test
-    void eligibleSetsListIsNonEmpty() {
-        List<String> eligibleSets = MatchGenerator.computeEligibleSets();
-        assertFalse(eligibleSets.isEmpty(), "Should have at least one eligible sealed set");
+    void theMatchWasPlayedInAnEligibleSet() {
+        // An ineligible set (an un-set, say) would fail pool generation, but a
+        // wrong pick that still generated would go unnoticed without this.
+        assertTrue(MatchGenerator.computeEligibleSets().contains(result.setCode()),
+                "set not eligible: " + result.setCode());
     }
 
     @Test
@@ -151,20 +138,11 @@ class MatchGeneratorTest {
 
         List<PaperCard> pool = generator.generatePool("RVR");
 
-        assertFalse(pool.isEmpty(), "Depleted pool came back empty");
+        assertTrue(pool.size() >= 70, "Depleted pool too small: " + pool.size());
         for (PaperCard card : pool) {
             assertFalse(excluded.contains(card.getName()),
                     "Excluded card reached a collected game: " + card.getName());
         }
-    }
-
-    @Test
-    void generatePoolWithoutExclusionsIsFullStrength() {
-        MatchGenerator generator = MatchGenerator.builder(List.of("RVR"), TEST_RUN_ID)
-                .random(new Random(42)).build();
-
-        assertTrue(generator.generatePool("RVR").size() >= 70,
-                "Full-strength pool too small");
     }
 
     @Test

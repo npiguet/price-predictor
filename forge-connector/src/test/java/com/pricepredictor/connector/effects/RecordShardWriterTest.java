@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -104,6 +105,17 @@ class RecordShardWriterTest {
             writer.write("{\"a\":" + i + "}");
         }
         assertEquals(RecordShardWriter.BLOCK_RECORDS, ShardRun.readShard(writer.path()).size());
+    }
+
+    @Test
+    void aWriterThatWritesNothingCreatesNoFile() {
+        // Many collector tests read "no shard on disk" as "nothing was
+        // recorded"; that reading holds only while the file is created by the
+        // first record, not by the writer.
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        writer.close();
+
+        assertFalse(Files.exists(writer.path()));
     }
 
     // ── identity across worker lifetimes ────────────────────────────────

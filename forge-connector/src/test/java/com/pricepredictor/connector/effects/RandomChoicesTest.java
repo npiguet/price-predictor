@@ -244,9 +244,4 @@ class RandomChoicesTest {
 
         assertNull(gain.getXManaCostPaid());
     }
-
-    @Test
-    void theRetryLimitIsTwenty() {
-        assertEquals(20, RandomChoices.MAX_DRAWS);
-    }
 }

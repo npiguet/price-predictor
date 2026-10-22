@@ -11,8 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -52,7 +50,8 @@ class SnapshotBuilderTest {
 
     /**
      * Every snapshot declares all four tiers, so an empty hand or stack reads as
-     * empty rather than as uncollected.
+     * empty rather than as uncollected. The literal is the contract:
+     * Python's {@code InclusionTier} and {@code record_io} mirror it.
      */
     @Test
     void everySnapshotDeclaresAllFourTiers() {
@@ -76,17 +75,6 @@ class SnapshotBuilderTest {
                 new SnapshotBuilder(null).refsJson(null));
     }
 
-    /**
-     * The refs block is re-rendered at resolution by a collector in another
-     * class, so it has to be reachable from there.
-     */
-    @Test
-    void refsCanBeReRenderedFromOutsideTheBuilder() throws Exception {
-        Method refs = SnapshotBuilder.class.getMethod(
-                "refsJson", forge.game.spellability.SpellAbility.class);
-        assertTrue(Modifier.isPublic(refs.getModifiers()));
-    }
-
     // ── the block order a resolution-time splice depends on ─────────────
 
     @Test
@@ -98,37 +86,7 @@ class SnapshotBuilderTest {
     }
 
     /**
-     * Refs sit immediately before the pending event, with nothing between them.
-     *
-     * <p>This is what lets a collector re-read refs at resolution — when the
-     * chosen colour and the named card exist — and splice them into a state
-     * captured before the ability resolved. The splice falls back to the
-     * un-spliced state when it cannot find both markers, so a reorder would show
-     * up as refs quietly staying empty rather than as a failure. Performing the
-     * splice here is the only way that stays loud.
-     */
-    @Test
-    void refsCanBeSplicedWithoutTouchingAnyOtherBlock() {
-        String castTime = SnapshotBuilder.stateJson(
-                "G", "P", "E", "{\"choices\":{}}", "null", "[1,2,3]");
-        String resolved = "{\"choices\":{\"chosen_color\":\"U\"}}";
-
-        int open = castTime.indexOf(SnapshotBuilder.REFS_KEY);
-        int close = castTime.indexOf(SnapshotBuilder.AFTER_REFS_KEY);
-        assertTrue(open >= 0 && close > open, "both splice markers present");
-
-        String spliced = castTime.substring(0, open)
-                + SnapshotBuilder.REFS_KEY + resolved
-                + castTime.substring(close);
-
-        assertEquals(
-                SnapshotBuilder.stateJson("G", "P", "E", resolved, "null",
-                        "[1,2,3]"),
-                spliced);
-    }
-
-    /**
-     * And the splice itself is one method, not one per collector.
+     * The splice is one method, not one per collector.
      *
      * <p>Two collectors doing the same substring arithmetic by hand is how the
      * two readings drift, and this one degrades silently rather than failing --

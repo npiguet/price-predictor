@@ -8,12 +8,9 @@ import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -78,14 +75,15 @@ class EventAttributionTest {
         assertNotEquals(EventAttribution.ROOT, EventAttribution.UNRESOLVED);
     }
 
-    /** Neither sentinel can be mistaken for a chain index. */
+    /**
+     * The sentinels are spelled as Python's {@code ATTRIBUTION_ROOT} and
+     * {@code ATTRIBUTION_UNRESOLVED} in {@code event_schema.py} spell them; a
+     * corpus on disk carries these literals, so neither side may drift.
+     */
     @Test
-    void neitherSentinelReadsAsAClauseIndex() {
-        for (String sentinel
-                : List.of(EventAttribution.ROOT, EventAttribution.UNRESOLVED)) {
-            assertThrows(NumberFormatException.class,
-                    () -> Integer.parseInt(sentinel), sentinel);
-        }
+    void theSentinelsAreSpelledAsPythonSpellsThem() {
+        assertEquals("root", EventAttribution.ROOT);
+        assertEquals("unresolved", EventAttribution.UNRESOLVED);
     }
 
     /**

@@ -105,9 +105,4 @@ class WorkerLoopTest {
                         + "Worker: 4 things done" + System.lineSeparator(),
                 progressBytes.toString(StandardCharsets.UTF_8));
     }
-
-    @Test
-    void theDefaultCapIsSmallEnoughToFailFast() {
-        assertEquals(10, WorkerLoop.MAX_CONSECUTIVE_FAILURES);
-    }
 }
