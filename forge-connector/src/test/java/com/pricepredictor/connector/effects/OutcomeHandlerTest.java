@@ -464,7 +464,7 @@ class OutcomeHandlerTest {
      * naive-fail-open trap -- passed every test in this class, because no
      * test ever set the pointer: the combat-damage test above leaves it null
      * by construction, and the probe test below only ever exercises the flag.
-     * So did dropping the {@link PatchedCollectors#belongsToLiveGame(CardTraitBase)}
+     * So did dropping the {@link LiveGame#owns(CardTraitBase)}
      * delegate and returning {@code true} whenever the pointer is merely
      * non-null. This resolves a real ability -- through {@code
      * AbilityUtils.resolve}, not a synthesized call -- so the pointer is

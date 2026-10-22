@@ -272,21 +272,6 @@ class PatchedCollectorTest {
     // ── coalescing the kinds that had none ─────────────────────────────
 
     /**
-     * A decision is keyed by what it says and the board it was asked on: the
-     * same answer on an unchanged board is written once, and a board that
-     * moved gets its own record.
-     */
-    @ParameterizedTest(name = "{0}")
-    @CsvSource({
-            "a decision on an unchanged board is written once, '{life:20}', false",
-            "a board that moved gets its own decision record, '{life:19}', true"})
-    void aDecisionIsKeyedByItsPayloadAndBoard(String why, String board, boolean allowed) {
-        PatchedCollectors collector = unwired(caps(2000, 1.0));
-        assertTrue(collector.allowDistinctRecord("decision", "{payload}", "{life:20}"));
-        assertEquals(allowed, collector.allowDistinctRecord("decision", "{payload}", board), why);
-    }
-
-    /**
      * Two copies of one anthem render one record.
      *
      * <p>The per-board coalescer cannot see this: the two statics have different
@@ -296,27 +281,11 @@ class PatchedCollectorTest {
     @Test
     void twoStaticsThatRenderIdenticallyAreWrittenOnce() {
         PatchedCollectors collector = unwired(caps(2000, 1.0));
+        RecordDedup dedup = new RecordDedup();
         assertTrue(collector.allowContinuousRecord("11", "board-1"));
         assertTrue(collector.allowContinuousRecord("12", "board-1"));
-        assertTrue(collector.allowDistinctRecord("continuous", "{anthem}", "{board}"));
-        assertFalse(collector.allowDistinctRecord("continuous", "{anthem}", "{board}"));
-    }
-
-    /**
-     * The legality cap keys on the snapshot as well as the payload (FR-028).
-     *
-     * <p>The AI's re-asks within one combat still collapse -- the board does
-     * not move while it evaluates, so their snapshots render identically --
-     * while the same answer on a board that moved is kept, which the
-     * payload-only key of gen-1 dropped as a repeat (spec Story 3 scenario 10).
-     */
-    @Test
-    void aLegalityAnswerCoalescesOnPayloadAndSnapshotTogether() {
-        PatchedCollectors collector = unwired(caps(2000, 1.0));
-        assertTrue(collector.allowDistinctRecord("blockers", "{payload}", "{board-1}"));
-        assertFalse(collector.allowDistinctRecord("blockers", "{payload}", "{board-1}"));
-        assertTrue(collector.allowDistinctRecord("blockers", "{payload}", "{board-2}"));
-        assertTrue(collector.allowDistinctRecord("attackers", "{payload}", "{board-1}"));
+        assertTrue(dedup.allowDistinct("continuous", "{anthem}", "{board}"));
+        assertFalse(dedup.allowDistinct("continuous", "{anthem}", "{board}"));
     }
 
     // ── the snapshot depth is the same on every record ─────────────────

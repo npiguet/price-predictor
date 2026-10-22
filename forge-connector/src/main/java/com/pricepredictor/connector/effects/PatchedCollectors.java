@@ -61,7 +61,7 @@ import java.util.function.Supplier;
  */
 public final class PatchedCollectors implements AutoCloseable {
 
-    private final Game game;
+    private final LiveGame live;
     private final CollectorContext context;
     private final SnapshotBuilder snapshots;
     private final AttributionMode mode;
@@ -77,8 +77,8 @@ public final class PatchedCollectors implements AutoCloseable {
     private final BusBracketCollector bracket;
     /** Boards a continuous static has already been recorded on, for coalescing. */
     private final Set<String> coalescedBoards = new LinkedHashSet<>();
-    /** Records already written this game, by a hash of what they say. */
-    private final Set<Long> coalescedRecords = new java.util.HashSet<>();
+    /** The records this game has written, shared by every channel that deduplicates. */
+    private final RecordDedup dedup = new RecordDedup();
     /** Each trigger mode's written evaluations and pending offers, this game. */
     private final Map<String, ModeBalance> triggerBalance = new HashMap<>();
     /** Records written per acting line and verdict, for the flood cap. */
@@ -116,10 +116,10 @@ public final class PatchedCollectors implements AutoCloseable {
     PatchedCollectors(
             Game game, CollectorContext context, CollectionCaps caps, long seed,
             BusBracketCollector bracket) {
-        this.game = game;
+        this.live = new LiveGame(game);
         this.context = context;
         this.caps = caps;
-        this.snapshots = new SnapshotBuilder(game);
+        this.snapshots = live.snapshots();
         this.mode = context.mode();
         this.sampler = new java.util.Random(GameRecording.scramble(seed));
         this.manaReservoir = new ManaReservoir(caps.manaCap(), sampler);
@@ -192,12 +192,12 @@ public final class PatchedCollectors implements AutoCloseable {
             // other game is dropped; anything this cannot identify is left
             // alone rather than newly dropped.
             CardTraitBase trait = args.get(0, CardTraitBase.class);
-            if (trait != null && !belongsToLiveGame(trait)) {
+            if (trait != null && !live.owns(trait)) {
                 return;
             }
             EffectRecord record = rewriteRecord(
                     args.get(0), args.get(1), args.get(2), args.optional(3), args.optional(4));
-            if (!allowDistinctRecord(
+            if (!dedup.allowDistinct(
                     RecordKind.REWRITE.wireName(), record.payloadJson(), record.stateJson())) {
                 return;
             }
@@ -263,7 +263,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
                 !ranKeys.isEmpty(), before, after);
         return context.newRecord(RecordKind.REWRITE)
-                .actor(controllerOf(source))
+                .actor(live.controllerOf(source))
                 .ability(ProvenanceKey.resolve(acting))
                 .state(snapshots.ofTrait(source, incoming).render())
                 .payload(EffectRecord.rewritePayload(
@@ -297,7 +297,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // CardTraitBase with a real host; anything this cannot identify
             // is left alone rather than newly dropped.
             CardTraitBase trait = args.get(0, CardTraitBase.class);
-            if (trait != null && !belongsToLiveGame(trait)) {
+            if (trait != null && !live.owns(trait)) {
                 return;
             }
             boolean fired = Boolean.TRUE.equals(args.get(2));
@@ -309,7 +309,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 return;
             }
             EffectRecord record = triggerRecord(args.get(0), args.get(1), fired);
-            if (!allowDistinctRecord(
+            if (!dedup.allowDistinct(
                     RecordKind.TRIGGER.wireName(), record.payloadJson(), record.stateJson())
                     || !allowTriggerLine(record.abilityJson(), fired)) {
                 return;
@@ -358,7 +358,7 @@ public final class PatchedCollectors implements AutoCloseable {
      *
      * <p>Bunching behind the firing is not a loss worth a controller. The
      * negatives that reach the shard are spread by
-     * {@link #allowDistinctRecord} instead: two consecutive non-fired
+     * {@link RecordDedup#allowDistinct} instead: two consecutive non-fired
      * evaluations on an unmoved board render the same record and the second is
      * refused, so this walks forward until it finds one that differs. The
      * negative it lands on is then the one closest in time to the positive it
@@ -461,7 +461,7 @@ public final class PatchedCollectors implements AutoCloseable {
         Card source = acting == null ? null : acting.getHostCard();
         EffectEvent event = RunParamNormalizer.describeParams(trait, runParams);
         return context.newRecord(RecordKind.TRIGGER)
-                .actor(controllerOf(source))
+                .actor(live.controllerOf(source))
                 .ability(ProvenanceKey.resolve(acting))
                 .state(snapshots.ofTrait(source, event).render())
                 .payload("{\"event\":" + event.toJson()
@@ -503,7 +503,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // avoids by running first. A null candidate is let through: its
             // record names no ability either way.
             SpellAbility candidate = args.get(0, SpellAbility.class);
-            if (candidate != null && !belongsToLiveGame(candidate)) {
+            if (candidate != null && !live.owns(candidate)) {
                 return;
             }
             recordCandidate(deciderOf(candidate), candidate,
@@ -600,11 +600,11 @@ public final class PatchedCollectors implements AutoCloseable {
         // playability record measured in the first corpus was this subkind:
         // the AI re-asks the same question about the same board, and the
         // answer repeats verbatim.
-        if (!allowDistinctRecord(PlayabilitySubkind.DECISION.wireName(), payload, state)) {
+        if (!dedup.allowDistinct(PlayabilitySubkind.DECISION.wireName(), payload, state)) {
             return;
         }
         emit(context.newPlayability(PlayabilitySubkind.DECISION)
-                .actor(playerIdOrActive(decider))
+                .actor(live.playerIdOrActive(decider))
                 .state(state)
                 .payload(payload));
     }
@@ -673,7 +673,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // to recordAttackers/recordBlockers, which tolerate both.
             Player decider = args.get(0, Player.class);
             GameEntity declaredAgainst = args.get(1, GameEntity.class);
-            if (declaredAgainst != null && !belongsToLiveGame(declaredAgainst)) {
+            if (declaredAgainst != null && !live.owns(declaredAgainst)) {
                 return;
             }
             switch (callback) {
@@ -762,55 +762,14 @@ public final class PatchedCollectors implements AutoCloseable {
         // Keyed on the snapshot as well as the payload (FR-028): the same
         // answer on a board that moved is a second observation, which a
         // payload-only key would drop as a repeat of the first.
-        if (!allowDistinctRecord(subkind.wireName(), payload, state)) {
+        if (!dedup.allowDistinct(subkind.wireName(), payload, state)) {
             return;
         }
         emit(context.newPlayability(subkind)
-                .actor(playerIdOrActive(decider))
+                .actor(live.playerIdOrActive(decider))
                 .whatIf(false)
                 .state(state)
                 .payload(payload));
-    }
-
-    /** The deciding player's id, or the active player's where none is known. */
-    private String playerIdOrActive(Player decider) {
-        return decider == null ? activePlayerId() : SnapshotBuilder.playerId(decider);
-    }
-
-    /** Distinct rendered records this game may hold before dedup stops. */
-    private static final int COALESCE_MAX_KEYS = 200_000;
-
-    /**
-     * Whether a record saying exactly this has already been written this game.
-     *
-     * <p>The generalisation of the legality cap to the kinds that had none.
-     * 624,679 records of the first corpus — 4.3% of it — were byte-identical to
-     * another record of the same game, and dedup existed only for the attacker
-     * and blocker subkinds: every duplicate playability record measured was the
-     * {@code decision} subkind, which is exactly what an unguarded path
-     * predicts. Two records that would be byte-identical carry one observation
-     * once, so collapsing them loses nothing.
-     *
-     * <p>A 64-bit hash rather than the 32-bit {@code String.hashCode} the
-     * legality cap used: over the hundred thousand keys one game can produce,
-     * a 32-bit space has a real chance of colliding, and a collision here
-     * silently drops a record that was not a duplicate.
-     *
-     * <p>Bounded: past the cap it stops deduplicating rather than growing, so a
-     * pathological game reverts to writing duplicates instead of exhausting a
-     * 1200 MB heap. The duplicate rate of a run is therefore something to
-     * measure rather than assume.
-     */
-    public boolean allowDistinctRecord(String tag, String payload, String state) {
-        if (coalescedRecords.size() >= COALESCE_MAX_KEYS) {
-            return true;
-        }
-        long digest = com.google.common.hash.Hashing.murmur3_128().newHasher()
-                .putUnencodedChars(tag).putChar('@')
-                .putUnencodedChars(payload == null ? "" : payload).putChar('#')
-                .putUnencodedChars(state == null ? "" : state)
-                .hash().asLong();
-        return coalescedRecords.add(digest);
     }
 
     /**
@@ -858,148 +817,6 @@ public final class PatchedCollectors implements AutoCloseable {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
-     * Whether a clause, replacement, trigger or mana ability belongs to the
-     * game this collector is installed for.
-     *
-     * <p>{@link #clauseHandler()} and {@link #outcomeHandler()} are wired to
-     * Forge's clause and outcome hooks, which are plain JVM statics with no
-     * {@code Game} reference of their own -- whichever resolution fires them
-     * last wins. {@code ForkCollector.forceResolution} fires them too:
-     * {@code GameSimulator.resolveStack} builds its own
-     * {@code PlayerControllerAi} and unconditionally calls
-     * {@code setUseSimulation(AIOption.USE_FULL_SIMULATION)}, regardless of
-     * how this game's own two lobby seats were registered, so a forked
-     * ability resolves through the exact same
-     * {@code AbilityUtils.resolveApiAbility} these hooks are installed
-     * against. {@link ForkEventSink}
-     * keeps a fork's own <em>bus</em> events out of this game's records by
-     * subscribing to the fork's own {@code Game} instead of this one, but
-     * these hooks are not bus subscriptions, so that separation never
-     * reaches them -- without this check, a fork's {@code vote_taken} or
-     * {@code coin_flipped} lands in the live game's bracket with nothing
-     * marking it as hypothetical.
-     *
-     * <p>Game identity is the check because it needs no cooperation from
-     * {@code ForkCollector} or {@code GameSimulator}, neither of which know
-     * this class exists: {@code GameCopier} builds every copied {@code Card}
-     * against a new {@code Game} object ({@code new Card(id, paperCard,
-     * newGame)}), so a fork's clause's own host card already carries the
-     * answer. Compared by reference, the same way
-     * {@code SpellAbility.setActivatingPlayer} itself already compares
-     * players ("don't use equals because player might be from simulation")
-     * -- a copied {@code Game} is never {@code equals} to the live one by
-     * accident, only by being the same object. A clause with no identifiable
-     * host is treated as not belonging here rather than let through by
-     * default: on the real resolution path a host card is always present
-     * (the same assumption {@code AbilityUtils.resolveApiAbilityUnobserved}
-     * already makes, unconditionally dereferencing it), so this branch is
-     * never live in production and only ever chooses the safer of two
-     * defaults for a state that should not occur.
-     *
-     * <p>Checked in the handlers themselves, immediately before each one's
-     * existing {@code bracket != null} (or, for {@link #rewriteHandler()} and
-     * {@link #triggerFireHandler()}, sampling/dedup) delivery gate, rather
-     * than inside {@link BusBracketCollector#recordClauseEvent}: that method
-     * only ever receives the already-built {@code EffectEvent}, not the
-     * {@code SpellAbility} that produced it, so checking there would mean
-     * widening a documented, two-call-site contract just to re-derive
-     * something both callers already have in scope. Both hooks' push/pop
-     * bookkeeping in {@link #clauseMemos} is untouched by this: a fork's
-     * clause still pushes and pops its own memo exactly as a live one does,
-     * so this check cannot desynchronize that deque.
-     *
-     * <p>Typed {@link CardTraitBase} rather than {@link SpellAbility}:
-     * {@code SpellAbility}, {@code ReplacementEffect} and
-     * {@code Trigger} all extend it and all declare {@code getHostCard()} on
-     * it, so {@link #rewriteHandler()} and {@link #triggerFireHandler()} --
-     * whose acting argument is a {@code ReplacementEffect}/{@code Trigger},
-     * never a {@code SpellAbility} -- reuse this same check rather than a
-     * near-duplicate.
-     */
-    private boolean belongsToLiveGame(CardTraitBase ability) {
-        if (ability == null) {
-            return false;
-        }
-        Card host = ability.getHostCard();
-        return host != null && host.getGame() == game;
-    }
-
-    /**
-     * As {@link #belongsToLiveGame(CardTraitBase)}, for {@link
-     * #combatLegalityHandler()}: the attacker/defender Forge hands that hook
-     * is a {@code Card} or {@code Player} directly, never a trait with a
-     * host, so the game comes straight off the {@code GameEntity} itself.
-     */
-    private boolean belongsToLiveGame(GameEntity entity) {
-        return entity != null && entity.getGame() == game;
-    }
-
-    /**
-     * Whether a null-ability outcome belongs to the live game.
-     *
-     * <p>{@link #outcomeHandler()}'s two production null-ability sources --
-     * {@code GameAction.reveal}'s six-argument funnel and
-     * {@code ReplacementHandler.runSingleReplaceDamageEffect}'s two
-     * {@code damage_prevented} sites -- call
-     * {@code EffectRecordOutcomes.note} with a literal {@code null} ability,
-     * always, on the live game exactly as on a fork: {@link
-     * #belongsToLiveGame(CardTraitBase)} has nothing to compare, and simply
-     * keeping every null-ability outcome would readmit exactly what that
-     * method exists to keep out.
-     *
-     * <p>Two signals, checked in this order:
-     *
-     * <ol>
-     *   <li>{@link ForkCollector#isForkRunningOnThisThread()}. Set around the
-     *   whole of {@code ForkCollector.intervene} and {@code
-     *   ForkCollector.probe} -- both this class's only two fork mechanisms --
-     *   so "a fork is running on this thread" is by construction true for
-     *   every null-ability outcome a fork can produce today, whichever of the
-     *   two produces it and whichever segment of either it fires from. Tried
-     *   first because, unlike the pointer below, it does not depend on the
-     *   call happening to be nested inside an ability resolution.
-     *   <li>The resolving-clause pointer ({@code
-     *   AbilityUtils.getEffectRecordSubAbility}, read via {@link
-     *   PatchHooks#currentSubAbility()}), when the flag is false. Every
-     *   ability resolves through {@code AbilityUtils.resolve}/{@code
-     *   resolveApiAbility}, live or forked alike, and both set this pointer to
-     *   the ability currently resolving before running its body. Kept as a
-     *   second, independent signal although the flag alone is sufficient for
-     *   both of this class's current fork mechanisms:
-     *   insurance against a future one that resolves an ability without going
-     *   through {@code intervene}/{@code probe}. When the flag is true this
-     *   branch is redundant with it (both cover the resolving case), not a
-     *   second opinion; it only does independent work when the flag is false.
-     * </ol>
-     *
-     * <p>Neither signal fires for a real combat-damage prevention on the live
-     * game -- {@code Combat.dealAssignedDamage} is a turn-based action, never
-     * inside an ability resolution and never inside a fork -- which is the
-     * intended "belongs to the live game" default this method falls through
-     * to.
-     *
-     * <p><b>Why not also use {@code damage_prevented}'s own {@code "source"}
-     * param</b> (a raw {@code Card}, held at {@link #outcomeRefOf} before it is
-     * converted to a ref): with the flag covering the entirety of
-     * both fork mechanisms, there is no remaining path where {@code source}
-     * would catch a fork this method's two signals miss -- it would be a
-     * third check for a gap that is already closed, not a narrower one. It is
-     * also not general: {@code card_revealed}'s params carry no card at all
-     * (just a count and a zone name), so a {@code source}-keyed check could
-     * only ever cover one of the two known null-ability types, where the flag
-     * and the pointer both cover either.
-     */
-    private boolean nullAbilityOutcomeBelongsToLiveGame() {
-        if (ForkCollector.isForkRunningOnThisThread()) {
-            return false;
-        }
-        if (PatchHooks.currentSubAbility() instanceof SpellAbility resolving) {
-            return belongsToLiveGame(resolving);
-        }
-        return true;
-    }
-
-    /**
      * Dispatches by method name on a listener this side never compiles
      * against, so the argument order below is a runtime contract rather than
      * one the compiler enforces: {@code onClauseResolving} is called with
@@ -1042,7 +859,7 @@ public final class PatchedCollectors implements AutoCloseable {
         // the same boundary in its own event stream. Nested, so
         // "resolved" cannot delimit modes; "resolving" of the first
         // clause is the one moment FR-029b's snapshot has to be taken.
-        if (belongsToLiveGame(clause)) {
+        if (live.owns(clause)) {
             if (bracket != null) {
                 CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
                 if (start != null) {
@@ -1063,7 +880,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // did would be a fact the game never contained.
             return;
         }
-        if (bracket != null && belongsToLiveGame(clause)) {
+        if (bracket != null && live.owns(clause)) {
             bracket.recordClauseEvent(ApiEvents.after(clause, memo, rules));
         }
     }
@@ -1210,8 +1027,8 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             SpellAbility ability = args.get(0, SpellAbility.class);
             boolean liveGame = ability != null
-                    ? belongsToLiveGame(ability)
-                    : nullAbilityOutcomeBelongsToLiveGame();
+                    ? live.owns(ability)
+                    : live.ownsNullAbilityOutcome();
             if (bracket != null && liveGame) {
                 bracket.recordClauseEvent(event);
             }
@@ -1280,7 +1097,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // too (forceResolution's forced ability,
             // or costs it pays along the way), and this hook is a JVM static
             // like the others.
-            if (ability == null || produced.isEmpty() || !belongsToLiveGame(ability)) {
+            if (ability == null || produced.isEmpty() || !live.owns(ability)) {
                 return;
             }
             String key = manaAbilityText(ability, produced);
@@ -1290,7 +1107,7 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             Player producer = args.get(1, Player.class);
             String player = producer != null
-                    ? SnapshotBuilder.playerId(producer) : activePlayerId();
+                    ? SnapshotBuilder.playerId(producer) : live.activePlayerId();
             EffectEvent event = new EffectEvent(EffectEvent.MANA_PRODUCED)
                     .subject(player)
                     .param("mana_by_color", RunParamNormalizer.manaByColor(produced));
@@ -1357,7 +1174,7 @@ public final class PatchedCollectors implements AutoCloseable {
             return;
         }
         Map<Long, Map<String, Contribution>> byStatic = new LinkedHashMap<>();
-        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+        for (Card card : live.game().getCardsIn(ZoneType.Battlefield)) {
             String entity = SnapshotBuilder.entityId(card);
             for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell
                     : card.getPTBoostTable().cellSet()) {
@@ -1424,7 +1241,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // two copies of one aura -- resolve to the same key, the same
             // contributions and the same suppressed board, so they render
             // identically and the board hash says they are different statics.
-            if (!allowDistinctRecord(RecordKind.CONTINUOUS.wireName(), payload, state)) {
+            if (!dedup.allowDistinct(RecordKind.CONTINUOUS.wireName(), payload, state)) {
                 continue;
             }
             emit(context.newRecord(RecordKind.CONTINUOUS)
@@ -1593,7 +1410,7 @@ public final class PatchedCollectors implements AutoCloseable {
      */
     private String boardHash() {
         StringBuilder shape = new StringBuilder();
-        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+        for (Card card : live.game().getCardsIn(ZoneType.Battlefield)) {
             shape.append(card.getId()).append(':').append(card.getName())
                     .append(':').append(card.getNetPower())
                     .append('/').append(card.getNetToughness()).append(';');
@@ -1613,7 +1430,7 @@ public final class PatchedCollectors implements AutoCloseable {
             return staticsById.get(id);
         }
         StaticAbility found = null;
-        for (Card card : game.getCardsInGame()) {
+        for (Card card : live.game().getCardsInGame()) {
             for (StaticAbility candidate : card.getStaticAbilities()) {
                 if (candidate.getId() == id) {
                     found = candidate;
@@ -1714,30 +1531,6 @@ public final class PatchedCollectors implements AutoCloseable {
      */
     static List<ProvenanceKey> keysOf(CardTraitBase trait) {
         return ProvenanceKey.resolve(trait).keys();
-    }
-
-    /**
-     * The player whose line acted, falling back to the active player.
-     *
-     * <p>A triggered or replacement ability belongs to its host's controller,
-     * which is often not whoever's turn it is: a death trigger fires on the
-     * opponent's turn as often as on its own. Forge decides it the same way —
-     * {@code TriggerHandler.runSingleTriggerUnobserved} defaults the controller to
-     * the host card's.
-     */
-    private String controllerOf(Card source) {
-        if (source == null || source.getController() == null) {
-            return activePlayerId();
-        }
-        return SnapshotBuilder.playerId(source.getController());
-    }
-
-    private String activePlayerId() {
-        var phase = game == null ? null : game.getPhaseHandler();
-        if (phase == null || phase.getPlayerTurn() == null) {
-            return null;
-        }
-        return SnapshotBuilder.playerId(phase.getPlayerTurn());
     }
 
     private void emit(EffectRecord record) {

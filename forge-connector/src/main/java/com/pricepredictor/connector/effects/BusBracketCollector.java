@@ -945,11 +945,11 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * As {@code PatchedCollectors#belongsToLiveGame(CardTraitBase)}, kept as
-     * this class's own copy rather than shared: this one needs only the
-     * {@code SpellAbility} shape {@link
-     * #confirmHandler()} calls it with, not the wider {@code CardTraitBase}
-     * {@code PatchedCollectors} also needs for its rewrite/trigger hooks.
+     * As {@link LiveGame#owns(forge.game.CardTraitBase)}, kept as this class's
+     * own copy rather than shared: this one needs only the
+     * {@code SpellAbility} shape {@link #confirmHandler()} calls it with, not
+     * the wider {@code CardTraitBase} {@code LiveGame} also takes for the
+     * rewrite and trigger hooks.
      */
     private boolean belongsToLiveGame(SpellAbility ability) {
         Card host = ability.getHostCard();
