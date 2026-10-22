@@ -147,7 +147,8 @@ class StateBasedDeathTest {
         Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
         SpellAbility bolt = targeting(
                 spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), bears);
-        SpellAbility shock = targeting(spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
 
         List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, bolt);
@@ -194,7 +195,8 @@ class StateBasedDeathTest {
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
         Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
-        SpellAbility shock = targeting(spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
 
         List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, shock);
@@ -248,7 +250,8 @@ class StateBasedDeathTest {
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
         Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
-        SpellAbility shock = targeting(spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
 
         List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, shock);
@@ -275,7 +278,8 @@ class StateBasedDeathTest {
         Player opponent = game.getPlayers().get(1);
         Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
         Card bystander = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
-        SpellAbility shock = targeting(spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
 
         List<String> records = ShardRun.observed(tempDir, game, collector -> {
             game.getStack().add(shock);
@@ -304,7 +308,8 @@ class StateBasedDeathTest {
         Player opponent = game.getPlayers().get(1);
         Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
         Card bystander = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
-        SpellAbility shock = targeting(spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
         Card mountain = TestBoard.inHand(game, caster, "Mountain");
 
         List<String> records = ShardRun.observed(tempDir, game, collector -> {
@@ -357,7 +362,8 @@ class StateBasedDeathTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
-        SpellAbility norn = spellOf(TestBoard.inHand(game, caster, "Elesh Norn, Grand Cenobite"), caster);
+        SpellAbility norn = spellOf(
+                TestBoard.inHand(game, caster, "Elesh Norn, Grand Cenobite"), caster);
 
         List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, norn);

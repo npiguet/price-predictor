@@ -49,12 +49,12 @@ public final class TestBoard {
      * checkStateEffects} returns early and leaves the stack frozen. Use
      * {@link #startedTwoPlayerGame} where a test needs either.
      */
-    public static Game twoPlayerGame(PhaseType phase) {
+    static Game twoPlayerGame(PhaseType phase) {
         return twoPlayerGame(phase, new LobbyPlayerAi("a", null), new LobbyPlayerAi("b", null));
     }
 
     /** The same, past the start: state-based actions run and the stack resolves. */
-    public static Game startedTwoPlayerGame(PhaseType phase) {
+    static Game startedTwoPlayerGame(PhaseType phase) {
         Game game = twoPlayerGame(phase);
         game.setAge(GameStage.Play);
         return game;
@@ -103,7 +103,7 @@ public final class TestBoard {
     }
 
     /** A card that has just entered the battlefield, summoning sick. */
-    public static Card onBattlefield(Game game, Player owner, String name) {
+    static Card onBattlefield(Game game, Player owner, String name) {
         return game.getAction().moveToPlay(card(game, owner, name), owner, null, null);
     }
 

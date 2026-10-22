@@ -334,7 +334,8 @@ class RandomSeatControllerTest {
                     creatures.get(i) + " attacked in " + share + " of the draws");
         }
         // Nothing at all: the seat's declarations write no record of any kind.
-        assertFalse(Files.exists(path), "the engine's declaration hook records attacks, not the seat");
+        assertFalse(Files.exists(path),
+                "the engine's declaration hook records attacks, not the seat");
     }
 
     /**
@@ -379,7 +380,8 @@ class RandomSeatControllerTest {
         }
 
         assertTrue(blockedOnce && heldBackOnce, "no block and a block are both drawn");
-        assertFalse(Files.exists(path), "the engine's declaration hook records blocks, not the seat");
+        assertFalse(Files.exists(path),
+                "the engine's declaration hook records blocks, not the seat");
     }
 
     // ── the match-level draw ────────────────────────────────────────────

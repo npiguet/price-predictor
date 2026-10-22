@@ -1390,7 +1390,8 @@ class PatchedCollectorTest {
             collector.writeHeldProbes("run.0-l1.10", DamageStep.FIRST_STRIKE.wireName());
         }
 
-        List<String> lines = ShardRun.readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
+        List<String> lines = ShardRun.readShard(
+                tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
         assertEquals(2, lines.size(), lines.toString());
         assertTrue(lines.get(0).contains("\"mirror_of\":\"run.0-l1.9\""), lines.get(0));
         assertTrue(lines.get(1).contains("\"mirror_of\":\"run.0-l1.10\""), lines.get(1));
@@ -1410,7 +1411,8 @@ class PatchedCollectorTest {
             collector.writeHeldProbes("run.0-l1.11", DamageStep.REGULAR.wireName());
         }
 
-        List<String> lines = ShardRun.readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
+        List<String> lines = ShardRun.readShard(
+                tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
         assertEquals(2, lines.size(), lines.toString());
         assertTrue(lines.get(0).contains("\"mirror_of\":\"run.0-l1.9\""), lines.get(0));
         assertTrue(lines.get(1).contains("\"mirror_of\":\"run.0-l1.11\""), lines.get(1));
