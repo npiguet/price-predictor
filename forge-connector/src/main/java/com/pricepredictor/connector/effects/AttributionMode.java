@@ -1,6 +1,5 @@
 package com.pricepredictor.connector.effects;
 
-import java.lang.reflect.Method;
 
 /**
  * Whether this JVM's Forge carries the attribution patch.
@@ -18,7 +17,7 @@ import java.lang.reflect.Method;
  */
 public enum AttributionMode {
 
-    /** The three attribution hooks are present; events name their cause. */
+    /** The attribution hook is present: events name the clause that produced them. */
     PATCHED("patched"),
 
     /**
@@ -51,14 +50,14 @@ public enum AttributionMode {
     /**
      * Whether the cause channel is there.
      *
-     * <p>Read from {@link PatchHooks#REQUIRED} rather than naming the method
+     * <p>Read from {@link PatchHooks#SUB_ABILITY} rather than naming the method
      * again here, so the mode and the hook inventory cannot drift apart. It is
      * deliberately one hook and not all of them: the mode says how an event was
      * attributed, and a checkout missing some later hook still attributes
      * exactly. {@link PatchHooks#report} is what names a partly-applied patch.
      */
     private static AttributionMode probe() {
-        return PatchHooks.REQUIRED.get(0).present() ? PATCHED : DEGRADED;
+        return PatchHooks.SUB_ABILITY.present() ? PATCHED : DEGRADED;
     }
 
     /** For tests: forget the probe so the next call re-runs it. */

@@ -50,7 +50,7 @@ public final class SourceTree {
         return TOKENSCRIPTS.equals(tree) || VARIANT_SCRIPTS.equals(tree);
     }
 
-    public static boolean isKnown(String tree) {
+    static boolean isKnown(String tree) {
         return CARDSFOLDER.equals(tree) || isFlat(tree);
     }
 

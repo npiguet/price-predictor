@@ -1,8 +1,8 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.AttributionMode;
 import com.pricepredictor.connector.effects.PatchHooks;
-import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 
 import java.nio.file.Path;
@@ -43,9 +43,6 @@ import java.util.List;
  *       {@link MatchGenerator#rollIsFileSample()}.</li>
  *   <li>{@code -Dmatch.best.of=<N>} — number of games per match (default 7). Must be a
  *       positive odd integer; any size is valid (Bo1, Bo3, Bo7, Bo17, …).</li>
- *   <li>{@code -Deffect.worker.lifetime=<token>} — pins the per-JVM token that makes
- *       record and game ids unique across worker restarts. Minted from the clock
- *       when absent, which is the normal case; only a test should set it.</li>
  *   <li>{@code -Deffect.random.seat.share=<F>} and
  *       {@code -Deffect.random.seat.probability=<P>} — in a share {@code F} of
  *       matches, one seat chosen per match is a {@link RandomSeatController}
@@ -161,17 +158,8 @@ public class MatchWorkerMain {
         // at zero with the JVM, so the shard token has to name the lifetime as well
         // as the slot; without it a run's record and game ids repeat once per
         // restart and unrelated games merge under one game_id. Minted here rather
-        // than required from the launcher so no spawn site can omit it; the
-        // property exists only so a test can pin the value.
-        String workerLifetime = System.getProperty("effect.worker.lifetime");
-        if (workerLifetime == null) {
-            workerLifetime = RecordShardWriter.mintLifetime();
-        } else if (!RecordShardWriter.isValidLifetime(workerLifetime)) {
-            System.err.println(
-                    "Error: -Deffect.worker.lifetime must match [0-9a-z]{1,16}, got: "
-                            + workerLifetime);
-            System.exit(2);
-        }
+        // than taken from the launcher so no spawn site can omit or repeat it.
+        String workerLifetime = RecordShardWriter.mintLifetime();
 
         // A counter, not a corpus: read independent of every other property
         // here, and never validated against output.file / effect.records.dir,
@@ -237,8 +225,8 @@ public class MatchWorkerMain {
             // reads "patched" while a channel this run meant to collect is
             // quietly empty. This is what names that.
             System.out.println(PatchHooks.report());
-            PatchedCollectors.CollectionCaps caps =
-                    PatchedCollectors.CollectionCaps.fromSystemProperties();
+            CollectionCaps caps =
+                    CollectionCaps.fromSystemProperties();
             if (caps.randomSeatEnabled()) {
                 // Named at startup the way the probe state is: a run whose
                 // random-seat matches wrote no sealed rows is a run someone

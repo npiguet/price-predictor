@@ -1,16 +1,35 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
+import forge.StaticData;
+import forge.ai.LobbyPlayerAi;
+import forge.deck.Deck;
+import forge.game.Game;
+import forge.game.GameRules;
+import forge.game.GameStage;
+import forge.game.GameType;
+import forge.game.Match;
 import forge.game.ability.AbilityFactory;
+import forge.game.card.Card;
+import forge.game.card.CardFactory;
+import forge.game.combat.Combat;
+import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
+import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,7 +54,7 @@ class ForkCollectorTest {
     private static CollectionCaps caps(
             int interventions, int probes, List<String> keywords) {
         return new CollectionCaps(
-                2000, 0.1, interventions, probes, keywords, 0.1);
+                2000, 0.1, interventions, probes, keywords, 0.0, 0.0);
     }
 
     private ForkCollector collector(CollectionCaps caps) {
@@ -153,25 +172,17 @@ class ForkCollectorTest {
 
     @Test
     void theProbeBudgetIsSpentByTakingProbes() {
+        // Spent even by a fork that fails: a null game makes every copy fail.
         ForkCollector collector = collector(caps(2, 1, List.of("wither")));
-        assertTrue(collector.recordProbeBranch(
-                "wither", "run.0.1", "{}", "{}", "P0"));
+        assertNull(collector.probe("wither", TestCards.build("Grizzly Bears"), false));
         assertFalse(collector.mayProbe("wither"));
     }
 
     @Test
-    void aProbeBranchIsRecordedAsAnOrdinaryCombatRecord() {
-        ForkCollector collector = collector(caps(2, 2, List.of("wither")));
-        assertTrue(collector.recordProbeBranch(
-                "wither", "run.0.1", "{}", "{}", "P0"));
-        assertEquals(1L, collector.recordsWritten());
-    }
-
-    @Test
-    void aProbeForAnUnnamedKeywordWritesNothing() {
-        ForkCollector collector = collector(caps(2, 2, List.of("wither")));
-        assertFalse(collector.recordProbeBranch(
-                "lifelink", "run.0.1", "{}", "{}", "P0"));
+    void aProbeForAnUnnamedKeywordSpendsNothing() {
+        ForkCollector collector = collector(caps(2, 1, List.of("wither")));
+        assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), false));
+        assertTrue(collector.mayProbe("wither"));
         assertEquals(0L, collector.recordsWritten());
     }
 
@@ -258,12 +269,12 @@ class ForkCollectorTest {
     void aHeldBranchNamesItsDamageStep() {
         ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                ForkCollector.SUBSTEP_FIRST_STRIKE);
+                DamageStep.FIRST_STRIKE.wireName());
 
         assertEquals("first_strike", held.substep());
         // Spelled as the bracket collector spells it, because the two classes
         // have to agree about which step they are describing.
-        assertEquals("regular", ForkCollector.SUBSTEP_REGULAR);
+        assertEquals("regular", DamageStep.REGULAR.wireName());
     }
 
     // ── the held branch knows *when* it came from ───────────────────────
@@ -315,7 +326,7 @@ class ForkCollectorTest {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
         ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                ForkCollector.SUBSTEP_REGULAR);
+                DamageStep.REGULAR.wireName());
 
         assertEquals(ForkCollector.TURN_UNKNOWN, held.turn());
         assertTrue(collector.writeHeldProbe(held, "run.0-l1.9"));
@@ -325,19 +336,102 @@ class ForkCollectorTest {
     private static ForkCollector.HeldProbe branch(int turn) {
         return new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                ForkCollector.SUBSTEP_REGULAR, turn);
+                DamageStep.REGULAR.wireName(), turn);
     }
 
-    // ── the seeded source ───────────────────────────────────────────────
+    // ── a probe branch reads damage as the observed record does ─────────
 
+    /**
+     * A probe branch's combat damage carries the combat flag and the named
+     * cause the observed combat record carries.
+     *
+     * <p>Gate 2 reads the branch against the record it mirrors, so the two
+     * must render one damage the same way. The blocker's damage to the
+     * attacker is the same in both branches — the stripped keyword is the
+     * attacker's trample — so its rendered event must match verbatim.
+     */
     @Test
-    void bothBranchesDrawFromOneSeededSource() {
-        // A difference between the branches has to be the keyword, not the
-        // draw, so the source is seeded per fork rather than per branch.
-        ForkCollector first = collector(caps(2, 2, List.of()));
-        ForkCollector second = collector(caps(2, 2, List.of()));
-        assertEquals(
-                first.seededRandom().nextInt(1000),
-                second.seededRandom().nextInt(1000));
+    void aProbeBranchsCombatDamageReadsAsTheObservedRecordReadsIt() throws IOException {
+        Game game = gameInADamageStep();
+        Player attacking = game.getPlayers().get(0);
+        Player defending = game.getPlayers().get(1);
+        Card dreadmaw = onBattlefield(game, "Colossal Dreadmaw", attacking);
+        Card bears = onBattlefield(game, "Grizzly Bears", defending);
+        Combat combat = new Combat(attacking);
+        combat.addAttacker(dreadmaw, defending);
+        combat.addBlocker(dreadmaw, bears);
+        // What the declare-blockers step leaves behind.
+        combat.setBlocked(dreadmaw, true);
+        combat.orderBlockersForDamageAssignment();
+        combat.orderAttackersForDamageAssignment();
+        game.getPhaseHandler().setCombat(combat);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        ForkCollector.HeldProbe held;
+        try {
+            ForkCollector forks = new ForkCollector(
+                    game, writer, "run.0-l1.0", caps(0, 1, List.of("trample")), 1L);
+            held = forks.probe("Trample", dreadmaw, false);
+            assertNotNull(held, "the probe fork was discarded");
+
+            BusBracketCollector observed = new BusBracketCollector(game, writer, "run.0-l1.0");
+            game.subscribeToEvents(observed);
+            assertTrue(combat.assignCombatDamage(false), "the live step assigned no damage");
+            combat.dealAssignedDamage();
+            observed.finishGame(Set.of());
+        } finally {
+            writer.close();
+        }
+
+        String record = readShard(writer.path()).stream()
+                .filter(r -> r.contains("\"kind\":\"combat\"")).findFirst().orElseThrow();
+        String onTheBears = damageTo(held.events(), bears).toJson();
+        assertTrue(onTheBears.contains("\"combat\":true"), onTheBears);
+        assertTrue(onTheBears.contains("\"cause\":\"E" + dreadmaw.getId() + "\""), onTheBears);
+        String onTheDreadmaw = damageTo(held.events(), dreadmaw).toJson();
+        assertTrue(record.contains(onTheDreadmaw),
+                "the branch renders " + onTheDreadmaw + " and the observed record " + record);
+        // The stripped keyword is the branch's input, not something its step did.
+        assertTrue(held.events().stream()
+                        .noneMatch(e -> EffectEvent.KEYWORD_CHANGE.equals(e.type())),
+                held.events().stream().map(EffectEvent::toJson).toList().toString());
+    }
+
+    private static EffectEvent damageTo(List<EffectEvent> events, Card card) {
+        return events.stream()
+                .filter(e -> EffectEvent.DAMAGE_DEALT.equals(e.type())
+                        && e.subjects().contains("E" + card.getId()))
+                .findFirst().orElseThrow(() -> new AssertionError(
+                        "no damage to " + card + " in "
+                                + events.stream().map(EffectEvent::toJson).toList()));
+    }
+
+    /** A two-player game in the regular damage step, past the start. */
+    private static Game gameInADamageStep() {
+        List<RegisteredPlayer> players = List.of(
+                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("a", null)),
+                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("b", null)));
+        GameRules rules = new GameRules(GameType.Constructed);
+        Game game = new Game(players, rules, new Match(rules, players, "ForkCollectorTest"));
+        game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DAMAGE, game.getPlayers().get(0));
+        game.setAge(GameStage.Play);
+        return game;
+    }
+
+    private static Card onBattlefield(Game game, String name, Player owner) {
+        Card card = CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard(name), owner, game);
+        return game.getAction().moveToPlay(card, owner, null, null);
+    }
+
+    private static List<String> readShard(Path path) throws IOException {
+        if (!Files.exists(path)) {
+            return List.of();
+        }
+        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
+                var reader = new BufferedReader(
+                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
+            return reader.lines().toList();
+        }
     }
 }

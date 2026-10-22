@@ -7,11 +7,11 @@ left behind:
 
 - no row in ``match-outcomes.txt`` or ``cards-played.txt``, though both writers
   are wired and matches completed (FR-025);
-- ``random_seat`` on every record right after ``synthetic``, ``what_if`` right
-  after it on the two legality subkinds and nowhere else, and both varying
+- ``random_seat`` on every record right after ``synthetic``, and varying;
+  ``what_if`` right after it on the two legality subkinds and nowhere else
   (FR-030, FR-031);
-- a real attack declaration for every combat, at a ``--legality-rate`` that
-  would keep one in fifty of them if real decisions were sampled (FR-029);
+- a real attack declaration for every combat, and no legality record that is
+  not a real declaration (FR-029);
 - one effect half per chosen mode of a resolved charm, each through its
   ``option`` line, and no charm effect half through the bare root (FR-029a,
   SC-001a). On an unpatched checkout the rule is the opposite one, a single
@@ -53,8 +53,6 @@ _COLLECTION_SECONDS = 900
 _POLL_SECONDS = 10
 #: Matches to finish before the outcome files say anything.
 _MIN_MATCHES = 3
-#: Low enough that a sampled real decision would show: one combat in fifty.
-_LEGALITY_RATE = 0.02
 #: A shard is written in blocks of this many records, and a killed worker
 #: truncates the block in flight; a modal resolution whose halves reach into
 #: the last complete block may have lost the rest to the truncated one.
@@ -118,7 +116,6 @@ def _run_pilot(tmp_path: Path) -> tuple[Path, Path, Path, list]:
     progress = tmp_path / "progress.txt"
     records_dir = tmp_path / "records"
     caps = CollectionCaps(
-        legality_rate=_LEGALITY_RATE,
         random_seat_share=1.0,
         random_seat_probability=0.5,
     )
@@ -174,7 +171,7 @@ def test_random_seat_matches_write_no_sealed_row(pilot) -> None:
         )
 
 
-def test_both_envelope_fields_are_present_in_order_and_vary(pilot) -> None:
+def test_both_envelope_fields_are_present_in_order(pilot) -> None:
     *_, shards = pilot
     raw = [item for lines, _ in shards for item in lines]
     if not raw:
@@ -191,7 +188,8 @@ def test_both_envelope_fields_are_present_in_order_and_vary(pilot) -> None:
             assert "what_if" not in item, item["record_id"]
 
     assert {item["random_seat"] for item in raw} == {True, False}
-    assert {item["what_if"] for item in raw if "what_if" in item} == {True, False}
+    # The engine's declaration hook reports real declarations only.
+    assert {item["what_if"] for item in raw if "what_if" in item} <= {False}
 
 
 def test_random_seat_follows_the_actor(pilot) -> None:
@@ -212,12 +210,12 @@ def test_random_seat_follows_the_actor(pilot) -> None:
 
 
 def test_every_real_attack_declaration_is_written(pilot) -> None:
-    """FR-029: the rate samples what-ifs only.
+    """FR-029: every real declaration is written, and nothing else is.
 
-    A combat record means attackers were declared that turn, by the AI's hook
-    or by the random seat itself, and either writes a real ``attackers``
-    record before the combat it opens. Sampled at 2%, nearly every combat
-    would have none.
+    A combat record means attackers were declared that turn, and the engine's
+    declaration hook writes a real ``attackers`` record before the combat it
+    opens, whichever seat declared. The hook reports declarations only, so no
+    legality record is a what-if.
     """
     *_, shards = pilot
     records = [r for _, rs in shards for r in rs]
@@ -235,11 +233,11 @@ def test_every_real_attack_declaration_is_written(pilot) -> None:
         pytest.skip("no combat in the collection window")
     missing = sorted(combats - real)
     assert not missing, f"combats with no real attackers record: {missing[:10]}"
-    sampled = sum(
+    what_ifs = sum(
         r.what_if is True for r in records
         if r.subkind in (PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS)
     )
-    assert sampled, "what-ifs at 2% should still leave some"
+    assert not what_ifs, f"{what_ifs} legality records are not real declarations"
 
 
 def test_a_resolved_charm_has_one_effect_half_per_chosen_mode(pilot) -> None:

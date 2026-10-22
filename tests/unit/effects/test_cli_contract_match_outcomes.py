@@ -15,7 +15,6 @@ import pytest
 
 from sealed.infrastructure.cli import (
     EFFECT_INTERVENTIONS_PER_GAME,
-    EFFECT_LEGALITY_RATE,
     EFFECT_MANA_CAP,
     EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBE_KEYWORDS,
@@ -59,7 +58,6 @@ class TestCapAndBudgetFlags:
             "first_strike,double_strike,deathtouch,lifelink,trample,"
             "indestructible,wither,infect"
         )
-        assert args.legality_rate == 0.0
 
     def test_the_constants_and_the_defaults_agree(self):
         args = parse("match-outcomes")
@@ -67,7 +65,6 @@ class TestCapAndBudgetFlags:
         assert args.playability_rate == EFFECT_PLAYABILITY_RATE
         assert args.interventions_per_game == EFFECT_INTERVENTIONS_PER_GAME
         assert args.probes_per_game == EFFECT_PROBES_PER_GAME
-        assert args.legality_rate == EFFECT_LEGALITY_RATE
         assert args.probe_keywords == EFFECT_PROBE_KEYWORDS
 
     def test_an_empty_keyword_list_turns_probes_off(self):
@@ -85,13 +82,11 @@ class TestCapAndBudgetFlags:
             "--playability-rate", "0.5",
             "--interventions-per-game", "4",
             "--probes-per-game", "1",
-            "--legality-rate", "0.5",
         )
         assert args.mana_cap == 50
         assert args.playability_rate == 0.5
         assert args.interventions_per_game == 4
         assert args.probes_per_game == 1
-        assert args.legality_rate == 0.5
 
     def test_no_flag_chooses_a_snapshot_depth(self):
         """Every record collects all four tiers."""

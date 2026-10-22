@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
 import forge.StaticData;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
@@ -246,7 +245,7 @@ class StateBasedDeathTest {
 
     /** The same on a patched worker, where the clause hook files the damage. */
     @Test
-    void aPatchedWorkerCarriesTheDeathToo() throws IOException {
+    void aPatchedWorkerCarriesTheDeathToo() throws Throwable {
         Game game = game();
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
@@ -254,23 +253,13 @@ class StateBasedDeathTest {
         SpellAbility bolt = targeting(
                 spellOf(inHand(game, "Lightning Bolt", caster), caster), bears);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try (PatchedCollectors patched = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            Assumptions.assumeTrue(
-                    patched.install() > 0 && patched.installedHooks().contains("clause-events"),
-                    "../forge has no clause hook");
-            patched.withBracket(collector);
-            castAndResolve(game, bolt);
-            nextStep(game);
-        } finally {
-            writer.close();
-        }
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "", (bracket, collectors) -> {
+                    castAndResolve(game, bolt);
+                    nextStep(game);
+                });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
         assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
     }
@@ -582,7 +571,7 @@ class StateBasedDeathTest {
             assertNotNull(charm);
             charm.setActivatingPlayer(caster);
             CollectionCaps caps = new CollectionCaps(
-                    2000, 0.1, 2, 0, List.of(), 0.1);
+                    2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
             Path dir = tempDir.resolve("fork-" + seed);
             RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
@@ -692,29 +681,18 @@ class StateBasedDeathTest {
      * its "2 damage to each opponent" half, which resolves after, never saw it.
      */
     @Test
-    void aModalDeathJoinsTheModeThatTouchedTheCreature() throws IOException {
+    void aModalDeathJoinsTheModeThatTouchedTheCreature() throws Throwable {
         Game game = game();
         Player caster = game.getPlayers().get(0);
         Card elves = onBattlefield(game, "Llanowar Elves", game.getPlayers().get(1));
         SpellAbility charm = charm(game, caster, 0, 1);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try (PatchedCollectors patched = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            Assumptions.assumeTrue(
-                    patched.install() > 0 && patched.installedHooks().contains("clause-events"),
-                    "../forge has no clause hook to split the modes");
-            patched.withBracket(collector);
-            castAndResolve(game, charm);
-            nextStep(game);
-        } finally {
-            writer.close();
-        }
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "to split the modes", (bracket, collectors) -> {
+                    castAndResolve(game, charm);
+                    nextStep(game);
+                });
 
-        List<String> records = readShard(writer.path());
         List<String> halves = effectHalves(records);
         assertEquals(2, halves.size(), records.toString());
         assertTrue(halves.get(0).contains("\"option\":0}"), halves.get(0));
@@ -732,29 +710,19 @@ class StateBasedDeathTest {
 
     /** Touched by two halves, the death goes to the later one, once. */
     @Test
-    void aDeathTouchedByTwoModesJoinsTheLastOfThemOnce() throws IOException {
+    void aDeathTouchedByTwoModesJoinsTheLastOfThemOnce() throws Throwable {
         Game game = game();
         Player caster = game.getPlayers().get(0);
         Card bears = onBattlefield(game, "Grizzly Bears", game.getPlayers().get(1));
         SpellAbility charm = charm(game, caster, 0, 0, 1);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try (PatchedCollectors patched = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            Assumptions.assumeTrue(
-                    patched.install() > 0 && patched.installedHooks().contains("clause-events"),
-                    "../forge has no clause hook to split the modes");
-            patched.withBracket(collector);
-            castAndResolve(game, charm);
-            nextStep(game);
-        } finally {
-            writer.close();
-        }
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "to split the modes", (bracket, collectors) -> {
+                    castAndResolve(game, charm);
+                    nextStep(game);
+                });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(3, halves.size(), halves.toString());
         assertFalse(halves.get(0).contains(deathOf(bears)), halves.get(0));
         assertEquals(1, count(halves.get(1), deathOf(bears)), halves.get(1));
@@ -787,7 +755,7 @@ class StateBasedDeathTest {
         // A one-creature board: the fork's random target draw has bears or a
         // player to choose from, so try seeds until one picks the bears.
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 50, 0, List.of(), 0.1);
+                2000, 0.1, 50, 0, List.of(), 0.0, 0.0);
 
         RecordShardWriter writer = writer();
         try (PatchedCollectors patched = new PatchedCollectors(

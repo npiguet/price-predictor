@@ -33,7 +33,6 @@ from effects.application.validate_corpus import Thresholds
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import (
     DEFAULT_INTERVENTIONS_PER_GAME,
-    DEFAULT_LEGALITY_RATE,
     DEFAULT_MANA_CAP,
     DEFAULT_PLAYABILITY_RATE,
     DEFAULT_PROBE_KEYWORDS,
@@ -302,14 +301,6 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
             f"eight, {DEFAULT_PROBE_KEYWORDS}). Name a subset to narrow the "
             "probes; an empty string takes no fork whatever --probes-per-game "
             "says."
-        ),
-    )
-    parser.add_argument(
-        "--legality-rate", type=float, default=DEFAULT_LEGALITY_RATE,
-        help=(
-            "Fraction of the AI's what-if legality queries kept (default: "
-            f"{DEFAULT_LEGALITY_RATE:g}, none). Real attack and block "
-            "declarations are always written."
         ),
     )
     parser.add_argument(

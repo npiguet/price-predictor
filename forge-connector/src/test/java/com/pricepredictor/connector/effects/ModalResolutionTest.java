@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
 import forge.StaticData;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
@@ -194,13 +193,7 @@ class ModalResolutionTest {
         SpellAbility charm = charmOf(game, caster, "Boros Charm");
         List<AbilitySub> clones = chain(charm, 0, 2);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
 
             collectors.clauseHandler().invoke(null, resolving(), new Object[]{charm});
@@ -213,11 +206,8 @@ class ModalResolutionTest {
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
             bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> records = readShard(path);
         assertEquals(3, records.size(), records.toString());
         String cost = records.get(0);
         String first = records.get(1);
@@ -247,24 +237,15 @@ class ModalResolutionTest {
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Brokers Confluence");
         List<AbilitySub> clones = chain(charm, 0, 0, 2);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
             for (AbilitySub clone : clones) {
                 collectors.clauseHandler().invoke(null, resolving(), new Object[]{clone});
             }
             bracket.endBracket(charm.getId(), false);
             bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> records = readShard(path);
         assertEquals(4, records.size(), records.toString());
         assertTrue(records.get(1).contains("\"option\":0}"), records.get(1));
         assertTrue(records.get(2).contains("\"option\":0}"), records.get(2));
@@ -282,24 +263,15 @@ class ModalResolutionTest {
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Boros Charm");
         List<AbilitySub> clones = chain(charm, 0, 2);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
             collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
             collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
             bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> records = readShard(path);
         assertEquals(3, records.size(), records.toString());
         assertTrue(records.get(1).contains("\"option\":0}"), records.get(1));
         assertTrue(records.get(1).contains("\"events\":[]"), records.get(1));
@@ -379,7 +351,7 @@ class ModalResolutionTest {
         // fork's stack frozen and the forced ability parked off it.
         game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), 0.1);
+                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
@@ -429,7 +401,7 @@ class ModalResolutionTest {
         creatureSpell.setActivatingPlayer(caster);
         game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), 0.1);
+                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
@@ -464,23 +436,14 @@ class ModalResolutionTest {
         SpellAbility other = charmOf(game, game.getPlayers().get(1), "Boros Charm");
         List<AbilitySub> otherClones = chain(other, 1);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
             collectors.clauseHandler().invoke(null, resolving(), new Object[]{otherClones.get(0)});
             assertEquals(0, bracket.modeHalvesOpen());
             bracket.endBracket(charm.getId(), false);
             bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> records = readShard(path);
         assertEquals(2, records.size(), records.toString());
         assertFalse(records.get(1).contains("\"option\""), records.get(1));
     }

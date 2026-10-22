@@ -727,10 +727,6 @@ def text_residues(coverage: dict[str, TextCoverage], floor: int) -> TextResidues
 def held_out_round_caps(caps: CollectionCaps) -> CollectionCaps:
     """Full strength (FR-035): every record the held-out cards produce is kept,
     because these are the only games that will ever see them.
-
-    What-if legality queries stay at the run's rate: they are the AI's
-    planning, not observations of the card, and real declarations are
-    written whatever the rate.
     """
     return replace(caps, playability_rate=1.0)
 

@@ -29,8 +29,6 @@ import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -279,13 +277,12 @@ class BusBracketCollectorTest {
      */
     @Test
     void aRepeatedStateTransitionIsFiledOnce() {
-        List<EffectEvent> into = new ArrayList<>();
-        Set<String> seen = new LinkedHashSet<>();
+        EventBuffer into = new EventBuffer();
 
-        assertTrue(BusBracketCollector.fileEvent(zoneChange(), into, seen));
-        assertFalse(BusBracketCollector.fileEvent(zoneChange(), into, seen));
+        assertTrue(into.file(zoneChange()));
+        assertFalse(into.file(zoneChange()));
 
-        assertEquals(1, into.size());
+        assertEquals(1, into.events().size());
     }
 
     /**
@@ -296,13 +293,12 @@ class BusBracketCollectorTest {
      */
     @Test
     void aRepeatedQuantityIsFiledEveryTime() {
-        List<EffectEvent> into = new ArrayList<>();
-        Set<String> seen = new LinkedHashSet<>();
+        EventBuffer into = new EventBuffer();
 
-        assertTrue(BusBracketCollector.fileEvent(oneDamage(), into, seen));
-        assertTrue(BusBracketCollector.fileEvent(oneDamage(), into, seen));
+        assertTrue(into.file(oneDamage()));
+        assertTrue(into.file(oneDamage()));
 
-        assertEquals(2, into.size());
+        assertEquals(2, into.events().size());
     }
 
     private static EffectEvent zoneChange() {
