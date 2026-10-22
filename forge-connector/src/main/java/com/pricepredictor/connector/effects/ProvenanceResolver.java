@@ -7,7 +7,6 @@ import forge.game.card.Card;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
-import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.WrappedAbility;
 import forge.util.FileSection;
@@ -19,9 +18,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 /**
  * The printed line a live Forge trait came from, or the reason it has none.
+ *
+ * <p>Forge rarely hands a collector the object that is actually a member of
+ * a card state's trait list. The stack replaces every non-mana activated
+ * ability with a fresh copy before pushing it ({@code MagicStack.add}), a
+ * triggered ability arrives inside a {@code WrappedAbility} around an
+ * {@code Execute$} SVar ability that belongs to no slice at all, and
+ * alternative- and extra-cost variants are copies with no back-reference
+ * whatsoever. Keying by object identity alone therefore fails for most of
+ * what resolves, which is why this walks a donor chain and falls back to a
+ * structural match rather than trusting {@code isIntrinsic()}.
  */
 public final class ProvenanceResolver {
 
@@ -30,6 +40,9 @@ public final class ProvenanceResolver {
 
     /** How many donor hops {@link #resolve} will take before giving up. */
     private static final int MAX_HOPS = 8;
+
+    /** How a line separates the SVar names it grants: spaces, commas, ampersands. */
+    private static final Pattern SVAR_LIST = Pattern.compile("[\\s,&]+");
 
     /**
      * The key for a live trait, following the donor chain for wrapped, granted
@@ -46,61 +59,40 @@ public final class ProvenanceResolver {
     }
 
     /**
+     * The printed line a runtime trait came from, as a list of at most one.
+     *
+     * <p>For the payload fields that carry keys but no reason — a playability
+     * candidate, a rewrite's {@code replaced_by}. A record's own acting line
+     * goes through {@link #resolve} instead, keeping the reason there is no
+     * key: an empty {@code ability} with nothing beside it cannot separate
+     * "this card has no printed line anywhere" from "the resolver regressed".
+     */
+    static List<ProvenanceKey> keysOf(CardTraitBase trait) {
+        return resolve(trait).keys();
+    }
+
+    /**
      * The key for a live trait, or the reason it has none.
      *
-     * <p>Forge rarely hands a collector the object that is actually a member of
-     * a card state's trait list. The stack replaces every non-mana activated
-     * ability with a fresh copy before pushing it ({@code MagicStack.add}), a
-     * triggered ability arrives inside a {@code WrappedAbility} around an
-     * {@code Execute$} SVar ability that belongs to no slice at all, and
-     * alternative- and extra-cost variants are copies with no back-reference
-     * whatsoever. Keying by object identity alone therefore fails for most of
-     * what resolves, which is why this walks a donor chain and falls back to a
-     * structural match rather than trusting {@code isIntrinsic()}.
-     *
-     * <p>The chain, in order:
+     * <p>The donor chain, in order; each step is the method named:
      * <ol>
-     *   <li><b>Unwrap</b> a {@code WrappedAbility}, then a sub-ability to its
-     *       root: neither is ever a member of a slice.</li>
-     *   <li><b>Trigger- and replacement-borne abilities</b> key to the trait
-     *       that owns them. The {@code Execute$} SVar ability lives in
-     *       {@code Trigger.overridingAbility}, not in the state's spell list,
-     *       so the {@code Trigger} is the printed line, not the SVar.</li>
-     *   <li><b>Granted abilities</b> resolve through the grantor static to the
-     *       donor's printed line. This is tried <em>before</em> keying the
-     *       trait where it stands, because a granted ability is appended to the
-     *       recipient's own trait list and would otherwise be found there by
-     *       identity — a confidently wrong key naming the recipient's script.</li>
-     *   <li><b>The trait as it stands</b>, by identity first and then by
-     *       structural fingerprint, which is what catches the stack's copies.</li>
-     *   <li><b>Granted keywords</b> resolve through
-     *       {@code KeywordInterface.getStatic()} to the static that handed the
-     *       keyword out. A keyword granted by another permanent — Virulent
-     *       Sliver's poisonous, Eldrazi Conscription's annihilator — builds its
-     *       trigger on the <em>recipient</em>, where it names no printed line;
-     *       {@code Card.getKeywordForStaticAbility} records the grantor, and
-     *       that grantor's static is the printed line. Tried only when the
-     *       keyword is not one the state prints, so an intrinsic keyword still
-     *       keys to its own ordinal.</li>
-     *   <li><b>Engine-spawned triggers</b> resolve through
-     *       {@code Trigger.getSpawningAbility()}. A delayed trigger — the
-     *       "sacrifice it at the beginning of the next end step" that
-     *       {@code AtEOT$} builds, and the Immediate and Delayed trigger
-     *       effects — is assembled in Java onto an LKI copy of its host and is
-     *       a member of no slice at all, but it carries a copy of the ability
-     *       that spawned it, and that copy fingerprints back to the line.</li>
-     *   <li><b>Copied abilities</b> resolve through the original-ability
-     *       back-reference, which the stack sets but the cost-variant helpers
-     *       do not.</li>
-     *   <li><b>Effect cards</b> ({@code Foo's Effect}) key to the ability that
-     *       created them, which is where the printed line lives.</li>
-     *   <li><b>Traits granted out of a donor's SVar</b> — an aura's
-     *       {@code AddTrigger$}, an {@code Animate}'s {@code Triggers$} — key
-     *       to the line that named the SVar, found by
-     *       {@link #keyForGrantingLine}. Forge keeps no back-reference for
-     *       these, so this is the one step that searches rather than follows,
-     *       and it is last for that reason.</li>
+     *   <li>{@link #unwrapped}: a {@code WrappedAbility}, or a sub-ability, to
+     *       something that could be a slice member;</li>
+     *   <li>{@link #ownerKey}: the trigger or replacement that owns the
+     *       ability, or {@link #runtimeOwner} when that trigger is one the
+     *       engine assembled;</li>
+     *   <li>{@link #grantorOf}: a granted ability's grantor static;</li>
+     *   <li>{@link #keyFor}: the trait as it stands;</li>
+     *   <li>{@link #keywordGrantorOf}: a granted keyword's grantor static;</li>
+     *   <li>{@link #spawnerOf}: what spawned an engine-built trigger;</li>
+     *   <li>{@link #originalOf}: a copy's original;</li>
+     *   <li>{@link #effectSourceOf}: the ability that made an effect card;</li>
+     *   <li>{@link #keyForGrantingLine}: the line that granted the trait out of
+     *       one of its own SVars.</li>
      * </ol>
+     * A step either keys the trait, which ends the chain, or hops to another
+     * trait, which starts the chain again from the first step; a trait no step
+     * applies to ends it with {@link #reasonFor}.
      *
      * <p>{@code getOriginalHost()} is deliberately not used to key a granted
      * trait: {@code CardTraitBase.getOriginalHost()} returns
@@ -134,81 +126,222 @@ public final class ProvenanceResolver {
         UnresolvedReason reason = UnresolvedReason.UNINDEXABLE;
         for (int hop = 0; t != null && hop < MAX_HOPS && seen.add(t); hop++) {
             // 1. Unwrap to something that could be a slice member.
-            if (t instanceof WrappedAbility wrapped) {
-                t = wrapped.getWrappedAbility();
+            CardTraitBase unwrapped = unwrapped(t);
+            if (unwrapped != t) {
+                t = unwrapped;
                 continue;
             }
-            if (t instanceof SpellAbility sub && sub.getParent() != null) {
-                t = sub.getRootAbility();
+            // 2. The trigger or replacement that owns this ability.
+            ProvenanceKey borne = ownerKey(t);
+            if (borne != null) return new Resolved(borne, null);
+            CardTraitBase next = runtimeOwner(t);
+            if (next != null) {
+                t = next;
                 continue;
             }
-            if (t instanceof SpellAbility sa) {
-                // 2. The trigger or replacement that owns this ability.
-                Trigger owner = sa.getTrigger();
-                ProvenanceKey borne = keyFor(owner);
-                if (borne == null) borne = keyFor(sa.getReplacementEffect());
-                if (borne != null) return new Resolved(borne, null);
-                // A trigger the engine assembled at runtime keys to nothing
-                // itself, but it knows what spawned it, so hop to the trigger
-                // rather than past it and let step 6 follow that chain. This is
-                // the reflexive "you may pay {X}. When you do..." shape, which
-                // was the largest population reaching the end of this loop with
-                // no key: ImmediateTriggerEffect deliberately nulls the execute
-                // ability's parent, so there is no root to climb instead, and
-                // the only way back to the printed line is through the trigger
-                // that owns it.
-                if (owner != null && owner.getSpawningAbility() != null) {
-                    t = owner;
-                    continue;
-                }
-                // 3. Granted: the donor's static, not the recipient's list.
-                StaticAbility grantor = sa.getGrantorStatic();
-                if (grantor != null) {
-                    t = grantor;
-                    continue;
-                }
+            // 3. Granted: the donor's static, not the recipient's list.
+            next = grantorOf(t);
+            if (next != null) {
+                t = next;
+                continue;
             }
             // 4. The trait where it stands.
             ProvenanceKey here = keyFor(t);
             if (here != null) return new Resolved(here, null);
             // 5. A granted keyword's printed line is the donor's static.
-            KeywordInterface keyword = t.getKeyword();
-            if (keyword != null && keyword.getStatic() != null
-                    && FaceOrder.keywordIndex(t.getCardState(), keyword) < 0) {
-                t = keyword.getStatic();
+            next = keywordGrantorOf(t);
+            if (next != null) {
+                t = next;
                 continue;
             }
             // 6. A trigger the engine spawned keys to the ability that spawned it.
-            if (t instanceof Trigger trigger && trigger.getSpawningAbility() != null) {
-                t = trigger.getSpawningAbility();
+            next = spawnerOf(t);
+            if (next != null) {
+                t = next;
                 continue;
             }
             // 7. The copy's original.
-            if (t instanceof SpellAbility sa) {
-                SpellAbility original = sa.getOriginalAbility();
-                if (original != null && original != sa) {
-                    t = original;
-                    continue;
-                }
+            next = originalOf(t);
+            if (next != null) {
+                t = next;
+                continue;
             }
             // 8. An effect card's printed line belongs to whatever made it.
-            CardState state = t.getCardState();
-            Card host = state == null ? t.getHostCard() : state.getCard();
-            if (host != null && host.getEffectSourceAbility() != null) {
-                t = host.getEffectSourceAbility();
+            next = effectSourceOf(t);
+            if (next != null) {
+                t = next;
                 continue;
             }
             // 9. A trait a donor line granted out of one of its own SVars.
             ProvenanceKey granting = keyForGrantingLine(t);
             if (granting != null) return new Resolved(granting, null);
-            reason = reasonFor(t, state, host);
+            reason = reasonFor(t);
             break;
         }
         return new Resolved(null, reason);
     }
 
     /**
-     * The printed line that granted a trait out of one of its own SVars.
+     * Step 1: the trait a wrapper or a sub-ability stands for, or the trait
+     * itself when it is neither; neither is ever a member of a slice.
+     *
+     * <p>Unlike the other hops this answers the trait itself rather than null
+     * when nothing applies, because a wrapper around nothing unwraps to null,
+     * and that ends the chain.
+     */
+    private static CardTraitBase unwrapped(CardTraitBase trait) {
+        if (trait instanceof WrappedAbility wrapped) {
+            return wrapped.getWrappedAbility();
+        }
+        if (trait instanceof SpellAbility sub && sub.getParent() != null) {
+            return sub.getRootAbility();
+        }
+        return trait;
+    }
+
+    /**
+     * Step 2: the key of the trigger or replacement that owns an ability, or
+     * null.
+     *
+     * <p>The {@code Execute$} SVar ability lives in
+     * {@code Trigger.overridingAbility}, not in the state's spell list, so the
+     * {@code Trigger} is the printed line, not the SVar.
+     */
+    private static ProvenanceKey ownerKey(CardTraitBase trait) {
+        if (!(trait instanceof SpellAbility sa)) return null;
+        ProvenanceKey borne = keyFor(sa.getTrigger());
+        return borne != null ? borne : keyFor(sa.getReplacementEffect());
+    }
+
+    /**
+     * Step 2, when the owner keys to nothing: the owning trigger, if the engine
+     * assembled it at runtime, or null.
+     *
+     * <p>Such a trigger keys to nothing itself, but it knows what spawned it,
+     * so the chain hops to the trigger rather than past it and lets
+     * {@link #spawnerOf} follow that. This is the reflexive "you may pay {X}.
+     * When you do..." shape: {@code ImmediateTriggerEffect} deliberately nulls
+     * the execute ability's parent, so there is no root to climb instead, and
+     * the only way back to the printed line is through the trigger that owns
+     * it.
+     */
+    private static CardTraitBase runtimeOwner(CardTraitBase trait) {
+        if (!(trait instanceof SpellAbility sa)) return null;
+        Trigger owner = sa.getTrigger();
+        return owner != null && owner.getSpawningAbility() != null ? owner : null;
+    }
+
+    /**
+     * Step 3: the static that granted an ability, or null.
+     *
+     * <p>Tried <em>before</em> keying the trait where it stands, because a
+     * granted ability is appended to the recipient's own trait list and would
+     * otherwise be found there by identity — a confidently wrong key naming
+     * the recipient's script.
+     */
+    private static CardTraitBase grantorOf(CardTraitBase trait) {
+        return trait instanceof SpellAbility sa ? sa.getGrantorStatic() : null;
+    }
+
+    /**
+     * Step 4: one trait, keyed where it stands; null when it is not a member
+     * of its own state's slice for its kind.
+     *
+     * <p>A keyword-derived trait keys to the keyword rather than to the spell
+     * slice it was appended to: {@code Card.updateSpellAbilities} appends those
+     * in {@code KeywordCollection} order, which is hash order over an enum and
+     * therefore differs between the convert JVM and the collect JVM, so a
+     * {@code spell} index landing in that tail is not reproducible.
+     */
+    static ProvenanceKey keyFor(CardTraitBase trait) {
+        if (trait == null) return null;
+        CardState state = trait.getCardState();
+        if (state == null) return null;
+        Card host = state.getCard();
+        if (host == null) return null;
+        if (isScriptless(host)) return null;
+        if (trait.getKeyword() != null) {
+            int index = FaceOrder.keywordIndex(state, trait.getKeyword());
+            return index < 0 ? null : new ProvenanceKey(
+                    ScriptLocator.scriptFileOf(host),
+                    FaceOrder.faceIndex(host, state.getStateName()),
+                    TraitKind.KEYWORD,
+                    index);
+        }
+        TraitKind kind = TraitKind.of(trait);
+        if (kind == null) return null;
+        int index = indexWithin(state, trait, kind);
+        if (index < 0) index = indexLike(state, trait, kind);
+        return index < 0 ? null : new ProvenanceKey(
+                ScriptLocator.scriptFileOf(host),
+                FaceOrder.faceIndex(host, state.getStateName()),
+                kind,
+                index);
+    }
+
+    /**
+     * Step 5: the static that handed out a granted keyword, or null.
+     *
+     * <p>A keyword granted by another permanent — Virulent Sliver's poisonous,
+     * Eldrazi Conscription's annihilator — builds its trigger on the
+     * <em>recipient</em>, where it names no printed line;
+     * {@code Card.getKeywordForStaticAbility} records the grantor, and that
+     * grantor's static is the printed line. Tried only when the keyword is not
+     * one the state prints, so an intrinsic keyword still keys to its own
+     * ordinal.
+     */
+    private static CardTraitBase keywordGrantorOf(CardTraitBase trait) {
+        KeywordInterface keyword = trait.getKeyword();
+        if (keyword != null && keyword.getStatic() != null
+                && FaceOrder.keywordIndex(trait.getCardState(), keyword) < 0) {
+            return keyword.getStatic();
+        }
+        return null;
+    }
+
+    /**
+     * Step 6: the ability that spawned an engine-built trigger, or null.
+     *
+     * <p>A delayed trigger — the "sacrifice it at the beginning of the next end
+     * step" that {@code AtEOT$} builds, and the Immediate and Delayed trigger
+     * effects — is assembled in Java onto an LKI copy of its host and is a
+     * member of no slice at all, but it carries a copy of the ability that
+     * spawned it, and that copy fingerprints back to the line.
+     */
+    private static CardTraitBase spawnerOf(CardTraitBase trait) {
+        return trait instanceof Trigger trigger ? trigger.getSpawningAbility() : null;
+    }
+
+    /**
+     * Step 7: the ability a copy was made from, or null.
+     *
+     * <p>The stack sets this back-reference, but the cost-variant helpers do
+     * not.
+     */
+    private static CardTraitBase originalOf(CardTraitBase trait) {
+        if (!(trait instanceof SpellAbility sa)) return null;
+        SpellAbility original = sa.getOriginalAbility();
+        return original != null && original != sa ? original : null;
+    }
+
+    /**
+     * Step 8: the ability that created the effect card ({@code Foo's Effect})
+     * a trait sits on, or null; that ability is where the printed line lives.
+     */
+    private static CardTraitBase effectSourceOf(CardTraitBase trait) {
+        Card host = hostOf(trait);
+        return host == null ? null : host.getEffectSourceAbility();
+    }
+
+    /** The card a trait sits on: its state's card, or its host when it has no state. */
+    private static Card hostOf(CardTraitBase trait) {
+        CardState state = trait.getCardState();
+        return state == null ? trait.getHostCard() : state.getCard();
+    }
+
+    /**
+     * Step 9: the printed line that granted a trait out of one of its own
+     * SVars, or null.
      *
      * <p>An aura's or an equipment's {@code AddTrigger$}, an {@code Animate}'s
      * {@code Triggers$} and an {@code Effect}'s traits are all parsed from an
@@ -226,10 +359,12 @@ public final class ProvenanceResolver {
      * between two runs of Forge's own {@code FileSection} parse, not a
      * resemblance test, so a match is the SVar and not something like it.
      *
-     * <p>This is the last resort, tried only once every back-reference in the
-     * chain has come up empty — which is also why walking four trait lists here
-     * costs nothing measurable: in the smoke corpus one record in a thousand
-     * ever reached this point.
+     * <p>Forge keeps no back-reference for these, so this is the one step
+     * that searches rather than follows, and it is last for that reason. It
+     * runs only once every back-reference in the chain has come up empty,
+     * which is also why walking four trait lists here costs nothing
+     * measurable: in the smoke corpus one record in a thousand ever reached
+     * this point.
      */
     private static ProvenanceKey keyForGrantingLine(CardTraitBase trait) {
         CardState state = trait.getCardState();
@@ -319,10 +454,6 @@ public final class ProvenanceResolver {
         return false;
     }
 
-    /** How a line separates the SVar names it grants: spaces, commas, ampersands. */
-    private static final java.util.regex.Pattern SVAR_LIST =
-            java.util.regex.Pattern.compile("[\\s,&]+");
-
     /**
      * Why a trait that reached the end of the chain names no printed line.
      *
@@ -344,11 +475,11 @@ public final class ProvenanceResolver {
      * own test for a trait living on a card other than the one whose script
      * text it came from.
      */
-    private static UnresolvedReason reasonFor(CardTraitBase trait, CardState state, Card host) {
-        if (isScriptless(host)) {
+    private static UnresolvedReason reasonFor(CardTraitBase trait) {
+        if (isScriptless(hostOf(trait))) {
             return UnresolvedReason.ENGINE_EFFECT;
         }
-        if (state == null) {
+        if (trait.getCardState() == null) {
             return UnresolvedReason.NO_CARD_STATE;
         }
         if (trait.getKeyword() != null) {
@@ -377,7 +508,8 @@ public final class ProvenanceResolver {
      * report {@code engine_effect} instead of a fabricated key.
      *
      * <p>Tokens are deliberately not included: a token <em>does</em> have a
-     * script, in {@code tokenscripts}, and {@link ScriptLocator#scriptFileOf} finds it.
+     * script, in {@code tokenscripts}, and {@link ScriptLocator#scriptFileOf}
+     * finds it.
      */
     private static boolean isScriptless(Card host) {
         if (host == null) return false;
@@ -385,61 +517,14 @@ public final class ProvenanceResolver {
         return type == GamePieceType.EFFECT || type == GamePieceType.DUNGEON;
     }
 
-    /**
-     * One trait, keyed where it stands; null when it is not a member of its own
-     * state's slice for its kind.
-     *
-     * <p>A keyword-derived trait keys to the keyword rather than to the spell
-     * slice it was appended to: {@code Card.updateSpellAbilities} appends those
-     * in {@code KeywordCollection} order, which is hash order over an enum and
-     * therefore differs between the convert JVM and the collect JVM, so a
-     * {@code spell} index landing in that tail is not reproducible.
-     */
-    static ProvenanceKey keyFor(CardTraitBase trait) {
-        if (trait == null) return null;
-        CardState state = trait.getCardState();
-        if (state == null) return null;
-        Card host = state.getCard();
-        if (host == null) return null;
-        if (isScriptless(host)) return null;
-        if (trait.getKeyword() != null) {
-            int index = FaceOrder.keywordIndex(state, trait.getKeyword());
-            return index < 0 ? null : new ProvenanceKey(
-                    ScriptLocator.scriptFileOf(host),
-                    FaceOrder.faceIndex(host, state.getStateName()),
-                    TraitKind.KEYWORD,
-                    index);
+    /** Index of {@code trait} within its kind's slice of {@code state}'s trait list. */
+    private static int indexWithin(CardState state, CardTraitBase trait, TraitKind kind) {
+        int index = 0;
+        for (CardTraitBase candidate : kind.slice(state)) {
+            if (candidate == trait) return index;
+            index++;
         }
-        TraitKind kind = TraitKind.of(trait);
-        if (kind == null) return null;
-        int index = indexWithin(state, trait, kind);
-        if (index < 0) index = indexLike(state, trait, kind);
-        return index < 0 ? null : new ProvenanceKey(
-                ScriptLocator.scriptFileOf(host),
-                FaceOrder.faceIndex(host, state.getStateName()),
-                kind,
-                index);
-    }
-
-    /**
-     * The position of the kind's only member of this trait's class, or -1.
-     *
-     * <p>The fallback for a trait with no fingerprint at all. A permanent spell
-     * is built in Java rather than parsed from a line -- {@code SpellPermanent}
-     * is constructed with an empty parameter map -- so a cost variant of one
-     * carries nothing to recognise it by: an Adventure half, a kicker, a
-     * {@code MayFlashCost} cast all copy the spell and set no back-reference,
-     * and the copy's fingerprint is as empty as the original's.
-     *
-     * <p>What is left is arithmetic. A card state has exactly one permanent
-     * spell, and a single candidate of the right class cannot be the wrong one.
-     * Two candidates and this refuses, for the reason {@link #indexLike}
-     * refuses: a record with no key is still trainable through its state and
-     * payload, while a record with the wrong key silently trains the wrong line.
-     */
-    private static int indexIfUnique(CardState state, CardTraitBase trait, TraitKind kind) {
-        return soleIndex(kind.slice(state),
-                candidate -> candidate.getClass() == trait.getClass());
+        return -1;
     }
 
     /**
@@ -463,27 +548,24 @@ public final class ProvenanceResolver {
                 && want.equals(candidate.getOriginalMapParams()));
     }
 
-
-    /** Index of {@code trait} within its kind's slice of {@code state}'s trait list. */
-    private static int indexWithin(CardState state, CardTraitBase trait, TraitKind kind) {
-        int index = 0;
-        for (CardTraitBase candidate : kind.slice(state)) {
-            if (candidate == trait) return index;
-            index++;
-        }
-        return -1;
-    }
-
     /**
-     * The printed line a runtime trait came from, as a list of at most one.
+     * The position of the kind's only member of this trait's class, or -1.
      *
-     * <p>For the payload fields that carry keys but no reason — a playability
-     * candidate, a rewrite's {@code replaced_by}. A record's own acting line
-     * goes through {@link #resolve} instead, keeping the reason there is no
-     * key: an empty {@code ability} with nothing beside it cannot separate
-     * "this card has no printed line anywhere" from "the resolver regressed".
+     * <p>The fallback for a trait with no fingerprint at all. A permanent spell
+     * is built in Java rather than parsed from a line -- {@code SpellPermanent}
+     * is constructed with an empty parameter map -- so a cost variant of one
+     * carries nothing to recognise it by: an Adventure half, a kicker, a
+     * {@code MayFlashCost} cast all copy the spell and set no back-reference,
+     * and the copy's fingerprint is as empty as the original's.
+     *
+     * <p>What is left is arithmetic. A card state has exactly one permanent
+     * spell, and a single candidate of the right class cannot be the wrong one.
+     * Two candidates and this refuses, for the reason {@link #indexLike}
+     * refuses: a record with no key is still trainable through its state and
+     * payload, while a record with the wrong key silently trains the wrong line.
      */
-    static List<ProvenanceKey> keysOf(CardTraitBase trait) {
-        return resolve(trait).keys();
+    private static int indexIfUnique(CardState state, CardTraitBase trait, TraitKind kind) {
+        return soleIndex(kind.slice(state),
+                candidate -> candidate.getClass() == trait.getClass());
     }
 }
