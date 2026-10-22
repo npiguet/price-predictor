@@ -11,6 +11,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,12 +27,12 @@ class PatchHooksTest {
     @Test
     void anAbsentHookReportsAbsentRatherThanThrowing() {
         assertFalse(PatchHooks.find(
-                "forge.game.trigger.TriggerHandler", "noSuchHook").present());
+                "forge.game.trigger.TriggerHandler", "noSuchHook").isPresent());
     }
 
     @Test
     void aMissingClassReportsAbsentRatherThanThrowing() {
-        assertFalse(PatchHooks.find("forge.game.NotAClass", "anything").present());
+        assertFalse(PatchHooks.find("forge.game.NotAClass", "anything").isPresent());
     }
 
     @Test
@@ -95,10 +96,9 @@ class PatchHooksTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("com.pricepredictor.connector.effects.HookShapes#declared")
     void eachStandInIsForgesOwnDeclaration(HookShapes.Declared standIn) {
-        PatchHooks.Lookup setter = PatchHooks.find(
-                standIn.setter().owner(), standIn.setter().method());
-        Assumptions.assumeTrue(setter.present(), "the checkout lacks " + standIn.setter());
-        Class<?> declared = setter.method().getParameterTypes()[0];
+        Optional<Method> setter = standIn.setter().lookUp();
+        Assumptions.assumeTrue(setter.isPresent(), "the checkout lacks " + standIn.setter());
+        Class<?> declared = setter.get().getParameterTypes()[0];
 
         List<Class<?>> accepted = new ArrayList<>(List.of(standIn.shape()));
         accepted.addAll(standIn.older());

@@ -296,7 +296,7 @@ class EffectRecordTest {
     void theDetectedModeMatchesTheHooksPresence() {
         boolean hookPresent = PatchHooks
                 .find(PatchHooks.ABILITY_UTILS, "getEffectRecordSubAbility")
-                .present();
+                .isPresent();
         assertEquals(
                 hookPresent ? AttributionMode.PATCHED : AttributionMode.DEGRADED,
                 AttributionMode.detect());
