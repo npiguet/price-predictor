@@ -75,8 +75,7 @@ final class CombatShape {
         if (combat == null) {
             return;
         }
-        Object assigned = PatchHooks.read(combat, PatchHooks.ASSIGNED_DAMAGE.method());
-        if (!(assigned instanceof Table<?, ?, ?> table)) {
+        if (!(PatchHooks.ASSIGNED_DAMAGE.read(combat) instanceof Table<?, ?, ?> table)) {
             return;
         }
         for (Table.Cell<?, ?, ?> cell : table.cellSet()) {

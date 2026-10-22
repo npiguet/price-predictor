@@ -74,6 +74,21 @@ public final class PatchHooks {
             PatchHooks.uninstall(owner, method);
         }
 
+        /** Call this static method, or answer null; see {@link PatchHooks#invokeStatic}. */
+        Object invoke(Class<?>[] parameterTypes, Object... args) {
+            return invokeStatic(owner, method, parameterTypes, args);
+        }
+
+        /** Read this no-argument accessor off {@code target}, or answer null. */
+        Object read(Object target) {
+            return PatchHooks.read(target, method);
+        }
+
+        /** Call this one-{@code long}-argument accessor on {@code target}, or answer null. */
+        Object read(Object target, long argument) {
+            return PatchHooks.read(target, method, argument);
+        }
+
         @Override
         public String toString() {
             return owner.substring(owner.lastIndexOf('.') + 1) + "." + method;

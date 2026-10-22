@@ -927,14 +927,12 @@ public final class PatchedCollectors implements AutoCloseable {
 
     /** Reflective, because the engine exposes these only on a patched checkout. */
     private static StaticAbility cantAttackStatic(Card attacker, GameEntity defender) {
-        return (StaticAbility) PatchHooks.invokeStatic(
-                PatchHooks.CANT_ATTACK_STATIC.owner(), PatchHooks.CANT_ATTACK_STATIC.method(),
+        return (StaticAbility) PatchHooks.CANT_ATTACK_STATIC.invoke(
                 new Class<?>[]{Card.class, GameEntity.class}, attacker, defender);
     }
 
     private static StaticAbility cantBlockByStatic(Card attacker, Card blocker) {
-        return (StaticAbility) PatchHooks.invokeStatic(
-                PatchHooks.CANT_BLOCK_BY_STATIC.owner(), PatchHooks.CANT_BLOCK_BY_STATIC.method(),
+        return (StaticAbility) PatchHooks.CANT_BLOCK_BY_STATIC.invoke(
                 new Class<?>[]{Card.class, Card.class}, attacker, blocker);
     }
 
@@ -1731,7 +1729,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 }
             }
             for (Map.Entry<Long, List<Object>> changed
-                    : changesByStatic(card, PatchHooks.CHANGED_TYPES_BY_STATIC.method())
+                    : changesByStatic(card, PatchHooks.CHANGED_TYPES_BY_STATIC)
                             .entrySet()) {
                 Contribution into = contribution(byStatic, changed.getKey(), entity);
                 for (Object change : changed.getValue()) {
@@ -1739,7 +1737,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 }
             }
             for (Map.Entry<Long, List<Object>> changed
-                    : changesByStatic(card, PatchHooks.CHANGED_COLORS_BY_STATIC.method())
+                    : changesByStatic(card, PatchHooks.CHANGED_COLORS_BY_STATIC)
                             .entrySet()) {
                 Contribution into = contribution(byStatic, changed.getKey(), entity);
                 for (Object change : changed.getValue()) {
@@ -1803,8 +1801,8 @@ public final class PatchedCollectors implements AutoCloseable {
      * though {@link #collectContinuous()} has already returned by then.
      */
     @SuppressWarnings("unchecked")
-    private static Map<Long, List<Object>> changesByStatic(Card card, String accessor) {
-        Object answer = PatchHooks.read(card, accessor);
+    private static Map<Long, List<Object>> changesByStatic(Card card, PatchHooks.Hook accessor) {
+        Object answer = accessor.read(card);
         return answer instanceof Map ? (Map<Long, List<Object>>) answer : Map.of();
     }
 
@@ -1820,8 +1818,7 @@ public final class PatchedCollectors implements AutoCloseable {
      */
     static void nameContributions(
             Card card, Map<Long, Map<String, Contribution>> byStatic, String entity) {
-        if (!(PatchHooks.read(card, PatchHooks.CHANGED_NAMES.method())
-                instanceof Table<?, ?, ?> names)) {
+        if (!(PatchHooks.CHANGED_NAMES.read(card) instanceof Table<?, ?, ?> names)) {
             return;
         }
         for (Table.Cell<?, ?, ?> cell : names.cellSet()) {

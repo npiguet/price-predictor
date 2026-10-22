@@ -419,11 +419,9 @@ public final class SnapshotBuilder {
             if (staticId == null) {
                 return null;
             }
-            if (!(PatchHooks.read(card, PatchHooks.TYPE_WITHOUT.method(), staticId)
-                            instanceof CardTypeView type)
-                    || !(PatchHooks.read(card, PatchHooks.COLOR_WITHOUT.method(), staticId)
-                            instanceof ColorSet colors)
-                    || !(PatchHooks.read(card, PatchHooks.KEYWORDS_WITHOUT.method(), staticId)
+            if (!(PatchHooks.TYPE_WITHOUT.read(card, staticId) instanceof CardTypeView type)
+                    || !(PatchHooks.COLOR_WITHOUT.read(card, staticId) instanceof ColorSet colors)
+                    || !(PatchHooks.KEYWORDS_WITHOUT.read(card, staticId)
                             instanceof Iterable<?> keywords)) {
                 return null;
             }
