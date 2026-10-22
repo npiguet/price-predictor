@@ -137,8 +137,8 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      * Pattern B (Specialize): "Specialize:cost::full sentence.:ReduceCost$ SVar"
      *   → uses the full sentence from parts[3] directly
      *
-     * (Adapt and Monstrosity were removed from the {@link Keyword} enum in
-     * recent Forge revisions, so their pattern is no longer reachable.)
+     * (Adapt and Monstrosity are not members of the {@link Keyword} enum, so
+     * no pattern covers them.)
      */
     private static String extractReduceCostDescription(Keyword kw, String original) {
         if (original == null) return null;
