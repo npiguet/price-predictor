@@ -20,9 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The snapshot properties that a running game cannot check for you.
  *
- * <p>The tier vector is the one whose defect no corpus shows: chosen per call
- * site, it would make {@code state.tiers} a perfect proxy for a collection
- * flag the schema bars from being a model input. Beside it, the state's block order and the
+ * <p>The tier vector is the one a corpus cannot show to be wrong: chosen per
+ * call site, it would make {@code state.tiers} a perfect proxy for a
+ * collection flag the schema bars from being a model input. Beside it, the
+ * state's block order and the
  * resolution-time refs reading that replaces the cast-time block and nothing
  * else.
  *

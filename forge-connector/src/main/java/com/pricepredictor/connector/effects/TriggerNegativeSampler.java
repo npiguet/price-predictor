@@ -54,8 +54,8 @@ final class TriggerNegativeSampler {
      * mode's kept negatives are behind its kept positives -- the deficit is the
      * whole rule, with no rate in front of it.
      *
-     * <p>No rate of any kind. <b>A fixed rate cannot hold a ratio</b>: the
-     * population ratio varies by mode, board size and turn. A probability in
+     * <p>No sampling rate decides it. <b>A fixed rate cannot hold a ratio</b>:
+     * the population ratio varies by mode, board size and turn. A probability in
      * front of the deficit is a <b>lagging</b> controller: it catches only
      * some of the negatives it is owed, and one game gives a mode too few
      * firings for the carried deficit ever to be repaid. Offering on the
