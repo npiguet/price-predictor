@@ -1,16 +1,11 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.StaticData;
 import forge.game.Direction;
 import forge.game.EvenOdd;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.combat.Combat;
 import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
@@ -796,23 +791,11 @@ class ApiEventsTest {
     }
 
     // ── Task 12: the eight highest-reach unemitted types ─────────────────
-
-    /**
-     * A fresh {@code Game}, not {@link TestCards#game()} -- combat state
-     * ({@code PhaseHandler.setCombat}) is per-{@code Game} and this suite's
-     * shared game is used by every other test in this class; mutating combat
-     * on it would leak across tests that never asked for it.
-     */
-    private static Game freshGame() {
-        GameRules rules = new GameRules(GameType.Constructed);
-        return new Game(List.of(), rules, new Match(rules, List.of(), "ApiEventsCombatTest"));
-    }
-
-    private static Card cardIn(Game game, String name) {
-        return CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(name), null,
-                TestCards.nextCardId(), game);
-    }
+    //
+    // The combat tests below build their cards in a game of their own, not
+    // TestCards.game(): combat state (PhaseHandler.setCombat) is per-Game and
+    // the shared game is used by every other test in this class, so mutating
+    // combat on it would leak across tests that never asked for it.
 
     // ── delayed_trigger_created ───────────────────────────────────────────
 
@@ -1052,11 +1035,11 @@ class ApiEventsTest {
      */
     @Test
     void removeFromCombatNamesEveryCreatureActuallyRemoved() {
-        Game game = freshGame();
+        Game game = TestBoard.anotherGame();
         Player attackerCtrl = new Player("attacker", game, 93201);
         Player defender = new Player("defender", game, 93202);
-        Card c1 = cardIn(game, "Grizzly Bears");
-        Card c2 = cardIn(game, "Runeclaw Bear");
+        Card c1 = TestBoard.cardIn(game, "Grizzly Bears");
+        Card c2 = TestBoard.cardIn(game, "Runeclaw Bear");
         Combat combat = new Combat(attackerCtrl);
         game.getPhaseHandler().setCombat(combat);
         combat.addAttacker(c1, defender);
@@ -1087,11 +1070,11 @@ class ApiEventsTest {
      */
     @Test
     void removeFromCombatNamesOnlyTheCreatureThatWasActuallyRemoved() {
-        Game game = freshGame();
+        Game game = TestBoard.anotherGame();
         Player attackerCtrl = new Player("attacker", game, 93203);
         Player defender = new Player("defender", game, 93204);
-        Card c1 = cardIn(game, "Grizzly Bears");
-        Card c2 = cardIn(game, "Runeclaw Bear");
+        Card c1 = TestBoard.cardIn(game, "Grizzly Bears");
+        Card c2 = TestBoard.cardIn(game, "Runeclaw Bear");
         Combat combat = new Combat(attackerCtrl);
         game.getPhaseHandler().setCombat(combat);
         combat.addAttacker(c1, defender);
@@ -1136,12 +1119,12 @@ class ApiEventsTest {
      */
     @Test
     void changeCombatantsNamesTheReselectedAttacker() {
-        Game game = freshGame();
+        Game game = TestBoard.anotherGame();
         Player attackerCtrl = new Player("attacker", game, 93301);
         Player oldDefender = new Player("old-defender", game, 93302);
         Player newDefender = new Player("new-defender", game, 93303);
-        Card host = cardIn(game, "Mountain");
-        Card c = cardIn(game, "Grizzly Bears");
+        Card host = TestBoard.cardIn(game, "Mountain");
+        Card c = TestBoard.cardIn(game, "Grizzly Bears");
         Combat combat = new Combat(attackerCtrl);
         game.getPhaseHandler().setCombat(combat);
         combat.addAttacker(c, oldDefender);
@@ -1181,13 +1164,13 @@ class ApiEventsTest {
      */
     @Test
     void changeCombatantsNamesEveryReselectedAttackerNotJustTheFirst() {
-        Game game = freshGame();
+        Game game = TestBoard.anotherGame();
         Player attackerCtrl = new Player("attacker", game, 93306);
         Player oldDefender = new Player("old-defender", game, 93307);
         Player newDefender = new Player("new-defender", game, 93308);
-        Card host = cardIn(game, "Mountain");
-        Card c1 = cardIn(game, "Grizzly Bears");
-        Card c2 = cardIn(game, "Runeclaw Bear");
+        Card host = TestBoard.cardIn(game, "Mountain");
+        Card c1 = TestBoard.cardIn(game, "Grizzly Bears");
+        Card c2 = TestBoard.cardIn(game, "Runeclaw Bear");
         Combat combat = new Combat(attackerCtrl);
         game.getPhaseHandler().setCombat(combat);
         combat.addAttacker(c1, oldDefender);
@@ -1221,11 +1204,11 @@ class ApiEventsTest {
      */
     @Test
     void changeCombatantsNamesNoOneWhenTheDefenderDidNotChange() {
-        Game game = freshGame();
+        Game game = TestBoard.anotherGame();
         Player attackerCtrl = new Player("attacker", game, 93304);
         Player defender = new Player("defender", game, 93305);
-        Card host = cardIn(game, "Mountain");
-        Card c = cardIn(game, "Grizzly Bears");
+        Card host = TestBoard.cardIn(game, "Mountain");
+        Card c = TestBoard.cardIn(game, "Grizzly Bears");
         Combat combat = new Combat(attackerCtrl);
         game.getPhaseHandler().setCombat(combat);
         combat.addAttacker(c, defender);

@@ -1,14 +1,8 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.StaticData;
-import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
 import forge.game.spellability.SpellAbility;
@@ -20,18 +14,13 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -370,31 +359,19 @@ class RewriteContractTest {
      */
     @Test
     void aReplacementFromAnotherGameDoesNotReachTheShard() throws Throwable {
-        GameRules forkRules = new GameRules(GameType.Constructed);
-        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
-        Card forkHost = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Rest in Peace"),
-                null, TestCards.nextCardId(), fork);
+        Card forkHost = TestBoard.cardInAnotherGame("Rest in Peace");
         ReplacementEffect forkReplacement =
                 forkHost.getCurrentState().getReplacementEffects().iterator().next();
         Map<String, Object> params = Map.of(
                 "Card", forkHost, "Destination", ZoneType.Graveyard);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                CollectionCaps.defaults(), 1L)) {
-            InvocationHandler handler = collector.rewriteHandler();
-            handler.invoke(null, onReplacement(ListenerShape.class), new Object[]{
-                    forkReplacement, params, params, ReplacementResult.Replaced, null});
-        } finally {
-            writer.close();
-        }
+        Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collector) ->
+                collector.rewriteHandler().invoke(null, onReplacement(ListenerShape.class),
+                        new Object[]{
+                                forkReplacement, params, params, ReplacementResult.Replaced, null}));
 
-        List<String> lines = readShard(path);
-        assertEquals(List.of(), lines,
-                "a fork's own replacement must not land in the live game's shard: " + lines);
+        assertFalse(Files.exists(shard),
+                "a fork's own replacement must not land in the live game's shard");
     }
 
     // ── plumbing ────────────────────────────────────────────────────────
@@ -414,33 +391,10 @@ class RewriteContractTest {
      * this side can get without a patched jar to proxy over.
      */
     private String oneRecordFrom(Object[] args, Class<?> shape) throws Throwable {
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                CollectionCaps.defaults(), 1L)) {
-            InvocationHandler handler = collector.rewriteHandler();
-            handler.invoke(null, onReplacement(shape), args);
-        } finally {
-            writer.close();
-        }
-        List<String> lines = readShard(path);
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) ->
+                collector.rewriteHandler().invoke(null, onReplacement(shape), args));
         assertEquals(1, lines.size(), "one replacement writes one record");
         assertNotNull(lines.get(0));
         return lines.get(0);
-    }
-
-    private static List<String> readShard(Path path) throws Exception {
-        // A collector that never delivered a single record never opens the
-        // shard file at all (RecordShardWriter creates it lazily), which
-        // aReplacementFromAnotherGameDoesNotReachTheShard hits exactly.
-        if (!Files.exists(path)) {
-            return List.of();
-        }
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
     }
 }

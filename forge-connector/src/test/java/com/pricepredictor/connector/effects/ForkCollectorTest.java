@@ -1,35 +1,21 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.StaticData;
-import forge.ai.LobbyPlayerAi;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameStage;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.combat.Combat;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
-import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -64,10 +50,14 @@ class ForkCollectorTest {
         return new ForkCollector(null, writer, "run.0-l1.0", caps, 42L);
     }
 
-    /** How many records the collector has written to its shard so far. */
-    private int recordsInShard() throws IOException {
+    /**
+     * The collector's shard, closed so every record it wrote is on disk. The
+     * writer creates the file with its first record, so a collector that
+     * wrote nothing leaves none.
+     */
+    private Path closedShard() {
         writer.close();
-        return readShard(tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX)).size();
+        return writer.path();
     }
 
     /**
@@ -124,10 +114,10 @@ class ForkCollectorTest {
     }
 
     @Test
-    void aFailedForkWritesNoRecord() throws IOException {
+    void aFailedForkWritesNoRecord() {
         ForkCollector collector = collector(caps(2, 2, List.of()));
         collector.intervene(null, 1);
-        assertEquals(0, recordsInShard());
+        assertFalse(Files.exists(closedShard()));
     }
 
     /**
@@ -184,11 +174,11 @@ class ForkCollectorTest {
     }
 
     @Test
-    void aProbeForAnUnnamedKeywordSpendsNothing() throws IOException {
+    void aProbeForAnUnnamedKeywordSpendsNothing() {
         ForkCollector collector = collector(caps(2, 1, List.of("wither")));
         assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), false));
         assertTrue(collector.mayProbe("wither"));
-        assertEquals(0, recordsInShard());
+        assertFalse(Files.exists(closedShard()));
     }
 
     // ── the held branch knows which step it came from ───────────────────
@@ -232,12 +222,12 @@ class ForkCollectorTest {
      * either way.
      */
     @Test
-    void aBranchFromAnEarlierTurnIsNotWrittenAgainstThisOnesRecord() throws IOException {
+    void aBranchFromAnEarlierTurnIsNotWrittenAgainstThisOnesRecord() {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
 
         assertFalse(collector.writeHeldProbe(branch(7), "run.0-l1.9"),
                 "a branch seven turns older than its mirror is not a pair");
-        assertEquals(0, recordsInShard());
+        assertFalse(Files.exists(closedShard()));
     }
 
     /** A branch from the turn the record was written on is written. */
@@ -246,7 +236,7 @@ class ForkCollectorTest {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
 
         assertTrue(collector.writeHeldProbe(branch(0), "run.0-l1.9"));
-        assertEquals(1, recordsInShard());
+        assertEquals(1, ShardRun.readShard(closedShard()).size());
     }
 
     /**
@@ -287,11 +277,11 @@ class ForkCollectorTest {
      */
     @Test
     void aProbeBranchsCombatDamageReadsAsTheObservedRecordReadsIt() throws IOException {
-        Game game = gameInADamageStep();
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_DAMAGE);
         Player attacking = game.getPlayers().get(0);
         Player defending = game.getPlayers().get(1);
-        Card dreadmaw = onBattlefield(game, "Colossal Dreadmaw", attacking);
-        Card bears = onBattlefield(game, "Grizzly Bears", defending);
+        Card dreadmaw = TestBoard.onBattlefield(game, attacking, "Colossal Dreadmaw");
+        Card bears = TestBoard.onBattlefield(game, defending, "Grizzly Bears");
         Combat combat = new Combat(attacking);
         combat.addAttacker(dreadmaw, defending);
         combat.addBlocker(dreadmaw, bears);
@@ -318,7 +308,7 @@ class ForkCollectorTest {
             writer.close();
         }
 
-        String record = readShard(writer.path()).stream()
+        String record = ShardRun.readShard(writer.path()).stream()
                 .filter(r -> r.contains("\"kind\":\"combat\"")).findFirst().orElseThrow();
         String onTheBears = damageTo(held.events(), bears).toJson();
         assertTrue(onTheBears.contains("\"combat\":true"), onTheBears);
@@ -344,27 +334,18 @@ class ForkCollectorTest {
      */
     @Test
     void aForcedTargetedSpellsRecordNamesItsTarget() throws IOException {
-        Game game = gameIn(PhaseType.MAIN1);
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        Card bears = onBattlefield(game, "Grizzly Bears", game.getPlayers().get(1));
+        Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
         // In hand, where the fork's copier can find it.
-        Card disfigure = game.getAction().moveTo(ZoneType.Hand,
-                CardFactory.getCard(StaticData.instance().getCommonCards()
-                        .getCard("Disfigure"), caster, game),
-                null, null);
+        Card disfigure = TestBoard.inHand(game, caster, "Disfigure");
         SpellAbility spell = disfigure.getFirstSpellAbility();
         spell.setActivatingPlayer(caster);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        try {
-            ForkCollector forks = new ForkCollector(
-                    game, writer, "run.0-l1.0", caps(1, 0, List.of()), 1L);
-            assertTrue(forks.intervene(spell, 1), "the forced resolution observed nothing");
-        } finally {
-            writer.close();
-        }
+        ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps(1, 0, List.of()), 1L, spell);
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
 
-        List<String> records = readShard(writer.path());
+        List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());
         String target = "\"E" + bears.getId() + "\"";
         assertTrue(records.get(0).contains("\"refs\":{\"targets\":[" + target + "]"),
@@ -378,39 +359,5 @@ class ForkCollectorTest {
                 .findFirst().orElseThrow(() -> new AssertionError(
                         "no damage to " + card + " in "
                                 + events.stream().map(EffectEvent::toJson).toList()));
-    }
-
-    /** A two-player game in the regular damage step, past the start. */
-    private static Game gameInADamageStep() {
-        return gameIn(PhaseType.COMBAT_DAMAGE);
-    }
-
-    /** A two-player game in {@code phase}, past the start. */
-    private static Game gameIn(PhaseType phase) {
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("a", null)),
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(players, rules, new Match(rules, players, "ForkCollectorTest"));
-        game.getPhaseHandler().devModeSet(phase, game.getPlayers().get(0));
-        game.setAge(GameStage.Play);
-        return game;
-    }
-
-    private static Card onBattlefield(Game game, String name, Player owner) {
-        Card card = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(name), owner, game);
-        return game.getAction().moveToPlay(card, owner, null, null);
-    }
-
-    private static List<String> readShard(Path path) throws IOException {
-        if (!Files.exists(path)) {
-            return List.of();
-        }
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
     }
 }

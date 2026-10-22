@@ -2,18 +2,12 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.StaticData;
-import forge.ai.LobbyPlayerAi;
 import forge.ai.simulation.GameCopier;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,35 +53,6 @@ class CopiedTokenProvenanceTest {
     private static final String CARD_SCRIPT = "cardsfolder/f/food_token.txt";
 
     private static final String PRINTED_KEY = "\"printed\":[";
-
-    /**
-     * A two-player game in a main phase, the shape {@code GameCopier} expects:
-     * it clones the match's registered players and replays the phase handler's
-     * turn onto the fork, so a game that has taken no turn at all forks with a
-     * null active player and the copy's own event bus logs an NPE.
-     *
-     * <p>Both seats get an <b>empty</b> deck on purpose, and that is
-     * load-bearing rather than incidental: the token has to be the only entity
-     * in either snapshot, because the assertions below read the whole rendered
-     * JSON -- {@code contains} over the two script paths, and a
-     * {@link #printedBlock} that takes the <em>first</em> {@code printed}
-     * array. A second permanent on the board would let some other card satisfy
-     * the {@code tokenscripts} check, or hand {@code printedBlock} somebody
-     * else's keys, and the test would keep passing while checking nothing. The
-     * entity count is asserted in the test so a fixture that stops holding
-     * this fails loudly instead.
-     */
-    private static Game twoPlayerGameInAMainPhase() {
-        Deck deck = new Deck();
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("a", null)),
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(
-                players, rules, new Match(rules, players, "CopiedTokenProvenanceTest"));
-        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, game.getPlayers().get(0));
-        return game;
-    }
 
     /**
      * A Food token on a forked board keys its printed line into the token tree.
@@ -151,9 +116,24 @@ class CopiedTokenProvenanceTest {
      * {@link #theSnapshotNamesTheTokenScriptNotThePrintedName} both need: a
      * two-player game with a single Food token on the battlefield, forked once
      * with {@link GameCopier}.
+     *
+     * <p>In a main phase, the shape {@code GameCopier} expects: it clones the
+     * match's registered players and replays the phase handler's turn onto the
+     * fork, so a game that has taken no turn at all forks with a null active
+     * player and the copy's own event bus logs an NPE.
+     *
+     * <p>Both seats' decks are <b>empty</b>, and that is load-bearing rather
+     * than incidental: the token has to be the only entity in either snapshot,
+     * because the assertions read the whole rendered JSON -- {@code contains}
+     * over the two script paths, and a {@link #printedBlock} that takes the
+     * <em>first</em> {@code printed} array. A second permanent on the board
+     * would let some other card satisfy the {@code tokenscripts} check, or hand
+     * {@code printedBlock} somebody else's keys, and the test would keep
+     * passing while checking nothing. The entity count is asserted in the test
+     * so a fixture that stops holding this fails loudly instead.
      */
     private static ForkedBoard boardWithFoodTokenAndItsFork() {
-        Game game = twoPlayerGameInAMainPhase();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player owner = game.getPlayers().get(0);
         Card food = CardFactory.getCard(
                 StaticData.instance().getAllTokens().getToken("c_a_food_sac"),

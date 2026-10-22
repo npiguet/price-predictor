@@ -3,41 +3,29 @@ package com.pricepredictor.connector.effects;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Record identity across worker lifetimes.
- *
- * <p>Separate from {@code CollectorTest}'s writer group because this is a
- * regression suite for one defect rather than a description of the writer: the
- * first collected corpus reused 71-75 % of its record ids and held 804 distinct
- * game ids for 31,662 games, because both counters live in one JVM's heap and
- * the supervisor replaces that JVM roughly 530 times over an eight-hour run.
- * Every test here fails against the pre-lifetime writer.
- *
- * <p>The restarts are not the bug and are not going away: the small heap and the
- * timed recycle are deliberate containment for Forge misbehaving late in a JVM's
- * life. The ids have to be correct under them, including for a JVM killed
- * mid-game, which runs no shutdown hook.
+ * The shard writer: the names and ids it issues, the file it appends to, and
+ * record identity across worker lifetimes.
  */
-class RecordShardIdentityTest {
+class RecordShardWriterTest {
 
     @TempDir
     Path tempDir;
+
+    // ── names and ids ───────────────────────────────────────────────────
 
     @Test
     void aShardIsNamedForItsRunWorkerAndLifetime() {
@@ -47,6 +35,90 @@ class RecordShardIdentityTest {
                     "run-uuid.4-l1.jsonl.gz", writer.path().getFileName().toString());
         }
     }
+
+    @Test
+    void recordIdsCarryTheWorkerIndexAndCountUp() {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 7, "l1")) {
+            assertEquals("run.7-l1.0", writer.nextRecordId());
+            assertEquals("run.7-l1.1", writer.nextRecordId());
+        }
+    }
+
+    @Test
+    void gameIdsCountSeparatelyFromRecordIds() {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
+            writer.nextRecordId();
+            writer.nextRecordId();
+            assertEquals("run.0-l1.0", writer.nextGameId());
+        }
+    }
+
+    @Test
+    void twoWorkersProduceDisjointIds() {
+        try (RecordShardWriter first = new RecordShardWriter(tempDir, "run", 0, "l1");
+             RecordShardWriter second = new RecordShardWriter(tempDir, "run", 1, "l1")) {
+            assertNotEquals(first.nextRecordId(), second.nextRecordId());
+        }
+    }
+
+    @Test
+    void theDirectoryIsCreated() {
+        Path nested = tempDir.resolve("output/effects/records");
+        try (RecordShardWriter writer = new RecordShardWriter(nested, "run", 0, "l1")) {
+            assertTrue(Files.isDirectory(nested));
+            assertNotNull(writer.path());
+        }
+    }
+
+    // ── the file ────────────────────────────────────────────────────────
+
+    @Test
+    void aShardIsAConcatenationOfCompleteGzipMembers() throws IOException {
+        // Each writer contributes its own member, so appending is valid gzip
+        // rather than a second stream glued onto the first. That is what lets a
+        // killed worker truncate the last member and leave the rest readable.
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
+            writer.write("{\"a\":1}");
+        }
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
+            writer.write("{\"a\":2}");
+        }
+        byte[] bytes = Files.readAllBytes(
+                tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
+        int members = 0;
+        for (int i = 0; i + 1 < bytes.length; i++) {
+            // gzip's magic number, which starts every member.
+            if ((bytes[i] & 0xFF) == 0x1F && (bytes[i + 1] & 0xFF) == 0x8B) {
+                members++;
+            }
+        }
+        assertTrue(members >= 2, "expected one member per writer, saw " + members);
+    }
+
+    @Test
+    void aFullBlockIsFlushedWithoutClosing() throws IOException {
+        // The worker loops until it is killed, so a shard that only wrote on
+        // close would be empty for the whole run.
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS; i++) {
+            writer.write("{\"a\":" + i + "}");
+        }
+        assertEquals(RecordShardWriter.BLOCK_RECORDS, ShardRun.readShard(writer.path()).size());
+    }
+
+    // ── identity across worker lifetimes ────────────────────────────────
+    //
+    // A regression suite for one defect rather than a description of the
+    // writer: the first collected corpus reused 71-75 % of its record ids and
+    // held 804 distinct game ids for 31,662 games, because both counters live
+    // in one JVM's heap and the supervisor replaces that JVM roughly 530 times
+    // over an eight-hour run. Every test here fails against the pre-lifetime
+    // writer.
+    //
+    // The restarts are not the bug and are not going away: the small heap and
+    // the timed recycle are deliberate containment for Forge misbehaving late
+    // in a JVM's life. The ids have to be correct under them, including for a
+    // JVM killed mid-game, which runs no shutdown hook.
 
     @Test
     void aRestartedWorkerReusesNoId() {
@@ -121,14 +193,14 @@ class RecordShardIdentityTest {
                 "the restarted lifetime reissued the killed one's ids");
 
         // The killed lifetime keeps every complete block; only the tail is lost.
-        List<String> survived = readShard(killed.path());
+        List<String> survived = ShardRun.readShard(killed.path());
         assertEquals(RecordShardWriter.BLOCK_RECORDS, survived.size());
-        assertEquals(10, readShard(restarted.path()).size());
+        assertEquals(10, ShardRun.readShard(restarted.path()).size());
 
         // And the corpus as a whole holds no id twice.
         Set<String> all = new HashSet<>();
         for (Path shard : shards()) {
-            for (String line : readShard(shard)) {
+            for (String line : ShardRun.readShard(shard)) {
                 assertTrue(all.add(line), "duplicate record across shards: " + line);
             }
         }
@@ -145,7 +217,7 @@ class RecordShardIdentityTest {
             writer.write("{\"a\":2}");
         }
         assertEquals(1, shards().size());
-        assertEquals(List.of("{\"a\":1}", "{\"a\":2}"), readShard(shards().get(0)));
+        assertEquals(List.of("{\"a\":1}", "{\"a\":2}"), ShardRun.readShard(shards().get(0)));
     }
 
     @Test
@@ -198,15 +270,6 @@ class RecordShardIdentityTest {
                     .filter(p -> p.getFileName().toString().endsWith(RecordShardWriter.SUFFIX))
                     .sorted()
                     .toList();
-        }
-    }
-
-    /** The shard's lines, decompressed across every complete gzip member. */
-    private static List<String> readShard(Path path) throws IOException {
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
         }
     }
 }

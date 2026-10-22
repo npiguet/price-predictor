@@ -1,23 +1,15 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.StaticData;
-import forge.ai.LobbyPlayerAi;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventPlayerRadiation;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
@@ -75,22 +67,27 @@ class BusBracketCollectorTest {
     private RecordShardWriter writer;
 
     private BusBracketCollector collector() {
+        return collector(TestCards.game());
+    }
+
+    private BusBracketCollector collector(Game game) {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        return new BusBracketCollector(TestCards.game(), writer, "run.0-l1.0");
+        return new BusBracketCollector(game, writer, "run.0-l1.0");
+    }
+
+    /**
+     * The shard, closed so every record written so far is on disk. The writer
+     * creates the file with its first record, so a collector that wrote
+     * nothing leaves none.
+     */
+    private Path closedShard() {
+        writer.close();
+        return writer.path();
     }
 
     /** The records written so far, one parsed line each. */
     private List<String> written() throws IOException {
-        writer.close();
-        Path path = tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX);
-        if (!Files.exists(path)) {
-            return List.of();
-        }
-        try (var gzip = new java.util.zip.GZIPInputStream(Files.newInputStream(path));
-                var reader = new java.io.BufferedReader(new java.io.InputStreamReader(
-                        gzip, java.nio.charset.StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
+        return ShardRun.readShard(closedShard());
     }
 
     /** A targeted burn spell, the shape a partial fizzle happens to. */
@@ -112,14 +109,14 @@ class BusBracketCollectorTest {
      * only say a literal, which is what all 4,989 activation records said.
      */
     @Test
-    void aCastIsHeldRatherThanWrittenWithAGuessedOutcome() throws IOException {
+    void aCastIsHeldRatherThanWrittenWithAGuessedOutcome() {
         BusBracketCollector collector = collector();
 
         SpellAbility bolt = damageAbility();
 
         collector.beginBracket(bolt);
 
-        assertEquals(List.of(), written());
+        assertFalse(Files.exists(closedShard()), "the cast wrote a record");
         assertEquals(1, collector.finishGame(Set.of(bolt.getId())),
                 "the cast is still held, to be abandoned at the end of the game");
     }
@@ -508,24 +505,15 @@ class BusBracketCollectorTest {
      */
     @Test
     void theGameOutcomeNamesTheWinningPlayerAsARef() throws IOException {
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("p1", null)),
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("p2", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Match match = new Match(rules, players, "outcome-shard-test");
-        Game outcomeGame = new Game(players, rules, match);
+        Game outcomeGame = TestBoard.twoPlayerGame("p1", "p2");
         Player p1 = outcomeGame.getPlayers().stream()
                 .filter(p -> "p1".equals(p.getLobbyPlayer().getName()))
                 .findFirst().orElseThrow();
-        Card boltHost = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Lightning Bolt"),
-                null, outcomeGame);
+        Card boltHost = TestBoard.card(outcomeGame, null, "Lightning Bolt");
         SpellAbility bolt = AbilityFactory.getAbility(
                 "SP$ DealDamage | Cost$ R | ValidTgts$ Any | TgtPrompt$ Choose"
                         + " | NumDmg$ 3", boltHost);
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        BusBracketCollector outcomeCollector = new BusBracketCollector(
-                outcomeGame, writer, "run.0-l1.0");
+        BusBracketCollector outcomeCollector = collector(outcomeGame);
 
         outcomeCollector.beginBracket(bolt);
         outcomeCollector.onGameOutcome(new GameEventGameOutcome(
@@ -564,8 +552,7 @@ class BusBracketCollectorTest {
      * unrecorded and uncounted.
      */
     @Test
-    void aCastStillOnTheStackAtTheEndIsCountedRatherThanGivenAnOutcome()
-            throws IOException {
+    void aCastStillOnTheStackAtTheEndIsCountedRatherThanGivenAnOutcome() {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
 
@@ -573,7 +560,7 @@ class BusBracketCollectorTest {
         long abandoned = collector.finishGame(Set.of(bolt.getId()));
 
         assertEquals(1, abandoned);
-        assertEquals(List.of(), written(), "no record claims one of the five");
+        assertFalse(Files.exists(closedShard()), "no record claims one of the five");
     }
 
     /**
@@ -594,8 +581,7 @@ class BusBracketCollectorTest {
      * {@code kind:resolution} record naming {@code bolt} as having resolved.
      */
     @Test
-    void aStillOpenBracketAtTheEndIsNotGivenAResolutionItNeverHad()
-            throws IOException {
+    void aStillOpenBracketAtTheEndIsNotGivenAResolutionItNeverHad() {
         BusBracketCollector collector = collector();
         SpellAbility bolt = damageAbility();
         Card victim = TestCards.build("Runeclaw Bear");
@@ -610,8 +596,7 @@ class BusBracketCollectorTest {
         long abandoned = collector.finishGame(Set.of(bolt.getId()));
 
         assertEquals(1, abandoned, "bolt never resolved and must still be counted so");
-        assertEquals(
-                List.of(), written(),
+        assertFalse(Files.exists(closedShard()),
                 "no record may claim bolt resolved -- it never did, and "
                         + "writeOffRemoved's abandoned count already says so correctly");
     }
@@ -650,9 +635,7 @@ class BusBracketCollectorTest {
     @Test
     void theCombatThatEndedTheGameIsWritten() throws IOException {
         Game game = gameInACombatDamageStep();
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
+        BusBracketCollector collector = collector(game);
         Card attacker = TestCards.build("Grizzly Bears");
 
         collector.onCardDamaged(new GameEventCardDamaged(
@@ -685,24 +668,15 @@ class BusBracketCollectorTest {
     @Test
     void aGameOutcomeAfterTheKillingBracketAlreadyClosedIsStillWritten()
             throws IOException {
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("p1", null)),
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("p2", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Match match = new Match(rules, players, "outcome-orphan-test");
-        Game outcomeGame = new Game(players, rules, match);
+        Game outcomeGame = TestBoard.twoPlayerGame("p1", "p2");
         Player p1 = outcomeGame.getPlayers().stream()
                 .filter(p -> "p1".equals(p.getLobbyPlayer().getName()))
                 .findFirst().orElseThrow();
-        Card boltHost = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Lightning Bolt"),
-                null, outcomeGame);
+        Card boltHost = TestBoard.card(outcomeGame, null, "Lightning Bolt");
         SpellAbility bolt = AbilityFactory.getAbility(
                 "SP$ DealDamage | Cost$ R | ValidTgts$ Any | TgtPrompt$ Choose"
                         + " | NumDmg$ 3", boltHost);
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        BusBracketCollector outcomeCollector = new BusBracketCollector(
-                outcomeGame, writer, "run.0-l1.0");
+        BusBracketCollector outcomeCollector = collector(outcomeGame);
 
         // Bolt resolves and its own bracket closes -- writing and clearing its
         // own effect half -- before anyone asks whether the game is over.
@@ -737,9 +711,7 @@ class BusBracketCollectorTest {
     @Test
     void aCreatureHitInTheFirstStrikeStepOpensACombatRecord() throws IOException {
         Game game = gameInACombatDamageStep(PhaseType.COMBAT_FIRST_STRIKE_DAMAGE);
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
+        BusBracketCollector collector = collector(game);
         Card attacker = TestCards.build("White Knight");
 
         collector.onCardDamaged(new GameEventCardDamaged(
@@ -768,9 +740,7 @@ class BusBracketCollectorTest {
     @Test
     void whatResolvesAfterTheDamageIsNotTheCombats() throws IOException {
         Game game = gameInACombatDamageStep();
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
+        BusBracketCollector collector = collector(game);
         Card attacker = TestCards.build("Grizzly Bears");
         collector.onCardDamaged(new GameEventCardDamaged(
                 TestCards.build("Runeclaw Bear").getView(), attacker.getView(), 2,
@@ -811,15 +781,7 @@ class BusBracketCollectorTest {
     }
 
     private static Game gameInACombatDamageStep(PhaseType step) {
-        Deck deck = new Deck();
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("a", null)),
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(
-                players, rules, new Match(rules, players, "BusBracketTest"));
-        game.getPhaseHandler().devModeSet(step, game.getPlayers().get(0));
-        return game;
+        return TestBoard.twoPlayerGame(step);
     }
 
     // ── an offer turned down ────────────────────────────────────────────
@@ -983,11 +945,7 @@ class BusBracketCollectorTest {
      */
     @Test
     void aDeclinedConfirmationFromAnotherGameDoesNotReachTheLiveBracket() throws IOException {
-        GameRules forkRules = new GameRules(GameType.Constructed);
-        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
-        Card forkHost = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Grizzly Bears"),
-                null, TestCards.nextCardId(), fork);
+        Card forkHost = TestBoard.cardInAnotherGame("Grizzly Bears");
         SpellAbility forkAbility = AbilityFactory.getAbility(
                 "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
 

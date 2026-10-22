@@ -1,144 +1,18 @@
 package com.pricepredictor.connector.effects;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The record envelope, the shard writer, and the event shape.
- *
- * <p>These are the parts that need no game. The collectors' behaviour inside a
- * running match — bracket attribution, two records for a first-strike combat, a
- * countered spell's partnerless cost record — is exercised by the integration
- * test, which plays real games; asserting it here would mean mocking Forge's
- * event bus, and a mock that agreed with my reading of the engine would prove
- * only that I read it consistently.
+ * The record envelope, the event shape, the attribution mode and JSON
+ * escaping: the parts of a record that need no game.
  */
-class CollectorTest {
-
-    @TempDir
-    Path tempDir;
-
-    // ── the shard writer ────────────────────────────────────────────────
-
-    @Test
-    void aShardIsNamedForItsRunWorkerAndLifetime() {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run-uuid", 4, "l1")) {
-            assertEquals(
-                    "run-uuid.4-l1.jsonl.gz", writer.path().getFileName().toString());
-        }
-    }
-
-    @Test
-    void recordIdsCarryTheWorkerIndexAndCountUp() {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 7, "l1")) {
-            assertEquals("run.7-l1.0", writer.nextRecordId());
-            assertEquals("run.7-l1.1", writer.nextRecordId());
-        }
-    }
-
-    @Test
-    void gameIdsCountSeparatelyFromRecordIds() {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.nextRecordId();
-            writer.nextRecordId();
-            assertEquals("run.0-l1.0", writer.nextGameId());
-        }
-    }
-
-    @Test
-    void twoWorkersProduceDisjointIds() {
-        try (RecordShardWriter first = new RecordShardWriter(tempDir, "run", 0, "l1");
-             RecordShardWriter second = new RecordShardWriter(tempDir, "run", 1, "l1")) {
-            assertNotEquals(first.nextRecordId(), second.nextRecordId());
-        }
-    }
-
-    @Test
-    void writesAreOneLineEach() throws IOException {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.write("{\"a\":1}");
-            writer.write("{\"a\":2}");
-        }
-        assertEquals(List.of("{\"a\":1}", "{\"a\":2}"), readShard("run.0-l1"));
-    }
-
-    @Test
-    void aSecondWriterAppendsRatherThanTruncating() throws IOException {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.write("{\"a\":1}");
-        }
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.write("{\"a\":2}");
-        }
-        assertEquals(2, readShard("run.0-l1").size());
-    }
-
-    @Test
-    void aShardIsAConcatenationOfCompleteGzipMembers() throws IOException {
-        // Each writer contributes its own member, so appending is valid gzip
-        // rather than a second stream glued onto the first. That is what lets a
-        // killed worker truncate the last member and leave the rest readable.
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.write("{\"a\":1}");
-        }
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.write("{\"a\":2}");
-        }
-        byte[] bytes = Files.readAllBytes(
-                tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
-        int members = 0;
-        for (int i = 0; i + 1 < bytes.length; i++) {
-            // gzip's magic number, which starts every member.
-            if ((bytes[i] & 0xFF) == 0x1F && (bytes[i + 1] & 0xFF) == 0x8B) {
-                members++;
-            }
-        }
-        assertTrue(members >= 2, "expected one member per writer, saw " + members);
-    }
-
-    @Test
-    void aFullBlockIsFlushedWithoutClosing() throws IOException {
-        // The worker loops until it is killed, so a shard that only wrote on
-        // close would be empty for the whole run.
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS; i++) {
-            writer.write("{\"a\":" + i + "}");
-        }
-        assertEquals(RecordShardWriter.BLOCK_RECORDS, readShard("run.0-l1").size());
-    }
-
-    /** The shard's lines, decompressed. */
-    private List<String> readShard(String stem) throws IOException {
-        Path path = tempDir.resolve(stem + RecordShardWriter.SUFFIX);
-        try (var gzip = new java.util.zip.GZIPInputStream(Files.newInputStream(path));
-                var reader = new java.io.BufferedReader(
-                        new java.io.InputStreamReader(gzip, java.nio.charset.StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
-    }
-
-    @Test
-    void theDirectoryIsCreated() {
-        Path nested = tempDir.resolve("output/effects/records");
-        try (RecordShardWriter writer = new RecordShardWriter(nested, "run", 0, "l1")) {
-            assertTrue(Files.isDirectory(nested));
-            assertNotNull(writer.path());
-        }
-    }
-
-    private static void assertNotNull(Object value) {
-        assertTrue(value != null);
-    }
+class EffectRecordTest {
 
     // ── the record envelope ─────────────────────────────────────────────
 

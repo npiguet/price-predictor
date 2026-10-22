@@ -1,13 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import forge.StaticData;
-import forge.ai.LobbyPlayerAi;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameStage;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
@@ -15,13 +9,8 @@ import forge.game.card.CardFactory;
 import forge.game.card.CounterEnumType;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.ZoneType;
-import forge.item.IPaperCard;
 import forge.item.PaperToken;
-
-import java.util.List;
 
 /**
  * A fresh two-player game for the characterization tests, and the cards on it.
@@ -46,16 +35,7 @@ final class CharacterizationBoard {
 
     /** An empty board in {@code phase} of the first player's turn, past the start. */
     static CharacterizationBoard empty(PhaseType phase) {
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("a", null)),
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(players, rules, new Match(rules, players, "Characterization"));
-        game.getPhaseHandler().devModeSet(phase, game.getPlayers().get(0));
-        // checkStateEffects returns early, leaving the stack frozen, on a game
-        // that has not started.
-        game.setAge(GameStage.Play);
-        return new CharacterizationBoard(game);
+        return new CharacterizationBoard(TestBoard.startedTwoPlayerGame(phase));
     }
 
     /**
@@ -122,11 +102,7 @@ final class CharacterizationBoard {
     }
 
     Card card(String name, Player owner) {
-        IPaperCard paper = StaticData.instance().getCommonCards().getCard(name);
-        if (paper == null) {
-            throw new AssertionError("card not in the database: " + name);
-        }
-        return CardFactory.getCard(paper, owner, game);
+        return TestBoard.card(game, owner, name);
     }
 
     /** A token by its script stem, on the battlefield. */
@@ -140,15 +116,15 @@ final class CharacterizationBoard {
     }
 
     Card battlefield(String name, Player owner) {
-        return game.getAction().moveToPlay(card(name, owner), owner, null, null);
+        return TestBoard.onBattlefield(game, owner, name);
     }
 
     Card hand(String name, Player owner) {
-        return game.getAction().moveTo(ZoneType.Hand, card(name, owner), null, null);
+        return TestBoard.inHand(game, owner, name);
     }
 
     Card graveyard(String name, Player owner) {
-        return game.getAction().moveTo(ZoneType.Graveyard, card(name, owner), null, null);
+        return TestBoard.inGraveyard(game, owner, name);
     }
 
     /** A card's spell, activated by {@code activator}. */
