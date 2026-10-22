@@ -37,12 +37,13 @@ final class TriggerChannel {
      */
     InvocationHandler handler() {
         return PatchHooks.TRIGGER_LISTENER.listener((callback, args) -> {
-            // Checked first, before this evaluation can spend any of the mode's negative-sampling budget (offer/keep
-            // below) -- a fork's trigger evaluations must not skew the live
-            // game's ratio bookkeeping any more than they must reach its
-            // shard. args[0] is declared Trigger on Forge's side, always a
-            // CardTraitBase with a real host; anything this cannot identify
-            // is left alone rather than newly dropped.
+            // Checked first, before this evaluation can spend any of the
+            // mode's negative-sampling budget (offer/keep below) -- a fork's
+            // trigger evaluations must not skew the live game's ratio
+            // bookkeeping any more than they must reach its shard. args[0] is
+            // declared Trigger on Forge's side, always a CardTraitBase with a
+            // real host; anything this cannot identify is kept, as only a
+            // positively identified other game is dropped.
             CardTraitBase trait = args.get(0, CardTraitBase.class);
             if (trait != null && !live.owns(trait)) {
                 return;

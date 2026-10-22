@@ -54,21 +54,18 @@ final class ProbeScheduler {
         if (firstStrike && !anyFirstStriker()) {
             // Forge always enters the first-strike step and skips it when no
             // combatant has first or double strike, so the phase event alone is
-            // no evidence that a step will happen. Probing anyway spent half the
-            // budget on forks that assigned no damage: every empty probe fork in
-            // the sampled corpus was a first-strike-step fork, and every
-            // first-strike-step fork was empty. Worse, the real game writes no
-            // combat record for a step that assigns nothing, so those branches
-            // survived and were completed against the *regular* step's record.
+            // no evidence that a step will happen. Probing anyway would spend
+            // budget on forks that assign no damage, and since the real game
+            // writes no combat record for a step that assigns nothing, those
+            // branches would be completed against the *regular* step's record.
             return;
         }
         discardStaleProbes(step);
         // One keyword per game rather than whichever the battlefield order
-        // reaches first. With eight probed keywords and a budget of two, the
-        // first corpus probed lifelink and trample eight times each and
-        // double strike, indestructible, wither and infect not at all -- and
-        // gate 2 is a per-keyword decision, so an unprobed keyword gets no
-        // check whatever.
+        // reaches first. With eight probed keywords and a budget of two,
+        // battlefield order would probe the same few keywords game after game
+        // and leave the rest unprobed -- and gate 2 is a per-keyword decision,
+        // so an unprobed keyword gets no check whatever.
         String focus = probeFocus();
         if (probeCombatants(focus, step) == 0) {
             // The focus is a rotation, not a restriction: a game whose combat
@@ -186,11 +183,11 @@ final class ProbeScheduler {
     /**
      * Complete only the branches taken at this damage step.
      *
-     * <p>A branch and the record it mirrors have to describe the same step. In
-     * the first corpus they did not: a branch forked at the first-strike step —
-     * where nothing was ever assigned — outlived that step and was written
-     * against the regular step's record, so gate 2's real-versus-fork
-     * difference compared a step that did not happen with one that did.
+     * <p>A branch and the record it mirrors have to describe the same step. A
+     * branch forked at the first-strike step — where nothing may have been
+     * assigned — written against the regular step's record would make gate 2's
+     * real-versus-fork difference compare a step that did not happen with one
+     * that did.
      */
     void writeHeldProbes(String combatRecordId, DamageStep substep) {
         if (heldProbes.isEmpty()) {

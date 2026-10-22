@@ -54,8 +54,7 @@ final class RewriteChannel {
             // pipeline, which is where replacements apply). args[0] is
             // declared ReplacementEffect on Forge's side -- always a
             // CardTraitBase with a real host -- so a positively-identified
-            // other game is dropped; anything this cannot identify is left
-            // alone rather than newly dropped.
+            // other game is dropped; anything this cannot identify is kept.
             CardTraitBase trait = args.get(0, CardTraitBase.class);
             if (trait != null && !live.owns(trait)) {
                 return;
@@ -84,11 +83,9 @@ final class RewriteChannel {
      * {@code state.entities} is the one this object carries.
      *
      * <p><b>Every replacement writes a record, including the ones that declined.</b>
-     * There used to be a rule here dropping a pair whose halves read alike, and
-     * it took 87% of them, because a substitution leaves the map untouched and
-     * looked exactly like a replacement that did nothing. The result argument is
-     * what tells those apart, so there is no longer such a thing as an
-     * uninformative rewrite record: a {@code not_replaced} is this channel's
+     * A substitution leaves the map untouched and so looks exactly like a
+     * replacement that did nothing. The result argument is what tells those
+     * apart, so no rewrite record is uninformative: a {@code not_replaced} is this channel's
      * negative, the same role a non-fired evaluation plays on the trigger
      * channel, and it is what teaches when a replacement applies rather than
      * only what it does when it has.
@@ -105,8 +102,7 @@ final class RewriteChannel {
         Card source = acting == null ? null : acting.getHostCard();
         EffectEvent incoming = RunParamNormalizer.describeParams(trait, before);
         EffectEvent rendered = RunParamNormalizer.describeParams(trait, after);
-        // Null rather than a copy, and this is the whole of the contract. The
-        // two halves were byte-identical on 87% of the candidates because a
+        // Null rather than a copy, and this is the whole of the contract. A
         // substitution does not edit the map -- it runs another ability and
         // returns a result -- so a copy here says "changed nothing observable"
         // about a replacement that exiled the card instead of killing it. What
