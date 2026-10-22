@@ -76,10 +76,10 @@ public final class EffectRecord {
      * A record of one of the four kinds that take neither a moment nor a
      * subkind.
      *
-     * <p>The other two are made by {@link #resolution} and {@link #playability},
-     * because a resolution record without its moment and a playability record
-     * without its subkind cannot be read, and a setter left uncalled is not
-     * something a reader can catch.
+     * <p>The other two are made by {@link #resolution} and {@link #playability}:
+     * a resolution record needs its moment and a playability record its
+     * subkind, and taking them at construction is what makes a record missing
+     * one impossible to build rather than merely wrong.
      */
     public EffectRecord(
             String recordId, String runId, String timestamp, String gameId,

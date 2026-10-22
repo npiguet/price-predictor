@@ -5,8 +5,8 @@ package com.pricepredictor.connector.effects;
  *
  * <p>Every playability record has one and no other kind does, which is why a
  * record is given its subkind when it is made, by
- * {@link EffectRecord#playability}, rather than by a setter a caller could
- * forget.
+ * {@link EffectRecord#playability}. {@code PlayabilitySubkind} in
+ * {@code records.py} is the other half of this vocabulary.
  */
 public enum PlayabilitySubkind {
     /** A candidate the AI weighed at priority, with the verdict on it. */
