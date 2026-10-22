@@ -46,6 +46,13 @@ class BoosterTemplatesTest {
     }
 
     @Test
+    void anAliasIsCanonicalizedAndAPlainOrUnknownCodeIsNot() {
+        assertEquals("CFX", BoosterTemplates.canonicalCode("CON"));
+        assertEquals("CFX", BoosterTemplates.canonicalCode("CFX"));
+        assertEquals("XXXXUNKNOWN", BoosterTemplates.canonicalCode("XXXXUNKNOWN"));
+    }
+
+    @Test
     void anUnknownSetHasNoTemplate() {
         assertEquals(Optional.empty(), BoosterTemplates.forSet("XXXXUNKNOWN"));
         assertEquals(Optional.empty(), BoosterTemplates.forSet(null));
