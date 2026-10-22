@@ -2885,9 +2885,11 @@ def share_vs_reliance() -> None:
                fontsize=8)
     fig.text(0.06, -0.135, "Not drawn: may block, whose share is undefined because the model "
              "scores no better than the board alone; the affordable verdict and trigger "
-             "firing,\nwhich have no ablation field.", fontsize=7.8, color=INK_SOFT)
-    ax.set_title("Only pump duration has a share the probes record's rule can read, and there "
-                 "e carries the answer\nand the trunk relies on it; deaths and affected cards "
+             "firing, which have no ablation field;\nthe two legal-target questions, which read "
+             "the affected gate, so their reliance is card affected's.", fontsize=7.8,
+             color=INK_SOFT)
+    ax.set_title("Of the questions drawn, only pump duration has a share the probes record's rule "
+                 "can read: e carries\nthe answer and the trunk relies on it; deaths and affected cards "
                  f"need a stronger probe first ({len(names)} gen-2 checkpoints)", pad=22)
     save(fig, "share-vs-reliance")
 
