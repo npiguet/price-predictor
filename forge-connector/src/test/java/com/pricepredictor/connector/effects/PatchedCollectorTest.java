@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.PatchedCollectors.Contribution;
-import com.pricepredictor.connector.effects.TestCollectors.FakeTrait;
 import forge.card.CardChangedType;
 import forge.card.CardType;
 import forge.card.ColorSet;
@@ -34,6 +33,7 @@ import java.util.Set;
 
 import static com.pricepredictor.connector.effects.TestCollectors.caps;
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
+import static com.pricepredictor.connector.effects.TestCollectors.triggerOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -324,7 +324,7 @@ class PatchedCollectorTest {
     @Test
     void everySnapshotCarriesAllFourTiers() {
         String json = recording(tempDir).triggerRecord(
-                new FakeTrait("Moved"), Map.of(), true).toJson();
+                triggerOfMode("ChangesZone"), Map.of(), true).toJson();
 
         assertTrue(json.contains("\"tiers\":[1,2,3,4]"), json);
     }

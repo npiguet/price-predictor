@@ -1,11 +1,16 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.replacement.ReplacementEffect;
+import forge.game.replacement.ReplacementHandler;
+import forge.game.trigger.Trigger;
+import forge.game.trigger.TriggerHandler;
+
 import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Patched collectors built the two ways a test drives them by hand, and a
- * trait to hand them.
+ * Patched collectors built the two ways a test drives them by hand, and the
+ * traits to hand them.
  *
  * <p>A test that needs the bracket wired, or reads the shard back, runs
  * through {@link ShardRun} instead.
@@ -48,16 +53,23 @@ final class TestCollectors {
     }
 
     /**
-     * A stand-in for a trait whose only readable property is its mode.
+     * A trigger of a chosen mode, on a host card the mode does not care about.
      *
-     * <p>The collector reads the mode reflectively, so anything with the
-     * accessor exercises the same path. Using one keeps a test about the
-     * parameter reading rather than about which Forge trait happens to declare
-     * a given mode.
+     * <p>Parsed rather than taken off a real card, because what is under test
+     * is the reading of one mode's run parameters and finding a printed card
+     * per mode would tie the test to the set list.
      */
-    public record FakeTrait(String mode) {
-        public String getMode() {
-            return mode;
-        }
+    static Trigger triggerOfMode(String mode) {
+        return TriggerHandler.parseTrigger(
+                "Mode$ " + mode + " | TriggerZones$ Battlefield"
+                        + " | TriggerDescription$ under test",
+                TestCards.build("Paralyze"), true);
+    }
+
+    /** A replacement of a chosen mode, parsed for the reason {@link #triggerOfMode} is. */
+    static ReplacementEffect replacementOfMode(String mode) {
+        return ReplacementHandler.parseReplacement(
+                "Event$ " + mode + " | Description$ under test",
+                TestCards.build("Paralyze"), true);
     }
 }

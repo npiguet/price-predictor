@@ -943,11 +943,7 @@ public final class BusBracketCollector extends BusEventReader {
      * degrades this channel silently.
      */
     InvocationHandler confirmHandler() {
-        return (proxy, method, args) -> {
-            if (!"onConfirm".equals(method.getName()) || args == null
-                    || args.length < 2) {
-                return null;
-            }
+        return PatchHooks.CONFIRM_LISTENER.listener((callback, args) -> {
             // This hook is a JVM static, and PlayerControllerAi.confirmAction
             // is exactly what a fork's own forced resolution asks when it
             // pays a cost or resolves an optional clause (GameSimulator builds
@@ -955,12 +951,12 @@ public final class BusBracketCollector extends BusEventReader {
             // listener it calls is this game's). args[0] is declared
             // SpellAbility on Forge's side; a value this cannot identify is
             // left alone rather than newly dropped.
-            if (Boolean.FALSE.equals(args[1])
-                    && (!(args[0] instanceof SpellAbility sa) || belongsToLiveGame(sa))) {
+            SpellAbility offered = args.get(0, SpellAbility.class);
+            if (Boolean.FALSE.equals(args.get(1))
+                    && (offered == null || belongsToLiveGame(offered))) {
                 noteDeclined();
             }
-            return null;
-        };
+        });
     }
 
     /**

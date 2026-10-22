@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.TestCollectors.FakeTrait;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
 import forge.game.replacement.ReplacementEffect;
@@ -25,6 +24,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
+import static com.pricepredictor.connector.effects.TestCollectors.replacementOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -74,7 +74,7 @@ class RewriteContractTest {
     void everyResultIsWrittenInItsWireSpelling(ReplacementResult result) {
         Card card = TestCards.build("Mountain");
         String json = recording(tempDir).rewriteRecord(
-                new FakeTrait("Moved"),
+                replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card), result, null).toJson();
 
         assertTrue(json.contains("\"result\":\"" + WIRE.get(result) + "\""),
@@ -93,7 +93,7 @@ class RewriteContractTest {
     void aReplacementWithNoAnswerSaysSoRatherThanGuessing() {
         Card card = TestCards.build("Mountain");
         String json = recording(tempDir).rewriteRecord(
-                new FakeTrait("Moved"),
+                replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card), null, null).toJson();
 
         assertTrue(json.contains("\"result\":null"), json);
@@ -126,7 +126,7 @@ class RewriteContractTest {
         after.put("DamageAmount", 1);
 
         String json = recording(tempDir).rewriteRecord(
-                new FakeTrait("DamageDone"), before, after,
+                replacementOfMode("DamageDone"), before, after,
                 ReplacementResult.Updated, null).toJson();
 
         assertFalse(json.contains("\"outgoing\":null"),
@@ -172,7 +172,7 @@ class RewriteContractTest {
     void nothingRunningInsteadIsAnEmptyListNotANull() {
         Card card = TestCards.build("Mountain");
         String json = recording(tempDir).rewriteRecord(
-                new FakeTrait("Untap"),
+                replacementOfMode("Untap"),
                 Map.of("Card", card), Map.of("Card", card),
                 ReplacementResult.Prevented, null).toJson();
 
@@ -191,7 +191,7 @@ class RewriteContractTest {
     void aSubstitutedAbilityThatIsNotATraitCostsOnlyTheField() {
         Card card = TestCards.build("Mountain");
         String json = recording(tempDir).rewriteRecord(
-                new FakeTrait("Moved"),
+                replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card),
                 ReplacementResult.Replaced, "not an ability").toJson();
 
@@ -402,7 +402,7 @@ class RewriteContractTest {
         after.put("Number", 1);
 
         EffectRecord record = recording(tempDir).rewriteRecord(
-                new FakeTrait("DrawCards"), before, after,
+                replacementOfMode("DrawCards"), before, after,
                 ReplacementResult.Updated, null);
 
         assertNotNull(record, "a replacement that halved a draw is a real rewrite");
@@ -463,7 +463,7 @@ class RewriteContractTest {
     private Tally tallyAfter(Map<String, Object> before, Map<String, Object> after,
             ReplacementResult result) throws Throwable {
         PatchedCollectors game = recording(tempDir);
-        game.rewriteRecord(new FakeTrait("Moved"), before, after, result, null);
+        game.rewriteRecord(replacementOfMode("Moved"), before, after, result, null);
         String printed = StdStreams.captureStdout(game::close);
         for (int games = 1; printed.isEmpty() && games < GAMES_PER_SUMMARY; games++) {
             printed = StdStreams.captureStdout(() -> unwired(CollectionCaps.defaults()).close());

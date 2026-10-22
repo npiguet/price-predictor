@@ -10,6 +10,8 @@ import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
 import forge.game.GameEntity;
 import forge.game.card.CardCollectionView;
+import forge.game.card.CardTraitChanges;
+import forge.game.card.ICardTraitChanges;
 
 import forge.game.card.CounterEnumType;
 import forge.game.card.CounterType;
@@ -419,11 +421,9 @@ public final class SnapshotBuilder {
             if (staticId == null) {
                 return null;
             }
-            if (!(PatchHooks.read(card, PatchHooks.TYPE_WITHOUT.method(), staticId)
-                            instanceof CardTypeView type)
-                    || !(PatchHooks.read(card, PatchHooks.COLOR_WITHOUT.method(), staticId)
-                            instanceof ColorSet colors)
-                    || !(PatchHooks.read(card, PatchHooks.KEYWORDS_WITHOUT.method(), staticId)
+            if (!(PatchHooks.TYPE_WITHOUT.read(card, staticId) instanceof CardTypeView type)
+                    || !(PatchHooks.COLOR_WITHOUT.read(card, staticId) instanceof ColorSet colors)
+                    || !(PatchHooks.KEYWORDS_WITHOUT.read(card, staticId)
                             instanceof Iterable<?> keywords)) {
                 return null;
             }
@@ -599,14 +599,12 @@ public final class SnapshotBuilder {
      * grant is part of what happened to it.
      */
     private List<ProvenanceKey> grantedTemporaryAbilities(Card card) {
-        Object changes = PatchHooks.read(card, "getChangedCardTraits");
-        if (!(changes instanceof com.google.common.collect.Table<?, ?, ?> table)) {
-            return List.of();
-        }
         Set<ProvenanceKey> keys = new LinkedHashSet<>();
-        for (Object value : table.values()) {
-            if (PatchHooks.read(value, "getAbilities") instanceof Iterable<?> granted) {
-                addKeys(keys, granted);
+        for (ICardTraitChanges change : card.getChangedCardTraits().values()) {
+            // Only the record carries granted lines; a keyword change sharing
+            // the table has none to name.
+            if (change instanceof CardTraitChanges granted) {
+                addKeys(keys, granted.getAbilities());
             }
         }
         return List.copyOf(keys);
