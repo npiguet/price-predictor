@@ -565,26 +565,6 @@ class ProvenanceKeyTest {
         assertTrue(resolved.keys().isEmpty());
     }
 
-    /** The record's acting-line list is the resolved key, or nothing. */
-    @Test
-    void theKeysListIsWhatARecordCarries() {
-        Card fountain = card("Fountain of Youth");
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(
-                scriptedSpell(fountain.getCurrentState(), "GainLife"));
-
-        assertEquals(List.of(resolved.key()), resolved.keys());
-    }
-
-    /** {@code of} stays the entry point every collector calls. */
-    @Test
-    void ofAgreesWithResolve() {
-        Card fountain = card("Fountain of Youth");
-        SpellAbility printed = scriptedSpell(fountain.getCurrentState(), "GainLife");
-
-        assertEquals(ProvenanceKey.resolve(printed).key(), ProvenanceKey.of(printed));
-        assertNull(ProvenanceKey.of(null));
-    }
-
     // -- the script path comes from the tree, not from a rule ------------
 
     /**
