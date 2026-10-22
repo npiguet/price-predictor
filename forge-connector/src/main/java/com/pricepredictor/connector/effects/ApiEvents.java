@@ -788,12 +788,10 @@ final class ApiEvents {
             return null;
         }
         EffectEvent event = new EffectEvent(EffectEvent.TEXT_CHANGE);
-        boolean any = false;
         for (Card c : cardsFromTargets(sa)) {
             event.subject(SnapshotBuilder.entityId(c));
-            any = true;
         }
-        return any ? event : null;
+        return event.subjects().isEmpty() ? null : event;
     }
 
     /**
@@ -823,15 +821,13 @@ final class ApiEvents {
         }
         Combat combat = host.getGame().getCombat();
         EffectEvent event = new EffectEvent(EffectEvent.REMOVED_FROM_COMBAT);
-        boolean any = false;
         for (Object o : before) {
             if (o instanceof Card c
                     && (combat == null || !(combat.isAttacking(c) || combat.isBlocking(c)))) {
                 event.subject(SnapshotBuilder.entityId(c));
-                any = true;
             }
         }
-        return any ? event : null;
+        return event.subjects().isEmpty() ? null : event;
     }
 
     /**
@@ -869,7 +865,6 @@ final class ApiEvents {
         }
         Combat combat = host.getGame().getCombat();
         EffectEvent event = new EffectEvent(EffectEvent.REMOVED_FROM_COMBAT);
-        boolean any = false;
         for (Map.Entry<?, ?> entry : before.entrySet()) {
             if (!(entry.getKey() instanceof Card c) || entry.getValue() == null) {
                 continue;
@@ -877,9 +872,8 @@ final class ApiEvents {
             GameEntity now = combat == null ? null : combat.getDefenderByAttacker(c);
             if (!entry.getValue().equals(now)) {
                 event.subject(SnapshotBuilder.entityId(c));
-                any = true;
             }
         }
-        return any ? event : null;
+        return event.subjects().isEmpty() ? null : event;
     }
 }

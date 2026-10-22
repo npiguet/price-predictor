@@ -589,6 +589,14 @@ public final class ForkCollector {
         }
     }
 
+    private static Card mappedCard(GameCopier copier, Card card) {
+        try {
+            return copier.find(card);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     // ── damage-step probes ──────────────────────────────────────────────
 
     /**
@@ -628,57 +636,20 @@ public final class ForkCollector {
             }
             Game fork = verified.get().fork();
             Player perspective = verified.get().perspective();
-            Card forkCarrier;
-            try {
-                forkCarrier = verified.get().copier().find(carrier);
-            } catch (RuntimeException e) {
-                forkCarrier = null;
-            }
+            Card forkCarrier = mappedCard(verified.get().copier(), carrier);
             if (forkCarrier == null || fork.getCombat() == null) {
                 return null;
             }
 
-            // The state is the board as the step began, with the keyword already
-            // gone: that is the input the counterfactual answers for.
             SnapshotBuilder snapshots = new SnapshotBuilder(fork);
-            ForkEventSink sink;
             String state;
-            CombatShape shape;
+            ProbedStep dealt;
             try {
-                // Through the layer system rather than off the printed list: the
-                // keyword may be printed, equipped or granted until end of turn,
-                // and a removal layer takes it away in all three cases the way the
-                // rules would.
-                forkCarrier.addChangedCardKeywords(
-                        null, List.of(keyword), false,
-                        fork.getNextTimestamp(), null);
+                stripKeyword(fork, forkCarrier, keyword);
+                // The state is the board as the step began, with the keyword
+                // already gone: that is the input the counterfactual answers for.
                 state = snapshots.ofBoard().render();
-                // Listening from here, once the keyword is gone: the stripped
-                // keyword is the branch's input, and a sink primed before it
-                // would report its removal as something the step did. No root:
-                // a damage step is a turn-based action, not a resolution, so
-                // this branch's events attribute the way the observed combat
-                // record's do -- from the resolving-clause pointer alone, which
-                // names nothing.
-                sink = ForkEventSink.forProbe(fork);
-                fork.subscribeToEvents(sink);
-                fork.getCombat().removeAbsentCombatants();
-                // Who is blocking whom, before the damage removes any of them; the
-                // assignment only exists after. Both are read as the observed
-                // record reads them, so the branch and the record it mirrors agree.
-                shape = CombatShape.of(fork.getCombat());
-                if (fork.getCombat().assignCombatDamage(step == DamageStep.FIRST_STRIKE)) {
-                    shape.addAssignment(fork.getCombat());
-                    fork.getCombat().dealAssignedDamage();
-                    // And then let the deaths happen. Damage alone kills nothing;
-                    // a creature with lethal damage on it leaves the battlefield
-                    // during state-based actions, and stopping before them made the
-                    // branch systematically miss every death the real step had —
-                    // biasing the difference gate 2 computes towards "the keyword
-                    // changed nothing". The same call Forge's own simulator makes
-                    // after resolving a stack.
-                    fork.getAction().checkStateEffects(false, new HashSet<>());
-                }
+                dealt = runDamageStep(fork, step == DamageStep.FIRST_STRIKE);
             } catch (RuntimeException | StackOverflowError e) {
                 // A stripped keyword reaches combat states ordinary play does not.
                 // Discarding is right; failing the worker is not.
@@ -686,8 +657,8 @@ public final class ForkCollector {
             }
             return new HeldProbe(
                     ProbeScheduler.normalizeKeyword(keyword),
-                    SnapshotBuilder.entityId(carrier), state, sink.events(),
-                    SnapshotBuilder.playerId(perspective), shape.fields(),
+                    SnapshotBuilder.entityId(carrier), state, dealt.events(),
+                    SnapshotBuilder.playerId(perspective), dealt.combatFields(),
                     step,
                     // The *live* game's turn, which is also the fork's: the copier
                     // carries the counter across (GameCopier hands it to
@@ -697,6 +668,62 @@ public final class ForkCollector {
                     // the branch remembers the step it belongs to.
                     liveTurn());
         });
+    }
+
+    /**
+     * Take {@code keyword} away from the fork's copy of the carrier.
+     *
+     * <p>Through the layer system rather than off the printed list: the
+     * keyword may be printed, equipped or granted until end of turn, and a
+     * removal layer takes it away in all three cases the way the rules would.
+     */
+    private static void stripKeyword(Game fork, Card forkCarrier, String keyword) {
+        forkCarrier.addChangedCardKeywords(
+                null, List.of(keyword), false,
+                fork.getNextTimestamp(), null);
+    }
+
+    /**
+     * What a probe's damage step did: the fork's combat, read as the observed
+     * record reads it, and the events the bus published.
+     */
+    private record ProbedStep(Map<String, Object> combatFields, List<EffectEvent> events) {
+    }
+
+    /**
+     * Assign and deal the fork's damage for one step, then let the deaths
+     * happen, listening throughout.
+     *
+     * @param firstStrike whether this is the first-strike damage step
+     */
+    private static ProbedStep runDamageStep(Game fork, boolean firstStrike) {
+        // Listening from here, once the keyword is gone: the stripped
+        // keyword is the branch's input, and a sink primed before it
+        // would report its removal as something the step did. No root:
+        // a damage step is a turn-based action, not a resolution, so
+        // this branch's events attribute the way the observed combat
+        // record's do -- from the resolving-clause pointer alone, which
+        // names nothing.
+        ForkEventSink sink = ForkEventSink.forProbe(fork);
+        fork.subscribeToEvents(sink);
+        fork.getCombat().removeAbsentCombatants();
+        // Who is blocking whom, before the damage removes any of them; the
+        // assignment only exists after. Both are read as the observed
+        // record reads them, so the branch and the record it mirrors agree.
+        CombatShape shape = CombatShape.of(fork.getCombat());
+        if (fork.getCombat().assignCombatDamage(firstStrike)) {
+            shape.addAssignment(fork.getCombat());
+            fork.getCombat().dealAssignedDamage();
+            // And then let the deaths happen. Damage alone kills nothing;
+            // a creature with lethal damage on it leaves the battlefield
+            // during state-based actions, and stopping before them made the
+            // branch systematically miss every death the real step had —
+            // biasing the difference gate 2 computes towards "the keyword
+            // changed nothing". The same call Forge's own simulator makes
+            // after resolving a stack.
+            fork.getAction().checkStateEffects(false, new HashSet<>());
+        }
+        return new ProbedStep(shape.fields(), sink.events());
     }
 
     /**
