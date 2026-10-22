@@ -4,37 +4,26 @@ import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.SnapshotBuilder;
-import forge.StaticData;
+import com.pricepredictor.connector.effects.TestBoard;
 import forge.ai.LobbyPlayerAi;
 import forge.ai.simulation.GameCopier;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.combat.Combat;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
-import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -62,46 +51,15 @@ class RandomSeatControllerTest {
 
     /** A game whose seat A is the random seat, in {@code phase} on A's turn. */
     private static Game gameWithRandomSeatA(PhaseType phase, double probability, long seed) {
-        Deck deck = new Deck();
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(deck).setPlayer(
-                        new RandomSeatLobbyPlayer("a", probability, new Random(seed))),
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(players, rules, new Match(rules, players, "RandomSeatControllerTest"));
-        game.getPhaseHandler().devModeSet(phase, game.getPlayers().get(0));
-        return game;
+        return TestBoard.twoPlayerGame(phase,
+                new RandomSeatLobbyPlayer("a", probability, new Random(seed)),
+                new LobbyPlayerAi("b", null));
     }
 
     private static RandomSeatController seatOf(Game game) {
         RandomSeatController seat = GamePlayer.randomSeatOf(game);
         assertNotNull(seat, "the lobby player installs the controller");
         return seat;
-    }
-
-    private static Card inPlay(Game game, Player owner, String name) {
-        Card card = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(name), owner, game);
-        game.getAction().moveToPlay(card, owner, null, null);
-        card.setSickness(false);
-        return card;
-    }
-
-    private static Card inHand(Game game, Player owner, String name) {
-        Card card = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(name), owner, game);
-        return game.getAction().moveTo(ZoneType.Hand, card, null, null);
-    }
-
-    private List<String> readShard(Path path) throws IOException {
-        if (!Files.exists(path)) {
-            return List.of();
-        }
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
     }
 
     // ── the play decision ───────────────────────────────────────────────
@@ -111,8 +69,8 @@ class RandomSeatControllerTest {
     void aSeatWithOnlyManaAbilitiesPlayablePasses() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
@@ -124,9 +82,9 @@ class RandomSeatControllerTest {
     void aSingleLegalOptionIsTaken() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        Card bears = inHand(game, a, "Grizzly Bears");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
+        Card bears = TestBoard.inHand(game, a, "Grizzly Bears");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
@@ -146,9 +104,9 @@ class RandomSeatControllerTest {
     void aRandomlyDrawnSpellIsCastOntoTheStack() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        inHand(game, a, "Grizzly Bears");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inHand(game, a, "Grizzly Bears");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
@@ -167,10 +125,10 @@ class RandomSeatControllerTest {
     void landFirstThenTheDraw() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        Card land = inHand(game, a, "Forest");
-        inHand(game, a, "Grizzly Bears");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
+        Card land = TestBoard.inHand(game, a, "Forest");
+        TestBoard.inHand(game, a, "Grizzly Bears");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
@@ -194,9 +152,9 @@ class RandomSeatControllerTest {
     void aFailedDrawLeavesThePlayToTheAi() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 0.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        inHand(game, a, "Grizzly Bears");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inHand(game, a, "Grizzly Bears");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
@@ -221,10 +179,10 @@ class RandomSeatControllerTest {
             Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
             Player a = game.getPlayers().get(0);
             for (int i = 0; i < 5; i++) {
-                inPlay(game, a, "Mountain");
+                TestBoard.inPlay(game, a, "Mountain");
             }
-            inHand(game, a, "Fiery Intervention");
-            inHand(game, a, "Shock");
+            TestBoard.inHand(game, a, "Fiery Intervention");
+            TestBoard.inHand(game, a, "Shock");
             RandomSeatController seat = seatOf(game);
             seat.attach(game, null);
 
@@ -246,9 +204,9 @@ class RandomSeatControllerTest {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
         for (int i = 0; i < 5; i++) {
-            inPlay(game, a, "Mountain");
+            TestBoard.inPlay(game, a, "Mountain");
         }
-        inHand(game, a, "Fiery Intervention");
+        TestBoard.inHand(game, a, "Fiery Intervention");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
@@ -268,9 +226,9 @@ class RandomSeatControllerTest {
             Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
             Player a = game.getPlayers().get(0);
             for (int i = 0; i < 4; i++) {
-                inPlay(game, a, "Mountain");
+                TestBoard.inPlay(game, a, "Mountain");
             }
-            inHand(game, a, "Fiery Confluence");
+            TestBoard.inHand(game, a, "Fiery Confluence");
             RandomSeatController seat = seatOf(game);
             seat.attach(game, null);
 
@@ -313,9 +271,9 @@ class RandomSeatControllerTest {
     void aForkOfTheGameDoesNotActAtRandom() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        inHand(game, a, "Grizzly Bears");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inHand(game, a, "Grizzly Bears");
         seatOf(game).attach(game, null);
 
         Game fork = new GameCopier(game).makeCopy();
@@ -337,13 +295,15 @@ class RandomSeatControllerTest {
      * covers every other.
      */
     @Test
-    void eachCreatureAttacksInAboutHalfTheDrawsAndTheSeatWritesNoLegalityRecord() throws IOException {
+    void eachCreatureAttacksInAboutHalfTheDrawsAndTheSeatWritesNoLegalityRecord() {
         Game game = gameWithRandomSeatA(PhaseType.COMBAT_DECLARE_ATTACKERS, 1.0, 7L);
         Player a = game.getPlayers().get(0);
         Player b = game.getPlayers().get(1);
         List<Card> creatures = List.of(
-                inPlay(game, a, "Grizzly Bears"), inPlay(game, a, "Runeclaw Bear"),
-                inPlay(game, a, "Hill Giant"), inPlay(game, a, "Grizzly Bears"));
+                TestBoard.inPlay(game, a, "Grizzly Bears"),
+                TestBoard.inPlay(game, a, "Runeclaw Bear"),
+                TestBoard.inPlay(game, a, "Hill Giant"),
+                TestBoard.inPlay(game, a, "Grizzly Bears"));
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         RandomSeatController seat = seatOf(game);
@@ -373,9 +333,8 @@ class RandomSeatControllerTest {
             assertTrue(share > 0.4 && share < 0.6,
                     creatures.get(i) + " attacked in " + share + " of the draws");
         }
-        List<String> records = readShard(path).stream()
-                .filter(l -> l.contains("\"subkind\":\"attackers\"")).toList();
-        assertEquals(List.of(), records, "the engine's declaration hook records attacks, not the seat");
+        // Nothing at all: the seat's declarations write no record of any kind.
+        assertFalse(Files.exists(path), "the engine's declaration hook records attacks, not the seat");
     }
 
     /**
@@ -384,14 +343,16 @@ class RandomSeatControllerTest {
      * writes no {@code blockers} record of its own.
      */
     @Test
-    void aBlockDeclarationDrawsBothWaysAndTheSeatWritesNoLegalityRecord() throws IOException {
+    void aBlockDeclarationDrawsBothWaysAndTheSeatWritesNoLegalityRecord() {
         Game game = gameWithRandomSeatA(PhaseType.COMBAT_DECLARE_BLOCKERS, 1.0, 3L);
         Player a = game.getPlayers().get(0);
         Player b = game.getPlayers().get(1);
         // B's turn: B attacks A with one creature, A has two it could block with.
         game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DECLARE_BLOCKERS, b);
-        Card attacker = inPlay(game, b, "Hill Giant");
-        List<Card> blockers = List.of(inPlay(game, a, "Grizzly Bears"), inPlay(game, a, "Runeclaw Bear"));
+        Card attacker = TestBoard.inPlay(game, b, "Hill Giant");
+        List<Card> blockers = List.of(
+                TestBoard.inPlay(game, a, "Grizzly Bears"),
+                TestBoard.inPlay(game, a, "Runeclaw Bear"));
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         RandomSeatController seat = seatOf(game);
@@ -418,9 +379,7 @@ class RandomSeatControllerTest {
         }
 
         assertTrue(blockedOnce && heldBackOnce, "no block and a block are both drawn");
-        List<String> records = readShard(path).stream()
-                .filter(l -> l.contains("\"subkind\":\"blockers\"")).toList();
-        assertEquals(List.of(), records, "the engine's declaration hook records blocks, not the seat");
+        assertFalse(Files.exists(path), "the engine's declaration hook records blocks, not the seat");
     }
 
     // ── the match-level draw ────────────────────────────────────────────

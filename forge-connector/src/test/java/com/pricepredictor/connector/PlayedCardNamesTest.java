@@ -1,19 +1,12 @@
 package com.pricepredictor.connector;
 
-import forge.StaticData;
-import forge.ai.LobbyPlayerAi;
+import com.pricepredictor.connector.effects.TestBoard;
 import forge.card.CardStateName;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.card.CardView;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,21 +23,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class PlayedCardNamesTest {
 
-    private static Game twoPlayerGame() {
-        Deck deck = new Deck();
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("p1", null)),
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("p2", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        return new Game(players, rules, new Match(rules, players, "PlayedCardNamesTest"));
-    }
-
     /** {@code cardName} with {@code face} showing, entering the battlefield under p1. */
     private static List<String> playedAs(String cardName, CardStateName face) {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame("p1", "p2");
         Player owner = game.getPlayers().get(0);
-        Card card = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(cardName), owner, game);
+        Card card = TestBoard.card(game, owner, cardName);
         game.getAction().moveToHand(card, null);
         if (face != null) {
             card.setState(face, true);
@@ -58,7 +41,8 @@ class PlayedCardNamesTest {
 
     @Test
     void aCollectorThatSawNothingHasNoCards() {
-        PlayedCardCollector collector = new PlayedCardCollector(twoPlayerGame());
+        PlayedCardCollector collector =
+                new PlayedCardCollector(TestBoard.twoPlayerGame("p1", "p2"));
         assertTrue(collector.getCards(Side.A).isEmpty());
         assertTrue(collector.getCards(Side.B).isEmpty());
     }
@@ -71,10 +55,8 @@ class PlayedCardNamesTest {
     @Test
     void aRoomDoorIsRecordedUnderTheFullRoomName() {
         String full = "Painter's Studio // Defaced Gallery";
-        Game game = twoPlayerGame();
-        Card room = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(full),
-                game.getPlayers().get(0), game);
+        Game game = TestBoard.twoPlayerGame("p1", "p2");
+        Card room = TestBoard.card(game, game.getPlayers().get(0), full);
         room.setState(CardStateName.LeftSplit, true);
         // The test only guards the wiring if a door's own name is on show.
         assertEquals("Painter's Studio", CardView.get(room).getCurrentState().getOracleName());

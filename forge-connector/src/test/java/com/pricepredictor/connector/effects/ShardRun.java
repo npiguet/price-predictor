@@ -24,7 +24,7 @@ import java.util.zip.GZIPInputStream;
  * wrote nothing leaves no shard, and reading one fails. A test that expects
  * nothing says so with {@link #shardOf} and asserts the file is absent.
  */
-public final class ShardRun {
+final class ShardRun {
 
     private static final String RUN = "run";
     private static final String LIFETIME = "l1";
@@ -183,7 +183,7 @@ public final class ShardRun {
      *
      * @throws java.nio.file.NoSuchFileException when nothing was ever written to it
      */
-    public static List<String> readShard(Path path) throws IOException {
+    static List<String> readShard(Path path) throws IOException {
         try (var gzip = new GZIPInputStream(Files.newInputStream(path));
                 var reader = new BufferedReader(
                         new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
