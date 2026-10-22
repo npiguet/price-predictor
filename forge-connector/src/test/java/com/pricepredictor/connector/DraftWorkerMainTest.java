@@ -12,11 +12,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.PrintStream;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Random;
@@ -90,19 +92,26 @@ class DraftWorkerMainTest {
         return size > 0;
     }
 
+    /** A pick channel that routes no agent: every seat picks in-process. */
+    private static DraftPickProtocol.PickChannel forgeOnlyChannel() {
+        return new DraftPickProtocol.PickChannel(
+                new PrintStream(new ByteArrayOutputStream()),
+                new BufferedReader(new StringReader("")), Set.of());
+    }
+
     // ── Pure helpers ──────────────────────────────────────────────────────────
 
     @Test
     void randomOverrideFractionByAgent() {
-        assertEquals(0.0, DraftWorkerMain.randomOverrideFraction("forge-full"));
-        assertEquals(0.30, DraftWorkerMain.randomOverrideFraction("forge-r30"));
-        assertEquals(1.0, DraftWorkerMain.randomOverrideFraction("forge-r100"));
-        assertEquals(0.0, DraftWorkerMain.randomOverrideFraction("unknown"));
+        assertEquals(0.0, DraftAgent.randomOverrideFraction("forge-full"));
+        assertEquals(0.30, DraftAgent.randomOverrideFraction("forge-r30"));
+        assertEquals(1.0, DraftAgent.randomOverrideFraction("forge-r100"));
+        assertEquals(0.0, DraftAgent.randomOverrideFraction("unknown"));
     }
 
     @Test
     void agentMixSamplesByWeight() {
-        DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("forge-full:9,forge-r100:1");
+        AgentMix mix = AgentMix.parse("forge-full:9,forge-r100:1");
         Random random = new Random(42);
         int full = 0;
         int trials = 5000;
@@ -117,9 +126,9 @@ class DraftWorkerMainTest {
 
     @Test
     void agentMixRejectsMalformed() {
-        assertThrows(IllegalArgumentException.class, () -> DraftWorkerMain.AgentMix.parse("forge-full"));
-        assertThrows(IllegalArgumentException.class, () -> DraftWorkerMain.AgentMix.parse("forge-full:0"));
-        assertThrows(NumberFormatException.class, () -> DraftWorkerMain.AgentMix.parse("forge-full:x"));
+        assertThrows(IllegalArgumentException.class, () -> AgentMix.parse("forge-full"));
+        assertThrows(IllegalArgumentException.class, () -> AgentMix.parse("forge-full:0"));
+        assertThrows(NumberFormatException.class, () -> AgentMix.parse("forge-full:x"));
     }
 
     // ── Forge-driven full draft ───────────────────────────────────────────────
@@ -129,11 +138,11 @@ class DraftWorkerMainTest {
         String setCode = uniformBoosterSet();
 
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
-        DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("forge-full:1");
+        AgentMix mix = AgentMix.parse("forge-full:1");
 
         String line = completedLine(
                 DraftWorkerMain.generateDraft(context, setCode, mix, new Random(0),
-                        DraftWorkerMain.PickChannel.NONE, "test-draft", null));
+                        forgeOnlyChannel(), "test-draft", null));
         assertTrue(line.startsWith(DraftWorkerMain.SENTINEL), "line must start with sentinel");
         assertFalse(line.substring(DraftWorkerMain.SENTINEL.length()).contains("\n"),
                 "transcript must be a single newline-free line");
@@ -159,11 +168,11 @@ class DraftWorkerMainTest {
         // Returned rather than thrown, so the worker loop must count it: a bad
         // -Ddraft.set once skipped every draft in silence, forever.
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
-        DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("forge-full:1");
+        AgentMix mix = AgentMix.parse("forge-full:1");
 
         DraftWorkerMain.DraftResult result =
                 DraftWorkerMain.generateDraft(context, "NOT-A-SET", mix, new Random(0),
-                        DraftWorkerMain.PickChannel.NONE, "test-draft", null);
+                        forgeOnlyChannel(), "test-draft", null);
 
         DraftWorkerMain.DraftResult.Skipped skipped =
                 assertInstanceOf(DraftWorkerMain.DraftResult.Skipped.class, result);
@@ -206,11 +215,11 @@ class DraftWorkerMainTest {
             try {
                 String line;
                 while ((line = reqReader.readLine()) != null) {
-                    if (!line.startsWith(DraftWorkerMain.PICK_REQUEST_SENTINEL)) {
+                    if (!line.startsWith(DraftPickProtocol.PICK_REQUEST_SENTINEL)) {
                         continue;
                     }
-                    String json = line.substring(DraftWorkerMain.PICK_REQUEST_SENTINEL.length());
-                    respOut.println(DraftWorkerMain.PICK_RESPONSE_SENTINEL
+                    String json = line.substring(DraftPickProtocol.PICK_REQUEST_SENTINEL.length());
+                    respOut.println(DraftPickProtocol.PICK_RESPONSE_SENTINEL
                             + "{\"draft_id\":\"" + jsonStringField(json, "draft_id")
                             + "\",\"seat\":" + jsonIntField(json, "seat")
                             + ",\"pack_number\":" + jsonIntField(json, "pack_number")
@@ -225,10 +234,10 @@ class DraftWorkerMainTest {
         responder.start();
 
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
-        DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("draft-agent:1");
+        AgentMix mix = AgentMix.parse("draft-agent:1");
         DraftWorkerMain.DraftResult result = DraftWorkerMain.generateDraft(
                 context, setCode, mix, new Random(0),
-                new DraftWorkerMain.PickChannel(out, stdin, Set.of("draft-agent")),
+                new DraftPickProtocol.PickChannel(out, stdin, Set.of("draft-agent")),
                 "test-draft", null);
         out.close();  // signal the responder EOF
 

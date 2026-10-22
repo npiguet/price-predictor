@@ -1,5 +1,10 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.DraftPickProtocol.DraftAbandonedException;
+import com.pricepredictor.connector.DraftPickProtocol.DraftAbortedException;
+import com.pricepredictor.connector.DraftPickProtocol.PickChannel;
+import com.pricepredictor.connector.DraftPickProtocol.PickRequest;
+import com.pricepredictor.connector.DraftPickProtocol.WorkerInputClosed;
 import com.pricepredictor.connector.effects.Json;
 import forge.gamemodes.limited.BoosterDraft;
 import forge.gamemodes.limited.DraftPack;
@@ -10,17 +15,17 @@ import forge.item.SealedTemplate;
 import forge.item.generation.UnOpenedProduct;
 import forge.util.MyRandom;
 
+import static com.pricepredictor.connector.DraftPickProtocol.formatAbandoned;
+import static com.pricepredictor.connector.DraftPickProtocol.requestExternalPick;
+
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
@@ -71,9 +76,6 @@ import java.util.UUID;
 public class DraftWorkerMain {
 
     static final String SENTINEL = "<<DRAFT-EVENT-JSON>>";
-    static final String PICK_REQUEST_SENTINEL = "<<DRAFT-PICK-REQUEST>>";
-    static final String PICK_RESPONSE_SENTINEL = "<<DRAFT-PICK-RESPONSE>>";
-    static final String ABANDONED_SENTINEL = "<<DRAFT-ABANDONED>>";
     static final int POD_SIZE = 8;
     static final int PACKS = 3;
 
@@ -171,25 +173,6 @@ public class DraftWorkerMain {
     }
 
     /**
-     * The pick side-channel to the supervisor: where requests are written,
-     * where responses are read, and which agent labels are routed through it.
-     */
-    record PickChannel(PrintStream out, BufferedReader in, Set<String> externalAgents) {
-
-        /** A Forge-only worker: every seat picks in-process. */
-        static final PickChannel NONE = new PickChannel(null, null, Set.of());
-
-        PickChannel {
-            externalAgents = Set.copyOf(externalAgents);
-        }
-
-        /** Whether a seat drafting as {@code agent} asks the supervisor for its picks. */
-        boolean routes(String agent) {
-            return externalAgents.contains(agent);
-        }
-    }
-
-    /**
      * Overwrite one uniformly-chosen seat with {@code requiredAgent} when the
      * per-seat draw produced none (spec 021 FR-003).
      *
@@ -248,10 +231,8 @@ public class DraftWorkerMain {
             return new DraftResult.Abandoned();
         } catch (DraftAbandonedException e) {
             // Worker-detected fault: tell the supervisor (it logs + counts it).
-            if (channel.out() != null) {
-                channel.out().println(formatAbandoned(draftId, e.getMessage()));
-                channel.out().flush();
-            }
+            channel.out().println(formatAbandoned(draftId, e.getMessage()));
+            channel.out().flush();
             return new DraftResult.Abandoned();
         }
         return new DraftResult.Completed(SENTINEL + pod.toJson());
@@ -366,7 +347,7 @@ public class DraftWorkerMain {
      */
     static PaperCard decidePick(
             LimitedPlayerAI player, DraftPack pack, String agent, Random random) {
-        double randomFraction = randomOverrideFraction(agent);
+        double randomFraction = DraftAgent.randomOverrideFraction(agent);
         if (randomFraction > 0 && random.nextDouble() < randomFraction) {
             return pack.get(random.nextInt(pack.size()));
         }
@@ -376,144 +357,6 @@ public class DraftWorkerMain {
             return pack.get(random.nextInt(pack.size()));
         }
         return aiPick;
-    }
-
-    static double randomOverrideFraction(String agent) {
-        return switch (agent) {
-            case "forge-r30" -> 0.30;
-            case "forge-r100" -> 1.0;
-            default -> 0.0;  // forge-full and any unknown label: pure AI
-        };
-    }
-
-    // ── Live pick side-channel ────────────────────────────────────────────────
-
-    /** A worker-detected fault: abandon the draft, telling the supervisor. */
-    static final class DraftAbandonedException extends RuntimeException {
-        DraftAbandonedException(String message) {
-            super(message);
-        }
-    }
-
-    /** Supervisor-initiated abandonment ({@code "abort":true}); drop silently. */
-    static final class DraftAbortedException extends RuntimeException {
-    }
-
-    /** stdin closed/EOF awaiting a response; the worker must exit. */
-    static final class WorkerInputClosed extends RuntimeException {
-        WorkerInputClosed(String message) {
-            super(message);
-        }
-    }
-
-    /**
-     * One outstanding pick request: the seat asking, where it is in the draft,
-     * and the pack it holds. A response must name the same draft, seat, pack
-     * and pick, and choose a card from {@code pack}.
-     */
-    record PickRequest(
-            String draftId, int seat, String agent, int podSize, int packNumber,
-            int pickNumber, String setCode, List<String> pack) {
-
-        PickRequest {
-            pack = List.copyOf(pack);
-        }
-
-        /** The {@code <<DRAFT-PICK-REQUEST>>} line (contracts/pick-protocol.md). */
-        String toWireLine() {
-            return PICK_REQUEST_SENTINEL
-                    + "{\"draft_id\":" + Json.string(draftId)
-                    + ",\"seat\":" + seat
-                    + ",\"agent\":" + Json.string(agent)
-                    + ",\"pod_size\":" + podSize
-                    + ",\"pack_number\":" + packNumber
-                    + ",\"pick_number\":" + pickNumber
-                    + ",\"set_code\":" + Json.string(setCode == null ? "" : setCode)
-                    + ",\"pack\":" + Json.stringArray(pack)
-                    + "}";
-        }
-    }
-
-    /**
-     * Ask the supervisor for a model-piloted seat's pick. Emits the request,
-     * blocks on the channel for the matching response, validates it, and
-     * returns the chosen card from the held pack.
-     */
-    static PaperCard requestExternalPick(
-            PickChannel channel, PickRequest request, DraftPack pack) {
-        channel.out().println(request.toWireLine());
-        channel.out().flush();
-
-        String line;
-        try {
-            line = readResponseLine(channel.in());
-        } catch (IOException e) {
-            throw new WorkerInputClosed("stdin read failed: " + e.getMessage());
-        }
-        if (line == null) {
-            throw new WorkerInputClosed("stdin EOF awaiting pick response");
-        }
-        String name = resolvePick(parseResponse(line), request);
-        for (int i = 0; i < pack.size(); i++) {
-            if (pack.get(i).getName().equals(name)) {
-                return pack.get(i);
-            }
-        }
-        // Unreachable: resolvePick already validated held-pack membership.
-        throw new DraftAbandonedException("resolved pick '" + name + "' not in held pack");
-    }
-
-    private static String readResponseLine(BufferedReader stdin) throws IOException {
-        String line;
-        while ((line = stdin.readLine()) != null) {
-            if (!line.isBlank()) {
-                return line;
-            }
-        }
-        return null;  // EOF
-    }
-
-    static Map<String, Object> parseResponse(String line) {
-        if (!line.startsWith(PICK_RESPONSE_SENTINEL)) {
-            throw new DraftAbandonedException("response missing sentinel: " + line);
-        }
-        String suffix = line.substring(PICK_RESPONSE_SENTINEL.length()).trim();
-        try {
-            return parseFlatJson(suffix);
-        } catch (RuntimeException e) {
-            throw new DraftAbandonedException("unparseable pick response: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Validate a parsed response against the outstanding request and return the
-     * chosen card name. Throws {@link DraftAbortedException} on {@code abort},
-     * {@link DraftAbandonedException} on a routing mismatch or an out-of-pack pick.
-     */
-    static String resolvePick(Map<String, Object> response, PickRequest request) {
-        if (Boolean.TRUE.equals(response.get("abort"))) {
-            throw new DraftAbortedException();
-        }
-        if (!request.draftId().equals(response.get("draft_id"))
-                || !eqInt(response.get("seat"), request.seat())
-                || !eqInt(response.get("pack_number"), request.packNumber())
-                || !eqInt(response.get("pick_number"), request.pickNumber())) {
-            throw new DraftAbandonedException(
-                    "response routing mismatch at seat " + request.seat() + " pack "
-                            + request.packNumber() + " pick " + request.pickNumber());
-        }
-        Object pick = response.get("pick");
-        if (!(pick instanceof String)) {
-            throw new DraftAbandonedException("response carried no pick");
-        }
-        if (!request.pack().contains(pick)) {
-            throw new DraftAbandonedException("pick '" + pick + "' not in held pack");
-        }
-        return (String) pick;
-    }
-
-    private static boolean eqInt(Object value, int expected) {
-        return value instanceof Long && ((Long) value) == (long) expected;
     }
 
     static Set<String> parseExternalAgents(String spec) {
@@ -528,165 +371,5 @@ public class DraftWorkerMain {
             }
         }
         return labels;
-    }
-
-    static String formatAbandoned(String draftId, String reason) {
-        return ABANDONED_SENTINEL + "{\"draft_id\":" + Json.string(draftId)
-                + ",\"reason\":" + Json.string(reason == null ? "" : reason) + "}";
-    }
-
-    /** Minimal parser for a flat JSON object (string/integer/boolean/null values). */
-    static Map<String, Object> parseFlatJson(String json) {
-        Map<String, Object> map = new HashMap<>();
-        int n = json.length();
-        int i = skipWs(json, 0);
-        if (i >= n || json.charAt(i) != '{') {
-            throw new IllegalArgumentException("expected '{'");
-        }
-        i = skipWs(json, i + 1);
-        if (i < n && json.charAt(i) == '}') {
-            return map;
-        }
-        while (i < n) {
-            i = skipWs(json, i);
-            if (json.charAt(i) != '"') {
-                throw new IllegalArgumentException("expected key string");
-            }
-            StringBuilder key = new StringBuilder();
-            i = parseJsonString(json, i, key);
-            i = skipWs(json, i);
-            if (i >= n || json.charAt(i) != ':') {
-                throw new IllegalArgumentException("expected ':'");
-            }
-            i = skipWs(json, i + 1);
-            char c = json.charAt(i);
-            if (c == '"') {
-                StringBuilder val = new StringBuilder();
-                i = parseJsonString(json, i, val);
-                map.put(key.toString(), val.toString());
-            } else if (c == 't' || c == 'f') {
-                boolean b = c == 't';
-                i += b ? 4 : 5;
-                map.put(key.toString(), b);
-            } else if (c == 'n') {
-                i += 4;
-                map.put(key.toString(), null);
-            } else {
-                int start = i;
-                while (i < n && (Character.isDigit(json.charAt(i))
-                        || json.charAt(i) == '-' || json.charAt(i) == '+')) {
-                    i++;
-                }
-                map.put(key.toString(), Long.parseLong(json.substring(start, i)));
-            }
-            i = skipWs(json, i);
-            if (i < n && json.charAt(i) == ',') {
-                i++;
-                continue;
-            }
-            if (i < n && json.charAt(i) == '}') {
-                break;
-            }
-            throw new IllegalArgumentException("expected ',' or '}'");
-        }
-        return map;
-    }
-
-    private static int skipWs(String s, int i) {
-        while (i < s.length() && Character.isWhitespace(s.charAt(i))) {
-            i++;
-        }
-        return i;
-    }
-
-    /** Parse a JSON string starting at the opening quote; returns the index past it. */
-    private static int parseJsonString(String s, int i, StringBuilder out) {
-        i++;  // opening quote
-        int n = s.length();
-        while (i < n) {
-            char c = s.charAt(i++);
-            if (c == '"') {
-                return i;
-            }
-            if (c == '\\') {
-                char e = s.charAt(i++);
-                switch (e) {
-                    case '"' -> out.append('"');
-                    case '\\' -> out.append('\\');
-                    case '/' -> out.append('/');
-                    case 'n' -> out.append('\n');
-                    case 'r' -> out.append('\r');
-                    case 't' -> out.append('\t');
-                    case 'b' -> out.append('\b');
-                    case 'f' -> out.append('\f');
-                    case 'u' -> {
-                        out.append((char) Integer.parseInt(s.substring(i, i + 4), 16));
-                        i += 4;
-                    }
-                    default -> out.append(e);
-                }
-            } else {
-                out.append(c);
-            }
-        }
-        throw new IllegalArgumentException("unterminated string");
-    }
-
-    /** Weighted categorical over agent labels, parsed from {@code label:weight,...}. */
-    static final class AgentMix {
-        private final String[] labels;
-        private final int[] cumulative;
-        private final int total;
-
-        private AgentMix(String[] labels, int[] cumulative, int total) {
-            this.labels = labels;
-            this.cumulative = cumulative;
-            this.total = total;
-        }
-
-        static AgentMix parse(String spec) {
-            String[] tokens = spec.split(",");
-            List<String> labels = new ArrayList<>();
-            List<Integer> weights = new ArrayList<>();
-            for (String token : tokens) {
-                token = token.trim();
-                if (token.isEmpty()) {
-                    continue;
-                }
-                int colon = token.indexOf(':');
-                if (colon <= 0 || colon != token.lastIndexOf(':')) {
-                    throw new IllegalArgumentException(
-                            "agent-mix entry must be 'label:weight', got: " + token);
-                }
-                String label = token.substring(0, colon).trim();
-                int weight = Integer.parseInt(token.substring(colon + 1).trim());
-                if (label.isEmpty() || weight < 1) {
-                    throw new IllegalArgumentException(
-                            "agent-mix entry must have a non-empty label and weight >= 1: " + token);
-                }
-                labels.add(label);
-                weights.add(weight);
-            }
-            if (labels.isEmpty()) {
-                throw new IllegalArgumentException("agent-mix is empty: " + spec);
-            }
-            int[] cumulative = new int[labels.size()];
-            int running = 0;
-            for (int i = 0; i < weights.size(); i++) {
-                running += weights.get(i);
-                cumulative[i] = running;
-            }
-            return new AgentMix(labels.toArray(new String[0]), cumulative, running);
-        }
-
-        String sample(Random random) {
-            int roll = random.nextInt(total);
-            for (int i = 0; i < cumulative.length; i++) {
-                if (roll < cumulative[i]) {
-                    return labels[i];
-                }
-            }
-            return labels[labels.length - 1];  // unreachable
-        }
     }
 }
