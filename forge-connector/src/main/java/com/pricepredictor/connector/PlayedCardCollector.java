@@ -134,13 +134,12 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
      * which is the whole name of a Room or split card, not the name of the
      * door or half that was cast. The printing is read from the game's card
      * object rather than looked up by name, so two cards sharing a face name
-     * cannot be confused. A copy credits the card it copies (its backup).
-     * A game object with no printing (e.g. a dungeon) falls back to
-     * {@link #resolveRecordedName}.
+     * cannot be confused. When the game holds no such card or it has no printing
+     * (a dungeon, say), the name is {@link #resolveRecordedName}'s: the backup's
+     * or current state's oracle name.
      */
     private String recordedName(CardView card) {
-        CardView origin = card.getBackup() != null ? card.getBackup() : card;
-        Card source = game.findById(origin.getId());
+        Card source = game.findById(card.getId());
         if (source != null && source.getPaperCard() != null) {
             return source.getPaperCard().getName();
         }
