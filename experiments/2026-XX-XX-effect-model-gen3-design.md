@@ -240,6 +240,26 @@ same corpus, one per mask. If the soft-mask arm scores the switched-off outputs 
 card-disjoint validation while the rule tests score the same, the hard mask is costing them data,
 and the soft mask replaces it.
 
+**A thresholded loss on the extra copies is a third stage, tried only if the soft mask still pulls
+the other outputs.** A copy's other outputs then train only where the model is clearly wrong. Below
+a threshold of error they get no gradient, and above it a small one. A duplicate then stops pushing
+its labels once the model has learned them, which is the pressure oversampling adds. It still
+corrects the model where the board shows something the model gets badly wrong. The established
+forms are the dead-zone losses: the hinge loss, and the ε-insensitive loss of support vector
+regression. Focal loss is the smooth form. It scales the loss by (1 − p)^γ, where p is the
+probability the model gives the correct answer.
+
+**The threshold applies to the extra copies only.** The natural copy of each record keeps the full
+loss, so the other outputs' calibration is still set by records at their natural share. A dead
+zone on a probability would otherwise teach the model to stop at the threshold, and focal loss is
+known to shift calibration. A record collected for one rule alone has no natural copy. Whether its
+other outputs get the threshold or one pass at full loss is left to this stage.
+
+**The thresholded loss has settings the soft mask does not.** Each output type needs its own
+meaning of clearly wrong: a probability for binary and categorical outputs, a tolerance for counts
+and deltas. A base weight comes on top. Two arms with different thresholds differ in what each
+output effectively trained on, which makes them harder to compare.
+
 ### The Comprehensive Rules could index what the corpus covers, rule by rule
 
 **Gen-2 measures coverage by card text and by rule family, not by the rules of the game.** A rule
