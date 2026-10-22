@@ -2373,8 +2373,8 @@ class PatchedCollectorTest {
      * Combat.dealAssignedDamage} always passes a null cause, live or forked.
      * A probe's damage step is a turn-based action with no ability resolving
      * and nothing on the resolving-clause pointer, which is why {@link
-     * ForkCollector#isForkRunningOnThisThread()} exists. {@link
-     * FORK_RUNNING} is set directly here, without needing a real combat to
+     * ForkCollector#isForkRunningOnThisThread()} exists. FORK_RUNNING
+     * is set directly here, without needing a real combat to
      * fork. No live bracket is open, matching a probe's own
      * timing: like {@code intervene}, it does not run nested inside a live
      * resolution.

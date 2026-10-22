@@ -191,7 +191,6 @@ class ForkCollectorTest {
         assertEquals(0, recordsInShard());
     }
 
-
     // ── the held branch knows which step it came from ───────────────────
 
     /**

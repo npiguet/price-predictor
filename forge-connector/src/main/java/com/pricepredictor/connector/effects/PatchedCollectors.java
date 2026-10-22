@@ -110,7 +110,7 @@ public final class PatchedCollectors implements AutoCloseable {
 
     /** Every listener this collector installs, in the order it installs them. */
     private final List<Listener> listeners = List.of(
-             new Listener(PatchHooks.REPLACEMENT_LISTENER, this::rewriteHandler),
+            new Listener(PatchHooks.REPLACEMENT_LISTENER, this::rewriteHandler),
             new Listener(PatchHooks.TRIGGER_LISTENER, this::triggerFireHandler),
             new Listener(PatchHooks.PLAYABILITY_LISTENER, this::playabilityHandler),
             new Listener(PatchHooks.MANA_LISTENER, this::manaHandler),

@@ -115,9 +115,13 @@ class BusBracketCollectorTest {
     void aCastIsHeldRatherThanWrittenWithAGuessedOutcome() throws IOException {
         BusBracketCollector collector = collector();
 
-        collector.beginBracket(damageAbility());
+        SpellAbility bolt = damageAbility();
+
+        collector.beginBracket(bolt);
 
         assertEquals(List.of(), written());
+        assertEquals(1, collector.finishGame(Set.of(bolt.getId())),
+                "the cast is still held, to be abandoned at the end of the game");
     }
 
     /**
@@ -187,6 +191,8 @@ class BusBracketCollectorTest {
         int written = collector.writeOffRemoved(Set.of(survives.getId()));
 
         assertEquals(1, written);
+        assertEquals(1, collector.finishGame(Set.of(survives.getId())),
+                "the survivor is still held");
         List<String> records = written();
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"outcome\":\"countered\""), records.get(0));
