@@ -25,6 +25,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.function.BiPredicate;
+import java.util.function.BooleanSupplier;
 
 /**
  * The random seat: a Forge AI that, with probability {@code P} at each of
@@ -387,6 +389,71 @@ public final class RandomSeatController extends PlayerControllerAi {
         return super.chooseTargetsFor(currentAbility);
     }
 
+    // ── combat declarations ─────────────────────────────────────────────
+
+    /**
+     * For each of {@code keys}, the creatures that may legally be declared
+     * against it, both in the order given.
+     *
+     * <p>Read once per declaration rather than per draw: legality does not
+     * change between redraws.
+     */
+    private static <K> Map<K, List<Card>> legalBy(
+            Iterable<? extends K> keys, Iterable<Card> creatures,
+            BiPredicate<K, Card> legal) {
+        Map<K, List<Card>> legalBy = new LinkedHashMap<>();
+        for (K key : keys) {
+            List<Card> declarable = new ArrayList<>();
+            for (Card creature : creatures) {
+                if (legal.test(key, creature)) {
+                    declarable.add(creature);
+                }
+            }
+            legalBy.put(key, declarable);
+        }
+        return legalBy;
+    }
+
+    /**
+     * What one creature may be declared against: every key of {@code legalBy}
+     * whose list holds it, in the map's order.
+     *
+     * <p>The order is part of the draw: a seeded run picks the same option
+     * only while the options are listed the same way.
+     */
+    private static <K> List<K> optionsFor(Card creature, Map<K, List<Card>> legalBy) {
+        List<K> options = new ArrayList<>();
+        legalBy.forEach((key, legal) -> {
+            if (legal.contains(creature)) {
+                options.add(key);
+            }
+        });
+        return options;
+    }
+
+    /**
+     * Draw a combat declaration until the engine accepts one, at most
+     * {@link RandomChoices#MAX_DRAWS} times, and hand a seat that never drew
+     * an acceptable one back to the AI with nothing declared.
+     *
+     * @param clear    withdraw everything the seat has declared so far
+     * @param drawOnce declare one random draw
+     * @param accepted whether the engine accepts the declaration as it stands
+     * @param fallBack declare as the AI would
+     */
+    private static void drawUntilAccepted(
+            Runnable clear, Runnable drawOnce, BooleanSupplier accepted, Runnable fallBack) {
+        for (int attempt = 0; attempt < RandomChoices.MAX_DRAWS; attempt++) {
+            clear.run();
+            drawOnce.run();
+            if (accepted.getAsBoolean()) {
+                return;
+            }
+        }
+        clear.run();
+        fallBack.run();
+    }
+
     // ── attacks ─────────────────────────────────────────────────────────
 
     /**
@@ -404,36 +471,23 @@ public final class RandomSeatController extends PlayerControllerAi {
             return;
         }
         CardCollection mine = player.getCreaturesInPlay();
-        Map<GameEntity, List<Card>> legalByDefender = new LinkedHashMap<>();
-        for (GameEntity defender : combat.getDefenders()) {
-            List<Card> legal = new ArrayList<>();
-            for (Card creature : mine) {
-                if (CombatUtil.canAttack(creature, defender)) {
-                    legal.add(creature);
-                }
-            }
-            legalByDefender.put(defender, legal);
-        }
-        for (int attempt = 0; attempt < RandomChoices.MAX_DRAWS; attempt++) {
-            combat.clearAttackers();
-            for (Card creature : mine) {
-                List<GameEntity> options = new ArrayList<>();
-                legalByDefender.forEach((defender, legal) -> {
-                    if (legal.contains(creature)) {
-                        options.add(defender);
+        Map<GameEntity, List<Card>> legalByDefender = legalBy(
+                combat.getDefenders(), mine,
+                (defender, creature) -> CombatUtil.canAttack(creature, defender));
+        drawUntilAccepted(
+                combat::clearAttackers,
+                () -> {
+                    for (Card creature : mine) {
+                        List<GameEntity> options = optionsFor(creature, legalByDefender);
+                        if (!options.isEmpty() && random.nextBoolean()) {
+                            combat.addAttacker(
+                                    creature, options.get(random.nextInt(options.size())));
+                        }
                     }
-                });
-                if (!options.isEmpty() && random.nextBoolean()) {
-                    combat.addAttacker(creature, options.get(random.nextInt(options.size())));
-                }
-            }
-            removeUnpayableAttackers(combat);
-            if (CombatUtil.validateAttackers(combat)) {
-                return;
-            }
-        }
-        combat.clearAttackers();
-        super.declareAttackers(attacker, combat);
+                    removeUnpayableAttackers(combat);
+                },
+                () -> CombatUtil.validateAttackers(combat),
+                () -> super.declareAttackers(attacker, combat));
     }
 
     /**
@@ -486,37 +540,24 @@ public final class RandomSeatController extends PlayerControllerAi {
         for (GameEntity defended : combat.getDefendersControlledBy(player)) {
             attackers.addAll(combat.getAttackersOf(defended));
         }
-        Map<Card, List<Card>> legalByAttacker = new LinkedHashMap<>();
-        for (Card attacker : attackers) {
-            List<Card> legal = new ArrayList<>();
-            for (Card blocker : candidates) {
-                if (CombatUtil.canBlock(attacker, blocker, combat)) {
-                    legal.add(blocker);
-                }
-            }
-            legalByAttacker.put(attacker, legal);
-        }
-        for (int attempt = 0; attempt < RandomChoices.MAX_DRAWS; attempt++) {
-            clearBlocks(combat);
-            for (Card blocker : candidates) {
-                List<Card> options = new ArrayList<>();
-                options.add(null);
-                legalByAttacker.forEach((attacker, legal) -> {
-                    if (legal.contains(blocker)) {
-                        options.add(attacker);
+        Map<Card, List<Card>> legalByAttacker = legalBy(
+                attackers, candidates,
+                (attacker, blocker) -> CombatUtil.canBlock(attacker, blocker, combat));
+        drawUntilAccepted(
+                () -> clearBlocks(combat),
+                () -> {
+                    for (Card blocker : candidates) {
+                        List<Card> options = new ArrayList<>();
+                        options.add(null);
+                        options.addAll(optionsFor(blocker, legalByAttacker));
+                        Card attacker = options.get(random.nextInt(options.size()));
+                        if (attacker != null) {
+                            combat.addBlocker(attacker, blocker);
+                        }
                     }
-                });
-                Card attacker = options.get(random.nextInt(options.size()));
-                if (attacker != null) {
-                    combat.addBlocker(attacker, blocker);
-                }
-            }
-            if (CombatUtil.validateBlocks(combat, player) == null) {
-                return;
-            }
-        }
-        clearBlocks(combat);
-        super.declareBlockers(defender, combat);
+                },
+                () -> CombatUtil.validateBlocks(combat, player) == null,
+                () -> super.declareBlockers(defender, combat));
     }
 
     private void clearBlocks(Combat combat) {
