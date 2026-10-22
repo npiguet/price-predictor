@@ -1,0 +1,7 @@
+acting line,resolutions,targets that are players,targets that are creatures,creature targets,creature targets marked affected
+"spell, any target",182,0.21,0.79,115,1
+"spell, target creature",178,0.01,0.99,168,0.98
+"activated, any target, tap in its cost",24,0.35,0.65,15,0.87
+"activated, any target, other cost",16,0.43,0.5,7,0.86
+"activated, target creature, tap in its cost",10,0,1,10,0.8
+"activated, target creature, other cost",13,0,1,13,0.92

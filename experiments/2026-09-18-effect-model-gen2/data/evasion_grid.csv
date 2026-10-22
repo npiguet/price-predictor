@@ -1,0 +1,1297 @@
+checkpoint,attacker_keyword,blocker_trait,predicted_may_block,rule_may_block
+e64 (earlier inputs),none,none,0.18,1
+e64 (earlier inputs),none,flying,0.18,1
+e64 (earlier inputs),none,reach,0.16,1
+e64 (earlier inputs),none,horsemanship,0.24,1
+e64 (earlier inputs),none,shadow,0.16,0
+e64 (earlier inputs),none,artifact,0.26,1
+e64 (earlier inputs),none,black,0.19,1
+e64 (earlier inputs),none,shares-colour,0.18,1
+e64 (earlier inputs),flying,none,0.17,0
+e64 (earlier inputs),flying,flying,0.17,1
+e64 (earlier inputs),flying,reach,0.16,1
+e64 (earlier inputs),flying,horsemanship,0.23,0
+e64 (earlier inputs),flying,shadow,0.15,0
+e64 (earlier inputs),flying,artifact,0.25,0
+e64 (earlier inputs),flying,black,0.19,0
+e64 (earlier inputs),flying,shares-colour,0.18,0
+e64 (earlier inputs),horsemanship,none,0.09,0
+e64 (earlier inputs),horsemanship,flying,0.08,0
+e64 (earlier inputs),horsemanship,reach,0.08,0
+e64 (earlier inputs),horsemanship,horsemanship,0.27,1
+e64 (earlier inputs),horsemanship,shadow,0.07,0
+e64 (earlier inputs),horsemanship,artifact,0.21,0
+e64 (earlier inputs),horsemanship,black,0.13,0
+e64 (earlier inputs),horsemanship,shares-colour,0.1,0
+e64 (earlier inputs),fear,none,0.15,0
+e64 (earlier inputs),fear,flying,0.14,0
+e64 (earlier inputs),fear,reach,0.13,0
+e64 (earlier inputs),fear,horsemanship,0.31,0
+e64 (earlier inputs),fear,shadow,0.13,0
+e64 (earlier inputs),fear,artifact,0.28,1
+e64 (earlier inputs),fear,black,0.19,1
+e64 (earlier inputs),fear,shares-colour,0.16,0
+e64 (earlier inputs),intimidate,none,0.13,0
+e64 (earlier inputs),intimidate,flying,0.12,0
+e64 (earlier inputs),intimidate,reach,0.12,0
+e64 (earlier inputs),intimidate,horsemanship,0.3,0
+e64 (earlier inputs),intimidate,shadow,0.11,0
+e64 (earlier inputs),intimidate,artifact,0.27,1
+e64 (earlier inputs),intimidate,black,0.18,0.1
+e64 (earlier inputs),intimidate,shares-colour,0.14,1
+e64 (earlier inputs),shadow,none,0.17,0
+e64 (earlier inputs),shadow,flying,0.17,0
+e64 (earlier inputs),shadow,reach,0.16,0
+e64 (earlier inputs),shadow,horsemanship,0.22,0
+e64 (earlier inputs),shadow,shadow,0.15,1
+e64 (earlier inputs),shadow,artifact,0.25,0
+e64 (earlier inputs),shadow,black,0.18,0
+e64 (earlier inputs),shadow,shares-colour,0.18,0
+e64 (earlier inputs),unblockable,none,0.18,0
+e64 (earlier inputs),unblockable,flying,0.18,0
+e64 (earlier inputs),unblockable,reach,0.17,0
+e64 (earlier inputs),unblockable,horsemanship,0.24,0
+e64 (earlier inputs),unblockable,shadow,0.16,0
+e64 (earlier inputs),unblockable,artifact,0.26,0
+e64 (earlier inputs),unblockable,black,0.2,0
+e64 (earlier inputs),unblockable,shares-colour,0.19,0
+e64 (earlier inputs),protection-blocker,none,0.21,0
+e64 (earlier inputs),protection-blocker,flying,0.2,0
+e64 (earlier inputs),protection-blocker,reach,0.19,0
+e64 (earlier inputs),protection-blocker,horsemanship,0.29,0
+e64 (earlier inputs),protection-blocker,shadow,0.19,0
+e64 (earlier inputs),protection-blocker,artifact,0.31,0
+e64 (earlier inputs),protection-blocker,black,0.23,0
+e64 (earlier inputs),protection-blocker,shares-colour,0.21,0
+e64 (earlier inputs),protection-other,none,0.21,1
+e64 (earlier inputs),protection-other,flying,0.2,1
+e64 (earlier inputs),protection-other,reach,0.19,1
+e64 (earlier inputs),protection-other,horsemanship,0.29,1
+e64 (earlier inputs),protection-other,shadow,0.19,0
+e64 (earlier inputs),protection-other,artifact,0.31,1
+e64 (earlier inputs),protection-other,black,0.23,1
+e64 (earlier inputs),protection-other,shares-colour,0.21,1
+e64,none,none,0.23,1
+e64,none,flying,0.33,1
+e64,none,reach,0.25,1
+e64,none,horsemanship,0.44,1
+e64,none,shadow,0.19,0
+e64,none,artifact,0.3,1
+e64,none,black,0.26,1
+e64,none,shares-colour,0.23,1
+e64,flying,none,0.22,0
+e64,flying,flying,0.32,1
+e64,flying,reach,0.24,1
+e64,flying,horsemanship,0.43,0
+e64,flying,shadow,0.17,0
+e64,flying,artifact,0.28,0
+e64,flying,black,0.24,0
+e64,flying,shares-colour,0.22,0
+e64,horsemanship,none,0.17,0
+e64,horsemanship,flying,0.28,0
+e64,horsemanship,reach,0.18,0
+e64,horsemanship,horsemanship,0.51,1
+e64,horsemanship,shadow,0.12,0
+e64,horsemanship,artifact,0.3,0
+e64,horsemanship,black,0.23,0
+e64,horsemanship,shares-colour,0.17,0
+e64,fear,none,0.22,0
+e64,fear,flying,0.32,0
+e64,fear,reach,0.23,0
+e64,fear,horsemanship,0.5,0
+e64,fear,shadow,0.17,0
+e64,fear,artifact,0.33,1
+e64,fear,black,0.26,1
+e64,fear,shares-colour,0.22,0
+e64,intimidate,none,0.22,0
+e64,intimidate,flying,0.32,0
+e64,intimidate,reach,0.23,0
+e64,intimidate,horsemanship,0.5,0
+e64,intimidate,shadow,0.17,0
+e64,intimidate,artifact,0.33,1
+e64,intimidate,black,0.26,0.1
+e64,intimidate,shares-colour,0.22,1
+e64,shadow,none,0.24,0
+e64,shadow,flying,0.33,0
+e64,shadow,reach,0.26,0
+e64,shadow,horsemanship,0.44,0
+e64,shadow,shadow,0.2,1
+e64,shadow,artifact,0.3,0
+e64,shadow,black,0.26,0
+e64,shadow,shares-colour,0.24,0
+e64,unblockable,none,0.23,0
+e64,unblockable,flying,0.33,0
+e64,unblockable,reach,0.25,0
+e64,unblockable,horsemanship,0.44,0
+e64,unblockable,shadow,0.19,0
+e64,unblockable,artifact,0.3,0
+e64,unblockable,black,0.26,0
+e64,unblockable,shares-colour,0.23,0
+e64,protection-blocker,none,0.35,0
+e64,protection-blocker,flying,0.4,0
+e64,protection-blocker,reach,0.36,0
+e64,protection-blocker,horsemanship,0.58,0
+e64,protection-blocker,shadow,0.29,0
+e64,protection-blocker,artifact,0.45,0
+e64,protection-blocker,black,0.35,0
+e64,protection-blocker,shares-colour,0.35,0
+e64,protection-other,none,0.35,1
+e64,protection-other,flying,0.4,1
+e64,protection-other,reach,0.36,1
+e64,protection-other,horsemanship,0.58,1
+e64,protection-other,shadow,0.29,0
+e64,protection-other,artifact,0.45,1
+e64,protection-other,black,0.35,1
+e64,protection-other,shares-colour,0.35,1
+e128,none,none,0.14,1
+e128,none,flying,0.17,1
+e128,none,reach,0.14,1
+e128,none,horsemanship,0.31,1
+e128,none,shadow,0.12,0
+e128,none,artifact,0.18,1
+e128,none,black,0.17,1
+e128,none,shares-colour,0.14,1
+e128,flying,none,0.13,0
+e128,flying,flying,0.16,1
+e128,flying,reach,0.13,1
+e128,flying,horsemanship,0.29,0
+e128,flying,shadow,0.11,0
+e128,flying,artifact,0.17,0
+e128,flying,black,0.16,0
+e128,flying,shares-colour,0.13,0
+e128,horsemanship,none,0.06,0
+e128,horsemanship,flying,0.1,0
+e128,horsemanship,reach,0.07,0
+e128,horsemanship,horsemanship,0.31,1
+e128,horsemanship,shadow,0.04,0
+e128,horsemanship,artifact,0.13,0
+e128,horsemanship,black,0.11,0
+e128,horsemanship,shares-colour,0.07,0
+e128,fear,none,0.09,0
+e128,fear,flying,0.13,0
+e128,fear,reach,0.1,0
+e128,fear,horsemanship,0.32,0
+e128,fear,shadow,0.07,0
+e128,fear,artifact,0.16,1
+e128,fear,black,0.13,1
+e128,fear,shares-colour,0.1,0
+e128,intimidate,none,0.1,0
+e128,intimidate,flying,0.14,0
+e128,intimidate,reach,0.11,0
+e128,intimidate,horsemanship,0.33,0
+e128,intimidate,shadow,0.07,0
+e128,intimidate,artifact,0.17,1
+e128,intimidate,black,0.14,0.1
+e128,intimidate,shares-colour,0.11,1
+e128,shadow,none,0.14,0
+e128,shadow,flying,0.18,0
+e128,shadow,reach,0.15,0
+e128,shadow,horsemanship,0.3,0
+e128,shadow,shadow,0.12,1
+e128,shadow,artifact,0.19,0
+e128,shadow,black,0.17,0
+e128,shadow,shares-colour,0.15,0
+e128,unblockable,none,0.14,0
+e128,unblockable,flying,0.17,0
+e128,unblockable,reach,0.15,0
+e128,unblockable,horsemanship,0.31,0
+e128,unblockable,shadow,0.12,0
+e128,unblockable,artifact,0.19,0
+e128,unblockable,black,0.17,0
+e128,unblockable,shares-colour,0.14,0
+e128,protection-blocker,none,0.16,0
+e128,protection-blocker,flying,0.19,0
+e128,protection-blocker,reach,0.17,0
+e128,protection-blocker,horsemanship,0.38,0
+e128,protection-blocker,shadow,0.13,0
+e128,protection-blocker,artifact,0.25,0
+e128,protection-blocker,black,0.18,0
+e128,protection-blocker,shares-colour,0.17,0
+e128,protection-other,none,0.16,1
+e128,protection-other,flying,0.19,1
+e128,protection-other,reach,0.17,1
+e128,protection-other,horsemanship,0.38,1
+e128,protection-other,shadow,0.13,0
+e128,protection-other,artifact,0.25,1
+e128,protection-other,black,0.18,1
+e128,protection-other,shares-colour,0.17,1
+e64-lethality,none,none,0.1,1
+e64-lethality,none,flying,0.14,1
+e64-lethality,none,reach,0.11,1
+e64-lethality,none,horsemanship,0.25,1
+e64-lethality,none,shadow,0.08,0
+e64-lethality,none,artifact,0.15,1
+e64-lethality,none,black,0.13,1
+e64-lethality,none,shares-colour,0.1,1
+e64-lethality,flying,none,0.07,0
+e64-lethality,flying,flying,0.1,1
+e64-lethality,flying,reach,0.08,1
+e64-lethality,flying,horsemanship,0.19,0
+e64-lethality,flying,shadow,0.05,0
+e64-lethality,flying,artifact,0.11,0
+e64-lethality,flying,black,0.09,0
+e64-lethality,flying,shares-colour,0.07,0
+e64-lethality,horsemanship,none,0.02,0
+e64-lethality,horsemanship,flying,0.03,0
+e64-lethality,horsemanship,reach,0.02,0
+e64-lethality,horsemanship,horsemanship,0.14,1
+e64-lethality,horsemanship,shadow,0.01,0
+e64-lethality,horsemanship,artifact,0.06,0
+e64-lethality,horsemanship,black,0.04,0
+e64-lethality,horsemanship,shares-colour,0.02,0
+e64-lethality,fear,none,0.04,0
+e64-lethality,fear,flying,0.05,0
+e64-lethality,fear,reach,0.04,0
+e64-lethality,fear,horsemanship,0.18,0
+e64-lethality,fear,shadow,0.02,0
+e64-lethality,fear,artifact,0.08,1
+e64-lethality,fear,black,0.06,1
+e64-lethality,fear,shares-colour,0.04,0
+e64-lethality,intimidate,none,0.04,0
+e64-lethality,intimidate,flying,0.06,0
+e64-lethality,intimidate,reach,0.04,0
+e64-lethality,intimidate,horsemanship,0.19,0
+e64-lethality,intimidate,shadow,0.02,0
+e64-lethality,intimidate,artifact,0.09,1
+e64-lethality,intimidate,black,0.06,0.1
+e64-lethality,intimidate,shares-colour,0.04,1
+e64-lethality,shadow,none,0.11,0
+e64-lethality,shadow,flying,0.15,0
+e64-lethality,shadow,reach,0.12,0
+e64-lethality,shadow,horsemanship,0.25,0
+e64-lethality,shadow,shadow,0.08,1
+e64-lethality,shadow,artifact,0.16,0
+e64-lethality,shadow,black,0.13,0
+e64-lethality,shadow,shares-colour,0.11,0
+e64-lethality,unblockable,none,0.1,0
+e64-lethality,unblockable,flying,0.14,0
+e64-lethality,unblockable,reach,0.11,0
+e64-lethality,unblockable,horsemanship,0.25,0
+e64-lethality,unblockable,shadow,0.08,0
+e64-lethality,unblockable,artifact,0.15,0
+e64-lethality,unblockable,black,0.12,0
+e64-lethality,unblockable,shares-colour,0.1,0
+e64-lethality,protection-blocker,none,0.08,0
+e64-lethality,protection-blocker,flying,0.1,0
+e64-lethality,protection-blocker,reach,0.08,0
+e64-lethality,protection-blocker,horsemanship,0.31,0
+e64-lethality,protection-blocker,shadow,0.05,0
+e64-lethality,protection-blocker,artifact,0.17,0
+e64-lethality,protection-blocker,black,0.1,0
+e64-lethality,protection-blocker,shares-colour,0.08,0
+e64-lethality,protection-other,none,0.08,1
+e64-lethality,protection-other,flying,0.1,1
+e64-lethality,protection-other,reach,0.08,1
+e64-lethality,protection-other,horsemanship,0.31,1
+e64-lethality,protection-other,shadow,0.05,0
+e64-lethality,protection-other,artifact,0.17,1
+e64-lethality,protection-other,black,0.1,1
+e64-lethality,protection-other,shares-colour,0.08,1
+e128-lethality,none,none,0.12,1
+e128-lethality,none,flying,0.15,1
+e128-lethality,none,reach,0.12,1
+e128-lethality,none,horsemanship,0.23,1
+e128-lethality,none,shadow,0.11,0
+e128-lethality,none,artifact,0.15,1
+e128-lethality,none,black,0.13,1
+e128-lethality,none,shares-colour,0.13,1
+e128-lethality,flying,none,0.11,0
+e128-lethality,flying,flying,0.14,1
+e128-lethality,flying,reach,0.11,1
+e128-lethality,flying,horsemanship,0.22,0
+e128-lethality,flying,shadow,0.1,0
+e128-lethality,flying,artifact,0.14,0
+e128-lethality,flying,black,0.13,0
+e128-lethality,flying,shares-colour,0.12,0
+e128-lethality,horsemanship,none,0.09,0
+e128-lethality,horsemanship,flying,0.11,0
+e128-lethality,horsemanship,reach,0.09,0
+e128-lethality,horsemanship,horsemanship,0.24,1
+e128-lethality,horsemanship,shadow,0.08,0
+e128-lethality,horsemanship,artifact,0.15,0
+e128-lethality,horsemanship,black,0.11,0
+e128-lethality,horsemanship,shares-colour,0.1,0
+e128-lethality,fear,none,0.11,0
+e128-lethality,fear,flying,0.13,0
+e128-lethality,fear,reach,0.11,0
+e128-lethality,fear,horsemanship,0.25,0
+e128-lethality,fear,shadow,0.1,0
+e128-lethality,fear,artifact,0.17,1
+e128-lethality,fear,black,0.12,1
+e128-lethality,fear,shares-colour,0.12,0
+e128-lethality,intimidate,none,0.12,0
+e128-lethality,intimidate,flying,0.14,0
+e128-lethality,intimidate,reach,0.12,0
+e128-lethality,intimidate,horsemanship,0.26,0
+e128-lethality,intimidate,shadow,0.1,0
+e128-lethality,intimidate,artifact,0.18,1
+e128-lethality,intimidate,black,0.12,0.1
+e128-lethality,intimidate,shares-colour,0.12,1
+e128-lethality,shadow,none,0.12,0
+e128-lethality,shadow,flying,0.15,0
+e128-lethality,shadow,reach,0.13,0
+e128-lethality,shadow,horsemanship,0.23,0
+e128-lethality,shadow,shadow,0.11,1
+e128-lethality,shadow,artifact,0.16,0
+e128-lethality,shadow,black,0.14,0
+e128-lethality,shadow,shares-colour,0.13,0
+e128-lethality,unblockable,none,0.12,0
+e128-lethality,unblockable,flying,0.15,0
+e128-lethality,unblockable,reach,0.12,0
+e128-lethality,unblockable,horsemanship,0.24,0
+e128-lethality,unblockable,shadow,0.11,0
+e128-lethality,unblockable,artifact,0.16,0
+e128-lethality,unblockable,black,0.13,0
+e128-lethality,unblockable,shares-colour,0.13,0
+e128-lethality,protection-blocker,none,0.16,0
+e128-lethality,protection-blocker,flying,0.19,0
+e128-lethality,protection-blocker,reach,0.16,0
+e128-lethality,protection-blocker,horsemanship,0.32,0
+e128-lethality,protection-blocker,shadow,0.15,0
+e128-lethality,protection-blocker,artifact,0.24,0
+e128-lethality,protection-blocker,black,0.16,0
+e128-lethality,protection-blocker,shares-colour,0.17,0
+e128-lethality,protection-other,none,0.16,1
+e128-lethality,protection-other,flying,0.19,1
+e128-lethality,protection-other,reach,0.16,1
+e128-lethality,protection-other,horsemanship,0.32,1
+e128-lethality,protection-other,shadow,0.15,0
+e128-lethality,protection-other,artifact,0.24,1
+e128-lethality,protection-other,black,0.16,1
+e128-lethality,protection-other,shares-colour,0.17,1
+e256-lethality,none,none,0.09,1
+e256-lethality,none,flying,0.15,1
+e256-lethality,none,reach,0.1,1
+e256-lethality,none,horsemanship,0.31,1
+e256-lethality,none,shadow,0.07,0
+e256-lethality,none,artifact,0.14,1
+e256-lethality,none,black,0.15,1
+e256-lethality,none,shares-colour,0.09,1
+e256-lethality,flying,none,0.06,0
+e256-lethality,flying,flying,0.11,1
+e256-lethality,flying,reach,0.07,1
+e256-lethality,flying,horsemanship,0.27,0
+e256-lethality,flying,shadow,0.04,0
+e256-lethality,flying,artifact,0.09,0
+e256-lethality,flying,black,0.11,0
+e256-lethality,flying,shares-colour,0.06,0
+e256-lethality,horsemanship,none,0.01,0
+e256-lethality,horsemanship,flying,0.02,0
+e256-lethality,horsemanship,reach,0.01,0
+e256-lethality,horsemanship,horsemanship,0.26,1
+e256-lethality,horsemanship,shadow,0.01,0
+e256-lethality,horsemanship,artifact,0.03,0
+e256-lethality,horsemanship,black,0.04,0
+e256-lethality,horsemanship,shares-colour,0.01,0
+e256-lethality,fear,none,0.03,0
+e256-lethality,fear,flying,0.06,0
+e256-lethality,fear,reach,0.04,0
+e256-lethality,fear,horsemanship,0.29,0
+e256-lethality,fear,shadow,0.02,0
+e256-lethality,fear,artifact,0.07,1
+e256-lethality,fear,black,0.08,1
+e256-lethality,fear,shares-colour,0.03,0
+e256-lethality,intimidate,none,0.03,0
+e256-lethality,intimidate,flying,0.05,0
+e256-lethality,intimidate,reach,0.03,0
+e256-lethality,intimidate,horsemanship,0.3,0
+e256-lethality,intimidate,shadow,0.02,0
+e256-lethality,intimidate,artifact,0.06,1
+e256-lethality,intimidate,black,0.08,0.1
+e256-lethality,intimidate,shares-colour,0.03,1
+e256-lethality,shadow,none,0.11,0
+e256-lethality,shadow,flying,0.17,0
+e256-lethality,shadow,reach,0.12,0
+e256-lethality,shadow,horsemanship,0.32,0
+e256-lethality,shadow,shadow,0.09,1
+e256-lethality,shadow,artifact,0.15,0
+e256-lethality,shadow,black,0.17,0
+e256-lethality,shadow,shares-colour,0.11,0
+e256-lethality,unblockable,none,0.09,0
+e256-lethality,unblockable,flying,0.14,0
+e256-lethality,unblockable,reach,0.1,0
+e256-lethality,unblockable,horsemanship,0.31,0
+e256-lethality,unblockable,shadow,0.07,0
+e256-lethality,unblockable,artifact,0.13,0
+e256-lethality,unblockable,black,0.15,0
+e256-lethality,unblockable,shares-colour,0.09,0
+e256-lethality,protection-blocker,none,0.11,0
+e256-lethality,protection-blocker,flying,0.14,0
+e256-lethality,protection-blocker,reach,0.11,0
+e256-lethality,protection-blocker,horsemanship,0.45,0
+e256-lethality,protection-blocker,shadow,0.08,0
+e256-lethality,protection-blocker,artifact,0.21,0
+e256-lethality,protection-blocker,black,0.17,0
+e256-lethality,protection-blocker,shares-colour,0.12,0
+e256-lethality,protection-other,none,0.11,1
+e256-lethality,protection-other,flying,0.14,1
+e256-lethality,protection-other,reach,0.11,1
+e256-lethality,protection-other,horsemanship,0.45,1
+e256-lethality,protection-other,shadow,0.08,0
+e256-lethality,protection-other,artifact,0.21,1
+e256-lethality,protection-other,black,0.17,1
+e256-lethality,protection-other,shares-colour,0.12,1
+A64 best,none,none,0.37,1
+A64 best,none,flying,0.48,1
+A64 best,none,reach,0.4,1
+A64 best,none,horsemanship,0.56,1
+A64 best,none,shadow,0.35,0
+A64 best,none,artifact,0.38,1
+A64 best,none,black,0.34,1
+A64 best,none,shares-colour,0.41,1
+A64 best,flying,none,0.22,0
+A64 best,flying,flying,0.4,1
+A64 best,flying,reach,0.24,1
+A64 best,flying,horsemanship,0.47,0
+A64 best,flying,shadow,0.18,0
+A64 best,flying,artifact,0.25,0
+A64 best,flying,black,0.24,0
+A64 best,flying,shares-colour,0.25,0
+A64 best,horsemanship,none,0.06,0
+A64 best,horsemanship,flying,0.13,0
+A64 best,horsemanship,reach,0.06,0
+A64 best,horsemanship,horsemanship,0.55,1
+A64 best,horsemanship,shadow,0.04,0
+A64 best,horsemanship,artifact,0.26,0
+A64 best,horsemanship,black,0.14,0
+A64 best,horsemanship,shares-colour,0.08,0
+A64 best,fear,none,0.13,0
+A64 best,fear,flying,0.25,0
+A64 best,fear,reach,0.13,0
+A64 best,fear,horsemanship,0.58,0
+A64 best,fear,shadow,0.1,0
+A64 best,fear,artifact,0.32,1
+A64 best,fear,black,0.21,1
+A64 best,fear,shares-colour,0.16,0
+A64 best,intimidate,none,0.12,0
+A64 best,intimidate,flying,0.23,0
+A64 best,intimidate,reach,0.12,0
+A64 best,intimidate,horsemanship,0.57,0
+A64 best,intimidate,shadow,0.08,0
+A64 best,intimidate,artifact,0.31,1
+A64 best,intimidate,black,0.19,0.1
+A64 best,intimidate,shares-colour,0.15,1
+A64 best,shadow,none,0.39,0
+A64 best,shadow,flying,0.48,0
+A64 best,shadow,reach,0.41,0
+A64 best,shadow,horsemanship,0.56,0
+A64 best,shadow,shadow,0.36,1
+A64 best,shadow,artifact,0.39,0
+A64 best,shadow,black,0.36,0
+A64 best,shadow,shares-colour,0.42,0
+A64 best,unblockable,none,0.37,0
+A64 best,unblockable,flying,0.48,0
+A64 best,unblockable,reach,0.4,0
+A64 best,unblockable,horsemanship,0.56,0
+A64 best,unblockable,shadow,0.35,0
+A64 best,unblockable,artifact,0.39,0
+A64 best,unblockable,black,0.34,0
+A64 best,unblockable,shares-colour,0.41,0
+A64 best,protection-blocker,none,0.31,0
+A64 best,protection-blocker,flying,0.35,0
+A64 best,protection-blocker,reach,0.31,0
+A64 best,protection-blocker,horsemanship,0.68,0
+A64 best,protection-blocker,shadow,0.24,0
+A64 best,protection-blocker,artifact,0.44,0
+A64 best,protection-blocker,black,0.23,0
+A64 best,protection-blocker,shares-colour,0.42,0
+A64 best,protection-other,none,0.31,1
+A64 best,protection-other,flying,0.35,1
+A64 best,protection-other,reach,0.31,1
+A64 best,protection-other,horsemanship,0.68,1
+A64 best,protection-other,shadow,0.24,0
+A64 best,protection-other,artifact,0.44,1
+A64 best,protection-other,black,0.23,1
+A64 best,protection-other,shares-colour,0.42,1
+A64 last,none,none,0.36,1
+A64 last,none,flying,0.45,1
+A64 last,none,reach,0.37,1
+A64 last,none,horsemanship,0.64,1
+A64 last,none,shadow,0.35,0
+A64 last,none,artifact,0.42,1
+A64 last,none,black,0.38,1
+A64 last,none,shares-colour,0.41,1
+A64 last,flying,none,0.08,0
+A64 last,flying,flying,0.27,1
+A64 last,flying,reach,0.09,1
+A64 last,flying,horsemanship,0.47,0
+A64 last,flying,shadow,0.08,0
+A64 last,flying,artifact,0.13,0
+A64 last,flying,black,0.12,0
+A64 last,flying,shares-colour,0.12,0
+A64 last,horsemanship,none,0.03,0
+A64 last,horsemanship,flying,0.08,0
+A64 last,horsemanship,reach,0.03,0
+A64 last,horsemanship,horsemanship,0.64,1
+A64 last,horsemanship,shadow,0.02,0
+A64 last,horsemanship,artifact,0.32,0
+A64 last,horsemanship,black,0.15,0
+A64 last,horsemanship,shares-colour,0.06,0
+A64 last,fear,none,0.09,0
+A64 last,fear,flying,0.16,0
+A64 last,fear,reach,0.09,0
+A64 last,fear,horsemanship,0.73,0
+A64 last,fear,shadow,0.07,0
+A64 last,fear,artifact,0.49,1
+A64 last,fear,black,0.33,1
+A64 last,fear,shares-colour,0.15,0
+A64 last,intimidate,none,0.08,0
+A64 last,intimidate,flying,0.16,0
+A64 last,intimidate,reach,0.08,0
+A64 last,intimidate,horsemanship,0.71,0
+A64 last,intimidate,shadow,0.07,0
+A64 last,intimidate,artifact,0.47,1
+A64 last,intimidate,black,0.26,0.1
+A64 last,intimidate,shares-colour,0.15,1
+A64 last,shadow,none,0.34,0
+A64 last,shadow,flying,0.45,0
+A64 last,shadow,reach,0.35,0
+A64 last,shadow,horsemanship,0.63,0
+A64 last,shadow,shadow,0.34,1
+A64 last,shadow,artifact,0.41,0
+A64 last,shadow,black,0.37,0
+A64 last,shadow,shares-colour,0.39,0
+A64 last,unblockable,none,0.36,0
+A64 last,unblockable,flying,0.45,0
+A64 last,unblockable,reach,0.37,0
+A64 last,unblockable,horsemanship,0.64,0
+A64 last,unblockable,shadow,0.35,0
+A64 last,unblockable,artifact,0.43,0
+A64 last,unblockable,black,0.38,0
+A64 last,unblockable,shares-colour,0.41,0
+A64 last,protection-blocker,none,0.37,0
+A64 last,protection-blocker,flying,0.31,0
+A64 last,protection-blocker,reach,0.34,0
+A64 last,protection-blocker,horsemanship,0.79,0
+A64 last,protection-blocker,shadow,0.36,0
+A64 last,protection-blocker,artifact,0.58,0
+A64 last,protection-blocker,black,0.44,0
+A64 last,protection-blocker,shares-colour,0.59,0
+A64 last,protection-other,none,0.37,1
+A64 last,protection-other,flying,0.31,1
+A64 last,protection-other,reach,0.34,1
+A64 last,protection-other,horsemanship,0.79,1
+A64 last,protection-other,shadow,0.36,0
+A64 last,protection-other,artifact,0.58,1
+A64 last,protection-other,black,0.44,1
+A64 last,protection-other,shares-colour,0.59,1
+B64 best,none,none,0.35,1
+B64 best,none,flying,0.48,1
+B64 best,none,reach,0.36,1
+B64 best,none,horsemanship,0.6,1
+B64 best,none,shadow,0.33,0
+B64 best,none,artifact,0.43,1
+B64 best,none,black,0.39,1
+B64 best,none,shares-colour,0.39,1
+B64 best,flying,none,0.16,0
+B64 best,flying,flying,0.38,1
+B64 best,flying,reach,0.18,1
+B64 best,flying,horsemanship,0.5,0
+B64 best,flying,shadow,0.14,0
+B64 best,flying,artifact,0.25,0
+B64 best,flying,black,0.26,0
+B64 best,flying,shares-colour,0.2,0
+B64 best,horsemanship,none,0.04,0
+B64 best,horsemanship,flying,0.08,0
+B64 best,horsemanship,reach,0.04,0
+B64 best,horsemanship,horsemanship,0.67,1
+B64 best,horsemanship,shadow,0.03,0
+B64 best,horsemanship,artifact,0.3,0
+B64 best,horsemanship,black,0.2,0
+B64 best,horsemanship,shares-colour,0.05,0
+B64 best,fear,none,0.09,0
+B64 best,fear,flying,0.18,0
+B64 best,fear,reach,0.08,0
+B64 best,fear,horsemanship,0.7,0
+B64 best,fear,shadow,0.07,0
+B64 best,fear,artifact,0.38,1
+B64 best,fear,black,0.3,1
+B64 best,fear,shares-colour,0.12,0
+B64 best,intimidate,none,0.08,0
+B64 best,intimidate,flying,0.17,0
+B64 best,intimidate,reach,0.07,0
+B64 best,intimidate,horsemanship,0.69,0
+B64 best,intimidate,shadow,0.06,0
+B64 best,intimidate,artifact,0.37,1
+B64 best,intimidate,black,0.27,0.1
+B64 best,intimidate,shares-colour,0.11,1
+B64 best,shadow,none,0.36,0
+B64 best,shadow,flying,0.49,0
+B64 best,shadow,reach,0.37,0
+B64 best,shadow,horsemanship,0.6,0
+B64 best,shadow,shadow,0.35,1
+B64 best,shadow,artifact,0.44,0
+B64 best,shadow,black,0.4,0
+B64 best,shadow,shares-colour,0.4,0
+B64 best,unblockable,none,0.35,0
+B64 best,unblockable,flying,0.48,0
+B64 best,unblockable,reach,0.36,0
+B64 best,unblockable,horsemanship,0.61,0
+B64 best,unblockable,shadow,0.33,0
+B64 best,unblockable,artifact,0.43,0
+B64 best,unblockable,black,0.39,0
+B64 best,unblockable,shares-colour,0.39,0
+B64 best,protection-blocker,none,0.33,0
+B64 best,protection-blocker,flying,0.37,0
+B64 best,protection-blocker,reach,0.31,0
+B64 best,protection-blocker,horsemanship,0.75,0
+B64 best,protection-blocker,shadow,0.29,0
+B64 best,protection-blocker,artifact,0.51,0
+B64 best,protection-blocker,black,0.35,0
+B64 best,protection-blocker,shares-colour,0.47,0
+B64 best,protection-other,none,0.33,1
+B64 best,protection-other,flying,0.37,1
+B64 best,protection-other,reach,0.31,1
+B64 best,protection-other,horsemanship,0.75,1
+B64 best,protection-other,shadow,0.29,0
+B64 best,protection-other,artifact,0.51,1
+B64 best,protection-other,black,0.35,1
+B64 best,protection-other,shares-colour,0.47,1
+B64 last,none,none,0.36,1
+B64 last,none,flying,0.51,1
+B64 last,none,reach,0.4,1
+B64 last,none,horsemanship,0.63,1
+B64 last,none,shadow,0.34,0
+B64 last,none,artifact,0.4,1
+B64 last,none,black,0.42,1
+B64 last,none,shares-colour,0.43,1
+B64 last,flying,none,0.09,0
+B64 last,flying,flying,0.34,1
+B64 last,flying,reach,0.12,1
+B64 last,flying,horsemanship,0.41,0
+B64 last,flying,shadow,0.07,0
+B64 last,flying,artifact,0.13,0
+B64 last,flying,black,0.17,0
+B64 last,flying,shares-colour,0.14,0
+B64 last,horsemanship,none,0.04,0
+B64 last,horsemanship,flying,0.06,0
+B64 last,horsemanship,reach,0.04,0
+B64 last,horsemanship,horsemanship,0.48,1
+B64 last,horsemanship,shadow,0.02,0
+B64 last,horsemanship,artifact,0.19,0
+B64 last,horsemanship,black,0.17,0
+B64 last,horsemanship,shares-colour,0.05,0
+B64 last,fear,none,0.08,0
+B64 last,fear,flying,0.14,0
+B64 last,fear,reach,0.08,0
+B64 last,fear,horsemanship,0.64,0
+B64 last,fear,shadow,0.06,0
+B64 last,fear,artifact,0.33,1
+B64 last,fear,black,0.33,1
+B64 last,fear,shares-colour,0.12,0
+B64 last,intimidate,none,0.07,0
+B64 last,intimidate,flying,0.13,0
+B64 last,intimidate,reach,0.07,0
+B64 last,intimidate,horsemanship,0.61,0
+B64 last,intimidate,shadow,0.05,0
+B64 last,intimidate,artifact,0.31,1
+B64 last,intimidate,black,0.28,0.1
+B64 last,intimidate,shares-colour,0.11,1
+B64 last,shadow,none,0.37,0
+B64 last,shadow,flying,0.51,0
+B64 last,shadow,reach,0.4,0
+B64 last,shadow,horsemanship,0.62,0
+B64 last,shadow,shadow,0.35,1
+B64 last,shadow,artifact,0.4,0
+B64 last,shadow,black,0.42,0
+B64 last,shadow,shares-colour,0.42,0
+B64 last,unblockable,none,0.36,0
+B64 last,unblockable,flying,0.51,0
+B64 last,unblockable,reach,0.4,0
+B64 last,unblockable,horsemanship,0.63,0
+B64 last,unblockable,shadow,0.34,0
+B64 last,unblockable,artifact,0.4,0
+B64 last,unblockable,black,0.42,0
+B64 last,unblockable,shares-colour,0.43,0
+B64 last,protection-blocker,none,0.26,0
+B64 last,protection-blocker,flying,0.27,0
+B64 last,protection-blocker,reach,0.25,0
+B64 last,protection-blocker,horsemanship,0.68,0
+B64 last,protection-blocker,shadow,0.21,0
+B64 last,protection-blocker,artifact,0.42,0
+B64 last,protection-blocker,black,0.36,0
+B64 last,protection-blocker,shares-colour,0.46,0
+B64 last,protection-other,none,0.26,1
+B64 last,protection-other,flying,0.27,1
+B64 last,protection-other,reach,0.25,1
+B64 last,protection-other,horsemanship,0.68,1
+B64 last,protection-other,shadow,0.21,0
+B64 last,protection-other,artifact,0.42,1
+B64 last,protection-other,black,0.36,1
+B64 last,protection-other,shares-colour,0.46,1
+A128 best,none,none,0.34,1
+A128 best,none,flying,0.45,1
+A128 best,none,reach,0.38,1
+A128 best,none,horsemanship,0.67,1
+A128 best,none,shadow,0.3,0
+A128 best,none,artifact,0.4,1
+A128 best,none,black,0.36,1
+A128 best,none,shares-colour,0.36,1
+A128 best,flying,none,0.28,0
+A128 best,flying,flying,0.4,1
+A128 best,flying,reach,0.32,1
+A128 best,flying,horsemanship,0.65,0
+A128 best,flying,shadow,0.24,0
+A128 best,flying,artifact,0.34,0
+A128 best,flying,black,0.31,0
+A128 best,flying,shares-colour,0.3,0
+A128 best,horsemanship,none,0.16,0
+A128 best,horsemanship,flying,0.26,0
+A128 best,horsemanship,reach,0.19,0
+A128 best,horsemanship,horsemanship,0.73,1
+A128 best,horsemanship,shadow,0.11,0
+A128 best,horsemanship,artifact,0.37,0
+A128 best,horsemanship,black,0.23,0
+A128 best,horsemanship,shares-colour,0.17,0
+A128 best,fear,none,0.28,0
+A128 best,fear,flying,0.38,0
+A128 best,fear,reach,0.31,0
+A128 best,fear,horsemanship,0.75,0
+A128 best,fear,shadow,0.21,0
+A128 best,fear,artifact,0.45,1
+A128 best,fear,black,0.32,1
+A128 best,fear,shares-colour,0.3,0
+A128 best,intimidate,none,0.27,0
+A128 best,intimidate,flying,0.37,0
+A128 best,intimidate,reach,0.3,0
+A128 best,intimidate,horsemanship,0.75,0
+A128 best,intimidate,shadow,0.21,0
+A128 best,intimidate,artifact,0.45,1
+A128 best,intimidate,black,0.31,0.1
+A128 best,intimidate,shares-colour,0.29,1
+A128 best,shadow,none,0.35,0
+A128 best,shadow,flying,0.46,0
+A128 best,shadow,reach,0.39,0
+A128 best,shadow,horsemanship,0.67,0
+A128 best,shadow,shadow,0.31,1
+A128 best,shadow,artifact,0.4,0
+A128 best,shadow,black,0.37,0
+A128 best,shadow,shares-colour,0.37,0
+A128 best,unblockable,none,0.35,0
+A128 best,unblockable,flying,0.46,0
+A128 best,unblockable,reach,0.38,0
+A128 best,unblockable,horsemanship,0.68,0
+A128 best,unblockable,shadow,0.31,0
+A128 best,unblockable,artifact,0.4,0
+A128 best,unblockable,black,0.36,0
+A128 best,unblockable,shares-colour,0.36,0
+A128 best,protection-blocker,none,0.46,0
+A128 best,protection-blocker,flying,0.5,0
+A128 best,protection-blocker,reach,0.47,0
+A128 best,protection-blocker,horsemanship,0.79,0
+A128 best,protection-blocker,shadow,0.42,0
+A128 best,protection-blocker,artifact,0.6,0
+A128 best,protection-blocker,black,0.41,0
+A128 best,protection-blocker,shares-colour,0.48,0
+A128 best,protection-other,none,0.46,1
+A128 best,protection-other,flying,0.5,1
+A128 best,protection-other,reach,0.47,1
+A128 best,protection-other,horsemanship,0.79,1
+A128 best,protection-other,shadow,0.42,0
+A128 best,protection-other,artifact,0.6,1
+A128 best,protection-other,black,0.41,1
+A128 best,protection-other,shares-colour,0.48,1
+A128 last,none,none,0.31,1
+A128 last,none,flying,0.52,1
+A128 last,none,reach,0.37,1
+A128 last,none,horsemanship,0.64,1
+A128 last,none,shadow,0.29,0
+A128 last,none,artifact,0.28,1
+A128 last,none,black,0.4,1
+A128 last,none,shares-colour,0.31,1
+A128 last,flying,none,0.15,0
+A128 last,flying,flying,0.38,1
+A128 last,flying,reach,0.21,1
+A128 last,flying,horsemanship,0.53,0
+A128 last,flying,shadow,0.14,0
+A128 last,flying,artifact,0.14,0
+A128 last,flying,black,0.23,0
+A128 last,flying,shares-colour,0.16,0
+A128 last,horsemanship,none,0.02,0
+A128 last,horsemanship,flying,0.04,0
+A128 last,horsemanship,reach,0.02,0
+A128 last,horsemanship,horsemanship,0.3,1
+A128 last,horsemanship,shadow,0.01,0
+A128 last,horsemanship,artifact,0.08,0
+A128 last,horsemanship,black,0.09,0
+A128 last,horsemanship,shares-colour,0.03,0
+A128 last,fear,none,0.06,0
+A128 last,fear,flying,0.13,0
+A128 last,fear,reach,0.07,0
+A128 last,fear,horsemanship,0.46,0
+A128 last,fear,shadow,0.04,0
+A128 last,fear,artifact,0.21,1
+A128 last,fear,black,0.26,1
+A128 last,fear,shares-colour,0.07,0
+A128 last,intimidate,none,0.05,0
+A128 last,intimidate,flying,0.11,0
+A128 last,intimidate,reach,0.06,0
+A128 last,intimidate,horsemanship,0.44,0
+A128 last,intimidate,shadow,0.03,0
+A128 last,intimidate,artifact,0.19,1
+A128 last,intimidate,black,0.2,0.1
+A128 last,intimidate,shares-colour,0.06,1
+A128 last,shadow,none,0.31,0
+A128 last,shadow,flying,0.52,0
+A128 last,shadow,reach,0.37,0
+A128 last,shadow,horsemanship,0.63,0
+A128 last,shadow,shadow,0.29,1
+A128 last,shadow,artifact,0.28,0
+A128 last,shadow,black,0.39,0
+A128 last,shadow,shares-colour,0.3,0
+A128 last,unblockable,none,0.32,0
+A128 last,unblockable,flying,0.52,0
+A128 last,unblockable,reach,0.37,0
+A128 last,unblockable,horsemanship,0.64,0
+A128 last,unblockable,shadow,0.29,0
+A128 last,unblockable,artifact,0.29,0
+A128 last,unblockable,black,0.4,0
+A128 last,unblockable,shares-colour,0.31,0
+A128 last,protection-blocker,none,0.24,0
+A128 last,protection-blocker,flying,0.3,0
+A128 last,protection-blocker,reach,0.23,0
+A128 last,protection-blocker,horsemanship,0.62,0
+A128 last,protection-blocker,shadow,0.19,0
+A128 last,protection-blocker,artifact,0.43,0
+A128 last,protection-blocker,black,0.45,0
+A128 last,protection-blocker,shares-colour,0.32,0
+A128 last,protection-other,none,0.24,1
+A128 last,protection-other,flying,0.3,1
+A128 last,protection-other,reach,0.23,1
+A128 last,protection-other,horsemanship,0.62,1
+A128 last,protection-other,shadow,0.19,0
+A128 last,protection-other,artifact,0.43,1
+A128 last,protection-other,black,0.45,1
+A128 last,protection-other,shares-colour,0.32,1
+B128 best,none,none,0.26,1
+B128 best,none,flying,0.39,1
+B128 best,none,reach,0.3,1
+B128 best,none,horsemanship,0.61,1
+B128 best,none,shadow,0.23,0
+B128 best,none,artifact,0.3,1
+B128 best,none,black,0.3,1
+B128 best,none,shares-colour,0.27,1
+B128 best,flying,none,0.17,0
+B128 best,flying,flying,0.31,1
+B128 best,flying,reach,0.21,1
+B128 best,flying,horsemanship,0.56,0
+B128 best,flying,shadow,0.14,0
+B128 best,flying,artifact,0.22,0
+B128 best,flying,black,0.22,0
+B128 best,flying,shares-colour,0.18,0
+B128 best,horsemanship,none,0.04,0
+B128 best,horsemanship,flying,0.07,0
+B128 best,horsemanship,reach,0.04,0
+B128 best,horsemanship,horsemanship,0.62,1
+B128 best,horsemanship,shadow,0.03,0
+B128 best,horsemanship,artifact,0.18,0
+B128 best,horsemanship,black,0.1,0
+B128 best,horsemanship,shares-colour,0.04,0
+B128 best,fear,none,0.11,0
+B128 best,fear,flying,0.2,0
+B128 best,fear,reach,0.12,0
+B128 best,fear,horsemanship,0.67,0
+B128 best,fear,shadow,0.07,0
+B128 best,fear,artifact,0.29,1
+B128 best,fear,black,0.22,1
+B128 best,fear,shares-colour,0.11,0
+B128 best,intimidate,none,0.1,0
+B128 best,intimidate,flying,0.19,0
+B128 best,intimidate,reach,0.11,0
+B128 best,intimidate,horsemanship,0.68,0
+B128 best,intimidate,shadow,0.07,0
+B128 best,intimidate,artifact,0.29,1
+B128 best,intimidate,black,0.22,0.1
+B128 best,intimidate,shares-colour,0.11,1
+B128 best,shadow,none,0.28,0
+B128 best,shadow,flying,0.41,0
+B128 best,shadow,reach,0.31,0
+B128 best,shadow,horsemanship,0.6,0
+B128 best,shadow,shadow,0.25,1
+B128 best,shadow,artifact,0.3,0
+B128 best,shadow,black,0.31,0
+B128 best,shadow,shares-colour,0.29,0
+B128 best,unblockable,none,0.27,0
+B128 best,unblockable,flying,0.4,0
+B128 best,unblockable,reach,0.3,0
+B128 best,unblockable,horsemanship,0.61,0
+B128 best,unblockable,shadow,0.24,0
+B128 best,unblockable,artifact,0.3,0
+B128 best,unblockable,black,0.3,0
+B128 best,unblockable,shares-colour,0.28,0
+B128 best,protection-blocker,none,0.33,0
+B128 best,protection-blocker,flying,0.4,0
+B128 best,protection-blocker,reach,0.34,0
+B128 best,protection-blocker,horsemanship,0.74,0
+B128 best,protection-blocker,shadow,0.27,0
+B128 best,protection-blocker,artifact,0.49,0
+B128 best,protection-blocker,black,0.33,0
+B128 best,protection-blocker,shares-colour,0.37,0
+B128 best,protection-other,none,0.33,1
+B128 best,protection-other,flying,0.4,1
+B128 best,protection-other,reach,0.34,1
+B128 best,protection-other,horsemanship,0.74,1
+B128 best,protection-other,shadow,0.27,0
+B128 best,protection-other,artifact,0.49,1
+B128 best,protection-other,black,0.33,1
+B128 best,protection-other,shares-colour,0.37,1
+B128 last,none,none,0.35,1
+B128 last,none,flying,0.49,1
+B128 last,none,reach,0.39,1
+B128 last,none,horsemanship,0.65,1
+B128 last,none,shadow,0.32,0
+B128 last,none,artifact,0.35,1
+B128 last,none,black,0.35,1
+B128 last,none,shares-colour,0.37,1
+B128 last,flying,none,0.23,0
+B128 last,flying,flying,0.39,1
+B128 last,flying,reach,0.28,1
+B128 last,flying,horsemanship,0.62,0
+B128 last,flying,shadow,0.2,0
+B128 last,flying,artifact,0.24,0
+B128 last,flying,black,0.26,0
+B128 last,flying,shares-colour,0.24,0
+B128 last,horsemanship,none,0.04,0
+B128 last,horsemanship,flying,0.07,0
+B128 last,horsemanship,reach,0.04,0
+B128 last,horsemanship,horsemanship,0.68,1
+B128 last,horsemanship,shadow,0.02,0
+B128 last,horsemanship,artifact,0.22,0
+B128 last,horsemanship,black,0.13,0
+B128 last,horsemanship,shares-colour,0.05,0
+B128 last,fear,none,0.13,0
+B128 last,fear,flying,0.23,0
+B128 last,fear,reach,0.14,0
+B128 last,fear,horsemanship,0.73,0
+B128 last,fear,shadow,0.1,0
+B128 last,fear,artifact,0.33,1
+B128 last,fear,black,0.25,1
+B128 last,fear,shares-colour,0.14,0
+B128 last,intimidate,none,0.12,0
+B128 last,intimidate,flying,0.22,0
+B128 last,intimidate,reach,0.13,0
+B128 last,intimidate,horsemanship,0.73,0
+B128 last,intimidate,shadow,0.09,0
+B128 last,intimidate,artifact,0.34,1
+B128 last,intimidate,black,0.23,0.1
+B128 last,intimidate,shares-colour,0.13,1
+B128 last,shadow,none,0.36,0
+B128 last,shadow,flying,0.5,0
+B128 last,shadow,reach,0.4,0
+B128 last,shadow,horsemanship,0.65,0
+B128 last,shadow,shadow,0.34,1
+B128 last,shadow,artifact,0.35,0
+B128 last,shadow,black,0.36,0
+B128 last,shadow,shares-colour,0.38,0
+B128 last,unblockable,none,0.35,0
+B128 last,unblockable,flying,0.5,0
+B128 last,unblockable,reach,0.4,0
+B128 last,unblockable,horsemanship,0.65,0
+B128 last,unblockable,shadow,0.33,0
+B128 last,unblockable,artifact,0.35,0
+B128 last,unblockable,black,0.36,0
+B128 last,unblockable,shares-colour,0.37,0
+B128 last,protection-blocker,none,0.32,0
+B128 last,protection-blocker,flying,0.36,0
+B128 last,protection-blocker,reach,0.33,0
+B128 last,protection-blocker,horsemanship,0.7,0
+B128 last,protection-blocker,shadow,0.3,0
+B128 last,protection-blocker,artifact,0.45,0
+B128 last,protection-blocker,black,0.28,0
+B128 last,protection-blocker,shares-colour,0.39,0
+B128 last,protection-other,none,0.32,1
+B128 last,protection-other,flying,0.36,1
+B128 last,protection-other,reach,0.33,1
+B128 last,protection-other,horsemanship,0.7,1
+B128 last,protection-other,shadow,0.3,0
+B128 last,protection-other,artifact,0.45,1
+B128 last,protection-other,black,0.28,1
+B128 last,protection-other,shares-colour,0.39,1
+A256 best,none,none,0.41,1
+A256 best,none,flying,0.59,1
+A256 best,none,reach,0.44,1
+A256 best,none,horsemanship,0.72,1
+A256 best,none,shadow,0.37,0
+A256 best,none,artifact,0.44,1
+A256 best,none,black,0.41,1
+A256 best,none,shares-colour,0.43,1
+A256 best,flying,none,0.16,0
+A256 best,flying,flying,0.48,1
+A256 best,flying,reach,0.2,1
+A256 best,flying,horsemanship,0.62,0
+A256 best,flying,shadow,0.13,0
+A256 best,flying,artifact,0.21,0
+A256 best,flying,black,0.18,0
+A256 best,flying,shares-colour,0.17,0
+A256 best,horsemanship,none,0.01,0
+A256 best,horsemanship,flying,0.03,0
+A256 best,horsemanship,reach,0.01,0
+A256 best,horsemanship,horsemanship,0.67,1
+A256 best,horsemanship,shadow,0.01,0
+A256 best,horsemanship,artifact,0.13,0
+A256 best,horsemanship,black,0.05,0
+A256 best,horsemanship,shares-colour,0.02,0
+A256 best,fear,none,0.06,0
+A256 best,fear,flying,0.1,0
+A256 best,fear,reach,0.06,0
+A256 best,fear,horsemanship,0.75,0
+A256 best,fear,shadow,0.03,0
+A256 best,fear,artifact,0.36,1
+A256 best,fear,black,0.26,1
+A256 best,fear,shares-colour,0.06,0
+A256 best,intimidate,none,0.05,0
+A256 best,intimidate,flying,0.1,0
+A256 best,intimidate,reach,0.06,0
+A256 best,intimidate,horsemanship,0.74,0
+A256 best,intimidate,shadow,0.03,0
+A256 best,intimidate,artifact,0.32,1
+A256 best,intimidate,black,0.19,0.1
+A256 best,intimidate,shares-colour,0.06,1
+A256 best,shadow,none,0.42,0
+A256 best,shadow,flying,0.61,0
+A256 best,shadow,reach,0.45,0
+A256 best,shadow,horsemanship,0.73,0
+A256 best,shadow,shadow,0.38,1
+A256 best,shadow,artifact,0.45,0
+A256 best,shadow,black,0.41,0
+A256 best,shadow,shares-colour,0.43,0
+A256 best,unblockable,none,0.4,0
+A256 best,unblockable,flying,0.59,0
+A256 best,unblockable,reach,0.44,0
+A256 best,unblockable,horsemanship,0.72,0
+A256 best,unblockable,shadow,0.37,0
+A256 best,unblockable,artifact,0.44,0
+A256 best,unblockable,black,0.41,0
+A256 best,unblockable,shares-colour,0.43,0
+A256 best,protection-blocker,none,0.34,0
+A256 best,protection-blocker,flying,0.36,0
+A256 best,protection-blocker,reach,0.33,0
+A256 best,protection-blocker,horsemanship,0.71,0
+A256 best,protection-blocker,shadow,0.28,0
+A256 best,protection-blocker,artifact,0.49,0
+A256 best,protection-blocker,black,0.41,0
+A256 best,protection-blocker,shares-colour,0.43,0
+A256 best,protection-other,none,0.34,1
+A256 best,protection-other,flying,0.36,1
+A256 best,protection-other,reach,0.33,1
+A256 best,protection-other,horsemanship,0.71,1
+A256 best,protection-other,shadow,0.28,0
+A256 best,protection-other,artifact,0.49,1
+A256 best,protection-other,black,0.41,1
+A256 best,protection-other,shares-colour,0.43,1
+A256 last,none,none,0.41,1
+A256 last,none,flying,0.59,1
+A256 last,none,reach,0.44,1
+A256 last,none,horsemanship,0.72,1
+A256 last,none,shadow,0.37,0
+A256 last,none,artifact,0.44,1
+A256 last,none,black,0.41,1
+A256 last,none,shares-colour,0.43,1
+A256 last,flying,none,0.16,0
+A256 last,flying,flying,0.48,1
+A256 last,flying,reach,0.2,1
+A256 last,flying,horsemanship,0.62,0
+A256 last,flying,shadow,0.13,0
+A256 last,flying,artifact,0.21,0
+A256 last,flying,black,0.18,0
+A256 last,flying,shares-colour,0.17,0
+A256 last,horsemanship,none,0.01,0
+A256 last,horsemanship,flying,0.03,0
+A256 last,horsemanship,reach,0.01,0
+A256 last,horsemanship,horsemanship,0.67,1
+A256 last,horsemanship,shadow,0.01,0
+A256 last,horsemanship,artifact,0.13,0
+A256 last,horsemanship,black,0.05,0
+A256 last,horsemanship,shares-colour,0.02,0
+A256 last,fear,none,0.06,0
+A256 last,fear,flying,0.1,0
+A256 last,fear,reach,0.06,0
+A256 last,fear,horsemanship,0.75,0
+A256 last,fear,shadow,0.03,0
+A256 last,fear,artifact,0.36,1
+A256 last,fear,black,0.26,1
+A256 last,fear,shares-colour,0.06,0
+A256 last,intimidate,none,0.05,0
+A256 last,intimidate,flying,0.1,0
+A256 last,intimidate,reach,0.06,0
+A256 last,intimidate,horsemanship,0.74,0
+A256 last,intimidate,shadow,0.03,0
+A256 last,intimidate,artifact,0.32,1
+A256 last,intimidate,black,0.19,0.1
+A256 last,intimidate,shares-colour,0.06,1
+A256 last,shadow,none,0.42,0
+A256 last,shadow,flying,0.61,0
+A256 last,shadow,reach,0.45,0
+A256 last,shadow,horsemanship,0.73,0
+A256 last,shadow,shadow,0.38,1
+A256 last,shadow,artifact,0.45,0
+A256 last,shadow,black,0.41,0
+A256 last,shadow,shares-colour,0.43,0
+A256 last,unblockable,none,0.4,0
+A256 last,unblockable,flying,0.59,0
+A256 last,unblockable,reach,0.44,0
+A256 last,unblockable,horsemanship,0.72,0
+A256 last,unblockable,shadow,0.37,0
+A256 last,unblockable,artifact,0.44,0
+A256 last,unblockable,black,0.41,0
+A256 last,unblockable,shares-colour,0.43,0
+A256 last,protection-blocker,none,0.34,0
+A256 last,protection-blocker,flying,0.36,0
+A256 last,protection-blocker,reach,0.33,0
+A256 last,protection-blocker,horsemanship,0.71,0
+A256 last,protection-blocker,shadow,0.28,0
+A256 last,protection-blocker,artifact,0.49,0
+A256 last,protection-blocker,black,0.41,0
+A256 last,protection-blocker,shares-colour,0.43,0
+A256 last,protection-other,none,0.34,1
+A256 last,protection-other,flying,0.36,1
+A256 last,protection-other,reach,0.33,1
+A256 last,protection-other,horsemanship,0.71,1
+A256 last,protection-other,shadow,0.28,0
+A256 last,protection-other,artifact,0.49,1
+A256 last,protection-other,black,0.41,1
+A256 last,protection-other,shares-colour,0.43,1
+B256 best,none,none,0.46,1
+B256 best,none,flying,0.58,1
+B256 best,none,reach,0.49,1
+B256 best,none,horsemanship,0.75,1
+B256 best,none,shadow,0.44,0
+B256 best,none,artifact,0.5,1
+B256 best,none,black,0.51,1
+B256 best,none,shares-colour,0.5,1
+B256 best,flying,none,0.2,0
+B256 best,flying,flying,0.47,1
+B256 best,flying,reach,0.24,1
+B256 best,flying,horsemanship,0.66,0
+B256 best,flying,shadow,0.18,0
+B256 best,flying,artifact,0.24,0
+B256 best,flying,black,0.23,0
+B256 best,flying,shares-colour,0.22,0
+B256 best,horsemanship,none,0.01,0
+B256 best,horsemanship,flying,0.03,0
+B256 best,horsemanship,reach,0.01,0
+B256 best,horsemanship,horsemanship,0.73,1
+B256 best,horsemanship,shadow,0.01,0
+B256 best,horsemanship,artifact,0.12,0
+B256 best,horsemanship,black,0.05,0
+B256 best,horsemanship,shares-colour,0.03,0
+B256 best,fear,none,0.05,0
+B256 best,fear,flying,0.07,0
+B256 best,fear,reach,0.05,0
+B256 best,fear,horsemanship,0.79,0
+B256 best,fear,shadow,0.03,0
+B256 best,fear,artifact,0.34,1
+B256 best,fear,black,0.3,1
+B256 best,fear,shares-colour,0.07,0
+B256 best,intimidate,none,0.05,0
+B256 best,intimidate,flying,0.07,0
+B256 best,intimidate,reach,0.05,0
+B256 best,intimidate,horsemanship,0.78,0
+B256 best,intimidate,shadow,0.03,0
+B256 best,intimidate,artifact,0.31,1
+B256 best,intimidate,black,0.2,0.1
+B256 best,intimidate,shares-colour,0.06,1
+B256 best,shadow,none,0.47,0
+B256 best,shadow,flying,0.6,0
+B256 best,shadow,reach,0.5,0
+B256 best,shadow,horsemanship,0.75,0
+B256 best,shadow,shadow,0.45,1
+B256 best,shadow,artifact,0.51,0
+B256 best,shadow,black,0.51,0
+B256 best,shadow,shares-colour,0.51,0
+B256 best,unblockable,none,0.46,0
+B256 best,unblockable,flying,0.58,0
+B256 best,unblockable,reach,0.49,0
+B256 best,unblockable,horsemanship,0.74,0
+B256 best,unblockable,shadow,0.44,0
+B256 best,unblockable,artifact,0.49,0
+B256 best,unblockable,black,0.5,0
+B256 best,unblockable,shares-colour,0.5,0
+B256 best,protection-blocker,none,0.22,0
+B256 best,protection-blocker,flying,0.21,0
+B256 best,protection-blocker,reach,0.21,0
+B256 best,protection-blocker,horsemanship,0.69,0
+B256 best,protection-blocker,shadow,0.18,0
+B256 best,protection-blocker,artifact,0.38,0
+B256 best,protection-blocker,black,0.38,0
+B256 best,protection-blocker,shares-colour,0.37,0
+B256 best,protection-other,none,0.22,1
+B256 best,protection-other,flying,0.21,1
+B256 best,protection-other,reach,0.21,1
+B256 best,protection-other,horsemanship,0.69,1
+B256 best,protection-other,shadow,0.18,0
+B256 best,protection-other,artifact,0.38,1
+B256 best,protection-other,black,0.38,1
+B256 best,protection-other,shares-colour,0.37,1
+B256 last,none,none,0.53,1
+B256 last,none,flying,0.65,1
+B256 last,none,reach,0.56,1
+B256 last,none,horsemanship,0.85,1
+B256 last,none,shadow,0.5,0
+B256 last,none,artifact,0.58,1
+B256 last,none,black,0.56,1
+B256 last,none,shares-colour,0.57,1
+B256 last,flying,none,0.24,0
+B256 last,flying,flying,0.57,1
+B256 last,flying,reach,0.3,1
+B256 last,flying,horsemanship,0.77,0
+B256 last,flying,shadow,0.21,0
+B256 last,flying,artifact,0.28,0
+B256 last,flying,black,0.23,0
+B256 last,flying,shares-colour,0.26,0
+B256 last,horsemanship,none,0.01,0
+B256 last,horsemanship,flying,0.03,0
+B256 last,horsemanship,reach,0.01,0
+B256 last,horsemanship,horsemanship,0.85,1
+B256 last,horsemanship,shadow,0.01,0
+B256 last,horsemanship,artifact,0.14,0
+B256 last,horsemanship,black,0.06,0
+B256 last,horsemanship,shares-colour,0.03,0
+B256 last,fear,none,0.07,0
+B256 last,fear,flying,0.07,0
+B256 last,fear,reach,0.07,0
+B256 last,fear,horsemanship,0.87,0
+B256 last,fear,shadow,0.05,0
+B256 last,fear,artifact,0.42,1
+B256 last,fear,black,0.36,1
+B256 last,fear,shares-colour,0.12,0
+B256 last,intimidate,none,0.07,0
+B256 last,intimidate,flying,0.08,0
+B256 last,intimidate,reach,0.08,0
+B256 last,intimidate,horsemanship,0.86,0
+B256 last,intimidate,shadow,0.05,0
+B256 last,intimidate,artifact,0.36,1
+B256 last,intimidate,black,0.23,0.1
+B256 last,intimidate,shares-colour,0.14,1
+B256 last,shadow,none,0.54,0
+B256 last,shadow,flying,0.66,0
+B256 last,shadow,reach,0.57,0
+B256 last,shadow,horsemanship,0.86,0
+B256 last,shadow,shadow,0.5,1
+B256 last,shadow,artifact,0.59,0
+B256 last,shadow,black,0.57,0
+B256 last,shadow,shares-colour,0.58,0
+B256 last,unblockable,none,0.53,0
+B256 last,unblockable,flying,0.64,0
+B256 last,unblockable,reach,0.56,0
+B256 last,unblockable,horsemanship,0.85,0
+B256 last,unblockable,shadow,0.49,0
+B256 last,unblockable,artifact,0.57,0
+B256 last,unblockable,black,0.56,0
+B256 last,unblockable,shares-colour,0.57,0
+B256 last,protection-blocker,none,0.26,0
+B256 last,protection-blocker,flying,0.19,0
+B256 last,protection-blocker,reach,0.24,0
+B256 last,protection-blocker,horsemanship,0.79,0
+B256 last,protection-blocker,shadow,0.21,0
+B256 last,protection-blocker,artifact,0.41,0
+B256 last,protection-blocker,black,0.39,0
+B256 last,protection-blocker,shares-colour,0.53,0
+B256 last,protection-other,none,0.26,1
+B256 last,protection-other,flying,0.19,1
+B256 last,protection-other,reach,0.24,1
+B256 last,protection-other,horsemanship,0.79,1
+B256 last,protection-other,shadow,0.21,0
+B256 last,protection-other,artifact,0.41,1
+B256 last,protection-other,black,0.39,1
+B256 last,protection-other,shares-colour,0.53,1

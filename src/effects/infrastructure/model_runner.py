@@ -18,19 +18,21 @@ from __future__ import annotations
 
 import logging
 import random
+import re
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
 
+from effects.application.ability_text import KeyResolver
 from effects.application.surface_batching import (
-    IDENTITY_TABLE_SIZE,
+    IdentityTable,
+    Materializer,
     SurfaceBatcher,
 )
-from effects.application.train_effect_model import (
-    RANDOM_SEED,
-    sampling_class,
-    variant_masks,
-)
+from effects.application.text_staging import TextStager
+from effects.application.train_effect_model import RANDOM_SEED
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     TruncationLog,
@@ -42,15 +44,14 @@ from effects.domain.ability_tokenizer import (
     AbilityTokenizer,
     tokenizer_surface,
 )
+from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import (
     INPUT_LAYOUT_KEY,
-    SlotKind,
-    act_features,
-    card_features,
-    global_features,
-    player_features,
+    feature_widths,
 )
-from effects.domain.effect_model import EffectModel, active_fields
+from effects.domain.effect_head_layout import FieldSpec, active_fields
+from effects.domain.effect_model import EffectModel
+from effects.domain.sampling import sampling_class
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
@@ -80,143 +81,243 @@ def input_layout_of(checkpoint) -> str | None:
     return (checkpoint.training_settings or {}).get(INPUT_LAYOUT_KEY)
 
 
-def feature_widths(records, layout: str | None) -> dict[SlotKind, int]:
-    """Measure each slot kind's width from real records, as training does."""
-    probe = records[0]
-    widths = {
-        SlotKind.GLOBAL: len(global_features(probe, layout=layout)),
-        SlotKind.ACT: len(act_features(probe)),
-        SlotKind.PLAYER: 0,
-        SlotKind.CARD: 0,
-    }
-    for record in records:
-        if record.state.players:
-            widths[SlotKind.PLAYER] = len(
-                player_features(record.state.players[0], record, layout=layout)
-            )
-        if record.state.entities:
-            widths[SlotKind.CARD] = len(
-                card_features(record.state.entities[0], record, layout=layout)
-            )
-        if widths[SlotKind.PLAYER] and widths[SlotKind.CARD]:
-            break
-    return widths
+def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
+    """The tokenizer ``checkpoint`` trained with, over its verified files.
 
-
-def load_runnable(
-    config, checkpoint, *, vocab_path: Path, keyword_path: Path, records,
-):
-    """``(encoder, model, batcher, fields)`` for one checkpoint.
-
-    ``fields`` is the active-field tuple for the classes the records actually
-    carry, read at a step past every curriculum threshold — the evaluator scores
-    a finished model, not one partway through its schedule.
+    A missing keyword table tokenizes with no definitions rather than failing:
+    a checkpoint trained before the table existed recorded none.
     """
     from effects.application.extract_keyword_definitions import (
         load_keyword_definitions,
     )
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     definitions = (
         load_keyword_definitions(keyword_path) if Path(keyword_path).exists()
         else {}
     )
     # The grammar the checkpoint trained under, which for gen-1 is the prose
     # grammar even on its script vocabulary.
-    tokenizer = AbilityTokenizer(
+    return AbilityTokenizer(
         load_vocabulary(Path(vocab_path)), definitions,
         surface=tokenizer_surface(
             surface_of(vocab_path), checkpoint.training_settings,
         ),
     )
 
+
+@dataclass(frozen=True, slots=True)
+class Runnable:
+    """One checkpoint, ready to run over one set of records.
+
+    ``fields`` is the active-field tuple for the classes those records carry,
+    read at a step past every curriculum threshold — the evaluator scores a
+    finished model, not one partway through its schedule.
+    """
+
+    encoder: AbilityEncoder
+    model: EffectModel
+    batcher: SurfaceBatcher
+    fields: tuple[FieldSpec, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedModel:
+    """A checkpoint's weights on the device, before any record is seen.
+
+    Split from :class:`Runnable` because the expensive part — the weights, the
+    identity table, the tokenizer — does not depend on the records, while the
+    batcher's slot widths and the active fields do. One load serves every
+    record set an evaluation scores; each set gets a batcher of its own, with
+    its own generator, so scoring one set never moves another's draws.
+    """
+
+    checkpoint: object
+    encoder: AbilityEncoder
+    model: EffectModel
+    tokenizer: AbilityTokenizer
+    identity_table: IdentityTable | None
+    surface: str
+    device: torch.device
+    sidecars: SidecarCache
+
+    def runnable(self, records) -> Runnable:
+        """The model with a batcher measured from ``records``."""
+        return Runnable(
+            self.encoder, self.model, self._batcher(records),
+            evaluation_fields(records),
+        )
+
+    def _batcher(self, records) -> SurfaceBatcher:
+        checkpoint = self.checkpoint
+        # The inputs the checkpoint learned on: a gen-1 checkpoint, or a gen-2
+        # arm trained before the layout was recorded, reads the earlier layout
+        # bit for bit (FR-063c).
+        layout = input_layout_of(checkpoint)
+        masks = baseline_masks(checkpoint.variant)
+        return SurfaceBatcher(
+            stager=TextStager(
+                tokenizer=self.tokenizer,
+                surface=self.surface,
+                withhold_keyword=checkpoint.provenance.withheld_keyword,
+                # Both are training-time augmentations. Sampling them at
+                # evaluation would make the gate's numbers depend on a coin flip.
+                keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
+                truncations=TruncationLog(log_truncation(logger, "evaluation")),
+            ),
+            resolver=KeyResolver(self.sidecars, self.surface),
+            masks=masks,
+            e_dim=checkpoint.encoder_config.e_dim,
+            widths=feature_widths(records, layout=layout),
+            materializer=Materializer(self.device, masks, self.identity_table),
+            context_dropout=0.0,
+            rng=random.Random(RANDOM_SEED),
+            input_layout=layout,
+        )
+
+
+def load_model(
+    config, checkpoint, *, vocab_path: Path, keyword_path: Path,
+    sidecars: SidecarCache | None = None,
+) -> LoadedModel:
+    """``checkpoint``'s weights on the device, with its tokenizer.
+
+    ``sidecars`` lets several loads share one cache; left out, the roots
+    ``config`` names are read into a new one.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    encoder, model = _load_weights(checkpoint, device)
+    return LoadedModel(
+        checkpoint=checkpoint,
+        encoder=encoder,
+        model=model,
+        tokenizer=tokenizer_for(checkpoint, vocab_path, keyword_path),
+        identity_table=_identity_table(checkpoint, device),
+        surface=surface_of(vocab_path),
+        device=device,
+        sidecars=sidecars if sidecars is not None else build_sidecars(config),
+    )
+
+
+def load_runnable(
+    config, checkpoint, *, vocab_path: Path, keyword_path: Path, records,
+) -> Runnable:
+    """One checkpoint, loaded and ready to run over ``records``."""
+    return load_model(
+        config, checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
+    ).runnable(records)
+
+
+#: Model state a shipped checkpoint may lack. The training-only heads are
+#: filtered out at save time (FR-076), and the option-kind embedding, which
+#: starts at zero, postdates checkpoints that read every row as it trained
+#: without it (FR-063a). Anything else missing would run at its random
+#: initial weights while every number it produced still looked like a result.
+OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
+    *(f"{head}." for head in EffectModel.TRAINING_ONLY_HEADS),
+    "option_kind_embedding.",
+)
+
+
+def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
+    """The checkpoint's encoder and model on ``device``, in evaluation mode."""
     # Built at the size the checkpoint recorded (FR-061): a non-default arm
     # loads without its flags restated.
     encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
     if checkpoint.encoder_state:
         encoder.load_state_dict(checkpoint.encoder_state)
     model = EffectModel(checkpoint.model_config).to(device)
-    # The training-only heads are filtered out at save time, so the shipped
-    # state is a strict subset of what the model declares.
-    model.load_state_dict(checkpoint.model_state, strict=False)
+    missing, unexpected = model.load_state_dict(checkpoint.model_state, strict=False)
+    absent = [key for key in missing if not key.startswith(OPTIONAL_STATE_PREFIXES)]
+    if absent or unexpected:
+        raise RuntimeError(
+            f"the checkpoint's model state does not fit the model it declares: "
+            f"missing {absent}, unexpected {list(unexpected)}"
+        )
+    return encoder.eval(), model.eval()
 
-    masks = variant_masks(checkpoint.variant)
-    identity_table = None
-    if masks.identity_embedding:
-        identity_table = torch.nn.Embedding(
-            IDENTITY_TABLE_SIZE, checkpoint.encoder_config.e_dim,
-        ).to(device)
-        saved = checkpoint.extra.get(IDENTITY_TABLE_KEY)
-        if saved is not None:
-            identity_table.load_state_dict(saved)
-        else:
-            logger.warning(
-                "The identity baseline at %s carries no embedding table, so "
-                "its e vectors are random rather than the ones it trained. "
-                "Gate 1's margin against it is not meaningful — retrain the "
-                "baseline with a build that saves the table.",
-                checkpoint.variant,
-            )
 
-    # The inputs the checkpoint learned on: a gen-1 checkpoint, or a gen-2 arm
-    # trained before the layout was recorded, reads the earlier layout bit for
-    # bit (FR-063c).
-    layout = input_layout_of(checkpoint)
-    batcher = SurfaceBatcher(
-        tokenizer=tokenizer,
-        sidecars=build_sidecars(config),
-        masks=masks,
-        surface=surface_of(vocab_path),
-        e_dim=checkpoint.encoder_config.e_dim,
-        widths=feature_widths(records, layout),
-        device=device,
-        withhold_keyword=checkpoint.provenance.withheld_keyword,
-        # Both are training-time augmentations. Sampling them at evaluation
-        # would make the gate's numbers depend on a coin flip.
-        keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
-        context_dropout=0.0,
-        rng=random.Random(RANDOM_SEED),
-        identity_table=identity_table,
-        truncations=TruncationLog(log_truncation(logger, "evaluation")),
-        input_layout=layout,
+def _identity_table(checkpoint, device) -> IdentityTable | None:
+    """The identity baseline's learned ``e`` table; None for any other variant."""
+    if not baseline_masks(checkpoint.variant).identity_embedding:
+        return None
+    saved = checkpoint.extra.get(IDENTITY_TABLE_KEY)
+    if saved is not None:
+        return IdentityTable.from_state(saved).to(device)
+    logger.warning(
+        "The identity baseline at %s carries no embedding table, so "
+        "its e vectors are random rather than the ones it trained. "
+        "Gate 1's margin against it is not meaningful — retrain the "
+        "baseline with a build that saves the table.",
+        checkpoint.variant,
     )
-    fields = active_fields(
+    return IdentityTable((), checkpoint.encoder_config.e_dim).to(device)
+
+
+def evaluation_fields(records) -> tuple[FieldSpec, ...]:
+    """The fields active for ``records``' classes once training has finished."""
+    return active_fields(
         present_classes=frozenset(sampling_class(r) for r in records),
         step=EVALUATION_STEP,
         curriculum_step=1,
     )
-    return encoder, model, batcher, fields
 
 
-def stratum_records(config, checkpoint) -> tuple[list, list, str]:
-    """``(card_disjoint, training, why_not)`` from the checkpoint's own split.
+#: Where a shard line names its record, read before the line is parsed.
+_RECORD_ID = re.compile(r'"record_id":"([^"]*)"')
+_RECORD_ID_SPAN = 256
 
-    The split comes from the checkpoint rather than being recomputed: the corpus
-    is append-only, so a recomputed split would score the gate partly on games
-    the model trained on.
 
-    The training records come back too, because gate 1's stratum is defined by
-    what the training games contain — a text the baseline never saw is the only
-    one it cannot simply recall.
+def training_acting_keys(directory: Path) -> set[tuple]:
+    """Every distinct ``acting_keys`` tuple among the records under ``directory``.
+
+    ``directory`` is the curated corpus's ``training/``: what the checkpoint
+    actually trained on, and so what the identity baseline could have
+    memorized. A record curation wrote several times (``--reuse-cap``) is
+    parsed once; the set is all gate 1 needs, and the records are never held.
     """
-    from effects.infrastructure.record_io import read_records
+    from effects.domain.records import acting_keys
+    from effects.infrastructure.record_io import (
+        iter_shard_lines,
+        iter_shards,
+        parse_record_line,
+        record_from_dict,
+    )
 
-    held_out = frozenset(checkpoint.provenance.card_disjoint_games)
-    if not held_out:
-        return [], [], (
-            "the checkpoint records no card-disjoint games, so there is no "
-            "held-out stratum to score gate 1 on"
-        )
-    validation = held_out | frozenset(checkpoint.provenance.game_disjoint_games)
-    card_disjoint, training = [], []
-    for record in read_records(Path(config.records_dir)):
-        if record.game_id in held_out:
-            card_disjoint.append(record)
-        elif record.game_id not in validation:
-            training.append(record)
-    if not card_disjoint:
-        return [], [], (
-            f"none of the checkpoint's {len(held_out)} card-disjoint games "
-            f"appear in {config.records_dir}"
-        )
-    return card_disjoint, training, ""
+    shards = iter_shards(directory)
+    read: set[str] = set()
+    acting: set[tuple] = set()
+    for done, shard in enumerate(shards, start=1):
+        for line in iter_shard_lines(shard):
+            found = _RECORD_ID.search(line, 0, _RECORD_ID_SPAN)
+            if found is not None:
+                if found.group(1) in read:
+                    continue
+                read.add(found.group(1))
+            stripped = line.strip()
+            if not stripped:
+                continue
+            keys = acting_keys(record_from_dict(parse_record_line(stripped)))
+            if keys:
+                acting.add(keys)
+        if done % 50 == 0:
+            logger.info(
+                "gate 1: %d of %d training shards read, %d acting lines",
+                done, len(shards), len(acting),
+            )
+    return acting
+
+
+def card_disjoint_resolutions(corpus_path: Path, games: frozenset[str]) -> Iterator:
+    """The resolution records of the curated corpus's card-disjoint ``games``, streamed.
+
+    Resolutions only, the one kind gate 1's stratum holds; the stratum's other
+    kinds are never parsed.
+    """
+    from effects.domain.records import RecordKind
+    from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.record_io import read_records_matching
+
+    return read_records_matching(
+        CorpusStore(corpus_path).card_disjoint_dir,
+        game_ids=games, kinds={RecordKind.RESOLUTION.value},
+    )

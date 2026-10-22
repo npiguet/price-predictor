@@ -1,0 +1,109 @@
+checkpoint,configuration,records,rule_affordable,predicted_affordable,below_exact_mean,below_exact_share
+e64 (earlier inputs),exact,300,1,0.357,0,0
+e64 (earlier inputs),surplus,300,1,0.488,-0.131,0
+e64 (earlier inputs),one short,300,0,0.238,0.119,1
+e64 (earlier inputs),pip missing,300,0,0.331,0.026,0.82
+e64 (earlier inputs),"pip missing, +2",300,0,0.456,-0.099,0.03
+e64 (earlier inputs),all off colour,300,0,0.324,0.033,0.83
+e64,exact,300,1,0.293,0,0
+e64,surplus,300,1,0.397,-0.105,0
+e64,one short,300,0,0.19,0.103,1
+e64,pip missing,300,0,0.266,0.027,0.74
+e64,"pip missing, +2",300,0,0.371,-0.079,0.06
+e64,all off colour,300,0,0.26,0.033,0.79
+e128,exact,300,1,0.198,0,0
+e128,surplus,300,1,0.262,-0.064,0
+e128,one short,300,0,0.129,0.069,1
+e128,pip missing,300,0,0.189,0.009,0.73
+e128,"pip missing, +2",300,0,0.254,-0.056,0.01
+e128,all off colour,300,0,0.187,0.011,0.77
+e64-lethality,exact,300,1,0.229,0,0
+e64-lethality,surplus,300,1,0.34,-0.111,0
+e64-lethality,one short,300,0,0.121,0.108,1
+e64-lethality,pip missing,300,0,0.218,0.011,0.75
+e64-lethality,"pip missing, +2",300,0,0.331,-0.102,0
+e64-lethality,all off colour,300,0,0.216,0.012,0.79
+e128-lethality,exact,300,1,0.225,0,0
+e128-lethality,surplus,300,1,0.302,-0.077,0
+e128-lethality,one short,300,0,0.148,0.077,1
+e128-lethality,pip missing,300,0,0.213,0.012,0.66
+e128-lethality,"pip missing, +2",300,0,0.292,-0.067,0
+e128-lethality,all off colour,300,0,0.21,0.015,0.72
+e256-lethality,exact,300,1,0.304,0,0
+e256-lethality,surplus,300,1,0.375,-0.071,0
+e256-lethality,one short,300,0,0.231,0.073,1
+e256-lethality,pip missing,300,0,0.291,0.013,0.75
+e256-lethality,"pip missing, +2",300,0,0.362,-0.058,0.02
+e256-lethality,all off colour,300,0,0.288,0.016,0.79
+A64 best,exact,300,1,0.203,0,0
+A64 best,surplus,300,1,0.296,-0.094,0
+A64 best,one short,300,0,0.104,0.099,1
+A64 best,pip missing,300,0,0.192,0.011,0.81
+A64 best,"pip missing, +2",300,0,0.285,-0.082,0
+A64 best,all off colour,300,0,0.19,0.013,0.85
+A64 last,exact,300,1,0.301,0,0
+A64 last,surplus,300,1,0.406,-0.105,0
+A64 last,one short,300,0,0.169,0.131,1
+A64 last,pip missing,300,0,0.276,0.025,0.83
+A64 last,"pip missing, +2",300,0,0.388,-0.087,0.01
+A64 last,all off colour,300,0,0.271,0.03,0.84
+B64 best,exact,300,1,0.211,0,0
+B64 best,surplus,300,1,0.325,-0.114,0
+B64 best,one short,300,0,0.097,0.114,1
+B64 best,pip missing,300,0,0.195,0.016,0.82
+B64 best,"pip missing, +2",300,0,0.31,-0.099,0
+B64 best,all off colour,300,0,0.192,0.019,0.84
+B64 last,exact,300,1,0.217,0,0
+B64 last,surplus,300,1,0.351,-0.134,0
+B64 last,one short,300,0,0.081,0.136,1
+B64 last,pip missing,300,0,0.196,0.021,0.82
+B64 last,"pip missing, +2",300,0,0.336,-0.119,0
+B64 last,all off colour,300,0,0.193,0.024,0.84
+A128 best,exact,300,1,0.201,0,0
+A128 best,surplus,300,1,0.307,-0.106,0
+A128 best,one short,300,0,0.11,0.091,1
+A128 best,pip missing,300,0,0.189,0.013,0.71
+A128 best,"pip missing, +2",300,0,0.295,-0.094,0
+A128 best,all off colour,300,0,0.186,0.015,0.74
+A128 last,exact,300,1,0.176,0,0
+A128 last,surplus,300,1,0.303,-0.127,0
+A128 last,one short,300,0,0.065,0.11,1
+A128 last,pip missing,300,0,0.16,0.016,0.72
+A128 last,"pip missing, +2",300,0,0.28,-0.105,0.01
+A128 last,all off colour,300,0,0.158,0.018,0.78
+B128 best,exact,300,1,0.194,0,0
+B128 best,surplus,300,1,0.304,-0.11,0
+B128 best,one short,300,0,0.093,0.102,1
+B128 best,pip missing,300,0,0.175,0.019,0.7
+B128 best,"pip missing, +2",300,0,0.282,-0.087,0.1
+B128 best,all off colour,300,0,0.172,0.022,0.73
+B128 last,exact,300,1,0.224,0,0
+B128 last,surplus,300,1,0.351,-0.127,0
+B128 last,one short,300,0,0.105,0.119,1
+B128 last,pip missing,300,0,0.202,0.022,0.73
+B128 last,"pip missing, +2",300,0,0.33,-0.106,0.01
+B128 last,all off colour,300,0,0.199,0.025,0.76
+A256 best,exact,300,1,0.29,0,0
+A256 best,surplus,300,1,0.372,-0.082,0
+A256 best,one short,300,0,0.192,0.098,1
+A256 best,pip missing,300,0,0.268,0.021,0.81
+A256 best,"pip missing, +2",300,0,0.355,-0.065,0.1
+A256 best,all off colour,300,0,0.264,0.026,0.84
+A256 last,exact,300,1,0.29,0,0
+A256 last,surplus,300,1,0.372,-0.082,0
+A256 last,one short,300,0,0.192,0.098,1
+A256 last,pip missing,300,0,0.268,0.021,0.81
+A256 last,"pip missing, +2",300,0,0.355,-0.065,0.1
+A256 last,all off colour,300,0,0.264,0.026,0.84
+B256 best,exact,300,1,0.23,0,0
+B256 best,surplus,300,1,0.333,-0.103,0
+B256 best,one short,300,0,0.119,0.111,1
+B256 best,pip missing,300,0,0.212,0.018,0.78
+B256 best,"pip missing, +2",300,0,0.316,-0.087,0.03
+B256 best,all off colour,300,0,0.209,0.021,0.82
+B256 last,exact,300,1,0.23,0,0
+B256 last,surplus,300,1,0.356,-0.126,0
+B256 last,one short,300,0,0.1,0.13,1
+B256 last,pip missing,300,0,0.207,0.023,0.81
+B256 last,"pip missing, +2",300,0,0.333,-0.103,0.02
+B256 last,all off colour,300,0,0.204,0.027,0.84

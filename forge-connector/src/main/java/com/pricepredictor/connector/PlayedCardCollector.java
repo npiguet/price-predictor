@@ -10,7 +10,7 @@ import forge.game.player.PlayerView;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
@@ -41,19 +41,18 @@ import java.util.Map;
  *       copy/clone effects credit the cast card, not the copied permanent.</li>
  * </ul>
  *
- * <p>Cards are bucketed by the owner's lobby player name, then mapped to
- * {@code 'A'} / {@code 'B'} via {@link GamePlayer}'s {@code LOBBY_NAME_A}
- * / {@code LOBBY_NAME_B} constants.
+ * <p>Cards are bucketed by the owner's lobby player name, mapped to its
+ * {@link Side}.
  *
  * <p>The collector is created fresh per game; flicker / re-enter effects
  * collapse to set membership.
  */
 public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
 
-    private final Map<Character, List<String>> cardsBySide = new HashMap<>();
+    private final Map<Side, List<String>> cardsBySide = new EnumMap<>(Side.class);
 
-    /** Return the recorded card names for one side ({@code 'A'} or {@code 'B'}). */
-    public List<String> getCards(char side) {
+    /** Return the recorded card names for one side. */
+    public List<String> getCards(Side side) {
         return cardsBySide.getOrDefault(side, List.of());
     }
 
@@ -117,13 +116,9 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
         if (name == null || name.isEmpty()) {
             return;
         }
-        char side;
-        try {
-            side = lobbyNameToSide(owner.getLobbyPlayerName());
-        } catch (IllegalArgumentException e) {
-            // Unknown lobby name — should not happen in practice; skip.
-            return;
-        }
+        // Throws on a name neither side registered, as the winner mapping
+        // does: a card credited to the wrong deck is a corrupt row.
+        Side side = Side.ofLobbyName(owner.getLobbyPlayerName());
         cardsBySide.computeIfAbsent(side, s -> new ArrayList<>()).add(name);
     }
 
@@ -154,21 +149,5 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
             boolean isBasicLand,
             boolean isRealDeckCard) {
         return controllerEqualsOwner && !isToken && !isBasicLand && isRealDeckCard;
-    }
-
-    /**
-     * Map a Forge lobby player name to its match side. Reads
-     * {@code LOBBY_NAME_A} / {@code LOBBY_NAME_B} from {@link GamePlayer}.
-     *
-     * @throws IllegalArgumentException for any other input.
-     */
-    static char lobbyNameToSide(String lobbyName) {
-        if (GamePlayer.LOBBY_NAME_A.equals(lobbyName)) {
-            return 'A';
-        }
-        if (GamePlayer.LOBBY_NAME_B.equals(lobbyName)) {
-            return 'B';
-        }
-        throw new IllegalArgumentException("Unknown lobby name: " + lobbyName);
     }
 }

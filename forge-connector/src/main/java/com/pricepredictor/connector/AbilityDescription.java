@@ -29,6 +29,12 @@ public final class AbilityDescription {
         return (result == null || result.isEmpty()) ? null : result;
     }
 
+    /** The text up to its first newline, or all of it when it has none. */
+    public static String firstLine(String text) {
+        int nl = text.indexOf('\n');
+        return nl < 0 ? text : text.substring(0, nl);
+    }
+
     /** Strip parenthesized reminder text. */
     public static String stripReminderText(String text) {
         if (text == null) {

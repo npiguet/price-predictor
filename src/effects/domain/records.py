@@ -25,6 +25,7 @@ Pure dataclasses with no torch and no IO — serialization lives in
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -89,7 +90,7 @@ class RewriteResult(StrEnum):
     This is the field that makes the ``rewrite`` channel readable at all. Only
     ``Replaced`` and ``Updated`` can edit the event's parameter map, and only
     then when the substituted ability happens to write one; every other outcome
-    is a bare ``return`` in ``executeReplacementInternal``. Without ``result``,
+    is a bare ``return`` in ``executeReplacementUnobserved``. Without ``result``,
     "enters tapped", "exile it instead" and "prevent that damage" all record as
     an event that came out exactly as it went in.
     """
@@ -146,6 +147,26 @@ COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
 #: The legality subkinds that carry ``what_if`` (FR-031). A ``decision`` record
 #: is always a real evaluation of a real candidate, so the question never arises.
 WHAT_IF_SUBKINDS: frozenset[str] = frozenset({"attackers", "blockers"})
+
+
+class LegalityDecision(StrEnum):
+    """Whether a legality record is the declaration actually made (FR-033).
+
+    ``unknown`` is a gen-1 record, collected before ``what_if`` existed; it is
+    never a real decision. One spelling for curation, the manifest and the
+    evaluation slices alike.
+    """
+
+    REAL = "real"
+    WHAT_IF = "what-if"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def of(cls, record) -> LegalityDecision:
+        """``record`` is anything carrying ``what_if``: a record or a result row."""
+        if record.what_if is None:
+            return cls.UNKNOWN
+        return cls.WHAT_IF if record.what_if else cls.REAL
 
 #: Why a record that does name an acting line carries no key for it. A closed
 #: vocabulary, because the point of the field is to separate "no printed line
@@ -440,9 +461,11 @@ class EffectRecord:
     interventional: bool = False
     fork: bool = False
     synthetic: bool = False
-    #: ``actor_player`` is the random seat (FR-030). A gen-1 shard never wrote
-    #: it, and its records read as on-policy. Collection metadata.
-    random_seat: bool = False
+    #: ``actor_player`` is the random seat (FR-030). None on a record read
+    #: from a gen-1 shard, which never wrote it: falsy, so the record reads as
+    #: on-policy, and kept apart from False so a rewritten record stays the
+    #: generation it was collected in (FR-033). Collection metadata.
+    random_seat: bool | None = False
     #: On ``attackers`` and ``blockers`` records only: False for the declaration
     #: a player actually made, True for a query the AI asked about a
     #: hypothetical (FR-027, FR-031). None is unknown — a gen-1 record — and
@@ -572,34 +595,6 @@ class EffectRecord:
         """The worker slot this record's ids were counted by."""
         return self.record_id.split(".")[-2].split("-")[0]
 
-    @property
-    def lifetime(self) -> str:
-        """The worker JVM lifetime the ids were counted in.
-
-        Empty on a shard written before ids carried one. The counters restart
-        at zero in every worker JVM and a collection run is hundreds of JVMs
-        per slot, so this is the segment that makes ``record_id`` and
-        ``game_id`` unique rather than merely per-worker.
-        """
-        return self.record_id.split(".")[-2].partition("-")[2]
-
-    def model_input_fields(self) -> dict:
-        """The envelope fields the model may see.
-
-        Collection metadata is excluded here rather than filtered downstream, so
-        a new consumer cannot reach it by accident. What remains describes the
-        game situation; what is dropped describes how we came to observe it.
-        """
-        return {
-            "kind": self.kind,
-            "moment": self.moment,
-            "subkind": self.subkind,
-            "actor_player": self.actor_player,
-            "ability": self.ability,
-            "state": self.state,
-            "payload": self.payload,
-        }
-
 
 def events_of(record: EffectRecord) -> tuple[Event, ...]:
     """Every event a record's payload carries, whatever its kind.
@@ -620,3 +615,50 @@ def events_of(record: EffectRecord) -> tuple[Event, ...]:
     if isinstance(payload, TriggerPayload):
         return (payload.event,) if payload.fired else ()
     return ()
+
+
+def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
+    """Every printed-line key a record names, except its emblems', in record order.
+
+    The acting ``ability``; each entity's ``printed``, ``granted_attached`` and
+    ``granted_temporary`` keys; and every key its payload carries — a
+    decision's candidates and their ``responsible_static``, a legality
+    record's ``forbidden`` statics, a rewrite's ``replaced_by``. One walk, so a
+    payload field that gains keys is added here once rather than in each
+    consumer that has to see every key.
+
+    Emblems are left out: an emblem's traits are built by the engine and key to
+    a script path that exists in no converted tree, so a consumer joining keys
+    to sidecars would report every planeswalker ultimate as a mismatch.
+    """
+    if record.ability:
+        yield from record.ability
+    for entity in record.state.entities:
+        yield from entity.printed
+        yield from entity.granted_attached
+        yield from entity.granted_temporary.abilities
+    payload = record.payload
+    if isinstance(payload, PlayabilityDecisionPayload):
+        for candidate in payload.candidates:
+            yield from candidate.ability
+            yield from candidate.responsible_static
+    elif isinstance(payload, (PlayabilityAttackersPayload, PlayabilityBlockersPayload)):
+        for forbidden in payload.forbidden:
+            yield from forbidden.responsible_static
+    elif isinstance(payload, RewritePayload):
+        yield from payload.replaced_by
+
+
+def acting_keys(record: EffectRecord) -> tuple[ProvenanceKey, ...]:
+    """The keys ``[ACT]`` reads: the acting line, or a decision's candidate.
+
+    A ``decision`` record names no acting line of its own; its ``[ACT]``
+    carries the candidate's ``e`` (FR-060a), and Java writes one candidate per
+    record, so it is the payload's first. Rarity, the per-text caps and gate 1's
+    stratum all key on this, because a text keyed one way there and read
+    another way at ``[ACT]`` weighs the whole decision class as textless.
+    """
+    payload = record.payload
+    if isinstance(payload, PlayabilityDecisionPayload):
+        return payload.candidates[0].ability if payload.candidates else ()
+    return record.ability or ()

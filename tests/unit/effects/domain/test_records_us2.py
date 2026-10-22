@@ -35,6 +35,7 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
+from tests.unit.effects.builders import make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -53,12 +54,9 @@ _REPLACED_BY = ProvenanceKey(
 
 
 def _record(kind, payload, **overrides) -> EffectRecord:
-    defaults: dict = {
-        "record_id": "r.0.1", "run_id": "r", "timestamp": "t", "game_id": "r.0.1",
-        "kind": kind, "actor_player": "P0", "state": _SNAPSHOT, "payload": payload,
-    }
+    defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
     defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(kind, payload=payload, **defaults)
 
 
 class TestContinuousCoalescing:

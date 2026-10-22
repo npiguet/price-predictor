@@ -26,13 +26,7 @@ public final class MissingSVarReport {
             StringBuilder sb = new StringBuilder();
             sb.append(card == null ? "?" : card);
             if (line != null) {
-                sb.append(" (").append(line.scriptFile()).append(") face")
-                        .append(line.face()).append('/')
-                        .append(line.traitKind()).append('[')
-                        .append(line.indexWithinKind()).append(']');
-                if (line.option() != null) {
-                    sb.append("/option").append(line.option());
-                }
+                sb.append(' ').append(line.describe());
             }
             return sb.append(": ").append(parameter).append("$ ").append(label).toString();
         }

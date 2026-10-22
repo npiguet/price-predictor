@@ -64,7 +64,7 @@ def resolve_connector_jar() -> Path:
     if not jar.exists():
         raise FileNotFoundError(
             f"Connector JAR not found at {jar}\n"
-            "Build it first: cd forge-connector && mvn package -DskipTests"
+            "Build it first: cd forge-connector && mvn install -DskipTests"
         )
     return jar
 

@@ -97,15 +97,9 @@ final class EventAttribution {
      * walks the acting ability's chain looking for the one the engine says is
      * resolving. {@link #ROOT} and {@link #UNRESOLVED} are the other two
      * answers; attribution never drops an event and never returns null.
-     */
-    static String attributedTo(SpellAbility root) {
-        return attributedTo(root, PatchHooks.currentSubAbility());
-    }
-
-    /**
-     * The same answer, from a pointer the caller already read.
      *
-     * <p>The hook is read once where an event is stamped and the arithmetic
+     * <p>{@code pointer} is the sub-ability hook's answer, read by the caller.
+     * The hook is read once where an event is stamped and the arithmetic
      * over it is what can be wrong, so the two are separated: this half needs
      * no patched checkout and no resolving thread to exercise.
      *
@@ -153,10 +147,6 @@ final class EventAttribution {
      * duration lives only in Java reads as {@code instant}, which is also the
      * right answer for the many events that do not last at all.
      */
-    static String duration(SpellAbility root) {
-        return duration(root, PatchHooks.currentSubAbility());
-    }
-
     static String duration(SpellAbility root, Object pointer) {
         return duration(root, pointer, null);
     }

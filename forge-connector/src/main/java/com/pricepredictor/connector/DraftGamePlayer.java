@@ -1,13 +1,9 @@
 package com.pricepredictor.connector;
 
-import forge.deck.CardPool;
 import forge.deck.Deck;
-import forge.deck.DeckSection;
 import forge.item.PaperCard;
-import forge.model.FModel;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -66,15 +62,26 @@ public class DraftGamePlayer {
                 pairing.a().setCode(),
                 pairing.a().label(),
                 pairing.b().label(),
-                cardNames(deckA),
-                cardNames(deckB),
-                winnerSequence(played),
-                playSequence(played),
+                DeckMaterializer.names(deckA),
+                DeckMaterializer.names(deckB),
+                played.winnerSequence(),
+                played.playSequence(),
                 played.durationSeconds());
 
         writer.write(result);
         return result;
     }
+
+    /**
+     * Why a seat with a name Forge cannot resolve is refused. The row this
+     * match would write is a tally entry for a seat's drafted deck; played
+     * short, it would credit or blame the agent for a deck it never drafted.
+     * Refusing writes no row, the outcome the class contract already gives a
+     * pairing that throws.
+     */
+    static final String UNRESOLVED_SEAT =
+            "A draft-game row records the seat's drafted deck, so a short deck "
+                    + "would put a result in the tally for a deck nobody drafted.";
 
     /**
      * A {@code deck} seat plays what the corpus recorded; a {@code pool} seat's
@@ -84,57 +91,11 @@ public class DraftGamePlayer {
      * replays it to recover the colours the seat committed to while drafting.
      */
     private Deck resolveDeck(SeatTableIndex.SeatEntry seat) {
-        List<PaperCard> cards = resolveCards(seat.cardNames());
+        List<PaperCard> cards = DeckMaterializer.resolve(
+                seat.cardNames(), DeckMaterializer.UnresolvedPolicy.FAIL, UNRESOLVED_SEAT);
         if (seat.isPool()) {
             return deckBuilder.buildDrafted(cards);
         }
-        Deck deck = new Deck();
-        CardPool main = deck.getOrCreate(DeckSection.Main);
-        for (PaperCard card : cards) {
-            main.add(card);
-        }
-        return deck;
-    }
-
-    private static List<PaperCard> resolveCards(List<String> names) {
-        List<PaperCard> cards = new ArrayList<>(names.size());
-        for (String name : names) {
-            PaperCard card = FModel.getMagicDb().getCommonCards().getCard(name);
-            if (card != null) {
-                cards.add(card);
-            }
-        }
-        return cards;
-    }
-
-    // ── Static helpers (package-visible for testing) ────────────────
-
-    /** All cards in a deck's main section, duplicates repeated. */
-    static List<String> cardNames(Deck deck) {
-        List<String> names = new ArrayList<>();
-        for (var entry : deck.getOrCreate(DeckSection.Main)) {
-            for (int i = 0; i < entry.getValue(); i++) {
-                names.add(entry.getKey().getName());
-            }
-        }
-        return names;
-    }
-
-    /** Per-game winner sequence, e.g. {@code "ABA"}. */
-    static String winnerSequence(GamePlayer.PlayedMatch played) {
-        StringBuilder sb = new StringBuilder();
-        for (GamePlayer.GameOutcome game : played.games()) {
-            sb.append(game.winner());
-        }
-        return sb.toString();
-    }
-
-    /** Per-game play-first sequence, same length as the winner sequence. */
-    static String playSequence(GamePlayer.PlayedMatch played) {
-        StringBuilder sb = new StringBuilder();
-        for (GamePlayer.GameOutcome game : played.games()) {
-            sb.append(game.playFirst());
-        }
-        return sb.toString();
+        return DeckMaterializer.deckOf(cards);
     }
 }

@@ -4,10 +4,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 
 /**
@@ -59,6 +59,7 @@ public class SeatTableIndex {
     /** Pods that can yield a legal pairing, in file order. */
     private final List<List<SeatEntry>> eligiblePods;
     private final int seatCount;
+    private final boolean includeMirrors;
     private final Random random;
 
     public SeatTableIndex(List<SeatEntry> seats, boolean includeMirrors) {
@@ -68,6 +69,10 @@ public class SeatTableIndex {
     SeatTableIndex(List<SeatEntry> seats, boolean includeMirrors, Random random) {
         this.random = random;
         this.seatCount = seats.size();
+        // Fixed once, here: eligibility below and the rejection loop in
+        // randomPairing must agree on it, or a single-label pod admitted under
+        // one setting spins forever under the other.
+        this.includeMirrors = includeMirrors;
 
         Map<String, List<SeatEntry>> byPod = new LinkedHashMap<>();
         for (SeatEntry seat : seats) {
@@ -110,11 +115,11 @@ public class SeatTableIndex {
      * <p>Pods that cannot yield a legal pairing are excluded at construction, so
      * the rejection loop always terminates.
      *
-     * @return a pairing, or null when no pod can yield one
+     * @return a pairing, or empty when no pod can yield one
      */
-    public Pairing randomPairing(boolean includeMirrors) {
+    public Optional<Pairing> randomPairing() {
         if (eligiblePods.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         List<SeatEntry> pod = eligiblePods.get(random.nextInt(eligiblePods.size()));
         while (true) {
@@ -124,7 +129,7 @@ public class SeatTableIndex {
             SeatEntry a = pod.get(i);
             SeatEntry b = pod.get(j);
             if (includeMirrors || !a.label().equals(b.label())) {
-                return new Pairing(a, b);
+                return Optional.of(new Pairing(a, b));
             }
         }
     }
@@ -154,9 +159,7 @@ public class SeatTableIndex {
             throw new IllegalArgumentException(
                     "seat line needs 5 ';'-separated fields, got " + parts.length + ": " + line);
         }
-        List<String> cards = parts[4].isEmpty()
-                ? List.of()
-                : Arrays.asList(parts[4].split("\\|", -1));
-        return new SeatEntry(parts[0], parts[1], parts[2], parts[3], cards);
+        return new SeatEntry(
+                parts[0], parts[1], parts[2], parts[3], CardNameList.parse(parts[4]));
     }
 }

@@ -58,8 +58,10 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "ability_unresolved": "str | None",
     # Gen-2 (feature 024), both under rule 1 and both collection metadata:
     # whether the acting player was the random seat, and whether a legality
-    # record is a real declaration or a what-if query. Absent on gen-1 shards.
-    "random_seat": "bool",
+    # record is a real declaration or a what-if query. Absent on gen-1 shards,
+    # which both read as None in memory, so a rewritten record keeps its
+    # generation; on the wire each is still a bool or absent.
+    "random_seat": "bool | None",
     "what_if": "bool | None",
     "extra_fields": "dict",
 }
@@ -189,8 +191,3 @@ class TestRuleFourMetadataNeverBecomesAModelInput:
     def test_every_metadata_field_is_a_real_envelope_field(self):
         assert COLLECTION_METADATA_FIELDS <= {f.name for f in fields(EffectRecord)}
 
-    def test_the_projection_excludes_them_for_every_kind(self, make_record):
-        for kind in (RecordKind.RESOLUTION, RecordKind.COMBAT):
-            record = make_record(kind=kind)
-            leaked = COLLECTION_METADATA_FIELDS & set(record.model_input_fields())
-            assert not leaked, f"{kind.value} leaks {sorted(leaked)} to the model"

@@ -14,8 +14,10 @@ import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.keyword.KeywordsChange;
 import forge.game.player.Player;
+import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
+import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -31,6 +33,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
+import java.util.function.Supplier;
 
 /**
  * The four record kinds the engine patch unlocks.
@@ -38,7 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>{@code rewrite}, {@code trigger}, {@code playability} and {@code mana}
  * records all need a hook at a point the bus never publishes: what a replacement
  * received before it rewrote it, a trigger condition that evaluated to false, a
- * legality verdict the AI computed and discarded, a mana ability that resolved
+ * legality verdict the rules computed and discarded, a mana ability that resolved
  * on the inline path. Each is installed reflectively and simply does not run on
  * an unpatched checkout.
  *
@@ -57,16 +61,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class PatchedCollectors implements AutoCloseable {
 
     private final Game game;
-    private final RecordShardWriter writer;
+    private final CollectorContext context;
     private final SnapshotBuilder snapshots;
     private final AttributionMode mode;
     private final String gameId;
     private final CollectionCaps caps;
 
-    /** Activations seen per unique mana text, the reservoir's {@code n}. */
-    private final Map<String, Integer> manaRecords = new HashMap<>();
     /** The sampled mana records, held until the game ends. */
-    private final Map<String, List<EffectRecord>> manaReservoir = new LinkedHashMap<>();
+    private final ManaReservoir manaReservoir;
     /** Lines already offered an intervention, so a redraw does not repeat one. */
     private final Set<String> interveneSeen = new LinkedHashSet<>();
     /** Stage three's forks, or null when the run takes none. */
@@ -78,17 +80,15 @@ public final class PatchedCollectors implements AutoCloseable {
      */
     private BusBracketCollector bracket;
     /** Probe branches waiting for the combat record they mirror. */
-    private final List<ForkCollector.HeldProbe> heldProbes = new ArrayList<>();
+    private final ProbeQueue heldProbes = new ProbeQueue();
     /** Boards a continuous static has already been recorded on, for coalescing. */
     private final Set<String> coalescedBoards = new LinkedHashSet<>();
     /** Records already written this game, by a hash of what they say. */
     private final Set<Long> coalescedRecords = new java.util.HashSet<>();
-    /** Kept trigger evaluations per mode: {fired, not fired}. */
-    private final Map<String, int[]> triggerKept = new HashMap<>();
-    /** Per mode, negatives offered since the last record that mode wrote. */
-    private final Map<String, int[]> triggerOffers = new HashMap<>();
+    /** Each trigger mode's written evaluations and pending offers, this game. */
+    private final Map<String, ModeBalance> triggerBalance = new HashMap<>();
     /** Records written per acting line and verdict, for the flood cap. */
-    private final Map<String, int[]> triggerPerLine = new HashMap<>();
+    private final Map<LineVerdict, Integer> triggerPerLine = new HashMap<>();
     private final List<String> installed = new ArrayList<>();
     /** Static ability by layer-table id, resolved once per game. */
     private final Map<Long, StaticAbility> staticsById = new HashMap<>();
@@ -97,132 +97,44 @@ public final class PatchedCollectors implements AutoCloseable {
     /**
      * Whether the engine can say what a card would be without one static.
      *
-     * <p>Separate from {@link AttributionMode}, which probes the trigger-cause
+     * <p>Separate from {@link AttributionMode}, which probes the sub-ability
      * hook. These three arrived later, so a checkout patched against an older
      * revision of the patch reports {@code patched} and still cannot suppress.
      */
-    static final boolean CAN_SUPPRESS = PatchHooks.present(
-            "forge.game.card.Card",
-            "getTypeWithout", "getColorWithout", "getKeywordsWithout");
+    static final boolean CAN_SUPPRESS = PatchHooks.TYPE_WITHOUT.present()
+            && PatchHooks.COLOR_WITHOUT.present()
+            && PatchHooks.KEYWORDS_WITHOUT.present();
 
-    private long recordsWritten;
-
-    /** The caps and budgets every collecting supervisor shares (FR-028). */
-    public record CollectionCaps(
-            int manaCap,
-            double playabilityRate,
-            int interventionsPerGame,
-            int probesPerGame,
-            List<String> probeKeywords,
-            double legalityRate,
-            double randomSeatShare,
-            double randomSeatProbability) {
-
-        /** The gen-1 caps alone: no random seat, which is the default anyway. */
-        public CollectionCaps(
-                int manaCap,
-                double playabilityRate,
-                int interventionsPerGame,
-                int probesPerGame,
-                List<String> probeKeywords,
-                double legalityRate) {
-            this(manaCap, playabilityRate, interventionsPerGame, probesPerGame,
-                    probeKeywords, legalityRate, 0.0, 0.0);
-        }
-
-        public static CollectionCaps defaults() {
-            return new CollectionCaps(
-                    1, 0.1, 2, 2, List.of(), 0.0, 0.0, 0.0);
-        }
-
-        /**
-         * Read from the {@code effect.*} system properties the supervisor sets.
-         *
-         * <p>Each falls back to its default rather than failing, because a
-         * worker started without instrumentation sets none of them and one
-         * started by an older supervisor may set only some.
-         */
-        public static CollectionCaps fromSystemProperties() {
-            CollectionCaps defaults = defaults();
-            return new CollectionCaps(
-                    intProperty("effect.mana.cap", defaults.manaCap()),
-                    doubleProperty("effect.playability.rate", defaults.playabilityRate()),
-                    intProperty("effect.interventions.per.game",
-                            defaults.interventionsPerGame()),
-                    intProperty("effect.probes.per.game", defaults.probesPerGame()),
-                    listProperty("effect.probe.keywords"),
-                    doubleProperty("effect.legality.rate", defaults.legalityRate()),
-                    // The random seat's two knobs (FR-021). A share of matches
-                    // and a per-decision P: both are drawn in the JVM, so the
-                    // supervisor can only name them. The Python side refuses a
-                    // share without a P before any worker starts (FR-026); a
-                    // worker reads what it is given and defaults the rest.
-                    doubleProperty("effect.random.seat.share", defaults.randomSeatShare()),
-                    doubleProperty("effect.random.seat.probability",
-                            defaults.randomSeatProbability()));
-        }
-
-        /** Whether any match of this run may seat a random player at all. */
-        public boolean randomSeatEnabled() {
-            return randomSeatShare > 0.0;
-        }
-
-        private static int intProperty(String name, int fallback) {
-            try {
-                String value = System.getProperty(name);
-                return value == null || value.isBlank()
-                        ? fallback : Integer.parseInt(value.trim());
-            } catch (NumberFormatException e) {
-                return fallback;
-            }
-        }
-
-        private static double doubleProperty(String name, double fallback) {
-            try {
-                String value = System.getProperty(name);
-                return value == null || value.isBlank()
-                        ? fallback : Double.parseDouble(value.trim());
-            } catch (NumberFormatException e) {
-                return fallback;
-            }
-        }
-
-        private static List<String> listProperty(String name) {
-            String value = System.getProperty(name);
-            if (value == null || value.isBlank()) {
-                return List.of();
-            }
-            List<String> parsed = new ArrayList<>();
-            for (String part : value.split(",")) {
-                if (!part.isBlank()) {
-                    parsed.add(part.trim());
-                }
-            }
-            return List.copyOf(parsed);
-        }
-
-        /**
-         * Whether any probe fork should be taken at all.
-         *
-         * <p>With no keywords named, none is — whatever the build state. The
-         * flag is the runtime switch, separate from the build decision gate 2
-         * drives.
-         */
-        public boolean probesEnabled() {
-            return !probeKeywords.isEmpty();
-        }
+    /**
+     * A hook this collector installs a listener on, and the name
+     * {@link #installedHooks} reports it by.
+     */
+    private record Listener(
+            String name, PatchHooks.Hook hook, Supplier<InvocationHandler> handler) {
     }
+
+    /** Every listener this collector installs, in the order it installs them. */
+    private final List<Listener> listeners = List.of(
+            new Listener("replacement", PatchHooks.REPLACEMENT_LISTENER, this::rewriteHandler),
+            new Listener("trigger-fire", PatchHooks.TRIGGER_LISTENER, this::triggerFireHandler),
+            new Listener("playability", PatchHooks.PLAYABILITY_LISTENER, this::playabilityHandler),
+            new Listener("mana", PatchHooks.MANA_LISTENER, this::manaHandler),
+            new Listener("combat-legality", PatchHooks.COMBAT_LISTENER,
+                    this::combatLegalityHandler),
+            new Listener("clause-events", PatchHooks.CLAUSE_LISTENER, this::clauseHandler),
+            new Listener("effect-outcome", PatchHooks.OUTCOME_LISTENER, this::outcomeHandler));
 
     public PatchedCollectors(
             Game game, RecordShardWriter writer, String gameId,
             CollectionCaps caps, long seed) {
         this.game = game;
-        this.writer = writer;
+        this.context = new CollectorContext(writer, gameId);
         this.gameId = gameId;
         this.caps = caps;
         this.snapshots = new SnapshotBuilder(game);
-        this.mode = AttributionMode.detect();
+        this.mode = context.mode();
         this.sampler = new java.util.Random(scramble(seed));
+        this.manaReservoir = new ManaReservoir(caps.manaCap(), sampler);
     }
 
     /**
@@ -254,7 +166,7 @@ public final class PatchedCollectors implements AutoCloseable {
     public void withForks(ForkCollector forks) {
         this.forks = forks;
         if (forks != null) {
-            forks.setRandomSeatPlayerId(randomSeatPlayerId);
+            forks.setRandomSeatPlayerId(context.randomSeatPlayerId());
         }
     }
 
@@ -271,7 +183,7 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     public long recordsWritten() {
-        return recordsWritten + (forks == null ? 0 : forks.recordsWritten());
+        return context.recordsWritten() + (forks == null ? 0 : forks.recordsWritten());
     }
 
     /**
@@ -312,40 +224,10 @@ public final class PatchedCollectors implements AutoCloseable {
         if (mode == AttributionMode.DEGRADED) {
             return 0;
         }
-        if (PatchHooks.install(
-                PatchHooks.REPLACEMENT_HANDLER, "setEffectRecordListener",
-                rewriteHandler())) {
-            installed.add("replacement");
-        }
-        if (PatchHooks.install(
-                PatchHooks.TRIGGER_HANDLER, "setEffectRecordTriggerListener",
-                triggerFireHandler())) {
-            installed.add("trigger-fire");
-        }
-        if (PatchHooks.install(
-                PatchHooks.AI_CONTROLLER, "setEffectRecordPlayabilityListener",
-                playabilityHandler())) {
-            installed.add("playability");
-        }
-        if (PatchHooks.install(
-                PatchHooks.ABILITY_MANA_PART, "setEffectRecordManaListener",
-                manaHandler())) {
-            installed.add("mana");
-        }
-        if (PatchHooks.install(
-                PatchHooks.AI_CONTROLLER, "setEffectRecordCombatListener",
-                combatLegalityHandler())) {
-            installed.add("combat-legality");
-        }
-        if (PatchHooks.install(
-                PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener",
-                clauseHandler())) {
-            installed.add("clause-events");
-        }
-        if (PatchHooks.install(
-                PatchHooks.EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
-                outcomeHandler())) {
-            installed.add("effect-outcome");
+        for (Listener listener : listeners) {
+            if (listener.hook().install(listener.handler().get())) {
+                installed.add(listener.name());
+            }
         }
         return installed.size();
     }
@@ -355,20 +237,9 @@ public final class PatchedCollectors implements AutoCloseable {
         // Before the hooks come down: this is the last moment the game can be
         // said to have ended, and the mana reservoir is only decided then.
         flushMana();
-        PatchHooks.uninstall(
-                PatchHooks.REPLACEMENT_HANDLER, "setEffectRecordListener");
-        PatchHooks.uninstall(
-                PatchHooks.TRIGGER_HANDLER, "setEffectRecordTriggerListener");
-        PatchHooks.uninstall(
-                PatchHooks.AI_CONTROLLER, "setEffectRecordPlayabilityListener");
-        PatchHooks.uninstall(
-                PatchHooks.ABILITY_MANA_PART, "setEffectRecordManaListener");
-        PatchHooks.uninstall(
-                PatchHooks.AI_CONTROLLER, "setEffectRecordCombatListener");
-        PatchHooks.uninstall(
-                PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
-        PatchHooks.uninstall(
-                PatchHooks.EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener");
+        for (Listener listener : listeners) {
+            listener.hook().uninstall();
+        }
         installed.clear();
         // Last, and outside the hook teardown: the question the tally answers
         // is about the run, so it is asked once per game whatever the game did.
@@ -405,8 +276,8 @@ public final class PatchedCollectors implements AutoCloseable {
                     || args.length < 3) {
                 return null;
             }
-            // final-fix-3.md item 2: a fork's own replacements resolve
-            // through this same JVM-static hook (ForkCollector.forceResolution
+            // A fork's own replacements resolve through this same JVM-static
+            // hook (ForkCollector.forceResolution
             // runs the fork's forced ability through the real resolution
             // pipeline, which is where replacements apply). args[0] is
             // declared ReplacementEffect on Forge's side -- always a
@@ -438,7 +309,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * unit test can call.
      *
      * <p>The host is taken as delivered, deliberately not re-resolved through
-     * {@code game.getCardState(host)} the way {@code executeReplacementInternal}
+     * {@code game.getCardState(host)} the way {@code executeReplacementUnobserved}
      * does: that answers an alternate-state card, and the entity id in
      * {@code state.entities} is the one this object carries.
      *
@@ -462,8 +333,8 @@ public final class PatchedCollectors implements AutoCloseable {
             Object replacedBy) {
         CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
         Card source = acting == null ? null : acting.getHostCard();
-        EffectEvent incoming = describeParams(trait, before);
-        EffectEvent rendered = describeParams(trait, after);
+        EffectEvent incoming = RunParamNormalizer.describeParams(trait, before);
+        EffectEvent rendered = RunParamNormalizer.describeParams(trait, after);
         // Null rather than a copy, and this is the whole of the contract. The
         // two halves were byte-identical on 87% of the candidates because a
         // substitution does not edit the map -- it runs another ability and
@@ -484,221 +355,14 @@ public final class PatchedCollectors implements AutoCloseable {
         List<ProvenanceKey> ranKeys = ran == null ? List.of() : keysOf(ran);
         String wireResult = EffectRecord.rewriteResult(result);
         JVM_REWRITES.record(
-                modeOf(trait), wireResult, outgoing != null, !ranKeys.isEmpty(),
-                before, after);
-        return new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_REWRITE, mode)
+                RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
+                !ranKeys.isEmpty(), before, after);
+        return context.newRecord(EffectRecord.KIND_REWRITE)
                 .actor(controllerOf(source))
-                .ability(resolveKey(acting))
+                .ability(ProvenanceKey.resolve(acting))
                 .state(snapshots.toJsonForTrait(source, referencedOf(source), incoming))
                 .payload(EffectRecord.rewritePayload(
                         incoming, outgoing, wireResult, ranKeys));
-    }
-
-    /**
-     * What the rewrite channel wrote, for the whole worker process.
-     *
-     * <p>It counted drops until the payload could say which of the five
-     * {@code ReplacementResult}s happened. That rule took 87% of the
-     * candidates, and it had to: a substitution runs another ability rather
-     * than editing the parameter map, so "exile it instead" and "the
-     * replacement declined" arrived as the same pair of identical halves. With
-     * the result recorded there is nothing left to drop, so this counts what
-     * the channel produced instead — and the question it now answers, in the
-     * first hour of a run rather than at the end of one, is whether the channel
-     * filled: how many records, and in what proportions of result.
-     *
-     * <p>The raw-parameter breakdown survives the change of subject, aimed at
-     * the records that carry no {@code outgoing}. A key whose <em>value</em>
-     * moved while the rendered halves stayed identical still names a parameter
-     * this collector does not read, and that is still the difference between
-     * "this replacement rewrote nothing" and "this normaliser cannot express
-     * what it rewrote". What is new is that such a record is now written rather
-     * than discarded, so the diagnostic says what a written record is missing
-     * rather than what a discarded one contained.
-     *
-     * <p>Per JVM rather than per game: one game's replacements are too few to
-     * read a share off, and a worker plays many games. Synchronized because
-     * nothing promises Forge keeps one thread for a whole worker, and the cost
-     * is paid once per replacement rather than once per event.
-     */
-    static final class RewriteTally {
-
-        /** Entries kept per breakdown before it stops taking new ones. */
-        private static final int MAX_KEYS = 512;
-        /** Entries printed per breakdown. */
-        private static final int TOP = 8;
-        /** Games between two summaries, after the first. */
-        private static final int GAMES_PER_SUMMARY = 10;
-
-        /**
-         * The result of a record that carries none.
-         *
-         * <p>Two causes, and the record cannot tell them apart: the replacement
-         * threw, or this worker is running against a Forge jar whose listener
-         * predates the argument. A run where this is the whole breakdown is the
-         * second one, and it is the shape to look for in the first summary a
-         * fresh deployment prints.
-         */
-        private static final String NO_RESULT = "?";
-
-        private final Map<String, long[]> byResult = new java.util.TreeMap<>();
-        private final Map<String, long[]> byModeAndResult = new java.util.TreeMap<>();
-        private final Map<String, long[]> rewrittenByMode = new java.util.TreeMap<>();
-        private final Map<String, long[]> movedButUnread = new java.util.TreeMap<>();
-        private final Map<String, long[]> unreadableByMode = new java.util.TreeMap<>();
-        private long records;
-        private long rewritten;
-        private long named;
-        private long unreadable;
-        private long games;
-
-        /**
-         * One replacement, and what its record says.
-         *
-         * <p>The raw maps are compared as rendered strings rather than by
-         * {@code equals}: the engine deep-copies the containers of the incoming
-         * map and leaves the leaves as identity references, so a copied
-         * {@code Multiset} that was rewritten in place is a different object
-         * reading the same text when nothing changed and a different text when
-         * something did. Two distinct cards sharing one name read alike, which
-         * understates rather than invents — the right way round for a diagnostic
-         * whose job is to say "there is more here than the record shows".
-         *
-         * @param rewritten whether the record carries an {@code outgoing}
-         * @param named     whether it names the ability that ran instead
-         */
-        synchronized void record(
-                String mode, String result, boolean rewritten, boolean named,
-                Object beforeParams, Object afterParams) {
-            records++;
-            String modeName = mode == null ? "?" : mode;
-            String resultName = result == null ? NO_RESULT : result;
-            count(byResult, resultName);
-            count(byModeAndResult, modeName + "." + resultName);
-            if (named) {
-                this.named++;
-            }
-            if (rewritten) {
-                this.rewritten++;
-                count(rewrittenByMode, modeName);
-                // A record that rewrote something in place already shows what
-                // moved, so there is nothing for the gap diagnostic to find.
-                return;
-            }
-            Map<String, Object> before = paramsByName(beforeParams);
-            Map<String, Object> after = paramsByName(afterParams);
-            Set<String> keys = new LinkedHashSet<>(before.keySet());
-            keys.addAll(after.keySet());
-            boolean moved = false;
-            for (String key : keys) {
-                if (String.valueOf(before.get(key))
-                        .equals(String.valueOf(after.get(key)))) {
-                    continue;
-                }
-                moved = true;
-                String entry = modeName + "." + key;
-                if (movedButUnread.size() < MAX_KEYS
-                        || movedButUnread.containsKey(entry)) {
-                    count(movedButUnread, entry);
-                }
-            }
-            if (moved) {
-                unreadable++;
-                count(unreadableByMode, modeName);
-            }
-        }
-
-        /**
-         * Close a game, printing the tally at a cadence the first hour answers.
-         *
-         * <p>The first game always, so a run that is wrong is visibly wrong a
-         * minute after it starts rather than eight hours later; every tenth
-         * after that, so a worker's log stays readable. A process that saw no
-         * replacement at all prints nothing — that is what
-         * {@code PatchHooks.report()} already says, and repeating it per game
-         * would be noise.
-         */
-        synchronized void endOfGame() {
-            games++;
-            if (records == 0) {
-                return;
-            }
-            if (games == 1 || games % GAMES_PER_SUMMARY == 0) {
-                System.out.println(summary());
-                System.out.flush();
-            }
-        }
-
-        synchronized long records() {
-            return records;
-        }
-
-        synchronized long rewritten() {
-            return rewritten;
-        }
-
-        synchronized long named() {
-            return named;
-        }
-
-        /** The rendered summary, its own method so a test can read it. */
-        synchronized String summary() {
-            StringBuilder out = new StringBuilder();
-            out.append("Effect rewrites [worker, ").append(games)
-                    .append(games == 1 ? " game]: " : " games]: ")
-                    .append(records).append(" records, ")
-                    .append(rewritten).append(" rewrote a parameter in place (")
-                    .append(share(rewritten, records))
-                    .append("%), ").append(named)
-                    .append(" named the ability that ran instead");
-            // The headline of the run. A first summary whose results are all
-            // "?" is a listener the patched jar does not have; one that is all
-            // not_replaced is a format whose replacements never apply; one with
-            // no records at all never reaches here.
-            out.append("\n  by result: ").append(top(byResult));
-            out.append("\n  by mode and result: ").append(top(byModeAndResult));
-            out.append("\n  rewrote in place, by mode: ").append(top(rewrittenByMode));
-            // The normaliser gap, and the list of keys that would close it.
-            out.append("\n  ").append(unreadable)
-                    .append(" carried no outgoing while a raw parameter moved: ")
-                    .append(top(movedButUnread));
-            out.append("\n  of those, by mode: ").append(top(unreadableByMode));
-            return out.toString();
-        }
-
-        /** A percentage to one decimal, or zero rather than a division by it. */
-        private static double share(long part, long whole) {
-            return whole == 0 ? 0.0 : Math.round(1000.0 * part / whole) / 10.0;
-        }
-
-        private static void count(Map<String, long[]> into, String key) {
-            into.computeIfAbsent(key, k -> new long[1])[0]++;
-        }
-
-        /** The heaviest entries, commonest first; the tail is a count. */
-        private static String top(Map<String, long[]> counts) {
-            if (counts.isEmpty()) {
-                return "none";
-            }
-            List<Map.Entry<String, long[]>> entries =
-                    new ArrayList<>(counts.entrySet());
-            entries.sort((a, b) -> {
-                int byCount = Long.compare(b.getValue()[0], a.getValue()[0]);
-                return byCount != 0 ? byCount : a.getKey().compareTo(b.getKey());
-            });
-            StringJoiner joiner = new StringJoiner(", ");
-            for (int i = 0; i < Math.min(TOP, entries.size()); i++) {
-                joiner.add(entries.get(i).getKey() + "="
-                        + entries.get(i).getValue()[0]);
-            }
-            if (entries.size() > TOP) {
-                joiner.add("and " + (entries.size() - TOP) + " more");
-            }
-            return joiner.toString();
-        }
     }
 
     /** The worker's rewrite tally, shared by every game it plays. */
@@ -714,9 +378,8 @@ public final class PatchedCollectors implements AutoCloseable {
      * about when. Drawn at roughly 1:1 by sampling the negatives, since a turn
      * evaluates far more conditions than it fires.
      *
-     *
-     * <p>Package-private rather than private (final-fix-3.md item 2), the same
-     * reason {@link #rewriteHandler()} already is: the argument order has no
+     * <p>Package-private rather than private, the same reason {@link
+     * #rewriteHandler()} is: the argument order has no
      * compiler behind it, so this hook's own game-identity test calls it with
      * a synthesized argument array.
      */
@@ -726,8 +389,7 @@ public final class PatchedCollectors implements AutoCloseable {
                     || args.length < 3) {
                 return null;
             }
-            // final-fix-3.md item 2: checked first, before this evaluation can
-            // spend any of the mode's negative-sampling budget (offer/keep
+            // Checked first, before this evaluation can spend any of the mode's negative-sampling budget (offer/keep
             // below) -- a fork's trigger evaluations must not skew the live
             // game's ratio bookkeeping any more than they must reach its
             // shard. args[0] is declared Trigger on Forge's side, always a
@@ -737,8 +399,11 @@ public final class PatchedCollectors implements AutoCloseable {
                 return null;
             }
             boolean fired = Boolean.TRUE.equals(args[2]);
-            String mode = modeOf(args[0]);
-            if (!offerTriggerEvaluation(mode == null ? "?" : mode, fired)) {
+            String mode = RunParamNormalizer.modeOf(args[0]);
+            if (mode == null) {
+                mode = RunParamNormalizer.UNKNOWN_MODE;
+            }
+            if (!offerTriggerEvaluation(mode, fired)) {
                 return null;
             }
             EffectRecord record = triggerRecord(args[0], args[1], fired);
@@ -750,7 +415,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // Counted only for a record that is actually written, so a
             // suppressed duplicate does not spend the negatives' quota and the
             // ratio holds over what reaches the shard.
-            keepTriggerEvaluation(mode == null ? "?" : mode, fired);
+            keepTriggerEvaluation(mode, fired);
             emit(record);
             return null;
         };
@@ -803,12 +468,12 @@ public final class PatchedCollectors implements AutoCloseable {
      * next evaluation is offered again. A mode whose negatives are all being
      * refused -- every acting line at its per-line cap, say -- would otherwise
      * build a snapshot per evaluation of the busiest hook in the collector.
-     * {@code triggerOffers} counts offers since that mode last wrote anything
-     * and decays the rate harmonically past
+     * {@link ModeBalance#offersSinceWrite} counts offers since that mode last
+     * wrote anything and decays the rate harmonically past
      * {@link #NEGATIVE_OFFERS_AT_FULL_RATE}, so an unfillable deficit costs a
      * few offers rather than all of them.
      *
-     * <p>Per mode, and per game -- the maps live on this collector, which is
+     * <p>Per mode, and per game -- the balances live on this collector, which is
      * built per game. A mode that never fires contributes no negatives, which
      * is the intended reading of "negatives drawn from same-event-type
      * evaluations". The aggregate ratio is therefore near 1:1 rather than
@@ -818,18 +483,17 @@ public final class PatchedCollectors implements AutoCloseable {
         if (fired) {
             return true;
         }
-        int[] kept = triggerKept.computeIfAbsent(mode, m -> new int[2]);
-        if (kept[0] * TARGET_NEGATIVE_RATIO - kept[1] <= 0.0) {
+        ModeBalance balance = triggerBalance.computeIfAbsent(mode, m -> new ModeBalance());
+        if (balance.fired * TARGET_NEGATIVE_RATIO - balance.notFired <= 0.0) {
             return false;
         }
-        int[] offers = triggerOffers.computeIfAbsent(mode, m -> new int[1]);
-        offers[0]++;
-        if (offers[0] <= NEGATIVE_OFFERS_AT_FULL_RATE) {
+        balance.offersSinceWrite++;
+        if (balance.offersSinceWrite <= NEGATIVE_OFFERS_AT_FULL_RATE) {
             return true;
         }
         double rate = Math.max(
                 MIN_NEGATIVE_RATE,
-                (double) NEGATIVE_OFFERS_AT_FULL_RATE / offers[0]);
+                (double) NEGATIVE_OFFERS_AT_FULL_RATE / balance.offersSinceWrite);
         return sampler.nextDouble() < rate;
     }
 
@@ -842,11 +506,28 @@ public final class PatchedCollectors implements AutoCloseable {
      * standing is repaid by the next evaluation of its mode.
      */
     void keepTriggerEvaluation(String mode, boolean fired) {
-        triggerKept.computeIfAbsent(mode, m -> new int[2])[fired ? 0 : 1]++;
+        ModeBalance balance = triggerBalance.computeIfAbsent(mode, m -> new ModeBalance());
+        if (fired) {
+            balance.fired++;
+        } else {
+            balance.notFired++;
+        }
         // A written record of either verdict opens a fresh window: a positive
         // has just created a debt and a negative has just paid one, and either
         // way the offers spent finding this record are spent.
-        triggerOffers.remove(mode);
+        balance.offersSinceWrite = 0;
+    }
+
+    /** One trigger mode's written evaluations, and the negatives offered since. */
+    private static final class ModeBalance {
+        private int fired;
+        private int notFired;
+        /** Negatives offered since this mode last wrote a record of either verdict. */
+        private int offersSinceWrite;
+    }
+
+    /** One acting line's verdict, the key the flood cap counts by. */
+    private record LineVerdict(String abilityJson, boolean fired) {
     }
 
     /**
@@ -858,12 +539,12 @@ public final class PatchedCollectors implements AutoCloseable {
      * hundreds an aura on a creature that keeps being pumped would write.
      */
     boolean allowTriggerLine(String abilityJson, boolean fired) {
-        int[] written = triggerPerLine.computeIfAbsent(
-                abilityJson + "|" + fired, key -> new int[1]);
-        if (written[0] >= TRIGGER_RECORDS_PER_LINE) {
+        LineVerdict line = new LineVerdict(abilityJson, fired);
+        int written = triggerPerLine.getOrDefault(line, 0);
+        if (written >= TRIGGER_RECORDS_PER_LINE) {
             return false;
         }
-        written[0]++;
+        triggerPerLine.put(line, written + 1);
         return true;
     }
 
@@ -877,13 +558,10 @@ public final class PatchedCollectors implements AutoCloseable {
     EffectRecord triggerRecord(Object trait, Object runParams, boolean fired) {
         CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
         Card source = acting == null ? null : acting.getHostCard();
-        EffectEvent event = describeParams(trait, runParams);
-        return new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_TRIGGER, mode)
+        EffectEvent event = RunParamNormalizer.describeParams(trait, runParams);
+        return context.newRecord(EffectRecord.KIND_TRIGGER)
                 .actor(controllerOf(source))
-                .ability(resolveKey(acting))
+                .ability(ProvenanceKey.resolve(acting))
                 .state(snapshots.toJsonForTrait(source, referencedOf(source), event))
                 .payload("{\"event\":" + event.toJson()
                         + ",\"fired\":" + fired + "}");
@@ -896,44 +574,44 @@ public final class PatchedCollectors implements AutoCloseable {
      *
      * <p>The AI's policy judgments never reach a record: they are its opinion
      * rather than the game's rules, and training on them would teach the model
-     * Forge's play style instead of Magic.
+     * Forge's play style instead of Magic. So the hook hands over only the
+     * candidate, and the verdict is {@link PlayabilityVerdict}'s, computed here
+     * after the sampler draw. A patch that still passes three verdict booleans
+     * after the candidate has them ignored: they were computed by the AI's own
+     * cost check, which is policy.
      *
      * <p>Sampled at {@code --playability-rate} because the AI evaluates every
      * candidate at every priority, which would otherwise swamp the corpus. The
      * {@code attackers} and {@code blockers} subkinds are always logged: they
      * fire once per combat, not once per candidate.
      *
-     * <p>Package-private rather than private (final-fix-3.md item 2), the same
-     * reason {@link #rewriteHandler()} already is: this hook's own
-     * game-identity test calls it with a synthesized argument array.
+     * <p>Package-private rather than private, the same reason {@link
+     * #rewriteHandler()} is: this hook's own game-identity test calls it with
+     * a synthesized argument array.
      */
     InvocationHandler playabilityHandler() {
         return (proxy, method, args) -> {
             if (!"onCandidate".equals(method.getName()) || args == null
-                    || args.length < 4) {
+                    || args.length < 1) {
                 return null;
             }
-            // final-fix-3.md item 2 / final-fix-4.md item 5: checked before the
-            // sampler draw below, not after -- a fork's own candidates are
+            // Checked before the sampler draw below, not after -- a fork's own candidates are
             // evaluated for playability too (ForkCollector.forceResolution's
             // chooseTargets, and GameSimulator's own AI decisions, both ask the
             // same AiController this hook is installed on), and letting one
             // consume from the shared `sampler` before being dropped would
             // re-randomise the live sample stream for every other subkind that
-            // draws from it (legality, trigger negatives, the mana reservoir) --
+            // draws from it (trigger negatives, the mana reservoir) --
             // exactly the cost triggerFireHandler's own identity check already
-            // avoids by running first. A null candidate is pre-existing,
-            // unrelated behaviour (the record still names no ability) and is
-            // left alone.
+            // avoids by running first. A null candidate is let through: its
+            // record names no ability either way.
             SpellAbility candidate =
                     args[0] instanceof SpellAbility sa ? sa : null;
             if (candidate != null && !belongsToLiveGame(candidate)) {
                 return null;
             }
-            recordCandidate(
-                    deciderOf(candidate), candidate,
-                    Boolean.TRUE.equals(args[1]), Boolean.TRUE.equals(args[2]),
-                    Boolean.TRUE.equals(args[3]));
+            recordCandidate(deciderOf(candidate), candidate,
+                    () -> PlayabilityVerdict.of(candidate));
             return null;
         };
     }
@@ -966,12 +644,22 @@ public final class PatchedCollectors implements AutoCloseable {
      * drew from through the same door. Sampled at {@code --playability-rate}
      * and de-duplicated here, so both callers get the same treatment.
      *
+     * <p>The verdict is asked for only once the candidate is sampled in, so a
+     * candidate the sampler drops costs no rules check. A candidate whose
+     * check throws is one the engine cannot evaluate on this board, the way
+     * the random seat treats it, and is not recorded.
+     *
      * @param decider the candidate's controller, written as {@code actor_player}
      */
     public void recordCandidate(
-            Player decider, SpellAbility candidate,
-            boolean canPlay, boolean affordable, boolean hasLegalTarget) {
+            Player decider, SpellAbility candidate, Supplier<PlayabilityVerdict> verdictOf) {
         if (sampler.nextDouble() > caps.playabilityRate()) {
+            return;
+        }
+        PlayabilityVerdict verdict;
+        try {
+            verdict = verdictOf.get();
+        } catch (RuntimeException e) {
             return;
         }
         // Snapshot defensively: a verdict can be abandoned mid-evaluation,
@@ -1000,10 +688,10 @@ public final class PatchedCollectors implements AutoCloseable {
                 candidate == null || candidate.getHostCard() == null
                         ? List.of() : List.of(candidate.getHostCard()));
         String payload = "{\"candidates\":[{"
-                        + "\"ability\":" + keyListJson(candidateKeys)
-                        + ",\"verdict\":{\"can_play\":" + canPlay
-                        + ",\"affordable\":" + affordable
-                        + ",\"has_legal_target\":" + hasLegalTarget + "}"
+                        + "\"ability\":" + ProvenanceKey.toJsonArray(candidateKeys)
+                        + ",\"verdict\":{\"can_play\":" + verdict.canPlay()
+                        + ",\"affordable\":" + verdict.affordable()
+                        + ",\"has_legal_target\":" + verdict.hasLegalTarget() + "}"
                         + ",\"legal_targets\":" + legalTargets
                         + ",\"cost_after_adjustment\":"
                         + (manaCost == null
@@ -1017,14 +705,11 @@ public final class PatchedCollectors implements AutoCloseable {
         // playability record measured in the first corpus was this subkind:
         // the AI re-asks the same question about the same board, and the
         // answer repeats verbatim.
-        if (!allowDistinctRecord("decision", payload, state)) {
+        if (!allowDistinctRecord(EffectRecord.SUBKIND_DECISION, payload, state)) {
             return;
         }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_PLAYABILITY, mode)
-                .subkind("decision")
+        emit(context.newRecord(EffectRecord.KIND_PLAYABILITY)
+                .subkind(EffectRecord.SUBKIND_DECISION)
                 .actor(playerIdOrActive(decider))
                 .state(state)
                 .payload(payload));
@@ -1052,13 +737,7 @@ public final class PatchedCollectors implements AutoCloseable {
         List<String> ids = new ArrayList<>();
         for (GameEntity entity
                 : candidate.getTargetRestrictions().getAllCandidates(candidate)) {
-            String id = entity instanceof Card card
-                    ? SnapshotBuilder.entityId(card)
-                    : entity instanceof Player player
-                            ? SnapshotBuilder.playerId(player) : null;
-            if (id != null) {
-                ids.add(id);
-            }
+            Refs.ofAny(entity).ifPresent(ids::add);
             if (ids.size() >= MAX_LEGAL_TARGETS) {
                 break;
             }
@@ -1074,108 +753,68 @@ public final class PatchedCollectors implements AutoCloseable {
      * <p>The eighth sampling class, and the only one that says what the rules
      * *forbid* rather than what happened.
      *
-     * <p>Deduplicated on payload and snapshot (FR-028). The AI asks these
-     * questions repeatedly while it evaluates a combat — once per candidate
-     * block assignment, once per defender it considers — and the board does not
-     * move while it does, so the answers repeat verbatim. Left alone they were
-     * four fifths of the corpus at thirteen hundred records a game. Two records
-     * that would be byte-identical carry the same observation once, so
-     * collapsing them loses nothing, which is what makes this a cap rather than
-     * a sample.
+     * <p>Asked by the engine's turn-based actions just before a player
+     * declares, once per defender and once per attacker coming at the
+     * defending player, so every record is a real declaration whoever
+     * controls the seat — the AI, the random seat or a human — and is stamped
+     * {@code what_if=false}. The engine names the deciding player, every
+     * creature that player controls is a candidate, and the legal set comes
+     * from the rules alone, against a combat holding the attackers and no
+     * blocks yet.
      *
-     * <p>What-ifs are also sampled at {@code --legality-rate} (the cap alone
-     * left these at 34.4% of the first corpus against a 5% training share);
-     * real decisions never are (FR-029). The rate is drawn <b>before</b> the
-     * dedup, because the dedup key now holds the snapshot and building one for
-     * every re-ask the rate then discards is the expensive part. The price is
-     * that a what-if the AI re-asks K times survives with probability
-     * 1 − (1 − rate)^K rather than rate, so the retained what-ifs lean towards
-     * the questions the AI asks most — accepted (research.md, legality
-     * de-duplication), since the real decisions, written in full, are the
-     * subset a reader can take as unweighted.
+     * <p>Deduplicated on payload and snapshot (FR-028): a board on which
+     * nothing moved between two declarations answers the same question the
+     * same way, and two records that would be byte-identical carry one
+     * observation once.
      *
-     * <p>Package-private rather than private (final-fix-3.md item 2), the same
-     * reason {@link #rewriteHandler()} already is: this hook's own
-     * game-identity test calls it with a synthesized argument array.
+     * <p>Package-private rather than private, the same reason
+     * {@link #rewriteHandler()} already is: this hook's own game-identity
+     * test calls it with a synthesized argument array.
      */
     InvocationHandler combatLegalityHandler() {
         return (proxy, method, args) -> {
             if (args == null) {
                 return null;
             }
-            // final-fix-3.md item 2: no CardTraitBase here -- the acting
-            // argument is the GameEntity itself (defender/attacker), so
-            // identity comes straight off it rather than through a host card.
-            // Wrong-type or null is left alone rather than newly dropped;
-            // emitAttackers/emitBlockers already tolerate both.
-            if ("onAttackersComputed".equals(method.getName()) && args.length >= 3) {
-                if (!(args[0] instanceof GameEntity defender) || belongsToLiveGame(defender)) {
-                    emitAttackers(args[0], asCards(args[1]), asCards(args[2]));
+            // No CardTraitBase here: the defender or attacker is the
+            // GameEntity itself, so identity comes straight off it rather
+            // than through a host card. A wrong-typed or null entity is left
+            // to recordAttackers/recordBlockers, which tolerate both.
+            Player decider = args.length > 0 && args[0] instanceof Player player ? player : null;
+            if ("onAttackersDeclarable".equals(method.getName()) && args.length >= 4) {
+                if (!(args[1] instanceof GameEntity defender) || belongsToLiveGame(defender)) {
+                    recordAttackers(
+                            decider,
+                            args[1] instanceof GameEntity entity ? entity : null,
+                            asCards(args[2]), asCards(args[3]));
                 }
-            } else if ("onBlockersComputed".equals(method.getName())
-                    && args.length >= 4) {
-                if (!(args[0] instanceof GameEntity attacker) || belongsToLiveGame(attacker)) {
-                    emitBlockers(
-                            args[0] instanceof Card attackerCard ? attackerCard : null,
-                            asCards(args[1]), asCards(args[2]),
-                            args[3] instanceof Integer min ? min : 0);
+            } else if ("onBlockersDeclarable".equals(method.getName())
+                    && args.length >= 5) {
+                if (!(args[1] instanceof GameEntity attacker) || belongsToLiveGame(attacker)) {
+                    recordBlockers(
+                            decider,
+                            args[1] instanceof Card attackerCard ? attackerCard : null,
+                            asCards(args[2]), asCards(args[3]),
+                            args[4] instanceof Integer min ? min : 0);
                 }
             }
             return null;
         };
     }
 
-    /** The hook path: the deciding player is the candidates' controller (FR-030a). */
-    private void emitAttackers(Object defender, List<Card> candidates, List<Card> legal) {
-        recordAttackers(
-                controllerOfCandidates(candidates),
-                defender instanceof GameEntity entity ? entity : null,
-                candidates, legal, null);
-    }
-
-    private void emitBlockers(
-            Card attacker, List<Card> candidates, List<Card> legal, int minBlockers) {
-        recordBlockers(
-                controllerOfCandidates(candidates), attacker, candidates, legal,
-                minBlockers, null);
-    }
-
-    private static Player controllerOfCandidates(List<Card> candidates) {
-        for (Card card : candidates) {
-            if (card != null && card.getController() != null) {
-                return card.getController();
-            }
-        }
-        return null;
-    }
-
     /**
      * One {@code attackers} record: who may attack this defender, and what
      * keeps the rest out.
      *
-     * <p>Public because the random seat writes its own when its draw succeeds
-     * (FR-022d): the AI's attack code does not run then, so the hook never
-     * fires, and the seat reports the lists it drew from through this door
-     * with {@code whatIf} stamped {@code false}. The hook passes null and the
-     * record is classed by FR-027: a real decision when the snapshot is taken
-     * in the declare-attackers step and the decider is the active player,
-     * a what-if anywhere else.
+     * <p>De-duplicated by FR-028, keyed on the snapshot as well as the
+     * answer, so the same answer on a board that moved is kept.
      *
-     * <p>Only what-ifs are sampled by {@code --legality-rate} (FR-029), and
-     * the draw comes <b>before</b> the snapshot: the AI re-asks this question
-     * on every candidate assignment it weighs, and a snapshot built for an
-     * answer the rate then discards is the cost the ordering saves. Both kinds
-     * then pass the de-duplication of FR-028, keyed on the snapshot as well as
-     * the answer, so the same answer on a board that moved is kept.
-     *
-     * @param decider the controller of the candidates, written as
+     * @param decider the attacking player the engine names, written as
      *                {@code actor_player}
-     * @param whatIf  the classification the caller already knows, or null to
-     *                class by FR-027
      */
-    public void recordAttackers(
+    void recordAttackers(
             Player decider, GameEntity defender, List<Card> candidates,
-            List<Card> legal, Boolean whatIf) {
+            List<Card> legal) {
         if (candidates == null || candidates.isEmpty()) {
             return;
         }
@@ -1193,41 +832,21 @@ public final class PatchedCollectors implements AutoCloseable {
         }
         String payload = "{\"legal_attackers\":" + attackers
                 + ",\"forbidden\":" + forbidden + "}";
-        boolean real = whatIf != null ? !whatIf : isRealAttackDeclaration(decider);
-        // A what-if is kept when the draw falls below the rate, so the
-        // default rate of 0 keeps none, not one in 2^53.
-        if (!real && sampler.nextDouble() >= caps.legalityRate()) {
-            return;
-        }
-        String state = snapshots.toJson(null, List.of());
-        if (!allowLegalityRecord("attackers", payload, state)) {
-            return;
-        }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_PLAYABILITY, mode)
-                .subkind("attackers")
-                .actor(playerIdOrActive(decider))
-                .whatIf(!real)
-                .state(state)
-                .payload(payload));
+        emitLegality(EffectRecord.SUBKIND_ATTACKERS, decider, payload);
     }
 
     /**
      * One {@code blockers} record: who may block this attacker, how many it
      * takes, and what keeps the rest out. The sibling of
-     * {@link #recordAttackers} in every respect, classed by FR-027's other
-     * half: real when the snapshot is taken in the declare-blockers step and
-     * the anchored attacker is attacking.
+     * {@link #recordAttackers} in every respect.
      *
-     * @param decider the controller of the candidate blockers (FR-030a) —
+     * @param decider the defending player the engine names (FR-030a) —
      *                gen-1 wrote the attacking player here, and a gen-2 shard
      *                is what tells a reader which meaning it holds
      */
-    public void recordBlockers(
+    void recordBlockers(
             Player decider, Card attacker, List<Card> candidates, List<Card> legal,
-            int minBlockers, Boolean whatIf) {
+            int minBlockers) {
         if (attacker == null || candidates == null || candidates.isEmpty()) {
             return;
         }
@@ -1247,45 +866,20 @@ public final class PatchedCollectors implements AutoCloseable {
                 + ",\"legal_blockers\":" + blockers
                 + ",\"forbidden\":" + forbidden
                 + ",\"min_blockers\":" + minBlockers + "}";
-        boolean real = whatIf != null ? !whatIf : isRealBlockDeclaration(attacker);
-        if (!real && sampler.nextDouble() >= caps.legalityRate()) {
-            return;
-        }
+        emitLegality(EffectRecord.SUBKIND_BLOCKERS, decider, payload);
+    }
+
+    private void emitLegality(String subkind, Player decider, String payload) {
         String state = snapshots.toJson(null, List.of());
-        if (!allowLegalityRecord("blockers", payload, state)) {
+        if (!allowLegalityRecord(subkind, payload, state)) {
             return;
         }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_PLAYABILITY, mode)
-                .subkind("blockers")
+        emit(context.newRecord(EffectRecord.KIND_PLAYABILITY)
+                .subkind(subkind)
                 .actor(playerIdOrActive(decider))
-                .whatIf(!real)
+                .whatIf(false)
                 .state(state)
                 .payload(payload));
-    }
-
-    /**
-     * FR-027's attack half: the declare-attackers step, and the decider is
-     * the player whose turn it is. Anything else — the AI weighing next
-     * turn's attack, a block evaluation asking who could have attacked — is
-     * a what-if. A collector over no game answers what-if for everything.
-     */
-    private boolean isRealAttackDeclaration(Player decider) {
-        var phase = game == null ? null : game.getPhaseHandler();
-        return phase != null && decider != null
-                && phase.getPhase() == forge.game.phase.PhaseType.COMBAT_DECLARE_ATTACKERS
-                && phase.getPlayerTurn() == decider;
-    }
-
-    /** FR-027's block half: the declare-blockers step, and the anchor is attacking. */
-    private boolean isRealBlockDeclaration(Card attacker) {
-        var phase = game == null ? null : game.getPhaseHandler();
-        return phase != null
-                && phase.getPhase() == forge.game.phase.PhaseType.COMBAT_DECLARE_BLOCKERS
-                && game.getCombat() != null
-                && game.getCombat().isAttacking(attacker);
     }
 
     /** The deciding player's id, or the active player's where none is known. */
@@ -1297,13 +891,10 @@ public final class PatchedCollectors implements AutoCloseable {
      * Whether this legality answer is new in this game.
      *
      * <p>Keyed on the subkind, the payload <b>and</b> the snapshot (FR-028).
-     * The payload alone was the gen-1 key, on the reasoning that the board
-     * does not move while the AI evaluates one combat — true, and still the
-     * reason the AI's re-asks collapse to one record, since their snapshots
-     * render identically. What the payload-only key also collapsed was the
-     * same answer on a board that <em>had</em> moved: a creature that may
-     * attack on two different turns is two observations, and the second was
-     * dropped as a repeat of the first.
+     * The payload alone would also collapse the same answer on a board that
+     * <em>had</em> moved: a creature that may attack on two different turns
+     * is two observations, and the second would be dropped as a repeat of
+     * the first.
      */
     public boolean allowLegalityRecord(String subkind, String payload, String state) {
         return allowDistinctRecord(subkind, payload, state);
@@ -1363,13 +954,13 @@ public final class PatchedCollectors implements AutoCloseable {
     /** Reflective, because the engine exposes these only on a patched checkout. */
     private static StaticAbility cantAttackStatic(Card attacker, GameEntity defender) {
         return (StaticAbility) PatchHooks.invokeStatic(
-                PatchHooks.CANT_ATTACK_BLOCK, "cantAttackStatic",
+                PatchHooks.CANT_ATTACK_STATIC.owner(), PatchHooks.CANT_ATTACK_STATIC.method(),
                 new Class<?>[]{Card.class, GameEntity.class}, attacker, defender);
     }
 
     private static StaticAbility cantBlockByStatic(Card attacker, Card blocker) {
         return (StaticAbility) PatchHooks.invokeStatic(
-                PatchHooks.CANT_ATTACK_BLOCK, "cantBlockByStatic",
+                PatchHooks.CANT_BLOCK_BY_STATIC.owner(), PatchHooks.CANT_BLOCK_BY_STATIC.method(),
                 new Class<?>[]{Card.class, Card.class}, attacker, blocker);
     }
 
@@ -1462,15 +1053,11 @@ public final class PatchedCollectors implements AutoCloseable {
         if (forks == null || !caps.probesEnabled() || mode == AttributionMode.DEGRADED) {
             return;
         }
-        var phase = game.getPhaseHandler();
-        if (phase == null || phase.getPhase() == null) {
+        DamageStep step = DamageStep.of(game.getPhaseHandler());
+        if (step == null) {
             return;
         }
-        String step = phase.getPhase().toString();
-        if (!step.contains("COMBAT_DAMAGE") && !step.contains("FIRST_STRIKE_DAMAGE")) {
-            return;
-        }
-        boolean firstStrike = step.contains("FIRST_STRIKE");
+        boolean firstStrike = step == DamageStep.FIRST_STRIKE;
         if (firstStrike && !anyFirstStriker()) {
             // Forge always enters the first-strike step and skips it when no
             // combatant has first or double strike, so the phase event alone is
@@ -1482,8 +1069,7 @@ public final class PatchedCollectors implements AutoCloseable {
             // survived and were completed against the *regular* step's record.
             return;
         }
-        String substep = firstStrike
-                ? ForkCollector.SUBSTEP_FIRST_STRIKE : ForkCollector.SUBSTEP_REGULAR;
+        String substep = step.wireName();
         discardStaleProbes(substep);
         // One keyword per game rather than whichever the battlefield order
         // reaches first. With eight probed keywords and a budget of two, the
@@ -1507,7 +1093,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * pairing rules below be exercised without a live combat to fork.
      */
     void hold(ForkCollector.HeldProbe held) {
-        heldProbes.add(held);
+        heldProbes.hold(held);
     }
 
     /** This game's turn in the probe-keyword rotation, or null when none. */
@@ -1602,7 +1188,7 @@ public final class PatchedCollectors implements AutoCloseable {
         if (forks == null || heldProbes.isEmpty()) {
             return;
         }
-        writeHeldProbes(combatRecordId, heldProbes.get(0).substep());
+        writeHeldProbes(combatRecordId, heldProbes.oldestSubstep());
     }
 
     /**
@@ -1618,16 +1204,9 @@ public final class PatchedCollectors implements AutoCloseable {
         if (forks == null || heldProbes.isEmpty()) {
             return;
         }
-        List<ForkCollector.HeldProbe> remaining = new ArrayList<>();
-        for (ForkCollector.HeldProbe held : heldProbes) {
-            if (java.util.Objects.equals(held.substep(), substep)) {
-                forks.writeHeldProbe(held, combatRecordId);
-            } else {
-                remaining.add(held);
-            }
+        for (ForkCollector.HeldProbe held : heldProbes.take(substep)) {
+            forks.writeHeldProbe(held, combatRecordId);
         }
-        heldProbes.clear();
-        heldProbes.addAll(remaining);
     }
 
     /**
@@ -1639,29 +1218,11 @@ public final class PatchedCollectors implements AutoCloseable {
      * is read as a difference the keyword caused.
      */
     public int discardStaleProbes(String substep) {
-        int dropped = 0;
-        List<ForkCollector.HeldProbe> remaining = new ArrayList<>();
-        for (ForkCollector.HeldProbe held : heldProbes) {
-            if (java.util.Objects.equals(held.substep(), substep)) {
-                remaining.add(held);
-            } else {
-                dropped++;
-            }
-        }
-        heldProbes.clear();
-        heldProbes.addAll(remaining);
-        return dropped;
-    }
-
-    /** Drop every held branch, for a combat that is over. */
-    public int discardHeldProbes() {
-        int dropped = heldProbes.size();
-        heldProbes.clear();
-        return dropped;
+        return heldProbes.discardOtherThan(substep);
     }
 
     /** Branches taken and not yet completed. */
-    public int heldProbeCount() {
+    int heldProbeCount() {
         return heldProbes.size();
     }
 
@@ -1671,9 +1232,11 @@ public final class PatchedCollectors implements AutoCloseable {
      * The events an effect API promises, taken from the clause that ran.
      *
      * <p>The memo is kept per thread and not per collector: a clause can resolve
-     * another, and the engine runs games on more than one thread.
+     * another, and the engine runs games on more than one thread. Each memo is
+     * wrapped because a deque holds no null, and a clause with no memo still
+     * pushes one so that every pop meets its own push.
      */
-    private final ThreadLocal<Deque<Object>> clauseMemos =
+    private final ThreadLocal<Deque<java.util.Optional<Object>>> clauseMemos =
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
@@ -1690,8 +1253,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * how this game's own two lobby seats were registered, so a forked
      * ability resolves through the exact same
      * {@code AbilityUtils.resolveApiAbility} these hooks are installed
-     * against (ruling R31, final-fix-1.md F2 -- reversing an earlier ruling
-     * of mine that treated this path as already inert). {@link ForkEventSink}
+     * against. {@link ForkEventSink}
      * keeps a fork's own <em>bus</em> events out of this game's records by
      * subscribing to the fork's own {@code Game} instead of this one, but
      * these hooks are not bus subscriptions, so that separation never
@@ -1711,7 +1273,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * accident, only by being the same object. A clause with no identifiable
      * host is treated as not belonging here rather than let through by
      * default: on the real resolution path a host card is always present
-     * (the same assumption {@code AbilityUtils.resolveApiAbilityBody}
+     * (the same assumption {@code AbilityUtils.resolveApiAbilityUnobserved}
      * already makes, unconditionally dereferencing it), so this branch is
      * never live in production and only ever chooses the safer of two
      * defaults for a state that should not occur.
@@ -1726,16 +1288,15 @@ public final class PatchedCollectors implements AutoCloseable {
      * something both callers already have in scope. Both hooks' push/pop
      * bookkeeping in {@link #clauseMemos} is untouched by this: a fork's
      * clause still pushes and pops its own memo exactly as a live one does,
-     * so this fix cannot desynchronize the deque F3 balances.
+     * so this check cannot desynchronize that deque.
      *
-     * <p>Typed {@link CardTraitBase} rather than {@link SpellAbility} (final-
-     * fix-3.md item 2): {@code SpellAbility}, {@code ReplacementEffect} and
+     * <p>Typed {@link CardTraitBase} rather than {@link SpellAbility}:
+     * {@code SpellAbility}, {@code ReplacementEffect} and
      * {@code Trigger} all extend it and all declare {@code getHostCard()} on
      * it, so {@link #rewriteHandler()} and {@link #triggerFireHandler()} --
      * whose acting argument is a {@code ReplacementEffect}/{@code Trigger},
      * never a {@code SpellAbility} -- reuse this same check rather than a
-     * near-duplicate. Every existing caller passes a {@code SpellAbility},
-     * which still satisfies the widened parameter unchanged.
+     * near-duplicate.
      */
     private boolean belongsToLiveGame(CardTraitBase ability) {
         if (ability == null) {
@@ -1756,13 +1317,12 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
-     * Whether a null-ability outcome belongs to the live game (final-fix-3.md
-     * item 1; widened final-fix-4.md item 2).
+     * Whether a null-ability outcome belongs to the live game.
      *
      * <p>{@link #outcomeHandler()}'s two production null-ability sources --
-     * {@code GameAction.reveal}'s six-argument funnel (ruling R10) and
+     * {@code GameAction.reveal}'s six-argument funnel and
      * {@code ReplacementHandler.runSingleReplaceDamageEffect}'s two
-     * {@code damage_prevented} sites (rulings R11/R12) -- call
+     * {@code damage_prevented} sites -- call
      * {@code EffectRecordOutcomes.note} with a literal {@code null} ability,
      * always, on the live game exactly as on a fork: {@link
      * #belongsToLiveGame(CardTraitBase)} has nothing to compare, and simply
@@ -1786,8 +1346,8 @@ public final class PatchedCollectors implements AutoCloseable {
      *   ability resolves through {@code AbilityUtils.resolve}/{@code
      *   resolveApiAbility}, live or forked alike, and both set this pointer to
      *   the ability currently resolving before running its body. Kept as a
-     *   second, independent signal instead of removed now that the flag alone
-     *   is sufficient for both of this class's current fork mechanisms:
+     *   second, independent signal although the flag alone is sufficient for
+     *   both of this class's current fork mechanisms:
      *   insurance against a future one that resolves an ability without going
      *   through {@code intervene}/{@code probe}. When the flag is true this
      *   branch is redundant with it (both cover the resolving case), not a
@@ -1802,8 +1362,7 @@ public final class PatchedCollectors implements AutoCloseable {
      *
      * <p><b>Why not also use {@code damage_prevented}'s own {@code "source"}
      * param</b> (a raw {@code Card}, held at {@link #outcomeRefOf} before it is
-     * converted to a ref -- the reviewer's suggestion, final-fix-4.md item 2):
-     * considered and not added. With the flag now covering the entirety of
+     * converted to a ref): with the flag covering the entirety of
      * both fork mechanisms, there is no remaining path where {@code source}
      * would catch a fork this method's two signals miss -- it would be a
      * third check for a gap that is already closed, not a narrower one. It is
@@ -1864,18 +1423,16 @@ public final class PatchedCollectors implements AutoCloseable {
             if (!"onClauseResolved".equals(method.getName())) {
                 return null;
             }
-            Deque<Object> memos = clauseMemos.get();
-            Object memo = memos.isEmpty() ? null : memos.pop();
+            Deque<java.util.Optional<Object>> memos = clauseMemos.get();
+            Object memo = memos.isEmpty() ? null : memos.pop().orElse(null);
             boolean threw = args.length > 1 && Boolean.TRUE.equals(args[1]);
             if (threw) {
                 // A clause that threw did not finish, and an event claiming it
                 // did would be a fact the game never contained.
                 return null;
             }
-            Object value = memo instanceof java.util.Optional<?> opt
-                    ? opt.orElse(null) : memo;
             if (bracket != null && belongsToLiveGame(clause)) {
-                bracket.recordClauseEvent(ApiEvents.after(clause, value));
+                bracket.recordClauseEvent(ApiEvents.after(clause, memo));
             }
             return null;
         };
@@ -1908,12 +1465,10 @@ public final class PatchedCollectors implements AutoCloseable {
      * <p>{@code test_event_schema_completeness.py}'s
      * {@code _emitted_event_types()} is a <em>textual</em> scan for
      * {@code EffectEvent.<NAME>} in this package's source, and a javadoc
-     * listing satisfies that scan exactly as well as this set does — which
-     * was the defect: before this set existed, all nine types this task
-     * wired were referenced only inside a comment, so deleting an effect's
-     * {@code note(...)} call, or misspelling the event name, would go
-     * unnoticed by the guard built specifically to catch that, one level up
-     * from where this whole plan started. This set is what
+     * listing satisfies that scan exactly as well as this set does. Were the
+     * types referenced only inside a comment, deleting an effect's {@code
+     * note(...)} call, or misspelling the event name, would go unnoticed by
+     * the guard built specifically to catch that. This set is what
      * {@link #outcomeHandler()} actually validates incoming types against,
      * so the reference is load-bearing code, not prose a rename can silently
      * strand.
@@ -1924,15 +1479,14 @@ public final class PatchedCollectors implements AutoCloseable {
      * twelve, from an effect directly. {@code SPELL_COUNTERED} ({@code
      * CounterEffect}), {@code TOKEN_CREATED} ({@code TokenEffectBase}, shared
      * by the six token-making effects) and {@code DICE_ROLLED} ({@code
-     * RollDiceEffect}) are Task 11's three -- the other one of Task 11's four,
-     * {@code PLAYER_WON}, is a bus subscription (see {@code
-     * BusBracketCollector#onGameOutcome}), not an outcome-hook type, and does
-     * not belong here. {@code TURN_ENDED} ({@code EndTurnEffect}) and {@code
-     * TEXT_CHANGE} ({@code TextBoxExchangeEffect} -- {@code ChangeText}'s own
-     * contribution to {@code TEXT_CHANGE} is an {@code ApiEvents.RULES} entry,
-     * not this hook) are Task 12's two note-based additions; the other six of
-     * Task 12's eight types are {@code ApiEvents.RULES} entries and never reach
-     * this set at all.
+     * RollDiceEffect}) are the same; {@code PLAYER_WON} is a bus
+     * subscription (see {@code BusEventReader#onGameOutcome}), not an
+     * outcome-hook type, and does not belong here. {@code TURN_ENDED}
+     * ({@code EndTurnEffect}) and {@code TEXT_CHANGE} ({@code
+     * TextBoxExchangeEffect} -- {@code ChangeText}'s own contribution to
+     * {@code TEXT_CHANGE} is an {@code ApiEvents.RULES} entry, not this hook)
+     * are noted by their effects too; the types an {@code ApiEvents.RULES}
+     * entry emits never reach this set at all.
      */
     private static final Set<String> KNOWN_OUTCOME_TYPES = Set.of(
             EffectEvent.COIN_FLIPPED, EffectEvent.CLASH_RESOLVED, EffectEvent.VOTE_TAKEN,
@@ -1952,9 +1506,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * {@code ApiEvents.reportEmitterFailure} and
      * {@code AbilityUtils.reportClauseListenerFailure} give their own hooks'
      * failures, for the same reason: a deleted {@code note(...)} call or a
-     * misspelled event name must not go dark silently, which is the exact
-     * founding failure mode this whole plan exists to end, recreated one
-     * level up.
+     * misspelled event name must not go dark silently.
      */
     private static void reportUnknownOutcomeType(String type) {
         if (UNKNOWN_OUTCOME_TYPE_REPORTED.compareAndSet(false, true)) {
@@ -1983,26 +1535,34 @@ public final class PatchedCollectors implements AutoCloseable {
      * consumes it" -- checked against {@link #KNOWN_OUTCOME_TYPES}, the real
      * vocabulary.
      *
-     * <p>Two params entries are not generic parameters:
+     * <p>The event's subjects are exactly what the effect names under
+     * {@code "subjects"}, and an outcome that names none has none. The acting
+     * ability's host is never a default: a coin flip or a token made is not
+     * something done to the card whose ability did it, and Detain's host is
+     * the spell that cast the restriction, not one of the cards it landed on.
+     *
+     * <p>Three params entries are not generic parameters:
      * <ul>
-     *   <li>{@code "subjects"}, carrying the raw Card/Player list a
-     *   restriction-change loop walked (Detain, Goad, MustBlock), is pulled
-     *   out and converted to refs on {@link EffectEvent#subject} instead --
-     *   the schema's {@code restriction_change} row normalizes only
-     *   {@code restriction} and {@code value}, so a raw {@code subjects}
-     *   entry left in {@code params} would fail the per-type allow-list in
-     *   the Python {@code EventRecord}'s own construction. Its presence also
-     *   means the acting ability's own host is <em>not</em> added as a
-     *   default subject below: Detain/Goad/MustBlock's host is the spell or
-     *   permanent that cast the restriction, not one of the cards it landed
-     *   on, and stating otherwise would double it into a subject list a
-     *   reader counts against.
+     *   <li>{@code "subjects"}, carrying the raw Card/Player list of who the
+     *   outcome happened to (the cards a restriction landed on, the players
+     *   whose library a reveal came from, the player or creature prevented
+     *   damage would have been dealt to), is pulled out and converted to refs
+     *   on {@link EffectEvent#subject} instead -- the schema's per-type rows
+     *   do not list it, so a raw {@code subjects} entry left in {@code params}
+     *   would fail the per-type allow-list in the Python {@code EventRecord}'s
+     *   own construction.
      *   <li>{@code "source"} (currently only {@code damage_prevented}),
      *   carrying a raw Card, is converted to an entity ref the same way --
      *   every other producer of a {@code source} key ({@code damage_dealt},
      *   and the trigger-derived {@code damage_prevented}) renders one, and a
      *   display name here would silently fail a join against those refs and
      *   collide two sources sharing a name.
+     *   <li>{@code "sample"} ({@code token_created} only), one token standing
+     *   for its batch, becomes {@code token_script_id} and
+     *   {@code characteristics}, rendered by {@link SnapshotBuilder}'s own
+     *   rules so the description reads the same as the token's entry on the
+     *   board: the same script id, and keywords spelled the way an entity's
+     *   are. The token itself never reaches the event.
      * </ul>
      *
      * <p>Package-private rather than private, the same reason
@@ -2022,16 +1582,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 reportUnknownOutcomeType(type);
                 return null;
             }
-            // An effect that supplies its own "subjects" is authoritative
-            // about who this outcome happened to; the host is a fallback
-            // default for the effects that supply nothing, not an addition
-            // on top of an explicit list (see the "subjects" bullet above).
-            boolean explicitSubjects = args[2] instanceof Map<?, ?> paramsMap
-                    && paramsMap.containsKey("subjects");
             EffectEvent event = new EffectEvent(type);
-            if (!explicitSubjects && args[0] instanceof SpellAbility sa && sa.getHostCard() != null) {
-                event.subject(SnapshotBuilder.entityId(sa.getHostCard()));
-            }
             if (args[2] instanceof Map<?, ?> params) {
                 for (Map.Entry<?, ?> entry : params.entrySet()) {
                     if ("subjects".equals(entry.getKey())) {
@@ -2040,6 +1591,13 @@ public final class PatchedCollectors implements AutoCloseable {
                     }
                     if ("source".equals(entry.getKey())) {
                         event.param("source", outcomeRefOf(entry.getValue()));
+                        continue;
+                    }
+                    if ("sample".equals(entry.getKey())) {
+                        if (entry.getValue() instanceof Card token) {
+                            event.param("token_script_id", SnapshotBuilder.tokenScriptIdOf(token));
+                            event.param("characteristics", tokenCharacteristics(token));
+                        }
                         continue;
                     }
                     event.param(String.valueOf(entry.getKey()), entry.getValue());
@@ -2066,12 +1624,22 @@ public final class PatchedCollectors implements AutoCloseable {
             return;
         }
         for (Object subject : subjects) {
-            if (subject instanceof Card card) {
-                event.subject(SnapshotBuilder.entityId(card));
-            } else if (subject instanceof Player player) {
-                event.subject(SnapshotBuilder.playerId(player));
-            }
+            Refs.ofAny(subject).ifPresent(event::subject);
         }
+    }
+
+    /**
+     * What a made token is, for a {@code token_created} event: its base
+     * power and toughness, its type line and its keywords — see
+     * {@link #outcomeHandler()} for why these are rendered here.
+     */
+    private static Map<String, Object> tokenCharacteristics(Card token) {
+        Map<String, Object> traits = new LinkedHashMap<>();
+        traits.put("power", token.getBasePower());
+        traits.put("toughness", token.getBaseToughness());
+        traits.put("types", token.getType().toString());
+        traits.put("keywords", SnapshotBuilder.keywordNames(token.getKeywords()));
+        return traits;
     }
 
     /**
@@ -2083,13 +1651,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * than being silently dropped.
      */
     private static Object outcomeRefOf(Object value) {
-        if (value instanceof Card card) {
-            return SnapshotBuilder.entityId(card);
-        }
-        if (value instanceof Player player) {
-            return SnapshotBuilder.playerId(player);
-        }
-        return value;
+        return Refs.ofAny(value).<Object>map(ref -> ref).orElse(value);
     }
 
     // ── mana records ────────────────────────────────────────────────────
@@ -2102,9 +1664,9 @@ public final class PatchedCollectors implements AutoCloseable {
      * That is what leaves the role-polarity probe unrunnable: paying {@code R}
      * is observable from stage one, producing it is not.
      *
-     * <p>Package-private rather than private (final-fix-3.md item 2), the same
-     * reason {@link #rewriteHandler()} already is: this hook's own
-     * game-identity test calls it with a synthesized argument array.
+     * <p>Package-private rather than private, the same reason {@link
+     * #rewriteHandler()} is: this hook's own game-identity test calls it with
+     * a synthesized argument array.
      */
     InvocationHandler manaHandler() {
         return (proxy, method, args) -> {
@@ -2114,15 +1676,15 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             SpellAbility ability = args[0] instanceof SpellAbility sa ? sa : null;
             String produced = String.valueOf(args[2]);
-            // final-fix-3.md item 2: a fork's own mana abilities can resolve
-            // through the inline path too (forceResolution's forced ability,
+            // A fork's own mana abilities can resolve through the inline path
+            // too (forceResolution's forced ability,
             // or costs it pays along the way), and this hook is a JVM static
             // like the others.
             if (ability == null || produced.isEmpty() || !belongsToLiveGame(ability)) {
                 return null;
             }
             String key = manaAbilityText(ability, produced);
-            int slot = manaReservoirSlot(key);
+            int slot = manaReservoir.slot(key);
             if (slot < 0) {
                 return null;
             }
@@ -2130,27 +1692,18 @@ public final class PatchedCollectors implements AutoCloseable {
                     ? SnapshotBuilder.playerId(p) : activePlayerId();
             EffectEvent event = new EffectEvent(EffectEvent.MANA_PRODUCED)
                     .subject(player)
-                    .param("mana_by_color", manaByColor(produced));
+                    .param("mana_by_color", RunParamNormalizer.manaByColor(produced));
             // Held rather than written: which activation survives is not known
             // until the game ends. The state is snapshotted here, at the moment
             // the mana was made, so a record that does survive describes the
             // board it was actually produced on.
-            EffectRecord record = new EffectRecord(
-                    writer.nextRecordId(), writer.runId(),
-                    RecordShardWriter.timestamp(), gameId,
-                    EffectRecord.KIND_RESOLUTION, mode)
-                    .moment("resolution")
+            EffectRecord record = context.newRecord(EffectRecord.KIND_RESOLUTION)
+                    .moment(EffectRecord.MOMENT_RESOLUTION)
                     .actor(player)
-                    .ability(resolveKey(ability))
+                    .ability(ProvenanceKey.resolve(ability))
                     .state(snapshots.toJson(null, List.of()))
-                    .payload("{\"events\":[" + event.toJson() + "]}");
-            List<EffectRecord> held =
-                    manaReservoir.computeIfAbsent(key, k -> new ArrayList<>());
-            if (slot == held.size()) {
-                held.add(record);
-            } else {
-                held.set(slot, record);
-            }
+                    .payload(EffectRecord.eventsPayload(List.of(event)));
+            manaReservoir.hold(key, slot, record);
             return null;
         };
     }
@@ -2169,65 +1722,9 @@ public final class PatchedCollectors implements AutoCloseable {
                 + ability.getHostCard().getName() + "|" + produced;
     }
 
-    /**
-     * Forge's produced-mana string as counts per colour letter.
-     *
-     * <p>Returned as a map rather than rendered here, because
-     * {@link EffectEvent#param} renders a map as a JSON object and a string as
-     * a JSON string — and the reader expects {@code {"B":1}}, not {@code "{...}"}.
-     */
-    static Map<String, Integer> manaByColor(String produced) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
-        for (String atom : produced.split(" ")) {
-            if (atom.isEmpty()) {
-                continue;
-            }
-            // A bare number is that many generic; anything else is one mana of
-            // the colour it names, "C" included.
-            if (atom.chars().allMatch(Character::isDigit)) {
-                counts.merge("C", Integer.parseInt(atom), Integer::sum);
-            } else {
-                counts.merge(atom.toUpperCase(java.util.Locale.ROOT), 1, Integer::sum);
-            }
-        }
-        return counts;
-    }
-
-    /**
-     * Which reservoir slot this activation takes, or -1 to skip it (FR-037).
-     *
-     * <p>A Mountain taps a dozen times a game for the same R, and the repeats
-     * observe a board that barely moved, so the corpus keeps
-     * {@code --mana-cap} of them per game. <b>Which</b> ones is the question
-     * this answers, and taking the first would be the wrong answer: a land's
-     * first tap is almost always turn one against an empty board, so every mana
-     * record would describe the same early game and the model would see a
-     * board-independent effect on a board that never varied.
-     *
-     * <p>Reservoir sampling (Algorithm R) instead: the first {@code cap} fill
-     * the reservoir, and the {@code n}th after that replaces a uniformly chosen
-     * one with probability {@code cap/n}. Every activation in the game ends up
-     * equally likely to survive, without knowing in advance how many there will
-     * be.
-     *
-     * <p>The record is built only when this returns a slot, so the expensive
-     * part — the state snapshot — is paid a logarithmic number of times rather
-     * than once per activation.
-     *
-     * <p>The produced mana is part of the key rather than of the count, so a
-     * dual land making G and the same land making U each get a reservoir.
-     */
-    public int manaReservoirSlot(String abilityText) {
-        int cap = caps.manaCap();
-        if (cap <= 0) {
-            return -1;
-        }
-        int seen = manaRecords.merge(abilityText, 1, Integer::sum);
-        if (seen <= cap) {
-            return seen - 1;
-        }
-        int candidate = sampler.nextInt(seen);
-        return candidate < cap ? candidate : -1;
+    /** Which reservoir slot this activation takes, or -1 to skip it; see {@link ManaReservoir}. */
+    int manaReservoirSlot(String abilityText) {
+        return manaReservoir.slot(abilityText);
     }
 
     /**
@@ -2239,15 +1736,9 @@ public final class PatchedCollectors implements AutoCloseable {
      * ability, against a crash that already costs the rest of the game.
      */
     private void flushMana() {
-        for (List<EffectRecord> held : manaReservoir.values()) {
-            for (EffectRecord record : held) {
-                if (record != null) {
-                    emit(record);
-                }
-            }
+        for (EffectRecord record : manaReservoir.drain()) {
+            emit(record);
         }
-        manaReservoir.clear();
-        manaRecords.clear();
     }
 
     // ── continuous records ──────────────────────────────────────────────
@@ -2294,14 +1785,16 @@ public final class PatchedCollectors implements AutoCloseable {
                 }
             }
             for (Map.Entry<Long, List<Object>> changed
-                    : changesByStatic(card, "getChangedCardTypesByStatic").entrySet()) {
+                    : changesByStatic(card, PatchHooks.CHANGED_TYPES_BY_STATIC.method())
+                            .entrySet()) {
                 Contribution into = contribution(byStatic, changed.getKey(), entity);
                 for (Object change : changed.getValue()) {
                     typeTokens(change, into);
                 }
             }
             for (Map.Entry<Long, List<Object>> changed
-                    : changesByStatic(card, "getChangedCardColorsByStatic").entrySet()) {
+                    : changesByStatic(card, PatchHooks.CHANGED_COLORS_BY_STATIC.method())
+                            .entrySet()) {
                 Contribution into = contribution(byStatic, changed.getKey(), entity);
                 for (Object change : changed.getValue()) {
                     colorTokens(change, into);
@@ -2340,10 +1833,7 @@ public final class PatchedCollectors implements AutoCloseable {
             if (!allowDistinctRecord("continuous", payload, state)) {
                 continue;
             }
-            emit(new EffectRecord(
-                    writer.nextRecordId(), writer.runId(),
-                    RecordShardWriter.timestamp(), gameId,
-                    EffectRecord.KIND_CONTINUOUS, mode)
+            emit(context.newRecord(EffectRecord.KIND_CONTINUOUS)
                     .actor(SnapshotBuilder.playerId(source.getHostCard().getController()))
                     .ability(acting)
                     .state(state)
@@ -2384,7 +1874,7 @@ public final class PatchedCollectors implements AutoCloseable {
      */
     static void nameContributions(
             Card card, Map<Long, Map<String, Contribution>> byStatic, String entity) {
-        if (!(PatchHooks.read(card, "getChangedCardNames")
+        if (!(PatchHooks.read(card, PatchHooks.CHANGED_NAMES.method())
                 instanceof Table<?, ?, ?> names)) {
             return;
         }
@@ -2598,18 +2088,10 @@ public final class PatchedCollectors implements AutoCloseable {
         String toJson() {
             return "{\"entity\":" + Json.string(entity)
                     + ",\"pt_boost\":[" + power + "," + toughness + "]"
-                    + ",\"keywords\":" + tokenJson(keywords)
-                    + ",\"types\":" + tokenJson(types)
-                    + ",\"colors\":" + tokenJson(colors)
+                    + ",\"keywords\":" + Json.stringArray(keywords)
+                    + ",\"types\":" + Json.stringArray(types)
+                    + ",\"colors\":" + Json.stringArray(colors)
                     + ",\"name\":" + Json.string(name) + "}";
-        }
-
-        private static String tokenJson(Set<String> tokens) {
-            StringJoiner joiner = new StringJoiner(",", "[", "]");
-            for (String token : tokens) {
-                joiner.add(Json.string(token));
-            }
-            return joiner.toString();
         }
     }
 
@@ -2627,641 +2109,17 @@ public final class PatchedCollectors implements AutoCloseable {
     // ── plumbing ────────────────────────────────────────────────────────
 
     /**
-     * A patched hook's parameter map as an event.
+     * The printed line a runtime trait came from, as a list of at most one.
      *
-     * <p>The map is Forge's own {@code AbilityKey} enum, which this side does
-     * not link against, so it is read by key <b>name</b> — but by the name of
-     * the key, never by the list of them, and what the record carries is the
-     * <b>values</b>.
-     *
-     * <p>That distinction is the whole of the rewrite channel's first defect.
-     * The previous reading built both halves of a rewrite record out of the
-     * mode, one subject per map entry, and a {@code cause} that was the
-     * comma-joined key names — so {@code incoming} and {@code outgoing} were
-     * byte-identical on 100% of 62,546 records by construction, and
-     * {@code cause} was a near-constant string per event type that named no
-     * cause. Every value that matters already has a slot in the event
-     * vocabulary, so filling those slots needs no change to the wire format.
-     */
-    private EffectEvent describeParams(Object trait, Object params) {
-        String mode = modeOf(trait);
-        Map<String, Object> byName = paramsByName(params);
-        EffectEvent event = new EffectEvent(typeOf(mode, byName));
-        // The engine's own name for what happened, kept whether or not the
-        // vocabulary has a member for it. Forge has some two hundred trigger
-        // modes and the vocabulary is a closed set of outcomes, so mapping
-        // every one would be a table nobody could keep true; carrying the mode
-        // loses nothing and lets a later stage map more of them.
-        if (mode != null) {
-            event.param("mode", mode);
-        }
-        if (byName.isEmpty()) {
-            return event;
-        }
-        for (String subject : subjectsOf(byName)) {
-            event.subject(subject);
-        }
-        normalizeParams(event, mode, byName);
-        event.cause(causeOf(byName));
-        return event;
-    }
-
-    /**
-     * The run parameters keyed by the name Forge spells them with.
-     *
-     * <p>{@code AbilityKey.toString()} is the key's own name, so this is a
-     * rename rather than a reading: what it buys is that everything below can
-     * ask for {@code "Origin"} without linking against the enum.
-     */
-    private static Map<String, Object> paramsByName(Object params) {
-        if (!(params instanceof Map<?, ?> map)) {
-            return Map.of();
-        }
-        Map<String, Object> byName = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> entry : map.entrySet()) {
-            byName.put(String.valueOf(entry.getKey()), entry.getValue());
-        }
-        return byName;
-    }
-
-    /**
-     * Which outcome this is, before any parameter is read into it.
-     *
-     * <p>Almost always the mode's own mapping. The exception is prevention:
-     * Forge reports it through the damage keys, and an event that says
-     * {@code damage_dealt} with no amount is not what happened.
-     */
-    private static String typeOf(String mode, Map<String, Object> byName) {
-        // Checked before the lookup rather than left to getOrDefault:
-        // EVENT_BY_MODE is a Map.of, which throws on a null key instead of
-        // answering the default. A trait whose getMode() is absent -- a hook
-        // whose signature drifted, so the argument is not the trait we expect --
-        // would take that NPE inside a dynamic proxy, and the engine would
-        // surface it as an UndeclaredThrowableException in the middle of
-        // canRunTrigger.
-        String type = mode == null
-                ? EffectEvent.STATE_FLAG_CHANGE
-                : EVENT_BY_MODE.getOrDefault(mode, EffectEvent.STATE_FLAG_CHANGE);
-        if (EffectEvent.DAMAGE_DEALT.equals(type)
-                && !byName.containsKey("DamageAmount")
-                && byName.containsKey("PreventedAmount")) {
-            return EffectEvent.DAMAGE_PREVENTED;
-        }
-        return type;
-    }
-
-    /**
-     * Keys that name what an event is <b>about</b>, most specific first.
-     *
-     * <p>A parameter map names one card several times over: {@code Card},
-     * {@code CardLKI} and {@code Affected} routinely all point at it, which is
-     * why 377 of 691 sampled trigger events carried a repeated subject. The
-     * others in the map — {@code Cause}, {@code DamageSource},
-     * {@code LastState*} — are causes and context, not subjects, and reading
-     * every entry as one is what made the subject list meaningless.
-     */
-    private static final List<String> SUBJECT_KEYS = List.of(
-            "Affected", "Card", "Player", "DamageTarget", "Attacker",
-            // Combat's own names, in the order that keeps each event about the
-            // creature it is about: an AttackerBlocked map holds Attacker and
-            // Blockers and is about the attacker, a Blocks map holds Blocker
-            // and Attackers and is about the blocker, and an AttackersDeclared
-            // map holds only the collection. Without these three, every one of
-            // them named no subject at all.
-            "Blocker", "Attackers", "Attached",
-            // Last, and only as a last resort. CardLKI is a copy of the card as
-            // it was, so wherever the live object is also in the map one of the
-            // keys above names it and this is never reached. Where it is not --
-            // MagicStack puts CardLKI, Activator and SpellAbility and no Card at
-            // all -- it is the only name the map has for the spell that was
-            // cast, and without it all 1,917 SpellCast events of the smoke
-            // corpus named no subject whatever.
-            "CardLKI");
-
-    /** How many subjects one event may name before the list is capped. */
-    private static final int MAX_SUBJECTS = 8;
-
-    /**
-     * What this event is about: the first subject key the map carries.
-     *
-     * <p>A collection value contributes each of its members — a damage-all
-     * event is about all of them — deduplicated, because the same card can
-     * appear twice in one collection after a state change.
-     */
-    private static Set<String> subjectsOf(Map<String, Object> byName) {
-        for (String key : SUBJECT_KEYS) {
-            Object value = byName.get(key);
-            if (value == null) {
-                continue;
-            }
-            Set<String> subjects = new LinkedHashSet<>();
-            if (value instanceof Iterable<?> members) {
-                for (Object member : members) {
-                    String id = subjectOf(member);
-                    if (id != null && subjects.size() < MAX_SUBJECTS) {
-                        subjects.add(id);
-                    }
-                }
-            } else {
-                String id = subjectOf(value);
-                if (id != null) {
-                    subjects.add(id);
-                }
-            }
-            if (!subjects.isEmpty()) {
-                return subjects;
-            }
-        }
-        return Set.of();
-    }
-
-    /**
-     * Keys that name the object a run-parameter map blames, most specific first.
-     *
-     * <p>Forge spells the causing object six ways and the reading was two of
-     * them. Measured over the 28,343 trait-derived events of the smoke corpus:
-     * {@code Cause} answers for {@code ChangesZone} (81%), {@code Sacrificed}
-     * and {@code Exiled}; {@code SpellAbility} answers for {@code SpellCast}
-     * (100%) and {@code LifeLost}. The four added here are where the rest of
-     * the volume keeps it — {@code Source} on {@code CounterAdded}
-     * ({@code Card.java:1790}) and on {@code LifeGained}
-     * ({@code Player.java:487}), {@code SourceSA} on {@code BecomesTarget}
-     * ({@code SpellAbilityStackInstance.java:170}), {@code Causer} on
-     * {@code Destroyed} ({@code GameAction.java:2161}), {@code Activator} on
-     * {@code TapsForMana} ({@code AbilityManaPart.java:251}).
-     *
-     * <p>Ordered rather than merged because a map often holds several: an
-     * explicit {@code Cause} is the engine's own answer and outranks a source
-     * card, which outranks the player who happened to be acting.
-     *
-     * <p>{@code DamageSource} is deliberately absent. The damage types
-     * normalize it into their own {@code source} slot, and repeating it here
-     * would make the cause channel a copy of a field the reader already has
-     * rather than a second fact about the event.
-     */
-    private static final List<String> CAUSE_KEYS = List.of(
-            "Cause", "SpellAbility", "SourceSA", "Source", "Causer", "Activator");
-
-    /**
-     * The object that caused this event, as a ref, or null when none is named.
-     *
-     * <p>{@code cause} is documented as an entity or player ref and was once
-     * written as a comma-joined list of run-parameter key names — the one place
-     * the schema contradicted itself, and the value nothing could learn from.
-     * A cause that is a spell or ability is named by the card it is on, which
-     * is the identity the snapshot carries.
-     *
-     * <p>Null is a real answer and stays one. {@code Phase} carries only the
-     * turn's player ({@code PhaseHandler.java:438}, with the {@code Phase} key
-     * commented out), {@code Untaps} carries only the card
-     * ({@code Card.java:4864}), and {@code Attacks} and {@code Blocks} carry
-     * combat's shape and no actor: nothing in the game caused them in the sense
-     * this field means, and inventing one would be worse than the gap.
-     */
-    private static String causeOf(Map<String, Object> byName) {
-        for (String key : CAUSE_KEYS) {
-            String ref = subjectOf(byName.get(key));
-            if (ref != null) {
-                return ref;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Fill the slots this event type declares, from the values the map holds.
-     *
-     * <p>Per type and no wider: the vocabulary normalizes an outcome so that the
-     * same thing from two different script APIs lands in the same slots, and a
-     * key written outside the type's own set is one no reader will look for. A
-     * type this has no reading for carries its mode and its cause and nothing
-     * else, which is a smaller claim than the identity pair it used to make.
-     */
-    private static void normalizeParams(
-            EffectEvent event, String mode, Map<String, Object> byName) {
-        switch (event.type()) {
-            case EffectEvent.ZONE_CHANGE -> {
-                event.param("from_zone", zoneName(byName.get("Origin")));
-                event.param("to_zone", zoneName(byName.get("Destination")));
-            }
-            case EffectEvent.DAMAGE_DEALT -> {
-                event.param("amount", intOf(byName.get("DamageAmount")));
-                Boolean combat = boolOf(byName.get("IsCombatDamage"));
-                event.param("combat", combat != null
-                        ? combat : boolOf(byName.get("IsCombat")));
-                event.param("source", subjectOf(byName.get("DamageSource")));
-            }
-            case EffectEvent.DAMAGE_PREVENTED -> {
-                event.param("amount", intOf(byName.get("PreventedAmount")));
-                event.param("source", subjectOf(byName.get("DamageSource")));
-            }
-            case EffectEvent.DESTROYED ->
-                    event.param("regenerable", boolOf(byName.get("Regeneration")));
-            case EffectEvent.COUNTER_CHANGE -> counterParams(event, byName);
-            // "Amount" last: it is how the replacement side spells the same
-            // quantity the trigger side calls LifeAmount, and without it a
-            // life-total replacement carries no number to differ in.
-            case EffectEvent.LIFE_CHANGE -> event.param(
-                    "delta",
-                    firstInt(byName, "LifeAmount", "LifeGained", "Amount"));
-            case EffectEvent.CARD_DRAWN, EffectEvent.CARD_MILLED,
-                    EffectEvent.CARD_DISCARDED ->
-                    event.param("count", firstInt(byName, "Number", "Num"));
-            // Scry and Surveil each spell their own count, and neither is
-            // Number: read under the general names alone this type carried no
-            // count at all.
-            case EffectEvent.CARD_LOOKED_AT -> {
-                event.param("count", firstInt(
-                        byName, "ScryNum", "SurveilNum", "Number", "Num"));
-                event.param("from_zone", zoneName(byName.get("Origin")));
-            }
-            case EffectEvent.POISON_CHANGE -> event.param(
-                    "delta", firstInt(byName, "Amount", "Num", "Number"));
-            case EffectEvent.MANA_PRODUCED, EffectEvent.MANA_LOST ->
-                    event.param("mana_by_color", manaOf(byName));
-            case EffectEvent.PHASED ->
-                    // Two modes, one type, and the direction is the whole of
-                    // the difference between them.
-                    event.param("out", !"PhaseIn".equals(mode));
-            case EffectEvent.ATTACHED ->
-                    event.param("attached_to", firstRef(
-                            byName, "AttachTarget", "Attached", "Card"));
-            case EffectEvent.UNATTACHED ->
-                    event.param("detached_from", firstRef(
-                            byName, "AttachTarget", "Attached", "Card"));
-            case EffectEvent.ATTACKERS_DECLARED ->
-                    // Attacked first: CombatUtil.checkDeclaredAttacker spells
-                    // the entity this creature attacked that way and no other.
-                    event.param("defender", firstRef(
-                            byName, "Attacked", "Defender", "AttackedTarget",
-                            "DefendingPlayer", "Defenders"));
-            case EffectEvent.BLOCKERS_DECLARED ->
-                    event.param("blocked", firstRef(
-                            byName, "Attackers", "Attacker"));
-            case EffectEvent.BECAME_BLOCKED ->
-                    event.param("blockers", refList(byName, "Blockers", "Blocker"));
-            case EffectEvent.FACE_CHANGE ->
-                    event.param("to_state", faceState(mode));
-            case EffectEvent.PLAYER_LOST ->
-                    event.param("reason", textOf(byName.get("LoseReason")));
-            case EffectEvent.SPELL_COPIED ->
-                    event.param("count", firstInt(byName, "Number", "Num"));
-            case EffectEvent.TOKEN_CREATED -> event.param(
-                    "count", firstInt(byName, "TokenNum", "Number", "Num"));
-            default -> {
-                // Tapped, untapped, phased, spell_cast and the generic outcome
-                // all carry their subject and their mode, which is everything
-                // the vocabulary declares for them.
-            }
-        }
-    }
-
-    /**
-     * Which counter moved and by how much.
-     *
-     * <p>Forge says it two ways. The plain one names the type and the number.
-     * The other hands over {@code CounterMap}, a per-player multiset that a
-     * counter-replacement rewrites <b>in place</b> — which is also why the
-     * engine-side copy of the parameter map has to reach inside it, or both
-     * halves of the record read the same however carefully this reads them.
-     *
-     * <p>A map naming several counter types at once has one delta and no single
-     * type: the total is the honest answer and a joined type name would be a
-     * value no reader could match.
-     */
-    private static void counterParams(EffectEvent event, Map<String, Object> byName) {
-        Object type = byName.get("CounterType");
-        Integer delta = firstInt(
-                byName, "CounterNum", "CounterAmount", "NewCounterAmount");
-        if (type != null) {
-            event.param("counter_type", counterName(type));
-        }
-        if (delta != null) {
-            event.param("delta", delta);
-            return;
-        }
-        if (!(byName.get("CounterMap") instanceof Map<?, ?> counters)) {
-            return;
-        }
-        Map<String, Integer> total = new LinkedHashMap<>();
-        for (Object value : counters.values()) {
-            if (!(value instanceof com.google.common.collect.Multiset<?> multiset)) {
-                continue;
-            }
-            for (com.google.common.collect.Multiset.Entry<?> entry
-                    : multiset.entrySet()) {
-                total.merge(
-                        counterName(entry.getElement()), entry.getCount(), Integer::sum);
-            }
-        }
-        if (total.isEmpty()) {
-            return;
-        }
-        if (total.size() == 1 && type == null) {
-            event.param("counter_type", total.keySet().iterator().next());
-        }
-        int sum = 0;
-        for (Integer count : total.values()) {
-            sum += count;
-        }
-        event.param("delta", sum);
-    }
-
-    /**
-     * The mana a mana event moved, in the slot the vocabulary declares.
-     *
-     * <p>Forge hands produced mana over as its own short text -- {@code "G"},
-     * {@code "G G"}, {@code "1"} -- so the reading is the one
-     * {@link #manaByColor(String)} already does for the activation channel,
-     * which is what keeps a tapped land and a replaced mana production
-     * comparable. A value that is not text yields nothing rather than an empty
-     * object: absent is the honest answer for a mana structure this side does
-     * not link against, and {@code {}} would claim no mana was produced.
-     */
-    private static Map<String, Integer> manaOf(Map<String, Object> byName) {
-        Object produced = byName.get("Produced");
-        if (!(produced instanceof String)) {
-            produced = byName.get("Mana");
-        }
-        if (!(produced instanceof String text)) {
-            return null;
-        }
-        Map<String, Integer> mana = manaByColor(text.trim());
-        return mana.isEmpty() ? null : mana;
-    }
-
-    /**
-     * Which face a card turned to.
-     *
-     * <p>Read from the mode rather than from a parameter, because the two modes
-     * that reach this type each mean exactly one direction and neither map
-     * carries a usable state name: {@code AbilityKey.CardState} exists but is a
-     * {@code CardState} object put there by door unlocking alone
-     * ({@code Card.java:8146}), and rendering it would fill the slot with an
-     * object's {@code toString} instead of a face.
-     */
-    private static String faceState(String mode) {
-        return "TurnFaceUp".equals(mode) ? "face_up" : "transformed";
-    }
-
-    /** The first of these keys that names an entity, single or collection. */
-    private static String firstRef(Map<String, Object> byName, String... keys) {
-        for (String key : keys) {
-            String ref = subjectOf(byName.get(key));
-            if (ref != null) {
-                return ref;
-            }
-            if (byName.get(key) instanceof Iterable<?> members) {
-                for (Object member : members) {
-                    ref = subjectOf(member);
-                    if (ref != null) {
-                        return ref;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    /** Every entity these keys name, deduplicated, or null for none. */
-    private static List<String> refList(Map<String, Object> byName, String... keys) {
-        Set<String> refs = new LinkedHashSet<>();
-        for (String key : keys) {
-            Object value = byName.get(key);
-            if (value instanceof Iterable<?> members) {
-                for (Object member : members) {
-                    String ref = subjectOf(member);
-                    if (ref != null && refs.size() < MAX_SUBJECTS) {
-                        refs.add(ref);
-                    }
-                }
-            } else {
-                String ref = subjectOf(value);
-                if (ref != null && refs.size() < MAX_SUBJECTS) {
-                    refs.add(ref);
-                }
-            }
-        }
-        return refs.isEmpty() ? null : new ArrayList<>(refs);
-    }
-
-    /** A parameter's own text, or null where it holds none. */
-    private static String textOf(Object value) {
-        if (value == null) {
-            return null;
-        }
-        String text = String.valueOf(value).trim();
-        return text.isEmpty() ? null : text;
-    }
-
-    private static String counterName(Object type) {
-        return type instanceof forge.game.card.CounterType counter
-                ? counter.getName().toUpperCase(java.util.Locale.ROOT)
-                : String.valueOf(type).toUpperCase(java.util.Locale.ROOT);
-    }
-
-    /** A zone, however the parameter spells it. */
-    private static String zoneName(Object value) {
-        if (value instanceof ZoneType zone) {
-            return zone.name().toLowerCase(java.util.Locale.ROOT);
-        }
-        return value == null
-                ? null : String.valueOf(value).toLowerCase(java.util.Locale.ROOT);
-    }
-
-    private static Integer firstInt(Map<String, Object> byName, String... keys) {
-        for (String key : keys) {
-            Integer value = intOf(byName.get(key));
-            if (value != null) {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    private static Integer intOf(Object value) {
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        try {
-            return value == null ? null : Integer.valueOf(String.valueOf(value).trim());
-        } catch (NumberFormatException e) {
-            // A script variable Forge has not evaluated yet. Absent is the
-            // right answer; zero would be a claim.
-            return null;
-        }
-    }
-
-    private static Boolean boolOf(Object value) {
-        if (value instanceof Boolean flag) {
-            return flag;
-        }
-        if (value == null) {
-            return null;
-        }
-        String text = String.valueOf(value);
-        return "true".equalsIgnoreCase(text) || "false".equalsIgnoreCase(text)
-                ? Boolean.valueOf(text.equalsIgnoreCase("true")) : null;
-    }
-
-    /**
-     * The entity a run-parameter value names, or null when it names none.
-     *
-     * <p>A replacement's and a trigger's parameter maps are the only place
-     * those records say what they are about, and nothing read them: every
-     * rewrite and trigger event in the corpus named no subjects at all, which
-     * left the pending-event overlay with nothing to attach to.
-     */
-    private static String subjectOf(Object value) {
-        if (value instanceof Card card) {
-            return SnapshotBuilder.entityId(card);
-        }
-        if (value instanceof Player player) {
-            return SnapshotBuilder.playerId(player);
-        }
-        if (value instanceof SpellAbility ability && ability.getHostCard() != null) {
-            return SnapshotBuilder.entityId(ability.getHostCard());
-        }
-        return null;
-    }
-
-    /** A trigger's or replacement's mode, by whichever accessor it has. */
-    private static String modeOf(Object trait) {
-        Object mode = PatchHooks.read(trait, "getMode");
-        return mode == null ? null : String.valueOf(mode);
-    }
-
-    /**
-     * Forge modes that have a counterpart in the event vocabulary.
-     *
-     * <p>Deliberately partial. The vocabulary names observable outcomes and
-     * Forge names engine hooks, so only some pairs are the same thing; the rest
-     * carry their mode as a parameter and take the generic type.
-     */
-    private static final Map<String, String> EVENT_BY_MODE = Map.ofEntries(
-            Map.entry("ChangesZone", EffectEvent.ZONE_CHANGE),
-            Map.entry("Moved", EffectEvent.ZONE_CHANGE),
-            Map.entry("Destroy", EffectEvent.DESTROYED),
-            Map.entry("Destroyed", EffectEvent.DESTROYED),
-            Map.entry("Sacrificed", EffectEvent.SACRIFICED),
-            Map.entry("DamageDone", EffectEvent.DAMAGE_DEALT),
-            Map.entry("DamageDealtOnce", EffectEvent.DAMAGE_DEALT),
-            Map.entry("DamageAll", EffectEvent.DAMAGE_DEALT),
-            Map.entry("Drawn", EffectEvent.CARD_DRAWN),
-            Map.entry("Draw", EffectEvent.CARD_DRAWN),
-            // The replacement side's spelling of the same event. This table was
-            // written from the trigger vocabulary, so 31 of Forge's 42
-            // ReplacementTypes fell through to the generic outcome carrying
-            // nothing but their mode -- and an event with no value in it cannot
-            // differ from itself, which is how a rewrite that halved a draw got
-            // dropped as an identity pair. Only the five whose quantity a
-            // reading above already picks up are added here; the rest are what
-            // the identity tally is instrumented to answer.
-            Map.entry("DrawCards", EffectEvent.CARD_DRAWN),
-            Map.entry("Discarded", EffectEvent.CARD_DISCARDED),
-            Map.entry("Milled", EffectEvent.CARD_MILLED),
-            Map.entry("Mill", EffectEvent.CARD_MILLED),
-            Map.entry("LifeGained", EffectEvent.LIFE_CHANGE),
-            Map.entry("LifeLost", EffectEvent.LIFE_CHANGE),
-            Map.entry("GainLife", EffectEvent.LIFE_CHANGE),
-            Map.entry("LoseLife", EffectEvent.LIFE_CHANGE),
-            Map.entry("LifeReduced", EffectEvent.LIFE_CHANGE),
-            Map.entry("PayLife", EffectEvent.LIFE_CHANGE),
-            Map.entry("Poisoned", EffectEvent.POISON_CHANGE),
-            Map.entry("CounterAdded", EffectEvent.COUNTER_CHANGE),
-            Map.entry("CounterAddedOnce", EffectEvent.COUNTER_CHANGE),
-            Map.entry("CounterRemoved", EffectEvent.COUNTER_CHANGE),
-            Map.entry("AddCounter", EffectEvent.COUNTER_CHANGE),
-            Map.entry("RemoveCounter", EffectEvent.COUNTER_CHANGE),
-            Map.entry("Taps", EffectEvent.TAPPED),
-            Map.entry("TapsForMana", EffectEvent.MANA_PRODUCED),
-            Map.entry("Untaps", EffectEvent.UNTAPPED),
-            Map.entry("Attached", EffectEvent.ATTACHED),
-            Map.entry("Unattach", EffectEvent.UNATTACHED),
-            Map.entry("SpellCast", EffectEvent.SPELL_CAST),
-            Map.entry("SpellAbilityCast", EffectEvent.SPELL_CAST),
-            Map.entry("Countered", EffectEvent.SPELL_COUNTERED),
-            Map.entry("TokenCreated", EffectEvent.TOKEN_CREATED),
-            Map.entry("CreateToken", EffectEvent.TOKEN_CREATED),
-            Map.entry("TokenCreatedOnce", EffectEvent.TOKEN_CREATED),
-            Map.entry("Attackers", EffectEvent.ATTACKERS_DECLARED),
-            Map.entry("AttackersDeclared", EffectEvent.ATTACKERS_DECLARED),
-            // Attacks is one creature being declared as an attacker, which is
-            // exactly what attackers_declared names -- and it is the third
-            // heaviest trait-derived mode in the corpus (2,632 events), every
-            // one of which took the generic type and carried nothing but its
-            // own name. As attackers_declared it carries the defender.
-            Map.entry("Attacks", EffectEvent.ATTACKERS_DECLARED),
-            Map.entry("Blocks", EffectEvent.BLOCKERS_DECLARED),
-            // Retargeted: the subject of an AttackerBlocked event is the
-            // attacker, not the blocker, so blockers_declared put the wrong
-            // creature in the slot named "blocked". became_blocked is the type
-            // whose subject is the attacker and whose param is the blockers.
-            Map.entry("AttackerBlocked", EffectEvent.BECAME_BLOCKED),
-            Map.entry("AttackerBlockedByCreature", EffectEvent.BECAME_BLOCKED),
-            Map.entry("TurnFaceUp", EffectEvent.FACE_CHANGE),
-            Map.entry("Shuffled", EffectEvent.LIBRARY_SHUFFLED),
-            Map.entry("Scry", EffectEvent.CARD_LOOKED_AT),
-            Map.entry("Surveil", EffectEvent.CARD_LOOKED_AT),
-            Map.entry("PhaseOut", EffectEvent.PHASED),
-            Map.entry("PhaseIn", EffectEvent.PHASED),
-            Map.entry("Regenerated", EffectEvent.REGENERATED),
-            // ── the replacement side's own spellings ────────────────────
-            // ReplacementType names its modes differently from TriggerType,
-            // and this table was written from the trigger vocabulary. A
-            // replacement mode with no entry here takes the generic type and
-            // carries nothing but its mode -- and an event with no value in it
-            // cannot differ from itself, so the pair is dropped as an identity
-            // rewrite however much the replacement changed. Untap was two such
-            // drops in the smoke run; the rest are the modes a random sealed
-            // game reaches less often.
-            Map.entry("Untap", EffectEvent.UNTAPPED),
-            Map.entry("Tap", EffectEvent.TAPPED),
-            Map.entry("DealtDamage", EffectEvent.DAMAGE_DEALT),
-            Map.entry("Counter", EffectEvent.SPELL_COUNTERED),
-            Map.entry("CopySpell", EffectEvent.SPELL_COPIED),
-            Map.entry("ProduceMana", EffectEvent.MANA_PRODUCED),
-            Map.entry("LoseMana", EffectEvent.MANA_LOST),
-            Map.entry("Transform", EffectEvent.FACE_CHANGE),
-            Map.entry("DeclareBlocker", EffectEvent.BLOCKERS_DECLARED),
-            Map.entry("RollDice", EffectEvent.DICE_ROLLED),
-            Map.entry("GameWin", EffectEvent.PLAYER_WON),
-            Map.entry("GameLoss", EffectEvent.PLAYER_LOST));
-
-    private static String keyListJson(List<ProvenanceKey> keys) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (ProvenanceKey key : keys) {
-            joiner.add(key.toJson());
-        }
-        return joiner.toString();
-    }
-
-    /**
-     * The printed line a runtime trait came from, as a one-element list.
-     *
-     * <p>Takes a {@link CardTraitBase} rather than a {@link SpellAbility}
-     * because a trigger and a replacement effect are traits too, and both hooks
-     * hand the collector the trait object itself — which is what the trigger and
-     * rewrite handlers were dropping. A null key is not an error, so a record
-     * whose line cannot be attributed still carries its host card and its
-     * snapshot rather than being suppressed.
+     * <p>For the payload fields that carry keys but no reason — a playability
+     * candidate, a rewrite's {@code replaced_by}. A record's own acting line
+     * goes through {@link ProvenanceKey#resolve} instead, keeping the reason
+     * there is no key: an empty {@code ability} with nothing beside it cannot
+     * separate "this card has no printed line anywhere" from "the resolver
+     * regressed".
      */
     static List<ProvenanceKey> keysOf(CardTraitBase trait) {
-        return resolveKey(trait).keys();
-    }
-
-    /**
-     * The same lookup, keeping the reason there was no key.
-     *
-     * <p>What every record-envelope call site wants. {@link #keysOf} throws the
-     * reason away, which is how every record with no acting line came to spell
-     * it {@code ability: []} and say nothing more — leaving "this card has no
-     * printed line anywhere" and "the resolver regressed" as the same row. The
-     * list form survives only for the playability payload, where the keys go
-     * into a candidate list that has no field to carry a reason.
-     */
-    static ProvenanceKey.Resolved resolveKey(CardTraitBase trait) {
-        return ProvenanceKey.resolve(trait);
+        return ProvenanceKey.resolve(trait).keys();
     }
 
     /**
@@ -3281,7 +2139,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * <p>A triggered or replacement ability belongs to its host's controller,
      * which is often not whoever's turn it is: a death trigger fires on the
      * opponent's turn as often as on its own. Forge decides it the same way —
-     * {@code TriggerHandler.runSingleTriggerBody} defaults the controller to
+     * {@code TriggerHandler.runSingleTriggerUnobserved} defaults the controller to
      * the host card's.
      */
     private String controllerOf(Card source) {
@@ -3300,26 +2158,19 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
-     * The match's random seat, as a player id, or null when it has none.
+     * Name the match's random seat; the fork collector learns it too.
      *
-     * <p>Every record is stamped against it at the write (FR-030), the mana
-     * reservoir's held records included: the seat is fixed for the game, so
-     * the stamp reads the same whenever it is applied.
+     * <p>The mana reservoir's held records are stamped against it when they are
+     * written, like every other record: the seat is fixed for the game.
      */
-    private String randomSeatPlayerId;
-
-    /** Name the match's random seat; the fork collector learns it too. */
     public void setRandomSeatPlayerId(String playerId) {
-        this.randomSeatPlayerId = playerId;
+        context.setRandomSeatPlayerId(playerId);
         if (forks != null) {
             forks.setRandomSeatPlayerId(playerId);
         }
     }
 
     private void emit(EffectRecord record) {
-        record.randomSeat(
-                randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
-        writer.write(record.toJson());
-        recordsWritten++;
+        context.emit(record);
     }
 }

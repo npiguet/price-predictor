@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.effect_head_input import CARD_TYPES, OVERLAY_KEYWORDS
-from effects.domain.effect_model import LIBRARY_EVENTS, ZONE_OUTCOMES
+from effects.domain.effect_head_layout import LIBRARY_EVENTS, ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets, events_of
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
@@ -22,7 +22,6 @@ from effects.domain.records import (
     Contribution,
     EffectRecord,
     ForbiddenEntity,
-    Moment,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
@@ -33,6 +32,7 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.state_snapshot import COLORS, GlobalState, StateSnapshot
+from tests.unit.effects.builders import make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -44,14 +44,9 @@ _SNAPSHOT = StateSnapshot(
 
 
 def _record(payload, kind=RecordKind.RESOLUTION, **overrides) -> EffectRecord:
-    defaults: dict = {
-        "record_id": "r.0.1", "run_id": "r", "timestamp": "t", "game_id": "r.0.1",
-        "kind": kind, "actor_player": "P0", "state": _SNAPSHOT, "payload": payload,
-    }
-    if kind is RecordKind.RESOLUTION:
-        defaults["moment"] = Moment.RESOLUTION
+    defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
     defaults.update(overrides)
-    return EffectRecord(**defaults)
+    return make_record(kind, payload=payload, **defaults)
 
 
 def _resolution(*events) -> EffectRecord:
@@ -243,6 +238,37 @@ class TestMultiBinaryFields:
         vector = targets["E1"].fields["keywords_gained"]
         assert vector[OVERLAY_KEYWORDS.index("first_strike")] == 1.0
 
+    def test_a_keyword_with_a_value_sets_its_bit(self):
+        """``StatDiffer`` writes the keyword as printed, value included."""
+        targets = derive_targets(_resolution(
+            Event(type=EventType.KEYWORD_CHANGE, subjects=("E1",),
+                  params={"keywords": ["ward:2", "annihilator:2"]}),
+        ))
+        vector = targets["E1"].fields["keywords_gained"]
+        assert vector[OVERLAY_KEYWORDS.index("ward")] == 1.0
+        assert vector[OVERLAY_KEYWORDS.index("annihilator")] == 1.0
+
+    def test_protection_from_a_quality_sets_the_protection_bit(self):
+        """The overlay has one protection slot; the input layout folds
+        ``protection_from_red`` onto it, and the target has to agree."""
+        targets = derive_targets(_resolution(
+            Event(type=EventType.KEYWORD_CHANGE, subjects=("E1",),
+                  params={"keywords": ["protection from blue"]}),
+        ))
+        vector = targets["E1"].fields["keywords_gained"]
+        assert vector[OVERLAY_KEYWORDS.index("protection")] == 1.0
+
+    def test_a_continuous_grant_with_a_value_sets_its_bit(self):
+        record = _record(
+            ContinuousPayload(contributions=(
+                Contribution(entity="E1", keywords=("ward:2", "-protection_from_red")),
+            )),
+            kind=RecordKind.CONTINUOUS,
+        )
+        fields = derive_targets(record)["E1"].fields
+        assert fields["keywords_gained"][OVERLAY_KEYWORDS.index("ward")] == 1.0
+        assert fields["keywords_lost"][OVERLAY_KEYWORDS.index("protection")] == 1.0
+
     def test_an_untracked_keyword_sets_no_bit(self):
         targets = derive_targets(_resolution(
             Event(type=EventType.KEYWORD_CHANGE, subjects=("E1",),
@@ -293,7 +319,9 @@ class TestPayloadKinds:
         )
         assert derive_targets(record)["E1"].fields["damage_taken"] == 0.0
 
-    def test_a_fired_trigger_reads_its_event(self):
+    def test_a_fired_trigger_supervises_no_entity_with_the_event_that_caused_it(self):
+        """The event is the trigger's input overlay; its own effects arrive as the
+        resolution record of the ability it put on the stack."""
         record = _record(
             TriggerPayload(
                 event=Event(type=EventType.LIFE_CHANGE, subjects=("P0",),
@@ -302,7 +330,7 @@ class TestPayloadKinds:
             ),
             kind=RecordKind.TRIGGER, moment=None,
         )
-        assert derive_targets(record)["P0"].fields["life_delta"] == 3.0
+        assert derive_targets(record) == {}
 
     def test_an_unfired_trigger_produces_no_entity_targets(self):
         record = _record(
@@ -461,7 +489,7 @@ class TestLegalityBits:
 
 class TestFieldNames:
     def test_every_produced_field_is_a_real_head_output(self):
-        from effects.domain.effect_model import FIELDS_BY_NAME
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
 
         record = _resolution(
             Event(type=EventType.DAMAGE_DEALT, subjects=("E1",),
@@ -479,7 +507,7 @@ class TestFieldNames:
 
     @pytest.mark.parametrize("counter", ["P1P1", "M1M1", "LOYALTY"])
     def test_every_tracked_counter_type_names_a_real_field(self, counter):
-        from effects.domain.effect_model import FIELDS_BY_NAME
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
 
         targets = derive_targets(_resolution(
             Event(type=EventType.COUNTER_CHANGE, subjects=("E1",),

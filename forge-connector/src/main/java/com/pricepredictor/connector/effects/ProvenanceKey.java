@@ -4,7 +4,6 @@ import forge.ImageKeys;
 import forge.StaticData;
 import forge.card.CardRules;
 import forge.card.CardStateName;
-import forge.card.ICardFace;
 import forge.game.CardTraitBase;
 import forge.game.card.Card;
 import forge.game.card.CardState;
@@ -26,6 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringJoiner;
+import java.util.function.Predicate;
 
 /**
  * Printed provenance of one runtime trait: which script file, which face, which
@@ -81,8 +82,22 @@ public record ProvenanceKey(
         return new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind, option);
     }
 
+    /**
+     * The key for a report a person reads, such as an undefined SVar's:
+     * {@code (cardsfolder/a/abrade.txt) face0/spell[0]/option1}.
+     */
+    public String describe() {
+        StringBuilder sb = new StringBuilder()
+                .append('(').append(scriptFile).append(") face").append(face)
+                .append('/').append(traitKind).append('[').append(indexWithinKind).append(']');
+        if (option != null) {
+            sb.append("/option").append(option);
+        }
+        return sb.toString();
+    }
+
     /** The root this key names: itself, or the charm a mode key belongs to. */
-    public ProvenanceKey root() {
+    ProvenanceKey root() {
         return option == null ? this : new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind);
     }
 
@@ -107,6 +122,29 @@ public record ProvenanceKey(
      * model input.
      */
     public record Resolved(ProvenanceKey key, String reason) {
+
+        /**
+         * No line, for a trait that is none of the kinds a printed line can be,
+         * or no trait at all.
+         */
+        public static final Resolved UNKNOWN = new Resolved(null, UNRESOLVED_UNKNOWN_KIND);
+
+        public Resolved {
+            if ((key == null) == (reason == null)) {
+                throw new IllegalArgumentException(
+                        "exactly one of a key and a reason: " + key + ", " + reason);
+            }
+        }
+
+        /**
+         * The same line's mode at {@code option}, or this when there is no
+         * option or no line to give it to: a mode nothing could place keeps
+         * the root key, and a reason stays a reason.
+         */
+        public Resolved withOption(Integer option) {
+            return option == null || key == null
+                    ? this : new Resolved(key.withOption(option), null);
+        }
 
         /** The acting-line list a record carries: the key, or nothing. */
         public List<ProvenanceKey> keys() {
@@ -246,11 +284,7 @@ public record ProvenanceKey(
      */
     public static Resolved resolve(CardTraitBase trait) {
         Resolved root = resolveRoot(trait);
-        if (root.key() == null) {
-            return root;
-        }
-        Integer option = CharmModes.optionOf(trait);
-        return option == null ? root : new Resolved(root.key().withOption(option), null);
+        return root.key() == null ? root : root.withOption(CharmModes.optionOf(trait));
     }
 
     private static Resolved resolveRoot(CardTraitBase trait) {
@@ -258,7 +292,7 @@ public record ProvenanceKey(
             // Not a resolver failure: a hook whose signature drifted hands the
             // collector something that is not a trait at all, and nothing that
             // is not one of the five kinds can name a printed line.
-            return new Resolved(null, UNRESOLVED_UNKNOWN_KIND);
+            return Resolved.UNKNOWN;
         }
         Set<CardTraitBase> seen =
                 Collections.newSetFromMap(new IdentityHashMap<>());
@@ -376,36 +410,65 @@ public record ProvenanceKey(
 
     /** The one SVar of {@code state} whose text parses to {@code want}, or null. */
     private static String soleSVarParsingTo(CardState state, Map<String, String> want) {
-        String hit = null;
-        int hits = 0;
-        for (Map.Entry<String, String> svar : state.getSVars().entrySet()) {
+        Map.Entry<String, String> hit = sole(state.getSVars().entrySet(), svar -> {
             String text = svar.getValue();
-            if (text == null || text.indexOf('$') < 0) continue;
-            if (want.equals(FileSection.parseToMap(
-                    text, FileSection.DOLLAR_SIGN_KV_SEPARATOR))) {
-                if (hits == 0) hit = svar.getKey();
-                hits++;
-            }
-        }
-        return hits == 1 ? hit : null;
+            return text != null && text.indexOf('$') >= 0 && want.equals(
+                    FileSection.parseToMap(text, FileSection.DOLLAR_SIGN_KV_SEPARATOR));
+        });
+        return hit == null ? null : hit.getKey();
     }
 
     /** The one printed line of {@code state} that names {@code svar}, or null. */
     private static CardTraitBase soleLineNaming(CardState state, String svar) {
-        CardTraitBase hit = null;
-        int hits = 0;
+        List<CardTraitBase> lines = new ArrayList<>();
         for (String kind : List.of(
                 KIND_SPELL, KIND_TRIGGER, KIND_STATIC, KIND_REPLACEMENT)) {
             Iterable<? extends CardTraitBase> slice = slice(state, kind);
-            if (slice == null) continue;
-            for (CardTraitBase candidate : slice) {
-                if (namesSVar(candidate, svar)) {
-                    if (hits == 0) hit = candidate;
-                    hits++;
-                }
+            if (slice != null) {
+                slice.forEach(lines::add);
             }
         }
-        return hits == 1 ? hit : null;
+        return sole(lines, line -> namesSVar(line, svar));
+    }
+
+    /**
+     * The position of the only item that matches, or -1 when none or several
+     * do.
+     *
+     * <p>Every fallback that recognises a line by resemblance refuses on two
+     * candidates: a record with no key is still trainable through its state
+     * and payload, while a record with the wrong key silently trains the
+     * wrong line.
+     */
+    private static <T> int soleIndex(Iterable<? extends T> items, Predicate<? super T> matches) {
+        int index = 0;
+        int hit = -1;
+        for (T item : items) {
+            if (matches.test(item)) {
+                if (hit >= 0) {
+                    return -1;
+                }
+                hit = index;
+            }
+            index++;
+        }
+        return hit;
+    }
+
+    /** The only item that matches, or null when none or several do; see {@link #soleIndex}. */
+    private static <T> T sole(Iterable<? extends T> items, Predicate<? super T> matches) {
+        T hit = null;
+        boolean found = false;
+        for (T item : items) {
+            if (matches.test(item)) {
+                if (found) {
+                    return null;
+                }
+                hit = item;
+                found = true;
+            }
+        }
+        return hit;
     }
 
     /**
@@ -529,19 +592,6 @@ public record ProvenanceKey(
     }
 
     /**
-     * The position of the one same-shape member of the kind's slice, or -1.
-     *
-     * <p>The fingerprint is {@code getOriginalMapParams()}, the script's own
-     * parameters as parsed. {@code SpellAbility.copy} preserves it because
-     * {@code putParam} writes only the live {@code mapParams}, so a stack copy,
-     * an alternative-cost copy and a copied spell all still fingerprint back to
-     * the line they came from even though none of them carries a back-reference.
-     *
-     * <p>Refuses to answer when two members match: a record with no key is
-     * still trainable through its state and payload, while a record with the
-     * wrong key silently trains the wrong line.
-     */
-    /**
      * The position of the kind's only member of this trait's class, or -1.
      *
      * <p>The fallback for a trait with no fingerprint at all. A permanent spell
@@ -559,37 +609,30 @@ public record ProvenanceKey(
      */
     private static int indexIfUnique(CardState state, CardTraitBase trait, String kind) {
         Iterable<? extends CardTraitBase> slice = slice(state, kind);
-        if (slice == null) return -1;
-        int index = 0;
-        int hit = -1;
-        int hits = 0;
-        for (CardTraitBase candidate : slice) {
-            if (candidate.getClass() == trait.getClass()) {
-                hit = index;
-                hits++;
-            }
-            index++;
-        }
-        return hits == 1 ? hit : -1;
+        return slice == null ? -1
+                : soleIndex(slice, candidate -> candidate.getClass() == trait.getClass());
     }
 
+    /**
+     * The position of the one same-shape member of the kind's slice, or -1.
+     *
+     * <p>The fingerprint is {@code getOriginalMapParams()}, the script's own
+     * parameters as parsed. {@code SpellAbility.copy} preserves it because
+     * {@code putParam} writes only the live {@code mapParams}, so a stack copy,
+     * an alternative-cost copy and a copied spell all still fingerprint back to
+     * the line they came from even though none of them carries a back-reference.
+     *
+     * <p>Refuses to answer when two members match: a record with no key is
+     * still trainable through its state and payload, while a record with the
+     * wrong key silently trains the wrong line.
+     */
     private static int indexLike(CardState state, CardTraitBase trait, String kind) {
         Iterable<? extends CardTraitBase> slice = slice(state, kind);
         if (slice == null) return -1;
         Map<String, String> want = trait.getOriginalMapParams();
         if (want == null || want.isEmpty()) return indexIfUnique(state, trait, kind);
-        int index = 0;
-        int hit = -1;
-        int hits = 0;
-        for (CardTraitBase candidate : slice) {
-            if (candidate.getClass() == trait.getClass()
-                    && want.equals(candidate.getOriginalMapParams())) {
-                if (hit < 0) hit = index;
-                hits++;
-            }
-            index++;
-        }
-        return hits == 1 ? hit : -1;
+        return soleIndex(slice, candidate -> candidate.getClass() == trait.getClass()
+                && want.equals(candidate.getOriginalMapParams()));
     }
 
     /**
@@ -778,6 +821,15 @@ public record ProvenanceKey(
         }
         Collections.sort(originals);
         return originals.indexOf(original);
+    }
+
+    /** Keys as the JSON array a record carries them in. */
+    public static String toJsonArray(List<ProvenanceKey> keys) {
+        StringJoiner joiner = new StringJoiner(",", "[", "]");
+        for (ProvenanceKey key : keys) {
+            joiner.add(key.toJson());
+        }
+        return joiner.toString();
     }
 
     /** The JSON object form used inside a record's {@code ability} array. */

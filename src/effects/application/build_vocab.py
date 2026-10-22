@@ -36,6 +36,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.domain.ability_tokenizer import (
+    SURFACE_PROSE,
+    SURFACE_SCRIPT,
     AbilityTokenizer,
     Token,
     camel_parts,
@@ -48,9 +50,6 @@ from price_predictor.application.build_vocabulary import (
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
 logger = logging.getLogger(__name__)
-
-SURFACE_PROSE = "prose"
-SURFACE_SCRIPT = "script"
 
 DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
     Path("output/cardsfolder/"),

@@ -521,26 +521,6 @@ class ProvenanceKeyTest {
         assertTrue(resolved.keys().isEmpty());
     }
 
-    /** The record's acting-line list is the resolved key, or nothing. */
-    @Test
-    void theKeysListIsWhatARecordCarries() {
-        Card fountain = card("Fountain of Youth");
-        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(
-                scriptedSpell(fountain.getCurrentState(), "GainLife"));
-
-        assertEquals(List.of(resolved.key()), resolved.keys());
-    }
-
-    /** {@code of} stays the entry point every collector calls. */
-    @Test
-    void ofAgreesWithResolve() {
-        Card fountain = card("Fountain of Youth");
-        SpellAbility printed = scriptedSpell(fountain.getCurrentState(), "GainLife");
-
-        assertEquals(ProvenanceKey.resolve(printed).key(), ProvenanceKey.of(printed));
-        assertNull(ProvenanceKey.of(null));
-    }
-
     // -- the script path comes from the tree, not from a rule ------------
 
     /**
@@ -1042,5 +1022,29 @@ class ProvenanceKeyTest {
                 ProvenanceKey.UNRESOLVED_UNINDEXABLE);
 
         assertEquals(reasons.size(), new java.util.HashSet<>(reasons).size());
+    }
+
+    /** A resolution names a line or says why it has none, never both nor neither. */
+    @Test
+    void aResolutionIsALineOrAReason() {
+        ProvenanceKey key = new ProvenanceKey(
+                "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new ProvenanceKey.Resolved(key, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new ProvenanceKey.Resolved(null, null));
+    }
+
+    /** A mode's option goes onto a line, and leaves a reason alone. */
+    @Test
+    void anOptionKeysTheModeOfALineAndLeavesAReasonAlone() {
+        ProvenanceKey key = new ProvenanceKey(
+                "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+        ProvenanceKey.Resolved line = new ProvenanceKey.Resolved(key, null);
+
+        assertEquals(key.withOption(2), line.withOption(2).key());
+        assertEquals(line, line.withOption(null));
+        assertEquals(ProvenanceKey.Resolved.UNKNOWN, ProvenanceKey.Resolved.UNKNOWN.withOption(2));
     }
 }

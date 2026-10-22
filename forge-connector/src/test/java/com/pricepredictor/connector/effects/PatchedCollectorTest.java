@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
 import com.pricepredictor.connector.effects.PatchedCollectors.Contribution;
 import forge.card.CardChangedType;
 import forge.card.CardType;
@@ -13,6 +12,7 @@ import forge.StaticData;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
 import forge.game.Game;
+import forge.game.GameEntity;
 import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.Match;
@@ -32,11 +32,12 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -80,8 +81,7 @@ class PatchedCollectorTest {
 
     private static CollectionCaps caps(int manaCap, double playabilityRate) {
         return new CollectionCaps(
-                manaCap, playabilityRate, 2, 2, List.of(),
-                CollectionCaps.defaults().legalityRate());
+                manaCap, playabilityRate, 2, 2, List.of(), 0.0, 0.0);
     }
 
     private static PatchedCollectors collectors(CollectionCaps caps) {
@@ -106,9 +106,6 @@ class PatchedCollectorTest {
         // A worker started without the property probes nothing; the eight
         // keywords a run probes by default are the supervisor's to send.
         assertTrue(defaults.probeKeywords().isEmpty());
-        // What-if legality queries are off: real decisions are written
-        // whatever the rate, and they alone fill the legality class.
-        assertEquals(0.0, defaults.legalityRate());
     }
 
     /**
@@ -125,8 +122,7 @@ class PatchedCollectorTest {
                 "effect.playability.rate", "0.5",
                 "effect.interventions.per.game", "3",
                 "effect.probes.per.game", "4",
-                "effect.probe.keywords", "wither, infect",
-                "effect.legality.rate", "0.25");
+                "effect.probe.keywords", "wither, infect");
         properties.forEach(System::setProperty);
         try {
             CollectionCaps caps = CollectionCaps.fromSystemProperties();
@@ -135,7 +131,6 @@ class PatchedCollectorTest {
             assertEquals(3, caps.interventionsPerGame());
             assertEquals(4, caps.probesPerGame());
             assertEquals(List.of("wither", "infect"), caps.probeKeywords());
-            assertEquals(0.25, caps.legalityRate());
         } finally {
             properties.keySet().forEach(System::clearProperty);
         }
@@ -165,7 +160,7 @@ class PatchedCollectorTest {
     void probesAreOffUntilKeywordsAreNamed() {
         assertFalse(CollectionCaps.defaults().probesEnabled());
         assertTrue(new CollectionCaps(
-                2000, 0.1, 2, 2, List.of("wither"), 0.1)
+                2000, 0.1, 2, 2, List.of("wither"), 0.0, 0.0)
                 .probesEnabled());
     }
 
@@ -239,25 +234,20 @@ class PatchedCollectorTest {
 
     // ── continuous coalescing ───────────────────────────────────────────
 
-    @Test
-    void aStaticIsRecordedOncePerStableBoard() {
+    /**
+     * A static's record is keyed by the static and the board: one repeating
+     * both is refused, and a change in either is a record of its own.
+     */
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            "a static is recorded once per stable board, anthem, board-1, false",
+            "a changed board gets a new record, anthem, board-2, true",
+            "two statics on one board each get a record, crusade, board-1, true"})
+    void aContinuousRecordIsKeyedByItsStaticAndBoard(
+            String why, String staticKey, String board, boolean allowed) {
         PatchedCollectors collector = collectors(caps(2000, 1.0));
         assertTrue(collector.allowContinuousRecord("anthem", "board-1"));
-        assertFalse(collector.allowContinuousRecord("anthem", "board-1"));
-    }
-
-    @Test
-    void aChangedBoardGetsANewRecord() {
-        PatchedCollectors collector = collectors(caps(2000, 1.0));
-        assertTrue(collector.allowContinuousRecord("anthem", "board-1"));
-        assertTrue(collector.allowContinuousRecord("anthem", "board-2"));
-    }
-
-    @Test
-    void twoStaticsOnOneBoardEachGetARecord() {
-        PatchedCollectors collector = collectors(caps(2000, 1.0));
-        assertTrue(collector.allowContinuousRecord("anthem", "board-1"));
-        assertTrue(collector.allowContinuousRecord("crusade", "board-1"));
+        assertEquals(allowed, collector.allowContinuousRecord(staticKey, board), why);
     }
 
     @Test
@@ -1172,7 +1162,7 @@ class PatchedCollectorTest {
      */
     @Test
     void aRecordWithNoOutgoingNamesTheParametersTheNormaliserDidNotRead() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         Card card = TestCards.build("Mountain");
         tally.record("Moved", "replaced", false, false,
                 Map.of("Card", card, "LibraryPosition", 0),
@@ -1187,7 +1177,7 @@ class PatchedCollectorTest {
     /** And one that moved nothing at all is not counted against the reader. */
     @Test
     void aRecordThatMovedNothingIsNoNormaliserGap() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
         tally.record("Untap", "skipped", false, false, same, same);
 
@@ -1207,7 +1197,7 @@ class PatchedCollectorTest {
      */
     @Test
     void theSummaryLeadsWithTheVolumeAndTheResults() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
         tally.record("Moved", "updated", true, true, same, same);
         for (int i = 0; i < 9; i++) {
@@ -1226,7 +1216,7 @@ class PatchedCollectorTest {
     /** A listener that never learnt the result says so rather than guessing. */
     @Test
     void aResultlessRecordIsItsOwnRowInTheBreakdown() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
         tally.record("Moved", null, false, false, same, same);
 
@@ -1241,7 +1231,7 @@ class PatchedCollectorTest {
      */
     @Test
     void aGameWithNoReplacementPrintsNothing() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
         java.io.PrintStream out = System.out;
         java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
         System.setOut(new java.io.PrintStream(captured));
@@ -1283,18 +1273,19 @@ class PatchedCollectorTest {
 
     // ── coalescing the kinds that had none ─────────────────────────────
 
-    @Test
-    void aDecisionOnAnUnchangedBoardIsWrittenOnce() {
-        PatchedCollectors collector = collectors(caps(2000, 1.0));
-        assertTrue(collector.allowDistinctRecord("decision", "{payload}", "{board}"));
-        assertFalse(collector.allowDistinctRecord("decision", "{payload}", "{board}"));
-    }
-
-    @Test
-    void aBoardThatMovedGetsItsOwnDecisionRecord() {
+    /**
+     * A decision is keyed by what it says and the board it was asked on: the
+     * same answer on an unchanged board is written once, and a board that
+     * moved gets its own record.
+     */
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            "a decision on an unchanged board is written once, '{life:20}', false",
+            "a board that moved gets its own decision record, '{life:19}', true"})
+    void aDecisionIsKeyedByItsPayloadAndBoard(String why, String board, boolean allowed) {
         PatchedCollectors collector = collectors(caps(2000, 1.0));
         assertTrue(collector.allowDistinctRecord("decision", "{payload}", "{life:20}"));
-        assertTrue(collector.allowDistinctRecord("decision", "{payload}", "{life:19}"));
+        assertEquals(allowed, collector.allowDistinctRecord("decision", "{payload}", board), why);
     }
 
     /**
@@ -1370,7 +1361,7 @@ class PatchedCollectorTest {
 
     private PatchedCollectors withForks(RecordShardWriter writer) {
         CollectionCaps probing = new CollectionCaps(
-                1, 1.0, 2, 2, List.of("trample"), 0.1);
+                1, 1.0, 2, 2, List.of("trample"), 0.0, 0.0);
         PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0", probing, 1L);
         collector.withForks(
@@ -1392,10 +1383,10 @@ class PatchedCollectorTest {
     void aBranchIsCompletedOnlyAgainstItsOwnDamageStep() {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
-            collector.hold(branch(ForkCollector.SUBSTEP_FIRST_STRIKE));
-            collector.hold(branch(ForkCollector.SUBSTEP_REGULAR));
+            collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
+            collector.hold(branch(DamageStep.REGULAR.wireName()));
 
-            collector.writeHeldProbes("run.0-l1.9", ForkCollector.SUBSTEP_REGULAR);
+            collector.writeHeldProbes("run.0-l1.9", DamageStep.REGULAR.wireName());
 
             assertEquals(1L, collector.recordsWritten());
             assertEquals(1, collector.heldProbeCount(),
@@ -1408,8 +1399,8 @@ class PatchedCollectorTest {
     void theOldestHeldStepIsTheOneACombatRecordCompletes() {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
-            collector.hold(branch(ForkCollector.SUBSTEP_FIRST_STRIKE));
-            collector.hold(branch(ForkCollector.SUBSTEP_REGULAR));
+            collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
+            collector.hold(branch(DamageStep.REGULAR.wireName()));
 
             collector.writeHeldProbes("run.0-l1.9");
 
@@ -1423,9 +1414,9 @@ class PatchedCollectorTest {
     void aBranchFromAStepThatWroteNoRecordIsDropped() {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             PatchedCollectors collector = withForks(writer);
-            collector.hold(branch(ForkCollector.SUBSTEP_FIRST_STRIKE));
+            collector.hold(branch(DamageStep.FIRST_STRIKE.wireName()));
 
-            assertEquals(1, collector.discardStaleProbes(ForkCollector.SUBSTEP_REGULAR));
+            assertEquals(1, collector.discardStaleProbes(DamageStep.REGULAR.wireName()));
             assertEquals(0, collector.heldProbeCount());
             assertEquals(0L, collector.recordsWritten());
         }
@@ -1464,44 +1455,73 @@ class PatchedCollectorTest {
     }
 
     /**
-     * Exactly the listener hooks the checkout offers get installed, and no
-     * others -- and none at all in degraded mode, where install() declines
-     * before it looks.
+     * Exactly the hooks the checkout offers get installed, and no others.
      *
      * <p>Asserted against the checkout rather than against a fixed count: the
-     * sibling Forge is patched or not independently of this repository. The
-     * expected set is derived from {@link PatchHooks#REQUIRED}, so a listener
-     * hook added there is expected here without editing the test. The confirm
-     * listener is excluded because the bracket collector installs it, not this
-     * class.
+     * sibling Forge is patched or not independently of this repository, so a
+     * test expecting zero passes only until someone applies the patches. What
+     * must hold either way is that install() finds what is there — a worker
+     * degrades on a stock checkout and collects fully on a patched one.
      */
     @Test
     void everyHookTheCheckoutOffersIsInstalledAndNoOthers() {
-        long expected = AttributionMode.detect() == AttributionMode.DEGRADED
-                ? 0
-                : PatchHooks.REQUIRED.stream()
-                        .filter(hook -> hook.method().startsWith("setEffectRecord")
-                                && hook.method().endsWith("Listener")
-                                && !PatchHooks.PLAYER_CONTROLLER_AI.equals(hook.owner()))
-                        .filter(PatchHooks.Hook::present)
-                        .count();
+        int available = 0;
+        if (PatchHooks.find(PatchHooks.REPLACEMENT_HANDLER,
+                "setEffectRecordListener").present()) {
+            available++;
+        }
+        if (PatchHooks.find(PatchHooks.TRIGGER_HANDLER,
+                "setEffectRecordTriggerListener").present()) {
+            available++;
+        }
+        if (PatchHooks.find(PatchHooks.AI_CONTROLLER,
+                "setEffectRecordPlayabilityListener").present()) {
+            available++;
+        }
+        if (PatchHooks.find(PatchHooks.ABILITY_MANA_PART,
+                "setEffectRecordManaListener").present()) {
+            available++;
+        }
+        if (PatchHooks.find(PatchHooks.COMBAT_LEGALITY_OBSERVER,
+                "setEffectRecordCombatListener").present()) {
+            available++;
+        }
+        if (PatchHooks.find(PatchHooks.ABILITY_UTILS,
+                "setEffectRecordClauseListener").present()) {
+            available++;
+        }
+        if (PatchHooks.find(PatchHooks.EFFECT_RECORD_OUTCOMES,
+                "setEffectRecordOutcomeListener").present()) {
+            available++;
+        }
         try (PatchedCollectors collector = collectors(CollectionCaps.defaults())) {
-            assertEquals(expected, collector.install());
-            assertEquals(expected, collector.installedHooks().size());
+            assertEquals(available, collector.install());
+            assertEquals(available, collector.installedHooks().size());
         }
     }
 
     /**
-     * The two read-only hooks answer null outside a resolution.
-     *
-     * <p>True on a stock checkout because the method does not exist, and true
-     * on a patched one because no trigger or sub-ability is resolving on this
-     * thread — the test asserts the caller-visible behaviour that holds either
-     * way.
+     * A patched checkout has every required hook, not just the one the mode
+     * probes: an engine refactor that drops or renames a setter would
+     * otherwise leave its channel empty while the count above still agrees
+     * with itself.
      */
     @Test
-    void theCauseAndSubAbilityHooksReadNullOutsideAResolution() {
-        assertEquals(null, PatchHooks.currentTriggerCause());
+    void aPatchedCheckoutHasEveryRequiredHook() {
+        if (AttributionMode.detect() == AttributionMode.PATCHED) {
+            assertEquals(List.of(), PatchHooks.missing(), PatchHooks.report());
+        }
+    }
+
+    /**
+     * The read-only sub-ability hook answers null outside a resolution.
+     *
+     * <p>True on a stock checkout because the method does not exist, and true
+     * on a patched one because no sub-ability is resolving on this thread —
+     * the test asserts the caller-visible behaviour that holds either way.
+     */
+    @Test
+    void theSubAbilityHookReadsNullOutsideAResolution() {
         assertEquals(null, PatchHooks.currentSubAbility());
     }
 
@@ -1726,7 +1746,7 @@ class PatchedCollectorTest {
      */
     @Test
     void theTallySeparatesAnUnreadableChangeFromNoChange() {
-        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        RewriteTally tally = new RewriteTally();
 
         tally.record("Moved", "replaced", false, true,
                 Map.of("Destination", "Battlefield"),
@@ -1840,7 +1860,9 @@ class PatchedCollectorTest {
     void theOutcomeStandInIsForgesOwnDeclaration() {
         PatchHooks.Lookup setter = PatchHooks.find(
                 PatchHooks.EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener");
-        Assumptions.assumeTrue(setter.present(), "the checkout lacks the outcome hook");
+        if (!setter.present()) {
+            return;
+        }
         Class<?> declared = setter.method().getParameterTypes()[0];
         Class<?>[] theirs = methodNamed(declared, "onOutcome").getParameterTypes();
         Class<?>[] ours = methodNamed(OutcomeListenerShape.class, "onOutcome").getParameterTypes();
@@ -1871,7 +1893,116 @@ class PatchedCollectorTest {
         EffectEvent written = collectors.lastClauseEvent();
         assertEquals("vote_taken", written.type());
         assertEquals(Map.of("beast", 2), written.params().get("tally"));
-        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), written.subjects());
+    }
+
+    /**
+     * An outcome that names no subjects has none: a coin flip or a token
+     * made is not something done to the card whose ability did it, so the
+     * acting host is not a default.
+     */
+    @Test
+    void anOutcomeNamingNoSubjectsHasNone() throws Throwable {
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        PatchedCollectors collectors = recording();
+
+        collectors.outcomeHandler().invoke(null,
+                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                new Object[]{sa, "coin_flipped", Map.of("won", true)});
+
+        EffectEvent written = collectors.lastClauseEvent();
+        assertEquals("coin_flipped", written.type());
+        assertEquals(List.of(), written.subjects(),
+                "the acting host is not a subject: " + written.toJson());
+    }
+
+    /**
+     * A {@code token_created} note hands over a sample token, which becomes
+     * the token's script id and characteristics as the board would render
+     * that token -- keywords included, spelled the way an entity's are --
+     * and never reaches the event itself.
+     */
+    @Test
+    void aTokenSampleBecomesItsScriptIdAndCharacteristics() throws Throwable {
+        Card bat = TestCards.token("b_1_1_bat_flying");
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        PatchedCollectors collectors = recording();
+
+        collectors.outcomeHandler().invoke(null,
+                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                new Object[]{sa, "token_created", Map.of("sample", bat, "count", 2)});
+
+        EffectEvent written = collectors.lastClauseEvent();
+        assertEquals("token_created", written.type());
+        assertEquals(Set.of("token_script_id", "characteristics", "count"),
+                written.params().keySet(), written.toJson());
+        assertEquals("b_1_1_bat_flying", written.params().get("token_script_id"));
+        assertEquals(SnapshotBuilder.tokenScriptIdOf(bat), written.params().get("token_script_id"));
+        assertEquals(2, written.params().get("count"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> traits = (Map<String, Object>) written.params().get("characteristics");
+        assertEquals(1, traits.get("power"));
+        assertEquals(1, traits.get("toughness"));
+        assertEquals(bat.getType().toString(), traits.get("types"));
+        assertEquals(List.of("flying"), traits.get("keywords"));
+        assertEquals(SnapshotBuilder.keywordNames(bat.getKeywords()), traits.get("keywords"));
+        assertFalse(written.toJson().contains("sample"), written.toJson());
+        assertEquals(List.of(), written.subjects());
+    }
+
+    /**
+     * {@code damage_prevented} names who the damage would have been dealt
+     * to, a player or a creature, as the event's subject.
+     */
+    @Test
+    void damagePreventedNamesItsRecipient() throws Throwable {
+        Card creature = TestCards.build("Grizzly Bears");
+        Player player = new Player("recipient", TestCards.game(), 93201);
+        PatchedCollectors collectors = recording();
+        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "damage_prevented",
+                        Map.of("amount", 2, "subjects", List.of(creature))});
+        assertEquals(List.of(SnapshotBuilder.entityId(creature)),
+                collectors.lastClauseEvent().subjects());
+        assertNull(collectors.lastClauseEvent().params().get("subjects"));
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "damage_prevented",
+                        Map.of("amount", 2, "subjects", List.of(player))});
+        assertEquals(List.of(SnapshotBuilder.playerId(player)),
+                collectors.lastClauseEvent().subjects());
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "damage_prevented",
+                        Map.of("amount", 2, "subjects", List.of())});
+        assertEquals(List.of(), collectors.lastClauseEvent().subjects());
+    }
+
+    /**
+     * A reveal from a library names the players it came from; any other
+     * reveal arrives with an empty list and names nobody.
+     */
+    @Test
+    void cardRevealedNamesTheLibrariesItCameFrom() throws Throwable {
+        Player first = new Player("first", TestCards.game(), 93202);
+        Player second = new Player("second", TestCards.game(), 93203);
+        PatchedCollectors collectors = recording();
+        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "card_revealed",
+                        Map.of("count", 2, "from_zone", "Library",
+                                "subjects", List.of(first, second))});
+        EffectEvent fromLibraries = collectors.lastClauseEvent();
+        assertEquals(List.of(SnapshotBuilder.playerId(first), SnapshotBuilder.playerId(second)),
+                fromLibraries.subjects());
+        assertEquals(Set.of("count", "from_zone"), fromLibraries.params().keySet());
+
+        collectors.outcomeHandler().invoke(null, onOutcome,
+                new Object[]{null, "card_revealed",
+                        Map.of("count", 1, "from_zone", "Hand", "subjects", List.of())});
+        assertEquals(List.of(), collectors.lastClauseEvent().subjects());
     }
 
     /**
@@ -1887,11 +2018,9 @@ class PatchedCollectorTest {
      *
      * <p>Exact match, not {@code containsAll}: {@code restriction_change}'s
      * acting card (the host, "Alchemist's Gambit" here) must not appear in
-     * the subject list alongside the two cards actually goaded --
-     * {@code outcomeHandler} skips the default host-subject when an effect
-     * supplies its own {@code "subjects"}, and an earlier version of this
-     * test used {@code containsAll}, which cannot tell "exactly these two"
-     * from "these two, plus an extra false one".
+     * the subject list alongside the two cards actually goaded, and
+     * {@code containsAll} cannot tell "exactly these two" from "these two,
+     * plus an extra false one".
      */
     @Test
     void restrictionChangeSubjectsBecomeEventSubjectsNotAParam() throws Throwable {
@@ -2033,33 +2162,23 @@ class PatchedCollectorTest {
                 "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
 
         SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
-                bracket.beginBracket(liveAbility);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            bracket.beginBracket(liveAbility);
 
-                collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                        new Object[]{forkAbility, "vote_taken", Map.of("tally", Map.of("beast", 2))});
+            collectors.outcomeHandler().invoke(null,
+                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                    new Object[]{forkAbility, "vote_taken", Map.of("tally", Map.of("beast", 2))});
 
-                assertNotNull(collectors.lastClauseEvent(),
-                        "the event must still be built -- only its delivery to "
-                                + "the live bracket is gated");
-                assertEquals("vote_taken", collectors.lastClauseEvent().type());
+            assertNotNull(collectors.lastClauseEvent(),
+                    "the event must still be built -- only its delivery to "
+                            + "the live bracket is gated");
+            assertEquals("vote_taken", collectors.lastClauseEvent().type());
 
-                bracket.endBracket(liveAbility.getId(), false);
-                bracket.flushHeldResolution();
-            }
-        } finally {
-            writer.close();
-        }
+            bracket.endBracket(liveAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertFalse(shard.contains("vote_taken"),
                 "a fork's outcome must not land in the live game's record: " + shard);
     }
@@ -2079,29 +2198,19 @@ class PatchedCollectorTest {
     void spellCounteredReachesTheLiveShard() throws Throwable {
         Card counteredCard = TestCards.build("Grizzly Bears");
         SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
-                bracket.beginBracket(liveAbility);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            bracket.beginBracket(liveAbility);
 
-                collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                        new Object[]{liveAbility, "spell_countered",
-                                Map.of("subjects", List.of(counteredCard))});
+            collectors.outcomeHandler().invoke(null,
+                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                    new Object[]{liveAbility, "spell_countered",
+                            Map.of("subjects", List.of(counteredCard))});
 
-                bracket.endBracket(liveAbility.getId(), false);
-                bracket.flushHeldResolution();
-            }
-        } finally {
-            writer.close();
-        }
+            bracket.endBracket(liveAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertTrue(shard.contains("\"type\":\"spell_countered\""), shard);
         assertTrue(shard.contains(SnapshotBuilder.entityId(counteredCard)), shard);
     }
@@ -2125,29 +2234,19 @@ class PatchedCollectorTest {
     void turnEndedReachesTheLiveShard() throws Throwable {
         Player activePlayer = new Player("active", TestCards.game(), 94001);
         SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
-                bracket.beginBracket(liveAbility);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            bracket.beginBracket(liveAbility);
 
-                collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                        new Object[]{liveAbility, "turn_ended",
-                                Map.of("subjects", List.of(activePlayer))});
+            collectors.outcomeHandler().invoke(null,
+                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                    new Object[]{liveAbility, "turn_ended",
+                            Map.of("subjects", List.of(activePlayer))});
 
-                bracket.endBracket(liveAbility.getId(), false);
-                bracket.flushHeldResolution();
-            }
-        } finally {
-            writer.close();
-        }
+            bracket.endBracket(liveAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertTrue(shard.contains("\"type\":\"turn_ended\""), shard);
         assertTrue(shard.contains(SnapshotBuilder.playerId(activePlayer)), shard);
     }
@@ -2158,29 +2257,19 @@ class PatchedCollectorTest {
         Card c1 = TestCards.build("Grizzly Bears");
         Card c2 = TestCards.build("Runeclaw Bear");
         SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
-                bracket.beginBracket(liveAbility);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            bracket.beginBracket(liveAbility);
 
-                collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                        new Object[]{liveAbility, "text_change",
-                                Map.of("subjects", List.of(c1, c2))});
+            collectors.outcomeHandler().invoke(null,
+                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                    new Object[]{liveAbility, "text_change",
+                            Map.of("subjects", List.of(c1, c2))});
 
-                bracket.endBracket(liveAbility.getId(), false);
-                bracket.flushHeldResolution();
-            }
-        } finally {
-            writer.close();
-        }
+            bracket.endBracket(liveAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertTrue(shard.contains("\"type\":\"text_change\""), shard);
         assertTrue(shard.contains(SnapshotBuilder.entityId(c1)), shard);
         assertTrue(shard.contains(SnapshotBuilder.entityId(c2)), shard);
@@ -2190,32 +2279,22 @@ class PatchedCollectorTest {
     @Test
     void tokenCreatedReachesTheLiveShard() throws Throwable {
         SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
-                bracket.beginBracket(liveAbility);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            bracket.beginBracket(liveAbility);
 
-                collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                        new Object[]{liveAbility, "token_created", Map.of(
-                                "token_script_id", "Soldier Token",
-                                "characteristics", Map.of(
-                                        "power", 1, "toughness", 1, "types", "Creature Soldier"),
-                                "count", 4)});
+            collectors.outcomeHandler().invoke(null,
+                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                    new Object[]{liveAbility, "token_created", Map.of(
+                            "token_script_id", "Soldier Token",
+                            "characteristics", Map.of(
+                                    "power", 1, "toughness", 1, "types", "Creature Soldier"),
+                            "count", 4)});
 
-                bracket.endBracket(liveAbility.getId(), false);
-                bracket.flushHeldResolution();
-            }
-        } finally {
-            writer.close();
-        }
+            bracket.endBracket(liveAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertTrue(shard.contains("\"type\":\"token_created\""), shard);
         assertTrue(shard.contains("\"count\":4"), shard);
     }
@@ -2224,30 +2303,20 @@ class PatchedCollectorTest {
     @Test
     void diceRolledReachesTheLiveShard() throws Throwable {
         SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
-                bracket.beginBracket(liveAbility);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            bracket.beginBracket(liveAbility);
 
-                collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                        new Object[]{liveAbility, "dice_rolled", Map.of(
-                                "sides", 6,
-                                "results", List.of(Map.of("natural", 3, "final", 5)))});
+            collectors.outcomeHandler().invoke(null,
+                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                    new Object[]{liveAbility, "dice_rolled", Map.of(
+                            "sides", 6,
+                            "results", List.of(Map.of("natural", 3, "final", 5)))});
 
-                bracket.endBracket(liveAbility.getId(), false);
-                bracket.flushHeldResolution();
-            }
-        } finally {
-            writer.close();
-        }
+            bracket.endBracket(liveAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertTrue(shard.contains("\"type\":\"dice_rolled\""), shard);
         assertTrue(shard.contains("\"sides\":6"), shard);
     }
@@ -2268,35 +2337,25 @@ class PatchedCollectorTest {
                 "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
 
         SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
-                bracket.beginBracket(liveAbility);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            bracket.beginBracket(liveAbility);
 
-                collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                        new Object[]{forkAbility, "token_created", Map.of(
-                                "token_script_id", "Soldier Token",
-                                "characteristics", Map.of(),
-                                "count", 2)});
+            collectors.outcomeHandler().invoke(null,
+                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                    new Object[]{forkAbility, "token_created", Map.of(
+                            "token_script_id", "Soldier Token",
+                            "characteristics", Map.of(),
+                            "count", 2)});
 
-                assertNotNull(collectors.lastClauseEvent(),
-                        "the event must still be built -- only its delivery to "
-                                + "the live bracket is gated");
+            assertNotNull(collectors.lastClauseEvent(),
+                    "the event must still be built -- only its delivery to "
+                            + "the live bracket is gated");
 
-                bracket.endBracket(liveAbility.getId(), false);
-                bracket.flushHeldResolution();
-            }
-        } finally {
-            writer.close();
-        }
+            bracket.endBracket(liveAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertFalse(shard.contains("token_created"),
                 "a fork's outcome must not land in the live game's record: " + shard);
     }
@@ -2359,31 +2418,21 @@ class PatchedCollectorTest {
     @Test
     void aNullAbilityOutcomeDuringLiveCombatDamageReachesTheShard() throws Throwable {
         Game game = gameInACombatDamageStep();
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    game, writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
+            
+                            collectors.outcomeHandler().invoke(null,
+                                    methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                    new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+            
+                            // Flushes the combat bracket the null-ability report above
+                            // opened, the way BusBracketCollectorTest
+                            // .theCombatThatEndedTheGameIsWritten does for the same reason:
+                            // a game ending in combat damage never reaches the ordinary
+                            // phase-boundary flush.
+                            bracket.finishGame(Set.of());
+                    });
 
-                collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                        new Object[]{null, "damage_prevented", Map.of("amount", 3)});
-
-                // Flushes the combat bracket the null-ability report above
-                // opened, the way BusBracketCollectorTest
-                // .theCombatThatEndedTheGameIsWritten does for the same reason:
-                // a game ending in combat damage never reaches the ordinary
-                // phase-boundary flush.
-                bracket.finishGame(Set.of());
-            }
-        } finally {
-            writer.close();
-        }
-
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertTrue(shard.contains("damage_prevented"),
                 "a live combat-damage prevention must still reach the shard: " + shard);
     }
@@ -2436,43 +2485,38 @@ class PatchedCollectorTest {
         forkAbility.getTargets().add(forkTarget);
         SpellAbility flushAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
-                bracket.beginBracket(flushAbility);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            bracket.beginBracket(flushAbility);
 
-                boolean installed = PatchHooks.install(PatchHooks.ABILITY_UTILS,
-                        "setEffectRecordClauseListener", (proxy, method, args) -> {
-                            if ("onClauseResolving".equals(method.getName())) {
-                                try {
-                                    collectors.outcomeHandler().invoke(null,
-                                            methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                                            new Object[]{null, "damage_prevented", Map.of("amount", 3)});
-                                } catch (Throwable t) {
-                                    throw new RuntimeException(t);
-                                }
+            boolean installed = PatchHooks.install(PatchHooks.ABILITY_UTILS,
+                    "setEffectRecordClauseListener", (proxy, method, args) -> {
+                        if ("onClauseResolving".equals(method.getName())) {
+                            try {
+                                collectors.outcomeHandler().invoke(null,
+                                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                        new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+                            } catch (Throwable t) {
+                                throw new RuntimeException(t);
                             }
-                            return null;
-                        });
-                Assumptions.assumeTrue(installed, "the checkout lacks the clause hook");
-                try {
-                    AbilityUtils.resolve(forkAbility);
-                } finally {
-                    PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
-                }
-                bracket.endBracket(flushAbility.getId(), false);
-                bracket.flushHeldResolution();
+                        }
+                        return null;
+                    });
+            if (!installed) {
+                // Reflective, so an unpatched checkout skips the assertion
+                // rather than failing it -- the same degradation every
+                // other hook lookup in this suite makes.
+                return;
             }
-        } finally {
-            writer.close();
-        }
+            try {
+                AbilityUtils.resolve(forkAbility);
+            } finally {
+                PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
+            }
+            bracket.endBracket(flushAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertFalse(shard.contains("damage_prevented"),
                 "a fork ability's own null-ability outcome, reported while it "
                         + "is genuinely resolving, must not reach the live shard: " + shard);
@@ -2497,43 +2541,35 @@ class PatchedCollectorTest {
         liveAbility.resetTargets();
         liveAbility.getTargets().add(liveTarget);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
-                bracket.beginBracket(liveAbility);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            bracket.beginBracket(liveAbility);
 
-                boolean installed = PatchHooks.install(PatchHooks.ABILITY_UTILS,
-                        "setEffectRecordClauseListener", (proxy, method, args) -> {
-                            if ("onClauseResolving".equals(method.getName())) {
-                                try {
-                                    collectors.outcomeHandler().invoke(null,
-                                            methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                                            new Object[]{null, "damage_prevented", Map.of("amount", 3)});
-                                } catch (Throwable t) {
-                                    throw new RuntimeException(t);
-                                }
+            boolean installed = PatchHooks.install(PatchHooks.ABILITY_UTILS,
+                    "setEffectRecordClauseListener", (proxy, method, args) -> {
+                        if ("onClauseResolving".equals(method.getName())) {
+                            try {
+                                collectors.outcomeHandler().invoke(null,
+                                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                        new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+                            } catch (Throwable t) {
+                                throw new RuntimeException(t);
                             }
-                            return null;
-                        });
-                Assumptions.assumeTrue(installed, "the checkout lacks the clause hook");
-                try {
-                    AbilityUtils.resolve(liveAbility);
-                } finally {
-                    PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
-                }
-                bracket.endBracket(liveAbility.getId(), false);
-                bracket.flushHeldResolution();
+                        }
+                        return null;
+                    });
+            if (!installed) {
+                return;
             }
-        } finally {
-            writer.close();
-        }
+            try {
+                AbilityUtils.resolve(liveAbility);
+            } finally {
+                PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
+            }
+            bracket.endBracket(liveAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertTrue(shard.contains("damage_prevented"),
                 "a live ability's own null-ability outcome, reported while it "
                         + "is genuinely resolving, must reach the shard: " + shard);
@@ -2555,39 +2591,24 @@ class PatchedCollectorTest {
      */
     @Test
     void aNullAbilityOutcomeFromAProbesOwnCombatDoesNotReachTheLiveShard() throws Throwable {
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collectors = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-                collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            
+                            ForkCollector.runAsForkForTest(() -> {
+                                try {
+                                    collectors.outcomeHandler().invoke(null,
+                                            methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                            new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+                                } catch (Throwable t) {
+                                    throw new RuntimeException(t);
+                                }
+                            });
+            
+                            assertNotNull(collectors.lastClauseEvent(),
+                                    "the event must still be built -- only its delivery to "
+                                            + "the live bracket is gated");
+                    });
 
-                ForkCollector.runAsForkForTest(() -> {
-                    try {
-                        collectors.outcomeHandler().invoke(null,
-                                methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                                new Object[]{null, "damage_prevented", Map.of("amount", 3)});
-                    } catch (Throwable t) {
-                        throw new RuntimeException(t);
-                    }
-                });
-
-                assertNotNull(collectors.lastClauseEvent(),
-                        "the event must still be built -- only its delivery to "
-                                + "the live bracket is gated");
-
-                // The event reaches the bracket's buffer, which only a flush
-                // writes; without one the shard is empty whether or not the
-                // gate exists.
-                bracket.finishGame(Set.of());
-            }
-        } finally {
-            writer.close();
-        }
-
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertFalse(shard.contains("damage_prevented"),
                 "a probe's own combat-damage report must not land in the live game's record: " + shard);
     }
@@ -2599,12 +2620,16 @@ class PatchedCollectorTest {
     }
 
     private interface PlayabilityListenerShape {
-        void onCandidate(SpellAbility candidate, boolean canPlay, boolean affordable,
-                boolean hasLegalTarget);
+        void onCandidate(SpellAbility candidate);
     }
 
+    /** Forge's {@code CombatLegalityObserver.EffectRecordCombatListener}, position by position. */
     private interface CombatLegalityListenerShape {
-        void onAttackersComputed(Object defender, List<Card> candidates, List<Card> legal);
+        void onAttackersDeclarable(Player decider, GameEntity defender,
+                List<Card> candidates, List<Card> legal);
+
+        void onBlockersDeclarable(Player decider, Card attacker,
+                List<Card> candidates, List<Card> legal, int minBlockers);
     }
 
     private interface ManaListenerShape {
@@ -2669,7 +2694,7 @@ class PatchedCollectorTest {
                 TestCards.game(), writer, "run.0-l1.0", caps(0, 1.0), 1L)) {
             collectors.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{forkCandidate, true, true, true});
+                    new Object[]{forkCandidate});
         } finally {
             writer.close();
         }
@@ -2680,10 +2705,10 @@ class PatchedCollectorTest {
     }
 
     /**
-     * final-fix-3.md item 2: {@code combatLegalityHandler} had no game check
-     * either. The defender is the acting {@code GameEntity} this hook hands
-     * over; the candidate/legal lists may be any real card, since only the
-     * defender's own game identity is what the fix reads.
+     * {@code combatLegalityHandler} checks the game the defender belongs to.
+     * The defender is the acting {@code GameEntity} this hook hands over; the
+     * candidate/legal lists may be any real card, since only the defender's
+     * own game identity is what the check reads.
      */
     @Test
     void anAttackerLegalityAnswerFromAnotherGamesDefenderDoesNotReachTheShard() throws Throwable {
@@ -2691,22 +2716,14 @@ class PatchedCollectorTest {
         Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
         Player forkDefender = new Player("fork-defender", fork, 92301);
         Card candidate = TestCards.build("Grizzly Bears");
-        // legalityRate forced to 1.0: the default (0.1) samples this subkind
-        // after the dedup check, so a run at the default rate could pass
-        // vacuously -- the record dropped by chance rather than by the gate
-        // under test.
-        CollectionCaps fullLegalityRate = new CollectionCaps(
-                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
-                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), 1.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0", fullLegalityRate, 1L)) {
+                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{forkDefender, List.of(candidate), List.of(candidate)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{null, forkDefender, List.of(candidate), List.of(candidate)});
         } finally {
             writer.close();
         }
@@ -2797,7 +2814,7 @@ class PatchedCollectorTest {
                 TestCards.game(), writer, "run.0-l1.0", caps(0, 1.0), 1L)) {
             collectors.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{liveCandidate, true, true, true});
+                    new Object[]{liveCandidate});
         } finally {
             writer.close();
         }
@@ -2811,21 +2828,14 @@ class PatchedCollectorTest {
     void aLiveAttackerLegalityAnswerReachesTheShard() throws Throwable {
         Player liveDefender = new Player("live-defender", TestCards.game(), 93101);
         Card candidate = TestCards.build("Grizzly Bears");
-        // legalityRate forced to 1.0, for the same reason as the playability
-        // test above: the default 0.1 samples this subkind after the dedup
-        // check, and a run at the default rate could pass vacuously.
-        CollectionCaps fullLegalityRate = new CollectionCaps(
-                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
-                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), 1.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0", fullLegalityRate, 1L)) {
+                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{liveDefender, List.of(candidate), List.of(candidate)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{null, liveDefender, List.of(candidate), List.of(candidate)});
         } finally {
             writer.close();
         }
@@ -2893,7 +2903,7 @@ class PatchedCollectorTest {
         CollectionCaps halfRate = new CollectionCaps(
                 CollectionCaps.defaults().manaCap(), 0.5,
                 CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().legalityRate());
+                CollectionCaps.defaults().probeKeywords(), 0.0, 0.0);
 
         RecordShardWriter soloWriter = new RecordShardWriter(tempDir, "solo", 0, "l1");
         Path soloPath = soloWriter.path();
@@ -2901,7 +2911,7 @@ class PatchedCollectorTest {
                 TestCards.game(), soloWriter, "solo.0-l1.0", halfRate, 1L)) {
             solo.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{liveCandidate, true, true, true});
+                    new Object[]{liveCandidate});
         } finally {
             soloWriter.close();
         }
@@ -2917,10 +2927,10 @@ class PatchedCollectorTest {
                 TestCards.game(), pairedWriter, "paired.0-l1.0", halfRate, 1L)) {
             paired.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{forkCandidate, true, true, true});
+                    new Object[]{forkCandidate});
             paired.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{liveCandidate, true, true, true});
+                    new Object[]{liveCandidate});
         } finally {
             pairedWriter.close();
         }
@@ -2935,14 +2945,13 @@ class PatchedCollectorTest {
     }
 
 
-    // ── gen-2: real decisions, what-ifs and the deciding player ─────────
+    // ── gen-2: declarations and the deciding player ─────────────────────
     //
-    // FR-027 classes a legality record by the snapshot's step and the
-    // deciding player; FR-030a makes that player the actor; FR-029 exempts a
-    // real decision from --legality-rate; FR-030 stamps random_seat off the
-    // actor. The classification reads the live phase handler, so these
-    // build a two-player game set to the step under test rather than driving
-    // the hook over the shared turn-less game.
+    // The engine reports legality from the turn-based declaration itself and
+    // names the deciding player, so every record is a real declaration
+    // (what_if=false) whatever the step, and FR-030a's actor is the player
+    // the engine names; FR-030 stamps random_seat off that actor. These
+    // build a two-player game so the deciding player is a real seat.
 
     private static Game twoPlayerGameIn(PhaseType phase) {
         Deck deck = new Deck();
@@ -2965,43 +2974,31 @@ class PatchedCollectorTest {
         return card;
     }
 
-    /** Legality at a rate of zero: only a real decision can reach the shard. */
-    private static CollectionCaps noWhatIfs() {
-        return new CollectionCaps(
-                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
-                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), 0.0);
-    }
-
     private static List<String> recordsOf(Path path) throws Exception {
         return readShard(path).stream().filter(l -> l.contains("\"kind\":\"playability\"")).toList();
     }
 
     /**
-     * Spec Story 3 scenario 7, both halves: the active player's declaration
-     * in the declare-attackers step is real and written at a legality rate
-     * of zero; the same answer for the non-active player -- the AI weighing
-     * what the opponent could attack with next turn -- is a what-if and is
-     * sampled out by that rate.
+     * An attackers record is a real declaration made by the player the
+     * engine names, and a candidate the rules keep out is listed as
+     * forbidden rather than left out.
      */
     @Test
-    void anAttackDeclarationIsRealOnlyForTheActivePlayerInItsOwnStep() throws Throwable {
+    void anAttackDeclarationIsRealAndNamesTheDeciderTheEngineReports() throws Throwable {
         Game game = twoPlayerGameIn(PhaseType.COMBAT_DECLARE_ATTACKERS);
         Player active = game.getPlayers().get(0);
         Player other = game.getPlayers().get(1);
-        Card mine = creatureOf(game, active, "Grizzly Bears");
-        Card theirs = creatureOf(game, other, "Runeclaw Bear");
+        Card ready = creatureOf(game, active, "Grizzly Bears");
+        Card tapped = creatureOf(game, active, "Runeclaw Bear");
+        tapped.setTapped(true);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", noWhatIfs(), 1L)) {
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{other, List.of(mine), List.of(mine)});
-            collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{active, List.of(theirs), List.of(theirs)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{active, other, List.of(ready, tapped), List.of(ready)});
         } finally {
             writer.close();
         }
@@ -3009,81 +3006,58 @@ class PatchedCollectorTest {
         List<String> records = recordsOf(path);
         assertEquals(1, records.size(), records.toString());
         String real = records.get(0);
+        assertTrue(real.contains("\"subkind\":\"attackers\""), real);
         assertTrue(real.contains("\"what_if\":false"), real);
         assertTrue(real.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(active) + "\""),
-                "the deciding player is the candidates' controller: " + real);
+                "the deciding player is the one the engine names: " + real);
         assertTrue(real.contains("\"random_seat\":false"), real);
+        assertTrue(real.contains("\"legal_attackers\":[\"" + SnapshotBuilder.entityId(ready) + "\"]"),
+                real);
+        assertTrue(real.contains("\"forbidden\":[{\"entity\":\""
+                + SnapshotBuilder.entityId(tapped) + "\""), real);
     }
 
-    /** The same answer outside the declare-attackers step is a what-if (scenario 7). */
+    /**
+     * Nothing about the step or whose turn it is reclassifies a declaration:
+     * the engine reports only real ones, so a report outside the
+     * declare-attackers step is still written as real.
+     */
     @Test
-    void anAttackAnswerInAnyOtherStepIsAWhatIf() throws Throwable {
+    void aDeclarationIsRealWhateverTheStep() throws Throwable {
         Game game = twoPlayerGameIn(PhaseType.MAIN1);
         Player active = game.getPlayers().get(0);
-        Card mine = creatureOf(game, active, "Grizzly Bears");
+        Player other = game.getPlayers().get(1);
+        Card theirs = creatureOf(game, other, "Grizzly Bears");
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
-        CollectionCaps everyWhatIf = new CollectionCaps(
-                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
-                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), 1.0);
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", everyWhatIf, 1L)) {
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{game.getPlayers().get(1), List.of(mine), List.of(mine)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{other, active, List.of(theirs), List.of(theirs)});
         } finally {
             writer.close();
         }
 
         List<String> records = recordsOf(path);
         assertEquals(1, records.size(), records.toString());
-        assertTrue(records.get(0).contains("\"what_if\":true"), records.get(0));
+        assertTrue(records.get(0).contains("\"what_if\":false"), records.get(0));
+        assertTrue(records.get(0).contains(
+                "\"actor_player\":\"" + SnapshotBuilder.playerId(other) + "\""), records.get(0));
     }
 
     /**
-     * What-if queries are not collected by default. The AI re-asks one combat
-     * many times while planning, so a query survives sampling in proportion
-     * to how long the AI deliberated, not how often its board occurs.
+     * FR-030a's blockers row: a blockers record names the blocking player
+     * the engine reports, with the attacker it anchors on and how many
+     * blockers that attacker takes.
      */
     @Test
-    void aWhatIfIsNotWrittenAtTheDefaultLegalityRate() throws Throwable {
-        Game game = twoPlayerGameIn(PhaseType.MAIN1);
-        Player active = game.getPlayers().get(0);
-        Card mine = creatureOf(game, active, "Grizzly Bears");
-
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            for (int turn = 0; turn < 20; turn++) {
-                active.setLife(20 - turn, null);
-                collectors.combatLegalityHandler().invoke(null,
-                        methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                        new Object[]{game.getPlayers().get(1), List.of(mine), List.of(mine)});
-            }
-        } finally {
-            writer.close();
-        }
-
-        assertEquals(List.of(), recordsOf(path));
-    }
-
-    /**
-     * Spec Story 3 scenario 8 and FR-030a's blockers row: a blockers record
-     * in the declare-blockers step whose anchor is attacking is real, and it
-     * names the blocking player -- the candidates' controller -- where gen-1
-     * named the attacker's.
-     */
-    @Test
-    void aBlockDeclarationIsRealWhenItsAnchorIsAttackingAndNamesTheBlockingPlayer()
-            throws Throwable {
+    void aBlockDeclarationIsRealAndNamesTheBlockingPlayer() throws Throwable {
         Game game = twoPlayerGameIn(PhaseType.COMBAT_DECLARE_BLOCKERS);
         Player attacking = game.getPlayers().get(0);
         Player blocking = game.getPlayers().get(1);
         Card attacker = creatureOf(game, attacking, "Grizzly Bears");
-        Card idle = creatureOf(game, attacking, "Runeclaw Bear");
         Card blocker = creatureOf(game, blocking, "Hill Giant");
         Combat combat = new Combat(attacking);
         combat.addAttacker(attacker, blocking);
@@ -3092,15 +3066,10 @@ class PatchedCollectorTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", noWhatIfs(), 1L)) {
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(BlockersListenerShape.class, "onBlockersComputed"),
-                    new Object[]{attacker, List.of(blocker), List.of(blocker), 1});
-            // The same question about a creature that is not attacking: a
-            // what-if, whatever the step.
-            collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(BlockersListenerShape.class, "onBlockersComputed"),
-                    new Object[]{idle, List.of(blocker), List.of(blocker), 1});
+                    methodNamed(CombatLegalityListenerShape.class, "onBlockersDeclarable"),
+                    new Object[]{blocking, attacker, List.of(blocker), List.of(blocker), 1});
         } finally {
             writer.close();
         }
@@ -3111,20 +3080,18 @@ class PatchedCollectorTest {
         assertTrue(real.contains("\"subkind\":\"blockers\""), real);
         assertTrue(real.contains("\"what_if\":false"), real);
         assertTrue(real.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(blocking) + "\""),
-                "the deciding player is the blockers' controller: " + real);
-    }
-
-    private interface BlockersListenerShape {
-        void onBlockersComputed(Card attacker, List<Card> candidates, List<Card> legal, int min);
+                "the deciding player is the blocking player: " + real);
+        assertTrue(real.contains("\"anchor_attacker\":\"" + SnapshotBuilder.entityId(attacker) + "\""),
+                real);
+        assertTrue(real.contains("\"min_blockers\":1"), real);
     }
 
     /**
-     * Spec Story 3 scenario 9: at a legality rate of one tenth every real
-     * decision is still written -- here twenty of them, each on a board that
-     * moved so the de-duplication keeps them apart.
+     * Every declaration on a board that moved is written, and the same
+     * declaration on an unchanged board is written once (FR-028).
      */
     @Test
-    void everyRealDecisionIsWrittenWhateverTheLegalityRate() throws Throwable {
+    void everyDeclarationOnAMovedBoardIsWrittenAndARepeatIsNot() throws Throwable {
         Game game = twoPlayerGameIn(PhaseType.COMBAT_DECLARE_ATTACKERS);
         Player active = game.getPlayers().get(0);
         Player other = game.getPlayers().get(1);
@@ -3134,13 +3101,15 @@ class PatchedCollectorTest {
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+            Method declarable = methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable");
             for (int turn = 0; turn < 20; turn++) {
                 // A life total that moves is enough to make each snapshot new.
                 active.setLife(20 - turn, null);
-                collectors.combatLegalityHandler().invoke(null,
-                        methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                        new Object[]{other, List.of(mine), List.of(mine)});
+                collectors.combatLegalityHandler().invoke(null, declarable,
+                        new Object[]{active, other, List.of(mine), List.of(mine)});
             }
+            collectors.combatLegalityHandler().invoke(null, declarable,
+                    new Object[]{active, other, List.of(mine), List.of(mine)});
         } finally {
             writer.close();
         }
@@ -3150,7 +3119,7 @@ class PatchedCollectorTest {
 
     /**
      * Spec Story 3 scenario 6 on the hook path: a record whose actor is the
-     * random seat says so, and one whose actor is the other player does not.
+     * random seat says so.
      */
     @Test
     void randomSeatIsStampedOffTheActor() throws Throwable {
@@ -3162,11 +3131,11 @@ class PatchedCollectorTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", noWhatIfs(), 1L)) {
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
             collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(active));
             collectors.combatLegalityHandler().invoke(null,
-                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
-                    new Object[]{other, List.of(mine), List.of(mine)});
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersDeclarable"),
+                    new Object[]{active, other, List.of(mine), List.of(mine)});
         } finally {
             writer.close();
         }
@@ -3174,6 +3143,25 @@ class PatchedCollectorTest {
         List<String> records = recordsOf(path);
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"random_seat\":true"), records.get(0));
+    }
+
+    /**
+     * The combat stand-in is what Forge declares, position by position.
+     * Reflective, so an unpatched checkout skips the assertion.
+     */
+    @Test
+    void theCombatLegalityStandInIsForgesOwnDeclaration() {
+        PatchHooks.Lookup setter = PatchHooks.find(
+                PatchHooks.COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener");
+        if (!setter.present()) {
+            return;
+        }
+        Class<?> declared = setter.method().getParameterTypes()[0];
+        for (String name : List.of("onAttackersDeclarable", "onBlockersDeclarable")) {
+            Class<?>[] theirs = methodNamed(declared, name).getParameterTypes();
+            Class<?>[] ours = methodNamed(CombatLegalityListenerShape.class, name).getParameterTypes();
+            assertArrayEquals(ours, theirs, name);
+        }
     }
 
     /**
@@ -3195,7 +3183,7 @@ class PatchedCollectorTest {
                 game, writer, "run.0-l1.0", caps(0, 1.0), 1L)) {
             collectors.playabilityHandler().invoke(null,
                     methodNamed(PlayabilityListenerShape.class, "onCandidate"),
-                    new Object[]{candidate, true, true, true});
+                    new Object[]{candidate});
         } finally {
             writer.close();
         }

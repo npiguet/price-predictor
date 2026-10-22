@@ -17,79 +17,36 @@ enumerates that split; this module reads it.
 **Rarity weighting counts games, not records.** One long game can produce
 hundreds of records of one ability; weighting by records would make that ability
 look well-observed when it has been seen in one board state. The weights feed a
-weighted shuffle *without replacement* over the resident shard (FR-086): the
-per-batch class draw is gone, because a sixteen-record shard resampled with
-replacement was replayed 640 times.
+weighted shuffle *without replacement* over the resident shard (FR-086) rather
+than a per-batch class draw with replacement, which replays a small shard's few
+records many times over within one epoch.
 """
 
 from __future__ import annotations
 
 import logging
 import random
-from collections import defaultdict
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from effects.domain.card_names import fold_card_name
-from effects.domain.effect_model import (
-    CLASS_COMBAT,
-    CLASS_CONTINUOUS,
-    CLASS_PLAYABILITY_DECISION,
-    CLASS_PLAYABILITY_LEGALITY,
-    CLASS_RESOLUTION_COST,
-    CLASS_RESOLUTION_EFFECT,
-    CLASS_REWRITE,
-    CLASS_TRIGGER,
-    SAMPLING_CLASSES,
+from effects.domain.baselines import Baseline
+from effects.domain.records import (
+    EffectRecord,
 )
-from effects.domain.records import EffectRecord, Moment, PlayabilitySubkind, RecordKind
-
-if TYPE_CHECKING:
-    from effects.infrastructure.sidecar_io import SidecarCache
+from effects.domain.split import (
+    CorpusSplit,
+    text_keyed_holdout,
+)
+from effects.domain.strata import VALIDATION_STRATA, Stratum
 
 logger = logging.getLogger(__name__)
 
-#: The eight-class mixture (root spec § Training), now a ``build-corpus``
-#: input: it sets the proportions the training stratum is written in, and the
-#: trainer samples whatever the corpus holds rather than re-mixing per batch.
-DEFAULT_KIND_MIX: dict[str, float] = {
-    CLASS_RESOLUTION_EFFECT: 0.30,
-    CLASS_COMBAT: 0.20,
-    CLASS_CONTINUOUS: 0.12,
-    CLASS_PLAYABILITY_DECISION: 0.10,
-    CLASS_RESOLUTION_COST: 0.08,
-    CLASS_TRIGGER: 0.08,
-    CLASS_REWRITE: 0.07,
-    CLASS_PLAYABILITY_LEGALITY: 0.05,
-}
 
-#: Classes whose records have no acting ability text, so rarity weighting has
-#: nothing to key on and they sample uniformly instead (FR-087).
-UNIFORM_CLASSES: frozenset[str] = frozenset({
-    CLASS_COMBAT, CLASS_PLAYABILITY_LEGALITY,
-})
-
-#: An eligible ability text is held out when crc32(text) % 1000 falls below
-#: this. Keyed on the text rather than the card because the model never reads a
-#: card's name, and stable per text so a depleted corpus stays valid (FR-088).
-HOLDOUT_PERMILLE = 20
-#: A text more cards than this carry is never eligible. `Flying` is on thousands
-#: of cards and depleting all of them would empty the training corpus.
-HOLDOUT_MAX_CARRIERS = 8
 #: Unique-text resolution records the card-disjoint stratum should hold
 #: before gate 1's margins mean anything. A floor, not a rule: below it
 #: the run warns, at zero it stops.
 MIN_HOLDOUT_RECORDS = 2000
-#: Rarity weight ceiling, as a multiple of the weight of the text at
-#: :data:`RARITY_PERCENTILE` of effective games (FR-054).
-RARITY_CAP = 20.0
-#: The percentile of effective games the ceiling is set against. The 99th
-#: rather than the maximum: one ubiquitous text (``Flying``) would otherwise
-#: set the ceiling for the whole class, and a corpus that gains one more game
-#: of it would move every rare text's weight.
-RARITY_PERCENTILE = 99.0
 RANDOM_SEED = 42
 
 #: Shards an epoch reads.
@@ -99,12 +56,9 @@ RANDOM_SEED = 42
 #: many different shards those steps are spread across. Raising it costs only
 #: the per-shard load — about a third of a second against a 45-minute epoch —
 #: so the ceiling is how thinly a shard can be sampled and still be worth
-#: opening, not time.
-#:
-#: The previous value of 18 was correct for the corpus it was written against
-#: (701 raw shards, covered once by 40 epochs) and silently wrong for the one
-#: ``build-corpus`` writes, which is 3,194. Eighteen an epoch reads 0.6% of
-#: that, and a run that early-stops at epoch 9 has seen 5% of it.
+#: opening, not time. It scales with the shard count ``build-corpus`` writes:
+#: an epoch that reads a sliver of the corpus, and a run that early-stops having
+#: seen a few percent of it, measures one corner of the data.
 DEFAULT_SHARDS_PER_EPOCH = 256
 
 #: Worker processes preparing training steps (``--prefetch-workers``). Three,
@@ -115,377 +69,7 @@ DEFAULT_SHARDS_PER_EPOCH = 256
 DEFAULT_PREFETCH_WORKERS = 3
 
 
-# ── sampling classes ────────────────────────────────────────────────────
-
-
-def sampling_class(record: EffectRecord) -> str:
-    """The mixture class a record belongs to."""
-    match record.kind:
-        case RecordKind.RESOLUTION:
-            return (
-                CLASS_RESOLUTION_COST
-                if record.moment is Moment.ACTIVATION
-                else CLASS_RESOLUTION_EFFECT
-            )
-        case RecordKind.COMBAT:
-            return CLASS_COMBAT
-        case RecordKind.CONTINUOUS:
-            return CLASS_CONTINUOUS
-        case RecordKind.TRIGGER:
-            return CLASS_TRIGGER
-        case RecordKind.REWRITE:
-            return CLASS_REWRITE
-        case RecordKind.PLAYABILITY:
-            return (
-                CLASS_PLAYABILITY_DECISION
-                if record.subkind is PlayabilitySubkind.DECISION
-                else CLASS_PLAYABILITY_LEGALITY
-            )
-    raise ValueError(f"no sampling class for record kind {record.kind}")
-
-
-def parse_kind_mix(value: str | None) -> dict[str, float]:
-    """``build-corpus --class-mix`` as ``class=share,…``; the default when absent."""
-    if not value:
-        return dict(DEFAULT_KIND_MIX)
-    mix: dict[str, float] = {}
-    for part in value.split(","):
-        if not part.strip():
-            continue
-        name, _, share = part.partition("=")
-        name = name.strip()
-        if name not in SAMPLING_CLASSES:
-            raise ValueError(
-                f"unknown sampling class {name!r}; known: {list(SAMPLING_CLASSES)}"
-            )
-        mix[name] = float(share)
-    return mix
-
-
-# ── rarity weighting ────────────────────────────────────────────────────
-
-
-def effective_games(
-    records: Iterable[EffectRecord], text_of,
-) -> dict[str, int]:
-    """Distinct games contributing a record of each unique ability text.
-
-    Games rather than records: one long game can produce hundreds of records of
-    one ability, and weighting by records would call that ability well-observed
-    when it has been seen in a single board state.
-    """
-    games: defaultdict[str, set[str]] = defaultdict(set)
-    for record in records:
-        text = text_of(record)
-        if text is not None:
-            games[text].add(record.game_id)
-    return {text: len(ids) for text, ids in games.items()}
-
-
-def _percentile(values: Sequence[float], percentile: float) -> float:
-    """Nearest-rank percentile of a non-empty sequence."""
-    ordered = sorted(values)
-    rank = max(1, -(-len(ordered) * percentile // 100))
-    return ordered[min(int(rank), len(ordered)) - 1]
-
-
-def rarity_weights(
-    games_per_text: dict[str, int], *, cap: float = RARITY_CAP,
-    percentile: float = RARITY_PERCENTILE,
-) -> dict[str, float]:
-    """``effective_games ** -0.5``, capped at ``cap`` times the p99 text's weight.
-
-    The exponent flattens the corpus's long tail without erasing it: an ability
-    seen in one game gets more weight than one seen in a hundred, but not a
-    hundred times more. The cap stops a single-game ability from dominating a
-    batch, and is expressed against the text at the ``percentile``-th
-    percentile of effective games (FR-054) — a common text, so the cap scales
-    with the corpus, but not the single most common one, whose count would set
-    every other text's ceiling on its own.
-    """
-    if not games_per_text:
-        return {}
-    raw = {
-        text: float(count) ** -0.5 if count > 0 else 0.0
-        for text, count in games_per_text.items()
-    }
-    counts = [float(count) for count in games_per_text.values() if count > 0]
-    if not counts:
-        return raw
-    ceiling = cap * _percentile(counts, percentile) ** -0.5
-    return {text: min(weight, ceiling) for text, weight in raw.items()}
-
-
-def sample_weights(
-    records: Sequence[EffectRecord], text_of, *,
-    rarity: Mapping[str, int] | None = None,
-    class_of=None,
-) -> list[float]:
-    """Per-record sampling weight within its class (FR-054).
-
-    A record with no acting ability text weighs 1 before normalization:
-    ``combat`` and ``playability``/``attackers``/``blockers`` sample uniformly,
-    because there is no ability text for rarity to key on (FR-087).
-
-    The ceiling is set and the weights normalized **within each sampling
-    class**: each class's weights are capped against its own p99 text and
-    scaled to a mean of one, so rarity reorders records inside a class without
-    moving mass between classes — the class mixture is the corpus's, fixed by
-    ``build-corpus --class-mix``.
-
-    Args:
-        rarity: a corpus-wide ``text -> games`` table from a curated dataset's
-            manifest, read in preference to the resident shard's own count. A
-            text the table does not name falls back to the shard's count for
-            it rather than to zero, so a shard collected after the dataset was
-            built still weights sanely instead of dominating every batch.
-        class_of: ``record -> class``; absent, the records are one class.
-    """
-    texts = [text_of(record) for record in records]
-    shard_counts = effective_games(records, text_of)
-    classes = [
-        class_of(record) if class_of is not None else "" for record in records
-    ]
-    out = [1.0] * len(records)
-    for name in set(classes):
-        members = [i for i, value in enumerate(classes) if value == name]
-        present = {texts[i] for i in members if texts[i] is not None}
-        weights = rarity_weights({
-            text: (
-                shard_counts[text] if rarity is None
-                else rarity.get(text, shard_counts[text])
-            )
-            for text in present
-        })
-        for i in members:
-            if texts[i] is not None:
-                out[i] = weights.get(texts[i], 1.0)
-        mean = sum(out[i] for i in members) / len(members)
-        if mean > 0:
-            for i in members:
-                out[i] /= mean
-    return out
-
-
-# ── the split ───────────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True, slots=True)
-class HeldOutCards:
-    """The card-disjoint holdout, addressable both ways a record names a card.
-
-    A record names a card by the entity names in its snapshot and by the script
-    files its provenance keys point at; matching on either catches both.
-
-    ``names`` is folded on construction (:func:`fold_card_name`), because the
-    two sides of this comparison spell a card differently and a caller that
-    passed printed case would produce a holdout matching nothing.
-    """
-
-    names: frozenset[str]
-    script_files: frozenset[str]
-    #: The held-out ability texts themselves. Under depletion no training card
-    #: carries one, so this is also gate 1's unique-text slice — sizing the
-    #: stratum needs no scan of the training corpus.
-    texts: frozenset[str] = frozenset()
-
-    def __post_init__(self) -> None:
-        folded = frozenset(fold_card_name(name) for name in self.names)
-        if folded != self.names:
-            object.__setattr__(self, "names", folded)
-
-    def __len__(self) -> int:
-        return len(self.script_files or self.names)
-
-
-@dataclass(frozen=True, slots=True)
-class CorpusSplit:
-    """The split a checkpoint records and the evaluator reads back.
-
-    Both strata are stored as explicit ``game_id`` sets rather than as a rule,
-    because the corpus is append-only and grows between runs: a recomputed
-    split would not be the trained-against one, and the gates would score partly
-    on games the model had trained on.
-    """
-
-    held_out_cards: tuple[str, ...]
-    card_disjoint_games: frozenset[str]
-    game_disjoint_games: frozenset[str]
-
-    @property
-    def validation_games(self) -> frozenset[str]:
-        return self.card_disjoint_games | self.game_disjoint_games
-
-    def is_training_game(self, game_id: str) -> bool:
-        return game_id not in self.validation_games
-
-
-def text_keyed_holdout(
-    card_files: dict[str, str],
-    texts_by_card: Mapping[str, Iterable[str]],
-    *,
-    permille: int = HOLDOUT_PERMILLE,
-    max_carriers: int = HOLDOUT_MAX_CARRIERS,
-    unit: str = "text",
-) -> HeldOutCards:
-    """Hold out ability texts, and with them every card carrying one (FR-088).
-
-    ``unit`` selects what is counted and hashed (FR-040, FR-041): ``template``
-    holds out every text sharing a masked template together, ``text`` is
-    feature 023's rule. ``holdout-cards``, ``build-corpus`` and
-    ``train-effect-model`` all go through here, so the three agree by
-    construction rather than by three implementations kept in step.
-
-    Args:
-        card_files: ``card name -> script file``, one entry per converted card
-            under ``output/cardsfolder/``. Token scripts and variant scripts are
-            not in this denominator.
-        texts_by_card: ``card name -> its sidecar's script texts``, from
-            ``load_card_texts``.
-
-    The text rather than the card, because the model never reads a card's name
-    and functional reprints compile to the same script: a name-keyed holdout
-    trains on Lightning Strike while holding out Searing Spear, and gate 1 then
-    drops those records for having text a training card carries.
-    """
-    from effects.domain.text_holdout import select_holdout
-
-    chosen = select_holdout(
-        texts_by_card, permille=permille, max_carriers=max_carriers, unit=unit,
-    )
-    names = frozenset(chosen.cards & card_files.keys())
-    return HeldOutCards(
-        names=names,
-        script_files=frozenset(card_files[name] for name in names),
-        texts=chosen.texts,
-    )
-
-
-def load_card_texts(
-    card_files: Mapping[str, str], sidecars: SidecarCache,
-) -> dict[str, list[str]]:
-    """``card name -> the script texts of its sidecar's lines``.
-
-    The I/O half of the holdout, kept apart from the selection so the rule can
-    be exercised without a converted tree on disk.
-    """
-    out: dict[str, list[str]] = {}
-    for name, script_file in card_files.items():
-        sidecar = sidecars.get(script_file)
-        if sidecar is None:
-            continue
-        out[name] = [
-            line.script_text for line in sidecar.lines if line.script_text
-        ]
-    return out
-
-
-def record_names_held_out_card(
-    record: EffectRecord, held_out: HeldOutCards,
-) -> bool:
-    """Whether this record names a held-out card, acting or in context."""
-    for entity in record.state.entities:
-        if fold_card_name(entity.name) in held_out.names:
-            return True
-    for key in record.ability or ():
-        if key.script_file in held_out.script_files:
-            return True
-    for entity in record.state.entities:
-        for key in (*entity.printed, *entity.granted_attached,
-                    *entity.granted_temporary.abilities):
-            if key.script_file in held_out.script_files:
-                return True
-    return False
-
-
 # ── reading the corpus one shard at a time ──────────────────────────────
-
-
-def shard_games(
-    records: Iterable[EffectRecord], held_out: HeldOutCards,
-) -> tuple[frozenset[str], frozenset[str]]:
-    """One shard's games, split by whether any record names a held-out card.
-
-    Decidable from the shard alone because a game never spans two shards: the
-    collector gives every shard its own game-id namespace. Returns
-    ``(tainted, clean)``, and a game appears in exactly one of them.
-    """
-    tainted: set[str] = set()
-    seen: set[str] = set()
-    for record in records:
-        seen.add(record.game_id)
-        if record.game_id not in tainted and record_names_held_out_card(
-            record, held_out
-        ):
-            tainted.add(record.game_id)
-    return frozenset(tainted), frozenset(seen - tainted)
-
-
-class SplitAccumulator:
-    """The split, built up shard by shard instead of derived in one pass.
-
-    A game naming a held-out card joins the card-disjoint stratum wherever it is
-    found, because training on it would let the shipping gate score on cards the
-    encoder had already seen. A clean game joins the game-disjoint stratum only
-    when it comes from a reserved shard, which is what makes the validation
-    records the same ones every epoch.
-
-    A ``--split-from`` run inherits a fixed split instead: the corpus grows
-    between runs, and re-deriving the boundary would move it.
-    """
-
-    def __init__(
-        self,
-        *,
-        held_out_cards: Sequence[str] = (),
-        inherited: CorpusSplit | None = None,
-    ) -> None:
-        self._held_out_cards = tuple(held_out_cards)
-        self._inherited = inherited
-        self._card_disjoint: set[str] = set()
-        self._game_disjoint: set[str] = set()
-
-    @classmethod
-    def inheriting(cls, split: CorpusSplit) -> SplitAccumulator:
-        return cls(held_out_cards=split.held_out_cards, inherited=split)
-
-    @property
-    def inherited(self) -> bool:
-        return self._inherited is not None
-
-    def note_shard(
-        self,
-        records: Iterable[EffectRecord],
-        held_out: HeldOutCards,
-        *,
-        reserved: bool,
-    ) -> tuple[frozenset[str], frozenset[str]]:
-        """Record one shard's games and return its ``(tainted, clean)`` sets."""
-        tainted, clean = shard_games(records, held_out)
-        self.note_games(tainted, clean, reserved=reserved)
-        return tainted, clean
-
-    def note_games(
-        self, tainted: Iterable[str], clean: Iterable[str], *, reserved: bool,
-    ) -> None:
-        """Record one shard's games, already split where the shard was read.
-
-        What the training loop calls when a worker process read the shard:
-        the game ids cross back to it, the records never do.
-        """
-        if self._inherited is None:
-            self._card_disjoint |= set(tainted)
-            if reserved:
-                self._game_disjoint |= set(clean)
-
-    def split(self) -> CorpusSplit:
-        if self._inherited is not None:
-            return self._inherited
-        return CorpusSplit(
-            held_out_cards=self._held_out_cards,
-            card_disjoint_games=frozenset(self._card_disjoint),
-            game_disjoint_games=frozenset(self._game_disjoint),
-        )
 
 
 def epoch_shards(
@@ -524,7 +108,10 @@ def epoch_shards(
 
 
 def steps_per_shard(total: int, count: int) -> list[int]:
-    """``total`` optimizer steps divided as evenly as possible over ``count``.
+    """``total`` training steps divided as evenly as possible over ``count``.
+
+    A step is one batch's forward and backward; under ``--grad-accum`` several
+    of them make one optimizer step.
 
     Spread rather than piled onto the last shard: every shard in the epoch
     should contribute comparably, whatever the remainder.
@@ -533,182 +120,6 @@ def steps_per_shard(total: int, count: int) -> list[int]:
         return []
     base, remainder = divmod(max(total, 0), count)
     return [base + (1 if index < remainder else 0) for index in range(count)]
-
-
-def load_card_files(cards_folder: Path) -> dict[str, str]:
-    """``card name -> tree-prefixed script file`` for one converted tree.
-
-    Names come from each file's ``name:`` line, which is authoritative — the
-    filename is a sanitized derivative and several cards share a stem.
-    """
-    from price_predictor.domain.tokenizer import extract_card_name
-
-    cards_folder = Path(cards_folder)
-    out: dict[str, str] = {}
-    for path in sorted(cards_folder.rglob("*.txt")):
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        name = extract_card_name(text)
-        if not name:
-            continue
-        relative = path.relative_to(cards_folder).as_posix()
-        out[name] = f"cardsfolder/{relative}"
-    return out
-
-
-def load_first_printings(printings_path: Path) -> dict[str, str]:
-    """``card name -> earliest release date`` from an MTGJSON dump.
-
-    Faces are indexed under their own names as well as the combined one, so a
-    record naming either resolves.
-    """
-    import json
-
-    data = json.loads(Path(printings_path).read_text(encoding="utf-8"))
-    earliest: dict[str, str] = {}
-    for set_info in data.get("data", {}).values():
-        cards = set_info if isinstance(set_info, list) else set_info.get("cards", [])
-        release = (
-            set_info.get("releaseDate", "") if isinstance(set_info, dict) else ""
-        )
-        for card in cards:
-            for key in {card.get("name"), card.get("faceName")} - {None, ""}:
-                previous = earliest.get(key)
-                if previous is None or (release and release < previous):
-                    earliest[key] = release
-    return earliest
-
-
-# ── batch assembly ──────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True, slots=True)
-class BatchPlan:
-    """Which records a batch draws, grouped by the game they came from.
-
-    Grouping matters for cost, not correctness: records from one game share a
-    board, so their context entities share ability texts, and one encode of a
-    text then serves many records instead of one.
-    """
-
-    by_game: dict[str, list[EffectRecord]] = field(default_factory=dict)
-
-    @property
-    def records(self) -> list[EffectRecord]:
-        return [r for group in self.by_game.values() for r in group]
-
-
-def weighted_order(weights: Sequence[float], rng: random.Random) -> list[int]:
-    """Indices in a weighted shuffle: each drawn once, heavier ones earlier.
-
-    Efraimidis–Spirakis: key ``u ** (1 / w)`` per item, sorted descending, is a
-    sample without replacement in proportion to ``w``. One shuffle per pass is
-    what lets a shard be seen whole rather than resampled from with
-    replacement, which is how a sixteen-record shard was replayed 640 times.
-    """
-    keys = [
-        rng.random() ** (1.0 / max(float(weight), 1e-9)) for weight in weights
-    ]
-    return sorted(range(len(keys)), key=keys.__getitem__, reverse=True)
-
-
-def batches_without_replacement(
-    records: Sequence[EffectRecord], weights: Sequence[float], *,
-    batch_size: int, rng: random.Random,
-) -> Iterator[BatchPlan]:
-    """Endless full batches over ``records``: one weighted shuffle per pass.
-
-    A batch smaller than ``batch_size`` is yielded only when the whole shard
-    is smaller; otherwise the ragged tail is dropped and the next pass
-    starts, so every step trains on a full batch.
-    """
-    if not records:
-        return
-    size = min(batch_size, len(records))
-    while True:
-        order = weighted_order(weights, rng)
-        for start in range(0, len(order) - size + 1, size):
-            plan: dict[str, list[EffectRecord]] = defaultdict(list)
-            for index in order[start:start + size]:
-                plan[records[index].game_id].append(records[index])
-            yield BatchPlan(dict(plan))
-
-
-# ── variants (FR-094) ───────────────────────────────────────────────────
-
-
-VARIANT_FULL = "full"
-VARIANT_IDENTITY = "identity"
-VARIANT_STATE_ONLY = "state-only"
-VARIANT_NO_STATE = "no-state"
-VARIANT_TAXONOMY = "taxonomy"
-
-VARIANTS: tuple[str, ...] = (
-    VARIANT_FULL, VARIANT_IDENTITY, VARIANT_STATE_ONLY, VARIANT_NO_STATE,
-    VARIANT_TAXONOMY,
-)
-
-#: What each baseline removes, in one line each. Gate 1 is defined against
-#: ``identity``, so its definition is contract rather than commentary.
-VARIANT_DESCRIPTIONS: dict[str, str] = {
-    VARIANT_FULL: "the shipping model: encoder plus effect head",
-    VARIANT_IDENTITY:
-        "a free embedding per unique ability text replaces the encoder — it can "
-        "memorize what each seen text does and knows nothing about an unseen one",
-    VARIANT_STATE_ONLY:
-        "all e inputs zeroed: the floor every record kind is reported against",
-    VARIANT_NO_STATE:
-        "every input zeroed except [ACT] and the record-kind flag, entity "
-        "ability e tokens included — the average-effect control",
-    VARIANT_TAXONOMY:
-        "e replaced by an embedding of the sidecar's API type and parameter keys",
-}
-
-
-@dataclass(frozen=True, slots=True)
-class VariantMasks:
-    """Which parts of the input a variant zeroes.
-
-    Expressed as masks rather than as four training paths, so every baseline
-    runs the identical pipeline and a difference in the numbers is a difference
-    in the inputs rather than in the code (FR-094).
-    """
-
-    #: Zero the acting line's and every entity ability token's ``e``.
-    zero_e: bool = False
-    #: Zero the ``[PLAYER]`` and ``[CARD]`` features and their ability tokens.
-    zero_state: bool = False
-    #: Replace the encoder with a free per-text embedding table.
-    identity_embedding: bool = False
-    #: Replace ``e`` with an embedding of the sidecar's API type and param keys.
-    taxonomy_embedding: bool = False
-
-
-def variant_masks(variant: str) -> VariantMasks:
-    """The masks a variant applies.
-
-    ``no-state`` zeroes the entity ability ``e`` tokens **as well as** the state
-    features. Leaving them live would let it read the board through the
-    abilities on it, and it would no longer be the average-effect control.
-    """
-    match variant:
-        case "full":
-            return VariantMasks()
-        case "identity":
-            return VariantMasks(identity_embedding=True)
-        case "state-only":
-            return VariantMasks(zero_e=True)
-        case "no-state":
-            return VariantMasks(zero_state=True, zero_e=True)
-        case "taxonomy":
-            return VariantMasks(taxonomy_embedding=True)
-    raise ValueError(f"unknown --variant {variant!r}; known: {list(VARIANTS)}")
-
-
-class MissingSplitError(RuntimeError):
-    """A variant run was started without ``--split-from``."""
 
 
 class EmptyHoldoutError(RuntimeError):
@@ -757,31 +168,6 @@ def check_holdout(
     return None
 
 
-def require_split_from(
-    variant: str, split_from: Path | None, *, corpus: str | None = None,
-) -> None:
-    """A variant run must inherit the split it is a baseline for (FR-091).
-
-    Without it the run would silently compute its own split and the comparison
-    would be between two models that saw different games — which looks like a
-    result and is not one. A shared ``--corpus`` satisfies this at least as
-    firmly as ``--split-from``: the manifest enumerates the split directly, so
-    every run reading the same curated dataset trains against the same games
-    (FR-146). ``--corpus`` is required on every run, so ``--split-from`` is
-    accepted alongside it only for a variant run's compatibility with an
-    older invocation; the split it would have computed is never read.
-    """
-    if variant != VARIANT_FULL and split_from is None and corpus is None:
-        raise MissingSplitError(
-            f"--variant {variant} requires --split-from PATH or --corpus DIR: "
-            "a baseline must inherit the split, vocabulary and "
-            "keyword-definition paths of the full run it baselines (via "
-            "--split-from), or read the same curated dataset (via --corpus) — "
-            "otherwise the comparison is between two models that saw "
-            "different games."
-        )
-
-
 # ── configuration ───────────────────────────────────────────────────────
 
 
@@ -797,7 +183,6 @@ class TrainEffectModelConfig:
         Path("output/cardsfolder/"), Path("output/tokenscripts/"),
     )
     variant_scripts: Path | None = None
-    split_from: Path | None = None
     #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
     holdout_unit: str | None = None
     vocab_path: Path = field(default_factory=lambda: Path("models/effects/vocab.txt"))
@@ -814,7 +199,7 @@ class TrainEffectModelConfig:
         default_factory=lambda: Path("output/effects/keyword-definitions.json"),
     )
     model_output: Path | None = None
-    variant: str = VARIANT_FULL
+    variant: str = Baseline.FULL
     e_dim: int = 64
     #: The noise ratio ``r`` on ``e``, relative to the running covariance of
     #: ``e`` itself (FR-056) — no longer a fixed σ.
@@ -826,19 +211,30 @@ class TrainEffectModelConfig:
     encoder_d_model: int = 256
     keyword_expand_p: float = 0.25
     context_dropout: float = 0.15
+    #: Counterfactual copies of each qualifying damage or -X/-X resolution a
+    #: training step makes, labelled by the rules (FR-063e); 0 makes none.
+    lethality_copies: int = 0
+    #: A factor on the learning rate at every step (FR-063f). Not a resume
+    #: setting: a resumed run may continue at another rate.
+    lr_scale: float = 1.0
+    #: Also keep each epoch's checkpoint under ``<model-output>/epochs/``
+    #: (FR-063f), beside the best-only ones, so any epoch can be probed.
+    save_every_epoch: bool = False
     mlm_weight: float = 0.1
     mlm_mask_prob: float = 0.15
-    api_weight: float = 0.05
+    #: The script-API head's weight. Its term sums ~1,245 parameter-key BCEs per
+    #: text (one reduction per row, as every head's), which at initialization is
+    #: two orders of magnitude above the value term; this weight starts it on the
+    #: scale of the value and MLM terms rather than beside the per-entity loss.
+    api_weight: float = 0.003
     #: The epoch whose first step enables the sparse field group (FR-082).
     #: An epoch rather than a step so validation before and after the switch
-    #: scores different field sets at an epoch boundary, never inside one:
-    #: the first run enabled the group at shard 244 of epoch 2 and validated
-    #: twenty-five untrained heads at that epoch's end, a 134-loss spike.
+    #: scores different field sets at an epoch boundary, never inside one: a
+    #: switch mid-epoch validates the new fields' untrained heads at the
+    #: epoch's end, which reads as a loss spike.
     curriculum_epoch: int = 3
     batch_size: int = 32
     grad_accum: int = 1
-    context_cache: bool = False
-    cache_refresh: int = 500
     steps_per_epoch: int = 5_000
     shards_per_epoch: int = DEFAULT_SHARDS_PER_EPOCH
     #: Worker processes preparing each step's host half (``--prefetch-workers``);
@@ -925,7 +321,7 @@ def warmup_steps(*, epochs: int, steps_per_epoch: int) -> int:
 
 def fields_for_epoch(config: TrainEffectModelConfig, *, present: frozenset[str], epoch: int):
     """The field set every step of ``epoch`` trains with, and validation scores."""
-    from effects.domain.effect_model import active_fields
+    from effects.domain.effect_head_layout import active_fields
 
     return active_fields(
         present_classes=present,
@@ -944,22 +340,6 @@ def learning_rate_at(step: int, *, warmup: int) -> float:
     if step >= warmup:
         return LEARNING_RATE
     return LEARNING_RATE * (step + 1) / warmup
-
-
-# ── keyword withholding (FR-117) ────────────────────────────────────────
-
-
-def withheld_keyword_rules(withheld: str | None) -> tuple[frozenset[str], bool]:
-    """Which keyword tokens to hide, and whether to force their expansion.
-
-    Withholding is what gives the zero-shot check something to measure: the
-    model never sees the keyword's *token*, only the sentence it stands for, so
-    the check asks whether a keyword it has only ever read as prose lands near
-    the right neighbours.
-    """
-    if not withheld:
-        return frozenset(), False
-    return frozenset({withheld.lower().replace(" ", "_")}), True
 
 
 # ── the epoch loop ──────────────────────────────────────────────────────
@@ -997,6 +377,13 @@ class EarlyStopper:
         self.since_best += 1
         return False
 
+    def state_dict(self) -> dict:
+        return {"best": self.best, "since_best": self.since_best}
+
+    def load_state_dict(self, state: dict) -> None:
+        self.best = state["best"]
+        self.since_best = state["since_best"]
+
     def reset(self) -> None:
         """Forget the best: the objective changed, so no earlier number compares."""
         self.best = float("inf")
@@ -1004,95 +391,11 @@ class EarlyStopper:
 
     @property
     def should_stop(self) -> bool:
-        return self.since_best >= self.patience
-
-
-class ContextCache:
-    """Stop-gradient momentum cache for context ability vectors (FR-084).
-
-    The documented fallback when live context re-encoding exceeds the 8 GB GPU
-    budget: context abilities read a cached ``e`` refreshed every
-    ``--cache-refresh`` batches instead of being re-encoded with gradient. The
-    acting ability is always live — it is the one under study.
-
-    Momentum rather than a hard overwrite so a refresh moves the cache toward
-    the current encoder rather than snapping to one batch's view of it.
-    """
-
-    def __init__(self, refresh_every: int = 500, momentum: float = 0.9) -> None:
-        self.refresh_every = refresh_every
-        self.momentum = momentum
-        self._vectors: dict[str, tuple[float, ...]] = {}
-        self._batches_since_refresh = 0
-
-    def get(self, text: str) -> tuple[float, ...] | None:
-        return self._vectors.get(text)
-
-    def due_for_refresh(self) -> bool:
-        return self._batches_since_refresh >= self.refresh_every
-
-    def note_batch(self) -> None:
-        self._batches_since_refresh += 1
-
-    def refresh(self, fresh: dict[str, tuple[float, ...]]) -> None:
-        """Blend freshly-encoded vectors into the cache and reset the counter."""
-        for text, vector in fresh.items():
-            previous = self._vectors.get(text)
-            if previous is None:
-                self._vectors[text] = vector
-            else:
-                self._vectors[text] = tuple(
-                    self.momentum * old + (1.0 - self.momentum) * new
-                    for old, new in zip(previous, vector)
-                )
-        self._batches_since_refresh = 0
-
-    def __len__(self) -> int:
-        return len(self._vectors)
+        """Never with ``patience`` 0: that run trains every epoch it is given."""
+        return self.patience > 0 and self.since_best >= self.patience
 
 
 # ── the run ─────────────────────────────────────────────────────────────
-
-
-def text_for_key(key, sidecars, surface: str) -> str | None:
-    """One provenance key's text on ``surface``, or None where it has none.
-
-    The single key-level definition. ``build-corpus`` surveys by provenance key
-    and folds to text afterwards, and a second spelling of this would key the
-    rarity table differently from every lookup the trainer makes against it.
-
-    Falls back to the key itself where the sidecar carries neither surface, so
-    a line that cannot be read is still a distinct unit for rarity weighting
-    rather than collapsing into every other unreadable line.
-    """
-    from effects.domain.ability_encoder import encoding_text
-    from effects.infrastructure.sidecar_io import UnconfiguredTree
-
-    try:
-        line = sidecars.line_for(key)
-    except UnconfiguredTree:
-        return None
-    if line is None:
-        return None
-    text = encoding_text(line, sidecars.prose_for(key), surface)
-    return text or f"{key.script_file}:{key.trait_kind}:{key.index_within_kind}"
-
-
-def ability_text_of(
-    record: EffectRecord, sidecars, surface: str = "prose",
-) -> str | None:
-    """The acting line's text on ``surface``, or None where no line acts.
-
-    ``combat`` and the ``attackers``/``blockers`` subkinds have none, which is
-    what makes them sample uniformly rather than by rarity.
-    """
-    if not record.ability:
-        return None
-    for key in record.ability:
-        text = text_for_key(key, sidecars, surface)
-        if text is not None:
-            return text
-    return None
 
 
 def load_shard(path: Path) -> list[EffectRecord]:
@@ -1128,7 +431,8 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
     so it is refused before any step rather than discovered at evaluation.
     """
     from effects.domain.text_holdout import normalize_script_text
-    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+    from effects.infrastructure.card_sources import load_card_files, load_card_texts
+    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
 
     unit = manifest.holdout_unit
     if config.holdout_unit is not None and config.holdout_unit != unit:
@@ -1158,6 +462,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
         permille=manifest.holdout_permille,
         max_carriers=manifest.holdout_max_carriers,
         unit=unit,
+        token_texts=load_tree_texts(roots.get("tokenscripts")),
     )
     logger.info(
         "Holdout recomputed in %.0fs: %d held-out text(s).",
@@ -1187,19 +492,6 @@ def run(config: TrainEffectModelConfig) -> int:
     never loaded whole: the shard list is read here and the records behind it
     one shard at a time, inside the loop.
     """
-    require_split_from(config.variant, config.split_from, corpus=config.corpus)
-    if config.split_from is not None:
-        logger.warning(
-            "--split-from %s is accepted for compatibility with an older "
-            "invocation, but nothing is read from this path: the manifest of "
-            "--corpus is authoritative for the split.", config.split_from,
-        )
-    if config.context_cache:
-        logger.warning(
-            "--context-cache is accepted but not wired into the batcher in "
-            "this trainer; context abilities are re-encoded live."
-        )
-
     if config.corpus is None:
         logger.error(
             "train-effect-model reads a curated corpus: pass --corpus DIR, built "
@@ -1220,7 +512,7 @@ def run(config: TrainEffectModelConfig) -> int:
         logger.error("No training shards under %s.", store.training_dir)
         return 1
     validation_samples = {
-        stratum: store.sample_path(stratum) for stratum in ("card-disjoint", "game-disjoint")
+        stratum: store.sample_path(stratum) for stratum in VALIDATION_STRATA
     }
     missing = [str(p) for p in validation_samples.values() if not p.exists()]
     if missing:
@@ -1245,11 +537,7 @@ def run(config: TrainEffectModelConfig) -> int:
     # Copied into the checkpoint's split (FR-042), so evaluation knows the
     # unit without re-reading the manifest.
     config.holdout_unit = manifest.holdout_unit
-    held_out = HeldOutCards(
-        names=frozenset(manifest.held_out_cards), script_files=frozenset(),
-        texts=frozenset(manifest.held_out_texts),
-    )
-    inherited = CorpusSplit(
+    split = CorpusSplit(
         held_out_cards=manifest.held_out_cards,
         card_disjoint_games=frozenset(manifest.card_disjoint_games),
         game_disjoint_games=frozenset(manifest.game_disjoint_games),
@@ -1257,7 +545,7 @@ def run(config: TrainEffectModelConfig) -> int:
     logger.info(
         "Curated corpus at %s: %d training shards, %d gate-one record(s), "
         "%d held-out ability text(s) on %d card(s).",
-        config.corpus, len(training_shards), manifest.per_stratum.get("gate-one", 0),
+        config.corpus, len(training_shards), manifest.per_stratum.get(Stratum.GATE_ONE, 0),
         len(manifest.held_out_texts), len(manifest.held_out_cards),
     )
 
@@ -1265,13 +553,12 @@ def run(config: TrainEffectModelConfig) -> int:
 
     return TrainingLoop(
         config,
-        held_out=held_out,
-        inherited=inherited,
+        split=split,
         training_shards=training_shards,
         validation_samples=validation_samples,
         holdout_permille=manifest.holdout_permille,
         holdout_max_carriers=manifest.holdout_max_carriers,
-        gate_one_records=manifest.per_stratum.get("gate-one", 0),
+        gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
         rarity=manifest.rarity,
         legality_mode_counts=manifest.legality_mode_counts or None,
         corpus_digest=manifest.digest(),

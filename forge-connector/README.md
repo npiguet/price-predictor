@@ -1,98 +1,26 @@
-# Forge Price Predictor Connector
+# forge-connector
 
-Lightweight Java 17+ library that lets MTG Forge get card price predictions
-from the price prediction service. Zero external dependencies.
-
-## Maven Coordinates
-
-```xml
-<dependency>
-    <groupId>com.pricepredictor</groupId>
-    <artifactId>forge-connector</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
-</dependency>
-```
-
-## Usage (5 lines)
-
-```java
-var client = new PricePredictorClient();
-var estimate = client.predict(CardAttributes.builder()
-    .type("Creature")
-    .manaCost("1 G G")
-    .power("2").toughness("2")
-    .build());
-System.out.println(estimate.predictedPriceEur()); // e.g. 0.15
-```
+Java 17+ command-line workers that the Python packages run against the sibling
+MTG Forge checkout (`../forge`): card-script conversion, sealed pool
+generation, self-play match workers, draft workers and scorer evaluation. The
+repository-root `CLAUDE.md` lists each main class and the command that spawns
+it, and its "Corpus file formats" section is the contract for everything the
+workers write.
 
 ## Build
 
+Forge must be installed into the local Maven repository first
+(`mvn install -DskipTests` in `../forge`). Then:
+
 ```bash
 cd forge-connector
-mvn package
+mvn install -DskipTests
 ```
 
-The JAR is at `target/forge-connector-1.0.0-SNAPSHOT.jar`.
+The fat JAR the Python side runs is
+`target/forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar`.
 
-## Requirements
+## Tests
 
-- Java 17+
-- The price prediction service must be running (`python -m price_predictor serve`)
-
-## API
-
-### PricePredictorClient
-
-```java
-// Default: http://localhost:8000, 5s timeout
-new PricePredictorClient();
-
-// Custom endpoint
-new PricePredictorClient("http://myserver:9000");
-
-// Custom endpoint + timeout (ms)
-new PricePredictorClient("http://myserver:9000", 3000);
-
-// Predict
-PriceEstimate estimate = client.predict(cardAttributes);
-```
-
-### CardAttributes (builder)
-
-```java
-CardAttributes card = CardAttributes.builder()
-    .name("Lightning Bolt")           // optional
-    .manaCost("R")                    // optional
-    .type("Instant")                  // required (at least one)
-    .supertype("Legendary")           // optional
-    .subtype("Human").subtype("Wizard") // optional
-    .oracleText("Deals 3 damage.")    // optional
-    .keyword("Flying").keyword("Haste") // optional
-    .power("3").toughness("4")        // optional
-    .loyalty("3")                     // optional
-    .build();
-```
-
-### PriceEstimate (record)
-
-```java
-estimate.predictedPriceEur()  // double
-estimate.modelVersion()       // String
-```
-
-## Error Handling
-
-| Scenario | Exception | Message pattern |
-|----------|-----------|-----------------|
-| Service not running | `ServiceUnavailableException` | "Connection refused: {url}" |
-| Request timeout (default 5s) | `ServiceUnavailableException` | "Request timed out after {ms}ms" |
-| Server returns 400/500 | `InvalidResponseException` | Server's error message |
-| Unparseable response | `InvalidResponseException` | "Failed to parse response: {detail}" |
-
-All exceptions extend `PricePredictorException` (checked).
-
-## Thread Safety
-
-`PricePredictorClient` is thread-safe and reusable across requests. Each
-`predict()` call creates a fresh HTTP request. The client automatically
-recovers when the service restarts.
+`mvn install` runs the unit tests. Tests that need an initialised Forge
+environment are tagged `integration` and run with `mvn test -Pintegration`.

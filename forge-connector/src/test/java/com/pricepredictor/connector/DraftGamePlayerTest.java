@@ -9,56 +9,54 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Unit tests for the pieces of {@link DraftGamePlayer} that do not need a live
- * Forge game: the per-game sequences a match-outcome row is built from, and the
- * row's field bindings.
+ * Unit tests for the pieces of a draft-game row that do not need a live Forge
+ * game: the per-game sequences {@link GamePlayer.PlayedMatch} gives the row,
+ * and the row's field bindings.
  *
  * <p>Playing an actual match needs an initialised Forge environment and belongs
  * to the integration profile.
  */
 class DraftGamePlayerTest {
 
-    private static GamePlayer.GameOutcome game(String winner, String playFirst) {
+    private static GamePlayer.GameOutcome game(Side winner, Side playFirst) {
         return new GamePlayer.GameOutcome(winner, playFirst, List.of(), List.of());
     }
 
     private static GamePlayer.PlayedMatch match(GamePlayer.GameOutcome... games) {
-        return new GamePlayer.PlayedMatch(List.of(games), 87);
+        return new GamePlayer.PlayedMatch(List.of(games), 87, false);
     }
 
     // ── Per-game sequences ──────────────────────────────────────────
 
     @Test
     void winnerSequenceIsOneCharPerGame() {
-        assertEquals("ABA", DraftGamePlayer.winnerSequence(
-                match(game("A", "A"), game("B", "B"), game("A", "A"))));
+        assertEquals("ABA", match(game(Side.A, Side.A), game(Side.B, Side.B), game(Side.A, Side.A)).winnerSequence());
     }
 
     @Test
     void playSequenceIsOneCharPerGame() {
-        assertEquals("BAB", DraftGamePlayer.playSequence(
-                match(game("A", "B"), game("B", "A"), game("A", "B"))));
+        assertEquals("BAB", match(game(Side.A, Side.B), game(Side.B, Side.A), game(Side.A, Side.B)).playSequence());
     }
 
     @Test
     void sequencesHaveEqualLength() {
-        GamePlayer.PlayedMatch played = match(game("A", "B"), game("A", "A"));
+        GamePlayer.PlayedMatch played = match(game(Side.A, Side.B), game(Side.A, Side.A));
 
         assertEquals(
-                DraftGamePlayer.winnerSequence(played).length(),
-                DraftGamePlayer.playSequence(played).length());
+                played.winnerSequence().length(),
+                played.playSequence().length());
     }
 
     @Test
     void aBestOfOneMatchIsASingleChar() {
-        assertEquals("B", DraftGamePlayer.winnerSequence(match(game("B", "A"))));
+        assertEquals("B", match(game(Side.B, Side.A)).winnerSequence());
     }
 
     // ── Row construction ────────────────────────────────────────────
 
     @Test
     void rowCarriesLabelsSetAndSequences() {
-        GamePlayer.PlayedMatch played = match(game("A", "A"), game("A", "B"));
+        GamePlayer.PlayedMatch played = match(game(Side.A, Side.A), game(Side.A, Side.B));
 
         MatchResult result = new MatchResult(
                 Instant.parse("2026-08-11T00:00:00Z"),
@@ -68,8 +66,8 @@ class DraftGamePlayerTest {
                 "forge-native",
                 List.of("Forest", "Island"),
                 List.of("Mountain", "Plains"),
-                DraftGamePlayer.winnerSequence(played),
-                DraftGamePlayer.playSequence(played),
+                played.winnerSequence(),
+                played.playSequence(),
                 played.durationSeconds());
 
         assertEquals("gen4", result.methodA());
@@ -83,32 +81,33 @@ class DraftGamePlayerTest {
     @Test
     void winCountsDeriveFromTheSequence() {
         GamePlayer.PlayedMatch played =
-                match(game("A", "A"), game("B", "B"), game("A", "A"));
+                match(game(Side.A, Side.A), game(Side.B, Side.B), game(Side.A, Side.A));
 
         MatchResult result = new MatchResult(
                 Instant.parse("2026-08-11T00:00:00Z"),
                 "eval-1", "BLB", "gen4", "gen1",
                 List.of("Forest"), List.of("Island"),
-                DraftGamePlayer.winnerSequence(played),
-                DraftGamePlayer.playSequence(played),
+                played.winnerSequence(),
+                played.playSequence(),
                 played.durationSeconds());
 
-        assertEquals(2, result.winsA());
-        assertEquals(1, result.winsB());
+        assertEquals(2, played.winsA());
+        assertEquals(1, played.winsB());
+        assertEquals("ABA", result.games());
     }
 
     @Test
     void aMatchWithNoGamesCannotBecomeARow() {
         // GamePlayer skips draws and aborted games, so a match can end up empty.
         // MatchResult rejects it rather than letting a blank row reach the corpus.
-        GamePlayer.PlayedMatch empty = new GamePlayer.PlayedMatch(List.of(), 0);
+        GamePlayer.PlayedMatch empty = new GamePlayer.PlayedMatch(List.of(), 0, false);
 
         assertThrows(IllegalArgumentException.class, () -> new MatchResult(
                 Instant.parse("2026-08-11T00:00:00Z"),
                 "eval-1", "BLB", "gen4", "gen1",
                 List.of("Forest"), List.of("Island"),
-                DraftGamePlayer.winnerSequence(empty),
-                DraftGamePlayer.playSequence(empty),
+                empty.winnerSequence(),
+                empty.playSequence(),
                 empty.durationSeconds()));
     }
 }

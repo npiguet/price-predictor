@@ -1,0 +1,5 @@
+corpus part,records,repaired,dropped
+training,892205,20864,2432
+card-disjoint stratum,3626459,2490,141
+game-disjoint stratum,1163084,1855,216
+validation samples,4096,42,0

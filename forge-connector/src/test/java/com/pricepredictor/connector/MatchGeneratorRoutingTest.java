@@ -1,17 +1,17 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.GeneratedDecksIndex.GeneratedDeck;
+import com.pricepredictor.connector.MatchGenerator.DeckSource;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Pure unit tests for {@link MatchGenerator}'s routing logic — no Forge
- * dependency. Covers constructor validation and the
+ * dependency. Covers configuration validation and the
  * {@link MatchGenerator#rollIsFileSample()} distribution. The full
  * {@link MatchGenerator#generateMatch()} flow is covered by the
  * Forge-dependent integration tests in {@link MatchGeneratorTest}.
@@ -21,57 +21,55 @@ class MatchGeneratorRoutingTest {
     private static final String RUN_ID = "test-run-id";
     private static final List<String> ELIGIBLE = List.of("MH3", "BLB", "RVR");
 
-    private static GeneratedDecksIndex emptyIndex() {
-        return new GeneratedDecksIndex(List.of(
-                new GeneratedDeck("test-label", "MH3", List.of("A"))));
+    private static DeckSource oneDeckFile() {
+        return file(new GeneratedDecksIndex(List.of(
+                new GeneratedDeck("test-label", "MH3", List.of("A")))));
     }
 
-    // ── constructor validation ────────────────────────────────────────────────
+    private static DeckSource file(GeneratedDecksIndex index) {
+        return new DeckSource.FileSampled(index);
+    }
+
+    private static MatchGenerator.Builder generator() {
+        return MatchGenerator.builder(ELIGIBLE, RUN_ID).random(new Random(0));
+    }
+
+    // ── configuration validation ──────────────────────────────────────────────
 
     @Test
     void runIdMustBeNonBlank() {
-        assertThrows(IllegalArgumentException.class, () -> new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), "",
-                null, null, 0, new Random(0)));
-        assertThrows(IllegalArgumentException.class, () -> new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), null,
-                null, null, 0, new Random(0)));
+        assertThrows(IllegalArgumentException.class,
+                () -> MatchGenerator.builder(ELIGIBLE, "").build());
+        assertThrows(IllegalArgumentException.class,
+                () -> MatchGenerator.builder(ELIGIBLE, null).build());
     }
 
     @Test
     void eligibleSetsMustBeNonEmpty() {
-        assertThrows(IllegalArgumentException.class, () -> new MatchGenerator(
-                List.of(), new DeckBuilder(), new GamePlayer(), RUN_ID,
-                null, null, 0, new Random(0)));
+        assertThrows(IllegalArgumentException.class,
+                () -> MatchGenerator.builder(List.of(), RUN_ID).build());
     }
 
     @Test
-    void sideBWeightMustBeAtLeastOneWhenSideBIndexProvided() {
-        GeneratedDecksIndex sideB = emptyIndex();
-        assertThrows(IllegalArgumentException.class, () -> new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                null, sideB, 0, new Random(0)));
-        assertThrows(IllegalArgumentException.class, () -> new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                null, sideB, -1, new Random(0)));
+    void sideBWeightMustBeAtLeastOneWhenSideBSamplesAFile() {
+        assertThrows(IllegalArgumentException.class,
+                () -> generator().sideB(oneDeckFile(), 0).build());
+        assertThrows(IllegalArgumentException.class,
+                () -> generator().sideB(oneDeckFile(), -1).build());
     }
 
     @Test
-    void sideBWeightUnusedWhenSideBIndexNull() {
-        // Passing weight=0 (or anything) is fine when sideBIndex is null —
-        // the weight is unused. Phase-0 (both null, weight=0) must work.
-        assertDoesNotThrow(() -> new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                null, null, 0, new Random(0)));
+    void sideBWeightUnusedWhenSideBIsForgeBuilt() {
+        // The weight is unused when side B is Forge-built: plain sealed
+        // self-play (both sides Forge-built, weight 0) must work.
+        assertDoesNotThrow(() -> generator().sideB(DeckSource.FORGE_BUILT, 0).build());
     }
 
     // ── rollIsFileSample distribution ────────────────────────────────────────
 
     @Test
-    void rollIsFileSampleAlwaysFalseWhenSideBIndexNull() {
-        MatchGenerator gen = new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                null, null, 0, new Random(0));
+    void rollIsFileSampleAlwaysFalseWhenSideBIsForgeBuilt() {
+        MatchGenerator gen = generator().build();
         for (int i = 0; i < 1000; i++) {
             assertFalse(gen.rollIsFileSample());
         }
@@ -80,9 +78,8 @@ class MatchGeneratorRoutingTest {
     @Test
     void rollIsFileSampleApproximatesWeightFraction() {
         // Weight 4 → fraction 4/(10+4) = 4/14 ≈ 0.286
-        MatchGenerator gen = new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                null, emptyIndex(), 4, new Random(123));
+        MatchGenerator gen = generator()
+                .sideB(oneDeckFile(), 4).random(new Random(123)).build();
 
         int trials = 14_000;
         int hits = 0;
@@ -97,9 +94,8 @@ class MatchGeneratorRoutingTest {
     @Test
     void rollIsFileSampleScalesWithWeight() {
         // Weight 8 → fraction 8/(10+8) = 8/18 ≈ 0.444
-        MatchGenerator gen = new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                null, emptyIndex(), 8, new Random(456));
+        MatchGenerator gen = generator()
+                .sideB(oneDeckFile(), 8).random(new Random(456)).build();
 
         int trials = 18_000;
         int hits = 0;
@@ -117,11 +113,11 @@ class MatchGeneratorRoutingTest {
     void decksOnlyAlwaysRollsTheFileForSideB() {
         // A coverage deck belongs to no set, so the Forge-method branch would
         // try to open a booster for a set code Forge has never heard of.
-        // Both indices present: decksOnly is refused without them, because a
-        // missing one turns the round back into sealed self-play in silence.
-        MatchGenerator generator = new MatchGenerator(
-                List.of("RVR"), null, null, RUN_ID, emptyIndex(), emptyIndex(), 1,
-                new Random(7), Set.of(), true);
+        // Both sides from a file: decksOnly is refused without them, because
+        // a missing one turns the round back into sealed self-play in silence.
+        MatchGenerator generator = generator()
+                .sideA(oneDeckFile()).sideB(oneDeckFile(), 1)
+                .random(new Random(7)).decksOnly(true).build();
 
         for (int i = 0; i < 100; i++) {
             assertTrue(generator.rollIsFileSample(),
@@ -131,9 +127,8 @@ class MatchGeneratorRoutingTest {
 
     @Test
     void withoutDecksOnlyTheRollStillMixes() {
-        MatchGenerator generator = new MatchGenerator(
-                List.of("RVR"), null, null, RUN_ID, null, emptyIndex(), 4,
-                new Random(7), Set.of(), false);
+        MatchGenerator generator = generator()
+                .sideB(oneDeckFile(), 4).random(new Random(7)).build();
 
         boolean sawForgeMethod = false;
         for (int i = 0; i < 200; i++) {
@@ -159,15 +154,14 @@ class MatchGeneratorRoutingTest {
         // Not reachable from CollectorSupervisor, which always points both
         // sides at the same file -- this is the defensive branch for a
         // side-B index misconfigured to hold no deck of deck A's set at all.
-        // Before this fix existed at all, this configuration silently fell
-        // through to forgeBuilt("COVERAGE"), which NPEs on a sentinel set
-        // code; a clear exception here is strictly better than either that
-        // NPE or a second silent fall-through reintroducing it.
-        GeneratedDecksIndex sideB = new GeneratedDecksIndex(List.of(
-                new GeneratedDeck("coverage", "OTHERSET", List.of("Forest"))));
-        MatchGenerator generator = new MatchGenerator(
-                List.of("RVR"), null, null, RUN_ID, emptyIndex(), sideB, 1,
-                new Random(7), Set.of(), true);
+        // Falling through to forgeBuilt("COVERAGE") would find no booster
+        // for a sentinel set code; a clear exception naming the set is
+        // strictly better than that or a second silent fall-through.
+        DeckSource sideB = file(new GeneratedDecksIndex(List.of(
+                new GeneratedDeck("coverage", "OTHERSET", List.of("Forest")))));
+        MatchGenerator generator = generator()
+                .sideA(oneDeckFile()).sideB(sideB, 1)
+                .random(new Random(7)).decksOnly(true).build();
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> generator.pickDeckB("COVERAGE", List.of("Llanowar Elves")));
@@ -175,105 +169,40 @@ class MatchGeneratorRoutingTest {
                 "exception should name the set that had no candidate");
     }
 
-    // ── decksOnly needs both indices ──────────────────────────────────────
+    // ── decksOnly needs a file on both sides ──────────────────────────────
 
     @Test
-    void decksOnlyRefusesANullSideBIndex() {
-        // With sideBIndex null, rollIsFileSample() returns false for every
+    void decksOnlyRefusesAForgeBuiltSideB() {
+        // With side B Forge-built, rollIsFileSample() returns false for every
         // match and the whole round silently plays ordinary sealed self-play
         // -- a decks-only run that never touches its decks file, reporting
         // success the entire time.
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> new MatchGenerator(ELIGIBLE, new DeckBuilder(), new GamePlayer(),
-                        RUN_ID, emptyIndex(), null, 1, new Random(0), Set.of(), true));
+                () -> generator().sideA(oneDeckFile()).decksOnly(true).build());
         assertTrue(ex.getMessage().contains("decksOnly"));
     }
 
     @Test
-    void decksOnlyRefusesANullSideAIndex() {
+    void decksOnlyRefusesAForgeBuiltSideA() {
         // The same hole on side A, and with no exception downstream at all:
         // pickDeckA would build deck A from a fresh Forge pool of a random
         // eligible set, so half of every coverage match would be a sealed
         // deck the round never asked for.
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> new MatchGenerator(ELIGIBLE, new DeckBuilder(), new GamePlayer(),
-                        RUN_ID, null, emptyIndex(), 1, new Random(0), Set.of(), true));
+                () -> generator().sideB(oneDeckFile(), 1).decksOnly(true).build());
         assertTrue(ex.getMessage().contains("decksOnly"));
     }
 
     @Test
-    void bothIndicesPresentIsTheOnlyDecksOnlyConfiguration() {
-        assertDoesNotThrow(() -> new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                emptyIndex(), emptyIndex(), 1, new Random(0), Set.of(), true));
+    void bothSidesFromAFileIsTheOnlyDecksOnlyConfiguration() {
+        assertDoesNotThrow(() -> generator()
+                .sideA(oneDeckFile()).sideB(oneDeckFile(), 1).decksOnly(true).build());
     }
 
     @Test
-    void withoutDecksOnlyANullSideAIndexIsStillOrdinary() {
+    void withoutDecksOnlyAForgeBuiltSideAIsStillOrdinary() {
         // `sealed match-outcomes --side-b-decks` is exactly this shape and
         // must keep working.
-        assertDoesNotThrow(() -> new MatchGenerator(
-                ELIGIBLE, new DeckBuilder(), new GamePlayer(), RUN_ID,
-                null, emptyIndex(), 4, new Random(0), Set.of(), false));
-    }
-
-    // ── unresolved card names ─────────────────────────────────────────────
-    //
-    // materializeDeck itself needs Forge's card database, so the resolution
-    // half lives in MatchGeneratorTest under -Pintegration. What it does with
-    // the names that missed is pure policy and belongs here.
-
-    @Test
-    void nothingUnresolvedSaysNothing() {
-        assertDoesNotThrow(() -> MatchGenerator.reportUnresolved(List.of(), 40, true));
-        assertDoesNotThrow(() -> MatchGenerator.reportUnresolved(List.of(), 40, false));
-    }
-
-    @Test
-    void aDecksOnlyDeckWithAnUnresolvableNameThrowsNamingIt() {
-        // A coverage or variant deck's names come from output/cardsfolder/
-        // and from VariantRegistry, not from Forge. A name Forge misses is
-        // dropped, the deck materializes as 17 basics, a game plays, a
-        // progress line is appended, records are written -- and the card the
-        // round exists to reach never entered a game. For collect-variants
-        // this can be the whole run: every deck basics, exit code 0, zero
-        // variant records.
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> MatchGenerator.reportUnresolved(
-                        List.of("Bolt Variant 0", "Bolt Variant 1"), 40, true));
-
-        assertTrue(ex.getMessage().contains("Bolt Variant 0"),
-                "the exception must name the cards that did not resolve, got: "
-                        + ex.getMessage());
-        assertTrue(ex.getMessage().contains("Bolt Variant 1"));
-        assertTrue(ex.getMessage().contains("2 of 40"),
-                "the exception must say how many of how many missed, got: "
-                        + ex.getMessage());
-    }
-
-    @Test
-    void anOrdinarySealedDeckOnlyLogsTheMiss() {
-        // Sealed self-play's names came out of Forge in the first place, so a
-        // miss there is a surprise rather than a broken round -- and killing
-        // a long self-play run over one is worse than saying so.
-        assertDoesNotThrow(() -> MatchGenerator.reportUnresolved(
-                List.of("Whatever"), 40, false));
-    }
-
-    @Test
-    void aLongUnresolvedListIsCappedRatherThanDumped() {
-        List<String> many = new java.util.ArrayList<>();
-        for (int i = 0; i < 40; i++) {
-            many.add("Missing " + i);
-        }
-
-        IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> MatchGenerator.reportUnresolved(many, 40, true));
-
-        assertTrue(ex.getMessage().contains("40 of 40"));
-        assertFalse(ex.getMessage().contains("Missing 39"),
-                "a 40-name dump is not a message anyone reads");
-        assertTrue(ex.getMessage().contains("more"),
-                "a capped list must say it was capped, got: " + ex.getMessage());
+        assertDoesNotThrow(() -> generator().sideB(oneDeckFile(), 4).build());
     }
 }

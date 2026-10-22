@@ -256,6 +256,25 @@ def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
     )
 
 
+def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
+    """``script file -> its sidecar's script texts`` over one converted tree.
+
+    The holdout's token carriers (``text_keyed_holdout(token_texts=...)``):
+    every converted token script, keyed by the script file its sidecar names,
+    which is what a record's provenance key and ``HeldOutCards.script_files``
+    both spell. An absent or missing root is an empty tree.
+    """
+    if root is None or not Path(root).is_dir():
+        return {}
+    out: dict[str, list[str]] = {}
+    for path in sorted(Path(root).rglob(f"*{SIDECAR_SUFFIX}")):
+        sidecar = read_sidecar(path)
+        texts = [line.script_text for line in sidecar.lines if line.script_text]
+        if texts:
+            out[sidecar.script_file] = texts
+    return out
+
+
 def converted_text_path(sidecar_path: Path) -> Path:
     """The converted ``.txt`` beside a sidecar."""
     sidecar_path = Path(sidecar_path)
@@ -326,12 +345,17 @@ class SidecarCache:
         """
         self._roots = {name: Path(root) for name, root in roots.items()}
         self._cache: dict[str, ProvenanceSidecar] = {}
+        #: Script files found to have no sidecar, so a miss stats the disk once.
+        self._missing: set[str] = set()
         self._prose: dict[str, list[str]] = {}
         #: ``script_file -> times asked`` for keys naming an unconverted script.
         #: Counted rather than only swallowed: today this is 0.07% of records,
         #: all of them tokens, but a conversion that broke would raise that
         #: share without otherwise changing the shape of a run.
         self.unresolved: dict[str, int] = {}
+        #: ``script_file -> times asked`` for keys :meth:`line_or_none` read as
+        #: no line although the sidecar exists and does not describe them.
+        self.undescribed: dict[str, int] = {}
 
     def path_for(self, script_file: str) -> Path:
         tree, _, relative = script_file.partition("/")
@@ -344,17 +368,16 @@ class SidecarCache:
 
     def get(self, script_file: str) -> ProvenanceSidecar:
         cached = self._cache.get(script_file)
-        if cached is None:
-            path = self.path_for(script_file)
-            if not path.exists():
-                self.unresolved[script_file] = (
-                    self.unresolved.get(script_file, 0) + 1
-                )
-                raise UnconvertedScript(
-                    f"{script_file} was never converted: no sidecar at {path}"
-                )
-            cached = read_sidecar(path)
-            self._cache[script_file] = cached
+        if cached is not None:
+            return cached
+        path = self.path_for(script_file)
+        if script_file in self._missing or not path.exists():
+            self._missing.add(script_file)
+            self.unresolved[script_file] = self.unresolved.get(script_file, 0) + 1
+            raise UnconvertedScript(
+                f"{script_file} was never converted: no sidecar at {path}"
+            )
+        cached = self._cache[script_file] = read_sidecar(path)
         return cached
 
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
@@ -368,6 +391,27 @@ class SidecarCache:
         try:
             return self.get(key.script_file).line_for(key)
         except UnconvertedScript:
+            return None
+
+    def line_or_none(self, key: ProvenanceKey) -> SidecarLine | None:
+        """The line a key names, or None wherever the join gives none.
+
+        The one policy for a reader that reads keys off a board rather than
+        training on them — the evaluator's keyword resolver and breakdowns, the
+        knowledge probes — where a gap costs one ability its text and nothing
+        else: a dropped key, a script never converted, a tree this run has no
+        root for, and a key the sidecar does not describe all read as no line.
+        The last is the join's fail-loudly case (:meth:`line_for` raises on it),
+        so it is tallied in :attr:`undescribed` rather than lost.
+        """
+        try:
+            return self.line_for(key)
+        except UnconfiguredTree:
+            return None
+        except KeyError:
+            self.undescribed[key.script_file] = (
+                self.undescribed.get(key.script_file, 0) + 1
+            )
             return None
 
     def prose_for(self, key: ProvenanceKey) -> str | None:

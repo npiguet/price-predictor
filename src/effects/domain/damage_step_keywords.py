@@ -47,6 +47,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind
 from effects.domain.state_snapshot import EntityState, StateSnapshot
 
@@ -657,7 +658,7 @@ def keyword_of_line(line) -> str | None:
     script = getattr(line, "script_text", None)
     if not script or "$" in script or "|" in script:
         return None
-    return script.strip().lower().replace(" ", "_")
+    return normalize_keyword(script)
 
 
 # ── who is observed ─────────────────────────────────────────────────────
@@ -682,19 +683,14 @@ class KeywordResolver:
     """
 
     def __init__(self, sidecars=None) -> None:
+        #: Read through ``line_or_none``: a key with no line carries no keyword.
         self._sidecars = sidecars
         self._by_key: dict[object, str | None] = {}
 
     def _keyword_for(self, key) -> str | None:
         if key not in self._by_key:
-            keyword = None
-            try:
-                line = self._sidecars.line_for(key)
-            except (KeyError, FileNotFoundError):
-                line = None
-            if line is not None:
-                keyword = keyword_of_line(line)
-            self._by_key[key] = keyword
+            line = self._sidecars.line_or_none(key)
+            self._by_key[key] = keyword_of_line(line) if line is not None else None
         return self._by_key[key]
 
     def keywords_of(self, entity) -> set[str]:

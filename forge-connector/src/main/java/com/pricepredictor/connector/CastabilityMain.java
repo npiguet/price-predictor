@@ -4,20 +4,17 @@ import com.pricepredictor.connector.effects.Json;
 import forge.card.CardRules;
 import forge.card.CardRarity;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.item.PaperCard;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.StringJoiner;
 
 /**
@@ -39,64 +36,56 @@ import java.util.StringJoiner;
  */
 public class CastabilityMain {
 
-    public static final String CASTABLE = "castable";
-    public static final String UNCASTABLE = "uncastable";
+    /** A card's answer; {@link #wireName()} is what the Python side reads. */
+    enum Verdict {
+        CASTABLE("castable"),
+        UNCASTABLE("uncastable");
+
+        private final String wireName;
+
+        Verdict(String wireName) {
+            this.wireName = wireName;
+        }
+
+        String wireName() {
+            return wireName;
+        }
+    }
 
     public static void main(String[] args) {
-        Path cardsFile = null;
-        Path output = null;
-        Path cardsPath = Path.of("output/cardsfolder");
-
-        for (int i = 0; i < args.length; i++) {
-            switch (args[i]) {
-                case "--cards" -> {
-                    if (i + 1 < args.length) cardsFile = Path.of(args[++i]);
-                }
-                case "--output" -> {
-                    if (i + 1 < args.length) output = Path.of(args[++i]);
-                }
-                case "--cards-path" -> {
-                    if (i + 1 < args.length) cardsPath = Path.of(args[++i]);
-                }
-            }
-        }
-        if (cardsFile == null || output == null) {
+        ToolMain.Args cli = ToolMain.args(args, "--cards", "--output");
+        String cardsArg = cli.get("--cards");
+        String outputArg = cli.get("--output");
+        if (cardsArg == null || outputArg == null) {
             System.err.println("Error: --cards and --output are required");
             System.exit(2);
         }
+        Path cardsFile = Path.of(cardsArg);
+        Path output = Path.of(outputArg);
 
-        try {
+        ToolMain.run(() -> {
             ForgeEnvironmentInitializer.initialize();
             List<String> names = Files.readAllLines(cardsFile, StandardCharsets.UTF_8)
                     .stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
-            Map<String, String> verdicts = consult(names);
+            Map<String, Verdict> verdicts = consult(names);
             if (output.getParent() != null) {
                 Files.createDirectories(output.getParent());
             }
             Files.writeString(output, render(verdicts), StandardCharsets.UTF_8);
             long castable = verdicts.values().stream()
-                    .filter(CASTABLE::equals).count();
+                    .filter(Verdict.CASTABLE::equals).count();
             System.out.println(
                     "Consulted " + verdicts.size() + " cards: " + castable
                             + " castable, " + (verdicts.size() - castable)
-                            + " uncastable. Output: " + output
-                            + " (cards from " + cardsPath + ")");
-            System.exit(0);
-        } catch (IOException | RuntimeException e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
-        }
+                            + " uncastable. Output: " + output);
+        });
     }
 
     /** One verdict per name Forge recognizes; names it does not are omitted. */
-    static Map<String, String> consult(List<String> names) {
-        Map<String, String> verdicts = new LinkedHashMap<>();
+    static Map<String, Verdict> consult(List<String> names) {
+        Map<String, Verdict> verdicts = new LinkedHashMap<>();
         for (String name : names) {
-            String verdict = verdictFor(name);
-            if (verdict != null) {
-                verdicts.put(name, verdict);
-            }
+            verdictFor(name).ifPresent(verdict -> verdicts.put(name, verdict));
         }
         return verdicts;
     }
@@ -117,45 +106,35 @@ public class CastabilityMain {
      * line: a permanent's {@code SpellPermanent}, a land's {@code LandAbility}.
      * The three-argument {@code getCard(paper, owner, game)} derives the id
      * from the owner and passes -1 for a null one, so an ownerless card has to
-     * be given its id here. The game it is built against is the same
-     * player-less dummy {@code convert} builds every card against in
-     * {@link RulesParser}: with no game at all, three cards' ability setup
-     * throws and would be misread as uncastable.
+     * be given its id here. The game it is built against is the
+     * {@link OfflineGame} {@code convert} builds every card against: with no
+     * game at all, three cards' ability setup throws and would be misread as
+     * uncastable.
      */
-    private static String verdictFor(String name) {
+    private static Optional<Verdict> verdictFor(String name) {
         // allowAltNames: a double-faced card's back-face name still names the
         // card the coverage unit is keyed on.
         CardRules rules = forge.model.FModel.getMagicDb().getCommonCards()
                 .getRules(name, true);
         if (rules == null) {
-            return null;
+            return Optional.empty();
         }
         try {
             PaperCard paper = new PaperCard(rules, "UNK", CardRarity.Common);
-            Game game = ConsultGame.INSTANCE;
+            Game game = OfflineGame.instance();
             Card card = CardFactory.getCard(paper, null, game.nextCardId(), game);
-            return card.getSpells().isEmpty() ? UNCASTABLE : CASTABLE;
+            return Optional.of(card.getSpells().isEmpty() ? Verdict.UNCASTABLE : Verdict.CASTABLE);
         } catch (RuntimeException e) {
             // A card Forge cannot even instantiate certainly cannot be cast.
-            return UNCASTABLE;
+            return Optional.of(Verdict.UNCASTABLE);
         }
     }
 
-    /** A player-less game to build cards against; created once, on first use. */
-    private static class ConsultGame {
-        static final Game INSTANCE = create();
-
-        private static Game create() {
-            GameRules rules = new GameRules(GameType.Constructed);
-            return new Game(List.of(), rules,
-                    new Match(rules, List.of(), "castability-consult"));
-        }
-    }
-
-    static String render(Map<String, String> verdicts) {
+    static String render(Map<String, Verdict> verdicts) {
         StringJoiner joiner = new StringJoiner(",", "{", "}");
-        for (Map.Entry<String, String> entry : verdicts.entrySet()) {
-            joiner.add(Json.string(entry.getKey()) + ":" + Json.string(entry.getValue()));
+        for (Map.Entry<String, Verdict> entry : verdicts.entrySet()) {
+            joiner.add(Json.string(entry.getKey()) + ":"
+                    + Json.string(entry.getValue().wireName()));
         }
         return joiner.toString();
     }

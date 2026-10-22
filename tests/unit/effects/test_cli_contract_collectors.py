@@ -7,10 +7,23 @@ side collection is the whole point, on that side it is an opt-in.
 
 from __future__ import annotations
 
+from dataclasses import fields
+from pathlib import Path
+
 import pytest
 
-from effects.infrastructure.cli import CAP_DEFAULTS, build_parser
+from effects.domain.collection_caps import CollectionCaps
+from effects.infrastructure.cli import build_parser
 from sealed.infrastructure.cli import build_parser as sealed_parser
+
+#: Every cap and its default, read off the dataclass the workers receive.
+#: ``random_seat_probability`` is left out: its flag defaults to None so that a
+#: share above 0 without it can be refused (FR-026).
+CAP_DEFAULTS = {
+    spec.name: spec.default
+    for spec in fields(CollectionCaps)
+    if spec.name != "random_seat_probability"
+}
 
 
 def parse(*argv: str):
@@ -19,7 +32,7 @@ def parse(*argv: str):
 
 class TestEffectRecordsDefaultAsymmetry:
     def test_collect_coverage_defaults_to_the_records_directory(self):
-        assert parse("collect-coverage").effect_records == "output/effects/records/"
+        assert parse("collect-coverage").effect_records == Path("output/effects/records/")
 
     def test_match_outcomes_has_no_default(self):
         """A default there would turn every self-play run into a collection run."""
@@ -39,7 +52,7 @@ class TestCollectCoverage:
 
     def test_split_from_is_accepted(self):
         args = parse("collect-coverage", "--split-from", "models/x/latest.pt")
-        assert args.split_from == "models/x/latest.pt"
+        assert args.split_from == Path("models/x/latest.pt")
 
     def test_cards_folder_is_repeatable(self):
         args = parse(
@@ -62,14 +75,13 @@ class TestSharedCapFlags:
             "first_strike,double_strike,deathtouch,lifelink,trample,"
             "indestructible,wither,infect"
         )
-        assert args.legality_rate == 0.0
 
     def test_the_constants_and_the_parsed_defaults_agree(self):
         """Every cap in the table, not a list this test has to be told about.
 
-        Spelled out one by one, a cap added to `CAP_DEFAULTS` and to only one
-        of the two parsers passed here — which is how `legality_rate` came to
-        be readable by the JVM and settable by nobody.
+        Spelled out one by one, a cap added to `CollectionCaps` and to only one
+        of the two parsers would pass here, readable by the JVM and settable by
+        nobody.
         """
         args = parse("collect-coverage")
         for name, default in CAP_DEFAULTS.items():
@@ -97,12 +109,11 @@ class TestSharedCapFlags:
         args = parse(
             "collect-coverage",
             "--mana-cap", "10", "--playability-rate", "1.0",
-            "--probe-keywords", "wither", "--legality-rate", "0.25",
+            "--probe-keywords", "wither",
         )
         assert args.mana_cap == 10
         assert args.playability_rate == 1.0
         assert args.probe_keywords == "wither"
-        assert args.legality_rate == 0.25
 
 
 class TestNoSnapshotTierFlag:
@@ -188,6 +199,35 @@ class TestTheRandomSeatOnTheCollectors:
             assert runner(parse(command, "--random-seat-share", "0.5")) == 1
         collect.assert_not_called()
         assert "--random-seat-probability" in capsys.readouterr().out
+
+
+class TestOneHoldoutSource:
+    @pytest.mark.parametrize(("command", "module"), [
+        ("collect-coverage", "effects.application.collect_coverage.run"),
+        ("collect-variants", "effects.application.collect_variants.run"),
+    ])
+    def test_two_holdout_sources_are_refused_before_any_worker(
+        self, command, module, capsys,
+    ):
+        """``--split-from`` beside ``--exclude-cards`` names one holdout twice;
+        both collectors say so as a message, never a traceback."""
+        from unittest.mock import patch
+
+        from effects.infrastructure.cli import (
+            run_collect_coverage,
+            run_collect_variants,
+        )
+
+        runner = {
+            "collect-coverage": run_collect_coverage,
+            "collect-variants": run_collect_variants,
+        }[command]
+        with patch(module) as collect:
+            assert runner(parse(
+                command, "--split-from", "latest.pt", "--exclude-cards", "h.txt",
+            )) == 1
+        collect.assert_not_called()
+        assert "one source of held-out cards" in capsys.readouterr().out
 
 
 class TestSubcommandTable:

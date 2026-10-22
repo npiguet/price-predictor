@@ -14,19 +14,16 @@ import pytest
 from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
-    VARIANT_FULL,
-    VARIANTS,
-    ContextCache,
     EarlyStopper,
-    MissingSplitError,
     TrainEffectModelConfig,
     learning_rate_at,
-    require_split_from,
-    variant_masks,
     warmup_steps,
-    withheld_keyword_rules,
 )
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.ability_tokenizer import withheld_keyword_tokens
+from effects.domain.baselines import (
+    baseline_masks,
+)
 from effects.domain.effect_model import EffectModelConfig
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
@@ -51,35 +48,6 @@ def _checkpoint(provenance: SplitProvenance) -> EffectCheckpoint:
     )
 
 
-class TestVariantRequiresASplit:
-    def test_a_variant_run_without_split_from_fails_fast(self):
-        for variant in VARIANTS:
-            if variant == VARIANT_FULL:
-                continue
-            with pytest.raises(MissingSplitError, match="--split-from"):
-                require_split_from(variant, None)
-
-    def test_the_error_says_why_the_comparison_would_be_meaningless(self):
-        with pytest.raises(MissingSplitError) as excinfo:
-            require_split_from("identity", None)
-        assert "saw different games" in str(excinfo.value)
-
-    def test_a_full_run_computes_its_own_split(self):
-        require_split_from(VARIANT_FULL, None)
-
-    def test_a_variant_run_with_split_from_is_accepted(self):
-        require_split_from("identity", Path("models/effects/effect-model/latest.pt"))
-
-    def test_a_variant_run_with_corpus_instead_is_accepted(self):
-        """A shared curated dataset is as firm a baseline as a checkpoint's
-        split (FR-146): its manifest enumerates the games directly."""
-        require_split_from("identity", None, corpus="output/effects/corpus")
-
-    def test_a_variant_run_with_neither_route_still_fails_fast(self):
-        with pytest.raises(MissingSplitError, match="--corpus"):
-            require_split_from("identity", None)
-
-
 class TestVariantCheckpointDisagreement:
     def _provenance(self, **overrides) -> SplitProvenance:
         defaults = {
@@ -99,7 +67,7 @@ class TestVariantCheckpointDisagreement:
             require_same_split(
                 main, variant,
                 main_path=tmp_path / "full.pt",
-                variant_path=tmp_path / "identity.pt",
+                baseline_path=tmp_path / "identity.pt",
             )
         message = str(excinfo.value)
         assert "full.pt" in message and "identity.pt" in message
@@ -110,7 +78,7 @@ class TestVariantCheckpointDisagreement:
         with pytest.raises(SplitMismatchError, match="vocabulary"):
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
             )
 
     def test_a_keyword_definition_disagreement_fails_fast(self, tmp_path):
@@ -121,7 +89,7 @@ class TestVariantCheckpointDisagreement:
         with pytest.raises(SplitMismatchError, match="keyword definitions"):
             require_same_split(
                 main, variant,
-                main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
             )
 
     def test_matching_checkpoints_pass(self, tmp_path):
@@ -129,7 +97,7 @@ class TestVariantCheckpointDisagreement:
         variant = _checkpoint(self._provenance())
         require_same_split(
             main, variant,
-            main_path=tmp_path / "a.pt", variant_path=tmp_path / "b.pt",
+            main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
         )
 
 
@@ -148,32 +116,36 @@ class TestHashMismatchAtInference:
             provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
 
 
-class TestVariantMasks:
+class TestBaselineMasks:
     def test_full_masks_nothing(self):
-        masks = variant_masks("full")
-        assert not (masks.zero_e or masks.zero_state)
+        masks = baseline_masks("full")
+        assert not (masks.zero_act_e or masks.zero_context_e or masks.zero_state)
         assert not (masks.identity_embedding or masks.taxonomy_embedding)
 
     def test_identity_replaces_the_encoder(self):
-        assert variant_masks("identity").identity_embedding
+        assert baseline_masks("identity").identity_embedding
 
     def test_state_only_zeroes_every_e(self):
-        masks = variant_masks("state-only")
-        assert masks.zero_e
+        masks = baseline_masks("state-only")
+        assert masks.zero_act_e and masks.zero_context_e
         assert not masks.zero_state
 
     def test_no_state_zeroes_the_ability_tokens_too(self):
         """Otherwise it would read the board through the abilities on it."""
-        masks = variant_masks("no-state")
+        masks = baseline_masks("no-state")
         assert masks.zero_state
-        assert masks.zero_e
+        assert masks.zero_context_e
+
+    def test_no_state_keeps_the_acting_lines_e(self):
+        """FR-094: every input zeroed except [ACT] and the record-kind flag."""
+        assert not baseline_masks("no-state").zero_act_e
 
     def test_taxonomy_swaps_e_for_the_sidecars_api_fields(self):
-        assert variant_masks("taxonomy").taxonomy_embedding
+        assert baseline_masks("taxonomy").taxonomy_embedding
 
     def test_an_unknown_variant_is_rejected(self):
         with pytest.raises(ValueError, match="unknown --variant"):
-            variant_masks("oracle-text")
+            baseline_masks("oracle-text")
 
 
 class TestScheduleConstants:
@@ -222,49 +194,12 @@ class TestEarlyStopping:
         assert stopper.best == 0.5
 
 
-class TestContextCache:
-    def test_it_starts_empty_and_due_only_after_enough_batches(self):
-        cache = ContextCache(refresh_every=3)
-        assert len(cache) == 0
-        assert not cache.due_for_refresh()
-        for _ in range(3):
-            cache.note_batch()
-        assert cache.due_for_refresh()
-
-    def test_a_refresh_seeds_unseen_texts_outright(self):
-        cache = ContextCache()
-        cache.refresh({"bolt": (1.0, 2.0)})
-        assert cache.get("bolt") == (1.0, 2.0)
-
-    def test_a_refresh_blends_a_seen_text_rather_than_snapping(self):
-        cache = ContextCache(momentum=0.5)
-        cache.refresh({"bolt": (0.0, 0.0)})
-        cache.refresh({"bolt": (2.0, 4.0)})
-        assert cache.get("bolt") == (1.0, 2.0)
-
-    def test_a_refresh_resets_the_counter(self):
-        cache = ContextCache(refresh_every=1)
-        cache.note_batch()
-        assert cache.due_for_refresh()
-        cache.refresh({})
-        assert not cache.due_for_refresh()
-
-    def test_an_unseen_text_reads_as_absent(self):
-        assert ContextCache().get("never encoded") is None
-
-
 class TestWithheldKeyword:
     def test_no_withholding_hides_nothing(self):
-        assert withheld_keyword_rules(None) == (frozenset(), False)
-
-    def test_a_withheld_keyword_is_hidden_and_force_expanded(self):
-        hidden, force = withheld_keyword_rules("cascade")
-        assert hidden == {"cascade"}
-        assert force
+        assert withheld_keyword_tokens(None) == frozenset()
 
     def test_the_token_form_matches_the_vocabularys(self):
-        hidden, _ = withheld_keyword_rules("First Strike")
-        assert hidden == {"first_strike"}
+        assert withheld_keyword_tokens("First Strike") == {"first_strike"}
 
 
 class TestConfigDefaults:
@@ -276,15 +211,13 @@ class TestConfigDefaults:
         assert config.keyword_expand_p == 0.25
         assert config.context_dropout == 0.15
         assert (config.mlm_weight, config.mlm_mask_prob) == (0.1, 0.15)
-        assert config.api_weight == 0.05
+        assert config.api_weight == 0.003
         assert config.curriculum_step == 10_000
         assert config.curriculum_epoch == 3
         assert (config.batch_size, config.grad_accum) == (32, 1)
         assert (config.steps_per_epoch, config.epochs, config.patience) == (
             5_000, 40, 5
         )
-        assert config.cache_refresh == 500
-        assert config.context_cache is False
         assert config.withhold_keyword is None
 
     def test_the_cards_folders_default_to_both_converted_trees(self):
@@ -292,10 +225,8 @@ class TestConfigDefaults:
             Path("output/cardsfolder/"), Path("output/tokenscripts/"),
         )
 
-    def test_variant_scripts_and_split_from_default_to_absent(self):
-        config = TrainEffectModelConfig()
-        assert config.variant_scripts is None
-        assert config.split_from is None
+    def test_variant_scripts_default_to_absent(self):
+        assert TrainEffectModelConfig().variant_scripts is None
 
     def test_full_writes_to_the_shipping_directory(self):
         assert TrainEffectModelConfig().resolved_model_output() == (
@@ -355,7 +286,7 @@ class TestCorpusMismatch:
     dataset rather than the vocabulary file."""
 
     def test_evaluate_refuses_a_corpus_rebuilt_since_training(self, tmp_path):
-        from effects.application.evaluate_effect_model import (
+        from effects.application.evaluation_context import (
             CorpusMismatchError,
             check_corpus,
         )
@@ -367,12 +298,12 @@ class TestCorpusMismatch:
             check_corpus(provenance, actual_digest="something-else")
 
     def test_evaluate_accepts_a_checkpoint_that_read_no_curated_corpus(self):
-        from effects.application.evaluate_effect_model import check_corpus
+        from effects.application.evaluation_context import check_corpus
 
         check_corpus(SplitProvenance(), actual_digest="anything")  # no raise
 
     def test_matching_digests_pass(self, tmp_path):
-        from effects.application.evaluate_effect_model import check_corpus
+        from effects.application.evaluation_context import check_corpus
 
         provenance = SplitProvenance(
             corpus_path=str(tmp_path), corpus_digest="same",
@@ -380,7 +311,7 @@ class TestCorpusMismatch:
         check_corpus(provenance, actual_digest="same")  # no raise
 
     def test_the_error_names_the_corpus_path_and_both_digests(self, tmp_path):
-        from effects.application.evaluate_effect_model import (
+        from effects.application.evaluation_context import (
             CorpusMismatchError,
             check_corpus,
         )
@@ -407,7 +338,7 @@ class TestCorpusPathResolution:
     _CHECKPOINT = Path("models/effects/effect-model/latest.pt")
 
     def test_defaults_to_the_checkpoints_recorded_path(self):
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         provenance = SplitProvenance(
             corpus_path="output/effects/corpus", corpus_digest="abc123",
@@ -417,7 +348,7 @@ class TestCorpusPathResolution:
         ) == Path("output/effects/corpus")
 
     def test_an_explicit_corpus_overrides(self, tmp_path):
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         provenance = SplitProvenance(
             corpus_path="output/effects/corpus", corpus_digest="abc123",
@@ -428,7 +359,7 @@ class TestCorpusPathResolution:
 
     def test_returns_none_when_the_checkpoint_read_no_curated_corpus(self, tmp_path):
         """No digest recorded means nothing to check, whatever --corpus says."""
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         assert resolve_corpus_path(
             SplitProvenance(), corpus=None, checkpoint=self._CHECKPOINT,
@@ -445,7 +376,7 @@ class TestCorpusPathResolution:
         would break a batch-eval script passing --corpus uniformly across a
         mix of curated and legacy checkpoints), and honouring it would be
         meaningless (there is no digest to compare freshness against)."""
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         with caplog.at_level("WARNING"):
             resolve_corpus_path(
@@ -460,7 +391,7 @@ class TestCorpusPathResolution:
         """A recorded digest means the override has something to check
         against, isolating corpus_digest as the one thing that decides
         whether the warning fires."""
-        from effects.application.evaluate_effect_model import resolve_corpus_path
+        from effects.application.evaluation_context import resolve_corpus_path
 
         provenance = SplitProvenance(
             corpus_path="output/effects/corpus", corpus_digest="abc123",
@@ -560,7 +491,7 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
         monkeypatch.setattr(train_effect_model, "run", refuse)
         monkeypatch.setattr(cli, "train_config_from", lambda args: None)
         args = argparse.Namespace(
-            split_from=None, variant="full", corpus="x",
+            variant="full", corpus="x",
             encoder_d_model=256, encoder_layers=4,
         )
 

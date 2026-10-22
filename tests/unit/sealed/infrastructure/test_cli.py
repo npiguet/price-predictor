@@ -15,6 +15,7 @@ from sealed.infrastructure.cli import (
     _parse_label,
     _parse_restarts,
     run_encode_cards,
+    run_evaluate_scorer,
     run_match_outcomes,
     run_train_scorer,
 )
@@ -203,6 +204,25 @@ def _write_phase_b_checkpoint(path: Path) -> None:
         },
         train_config={"lr": 2e-5, "embedding_lr": 1e-7, "patience": 10},
     )
+
+
+class TestEvaluateScorerBestOf:
+    """An even best-of is refused before any worker starts: the Java worker
+    exits on it, and the evaluation supervisor would restart it forever."""
+
+    @pytest.mark.parametrize("best_of", [0, 2, 4, -1])
+    def test_even_or_non_positive_rejected(self, best_of, capsys):
+        args = Namespace(
+            resume=False, work_dir=None, best_of=best_of, checkpoint="c.pt",
+            cards_path="cards", pools=1, workers=1, set_code=None,
+        )
+        with patch(
+            "sealed.application.evaluate_scorer.EvaluateScorerUseCase"
+        ) as mock_use_case:
+            rc = run_evaluate_scorer(args)
+        assert rc == 2
+        mock_use_case.assert_not_called()
+        assert "positive odd integer" in capsys.readouterr().err
 
 
 class TestTrainScorerCliRejections:

@@ -997,7 +997,6 @@ EFFECT_PROBE_KEYWORDS = (
     "first_strike,double_strike,deathtouch,lifelink,trample,indestructible,"
     "wither,infect"
 )
-EFFECT_LEGALITY_RATE = 0.0
 EFFECT_RANDOM_SEAT_SHARE = 0.0
 EFFECT_RANDOM_SEAT_PROBABILITY = 0.0
 
@@ -1027,9 +1026,6 @@ def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
         ),
         "effect.probe.keywords": str(
             getattr(args, "probe_keywords", EFFECT_PROBE_KEYWORDS)
-        ),
-        "effect.legality.rate": str(
-            getattr(args, "legality_rate", EFFECT_LEGALITY_RATE)
         ),
         "effect.random.seat.share": str(
             getattr(args, "random_seat_share", EFFECT_RANDOM_SEAT_SHARE)
@@ -1067,8 +1063,9 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
         default=EFFECT_PLAYABILITY_RATE,
         help=(
             "Fraction of decision-subkind playability logging points sampled."
-            " attackers and blockers records are sampled separately, at"
-            " --legality-rate."
+            " attackers and blockers records are not sampled: every real"
+            " declaration is written, and a repeat on an unchanged board is"
+            " coalesced."
             f" Default: {EFFECT_PLAYABILITY_RATE}."
         ),
     )
@@ -1099,17 +1096,6 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
             f" eight, {EFFECT_PROBE_KEYWORDS}). Name a subset to narrow the"
             " probes; an empty string takes no fork whatever"
             " --probes-per-game says."
-        ),
-    )
-    parser.add_argument(
-        "--legality-rate",
-        type=float,
-        default=EFFECT_LEGALITY_RATE,
-        help=(
-            "Fraction of the AI's what-if legality queries kept. Real attack"
-            " and block declarations are always written. Default:"
-            f" {EFFECT_LEGALITY_RATE}, none: a query the AI re-asks while"
-            " planning is kept in proportion to how often it asked."
         ),
     )
     parser.add_argument(
@@ -1756,6 +1742,14 @@ def run_evaluate_scorer(args: argparse.Namespace) -> int:
 
     if args.resume and not args.work_dir:
         print("Error: --resume requires --work-dir", file=sys.stderr)
+        return 2
+    # The Java worker refuses an even best-of at startup, and the evaluation
+    # supervisor restarts a worker that exits: caught here, or never caught.
+    if args.best_of < 1 or args.best_of % 2 == 0:
+        print(
+            f"Error: --best-of must be a positive odd integer, got: {args.best_of}",
+            file=sys.stderr,
+        )
         return 2
 
     config = EvaluateScorerConfig(

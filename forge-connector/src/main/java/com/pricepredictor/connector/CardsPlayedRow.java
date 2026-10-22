@@ -3,6 +3,7 @@ package com.pricepredictor.connector;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Per-game card-play record written to {@code output/sealed/cards-played.txt}
@@ -24,8 +25,8 @@ import java.util.List;
  * @param cardsPlayedB     Same for deck B.
  * @param cardsNotPlayedA  Deck A cards (minus basics) that were not played in this game.
  * @param cardsNotPlayedB  Same for deck B.
- * @param winner           {@code 'A'} or {@code 'B'}; matches the corresponding char of the parent's {@code games}.
- * @param starter          {@code 'A'} or {@code 'B'}; matches the corresponding char of the parent's {@code play}.
+ * @param winner           Matches the corresponding char of the parent's {@code games}.
+ * @param starter          Matches the corresponding char of the parent's {@code play}.
  */
 public record CardsPlayedRow(
         Instant timestamp,
@@ -37,19 +38,13 @@ public record CardsPlayedRow(
         List<String> cardsPlayedB,
         List<String> cardsNotPlayedA,
         List<String> cardsNotPlayedB,
-        char winner,
-        char starter
+        Side winner,
+        Side starter
 ) {
 
     public CardsPlayedRow {
-        if (winner != 'A' && winner != 'B') {
-            throw new IllegalArgumentException(
-                    "winner must be 'A' or 'B', got: " + winner);
-        }
-        if (starter != 'A' && starter != 'B') {
-            throw new IllegalArgumentException(
-                    "starter must be 'A' or 'B', got: " + starter);
-        }
+        Objects.requireNonNull(winner, "winner");
+        Objects.requireNonNull(starter, "starter");
     }
 
     /** Format this row as one line of {@code cards-played.txt}. */
@@ -59,15 +54,11 @@ public record CardsPlayedRow(
                 + ";" + setCode
                 + ";" + methodA
                 + ";" + methodB
-                + ";" + encode(cardsPlayedA)
-                + ";" + encode(cardsPlayedB)
-                + ";" + encode(cardsNotPlayedA)
-                + ";" + encode(cardsNotPlayedB)
+                + ";" + CardNameList.format(cardsPlayedA)
+                + ";" + CardNameList.format(cardsPlayedB)
+                + ";" + CardNameList.format(cardsNotPlayedA)
+                + ";" + CardNameList.format(cardsNotPlayedB)
                 + ";" + winner
                 + ";" + starter;
-    }
-
-    private static String encode(List<String> names) {
-        return String.join("|", names);
     }
 }

@@ -30,9 +30,10 @@ import logging
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.baselines import Baseline
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from price_predictor.infrastructure.torch_checkpoint import (
     load_checkpoint,
@@ -44,18 +45,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL_OUTPUT = Path("models/effects/effect-model")
 LATEST_NAME = "latest.pt"
 
-#: `--variant full` ships; every other variant writes under its own name so a
-#: baseline run can never overwrite the checkpoint the cache was built from.
-VARIANT_FULL = "full"
-VARIANTS: tuple[str, ...] = (
-    VARIANT_FULL, "identity", "state-only", "no-state", "taxonomy",
-)
 
 
 def model_output_for(variant: str, root: Path = DEFAULT_MODEL_OUTPUT) -> Path:
     """``models/effects/effect-model/`` for ``full``, a subdirectory otherwise."""
     root = Path(root)
-    return root if variant == VARIANT_FULL else root / variant
+    return root if variant == Baseline.FULL else root / variant
 
 
 def content_hash(path: Path) -> str:
@@ -188,7 +183,7 @@ class EffectCheckpoint:
     encoder_state: dict[str, Any]
     model_state: dict[str, Any]
     provenance: SplitProvenance
-    variant: str = VARIANT_FULL
+    variant: str = Baseline.FULL
     best_val_loss: float = float("inf")
     epoch: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
@@ -297,7 +292,7 @@ class EffectModelStore:
             encoder_state=payload["encoder_state_dict"],
             model_state=payload["model_state_dict"],
             provenance=SplitProvenance.from_dict(payload.get("provenance", {})),
-            variant=payload.get("variant", VARIANT_FULL),
+            variant=payload.get("variant", Baseline.FULL),
             best_val_loss=payload.get("best_val_loss", float("inf")),
             epoch=payload.get("epoch", 0),
             # Whatever a variant needed to save beyond the two state dicts —
@@ -314,32 +309,32 @@ class EffectModelStore:
 
 
 def require_same_split(
-    main: EffectCheckpoint, variant: EffectCheckpoint,
-    *, main_path: Path, variant_path: Path,
+    main: EffectCheckpoint, baseline: EffectCheckpoint,
+    *, main_path: Path, baseline_path: Path,
 ) -> None:
-    """Fail fast when a variant checkpoint's split or hashes differ.
+    """Fail fast when a baseline checkpoint's split or hashes differ.
 
     A baseline compared against a model that saw different games is not a
     baseline. The error names both checkpoints, because the operator's next
-    move is to retrain one of them with ``--split-from``.
+    move is to retrain one of them on the other's ``--corpus``.
     """
-    if not main.provenance.describes_same_split(variant.provenance):
+    if not main.provenance.describes_same_split(baseline.provenance):
         raise SplitMismatchError(
-            f"{variant_path} records a different split than {main_path}. "
-            f"Retrain it with --split-from {main_path}: a baseline that saw "
-            "different games is not a baseline."
+            f"{baseline_path} records a different split than {main_path}. "
+            f"Retrain it on the --corpus {main_path} trained on: a baseline "
+            "that saw different games is not a baseline."
         )
     for label, recorded, actual in (
-        ("vocabulary", main.provenance.vocab_hash, variant.provenance.vocab_hash),
+        ("vocabulary", main.provenance.vocab_hash, baseline.provenance.vocab_hash),
         (
             "keyword definitions",
             main.provenance.keyword_definitions_hash,
-            variant.provenance.keyword_definitions_hash,
+            baseline.provenance.keyword_definitions_hash,
         ),
     ):
         if recorded != actual:
             raise SplitMismatchError(
-                f"{variant_path} recorded a different {label} hash than "
+                f"{baseline_path} recorded a different {label} hash than "
                 f"{main_path} ({actual[:12] or '(none)'}… vs "
                 f"{recorded[:12] or '(none)'}…)."
             )
@@ -365,6 +360,53 @@ def resolve_inference_paths(
     return resolved_vocab, resolved_keyword
 
 
+def load_effect_checkpoint(path: Path) -> EffectCheckpoint:
+    """The checkpoint at ``path``, read through the store of its own directory."""
+    path = Path(path)
+    return EffectModelStore(path.parent).load(path)
+
+
+def verified_inference_paths(
+    checkpoint: EffectCheckpoint,
+    *,
+    vocab_path: Path | None = None,
+    keyword_path: Path | None = None,
+) -> tuple[Path, Path]:
+    """:func:`resolve_inference_paths`, then the hash check on what it resolved.
+
+    One step rather than two, because every inference command needs both and
+    a caller that resolved without verifying encoded against whatever
+    vocabulary sat at the recorded path.
+    """
+    vocab, keywords = resolve_inference_paths(
+        checkpoint.provenance, vocab_path=vocab_path, keyword_path=keyword_path,
+    )
+    checkpoint.provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
+    return vocab, keywords
+
+
+class InferenceCheckpoint(NamedTuple):
+    """A checkpoint with the vocabulary and keyword files it verified against."""
+
+    checkpoint: EffectCheckpoint
+    vocab_path: Path
+    keyword_path: Path
+
+
+def load_for_inference(
+    path: Path,
+    *,
+    vocab_path: Path | None = None,
+    keyword_path: Path | None = None,
+) -> InferenceCheckpoint:
+    """Load ``path`` and resolve and hash-check its inference files (FR-097)."""
+    checkpoint = load_effect_checkpoint(path)
+    vocab, keywords = verified_inference_paths(
+        checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
+    )
+    return InferenceCheckpoint(checkpoint, vocab, keywords)
+
+
 # ── resuming an interrupted run ─────────────────────────────────────────────
 
 #: The file a training run rewrites at the end of every epoch, beside its
@@ -374,6 +416,12 @@ def resolve_inference_paths(
 #: stopped — the full model, the optimizer, the step count, the early stopper,
 #: the noise on ``e`` and the random generators.
 RESUME_NAME = "resume.pt"
+#: The resume state of the run's best card-disjoint epoch, copied from
+#: ``resume.pt`` whenever an epoch sets a new best (FR-063f). Copied into
+#: another run's directory as its ``resume.pt``, it continues from that epoch.
+RESUME_BEST_NAME = "resume-best.pt"
+#: Where ``--save-every-epoch`` keeps one checkpoint per epoch.
+EPOCHS_DIR = "epochs"
 
 
 class ResumeMismatchError(RuntimeError):

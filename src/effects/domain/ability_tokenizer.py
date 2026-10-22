@@ -39,9 +39,8 @@ from effects.domain.keyword_formatting import (
 from effects.domain.provenance import RoleSpan
 from price_predictor.domain.tokenizer import MtgTokenizer
 
-#: The two encoding surfaces. Spelled here rather than imported from
-#: ``ability_encoder``, which loads torch, so the tokenizer stays importable by
-#: the corpus tools that never touch a model.
+#: The two encoding surfaces, defined here rather than beside the encoder,
+#: which loads torch, so every corpus tool can name them without a model.
 SURFACE_PROSE = "prose"
 SURFACE_SCRIPT = "script"
 
@@ -133,6 +132,17 @@ def tokenizer_surface(vocab_surface: str, training_settings) -> str:
 def keyword_token(display_name: str) -> str:
     """Forge's display name as the token form the vocabulary carries."""
     return display_name.lower().replace("'", "").replace(" ", "_")
+
+
+def withheld_keyword_tokens(withheld: str | None) -> frozenset[str]:
+    """The token form of the keyword ``--withhold-keyword`` names, if any.
+
+    Withholding is what gives the zero-shot check something to measure: the
+    model never sees the keyword's *token*, only the sentence it stands for —
+    the batcher force-expands it to its definition — so the check asks whether
+    a keyword it has only ever read as prose lands near the right neighbours.
+    """
+    return frozenset({keyword_token(withheld)}) if withheld else frozenset()
 
 
 _HOST_BODIED_TOKENS: frozenset[str] = frozenset(
@@ -248,9 +258,11 @@ class AbilityTokenizer:
             self._multi_word_by_first.setdefault(parts[0], []).append(
                 (entry, parts),
             )
-        #: Memoises :meth:`tokenize` for the (overwhelmingly common)
-        #: no-``role_spans`` case. See :meth:`tokenize` for why.
-        self._tokenize_cache: dict[str, tuple[Token, ...]] = {}
+        #: Memoises :meth:`tokenize` by text and role spans. See
+        #: :meth:`tokenize` for why.
+        self._tokenize_cache: dict[
+            tuple[str, tuple[RoleSpan, ...]], tuple[Token, ...]
+        ] = {}
 
     # ── ids ─────────────────────────────────────────────────────────────
 
@@ -291,41 +303,35 @@ class AbilityTokenizer:
         ``role_spans`` are character ranges over this same text, as the sidecar
         records them for the line.
 
-        With no ``role_spans`` the result depends on ``text`` alone, and
+        The result depends on ``text`` and ``role_spans`` alone, and
         :class:`~effects.application.surface_batching.SurfaceBatcher` calls
         this once per unique ability text in *every* batch of every epoch —
         the same tens of thousands of lines, retokenized from scratch each
         time. A profile of a training run put 80% of its wall time in this
-        method for exactly that reason, so the no-``role_spans`` result is
-        cached on the instance (bounded by :attr:`_TOKENIZE_CACHE_CAP`) and a
-        **new list** is always handed back: ``Token`` is frozen, so sharing its
+        method for exactly that reason, so the result is cached on the
+        instance under both (bounded by :attr:`_TOKENIZE_CACHE_CAP`) — the
+        prose surface passes every line's spans, and a cache keyed on the text
+        alone would hand one span set's roles to another's — and a **new
+        list** is always handed back: ``Token`` is frozen, so sharing its
         elements is safe, but a caller (``expand_keywords``) builds its own
         list from what it's given, and must never be handed the cached list
-        itself to build it from. A call carrying ``role_spans`` bypasses the
-        cache: those calls are rare — only the corpus/record-building path
-        attaches spans — and the result depends on the spans too, so keying
-        the cache on the text alone would silently reuse a role assignment
-        from an unrelated span set, and keying it on both text and spans would
-        cache something the hot path never repeats.
+        itself to build it from.
         """
-        if not role_spans:
-            cached = self._tokenize_cache.get(text)
-            if cached is not None:
-                return list(cached)
-            tokens = self._tag_keyword_line(
-                self._merge_multi_word(self._split_with_offsets(text), text), text,
-            )
-            if len(self._tokenize_cache) >= self._TOKENIZE_CACHE_CAP:
-                self._tokenize_cache.clear()
-            self._tokenize_cache[text] = tuple(tokens)
-            return list(tokens)
-        tokens = self._split_with_offsets(text)
-        tokens = self._merge_multi_word(tokens, text)
-        tokens = [
-            replace(token, role=self._role_at(token, role_spans))
-            for token in tokens
-        ]
-        return self._tag_keyword_line(tokens, text)
+        key = (text, tuple(role_spans))
+        cached = self._tokenize_cache.get(key)
+        if cached is not None:
+            return list(cached)
+        tokens = self._merge_multi_word(self._split_with_offsets(text), text)
+        if role_spans:
+            tokens = [
+                replace(token, role=self._role_at(token, role_spans))
+                for token in tokens
+            ]
+        tokens = self._tag_keyword_line(tokens, text)
+        if len(self._tokenize_cache) >= self._TOKENIZE_CACHE_CAP:
+            self._tokenize_cache.clear()
+        self._tokenize_cache[key] = tuple(tokens)
+        return list(tokens)
 
     def _split_with_offsets(self, text: str) -> list[Token]:
         if self.surface == SURFACE_SCRIPT:
@@ -514,6 +520,7 @@ class AbilityTokenizer:
         probability: float = 0.0,
         rng: random.Random | None = None,
         instance_values: dict[str, list[str]] | None = None,
+        forced: frozenset[str] = frozenset(),
     ) -> list[Token]:
         """Replace some keywords with their definitions.
 
@@ -526,22 +533,53 @@ class AbilityTokenizer:
         expandable keyword unknown to the vocabulary is expanded, a known one
         with probability ``probability`` (FR-014). ``instance_values`` supplies
         already-formatted values for a keyword, by its token form; without
-        them a template's unfilled placeholders are removed.
+        them a template's unfilled placeholders are removed. A keyword whose
+        token form is in ``forced`` always expands, as an unknown one does:
+        that is how ``--withhold-keyword`` shows the model a keyword's
+        definition and never its token. An empty ``forced`` takes exactly the
+        draws it always took.
         """
         rng = rng or random.Random()
         values = instance_values or {}
         line = tokens[0].keyword_line if tokens else None
         if line is not None:
-            return self._expand_line(tokens, line, probability, rng, values)
+            return self._expand_line(tokens, line, probability, rng, values, forced)
         out: list[Token] = []
         for token in tokens:
             if self.must_expand(token) or (
-                self.expandable(token) and rng.random() < probability
+                self.expandable(token)
+                and (token.text in forced or rng.random() < probability)
             ):
                 out.extend(self._expansion(token, values.get(token.text)))
             else:
                 out.append(token)
         return out
+
+    def encoding_tokens(
+        self,
+        text: str,
+        *,
+        role_spans: tuple[RoleSpan, ...] = (),
+        withheld: frozenset[str] = frozenset(),
+        probability: float = 0.0,
+        rng: random.Random | None = None,
+    ) -> list[Token]:
+        """The tokens one ability text is encoded from, wherever it is encoded.
+
+        Tokenized, keywords expanded — a ``withheld`` keyword always, as an
+        unknown one is — and then the withheld keyword's token dropped
+        everywhere it is left: where it had no definition to expand to, and
+        inside an expansion, since a reminder text can name its own keyword
+        (flying's does, and so does reach's). Training, evaluation and the
+        cache all encode through here, so none of them ever reads the token.
+        """
+        tokens = self.expand_keywords(
+            self.tokenize(text, role_spans),
+            probability=probability, rng=rng, forced=withheld,
+        )
+        if withheld:
+            tokens = [token for token in tokens if token.text not in withheld]
+        return tokens
 
     def _expand_line(
         self,
@@ -550,6 +588,7 @@ class AbilityTokenizer:
         probability: float,
         rng: random.Random,
         values: dict[str, list[str]],
+        forced: frozenset[str] = frozenset(),
     ) -> list[Token]:
         if not self._line_expandable(line):
             return list(tokens)
@@ -559,9 +598,9 @@ class AbilityTokenizer:
         unknown = not name_tokens or any(
             t.token_id == self.unk_id for t in name_tokens
         )
-        if not (unknown or rng.random() < probability):
-            return list(tokens)
         form = keyword_token(line.name)
+        if not (unknown or form in forced or rng.random() < probability):
+            return list(tokens)
         text = self.expansion_text(line.name, line.details, values.get(form))
         return self._as_expansion(text, role=tokens[0].role, keyword=form)
 
@@ -621,11 +660,6 @@ class AbilityTokenizer:
         if not template:
             return ""
         return strip_specifiers(java_format(template, list(values or ())))
-
-    @staticmethod
-    def _keyword_token(display_name: str) -> str:
-        """Forge's display name as the token form the vocabulary carries."""
-        return keyword_token(display_name)
 
 
 def camel_parts(word: str) -> list[tuple[int, int]]:

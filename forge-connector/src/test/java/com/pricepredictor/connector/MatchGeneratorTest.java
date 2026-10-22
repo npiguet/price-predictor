@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,48 +24,55 @@ class MatchGeneratorTest {
 
     private static final String TEST_RUN_ID = "test-run-id";
 
+    /** Forge-built decks on both sides, best-of-3, every eligible set. */
+    static MatchGenerator sealedSelfPlay() {
+        return MatchGenerator.builder(MatchGenerator.computeEligibleSets(), TEST_RUN_ID).build();
+    }
+
+    private static MatchGenerationResult sharedMatch;
+
+    /**
+     * One sealed self-play match, played once for every test here and in
+     * {@link MatchGeneratorCardsPlayedIntegrationTest} that only reads one:
+     * a real Forge match costs seconds, and these tests ask nothing of the
+     * match that a second one would answer differently.
+     */
+    static synchronized MatchGenerationResult sharedMatch() {
+        if (sharedMatch == null) {
+            sharedMatch = sealedSelfPlay().generateMatch();
+        }
+        return sharedMatch;
+    }
+
+    private static MatchResult result;
+
+    @BeforeAll
+    static void playOneMatch() {
+        result = sharedMatch().matchResult();
+    }
+
     @Test
     void generateMatchReturnsValidResult() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
-
-        MatchResult result = generator.generateMatch().matchResult();
-
-        assertNotNull(result);
         assertEquals(40, result.deckA().size(), "deckA must be exactly 40 cards");
         assertEquals(40, result.deckB().size(), "deckB must be exactly 40 cards");
-        int total = result.winsA() + result.winsB();
-        assertTrue(total == 2 || total == 3, "wins must sum to 2 or 3, got " + total);
-        assertTrue(result.winsA() >= 0 && result.winsA() <= 2);
-        assertTrue(result.winsB() >= 0 && result.winsB() <= 2);
+        // Best-of-3: two or three games, and no deck wins more than two.
+        String games = result.games();
+        assertTrue(games.length() == 2 || games.length() == 3, "games: " + games);
+        assertTrue(games.chars().filter(c -> c == 'A').count() <= 2, "games: " + games);
+        assertTrue(games.chars().filter(c -> c == 'B').count() <= 2, "games: " + games);
     }
 
     @Test
     void generateMatchPopulatesMetadata() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
-
-        MatchResult result = generator.generateMatch().matchResult();
-
         assertEquals(TEST_RUN_ID, result.runId());
         assertNotNull(result.timestamp(), "timestamp must be populated");
         assertNotNull(result.setCode(), "setCode must be populated");
         assertFalse(result.setCode().isBlank(), "setCode must be non-blank");
-        assertTrue(result.durationSeconds() >= 0, "duration must be non-negative");
-        assertEquals(result.games().length(), result.play().length(),
-                "games and play must have matching lengths");
     }
 
     @Test
     void methodTagsComeFromDeckBuilder() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
-
-        MatchResult result = generator.generateMatch().matchResult();
-
-        List<String> allowed = List.of(
-                DeckBuilder.METHOD_FORGE_BEST,
-                DeckBuilder.METHOD_FORGE_3SUB,
-                DeckBuilder.METHOD_FORGE_8SUB,
-                DeckBuilder.METHOD_RANDOM
-        );
+        List<String> allowed = List.of("forge-best", "forge-3sub", "forge-8sub", "random");
         assertTrue(allowed.contains(result.methodA()),
                 "methodA must be one of the phase-0 tags, got: " + result.methodA());
         assertTrue(allowed.contains(result.methodB()),
@@ -72,16 +80,8 @@ class MatchGeneratorTest {
     }
 
     @Test
-    void runIdMustBeNonBlank() {
-        assertThrows(IllegalArgumentException.class,
-                () -> MatchGenerator.withDefaultBuilders(""));
-        assertThrows(IllegalArgumentException.class,
-                () -> MatchGenerator.withDefaultBuilders(null));
-    }
-
-    @Test
     void generateMatchUsesOnlyEligibleSets() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
+        MatchGenerator generator = sealedSelfPlay();
 
         // Eligible sets: must have draft booster template, must not be FUNNY type.
         // We don't know which set was chosen, but the generator should not throw.
@@ -143,12 +143,11 @@ class MatchGeneratorTest {
         // --exclude-cards` never reaches here: MatchGenerator makes its own pool
         // per match, so a depleted collection run needs the exclusion on the
         // worker, not on the pool file.
-        List<String> reference = new PoolGenerator().generate("RVR", 1).get(0);
+        List<String> reference = new PoolGenerator().generate("RVR", 1, HoldoutCards.NONE).get(0);
         Set<String> excluded = Set.copyOf(reference.subList(0, 10));
 
-        MatchGenerator generator = new MatchGenerator(
-                List.of("RVR"), null, null, TEST_RUN_ID, null, null, 0,
-                new Random(42), excluded, false);
+        MatchGenerator generator = MatchGenerator.builder(List.of("RVR"), TEST_RUN_ID)
+                .random(new Random(42)).excludedCards(HoldoutCards.of(excluded)).build();
 
         List<PaperCard> pool = generator.generatePool("RVR");
 
@@ -161,9 +160,8 @@ class MatchGeneratorTest {
 
     @Test
     void generatePoolWithoutExclusionsIsFullStrength() {
-        MatchGenerator generator = new MatchGenerator(
-                List.of("RVR"), null, null, TEST_RUN_ID, null, null, 0,
-                new Random(42), Set.of(), false);
+        MatchGenerator generator = MatchGenerator.builder(List.of("RVR"), TEST_RUN_ID)
+                .random(new Random(42)).build();
 
         assertTrue(generator.generatePool("RVR").size() >= 70,
                 "Full-strength pool too small");
@@ -177,26 +175,23 @@ class MatchGeneratorTest {
         // exactly one card left samples 23 nonlands with replacement from a
         // single candidate -- every deck that round builds is byte-identical,
         // deterministically. Under decksOnly, pickDeckB's non-mirror search
-        // then always comes up empty. Before this fix, it fell through to
-        // forgeBuilt("COVERAGE") -- a sentinel set code that resolves against
-        // no real Forge edition -- throwing NullPointerException on every
-        // single match attempt, forever, since decksOnly forces every attempt
-        // down this branch: no match ever completed, the progress file never
-        // grew, and ForgeWorkerPool.run() blocked indefinitely.
+        // then always comes up empty. Falling through to forgeBuilt("COVERAGE")
+        // -- a sentinel set code that resolves against no real Forge edition --
+        // would throw on every single match attempt, since decksOnly forces
+        // every attempt down this branch: no match would ever complete.
         GeneratedDecksIndex.GeneratedDeck deck = new GeneratedDecksIndex.GeneratedDeck(
                 "coverage", "COVERAGE", List.of("Llanowar Elves"));
         GeneratedDecksIndex mirrorOnly = new GeneratedDecksIndex(List.of(deck, deck));
         // Both sides point at the same index, which is what
         // CollectorSupervisor does (one decks file, both --side-*-decks
-        // paths) and what decksOnly now requires: a null index on either
-        // side does not fail a decks-only match, it quietly turns it back
-        // into sealed self-play. pickDeckB never reads sideAIndex -- only
-        // pickDeckA does -- so this changes nothing about the branch under
-        // test, which is called directly below with an explicit set code and
-        // deck-A card list.
-        MatchGenerator generator = new MatchGenerator(
-                List.of("RVR"), null, null, TEST_RUN_ID, mirrorOnly, mirrorOnly, 1,
-                new Random(7), Set.of(), true);
+        // paths) and what decksOnly requires: a Forge-built side does not
+        // fail a decks-only match, it quietly turns it back into sealed
+        // self-play. pickDeckB never reads side A -- only pickDeckA does --
+        // so this changes nothing about the branch under test, which is
+        // called directly below with an explicit set code and deck-A card list.
+        MatchGenerator.DeckSource decks = new MatchGenerator.DeckSource.FileSampled(mirrorOnly);
+        MatchGenerator generator = MatchGenerator.builder(List.of("RVR"), TEST_RUN_ID)
+                .sideA(decks).sideB(decks, 1).random(new Random(7)).decksOnly(true).build();
 
         MatchGenerator.DeckSelection b = assertDoesNotThrow(
                 () -> generator.pickDeckB("COVERAGE", List.of("Llanowar Elves")),

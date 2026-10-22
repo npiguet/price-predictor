@@ -25,19 +25,11 @@ import java.nio.file.Path;
 public class DraftGameWorkerMain {
 
     public static void main(String[] args) {
-        String seatsFileProp = requiredProperty("seats.file");
-        String outputFileProp = requiredProperty("output.file");
-        String runId = requiredProperty("run.id");
-
-        int bestOf = 3;
-        try {
-            bestOf = Integer.parseInt(System.getProperty("best.of", "3"));
-        } catch (NumberFormatException e) {
-            System.err.println("Warning: invalid -Dbest.of value, using 3");
-        }
-
-        boolean includeMirrors = Boolean.parseBoolean(
-                System.getProperty("include.mirrors", "false"));
+        String seatsFileProp = WorkerProperties.require("seats.file");
+        String outputFileProp = WorkerProperties.require("output.file");
+        String runId = WorkerProperties.require("run.id");
+        int bestOf = WorkerProperties.bestOf("best.of", 3);
+        boolean includeMirrors = WorkerProperties.flag("include.mirrors");
 
         Path seatsFile = Path.of(seatsFileProp);
         Path outputFile = Path.of(outputFileProp);
@@ -53,7 +45,8 @@ public class DraftGameWorkerMain {
      * Load the seat table and play pairings until the process is killed.
      *
      * <p>A pairing that throws is abandoned without writing a row and the loop
-     * draws another. Nothing was reserved for it, so nothing is lost but time.
+     * draws another. Nothing was reserved for it, so nothing is lost but time —
+     * unless every pairing throws, which {@link WorkerLoop} turns into exit 1.
      */
     static void run(
             Path seatsFile,
@@ -83,34 +76,13 @@ public class DraftGameWorkerMain {
         DraftGamePlayer player = new DraftGamePlayer(
                 new GamePlayer(bestOf), new MatchResultWriter(outputFile), runId);
 
-        long played = 0;
-        while (true) {
-            try {
-                SeatTableIndex.Pairing pairing = index.randomPairing(includeMirrors);
-                if (pairing == null) {
-                    System.err.println("Error: no pairing available; stopping");
-                    return;
-                }
-                player.play(pairing);
-                played++;
-                if (played % 5 == 0) {
-                    System.out.println("Worker: " + played + " matches played");
-                }
-            } catch (Exception e) {
-                // No row is written. The supervisor sees this only as a slower
-                // match rate; it never reserved this pairing for us.
-                System.err.println("Error playing pairing: " + e.getMessage());
-            }
-        }
-    }
-
-    /** Read a required system property, or exit 2 naming the one that is missing. */
-    private static String requiredProperty(String name) {
-        String value = System.getProperty(name);
-        if (value == null || value.isBlank()) {
-            System.err.println("Error: -D" + name + " system property is required");
-            System.exit(2);
-        }
-        return value;
+        WorkerLoop.runUntilBroken(
+                () -> {
+                    // Never empty: a table with no eligible pod exited above.
+                    player.play(index.randomPairing().orElseThrow());
+                    return WorkerLoop.Outcome.COMPLETED;
+                },
+                new WorkerLoop.Progress(
+                        System.out, 5, "matches played", "Error playing pairing"));
     }
 }

@@ -1,7 +1,9 @@
 """JSONL shard IO for the effect-record corpus.
 
-One ``{run_id}.{worker}-{lifetime}.jsonl`` shard per worker JVM, all read as a
-directory. One shard per worker rather than one shared file because records are
+One ``{run_id}.{worker}-{lifetime}.jsonl.gz`` shard per worker JVM, all read as a
+directory. The Java collector writes raw shards; Python only reads them, and
+writes the curated shards ``build-corpus`` produces (:func:`write_shard`).
+One shard per worker rather than one shared file because records are
 far larger than a match-outcome row, so cross-process appends would interleave
 mid-record; and line-oriented rather than columnar because the writers are Forge
 JVMs that are expected to crash mid-write, which is exactly what a line format
@@ -41,16 +43,19 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Collection, Iterable, Iterator, Sequence
-from dataclasses import replace
+from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import IO, Any
 
 import orjson
 
+from effects.domain.corpus_curation import record_hash
 from effects.domain.event_schema import Event
+from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
+    PAYLOAD_TYPES,
     ActivationPayload,
     Candidate,
     CollectionMode,
@@ -84,7 +89,6 @@ from effects.domain.state_snapshot import (
     StackExtras,
     StateSnapshot,
     normalize_counter_type,
-    normalize_keyword,
 )
 from price_predictor.infrastructure.append_only import (
     count_complete_lines,
@@ -166,47 +170,8 @@ def _event_from_json(item: Any) -> Event:
 # ── snapshot ────────────────────────────────────────────────────────────
 
 
-def _snapshot_to_json(state: StateSnapshot) -> dict:
-    return {
-        "global": {
-            "turn": state.global_.turn,
-            "phase": state.global_.phase,
-            "active": state.global_.active,
-            "priority": state.global_.priority,
-            "stack_size": state.global_.stack_size,
-            "combat_substep": state.global_.combat_substep,
-            "emblems": _keys_to_json(state.global_.emblems),
-        },
-        "players": [
-            {
-                "id": p.id, "life": p.life, "hand": p.hand,
-                "library": p.library, "graveyard": p.graveyard,
-                "poison": p.poison, "energy": p.energy,
-                "this_turn": dict(p.this_turn),
-                "floating_mana": dict(p.floating_mana),
-                "untapped_production": dict(p.untapped_production),
-            }
-            for p in state.players
-        ],
-        "entities": [_entity_to_json(e) for e in state.entities],
-        "refs": {
-            "targets": list(state.refs.targets),
-            "source": state.refs.source,
-            "modes": list(state.refs.modes),
-            "x": state.refs.x,
-            "choices": dict(state.refs.choices),
-        },
-        "pending_event": (
-            state.pending_event.as_dict() if state.pending_event else None
-        ),
-        # Explicit, because "absent tier means uncollected" is unanswerable
-        # without it: an empty entity list and an uncollected tier look alike.
-        "tiers": sorted(int(t) for t in state.tiers),
-    }
-
-
 def _entity_to_json(entity: EntityState) -> dict:
-    out: dict = {
+    return {
         "id": entity.id, "name": entity.name, "zone": entity.zone,
         "controller": entity.controller, "face": entity.face,
         "copy_source": entity.copy_source,
@@ -253,7 +218,6 @@ def _entity_to_json(entity: EntityState) -> dict:
             else None
         ),
     }
-    return out
 
 
 def _entity_from_json(data: dict) -> EntityState:
@@ -317,6 +281,45 @@ def _entity_from_json(data: dict) -> EntityState:
     )
 
 
+def _snapshot_to_json(state: StateSnapshot) -> dict:
+    return {
+        "global": {
+            "turn": state.global_.turn,
+            "phase": state.global_.phase,
+            "active": state.global_.active,
+            "priority": state.global_.priority,
+            "stack_size": state.global_.stack_size,
+            "combat_substep": state.global_.combat_substep,
+            "emblems": _keys_to_json(state.global_.emblems),
+        },
+        "players": [
+            {
+                "id": p.id, "life": p.life, "hand": p.hand,
+                "library": p.library, "graveyard": p.graveyard,
+                "poison": p.poison, "energy": p.energy,
+                "this_turn": dict(p.this_turn),
+                "floating_mana": dict(p.floating_mana),
+                "untapped_production": dict(p.untapped_production),
+            }
+            for p in state.players
+        ],
+        "entities": [_entity_to_json(e) for e in state.entities],
+        "refs": {
+            "targets": list(state.refs.targets),
+            "source": state.refs.source,
+            "modes": list(state.refs.modes),
+            "x": state.refs.x,
+            "choices": dict(state.refs.choices),
+        },
+        "pending_event": (
+            state.pending_event.as_dict() if state.pending_event else None
+        ),
+        # Explicit, because "absent tier means uncollected" is unanswerable
+        # without it: an empty entity list and an uncollected tier look alike.
+        "tiers": sorted(int(t) for t in state.tiers),
+    }
+
+
 def _snapshot_from_json(data: dict) -> StateSnapshot:
     g = data["global"]
     refs = data.get("refs") or {}
@@ -347,98 +350,197 @@ def _snapshot_from_json(data: dict) -> StateSnapshot:
             x=refs.get("x"),
             choices=dict(refs.get("choices", {})),
         ),
-        pending_event=Event.from_dict(pending) if pending else None,
+        pending_event=_event_from_json(pending) if pending else None,
         tiers=frozenset(InclusionTier(t) for t in data.get("tiers", ())),
     )
 
 
 # ── payloads ────────────────────────────────────────────────────────────
+#
+# One encoder and one decoder per payload type, side by side, so a field added
+# to one direction is in plain sight of the other. The decoder is chosen by
+# ``PAYLOAD_TYPES``, the table the record's own invariant checks against, so a
+# ``(kind, moment/subkind)`` pair that table does not know is refused here
+# rather than read as whichever payload happened to be the fallback.
 
 
-def _payload_to_json(payload) -> dict:
-    match payload:
-        case ActivationPayload():
-            return {
-                "costs": {
-                    "mana_by_color": dict(payload.costs.mana_by_color),
-                    "tapped": list(payload.costs.tapped),
-                    "life": payload.costs.life,
-                    "sacrificed": list(payload.costs.sacrificed),
-                    "discarded": list(payload.costs.discarded),
-                    "exiled": list(payload.costs.exiled),
-                },
-                "outcome": payload.outcome.value,
+def _activation_to_json(payload: ActivationPayload) -> dict:
+    return {
+        "costs": {
+            "mana_by_color": dict(payload.costs.mana_by_color),
+            "tapped": list(payload.costs.tapped),
+            "life": payload.costs.life,
+            "sacrificed": list(payload.costs.sacrificed),
+            "discarded": list(payload.costs.discarded),
+            "exiled": list(payload.costs.exiled),
+        },
+        "outcome": payload.outcome.value,
+    }
+
+
+def _activation_from_json(data: dict) -> ActivationPayload:
+    costs = data.get("costs") or {}
+    return ActivationPayload(
+        costs=Costs(
+            mana_by_color=dict(costs.get("mana_by_color", {})),
+            tapped=tuple(costs.get("tapped", ())),
+            life=costs.get("life", 0),
+            sacrificed=tuple(costs.get("sacrificed", ())),
+            discarded=tuple(costs.get("discarded", ())),
+            exiled=tuple(costs.get("exiled", ())),
+        ),
+        outcome=ResolutionOutcome(data["outcome"]),
+    )
+
+
+def _resolution_to_json(payload: ResolutionPayload) -> dict:
+    return {"events": _events_to_json(payload.events)}
+
+
+def _resolution_from_json(data: dict) -> ResolutionPayload:
+    return ResolutionPayload(events=_events_from_json(data.get("events")))
+
+
+def _rewrite_to_json(payload: RewritePayload) -> dict:
+    return {
+        "incoming": payload.incoming.as_dict(),
+        # Written as null rather than as a copy of `incoming` when the
+        # replacement edited nothing. The two spellings are not
+        # interchangeable: a copy claims the event survived unchanged,
+        # null says the question does not apply.
+        "outgoing": payload.outgoing.as_dict() if payload.outgoing else None,
+        "result": payload.result.value if payload.result else None,
+        "replaced_by": _keys_to_json(payload.replaced_by),
+    }
+
+
+def _rewrite_from_json(data: dict) -> RewritePayload:
+    # Two shapes coexist in an append-only corpus. A shard collected before
+    # the outcome was passed to the hook carries `{incoming, outgoing}` with
+    # `outgoing` always an event — usually one byte-identical to
+    # `incoming`, because Forge substitutes by running another ability
+    # rather than by editing the event — and no `result`. Such a record
+    # reads as `result=None`, which is a third state and not `not_replaced`:
+    # it says the writer reported nothing, where `not_replaced` says the
+    # writer watched a replacement decline. A consumer that needs the
+    # distinction filters on `result is None`; one that does not can treat
+    # those records as the unreadable ones they always were.
+    outgoing = data.get("outgoing")
+    result = data.get("result")
+    return RewritePayload(
+        incoming=_event_from_json(data["incoming"]),
+        outgoing=_event_from_json(outgoing) if outgoing else None,
+        result=RewriteResult(result) if result else None,
+        replaced_by=_keys_from_json(data.get("replaced_by")),
+    )
+
+
+def _continuous_to_json(payload: ContinuousPayload) -> dict:
+    return {
+        "contributions": [
+            {
+                "entity": c.entity, "pt_boost": list(c.pt_boost),
+                "keywords": list(c.keywords), "types": list(c.types),
+                "colors": list(c.colors), "name": c.name,
             }
-        case ResolutionPayload():
-            return {"events": _events_to_json(payload.events)}
-        case RewritePayload():
-            return {
-                "incoming": payload.incoming.as_dict(),
-                # Written as null rather than as a copy of `incoming` when the
-                # replacement edited nothing. The two spellings are not
-                # interchangeable: a copy claims the event survived unchanged,
-                # null says the question does not apply.
-                "outgoing": (
-                    payload.outgoing.as_dict() if payload.outgoing else None
+            for c in payload.contributions
+        ],
+        "board_hash": payload.board_hash,
+    }
+
+
+def _continuous_from_json(data: dict) -> ContinuousPayload:
+    return ContinuousPayload(
+        contributions=tuple(
+            Contribution(
+                entity=c["entity"],
+                pt_boost=tuple(c.get("pt_boost", (0, 0))),
+                # Same spelling rule as the overlay channel: Forge writes
+                # "first strike", everything downstream reads first_strike.
+                keywords=tuple(
+                    normalize_keyword(k) for k in c.get("keywords", ())
                 ),
-                "result": payload.result.value if payload.result else None,
-                "replaced_by": _keys_to_json(payload.replaced_by),
-            }
-        case ContinuousPayload():
-            return {
-                "contributions": [
-                    {
-                        "entity": c.entity, "pt_boost": list(c.pt_boost),
-                        "keywords": list(c.keywords), "types": list(c.types),
-                        "colors": list(c.colors), "name": c.name,
-                    }
-                    for c in payload.contributions
-                ],
-                "board_hash": payload.board_hash,
-            }
-        case CombatPayload():
-            return {
-                "attackers": list(payload.attackers),
-                "blocks": {k: list(v) for k, v in payload.blocks.items()},
-                "assignment_choices": {
-                    k: dict(v) for k, v in payload.assignment_choices.items()
+                types=tuple(c.get("types", ())),
+                colors=tuple(c.get("colors", ())),
+                name=c.get("name"),
+            )
+            for c in data.get("contributions", ())
+        ),
+        board_hash=data.get("board_hash", ""),
+    )
+
+
+def _combat_to_json(payload: CombatPayload) -> dict:
+    return {
+        "attackers": list(payload.attackers),
+        "blocks": {k: list(v) for k, v in payload.blocks.items()},
+        "assignment_choices": {
+            k: dict(v) for k, v in payload.assignment_choices.items()
+        },
+        "events": _events_to_json(payload.events),
+        "probed_keyword": payload.probed_keyword,
+        "probed_entity": payload.probed_entity,
+    }
+
+
+def _combat_from_json(data: dict) -> CombatPayload:
+    return CombatPayload(
+        attackers=tuple(data.get("attackers", ())),
+        blocks={k: tuple(v) for k, v in (data.get("blocks") or {}).items()},
+        assignment_choices={
+            k: dict(v)
+            for k, v in (data.get("assignment_choices") or {}).items()
+        },
+        events=_events_from_json(data.get("events")),
+        probed_keyword=data.get("probed_keyword"),
+        probed_entity=data.get("probed_entity"),
+    )
+
+
+def _trigger_to_json(payload: TriggerPayload) -> dict:
+    return {"event": payload.event.as_dict(), "fired": payload.fired}
+
+
+def _trigger_from_json(data: dict) -> TriggerPayload:
+    return TriggerPayload(
+        event=_event_from_json(data["event"]), fired=bool(data["fired"]),
+    )
+
+
+def _decision_to_json(payload: PlayabilityDecisionPayload) -> dict:
+    return {
+        "candidates": [
+            {
+                "ability": _keys_to_json(c.ability),
+                "verdict": {
+                    "can_play": c.can_play,
+                    "affordable": c.affordable,
+                    "has_legal_target": c.has_legal_target,
                 },
-                "events": _events_to_json(payload.events),
-                "probed_keyword": payload.probed_keyword,
-                "probed_entity": payload.probed_entity,
+                "legal_targets": list(c.legal_targets),
+                "cost_after_adjustment": dict(c.cost_after_adjustment),
+                "responsible_static": _keys_to_json(c.responsible_static),
             }
-        case TriggerPayload():
-            return {"event": payload.event.as_dict(), "fired": payload.fired}
-        case PlayabilityDecisionPayload():
-            return {
-                "candidates": [
-                    {
-                        "ability": _keys_to_json(c.ability),
-                        "verdict": {
-                            "can_play": c.can_play,
-                            "affordable": c.affordable,
-                            "has_legal_target": c.has_legal_target,
-                        },
-                        "legal_targets": list(c.legal_targets),
-                        "cost_after_adjustment": dict(c.cost_after_adjustment),
-                        "responsible_static": _keys_to_json(c.responsible_static),
-                    }
-                    for c in payload.candidates
-                ]
-            }
-        case PlayabilityAttackersPayload():
-            return {
-                "legal_attackers": list(payload.legal_attackers),
-                "forbidden": _forbidden_to_json(payload.forbidden),
-            }
-        case PlayabilityBlockersPayload():
-            return {
-                "anchor_attacker": payload.anchor_attacker,
-                "legal_blockers": list(payload.legal_blockers),
-                "forbidden": _forbidden_to_json(payload.forbidden),
-                "min_blockers": payload.min_blockers,
-            }
-    raise TypeError(f"no wire form for payload type {type(payload).__name__}")
+            for c in payload.candidates
+        ]
+    }
+
+
+def _decision_from_json(data: dict) -> PlayabilityDecisionPayload:
+    return PlayabilityDecisionPayload(
+        candidates=tuple(
+            Candidate(
+                ability=_keys_from_json(c.get("ability")),
+                can_play=c["verdict"]["can_play"],
+                affordable=c["verdict"]["affordable"],
+                has_legal_target=c["verdict"]["has_legal_target"],
+                legal_targets=tuple(c.get("legal_targets", ())),
+                cost_after_adjustment=dict(c.get("cost_after_adjustment", {})),
+                responsible_static=_keys_from_json(c.get("responsible_static")),
+            )
+            for c in data.get("candidates", ())
+        )
+    )
 
 
 def _forbidden_to_json(forbidden: tuple[ForbiddenEntity, ...]) -> list[dict]:
@@ -461,104 +563,80 @@ def _forbidden_from_json(data: Any) -> tuple[ForbiddenEntity, ...]:
     )
 
 
-def _payload_from_json(
-    data: dict, kind: RecordKind, discriminator: Moment | PlayabilitySubkind | None,
-):
-    if kind is RecordKind.RESOLUTION:
-        if discriminator is Moment.ACTIVATION:
-            costs = data.get("costs") or {}
-            return ActivationPayload(
-                costs=Costs(
-                    mana_by_color=dict(costs.get("mana_by_color", {})),
-                    tapped=tuple(costs.get("tapped", ())),
-                    life=costs.get("life", 0),
-                    sacrificed=tuple(costs.get("sacrificed", ())),
-                    discarded=tuple(costs.get("discarded", ())),
-                    exiled=tuple(costs.get("exiled", ())),
-                ),
-                outcome=ResolutionOutcome(data["outcome"]),
-            )
-        return ResolutionPayload(events=_events_from_json(data.get("events")))
-    if kind is RecordKind.REWRITE:
-        # Two shapes coexist in an append-only corpus. A shard collected before
-        # the outcome was passed to the hook carries `{incoming, outgoing}` with
-        # `outgoing` always an event — usually one byte-identical to
-        # `incoming`, because Forge substitutes by running another ability
-        # rather than by editing the event — and no `result`. Such a record
-        # reads as `result=None`, which is a third state and not `not_replaced`:
-        # it says the writer reported nothing, where `not_replaced` says the
-        # writer watched a replacement decline. A consumer that needs the
-        # distinction filters on `result is None`; one that does not can treat
-        # those records as the unreadable ones they always were.
-        outgoing = data.get("outgoing")
-        result = data.get("result")
-        return RewritePayload(
-            incoming=Event.from_dict(data["incoming"]),
-            outgoing=Event.from_dict(outgoing) if outgoing else None,
-            result=RewriteResult(result) if result else None,
-            replaced_by=_keys_from_json(data.get("replaced_by")),
-        )
-    if kind is RecordKind.CONTINUOUS:
-        return ContinuousPayload(
-            contributions=tuple(
-                Contribution(
-                    entity=c["entity"],
-                    pt_boost=tuple(c.get("pt_boost", (0, 0))),
-                    # Same spelling rule as the overlay channel: Forge writes
-                    # "first strike", everything downstream reads first_strike.
-                    keywords=tuple(
-                        normalize_keyword(k) for k in c.get("keywords", ())
-                    ),
-                    types=tuple(c.get("types", ())),
-                    colors=tuple(c.get("colors", ())),
-                    name=c.get("name"),
-                )
-                for c in data.get("contributions", ())
-            ),
-            board_hash=data.get("board_hash", ""),
-        )
-    if kind is RecordKind.COMBAT:
-        return CombatPayload(
-            attackers=tuple(data.get("attackers", ())),
-            blocks={k: tuple(v) for k, v in (data.get("blocks") or {}).items()},
-            assignment_choices={
-                k: dict(v)
-                for k, v in (data.get("assignment_choices") or {}).items()
-            },
-            events=_events_from_json(data.get("events")),
-            probed_keyword=data.get("probed_keyword"),
-            probed_entity=data.get("probed_entity"),
-        )
-    if kind is RecordKind.TRIGGER:
-        return TriggerPayload(
-            event=Event.from_dict(data["event"]), fired=bool(data["fired"]),
-        )
-    if discriminator is PlayabilitySubkind.DECISION:
-        return PlayabilityDecisionPayload(
-            candidates=tuple(
-                Candidate(
-                    ability=_keys_from_json(c.get("ability")),
-                    can_play=c["verdict"]["can_play"],
-                    affordable=c["verdict"]["affordable"],
-                    has_legal_target=c["verdict"]["has_legal_target"],
-                    legal_targets=tuple(c.get("legal_targets", ())),
-                    cost_after_adjustment=dict(c.get("cost_after_adjustment", {})),
-                    responsible_static=_keys_from_json(c.get("responsible_static")),
-                )
-                for c in data.get("candidates", ())
-            )
-        )
-    if discriminator is PlayabilitySubkind.ATTACKERS:
-        return PlayabilityAttackersPayload(
-            legal_attackers=tuple(data.get("legal_attackers", ())),
-            forbidden=_forbidden_from_json(data.get("forbidden")),
-        )
+def _attackers_to_json(payload: PlayabilityAttackersPayload) -> dict:
+    return {
+        "legal_attackers": list(payload.legal_attackers),
+        "forbidden": _forbidden_to_json(payload.forbidden),
+    }
+
+
+def _attackers_from_json(data: dict) -> PlayabilityAttackersPayload:
+    return PlayabilityAttackersPayload(
+        legal_attackers=tuple(data.get("legal_attackers", ())),
+        forbidden=_forbidden_from_json(data.get("forbidden")),
+    )
+
+
+def _blockers_to_json(payload: PlayabilityBlockersPayload) -> dict:
+    return {
+        "anchor_attacker": payload.anchor_attacker,
+        "legal_blockers": list(payload.legal_blockers),
+        "forbidden": _forbidden_to_json(payload.forbidden),
+        "min_blockers": payload.min_blockers,
+    }
+
+
+def _blockers_from_json(data: dict) -> PlayabilityBlockersPayload:
     return PlayabilityBlockersPayload(
         anchor_attacker=data["anchor_attacker"],
         legal_blockers=tuple(data.get("legal_blockers", ())),
         forbidden=_forbidden_from_json(data.get("forbidden")),
         min_blockers=data.get("min_blockers", 0),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _PayloadCodec:
+    encode: Callable[[Any], dict]
+    decode: Callable[[dict], Any]
+
+
+#: Every payload type's wire form, by type: the values of ``PAYLOAD_TYPES``,
+#: each once.
+_PAYLOAD_CODECS: dict[type, _PayloadCodec] = {
+    ActivationPayload: _PayloadCodec(_activation_to_json, _activation_from_json),
+    ResolutionPayload: _PayloadCodec(_resolution_to_json, _resolution_from_json),
+    RewritePayload: _PayloadCodec(_rewrite_to_json, _rewrite_from_json),
+    ContinuousPayload: _PayloadCodec(_continuous_to_json, _continuous_from_json),
+    CombatPayload: _PayloadCodec(_combat_to_json, _combat_from_json),
+    TriggerPayload: _PayloadCodec(_trigger_to_json, _trigger_from_json),
+    PlayabilityDecisionPayload: _PayloadCodec(_decision_to_json, _decision_from_json),
+    PlayabilityAttackersPayload: _PayloadCodec(_attackers_to_json, _attackers_from_json),
+    PlayabilityBlockersPayload: _PayloadCodec(_blockers_to_json, _blockers_from_json),
+}
+
+
+def _payload_to_json(payload) -> dict:
+    codec = _PAYLOAD_CODECS.get(type(payload))
+    if codec is None:
+        raise TypeError(f"no wire form for payload type {type(payload).__name__}")
+    return codec.encode(payload)
+
+
+def _payload_from_json(
+    data: dict, kind: RecordKind, discriminator: Moment | PlayabilitySubkind | None,
+):
+    payload_type = PAYLOAD_TYPES.get((kind, discriminator))
+    if payload_type is None:
+        # A ValueError, which is what the record's own discriminator check
+        # raises for the same line: a resolution without a moment, a
+        # playability record without a subkind, or a discriminator on a kind
+        # that takes none.
+        raise ValueError(
+            f"no payload is defined for kind={kind.value} with "
+            f"moment/subkind={discriminator.value if discriminator else None}"
+        )
+    return _PAYLOAD_CODECS[payload_type].decode(data)
 
 
 # ── records ─────────────────────────────────────────────────────────────
@@ -581,8 +659,12 @@ def record_to_dict(record: EffectRecord) -> dict:
         "interventional": record.interventional,
         "fork": record.fork,
         "synthetic": record.synthetic,
-        "random_seat": record.random_seat,
     }
+    # Written only where the source carried it: its presence is what makes a
+    # shard gen-2 (``shard_generation``), so a curated shard rewritten from
+    # gen-1 records has to stay gen-1 for the mixed-generation guard to fire.
+    if record.random_seat is not None:
+        out["random_seat"] = record.random_seat
     if record.what_if is not None:
         out["what_if"] = record.what_if
     out |= {
@@ -624,9 +706,9 @@ def record_from_dict(data: dict) -> EffectRecord:
         interventional=data.get("interventional", False),
         fork=data.get("fork", False),
         synthetic=data.get("synthetic", False),
-        # Absent on a gen-1 shard (FR-033): off-policy is something a record
-        # has to claim, and an unclassed legality record is never real.
-        random_seat=data.get("random_seat", False),
+        # Absent on a gen-1 shard (FR-033): None, which reads as on-policy and
+        # writes back absent, so the record keeps its generation.
+        random_seat=data.get("random_seat"),
         what_if=data.get("what_if"),
         ability=_keys_from_json(ability) if ability is not None else None,
         ability_unresolved=data.get("ability_unresolved"),
@@ -641,58 +723,9 @@ def format_record_line(record: EffectRecord) -> str:
     return json.dumps(record_to_dict(record), separators=_JSON_SEPARATORS)
 
 
-def append_record(out: IO[str], record: EffectRecord) -> None:
-    """Append one record to an open text handle and flush.
-
-    The caller owns the handle (opened in append mode) so a long collection run
-    keeps one open per worker across many games.
-    """
-    out.write(format_record_line(record))
-    out.write("\n")
-    out.flush()
-
-
-def shard_path(directory: Path, run_id: str, worker: int, lifetime: str) -> Path:
-    """``{run_id}.{worker}-{lifetime}.jsonl`` under ``directory``.
-
-    ``lifetime`` is required rather than defaulted: a caller that does not say
-    which JVM lifetime it is writing would reopen a previous one's shard and
-    reissue ids it already used, which is the defect the segment exists to
-    prevent.
-    """
-    return Path(directory) / f"{run_id}.{worker}-{lifetime}.jsonl"
-
-
-class ShardWriter:
-    """Append-only writer for one worker's shard.
-
-    Used as a context manager so the handle closes on a clean shutdown; a crash
-    leaves at most a trailing partial line, which every reader here skips.
-    """
-
-    def __init__(
-        self, directory: Path, run_id: str, worker: int, lifetime: str,
-    ) -> None:
-        self.path = shard_path(directory, run_id, worker, lifetime)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._handle: IO[str] | None = None
-
-    def __enter__(self) -> ShardWriter:
-        self._handle = self.path.open("a", encoding="utf-8")
-        return self
-
-    def __exit__(self, *exc_info) -> None:
-        self.close()
-
-    def write(self, record: EffectRecord) -> None:
-        if self._handle is None:
-            self._handle = self.path.open("a", encoding="utf-8")
-        append_record(self._handle, record)
-
-    def close(self) -> None:
-        if self._handle is not None:
-            self._handle.close()
-            self._handle = None
+def _write_line(handle: IO[str], record: EffectRecord) -> None:
+    handle.write(format_record_line(record))
+    handle.write("\n")
 
 
 def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
@@ -710,27 +743,48 @@ def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
     written = 0
     with gzip.open(path, "wt", encoding="utf-8") as handle:
         for record in records:
-            handle.write(format_record_line(record))
-            handle.write("\n")
+            _write_line(handle, record)
             written += 1
     return written
 
 
+#: How many bucket files one pass over the parts holds open. A stratum with
+#: more output shards than this is dealt over several passes.
+_OPEN_BUCKETS = 256
+
+
 def repack_shards(
     parts: Sequence[Path], out_dir: Path, *, shard_records: int,
-    prefix: str = "shard",
+    seed: int = 0, records: int | None = None, prefix: str = "shard",
 ) -> list[Path]:
-    """Stream ``parts`` into shards of about ``shard_records`` records each.
+    """Deal ``parts``' games into shards of about ``shard_records`` records each.
 
-    A shard closes once it holds at least ``shard_records`` records *and* the
-    next record belongs to a different game, so a game never spans two shards:
-    the evaluator resolves a probe's ``mirror_of`` within its stratum, and the
-    trainer's per-game text sharing wants a game's records together.
+    Whole games are dealt by a seeded hash of ``game_id`` modulo the shard
+    count, so a game never spans two shards -- the split is by game, and the
+    trainer filters a shard by game -- and each shard holds games from across
+    the whole stratum rather
+    than a run of consecutive parts. A part is one source shard, one JVM
+    lifetime of one collection run, so cutting the parts in order filled
+    each shard with a handful of lifetimes of one run; the trainer draws
+    whole shards and shuffles only inside the one it holds, so every batch
+    drawn from such a shard is correlated by run. Each shard's records are
+    then shuffled under ``seed``, which also spreads a record's copies, dealt
+    with their game to one shard, through it.
 
-    ``shard_records <= 0`` writes one shard per part, which is what the write
-    pass did before repacking existed. Parts are not deleted here.
+    Streamed, since a training stratum does not fit in memory: one pass deals
+    the lines into compressed bucket files beside ``out_dir`` (several
+    passes when there are more buckets than :data:`_OPEN_BUCKETS`), then each
+    bucket, which is one shard, is read, shuffled and written. Empty buckets
+    write nothing. ``records`` is the parts' record count when the caller
+    already knows it; otherwise the parts are counted first.
+
+    ``shard_records <= 0`` writes one shard per part, unshuffled, which is
+    what the write pass did before repacking existed. Parts are not deleted.
     """
     import gzip
+    import math
+    import random
+    import shutil
 
     parts = [Path(p) for p in parts]
     if not parts:
@@ -739,39 +793,64 @@ def repack_shards(
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
 
-    def open_next():
+    def next_path() -> Path:
         path = out_dir / f"{prefix}-{len(written) + 1:05d}.jsonl.gz"
         written.append(path)
-        return gzip.open(path, "wt", encoding="utf-8")
+        return path
 
     if shard_records <= 0:
         for part in parts:
-            with open_next() as handle:
-                for record in read_shard(part):
-                    handle.write(format_record_line(record))
-                    handle.write("\n")
+            with gzip.open(next_path(), "wt", encoding="utf-8") as handle:
+                for line in iter_shard_lines(part):
+                    handle.write(line)
         return written
 
-    handle = open_next()
-    count = 0
-    last_game: str | None = None
+    if records is None:
+        records = sum(1 for part in parts for _ in iter_shard_lines(part))
+    count = max(1, math.ceil(records / shard_records))
+    scratch = out_dir.with_name(f".{out_dir.name}.buckets")
+    shutil.rmtree(scratch, ignore_errors=True)
+    scratch.mkdir(parents=True)
     try:
-        for part in parts:
-            for record in read_shard(part):
-                if count >= shard_records and record.game_id != last_game:
+        for low in range(0, count, _OPEN_BUCKETS):
+            high = min(count, low + _OPEN_BUCKETS)
+            handles = {
+                index: gzip.open(
+                    scratch / f"{index:05d}.gz", "wt", encoding="utf-8", compresslevel=1,
+                )
+                for index in range(low, high)
+            }
+            try:
+                for part in parts:
+                    for line in iter_shard_lines(part):
+                        if not line.strip():
+                            continue
+                        index = record_hash(_game_of_line(line), seed=seed) % count
+                        handle = handles.get(index)
+                        if handle is not None:
+                            handle.write(line)
+            finally:
+                for handle in handles.values():
                     handle.close()
-                    handle = open_next()
-                    count = 0
-                handle.write(format_record_line(record))
-                handle.write("\n")
-                count += 1
-                last_game = record.game_id
+        for index in range(count):
+            with gzip.open(scratch / f"{index:05d}.gz", "rt", encoding="utf-8") as handle:
+                lines = handle.readlines()
+            if not lines:
+                continue
+            random.Random(f"{seed}:{index}").shuffle(lines)
+            with gzip.open(next_path(), "wt", encoding="utf-8") as handle:
+                handle.writelines(lines)
     finally:
-        handle.close()
-    if count == 0:
-        # Only possible when every part was empty: drop the empty file.
-        written.pop().unlink()
+        shutil.rmtree(scratch, ignore_errors=True)
     return written
+
+
+def _game_of_line(line: str) -> str:
+    """A shard line's ``game_id``, read off the envelope head without a parse."""
+    head = _ENVELOPE_HEAD.search(line, 0, _ENVELOPE_HEAD_SPAN)
+    if head is not None:
+        return head.group(1)
+    return parse_record_line(line.strip())["game_id"]
 
 
 def parse_record_line(text: str) -> dict:
@@ -810,33 +889,39 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
     import gzip
     import zlib
 
-    pending = ""
     try:
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             for line in handle:
+                # The reader runs on across member boundaries, so a line
+                # without its newline can only be the stream's last: a member
+                # cut short. Dropped, because half a record parses as nothing.
                 if line.endswith("\n"):
-                    if pending:
-                        line = pending + line
-                        pending = ""
                     yield line
-                else:
-                    # No newline: either the file ends here or the member was
-                    # cut short. Held back rather than yielded, because half a
-                    # record parses as nothing.
-                    pending = line
     except (EOFError, gzip.BadGzipFile, zlib.error):
         # The final member was truncated by a killed worker. Everything before
         # it has already been yielded.
         return
 
 
-def read_shard(path: Path) -> Iterator[EffectRecord]:
-    """Yield every complete record in one shard; skip a trailing partial line."""
+def iter_record_dicts(path: Path) -> Iterator[dict]:
+    """Every complete record of one shard, as the dict its line parses to.
+
+    The read every record reader shares, for a caller that has to see or edit
+    the raw JSON before a record is built from it: the token-key remap
+    rewrites keys a frozen ``ProvenanceKey`` cannot, and a generation check
+    needs only whether a field is present. Blank lines are skipped, and a
+    trailing partial line never arrives, as :func:`iter_shard_lines` promises.
+    """
     for line in iter_shard_lines(Path(path)):
         stripped = line.strip()
-        if not stripped:
-            continue
-        yield record_from_dict(parse_record_line(stripped))
+        if stripped:
+            yield parse_record_line(stripped)
+
+
+def read_shard(path: Path) -> Iterator[EffectRecord]:
+    """Yield every complete record in one shard; skip a trailing partial line."""
+    for data in iter_record_dicts(path):
+        yield record_from_dict(data)
 
 
 def iter_shards(directory: Path) -> list[Path]:
@@ -850,9 +935,8 @@ def iter_shards(directory: Path) -> list[Path]:
     target the corpus had already met.
 
     Path order rather than name order, so two shards of the same name in
-    different subdirectories keep a stable relative position — the epoch walk
-    and the split's shard-by-shard accumulation both depend on the order not
-    moving between runs.
+    different subdirectories keep a stable relative position, and every
+    reader that walks a corpus walks it in the same order on every run.
     """
     directory = Path(directory)
     if not directory.is_dir():
@@ -971,11 +1055,8 @@ def shard_generation(path: Path) -> str | None:
     records disagree about carrying the field, so one record speaks for its
     shard. Only the first line is decoded.
     """
-    for line in iter_shard_lines(Path(path)):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        return GEN_2 if "random_seat" in parse_record_line(stripped) else GEN_1
+    for data in iter_record_dicts(path):
+        return GEN_2 if "random_seat" in data else GEN_1
     return None
 
 

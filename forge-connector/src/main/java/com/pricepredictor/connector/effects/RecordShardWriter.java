@@ -121,7 +121,7 @@ public final class RecordShardWriter implements AutoCloseable {
     }
 
     /** Whether {@code token} is safe to embed in a shard name and an id. */
-    public static boolean isValidLifetime(String token) {
+    static boolean isValidLifetime(String token) {
         return token != null && LIFETIME.matcher(token).matches();
     }
 

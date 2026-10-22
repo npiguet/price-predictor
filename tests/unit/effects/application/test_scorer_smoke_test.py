@@ -141,9 +141,22 @@ class TestTheRun:
         )
         config = _config(tree)
         runner = _Runner(config)
-        with pytest.raises(ValueError, match="another checkpoint"):
+        widths = r"pools to widths \[6\], not the 16 that .* e_dim of 8 gives"
+        with pytest.raises(ValueError, match=widths):
             smoke.run(config, runner=runner)
         assert runner.calls == []
+
+    def test_a_second_run_in_the_same_scratch_dir_is_refused(self, tree):
+        """encode-cards skips a vector that exists, so a re-run would splice
+        e into an already-spliced vector a second time."""
+        config = _config(tree)
+        smoke.run(config, runner=_Runner(config))
+        before = _files(config.scratch_dir)
+        runner = _Runner(config)
+        with pytest.raises(ValueError, match="already holds"):
+            smoke.run(config, runner=runner)
+        assert runner.calls == []
+        assert _files(config.scratch_dir) == before
 
     def test_a_missing_cache_is_refused(self, tree):
         config = ScorerSmokeTestConfig(

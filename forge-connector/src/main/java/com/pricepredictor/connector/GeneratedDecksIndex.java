@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 
 /**
@@ -72,8 +73,8 @@ public class GeneratedDecksIndex {
             }
             String label = line.substring(0, firstSep);
             String setCode = line.substring(firstSep + 1, secondSep);
-            String[] names = line.substring(secondSep + 1).split("\\|", -1);
-            decks.add(new GeneratedDeck(label, setCode, List.of(names)));
+            decks.add(new GeneratedDeck(label, setCode,
+                    CardNameList.parse(line.substring(secondSep + 1))));
         }
         if (decks.isEmpty()) {
             throw new IOException("Generated-decks file is empty: " + file);
@@ -92,8 +93,8 @@ public class GeneratedDecksIndex {
 
     /**
      * Pick a random deck from the given set whose card list is not a
-     * permutation of {@code excludeCards}. Returns {@code null} if no
-     * matching deck exists. The exclusion uses content equality (multiset
+     * permutation of {@code excludeCards}, or empty if no matching deck
+     * exists. The exclusion uses content equality (multiset
      * over card names) rather than reference equality, so a deck loaded
      * from this index is treated as a mirror of {@code excludeCards} even
      * if it was sampled from a different index instance with the same
@@ -105,11 +106,11 @@ public class GeneratedDecksIndex {
      *                     order-insensitive
      * @param random       Source of randomness
      */
-    public GeneratedDeck randomDeckFromSet(
+    public Optional<GeneratedDeck> randomDeckFromSet(
             String setCode, List<String> excludeCards, Random random) {
         List<GeneratedDeck> candidates = decksBySet.get(setCode);
         if (candidates == null || candidates.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         List<String> excludeSorted = new ArrayList<>(excludeCards);
         Collections.sort(excludeSorted);
@@ -123,14 +124,14 @@ public class GeneratedDecksIndex {
             }
         }
         if (nonMirror.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
-        return nonMirror.get(random.nextInt(nonMirror.size()));
+        return Optional.of(nonMirror.get(random.nextInt(nonMirror.size())));
     }
 
     /**
      * Pick any random deck from the given set, without excluding mirrors of
-     * anything. Returns {@code null} if the set has no candidates at all.
+     * anything, or empty if the set has no candidates at all.
      *
      * <p>Exists for {@link MatchGenerator#pickDeckB}'s {@code decksOnly}
      * fallback: a decks-only round has no Forge-legal deck-building path (its
@@ -140,11 +141,11 @@ public class GeneratedDecksIndex {
      * Forge. A mirror match still puts every card in the round's decks into
      * a game, which is all a coverage or variant round requires.
      */
-    public GeneratedDeck randomAnyDeckFromSet(String setCode, Random random) {
+    public Optional<GeneratedDeck> randomAnyDeckFromSet(String setCode, Random random) {
         List<GeneratedDeck> candidates = decksBySet.get(setCode);
         if (candidates == null || candidates.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
-        return candidates.get(random.nextInt(candidates.size()));
+        return Optional.of(candidates.get(random.nextInt(candidates.size())));
     }
 }

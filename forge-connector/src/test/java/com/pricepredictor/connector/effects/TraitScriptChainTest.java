@@ -1,7 +1,7 @@
 package com.pricepredictor.connector.effects;
 
-import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.RenderedLine;
 import com.pricepredictor.connector.RulesParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,13 +51,7 @@ class TraitScriptChainTest {
         String scriptFile = SourceTree.CARDSFOLDER + "/" + relativePath;
         RulesParser.ParsedCard parsed =
                 parser.parseScript(source, file.getFileName().toString(), scriptFile);
-        List<Ability> owners = new ArrayList<>();
-        List<Integer> faceOfLine = new ArrayList<>();
-        List<String> lines = parsed.card().renderLines(owners, faceOfLine);
-        ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                parsed.card().faces().get(0).name(), scriptFile, parsed.card(),
-                lines, owners, faceOfLine, parsed.recorders());
-        return new Converted(lines, sidecar, parser.missingSVars());
+        return converted(parsed, scriptFile, parser);
     }
 
     private static Converted convertInline(String relativePath, String script) {
@@ -67,13 +60,17 @@ class TraitScriptChainTest {
         RulesParser.ParsedCard parsed = parser.parseScript(
                 List.of(script.split("\n")), Path.of(relativePath).getFileName().toString(),
                 scriptFile);
-        List<Ability> owners = new ArrayList<>();
-        List<Integer> faceOfLine = new ArrayList<>();
-        List<String> lines = parsed.card().renderLines(owners, faceOfLine);
+        return converted(parsed, scriptFile, parser);
+    }
+
+    private static Converted converted(RulesParser.ParsedCard parsed, String scriptFile,
+                                       RulesParser parser) {
+        List<RenderedLine> rendered = parsed.card().renderLines();
         ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                parsed.card().faces().get(0).name(), scriptFile, parsed.card(),
-                lines, owners, faceOfLine, parsed.recorders());
-        return new Converted(lines, sidecar, parser.missingSVars());
+                parsed.card().faces().get(0).name(), scriptFile,
+                rendered, parsed.recorders());
+        return new Converted(rendered.stream().map(RenderedLine::text).toList(),
+                sidecar, parser.missingSVars());
     }
 
     private static List<ProvenanceSidecar.Line> linesOfKind(Converted converted, String kind) {

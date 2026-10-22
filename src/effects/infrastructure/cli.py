@@ -2,8 +2,10 @@
 
 Mirrors ``draft/infrastructure/cli.py``: ``build_parser`` adds one subparser per
 command with ``set_defaults(func=…)`` dispatch, and ``main`` parses and calls the
-resolved ``func``. Application imports are lazy (inside each ``run_*``) so
-``python -m effects --help`` and the unit suite don't pay the torch import cost.
+resolved ``func``. Each ``run_*`` imports its application module when it runs;
+the parser itself imports only defaults, from modules that load no torch, so
+``python -m effects --help`` never pays the torch import cost.
+``tests/unit/effects/infrastructure/test_cli_parser_imports.py`` pins that.
 
 Every flag and default here is contract, pinned by
 ``specs/023-ability-effect-model/contracts/cli.md`` and asserted by the
@@ -15,11 +17,22 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable
+from dataclasses import fields
 from pathlib import Path
+from typing import Any, TypeVar
 
+from effects.application import collect_coverage, collect_variants
+from effects.application.build_corpus import DEFAULT_GAME_DISJOINT_KEYWORDS
+from effects.application.build_vocab import DEFAULT_TARGET_SIZE
+from effects.application.train_effect_model import (
+    DEFAULT_PREFETCH_WORKERS,
+    DEFAULT_SHARDS_PER_EPOCH,
+)
+from effects.application.validate_corpus import Thresholds
+from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import (
     DEFAULT_INTERVENTIONS_PER_GAME,
-    DEFAULT_LEGALITY_RATE,
     DEFAULT_MANA_CAP,
     DEFAULT_PLAYABILITY_RATE,
     DEFAULT_PROBE_KEYWORDS,
@@ -27,65 +40,54 @@ from effects.domain.collection_caps import (
     DEFAULT_RANDOM_SEAT_SHARE,
     CollectionCaps,
 )
+from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE
+from effects.infrastructure.default_paths import (
+    DEFAULT_ABILITIES_ROOT,
+    DEFAULT_CARDS_FOLDERS,
+    DEFAULT_CHECKPOINT,
+    DEFAULT_CORPUS_OUTPUT,
+    DEFAULT_FORGE_CARDS_PATH,
+    DEFAULT_FORGE_TOKENSCRIPTS,
+    DEFAULT_KEYWORD_DEFINITIONS,
+    DEFAULT_MATCH_OUTCOMES,
+    DEFAULT_RECORDS_DIR,
+    DEFAULT_SCRIPT_VOCAB_PATH,
+    DEFAULT_SEALED_ENCODER,
+    DEFAULT_VARIANT_SCRIPTS,
+    DEFAULT_VOCAB_PATH,
+    DEFAULT_WIN_RATES,
+)
 
 logger = logging.getLogger(__name__)
 
-# ── shared defaults (contracts/cli.md) ──────────────────────────────────
-DEFAULT_RECORDS_DIR = "output/effects/records/"
-DEFAULT_CARDS_FOLDERS = ("output/cardsfolder/", "output/tokenscripts/")
-DEFAULT_KEYWORD_DEFINITIONS = "output/effects/keyword-definitions.json"
-DEFAULT_VOCAB_PATH = "models/effects/vocab.txt"
-DEFAULT_SCRIPT_VOCAB_PATH = "models/effects/vocab-script.txt"
-DEFAULT_VARIANT_SCRIPTS = "output/effects/variant-scripts/"
-#: Mirrors collect_variants.RANDOM_SEED. Restated rather than imported
-#: because the parser is built before that module is, and pinned against
-#: it by tests/unit/effects/application/test_variants.py.
-VARIANT_RANDOM_SEED = 42
-DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
-#: Restated rather than imported, so `--help` stays free of torch. The
-#: trainer's own constants are the source; `test_holdout_cli.py` pins them.
-HOLDOUT_PERMILLE = 20
-HOLDOUT_MAX_CARRIERS = 8
-DEFAULT_CHECKPOINT = "models/effects/effect-model/latest.pt"
+_Config = TypeVar("_Config")
 
-#: Thresholds `validate-corpus` holds a fresh shard directory to. Set from the
-#: first collected corpus's measurements, so a run reproducing any of its
-#: defects fails rather than squeaking through.
-DEFAULT_MIN_KEYED_RATE = 0.95
-DEFAULT_MAX_DUPLICATE_RATE = 0.02
-DEFAULT_MAX_UNPAIRED_LINK_RATE = 0.02
-DEFAULT_MAX_NAMES_PER_GAME = 120
-DEFAULT_TURN_JUMP_TOLERANCE = 1
-DEFAULT_MIN_COST_EVIDENCE = 200
-DEFAULT_MAX_DUPLICATE_EVENT_RATE = 0.02
-DEFAULT_MAX_TRIGGER_FIRED_SHARE = 0.65
 
-#: The rates `validate-corpus` measures and does not judge unless asked.
-#: Their healthy value is not yet known — a `zone_change` for a card *made*
-#: rather than moved has no origin to report, and a hook that names no causing
-#: object is not a collector that lost it — so a default floor would fail every
-#: run, which is the failure mode the whole command exists to avoid.
-DEFAULT_MIN_ZONE_CHANGE_FROM_ZONE_RATE = None
-DEFAULT_MIN_ATTRIBUTED_RATE = None
-DEFAULT_MIN_FORK_ATTRIBUTED_RATE = None
-DEFAULT_MIN_CAUSE_RATE = None
-DEFAULT_MIN_REWRITE_REPLACED_BY_RATE = None
+def config_from_args(cls: type[_Config], args: argparse.Namespace, **overrides: Any) -> _Config:
+    """``cls`` built from the parsed flags whose dest names one of its fields.
 
-#: Judged, and at zero: a fork is taken at the moment it mirrors, so the two
-#: records describe one moment and there is no rate at which they may disagree
-#: about which turn it is.
-DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE = 0.0
+    Every command's dests are its config's field names, so the config is read
+    off the namespace rather than copied field by field, and a flag added to
+    both reaches the run without a third edit. A field with no flag keeps the
+    dataclass default. ``overrides`` supplies what a flag cannot give as
+    parsed: a location resolved from several flags, a nested config, a dest
+    spelled differently. An override naming no field is refused, so a typo
+    cannot quietly fall back to the default.
+    """
+    names = {spec.name for spec in fields(cls) if spec.init}
+    unknown = sorted(overrides.keys() - names)
+    if unknown:
+        raise TypeError(f"{cls.__name__} has no field {', '.join(unknown)}")
+    values = {name: getattr(args, name) for name in names if hasattr(args, name)}
+    return cls(**{**values, **overrides})
 
-#: Caps and budgets, shared by every collecting supervisor (FR-028).
-CAP_DEFAULTS: dict[str, object] = {
-    "mana_cap": DEFAULT_MANA_CAP,
-    "playability_rate": DEFAULT_PLAYABILITY_RATE,
-    "interventions_per_game": DEFAULT_INTERVENTIONS_PER_GAME,
-    "probes_per_game": DEFAULT_PROBES_PER_GAME,
-    "probe_keywords": DEFAULT_PROBE_KEYWORDS,
-    "legality_rate": DEFAULT_LEGALITY_RATE,
-    "random_seat_share": DEFAULT_RANDOM_SEAT_SHARE,
-}
+
+def _optional_path(text: str) -> Path | None:
+    """A path flag's ``type`` where an empty value means unset, as omitting it does."""
+    return Path(text) if text else None
+
+
+# ── flags several commands share ────────────────────────────────────────
 
 
 def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
@@ -98,40 +100,202 @@ def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def resolve_cards_folders(values: list[str] | None) -> tuple[Path, ...]:
+    """``--cards-folder`` values, or both converted trees."""
+    chosen = values or list(DEFAULT_CARDS_FOLDERS)
+    return tuple(Path(value) for value in chosen)
+
+
+def _add_effect_records(parser: argparse.ArgumentParser, *, help_text: str) -> None:
+    """``--effect-records``, defaulting to the raw shard root on every command."""
+    parser.add_argument(
+        "--effect-records", type=Path, default=DEFAULT_RECORDS_DIR, help=help_text,
+    )
+
+
+#: The name a depletion list takes inside the corpus it depleted.
+HOLDOUT_LIST_NAME = "holdout-cards.txt"
+
+
+def _add_holdout_sources(
+    parser: argparse.ArgumentParser, *, excluded: str = "held-out cards",
+) -> None:
+    """The three ways a collector names the cards it keeps out of every deck.
+
+    One definition for both collectors, so neither can accept a source the
+    other refuses: a corpus depleted against one holdout and split against
+    another is a silent corruption. ``excluded`` names what a checkpoint's
+    holdout removes on this command.
+    """
+    parser.add_argument(
+        "--split-from", type=_optional_path, default=None,
+        help=(
+            f"A checkpoint whose {excluded} are excluded from every deck. "
+            "Without a holdout source a collection run contaminates the "
+            "card-disjoint split of the model it feeds."
+        ),
+    )
+    parser.add_argument(
+        "--exclude-cards", type=_optional_path, default=None,
+        help=(
+            "File of card names, one per line, to keep out of every deck — "
+            "from 'python -m effects holdout-cards'. The ordinary way to name "
+            "the holdout: it needs no trained model, so this command no longer "
+            "waits on a training run that follows it. Mutually exclusive with "
+            "--split-from, which inherits an existing checkpoint's split "
+            "instead."
+        ),
+    )
+    parser.add_argument(
+        "--training-corpus", type=Path, default=None,
+        help=(
+            f"Directory holding the training corpus AND the {HOLDOUT_LIST_NAME} "
+            "it was depleted against. Shorthand for --effect-records DIR plus "
+            f"--exclude-cards DIR/{HOLDOUT_LIST_NAME}, which belong together: a "
+            "corpus depleted against one list and split against another is a "
+            "silent corruption. Refused alongside either flag it implies."
+        ),
+    )
+
+
+#: Java worker processes a collector runs, as both collectors' configs default.
+DEFAULT_COLLECTOR_WORKERS = 12
+
+
+def _add_collector_round_flags(
+    parser: argparse.ArgumentParser, *, decks_per_round: int,
+) -> None:
+    """How much a collector plays per round, and on how many workers."""
+    parser.add_argument(
+        "--decks-per-round", type=int, default=decks_per_round,
+        help=f"Decks played as matches per round (default: {decks_per_round})",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=DEFAULT_COLLECTOR_WORKERS,
+        help=(
+            "Parallel Java worker processes (default: "
+            f"{DEFAULT_COLLECTOR_WORKERS})"
+        ),
+    )
+
+
+def _add_holdout_flags(parser: argparse.ArgumentParser) -> None:
+    """The holdout rule, on both commands that compute it.
+
+    ``holdout-cards`` writes the depletion list and ``build-corpus`` splits the
+    corpus; the two must be passed the same values, or pools are depleted
+    against one holdout while the split uses another.
+    """
+    parser.add_argument(
+        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
+        help=(
+            "An eligible text (a template, under --holdout-unit template) is "
+            "held out when its crc32 %% 1000 is below this "
+            f"(default: {HOLDOUT_PERMILLE})"
+        ),
+    )
+    parser.add_argument(
+        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
+        help=(
+            "A text (or template) more cards than this carry is never eligible "
+            f"(default: {HOLDOUT_MAX_CARRIERS})"
+        ),
+    )
+    _add_holdout_unit(parser, default="template")
+
+
+def _add_holdout_unit(parser: argparse.ArgumentParser, *, default: str | None) -> None:
+    """``--holdout-unit``, shared by every command that computes the holdout."""
+    parser.add_argument(
+        "--holdout-unit", choices=("template", "text"), default=default,
+        help=(
+            "What the holdout keys on: 'template' holds out every text sharing "
+            "a masked template (digits, CARDNAME and descriptions masked) "
+            "together; 'text' is feature 023's per-text rule"
+            + (f" (default: {default})" if default else
+               " (default: the corpus manifest's recorded unit)")
+        ),
+    )
+
+
+def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = None) -> None:
+    """``--variant``: the shipping model or one of its baselines."""
+    parser.add_argument(
+        "--variant", choices=BASELINES, default=Baseline.FULL.value, help=help_text,
+    )
+
+
+def _add_variant_scripts(
+    parser: argparse.ArgumentParser, *,
+    without: str = "no variant tree is read",
+    path_type: Callable[[str], object] = _optional_path,
+) -> None:
+    """``--variant-scripts`` on a command that reads the stage-four tree.
+
+    ``without`` says what an unset flag costs on this command.
+    """
+    parser.add_argument(
+        "--variant-scripts", type=path_type, default=None,
+        help=(
+            "Stage four: the perturbed-script tree collect-variants wrote "
+            f"(usually {DEFAULT_VARIANT_SCRIPTS}). Unset by default, and then "
+            f"{without}"
+        ),
+    )
+
+
+def _add_recorded_tokenizer_paths(parser: argparse.ArgumentParser) -> None:
+    """``--vocab-path`` and ``--keyword-definitions`` on a checkpoint reader.
+
+    Both default to None, read as the paths the checkpoint recorded from
+    training (FR-097): a constant would tokenize with a vocabulary the model
+    may never have seen.
+    """
+    for flag in ("--vocab-path", "--keyword-definitions"):
+        parser.add_argument(
+            flag, type=_optional_path, default=None,
+            help="Defaults to the path the checkpoint recorded from training",
+        )
+
+
 def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
     """The cap and budget flags every collecting supervisor carries."""
     parser.add_argument(
-        "--mana-cap", type=int, default=CAP_DEFAULTS["mana_cap"],
+        "--mana-cap", type=int, default=DEFAULT_MANA_CAP,
         help=(
-            "Records per unique mana ability, per game (default: 1). A "
+            "Records per unique mana ability, per game (default: "
+            f"{DEFAULT_MANA_CAP}). A "
             "Mountain taps a dozen times a game for the same R, and the "
             "repeats observe a board that barely moved. Keyed on the mana "
             "produced too, so a dual land's two colours both record."
         ),
     )
     parser.add_argument(
-        "--playability-rate", type=float,
-        default=CAP_DEFAULTS["playability_rate"],
+        "--playability-rate", type=float, default=DEFAULT_PLAYABILITY_RATE,
         help=(
             "Fraction of decision-subkind logging points sampled (default: "
-            "0.1). The legality subkinds are not sampled — identical answers "
-            "are coalesced instead."
+            f"{DEFAULT_PLAYABILITY_RATE:g}). The legality subkinds are not "
+            "sampled — identical answers are coalesced instead."
         ),
     )
     parser.add_argument(
         "--interventions-per-game", type=int,
-        default=CAP_DEFAULTS["interventions_per_game"],
-        help="Interventional resolutions per game, stage three (default: 2)",
+        default=DEFAULT_INTERVENTIONS_PER_GAME,
+        help=(
+            "Interventional resolutions per game, stage three (default: "
+            f"{DEFAULT_INTERVENTIONS_PER_GAME})"
+        ),
     )
     parser.add_argument(
-        "--probes-per-game", type=int, default=CAP_DEFAULTS["probes_per_game"],
+        "--probes-per-game", type=int, default=DEFAULT_PROBES_PER_GAME,
         help=(
-            "Damage-step probe forks per game (default: 2). A budget, not a "
+            "Damage-step probe forks per game (default: "
+            f"{DEFAULT_PROBES_PER_GAME}). A budget, not a "
             "switch: it is spent only on keywords --probe-keywords names."
         ),
     )
     parser.add_argument(
-        "--probe-keywords", type=str, default=CAP_DEFAULTS["probe_keywords"],
+        "--probe-keywords", type=str, default=DEFAULT_PROBE_KEYWORDS,
         help=(
             "Comma-separated damage-step keywords to probe (default: all "
             f"eight, {DEFAULT_PROBE_KEYWORDS}). Name a subset to narrow the "
@@ -140,21 +304,13 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--legality-rate", type=float, default=CAP_DEFAULTS["legality_rate"],
-        help=(
-            "Fraction of the AI's what-if legality queries kept (default: 0, "
-            "none). Real attack and block declarations are always written."
-        ),
-    )
-    parser.add_argument(
-        "--random-seat-share", type=float,
-        default=CAP_DEFAULTS["random_seat_share"],
+        "--random-seat-share", type=float, default=DEFAULT_RANDOM_SEAT_SHARE,
         help=(
             "Share of matches in which one seat, chosen at random per match, "
             "is a random seat: with probability --random-seat-probability it "
             "plays, targets, attacks and blocks uniformly at random among the "
             "legal options instead of as the Forge AI, so it casts cards the "
-            "AI never would (default: 0, none)."
+            f"AI never would (default: {DEFAULT_RANDOM_SEAT_SHARE:g}, none)."
         ),
     )
     parser.add_argument(
@@ -209,12 +365,6 @@ def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
     )
 
 
-def resolve_cards_folders(values: list[str] | None) -> tuple[Path, ...]:
-    """``--cards-folder`` values, or both converted trees."""
-    chosen = values or list(DEFAULT_CARDS_FOLDERS)
-    return tuple(Path(value) for value in chosen)
-
-
 # ── build-vocab ─────────────────────────────────────────────────────────
 
 
@@ -233,19 +383,22 @@ def _build_vocab_parser(subparsers) -> None:
     )
     _add_cards_folder(parser)
     parser.add_argument(
-        "--vocab-path", type=str, default=None,
+        "--vocab-path", type=_optional_path, default=None,
         help=(
             f"Output path (default: {DEFAULT_VOCAB_PATH}, or "
             f"{DEFAULT_SCRIPT_VOCAB_PATH} under --surface script)"
         ),
     )
     parser.add_argument(
-        "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
+        "--keyword-definitions", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
         help=f"Keyword definitions to scan (default: {DEFAULT_KEYWORD_DEFINITIONS})",
     )
     parser.add_argument(
-        "--target-size", type=int, default=5000,
-        help="Post-truncate the corpus-frequency vocabulary (default: 5000)",
+        "--target-size", type=int, default=DEFAULT_TARGET_SIZE,
+        help=(
+            "Post-truncate the corpus-frequency vocabulary (default: "
+            f"{DEFAULT_TARGET_SIZE})"
+        ),
     )
 
 
@@ -256,12 +409,9 @@ def run_build_vocab(args: argparse.Namespace) -> int:
     )
     from effects.application.build_vocab import run as build_vocab
 
-    config = BuildVocabConfig(
-        surface=args.surface,
+    config = config_from_args(
+        BuildVocabConfig, args,
         cards_folders=resolve_cards_folders(args.cards_folders),
-        vocab_path=Path(args.vocab_path) if args.vocab_path else None,
-        keyword_definitions=Path(args.keyword_definitions),
-        target_size=args.target_size,
     )
     try:
         build_vocab(config)
@@ -284,7 +434,7 @@ def _extract_keyword_definitions_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_extract_keyword_definitions)
     parser.add_argument(
-        "--output", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
+        "--output", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
         help=f"Output path (default: {DEFAULT_KEYWORD_DEFINITIONS})",
     )
 
@@ -297,7 +447,7 @@ def run_extract_keyword_definitions(args: argparse.Namespace) -> int:
         run as extract,
     )
 
-    return extract(ExtractKeywordDefinitionsConfig(output=Path(args.output)))
+    return extract(config_from_args(ExtractKeywordDefinitionsConfig, args))
 
 
 # ── collect-coverage ────────────────────────────────────────────────────
@@ -312,46 +462,15 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_collect_coverage)
-    parser.add_argument(
-        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
-        help=(
-            "Destination shard directory. Unlike on match-outcomes this has a "
-            f"default ({DEFAULT_RECORDS_DIR}): collection is the whole point "
-            "of this command."
-        ),
-    )
+    _add_effect_records(parser, help_text=(
+        "Destination shard directory. Unlike on match-outcomes this has a "
+        f"default ({DEFAULT_RECORDS_DIR}): collection is the whole point "
+        "of this command."
+    ))
     _add_cards_folder(parser)
+    _add_holdout_sources(parser)
     parser.add_argument(
-        "--split-from", type=str, default=None,
-        help=(
-            "A checkpoint whose held-out cards are excluded from every deck. "
-            "Without it a coverage run would contaminate the card-disjoint "
-            "split of the model it feeds."
-        ),
-    )
-    parser.add_argument(
-        "--exclude-cards", type=str, default=None,
-        help=(
-            "File of card names, one per line, to keep out of every deck — "
-            "from 'python -m effects holdout-cards'. The ordinary way to name "
-            "the holdout: it needs no trained model, so this command no longer "
-            "waits on a training run that follows it. Mutually exclusive with "
-            "--split-from, which inherits an existing checkpoint's split "
-            "instead."
-        ),
-    )
-    parser.add_argument(
-        "--training-corpus", type=str, default=None,
-        help=(
-            "Directory holding the training corpus AND the holdout-cards.txt "
-            "it was depleted against. Shorthand for --effect-records DIR plus "
-            "--exclude-cards DIR/holdout-cards.txt, which belong together: a "
-            "corpus depleted against one list and split against another is a "
-            "silent corruption. Refused alongside either flag it implies."
-        ),
-    )
-    parser.add_argument(
-        "--only-cards", type=str, default=None,
+        "--only-cards", type=_optional_path, default=None,
         help=(
             "The held-out coverage round: the list 'holdout-cards' writes. "
             "Decks are built from these cards alone, plus basics, records are "
@@ -360,36 +479,51 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--min-text-games", type=int, default=5,
+        "--min-text-games", type=int,
+        default=collect_coverage.DEFAULT_MIN_TEXT_GAMES,
         help=(
             "With --only-cards: distinct games a held-out text must act in to "
-            "be satisfied (default: 5)"
+            f"be satisfied (default: {collect_coverage.DEFAULT_MIN_TEXT_GAMES})"
         ),
     )
     parser.add_argument(
-        "--target-records", type=int, default=50,
-        help="Per-card satisfaction goal (default: 50)",
+        "--target-records", type=int,
+        default=collect_coverage.DEFAULT_TARGET_RECORDS,
+        help=(
+            "Per-card satisfaction goal (default: "
+            f"{collect_coverage.DEFAULT_TARGET_RECORDS})"
+        ),
     )
     parser.add_argument(
-        "--decks-per-round", type=int, default=500,
-        help="Decks played as matches per round (default: 500)",
-    )
-    parser.add_argument(
-        "--no-progress-rounds", type=int, default=3,
+        "--no-progress-rounds", type=int,
+        default=collect_coverage.DEFAULT_NO_PROGRESS_ROUNDS,
         help=(
             "Consecutive rounds without a new qualifying record before a card "
-            "retires (default: 3). This is what makes the run terminate."
+            f"retires (default: {collect_coverage.DEFAULT_NO_PROGRESS_ROUNDS}). "
+            "This is what makes the run terminate."
         ),
     )
-    parser.add_argument(
-        "--workers", type=int, default=12,
-        help="Parallel Java worker processes (default: 12)",
+    _add_collector_round_flags(
+        parser, decks_per_round=collect_coverage.DEFAULT_DECKS_PER_ROUND,
     )
     _add_cap_flags(parser)
 
 
-#: The name a depletion list takes inside the corpus it depleted.
-HOLDOUT_LIST_NAME = "holdout-cards.txt"
+def holdout_source(args: argparse.Namespace) -> tuple[Path, Path | None]:
+    """:func:`resolve_training_corpus`, refusing a second source beside it.
+
+    Checked here, before any worker starts, so a collector refuses
+    ``--split-from`` beside a depletion list as a message rather than as a
+    traceback out of its first round.
+
+    Raises:
+        ValueError: As :func:`resolve_training_corpus`, or when ``--split-from``
+            names a holdout the depletion list already names.
+    """
+    records, listed = resolve_training_corpus(args)
+    if args.split_from and listed is not None:
+        raise ValueError(collect_coverage.TWO_HOLDOUT_SOURCES)
+    return records, listed
 
 
 def resolve_training_corpus(args: argparse.Namespace) -> tuple[Path, Path | None]:
@@ -408,17 +542,13 @@ def resolve_training_corpus(args: argparse.Namespace) -> tuple[Path, Path | None
     """
     corpus = getattr(args, "training_corpus", None)
     if corpus is None:
-        return (
-            Path(args.effect_records),
-            Path(args.exclude_cards) if args.exclude_cards else None,
-        )
-    if args.effect_records != DEFAULT_RECORDS_DIR or args.exclude_cards:
+        return args.effect_records, args.exclude_cards
+    if args.effect_records != Path(DEFAULT_RECORDS_DIR) or args.exclude_cards:
         raise ValueError(
             "pass one source of the corpus location, not both: "
             "--training-corpus DIR means --effect-records DIR with its own "
             f"{HOLDOUT_LIST_NAME}"
         )
-    corpus = Path(corpus)
     listed = corpus / HOLDOUT_LIST_NAME
     if not listed.is_file():
         raise ValueError(
@@ -452,18 +582,12 @@ def coverage_config_from(args: argparse.Namespace):
                 f"--only-cards decks the held-out cards; {', '.join(clashing)} "
                 "keeps a holdout out of every deck. Pass one or the other."
             )
-    records, listed = resolve_training_corpus(args)
-    return CollectCoverageConfig(
-        only_cards=Path(only_cards) if only_cards else None,
-        min_text_games=getattr(args, "min_text_games", 5),
+    records, listed = holdout_source(args)
+    return config_from_args(
+        CollectCoverageConfig, args,
         effect_records=records,
-        cards_folders=resolve_cards_folders(args.cards_folders),
-        split_from=Path(args.split_from) if args.split_from else None,
         exclude_cards=listed,
-        target_records=args.target_records,
-        decks_per_round=args.decks_per_round,
-        no_progress_rounds=args.no_progress_rounds,
-        workers=args.workers,
+        cards_folders=resolve_cards_folders(args.cards_folders),
         caps=CollectionCaps.from_args(args),
     )
 
@@ -487,17 +611,6 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
 
 # ── build-corpus ────────────────────────────────────────────────────────
 
-#: Kept apart from DEFAULT_RECORDS_DIR: this is the *curated dataset*
-#: directory build-corpus writes to, not the raw shard root it reads from
-#: (specs/2026-09-05-ability-effect-model.md § Curated corpus).
-DEFAULT_CORPUS_OUTPUT = "output/effects/corpus/"
-
-#: Forge's own token scripts, beside the card scripts `convert` reads. The
-#: remap needs the raw tree rather than `output/tokenscripts/`: it tells
-#: same-name token scripts apart by their Colors/Types/PT lines, which
-#: conversion does not preserve.
-DEFAULT_FORGE_TOKENSCRIPTS = "../forge/forge-gui/res/tokenscripts"
-
 
 def _class_mix(text: str) -> dict[str, float]:
     """``--class-mix`` as argparse wants it: parsed through the trainer's own
@@ -505,18 +618,12 @@ def _class_mix(text: str) -> dict[str, float]:
     or the class vocabulary. Raising ``ArgumentTypeError`` puts a bad value in
     the usage message rather than in a traceback.
     """
-    from effects.application.train_effect_model import parse_kind_mix
+    from effects.domain.sampling import parse_kind_mix
 
     try:
         return parse_kind_mix(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from None
-
-
-#: FR-045's default; restated rather than imported so ``--help`` stays light.
-DEFAULT_GAME_DISJOINT_KEYWORDS: tuple[str, ...] = (
-    "first strike", "deathtouch", "trample", "indestructible", "wither", "infect",
-)
 
 
 def _keyword_list(text: str) -> tuple[str, ...]:
@@ -532,46 +639,86 @@ def _build_corpus_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_build_corpus)
+    _add_corpus_inputs(parser)
+    _add_holdout_flags(parser)
+    _add_corpus_selection(parser)
+    _add_game_disjoint_stratum(parser)
     parser.add_argument(
-        "--records-dir", type=str, default=DEFAULT_RECORDS_DIR,
+        "--shard-records", type=int, default=2000,
+        help=(
+            "Records per output shard after repacking, about this many each: whole "
+            "games are dealt to shards by a seeded hash of their game id and each "
+            "shard is shuffled; 0 keeps one output shard per source shard (default: 2000)"
+        ),
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Selection seed (default: 42)",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=None,
+        help="Parallel shard readers (default: CPU count)",
+    )
+    parser.add_argument(
+        "--verify", action="store_true",
+        help="Report drift against an existing manifest and write nothing",
+    )
+
+
+def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
+    """What ``build-corpus`` reads, and where it writes."""
+    parser.add_argument(
+        "--records-dir", type=Path, default=DEFAULT_RECORDS_DIR,
         help=f"Raw corpus root; discovery recurses (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
-        "--output", type=str, default=DEFAULT_CORPUS_OUTPUT,
+        "--output", type=Path, default=DEFAULT_CORPUS_OUTPUT,
         help=f"Curated dataset directory (default: {DEFAULT_CORPUS_OUTPUT})",
     )
     _add_cards_folder(parser)
     parser.add_argument(
+        # A string for the same reason as --variant-scripts below.
         "--vocab-path", type=str, default=DEFAULT_VOCAB_PATH,
         help=(
             "Decides the encoding surface the rarity table's text keys are "
             f"built on (default: {DEFAULT_VOCAB_PATH})"
         ),
     )
+    # Kept as typed: the manifest records the string, and a Path would
+    # rewrite its separators on Windows.
+    _add_variant_scripts(parser, path_type=str, without=(
+        "a variant line resolves to no ability text, so it gets neither a "
+        "rarity-table entry nor a per-text cap while every real ability "
+        "gets both"
+    ))
     parser.add_argument(
-        "--variant-scripts", type=str, default=None,
+        "--keyword-definitions", type=_optional_path, default=DEFAULT_KEYWORD_DEFINITIONS,
         help=(
-            "The stage-four variant tree (collect-variants). Without it a "
-            "variant line resolves to no ability text, so it gets neither a "
-            "rarity-table entry nor a per-text cap while every real ability "
-            "gets both"
+            "The keyword table the tokenizer expands with; the build fails when "
+            "a display-name match would expand a non-keyword line "
+            f"(default: {DEFAULT_KEYWORD_DEFINITIONS})"
         ),
     )
     parser.add_argument(
-        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
+        "--forge-tokenscripts", type=_optional_path, default=DEFAULT_FORGE_TOKENSCRIPTS,
         help=(
-            "Holdout share of eligible ability texts "
-            f"(default: {HOLDOUT_PERMILLE})"
+            "Forge's raw token scripts, read to remap the old collector's "
+            "token keys: a key naming a cardsfolder path no tree holds, whose "
+            "stem is a token's printed name, is rewritten to the token script "
+            f"it meant (default: {DEFAULT_FORGE_TOKENSCRIPTS})"
         ),
     )
     parser.add_argument(
-        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
+        "--no-remap-token-keys", dest="remap_token_keys", action="store_false",
         help=(
-            "A text more cards than this carry stays out of the holdout "
-            f"(default: {HOLDOUT_MAX_CARRIERS})"
+            "Build without the token-key remap, keeping every key exactly as "
+            "collected. Records of a token's abilities then resolve to no "
+            "ability text at all, as they did before the remap existed"
         ),
     )
-    _add_holdout_unit(parser, default="template")
+
+
+def _add_corpus_selection(parser: argparse.ArgumentParser) -> None:
+    """Which records the training corpus and its validation sample keep."""
     parser.add_argument(
         "--text-cap", type=int, default=200,
         help=(
@@ -601,6 +748,33 @@ def _build_corpus_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--card-disjoint-text-cap", type=int, default=50,
+        help=(
+            "Max card-disjoint games admitted per held-out ability text; 0 "
+            "means no cap (default: 50)"
+        ),
+    )
+    parser.add_argument(
+        "--max-events-per-record", type=int, default=64,
+        help=(
+            "A record carrying more events than this is refused as a game "
+            "dump rather than an ability; 0 disables the event-flood rule "
+            "(default: 64)"
+        ),
+    )
+    parser.add_argument(
+        "--validation-sample", type=int, default=2048,
+        help=(
+            "Records per stratum in validation/samples/, mixture-matched; the "
+            "card-disjoint resolution classes draw from the gate-one slice; "
+            "0 writes no sample (default: 2048)"
+        ),
+    )
+
+
+def _add_game_disjoint_stratum(parser: argparse.ArgumentParser) -> None:
+    """Which games the game-disjoint validation stratum takes (FR-044, FR-045)."""
+    parser.add_argument(
         "--game-disjoint-share", type=float, default=0.01,
         help=(
             "A game naming no held-out card enters the game-disjoint stratum "
@@ -623,72 +797,6 @@ def _build_corpus_parser(subparsers) -> None:
             f"(default: {','.join(DEFAULT_GAME_DISJOINT_KEYWORDS)})"
         ),
     )
-    parser.add_argument(
-        "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
-        help=(
-            "The keyword table the tokenizer expands with; the build fails when "
-            "a display-name match would expand a non-keyword line "
-            f"(default: {DEFAULT_KEYWORD_DEFINITIONS})"
-        ),
-    )
-    parser.add_argument(
-        "--card-disjoint-text-cap", type=int, default=50,
-        help=(
-            "Max card-disjoint games admitted per held-out ability text; 0 "
-            "means no cap (default: 50)"
-        ),
-    )
-    parser.add_argument(
-        "--shard-records", type=int, default=2000,
-        help=(
-            "Records per output shard after repacking, cut at game boundaries; "
-            "0 keeps one output shard per source shard (default: 2000)"
-        ),
-    )
-    parser.add_argument(
-        "--max-events-per-record", type=int, default=64,
-        help=(
-            "A record carrying more events than this is refused as a game "
-            "dump rather than an ability; 0 disables the event-flood rule "
-            "(default: 64)"
-        ),
-    )
-    parser.add_argument(
-        "--validation-sample", type=int, default=2048,
-        help=(
-            "Records per stratum in validation/samples/, mixture-matched; the "
-            "card-disjoint resolution classes draw from the gate-one slice; "
-            "0 writes no sample (default: 2048)"
-        ),
-    )
-    parser.add_argument(
-        "--forge-tokenscripts", type=str, default=DEFAULT_FORGE_TOKENSCRIPTS,
-        help=(
-            "Forge's raw token scripts, read to remap the old collector's "
-            "token keys: a key naming a cardsfolder path no tree holds, whose "
-            "stem is a token's printed name, is rewritten to the token script "
-            f"it meant (default: {DEFAULT_FORGE_TOKENSCRIPTS})"
-        ),
-    )
-    parser.add_argument(
-        "--no-remap-token-keys", dest="remap_token_keys", action="store_false",
-        help=(
-            "Build without the token-key remap, keeping every key exactly as "
-            "collected. Records of a token's abilities then resolve to no "
-            "ability text at all, as they did before the remap existed"
-        ),
-    )
-    parser.add_argument(
-        "--seed", type=int, default=42, help="Selection seed (default: 42)",
-    )
-    parser.add_argument(
-        "--workers", type=int, default=None,
-        help="Parallel shard readers (default: CPU count)",
-    )
-    parser.add_argument(
-        "--verify", action="store_true",
-        help="Report drift against an existing manifest and write nothing",
-    )
 
 
 def run_build_corpus(args: argparse.Namespace) -> int:
@@ -697,38 +805,12 @@ def run_build_corpus(args: argparse.Namespace) -> int:
 
     try:
         # Inside the try: the config validates its own counts on construction.
-        config = BuildCorpusConfig(
-            records_dir=Path(args.records_dir),
-            output=Path(args.output),
+        config = config_from_args(
+            BuildCorpusConfig, args,
             cards_folders=tuple(
                 str(path) for path in resolve_cards_folders(args.cards_folders)
             ),
-            vocab_path=args.vocab_path,
-            variant_scripts=args.variant_scripts,
-            forge_tokenscripts=(
-                Path(args.forge_tokenscripts) if args.forge_tokenscripts else None
-            ),
-            remap_token_keys=args.remap_token_keys,
-            holdout_permille=args.holdout_permille,
-            holdout_max_carriers=args.holdout_max_carriers,
-            holdout_unit=args.holdout_unit,
-            text_cap=args.text_cap,
-            reuse_cap=args.reuse_cap,
-            class_mix=args.class_mix,
-            training_records=args.training_records,
-            game_disjoint_share=args.game_disjoint_share,
-            game_disjoint_keyword_share=args.game_disjoint_keyword_share,
-            game_disjoint_keywords=args.game_disjoint_keywords,
-            keyword_definitions=(
-                Path(args.keyword_definitions) if args.keyword_definitions else None
-            ),
-            card_disjoint_text_cap=args.card_disjoint_text_cap,
-            shard_records=args.shard_records,
             max_events=args.max_events_per_record,
-            validation_sample=args.validation_sample,
-            seed=args.seed,
-            workers=args.workers,
-            verify=args.verify,
         )
         return build_corpus_module.build(config)
     except BuildCorpusError as exc:
@@ -763,8 +845,8 @@ def _holdout_cards_parser(subparsers) -> None:
         help="Destination file, one Forge canonical card name per line",
     )
     parser.add_argument(
-        "--cards-folder", type=str, default="output/cardsfolder/",
-        help="Converted card tree (default: output/cardsfolder/)",
+        "--cards-folder", type=str, default=DEFAULT_CARDS_FOLDERS[0],
+        help=f"Converted card tree (default: {DEFAULT_CARDS_FOLDERS[0]})",
     )
     parser.add_argument(
         "--printings-path", type=str, default="resources/AllPrintings.json",
@@ -774,35 +856,7 @@ def _holdout_cards_parser(subparsers) -> None:
             "(default: resources/AllPrintings.json)"
         ),
     )
-    parser.add_argument(
-        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
-        help=(
-            "An eligible text is held out when crc32(text) %% 1000 is below "
-            f"this (default: {HOLDOUT_PERMILLE})"
-        ),
-    )
-    parser.add_argument(
-        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
-        help=(
-            "A text more cards than this carry is never eligible "
-            f"(default: {HOLDOUT_MAX_CARRIERS})"
-        ),
-    )
-    _add_holdout_unit(parser, default="template")
-
-
-def _add_holdout_unit(parser: argparse.ArgumentParser, *, default: str | None) -> None:
-    """``--holdout-unit``, shared by every command that computes the holdout."""
-    parser.add_argument(
-        "--holdout-unit", choices=("template", "text"), default=default,
-        help=(
-            "What the holdout keys on: 'template' holds out every text sharing "
-            "a masked template (digits, CARDNAME and descriptions masked) "
-            "together; 'text' is feature 023's per-text rule"
-            + (f" (default: {default})" if default else
-               " (default: the corpus manifest's recorded unit)")
-        ),
-    )
+    _add_holdout_flags(parser)
 
 
 def run_holdout_cards(args: argparse.Namespace) -> int:
@@ -815,12 +869,12 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
         holdout_report,
         write_depletion_list,
     )
-    from effects.application.train_effect_model import (
+    from effects.infrastructure.card_sources import (
         load_card_files,
         load_card_texts,
         load_first_printings,
     )
-    from effects.infrastructure.sidecar_io import SidecarCache
+    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts
 
     cards_folder = Path(args.cards_folder)
     if not cards_folder.is_dir():
@@ -848,6 +902,8 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
         max_carriers=args.holdout_max_carriers,
         unit=args.holdout_unit,
         canonical_names=canonical,
+        # The converted token tree beside the card tree, as build-corpus reads it.
+        token_texts=load_tree_texts(cards_folder.parent / "tokenscripts"),
     )
     written = write_depletion_list(report.names, Path(args.out))
     if report.unit == "template":
@@ -878,9 +934,8 @@ def _field_coverage_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_field_coverage)
-    parser.add_argument(
-        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
-        help=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
+    _add_effect_records(
+        parser, help_text=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
         "--all", action="store_true",
@@ -902,7 +957,7 @@ def run_field_coverage(args: argparse.Namespace) -> int:
     )
     from effects.infrastructure.record_io import iter_shards, read_shard
 
-    root = Path(args.effect_records)
+    root = args.effect_records
     shards = iter_shards(root)
     if not shards:
         print(f"no shards under {root}")
@@ -940,6 +995,104 @@ def run_field_coverage(args: argparse.Namespace) -> int:
 # ── validate-corpus ─────────────────────────────────────────────────────
 
 
+#: The help for each ``Thresholds`` field, in the order ``--help`` lists them.
+#: The flag is the field's name, and its default and type are the field's own,
+#: so a threshold cannot drift from the value the check reads; why each default
+#: is what it is lives on the field. A field defaulting to None is a rate that
+#: is measured and reported as [WATCH] unless a floor is passed: its healthy
+#: value is not yet known, so a default floor would fail every run, which is
+#: the failure mode the whole command exists to avoid.
+_THRESHOLD_HELP: dict[str, str] = {
+    "min_keyed_rate": (
+        "Share of records naming a line that must resolve it to a printed "
+        "key (default: {default})"
+    ),
+    "max_duplicate_rate": (
+        "Share of a kind's records that may repeat an earlier record of "
+        "the same kind in the same game (default: {default})"
+    ),
+    "max_unpaired_link_rate": (
+        "Share of link ids that may lack one activation and one resolution "
+        "half (default: {default})"
+    ),
+    "max_names_per_game": (
+        "Distinct card names one game_id may show before it is reading as "
+        "more than one game (default: {default})"
+    ),
+    "min_cost_evidence": (
+        "Activation records needed before a cost channel reading zero "
+        "means the collector rather than the pool (default: {default})"
+    ),
+    "turn_jump_tolerance": (
+        "Turns a snapshot may sit below the highest already seen in its "
+        "game before that reads as a game boundary (default: {default}). "
+        "Deferred mana-reservoir flushes are exempt and the report says how "
+        "many were exempted."
+    ),
+    "max_duplicate_event_rate": (
+        "Share of events that may repeat another event in the same record "
+        "(default: {default}). Distinct from --max-duplicate-rate, which "
+        "compares whole records and read zero on a corpus that duplicated one "
+        "event in seven"
+    ),
+    "max_trigger_fired_share": (
+        "Share of trigger records that may report fired=true (default: "
+        "{default}); the negative sampler targets ~1:1, and the report breaks "
+        "the ratio down per evaluated mode"
+    ),
+    "min_zone_change_from_zone_rate": (
+        "Share of zone_change events that must carry from_zone. Unset by "
+        "default: the rate is measured and reported as [WATCH] without "
+        "failing the run"
+    ),
+    "min_attributed_rate": (
+        "Share of resolution events that must name a producing clause. "
+        "Unset by default: measured and reported as [WATCH] without "
+        "failing the run"
+    ),
+    "min_fork_attributed_rate": (
+        "Share of events on fork records that must name a producing "
+        "clause. Unset by default: measured and reported as [WATCH]. Kept "
+        "apart from --min-attributed-rate because the fork collectors are "
+        "different code, and the aggregate hid a fork path writing null "
+        "on every event"
+    ),
+    "min_cause_rate": (
+        "Share of the events whose schema row declares a cause that must "
+        "populate it. Unset by default: measured and reported as [WATCH]. "
+        "An empty cause is what makes two attackers' identical damage "
+        "read as one outcome written twice"
+    ),
+    "min_rewrite_replaced_by_rate": (
+        "Share of the rewrite records whose result ran an ability that "
+        "must name it. Unset by default: measured and reported as "
+        "[WATCH]. A replacement that substitutes an ability and cannot "
+        "say which one is the shape that left this channel unreadable"
+    ),
+    "max_mirror_turn_disagreement_rate": (
+        "Share of fork records whose turn may differ from the record they "
+        "mirror (default: {default}). A fork is taken at the moment it "
+        "mirrors, so a disagreement is a stale snapshot; it surfaced before "
+        "as a backward turn jump in the game_id check, which blamed a game "
+        "merge that had not happened"
+    ),
+}
+
+
+def _add_threshold_flags(parser: argparse.ArgumentParser) -> None:
+    """One flag per ``Thresholds`` field, defaulting to the field's own value."""
+    defaults = {spec.name: spec.default for spec in fields(Thresholds)}
+    for name, help_text in _THRESHOLD_HELP.items():
+        default = defaults[name]
+        parser.add_argument(
+            "--" + name.replace("_", "-"),
+            # A watched rate defaults to None and takes a share when set.
+            type=float if default is None else type(default),
+            default=default,
+            help=help_text.format(default=default),
+        )
+
+
 def _validate_corpus_parser(subparsers) -> None:
     parser = subparsers.add_parser(
         "validate-corpus",
@@ -949,9 +1102,8 @@ def _validate_corpus_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_validate_corpus)
-    parser.add_argument(
-        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
-        help=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
+    _add_effect_records(
+        parser, help_text=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
         "--limit", type=int, default=0,
@@ -961,131 +1113,7 @@ def _validate_corpus_parser(subparsers) -> None:
             "pass, and every record id is held in memory while it runs."
         ),
     )
-    parser.add_argument(
-        "--min-keyed-rate", type=float, default=DEFAULT_MIN_KEYED_RATE,
-        help=(
-            "Share of records naming a line that must resolve it to a printed "
-            f"key (default: {DEFAULT_MIN_KEYED_RATE})"
-        ),
-    )
-    parser.add_argument(
-        "--max-duplicate-rate", type=float, default=DEFAULT_MAX_DUPLICATE_RATE,
-        help=(
-            "Share of a kind's records that may repeat an earlier record of "
-            f"the same kind in the same game (default: {DEFAULT_MAX_DUPLICATE_RATE})"
-        ),
-    )
-    parser.add_argument(
-        "--max-unpaired-link-rate", type=float,
-        default=DEFAULT_MAX_UNPAIRED_LINK_RATE,
-        help=(
-            "Share of link ids that may lack one activation and one resolution "
-            f"half (default: {DEFAULT_MAX_UNPAIRED_LINK_RATE})"
-        ),
-    )
-    parser.add_argument(
-        "--max-names-per-game", type=int, default=DEFAULT_MAX_NAMES_PER_GAME,
-        help=(
-            "Distinct card names one game_id may show before it is reading as "
-            f"more than one game (default: {DEFAULT_MAX_NAMES_PER_GAME})"
-        ),
-    )
-    parser.add_argument(
-        "--min-cost-evidence", type=int, default=DEFAULT_MIN_COST_EVIDENCE,
-        help=(
-            "Activation records needed before a cost channel reading zero "
-            "means the collector rather than the pool (default: "
-            f"{DEFAULT_MIN_COST_EVIDENCE})"
-        ),
-    )
-    parser.add_argument(
-        "--turn-jump-tolerance", type=int, default=DEFAULT_TURN_JUMP_TOLERANCE,
-        help=(
-            "Turns a snapshot may sit below the highest already seen in its "
-            f"game before that reads as a game boundary (default: "
-            f"{DEFAULT_TURN_JUMP_TOLERANCE}). Deferred mana-reservoir flushes "
-            "are exempt and the report says how many were exempted."
-        ),
-    )
-    parser.add_argument(
-        "--max-duplicate-event-rate", type=float,
-        default=DEFAULT_MAX_DUPLICATE_EVENT_RATE,
-        help=(
-            "Share of events that may repeat another event in the same record "
-            f"(default: {DEFAULT_MAX_DUPLICATE_EVENT_RATE}). Distinct from "
-            "--max-duplicate-rate, which compares whole records and read zero "
-            "on a corpus that duplicated one event in seven"
-        ),
-    )
-    parser.add_argument(
-        "--max-trigger-fired-share", type=float,
-        default=DEFAULT_MAX_TRIGGER_FIRED_SHARE,
-        help=(
-            "Share of trigger records that may report fired=true (default: "
-            f"{DEFAULT_MAX_TRIGGER_FIRED_SHARE}); the negative sampler targets "
-            "~1:1, and the report breaks the ratio down per evaluated mode"
-        ),
-    )
-    parser.add_argument(
-        "--min-zone-change-from-zone-rate", type=float,
-        default=DEFAULT_MIN_ZONE_CHANGE_FROM_ZONE_RATE,
-        help=(
-            "Share of zone_change events that must carry from_zone. Unset by "
-            "default: the rate is measured and reported as [WATCH] without "
-            "failing the run"
-        ),
-    )
-    parser.add_argument(
-        "--min-attributed-rate", type=float,
-        default=DEFAULT_MIN_ATTRIBUTED_RATE,
-        help=(
-            "Share of resolution events that must name a producing clause. "
-            "Unset by default: measured and reported as [WATCH] without "
-            "failing the run"
-        ),
-    )
-    parser.add_argument(
-        "--min-fork-attributed-rate", type=float,
-        default=DEFAULT_MIN_FORK_ATTRIBUTED_RATE,
-        help=(
-            "Share of events on fork records that must name a producing "
-            "clause. Unset by default: measured and reported as [WATCH]. Kept "
-            "apart from --min-attributed-rate because the fork collectors are "
-            "different code, and the aggregate hid a fork path writing null "
-            "on every event"
-        ),
-    )
-    parser.add_argument(
-        "--min-cause-rate", type=float, default=DEFAULT_MIN_CAUSE_RATE,
-        help=(
-            "Share of the events whose schema row declares a cause that must "
-            "populate it. Unset by default: measured and reported as [WATCH]. "
-            "An empty cause is what makes two attackers' identical damage "
-            "read as one outcome written twice"
-        ),
-    )
-    parser.add_argument(
-        "--min-rewrite-replaced-by-rate", type=float,
-        default=DEFAULT_MIN_REWRITE_REPLACED_BY_RATE,
-        help=(
-            "Share of the rewrite records whose result ran an ability that "
-            "must name it. Unset by default: measured and reported as "
-            "[WATCH]. A replacement that substitutes an ability and cannot "
-            "say which one is the shape that left this channel unreadable"
-        ),
-    )
-    parser.add_argument(
-        "--max-mirror-turn-disagreement-rate", type=float,
-        default=DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE,
-        help=(
-            "Share of fork records whose turn may differ from the record they "
-            f"mirror (default: {DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE}). "
-            "A fork is taken at the moment it mirrors, so a disagreement is a "
-            "stale snapshot; it surfaced before as a backward turn jump in "
-            "the game_id check, which blamed a game merge that had not "
-            "happened"
-        ),
-    )
+    _add_threshold_flags(parser)
     _add_cards_folder(parser)
 
 
@@ -1101,34 +1129,18 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
     """
     from effects.application.validate_corpus import (
         FieldPresence,
-        Thresholds,
         read_window,
         validate_corpus,
     )
     from effects.infrastructure.record_io import iter_shards
 
-    root = Path(args.effect_records)
+    root = args.effect_records
     shards = iter_shards(root)
     if not shards:
         print(f"no shards under {root}")
         return 1
 
-    thresholds = Thresholds(
-        min_keyed_rate=args.min_keyed_rate,
-        max_duplicate_rate=args.max_duplicate_rate,
-        max_unpaired_link_rate=args.max_unpaired_link_rate,
-        max_names_per_game=args.max_names_per_game,
-        min_cost_evidence=args.min_cost_evidence,
-        turn_jump_tolerance=args.turn_jump_tolerance,
-        max_duplicate_event_rate=args.max_duplicate_event_rate,
-        max_trigger_fired_share=args.max_trigger_fired_share,
-        min_zone_change_from_zone_rate=args.min_zone_change_from_zone_rate,
-        min_attributed_rate=args.min_attributed_rate,
-        min_fork_attributed_rate=args.min_fork_attributed_rate,
-        min_cause_rate=args.min_cause_rate,
-        min_rewrite_replaced_by_rate=args.min_rewrite_replaced_by_rate,
-        max_mirror_turn_disagreement_rate=args.max_mirror_turn_disagreement_rate,
-    )
+    thresholds = config_from_args(Thresholds, args)
     sidecars = _sidecars_for_validation(args)
     presence = FieldPresence()
     findings = validate_corpus(
@@ -1181,33 +1193,34 @@ def _collect_variants_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_collect_variants)
-    parser.add_argument(
-        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
-        help=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
+    _add_effect_records(
+        parser,
+        help_text=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
-        "--forge-cards-path", type=str,
-        default="../forge/forge-gui/res/cardsfolder/",
+        "--forge-cards-path", type=Path, default=DEFAULT_FORGE_CARDS_PATH,
         help=(
             "Forge's *source* card scripts, not the converted ones: a variant "
             "is a Forge script Forge must be able to load"
         ),
     )
     parser.add_argument(
-        "--variant-scripts", type=str, default=DEFAULT_VARIANT_SCRIPTS,
+        "--variant-scripts", type=Path, default=DEFAULT_VARIANT_SCRIPTS,
         help=f"Where perturbed scripts are written (default: {DEFAULT_VARIANT_SCRIPTS})",
     )
     parser.add_argument(
-        "--variant-volume", type=float, default=0.2,
+        "--variant-volume", type=float,
+        default=collect_variants.DEFAULT_VARIANT_VOLUME,
         help=(
             "Cap on how many variant *scripts* are generated, as a fraction of "
-            "the real records already present (default: 0.2). Expressed "
+            "the real records already present (default: "
+            f"{collect_variants.DEFAULT_VARIANT_VOLUME}). Expressed "
             "against the corpus so it scales with it; at any real corpus size "
             "it exceeds the number of perturbable scripts and is inert."
         ),
     )
     parser.add_argument(
-        "--corpus-records", type=str, default=None,
+        "--corpus-records", type=_optional_path, default=None,
         help=(
             "The real records --variant-volume is measured against (default: "
             "--effect-records). Point it at the corpus when variants are "
@@ -1215,46 +1228,20 @@ def _collect_variants_parser(subparsers) -> None:
             "empty destination and allows nothing."
         ),
     )
-    parser.add_argument("--decks-per-round", type=int, default=500)
     parser.add_argument(
-        "--seed", type=int, default=VARIANT_RANDOM_SEED,
+        "--seed", type=int, default=collect_variants.RANDOM_SEED,
         help=(
             "Seeds both the perturbation and the deck build (default: "
-            f"{VARIANT_RANDOM_SEED}). A variant round weights every variant "
-            "equally and plays once, so a repeat run with the same seed "
+            f"{collect_variants.RANDOM_SEED}). A variant round weights every "
+            "variant equally and plays once, so a repeat run with the same seed "
             "regenerates the same scripts and decks and collects nothing; "
             "change it to top a corpus up."
         ),
     )
-    parser.add_argument(
-        "--split-from", type=str, default=None,
-        help=(
-            "A checkpoint whose held-out cards, and their variants, are "
-            "excluded"
-        ),
+    _add_holdout_sources(parser, excluded="held-out cards, and their variants,")
+    _add_collector_round_flags(
+        parser, decks_per_round=collect_variants.DEFAULT_DECKS_PER_ROUND,
     )
-    parser.add_argument(
-        "--exclude-cards", type=str, default=None,
-        help=(
-            "File of card names, one per line, to keep out of every deck — "
-            "from 'python -m effects holdout-cards'. The ordinary way to name "
-            "the holdout: it needs no trained model, so this command no longer "
-            "waits on a training run that follows it. Mutually exclusive with "
-            "--split-from, which inherits an existing checkpoint's split "
-            "instead."
-        ),
-    )
-    parser.add_argument(
-        "--training-corpus", type=str, default=None,
-        help=(
-            "Directory holding the training corpus AND the holdout-cards.txt "
-            "it was depleted against. Shorthand for --effect-records DIR plus "
-            "--exclude-cards DIR/holdout-cards.txt, which belong together: a "
-            "corpus depleted against one list and split against another is a "
-            "silent corruption. Refused alongside either flag it implies."
-        ),
-    )
-    parser.add_argument("--workers", type=int, default=12)
     _add_cap_flags(parser)
 
 
@@ -1266,21 +1253,16 @@ def run_collect_variants(args: argparse.Namespace) -> int:
     if error is not None:
         print(f"collect-variants: {error}")
         return 1
+    try:
+        records, listed = holdout_source(args)
+    except ValueError as exc:
+        print(f"collect-variants: {exc}")
+        return 1
     print(announce_probe_state(args.probe_keywords, args.probes_per_game))
-    records, listed = resolve_training_corpus(args)
-    return collect(CollectVariantsConfig(
+    return collect(config_from_args(
+        CollectVariantsConfig, args,
         effect_records=records,
-        forge_cards_path=Path(args.forge_cards_path),
-        variant_scripts=Path(args.variant_scripts),
-        variant_volume=args.variant_volume,
-        corpus_records=(
-            Path(args.corpus_records) if args.corpus_records else None
-        ),
-        decks_per_round=args.decks_per_round,
-        seed=args.seed,
-        split_from=Path(args.split_from) if args.split_from else None,
         exclude_cards=listed,
-        workers=args.workers,
         caps=CollectionCaps.from_args(args),
     ))
 
@@ -1289,16 +1271,18 @@ def run_collect_variants(args: argparse.Namespace) -> int:
 
 
 def _train_effect_model_parser(subparsers) -> None:
-    from effects.application.train_effect_model import (
-        DEFAULT_PREFETCH_WORKERS,
-        DEFAULT_SHARDS_PER_EPOCH,
-    )
-
     parser = subparsers.add_parser(
         "train-effect-model",
         help="Train the ability encoder and effect head jointly from random init",
     )
     parser.set_defaults(func=run_train_effect_model)
+    _add_training_inputs(parser)
+    _add_model_shape(parser)
+    _add_training_schedule(parser)
+
+
+def _add_training_inputs(parser: argparse.ArgumentParser) -> None:
+    """What the trainer reads, and where its checkpoints go."""
     parser.add_argument(
         "--corpus", type=str, required=True,
         help=(
@@ -1310,34 +1294,23 @@ def _train_effect_model_parser(subparsers) -> None:
     )
     _add_cards_folder(parser)
     _add_holdout_unit(parser, default=None)
+    _add_variant_scripts(parser)
+    parser.add_argument("--vocab-path", type=Path, default=DEFAULT_VOCAB_PATH)
     parser.add_argument(
-        "--variant-scripts", type=str, default=None,
-        help=f"Stage four: perturbed scripts (default: {DEFAULT_VARIANT_SCRIPTS})",
+        "--keyword-definitions", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
     )
     parser.add_argument(
-        "--split-from", type=str, default=None,
-        help=(
-            "Accepted for compatibility with older invocations of a --variant "
-            "run; nothing is read from this path. The manifest of --corpus is "
-            "authoritative for the split."
-        ),
-    )
-    parser.add_argument("--vocab-path", type=str, default=DEFAULT_VOCAB_PATH)
-    parser.add_argument(
-        "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
-    )
-    parser.add_argument(
-        "--model-output", type=str, default=None,
+        "--model-output", type=_optional_path, default=None,
         help=(
             "Checkpoint directory (default: models/effects/effect-model/ for "
             "--variant full, models/effects/effect-model/{variant}/ otherwise)"
         ),
     )
-    parser.add_argument(
-        "--variant",
-        choices=("full", "identity", "state-only", "no-state", "taxonomy"),
-        default="full",
-    )
+    _add_variant(parser)
+
+
+def _add_model_shape(parser: argparse.ArgumentParser) -> None:
+    """The architecture and the losses it trains under; the checkpoint records them."""
     parser.add_argument("--e-dim", type=int, default=64)
     parser.add_argument(
         "--e-noise", type=float, default=0.1,
@@ -1363,25 +1336,27 @@ def _train_effect_model_parser(subparsers) -> None:
     )
     parser.add_argument("--keyword-expand-p", type=float, default=0.25)
     parser.add_argument("--context-dropout", type=float, default=0.15)
+    parser.add_argument(
+        "--lethality-copies", type=int, default=0,
+        help=(
+            "Counterfactual copies per qualifying damage or -X/-X resolution in "
+            "each training step, with the target's toughness and the stated "
+            "amount redrawn and the death labelled by the rules (default: 0)"
+        ),
+    )
     parser.add_argument("--mlm-weight", type=float, default=0.1)
     parser.add_argument("--mlm-mask-prob", type=float, default=0.15)
-    parser.add_argument("--api-weight", type=float, default=0.05)
+    parser.add_argument("--api-weight", type=float, default=0.003)
     parser.add_argument(
         "--curriculum-epoch", type=int, default=3,
         help="Epoch whose first step enables the sparse field group (default: 3)",
     )
+
+
+def _add_training_schedule(parser: argparse.ArgumentParser) -> None:
+    """Batches, epochs, stopping and resuming."""
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--grad-accum", type=int, default=1)
-    parser.add_argument(
-        "--context-cache", action="store_true",
-        help=(
-            "Accepted and ignored (not implemented): the stop-gradient "
-            "momentum cache is specified as the fallback for when live "
-            "re-encoding exceeds the GPU budget, but the trainer's batcher "
-            "has no cache and re-encodes context abilities live"
-        ),
-    )
-    parser.add_argument("--cache-refresh", type=int, default=500)
     parser.add_argument("--steps-per-epoch", type=int, default=5000)
     parser.add_argument(
         "--shards-per-epoch", type=int, default=DEFAULT_SHARDS_PER_EPOCH,
@@ -1412,7 +1387,18 @@ def _train_effect_model_parser(subparsers) -> None:
         ),
     )
     parser.add_argument("--epochs", type=int, default=40)
-    parser.add_argument("--patience", type=int, default=5)
+    parser.add_argument(
+        "--patience", type=int, default=5,
+        help="Epochs without a new card-disjoint best before stopping; 0 never stops early",
+    )
+    parser.add_argument(
+        "--lr-scale", type=float, default=1.0,
+        help="Factor on the learning rate; may differ from the run a --resume continues",
+    )
+    parser.add_argument(
+        "--save-every-epoch", action="store_true",
+        help="Also keep every epoch's checkpoint under <model-output>/epochs/",
+    )
     parser.add_argument(
         "--resume", action="store_true",
         help=(
@@ -1435,15 +1421,7 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import (
         EmptyHoldoutError,
         SurfaceMismatchError,
-        require_split_from,
     )
-
-    split_from = Path(args.split_from) if args.split_from else None
-    # --corpus is required at the parser, so require_split_from's
-    # corpus-is-None branch can never fire from here; kept as a defensive
-    # pre-flight check rather than caught, since it cannot raise.
-    require_split_from(args.variant, split_from, corpus=args.corpus)
-
     from effects.domain.ability_encoder import ENCODER_N_HEADS
 
     # Refused here, before anything is read (FR-062): the encoder's attention
@@ -1479,47 +1457,12 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
 
 
 def train_config_from(args: argparse.Namespace):
-    """The trainer's config, assembled from parsed arguments.
-
-    Imported here rather than at module scope so ``--help`` stays free of torch.
-    """
+    """The trainer's config, assembled from parsed arguments."""
     from effects.application.train_effect_model import TrainEffectModelConfig
 
-    return TrainEffectModelConfig(
-        corpus=args.corpus,
+    return config_from_args(
+        TrainEffectModelConfig, args,
         cards_folders=resolve_cards_folders(args.cards_folders),
-        variant_scripts=(
-            Path(args.variant_scripts) if args.variant_scripts else None
-        ),
-        split_from=Path(args.split_from) if args.split_from else None,
-        holdout_unit=args.holdout_unit,
-        vocab_path=Path(args.vocab_path),
-        keyword_definitions=Path(args.keyword_definitions),
-        model_output=Path(args.model_output) if args.model_output else None,
-        variant=args.variant,
-        e_dim=args.e_dim,
-        e_noise=args.e_noise,
-        value_weight=args.value_weight,
-        encoder_layers=args.encoder_layers,
-        encoder_d_model=args.encoder_d_model,
-        keyword_expand_p=args.keyword_expand_p,
-        context_dropout=args.context_dropout,
-        mlm_weight=args.mlm_weight,
-        mlm_mask_prob=args.mlm_mask_prob,
-        api_weight=args.api_weight,
-        curriculum_epoch=args.curriculum_epoch,
-        batch_size=args.batch_size,
-        grad_accum=args.grad_accum,
-        context_cache=args.context_cache,
-        cache_refresh=args.cache_refresh,
-        steps_per_epoch=args.steps_per_epoch,
-        shards_per_epoch=args.shards_per_epoch,
-        prefetch_workers=args.prefetch_workers,
-        seed=args.seed,
-        epochs=args.epochs,
-        patience=args.patience,
-        withhold_keyword=args.withhold_keyword,
-        resume=args.resume,
     )
 
 
@@ -1532,27 +1475,17 @@ def _encode_abilities_parser(subparsers) -> None:
         help="Compute the per-ability embedding cache from a trained checkpoint",
     )
     parser.set_defaults(func=run_encode_abilities)
-    parser.add_argument(
-        "--variant",
-        choices=("full", "identity", "state-only", "no-state", "taxonomy"),
-        default="full",
-        help="Resolves the checkpoint and the output suffix together",
+    _add_variant(
+        parser, help_text="Resolves the checkpoint and the output suffix together",
     )
     parser.add_argument(
-        "--checkpoint", type=str, default=None,
+        "--checkpoint", type=_optional_path, default=None,
         help="Overrides the checkpoint --variant resolves",
     )
     _add_cards_folder(parser)
-    parser.add_argument("--variant-scripts", type=str, default=None)
-    parser.add_argument(
-        "--vocab-path", type=str, default=None,
-        help="Defaults to the path the checkpoint recorded from training",
-    )
-    parser.add_argument(
-        "--keyword-definitions", type=str, default=None,
-        help="Defaults to the path the checkpoint recorded from training",
-    )
-    parser.add_argument("--output-root", type=str, default=DEFAULT_ABILITIES_ROOT)
+    _add_variant_scripts(parser)
+    _add_recorded_tokenizer_paths(parser)
+    parser.add_argument("--output-root", type=Path, default=DEFAULT_ABILITIES_ROOT)
     parser.add_argument(
         "--clean", action="store_true",
         help="Remove only the files this variant wrote, then re-encode",
@@ -1564,19 +1497,9 @@ def run_encode_abilities(args: argparse.Namespace) -> int:
     from effects.application.encode_abilities import run as encode
     from effects.infrastructure.effect_model_store import HashMismatchError
 
-    config = EncodeAbilitiesConfig(
-        variant=args.variant,
-        checkpoint=Path(args.checkpoint) if args.checkpoint else None,
+    config = config_from_args(
+        EncodeAbilitiesConfig, args,
         cards_folders=resolve_cards_folders(args.cards_folders),
-        variant_scripts=(
-            Path(args.variant_scripts) if args.variant_scripts else None
-        ),
-        vocab_path=Path(args.vocab_path) if args.vocab_path else None,
-        keyword_definitions=(
-            Path(args.keyword_definitions) if args.keyword_definitions else None
-        ),
-        output_root=Path(args.output_root),
-        clean=args.clean,
     )
     try:
         encode(config)
@@ -1598,45 +1521,40 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         help="Run the three gates and the reported checks over a checkpoint",
     )
     parser.set_defaults(func=run_evaluate_effect_model)
-    parser.add_argument("--checkpoint", type=str, default=DEFAULT_CHECKPOINT)
+    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument(
-        "--variant-checkpoint", action="append", dest="variant_checkpoints",
+        "--variant-checkpoint", action="append", dest="baseline_checkpoints",
         default=None, metavar="NAME=PATH",
         help="Baseline checkpoint to compare against; repeatable",
     )
-    parser.add_argument("--records-dir", type=str, default=DEFAULT_RECORDS_DIR)
+    parser.add_argument("--records-dir", type=Path, default=DEFAULT_RECORDS_DIR)
     _add_cards_folder(parser)
-    parser.add_argument("--variant-scripts", type=str, default=None)
+    _add_variant_scripts(parser, without=(
+        "the tree the corpus's manifest records is read, if any"
+    ))
+    _add_recorded_tokenizer_paths(parser)
     parser.add_argument(
-        "--vocab-path", type=str, default=None,
-        help="Defaults to the path --checkpoint recorded",
-    )
-    parser.add_argument(
-        "--keyword-definitions", type=str, default=None,
-        help="Defaults to the path --checkpoint recorded",
-    )
-    parser.add_argument(
-        "--corpus", type=str, default=None,
+        "--corpus", type=_optional_path, default=None,
         help=(
             "A curated dataset directory (build-corpus); defaults to the one "
             "--checkpoint recorded, if any. Fails fast when it has been "
             "rebuilt since training."
         ),
     )
-    parser.add_argument("--abilities-root", type=str, default=DEFAULT_ABILITIES_ROOT)
+    parser.add_argument("--abilities-root", type=Path, default=DEFAULT_ABILITIES_ROOT)
     parser.add_argument(
-        "--win-rates", type=str, default="output/sealed/cards-win-rates.txt",
+        "--win-rates", type=Path, default=DEFAULT_WIN_RATES,
         help="Per-card win-rate table the decodability battery reads",
     )
 
 
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
-    from effects.application.evaluate_effect_model import (
+    from effects.application.evaluate_effect_model import run as evaluate
+    from effects.application.evaluation_context import (
         CorpusMismatchError,
         EvaluateEffectModelConfig,
-        parse_variant_checkpoint,
+        parse_baseline_checkpoint,
     )
-    from effects.application.evaluate_effect_model import run as evaluate
     from effects.infrastructure.effect_model_store import (
         HashMismatchError,
         SplitMismatchError,
@@ -1644,28 +1562,17 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
 
     try:
         variants = dict(
-            parse_variant_checkpoint(value)
-            for value in (args.variant_checkpoints or [])
+            parse_baseline_checkpoint(value)
+            for value in (args.baseline_checkpoints or [])
         )
     except ValueError as exc:
         logger.error("%s", exc)
         return 2
 
-    config = EvaluateEffectModelConfig(
-        checkpoint=Path(args.checkpoint),
-        variant_checkpoints=variants,
-        records_dir=Path(args.records_dir),
+    config = config_from_args(
+        EvaluateEffectModelConfig, args,
+        baseline_checkpoints=variants,
         cards_folders=resolve_cards_folders(args.cards_folders),
-        variant_scripts=(
-            Path(args.variant_scripts) if args.variant_scripts else None
-        ),
-        vocab_path=Path(args.vocab_path) if args.vocab_path else None,
-        keyword_definitions=(
-            Path(args.keyword_definitions) if args.keyword_definitions else None
-        ),
-        corpus=Path(args.corpus) if args.corpus else None,
-        abilities_root=Path(args.abilities_root),
-        win_rates=Path(args.win_rates),
     )
     try:
         report = evaluate(config)
@@ -1676,7 +1583,9 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 2
     print(report.render())
-    return 0 if report.ships else 1
+    # A failed gate is a result to record, not a reason to stop: the sweep runs
+    # every arm's probes after evaluation whatever the verdicts.
+    return 0
 
 
 # ── scorer-smoke-test ───────────────────────────────────────────────────
@@ -1692,27 +1601,27 @@ def _scorer_smoke_test_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_scorer_smoke_test)
     parser.add_argument(
-        "--checkpoint", type=str, default=DEFAULT_CHECKPOINT,
+        "--checkpoint", type=Path, default=DEFAULT_CHECKPOINT,
         help="Effect model whose cache's pooled e is written",
     )
     parser.add_argument(
-        "--sealed-encoder-checkpoint", type=str,
-        default="models/sealed/encoder/latest.pt",
+        "--sealed-encoder-checkpoint", type=Path,
+        default=DEFAULT_SEALED_ENCODER,
         help="Sealed encoder whose vectors pooled e is concatenated with",
     )
     parser.add_argument(
-        "--abilities-root", type=str, default="output/effects/abilities",
+        "--abilities-root", type=Path, default=DEFAULT_ABILITIES_ROOT,
         help=(
             "Ability cache whose pooled e is spliced in: the one encode-abilities "
-            "wrote from --checkpoint (default: output/effects/abilities)"
+            f"wrote from --checkpoint (default: {DEFAULT_ABILITIES_ROOT})"
         ),
     )
     parser.add_argument(
-        "--outcomes-path", type=str, default="output/sealed/match-outcomes.txt",
-        help="Match outcomes Phase A trains on (default: output/sealed/match-outcomes.txt)",
+        "--outcomes-path", type=Path, default=DEFAULT_MATCH_OUTCOMES,
+        help=f"Match outcomes Phase A trains on (default: {DEFAULT_MATCH_OUTCOMES})",
     )
     parser.add_argument(
-        "--scratch-dir", type=str, required=True,
+        "--scratch-dir", type=Path, required=True,
         help="Where the vectors and the scorer checkpoint go; nothing is written elsewhere",
     )
 
@@ -1721,13 +1630,7 @@ def run_scorer_smoke_test(args: argparse.Namespace) -> int:
     from effects.application.scorer_smoke_test import ScorerSmokeTestConfig
     from effects.application.scorer_smoke_test import run as smoke_test
 
-    config = ScorerSmokeTestConfig(
-        scratch_dir=Path(args.scratch_dir),
-        checkpoint=Path(args.checkpoint),
-        sealed_encoder_checkpoint=Path(args.sealed_encoder_checkpoint),
-        abilities_root=Path(args.abilities_root),
-        outcomes_path=Path(args.outcomes_path),
-    )
+    config = config_from_args(ScorerSmokeTestConfig, args)
     try:
         result = smoke_test(config)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:

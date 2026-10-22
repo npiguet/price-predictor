@@ -44,17 +44,18 @@ public final class EffectRecord {
     public static final String MOMENT_ACTIVATION = "activation";
     public static final String MOMENT_RESOLUTION = "resolution";
 
+    /** A candidate the AI weighed at priority, with the verdict on it. */
+    public static final String SUBKIND_DECISION = "decision";
+    /** Who may attack, declared at the attackers step. */
+    public static final String SUBKIND_ATTACKERS = "attackers";
+    /** Who may block an attacker, declared at the blockers step. */
+    public static final String SUBKIND_BLOCKERS = "blockers";
+
     public static final String OUTCOME_RESOLVED = "resolved";
     public static final String OUTCOME_FIZZLED = "fizzled";
     public static final String OUTCOME_PARTIALLY_FIZZLED = "partially_fizzled";
     public static final String OUTCOME_DECLINED = "declined";
     public static final String OUTCOME_COUNTERED = "countered";
-
-    public static final String REWRITE_REPLACED = "replaced";
-    public static final String REWRITE_NOT_REPLACED = "not_replaced";
-    public static final String REWRITE_PREVENTED = "prevented";
-    public static final String REWRITE_UPDATED = "updated";
-    public static final String REWRITE_SKIPPED = "skipped";
 
     private final String recordId;
     private final String runId;
@@ -84,7 +85,9 @@ public final class EffectRecord {
      * Real decision or what-if query, on the two legality subkinds only
      * (FR-031): {@code false} is a declaration the engine acted on, {@code
      * true} an answer the AI computed while weighing a combat and discarded.
-     * Null everywhere else, and absent from the JSON then.
+     * The collector reports legality at the declaration itself and so writes
+     * only {@code false}; {@code true} is read from shards collected inside
+     * the AI. Null everywhere else, and absent from the JSON then.
      */
     private Boolean whatIf;
     private String actorPlayer;
@@ -282,23 +285,40 @@ public final class EffectRecord {
     }
 
     String abilityJson() {
-        if (ability == null) {
-            return "null";
-        }
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (ProvenanceKey key : ability) {
-            joiner.add(key.toJson());
-        }
-        return joiner.toString();
+        return ability == null ? "null" : ProvenanceKey.toJsonArray(ability);
     }
 
-    /** ``{"events": [...]}`` — a resolution effect half or a combat step. */
+    /** ``{"events": [...]}`` — a resolution effect half. */
     public static String eventsPayload(List<EffectEvent> events) {
+        return "{\"events\":" + eventArray(events) + "}";
+    }
+
+    /**
+     * ``{<combat fields>, "events": [...]}`` — an observed damage step, its
+     * combat rendered by {@link CombatShape#fields}.
+     */
+    static String combatPayload(String combatFields, List<EffectEvent> events) {
+        return "{" + combatFields + ",\"events\":" + eventArray(events) + "}";
+    }
+
+    /**
+     * A damage-step probe's combat payload, which also names what it
+     * perturbed: the keyword it stripped and the creature it stripped it from.
+     */
+    static String probePayload(
+            String combatFields, List<EffectEvent> events, String keyword, String carrier) {
+        return "{" + combatFields
+                + ",\"events\":" + eventArray(events)
+                + ",\"probed_keyword\":" + Json.string(keyword)
+                + ",\"probed_entity\":" + Json.string(carrier) + "}";
+    }
+
+    private static String eventArray(List<EffectEvent> events) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
         for (EffectEvent event : events) {
             joiner.add(event.toJson());
         }
-        return "{\"events\":" + joiner + "}";
+        return joiner.toString();
     }
 
     /**
@@ -329,12 +349,7 @@ public final class EffectRecord {
     public static String rewritePayload(
             EffectEvent incoming, EffectEvent outgoing, String result,
             List<ProvenanceKey> replacedBy) {
-        StringJoiner keys = new StringJoiner(",", "[", "]");
-        if (replacedBy != null) {
-            for (ProvenanceKey key : replacedBy) {
-                keys.add(key.toJson());
-            }
-        }
+        String keys = ProvenanceKey.toJsonArray(replacedBy == null ? List.of() : replacedBy);
         return "{\"incoming\":" + incoming.toJson()
                 + ",\"outgoing\":" + (outgoing == null ? "null" : outgoing.toJson())
                 + ",\"result\":" + Json.string(result)

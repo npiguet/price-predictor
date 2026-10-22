@@ -16,8 +16,11 @@ import json
 from pathlib import Path
 
 from effects.domain.corpus_manifest import CorpusManifest, SourceShard
+from effects.domain.strata import OUTPUT_STRATA, Stratum
 
 MANIFEST_NAME = "manifest.json"
+#: Where ``clear_outputs`` moves the manifest of the dataset it is clearing.
+PREVIOUS_MANIFEST_NAME = "manifest.previous.json"
 
 
 class CorpusStore:
@@ -31,16 +34,28 @@ class CorpusStore:
         return self.directory / MANIFEST_NAME
 
     @property
+    def previous_manifest_path(self) -> Path:
+        """The cleared dataset's manifest, kept as a record and read by nothing."""
+        return self.directory / PREVIOUS_MANIFEST_NAME
+
+    def output_dir(self, stratum: Stratum) -> Path:
+        """Where ``stratum``'s shards live: training at the root, the rest under
+        ``validation/``."""
+        if stratum is Stratum.TRAINING:
+            return self.directory / stratum
+        return self.directory / "validation" / stratum
+
+    @property
     def training_dir(self) -> Path:
-        return self.directory / "training"
+        return self.output_dir(Stratum.TRAINING)
 
     @property
     def card_disjoint_dir(self) -> Path:
-        return self.directory / "validation" / "card-disjoint"
+        return self.output_dir(Stratum.CARD_DISJOINT)
 
     @property
     def game_disjoint_dir(self) -> Path:
-        return self.directory / "validation" / "game-disjoint"
+        return self.output_dir(Stratum.GAME_DISJOINT)
 
     @property
     def gate_one_dir(self) -> Path:
@@ -55,7 +70,7 @@ class CorpusStore:
         pointed one level up counts those records two and three times over.
         Read one directory at a time.
         """
-        return self.directory / "validation" / "gate-one"
+        return self.output_dir(Stratum.GATE_ONE)
 
     @property
     def samples_dir(self) -> Path:
@@ -78,9 +93,9 @@ class CorpusStore:
         return self.parts_dir / stratum
 
     def clear_outputs(self) -> None:
-        """Delete every output directory, leaving the manifest in place.
+        """Delete every output directory, moving the manifest aside first.
 
-        Every output in ``OUTPUTS`` plus the samples and the parts directory:
+        Every output stratum plus the samples and the parts directory:
         each is rewritten whole by the next build.
 
         A dataset is rebuilt whole rather than extended (FR-144): the split and
@@ -91,23 +106,38 @@ class CorpusStore:
         files behind that every reader loads as part of the dataset while the
         manifest and its digest describe only the newer build.
 
-        The manifest itself is left alone so a build that fails before writing
-        one does not also destroy the record of what used to be here.
+        The manifest is moved to :attr:`previous_manifest_path` before any
+        stratum goes, and the new one is written last. A manifest left in
+        place over a build that then failed would describe strata that are
+        empty or half written while its digest still matched every checkpoint
+        trained on the old dataset, so the evaluator would score them against
+        the wreckage. Moved rather than deleted, so the record of what used to
+        be here survives the failure.
         """
         import shutil
 
+        if self.manifest_path.exists():
+            self.manifest_path.replace(self.previous_manifest_path)
         for directory in (
-            self.training_dir, self.card_disjoint_dir, self.game_disjoint_dir,
-            self.gate_one_dir, self.samples_dir, self.parts_dir,
+            *(self.output_dir(stratum) for stratum in OUTPUT_STRATA),
+            self.samples_dir, self.parts_dir,
         ):
             shutil.rmtree(directory, ignore_errors=True)
 
     def save(self, manifest: CorpusManifest) -> Path:
+        """Write the manifest atomically, and drop the one ``clear_outputs`` set aside.
+
+        Through a temporary name and a rename, so a build killed mid-write
+        leaves no manifest rather than a truncated one.
+        """
         self.directory.mkdir(parents=True, exist_ok=True)
-        self.manifest_path.write_text(
+        staging = self.manifest_path.with_name(f"{MANIFEST_NAME}.tmp")
+        staging.write_text(
             json.dumps(manifest.as_dict(), indent=2, sort_keys=True),
             encoding="utf-8",
         )
+        staging.replace(self.manifest_path)
+        self.previous_manifest_path.unlink(missing_ok=True)
         return self.manifest_path
 
     def load(self) -> CorpusManifest:

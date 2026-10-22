@@ -293,6 +293,28 @@ class TestSidecarCache:
         key = ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "static", 0)
         assert cache.line_for(key) is None
 
+    def test_line_or_none_reads_every_gap_as_no_line(self, tmp_path):
+        """One policy for a reader that tolerates gaps: a dropped key, a script
+        never converted, a tree this run has no root for, and a key the sidecar
+        does not describe all read as no line."""
+        cache = self._write_trees(tmp_path)
+        assert cache.line_or_none(_TRIGGER).script_api_type == "PutCounter"
+        for key in (
+            _DROPPED,
+            ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "static", 0),
+            ProvenanceKey("variant-scripts/shock_variant.txt", 0, "spell", 0),
+            _ABSENT,
+        ):
+            assert cache.line_or_none(key) is None
+
+    def test_line_or_none_counts_the_keys_a_sidecar_does_not_describe(self, tmp_path):
+        """That case is the join's fail-loudly one: tolerated here, never hidden."""
+        cache = self._write_trees(tmp_path)
+        for _ in range(2):
+            cache.line_or_none(_ABSENT)
+        cache.line_or_none(_DROPPED)
+        assert cache.undescribed == {_SCRIPT: 2}
+
     def test_the_cache_joins_a_record_key_to_its_row(self, tmp_path):
         cache = self._write_trees(tmp_path)
         assert cache.row_for(_TRIGGER) == 1
@@ -513,3 +535,32 @@ class TestSidecarRoots:
         api_types, keys = script_vocabularies([tmp_path / "cardsfolder"])
         assert api_types == ["Draw"]
         assert {"DB", "NumAtt", "NumCards", "SP", "SubAbility"} <= set(keys)
+
+
+class TestLoadTreeTexts:
+    """The holdout's token carriers, read straight off a converted tree."""
+
+    def test_each_script_file_maps_to_its_lines_script_texts(self, tmp_path):
+        from effects.infrastructure.sidecar_io import load_tree_texts
+
+        key = ProvenanceKey("tokenscripts/goblin.txt", 0, "spell", 1)
+        write_sidecar(
+            ProvenanceSidecar(
+                card="goblin", script_file="tokenscripts/goblin.txt",
+                lines=(
+                    SidecarLine(line_index=0, line_kind="spell", provenance=(key,),
+                                script_text="SP$ DealDamage | NumDmg$ 1"),
+                    SidecarLine(line_index=1, line_kind="keyword", provenance=()),
+                ),
+            ),
+            sidecar_path_for(tmp_path / "tokenscripts" / "goblin.txt"),
+        )
+        assert load_tree_texts(tmp_path / "tokenscripts") == {
+            "tokenscripts/goblin.txt": ["SP$ DealDamage | NumDmg$ 1"],
+        }
+
+    def test_a_missing_tree_is_empty(self, tmp_path):
+        from effects.infrastructure.sidecar_io import load_tree_texts
+
+        assert load_tree_texts(tmp_path / "absent") == {}
+        assert load_tree_texts(None) == {}

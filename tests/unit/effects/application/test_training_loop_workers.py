@@ -26,30 +26,32 @@ import torch
 
 from effects.application import training_loop as loop_module
 from effects.application.extract_keyword_definitions import load_keyword_definitions
+from effects.application.resume_state import ResumeState
 from effects.application.step_preparation import (
-    PreparerSettings,
     ShardOpened,
     ShardTask,
     StepPreparer,
     StepReady,
 )
-from effects.application.surface_batching import SurfaceBatcher
 from effects.application.train_effect_model import (
-    CorpusSplit,
-    HeldOutCards,
     TrainEffectModelConfig,
     fields_for_epoch,
-    sampling_class,
-    variant_masks,
 )
 from effects.application.training_loop import TrainingLoop
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
+from effects.domain.baselines import baseline_masks
+from effects.domain.effect_head_input import feature_widths
 from effects.domain.effect_model import EffectModel
+from effects.domain.sampling import sampling_class
+from effects.domain.split import (
+    CorpusSplit,
+)
 from effects.infrastructure.record_io import read_shard, write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.step_workers import pack, unpack
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
+from tests.unit.effects.builders import make_batcher
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 _CARDS = (
@@ -89,8 +91,8 @@ def corpus(tmp_path_factory, records):
     definitions = load_keyword_definitions(_DEFINITIONS)
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
     bare = AbilityTokenizer(base, definitions, surface="script")
-    batcher = SurfaceBatcher(
-        tokenizer=bare, sidecars=sidecars, masks=variant_masks("full"),
+    batcher = make_batcher(
+        tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
         surface="script", e_dim=16, widths={}, device=torch.device("cpu"),
     )
     texts = [*batcher.batch_texts(records)]
@@ -128,7 +130,7 @@ class _Interrupted(Exception):
 
 def _run(
     monkeypatch, corpus, out: Path, caplog, *, workers: int, seed: int = SEED,
-    interrupt_after: int | None = None, resume: bool = False,
+    interrupt_after: int | None = None, resume: bool = False, **config,
 ) -> dict:
     """Two epochs end to end; every loss, the final weights, the share lines.
 
@@ -137,17 +139,18 @@ def _run(
     """
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     if interrupt_after is not None:
-        real_save = TrainingLoop._save_resume
+        real_save = ResumeState.save
 
         def save_then_stop(self, epoch, *args, **kwargs):
             real_save(self, epoch, *args, **kwargs)
             if epoch == interrupt_after:
                 raise _Interrupted
 
-        monkeypatch.setattr(TrainingLoop, "_save_resume", save_then_stop)
+        monkeypatch.setattr(ResumeState, "save", save_then_stop)
     built: dict[str, torch.nn.Module] = {}
+    initial: dict[str, torch.Tensor] = {}
     losses: list[float] = []
-    real_loss = TrainingLoop._loss_for
+    real_loss = TrainingLoop._device_loss
 
     def encoder(config):
         built["encoder"] = AbilityEncoder(config)
@@ -159,25 +162,28 @@ def _run(
         built["model"] = EffectModel(replace(
             config, d_model=32, n_layers=1, n_heads=2, ff_dim=64,
         ))
+        initial.update({
+            name: value.detach().clone()
+            for name, value in built["model"].state_dict().items()
+        })
         return built["model"]
 
-    def loss_for(self, *args, **kwargs):
+    def device_loss(self, *args, **kwargs):
         computed = real_loss(self, *args, **kwargs)
-        if computed is not None:
-            losses.append(float(computed[0].detach()))
+        losses.append(float(computed.total.detach()))
         return computed
 
     monkeypatch.setattr(loop_module, "AbilityEncoder", encoder)
     monkeypatch.setattr(loop_module, "EffectModel", model)
-    monkeypatch.setattr(TrainingLoop, "_loss_for", loss_for)
+    monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
         loop = TrainingLoop(
             _config(
                 corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
+                **config,
             ),
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=CorpusSplit(
+            split=CorpusSplit(
                 held_out_cards=(), card_disjoint_games=frozenset(),
                 game_disjoint_games=frozenset({corpus.held}),
             ),
@@ -204,6 +210,7 @@ def _run(
         "shares": [m for m in caplog.messages if "by rarity bucket" in m],
         "held back": [m.split("|")[2] for m in caplog.messages if "held back" in m],
         "workers": any("worker process" in m for m in caplog.messages),
+        "initial": initial,
     }
 
 
@@ -341,6 +348,69 @@ def test_resuming_a_run_that_reached_its_last_epoch_trains_nothing(
     assert again["losses"] == []
 
 
+def _stopped_early(out: Path) -> None:
+    """Rewrite a finished run's resume file as one the early stopper ended."""
+    from effects.infrastructure.effect_model_store import (
+        load_resume_state,
+        save_resume_state,
+    )
+
+    state = load_resume_state(out)
+    state["finished"] = True
+    state["stopper"]["since_best"] = 5
+    save_resume_state(out, state)
+
+
+def test_a_run_stopped_early_stays_stopped_under_the_same_patience(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    out = tmp_path / "stopped"
+    _run(monkeypatch, corpus, out, caplog, workers=0)
+    _stopped_early(out)
+    again = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True, epochs=3)
+    assert again["losses"] == []
+
+
+def test_a_run_stopped_early_continues_with_no_early_stopping(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    """``--patience 0`` reopens it and trains to ``--epochs`` (FR-063f)."""
+    out = tmp_path / "stopped"
+    _run(monkeypatch, corpus, out, caplog, workers=0)
+    _stopped_early(out)
+    again = _run(
+        monkeypatch, corpus, out, caplog, workers=0, resume=True, epochs=3, patience=0,
+    )
+    assert again["losses"]  # it trained epoch 3
+
+
+def test_every_epoch_is_kept_and_the_best_one_s_resume_state(
+    monkeypatch, corpus, tmp_path, caplog,
+):
+    out = tmp_path / "kept"
+    _run(monkeypatch, corpus, out, caplog, workers=0, save_every_epoch=True)
+    assert len(list((out / "epochs").glob("2*.pt"))) == 2
+    assert (out / "epochs" / "latest.pt").exists()
+    assert (out / "resume-best.pt").exists()
+
+
+def test_a_zero_learning_rate_factor_trains_nothing(monkeypatch, corpus, tmp_path, caplog):
+    """The factor reaches every step's rate: at 0 no weight moves (FR-063f)."""
+    run = _run(monkeypatch, corpus, tmp_path / "frozen", caplog, workers=0, lr_scale=0.0)
+    for name, value in run["initial"].items():
+        assert torch.equal(value, run["parameters"][f"model.{name}"]), name
+
+
+def test_early_stopping_with_no_patience_never_stops():
+    from effects.application.train_effect_model import EarlyStopper
+
+    stopper = EarlyStopper(0)
+    stopper.update(1.0)
+    for _ in range(50):
+        stopper.update(2.0)
+    assert not stopper.should_stop
+
+
 def test_resuming_without_a_resume_file_fails(monkeypatch, corpus, tmp_path, caplog):
     with pytest.raises(FileNotFoundError, match="resume"):
         _run(monkeypatch, corpus, tmp_path / "empty", caplog, workers=0, resume=True)
@@ -385,29 +455,22 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     config = _config(corpus, corpus.root / "unused")
     loop = TrainingLoop(
-        config, held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-        inherited=None, training_shards=[], validation_samples={},
+        config, split=CorpusSplit(), training_shards=[], validation_samples={},
         holdout_permille=20, holdout_max_carriers=8, rarity={"x": 3},
     )
-    tokenizer = loop._build_tokenizer()
-    sidecars = loop._build_sidecars()
-    widths = loop._feature_widths(records)
     loop.api_types, loop.param_keys = loop._script_vocabularies()
-    heads = frozenset({"value", "api", "mlm"})
+    settings = loop._preparer_settings(feature_widths(records))
+    assert settings.heads == frozenset({"value", "api", "mlm"})
     fields = fields_for_epoch(
         config, present=frozenset(sampling_class(r) for r in records), epoch=1,
     )
     task = ShardTask(
         shard=Path("fixture"), epoch=1, position=2, budget=5, fields=fields,
     )
-    here = list(loop.shard_steps(
-        task, records, tokenizer, sidecars, widths, heads=heads,
+    here = list(StepPreparer(settings, truncations=loop.truncations).shard_steps(
+        task, records,
     ))
-    worker = StepPreparer(PreparerSettings(
-        config=config, seed=loop.seed, held_out=loop.held_out, inherited=None,
-        rarity={"x": 3}, api_types=tuple(loop.api_types),
-        param_keys=tuple(loop.param_keys), widths=widths, heads=heads,
-    ))
+    worker = StepPreparer(settings)
     there = [
         unpack(pack(m)) if isinstance(m, StepReady) else m
         for m in worker.steps(task, records)
@@ -461,7 +524,7 @@ def test_an_interrupt_mid_shard_leaves_no_process_behind(
     monkeypatch, corpus, tmp_path, caplog,
 ):
     """Ctrl+C lands in the training loop with workers blocked on full queues."""
-    real_loss = TrainingLoop._loss_for
+    real_loss = TrainingLoop._device_loss
     calls = []
 
     def interrupted(self, *args, **kwargs):
@@ -470,7 +533,7 @@ def test_an_interrupt_mid_shard_leaves_no_process_behind(
             raise KeyboardInterrupt
         return real_loss(self, *args, **kwargs)
 
-    monkeypatch.setattr(TrainingLoop, "_loss_for", interrupted)
+    monkeypatch.setattr(TrainingLoop, "_device_loss", interrupted)
     with pytest.raises(KeyboardInterrupt):
         _run(monkeypatch, corpus, tmp_path / "out", caplog, workers=2)
     assert not multiprocessing.active_children()

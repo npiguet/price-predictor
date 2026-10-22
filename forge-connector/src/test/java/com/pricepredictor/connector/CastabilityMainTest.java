@@ -7,8 +7,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.CastabilityMain.CASTABLE;
-import static com.pricepredictor.connector.CastabilityMain.UNCASTABLE;
+import static com.pricepredictor.connector.CastabilityMain.Verdict.CASTABLE;
+import static com.pricepredictor.connector.CastabilityMain.Verdict.UNCASTABLE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,8 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class CastabilityMainTest {
 
-    private static String verdict(String name) {
-        Map<String, String> verdicts = CastabilityMain.consult(List.of(name));
+    private static CastabilityMain.Verdict verdict(String name) {
+        Map<String, CastabilityMain.Verdict> verdicts = CastabilityMain.consult(List.of(name));
         assertTrue(verdicts.containsKey(name), name + " should get a verdict");
         return verdicts.get(name);
     }
@@ -82,7 +82,7 @@ class CastabilityMainTest {
         List<String> names = List.of(
                 "Forest", "Lightning Bolt", "No Such Card Was Ever Printed", "Grizzly Bears");
 
-        Map<String, String> verdicts = CastabilityMain.consult(names);
+        Map<String, CastabilityMain.Verdict> verdicts = CastabilityMain.consult(names);
 
         assertEquals(List.of("Forest", "Lightning Bolt", "Grizzly Bears"),
                 List.copyOf(verdicts.keySet()));

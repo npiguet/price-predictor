@@ -1,0 +1,307 @@
+checkpoint,restriction,family,items,legal,auc
+e64 (earlier inputs),Creature,card type only,5752,1380,0.999
+e64 (earlier inputs),Any,card type only,1643,389,1
+e64 (earlier inputs),Creature.YouCtrl,controller,992,161,0.994
+e64 (earlier inputs),"Creature,Planeswalker",card type only,477,137,1
+e64 (earlier inputs),Permanent.nonLand,other,435,133,0.98
+e64 (earlier inputs),"Artifact,Enchantment",card type only,250,27,0.975
+e64 (earlier inputs),"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.994
+e64 (earlier inputs),Creature.nonBlack,colour,206,32,0.95
+e64 (earlier inputs),Land,card type only,196,143,0.945
+e64 (earlier inputs),Creature.nonArtifact,other,128,22,0.952
+e64 (earlier inputs),Creature.nonBlack+nonArtifact,colour,115,27,0.968
+e64 (earlier inputs),Creature.Other,other,111,24,0.954
+e64 (earlier inputs),Creature.powerLE#,number,96,23,0.936
+e64 (earlier inputs),Creature.nonMount,other,58,22,0.878
+e64 (earlier inputs),"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,0.992
+e64 (earlier inputs),"Creature,Vehicle",card type only,37,15,1
+e64 (earlier inputs),Permanent.YouCtrl,controller,32,17,1
+e64,Creature,card type only,5752,1380,0.999
+e64,Any,card type only,1643,389,0.999
+e64,Creature.YouCtrl,controller,992,161,1
+e64,"Creature,Planeswalker",card type only,477,137,1
+e64,Permanent.nonLand,other,435,133,0.968
+e64,"Artifact,Enchantment",card type only,250,27,0.98
+e64,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.985
+e64,Creature.nonBlack,colour,206,32,0.948
+e64,Land,card type only,196,143,0.971
+e64,Creature.nonArtifact,other,128,22,0.976
+e64,Creature.nonBlack+nonArtifact,colour,115,27,0.976
+e64,Creature.Other,other,111,24,0.968
+e64,Creature.powerLE#,number,96,23,0.962
+e64,Creature.nonMount,other,58,22,0.951
+e64,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+e64,"Creature,Vehicle",card type only,37,15,1
+e64,Permanent.YouCtrl,controller,32,17,1
+e128,Creature,card type only,5752,1380,0.999
+e128,Any,card type only,1643,389,1
+e128,Creature.YouCtrl,controller,992,161,0.996
+e128,"Creature,Planeswalker",card type only,477,137,1
+e128,Permanent.nonLand,other,435,133,0.947
+e128,"Artifact,Enchantment",card type only,250,27,0.948
+e128,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.994
+e128,Creature.nonBlack,colour,206,32,0.95
+e128,Land,card type only,196,143,0.875
+e128,Creature.nonArtifact,other,128,22,0.958
+e128,Creature.nonBlack+nonArtifact,colour,115,27,0.974
+e128,Creature.Other,other,111,24,0.88
+e128,Creature.powerLE#,number,96,23,0.929
+e128,Creature.nonMount,other,58,22,0.922
+e128,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+e128,"Creature,Vehicle",card type only,37,15,1
+e128,Permanent.YouCtrl,controller,32,17,1
+e64-lethality,Creature,card type only,5752,1380,1
+e64-lethality,Any,card type only,1643,389,1
+e64-lethality,Creature.YouCtrl,controller,992,161,1
+e64-lethality,"Creature,Planeswalker",card type only,477,137,1
+e64-lethality,Permanent.nonLand,other,435,133,0.982
+e64-lethality,"Artifact,Enchantment",card type only,250,27,1
+e64-lethality,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.988
+e64-lethality,Creature.nonBlack,colour,206,32,0.958
+e64-lethality,Land,card type only,196,143,0.707
+e64-lethality,Creature.nonArtifact,other,128,22,0.963
+e64-lethality,Creature.nonBlack+nonArtifact,colour,115,27,0.971
+e64-lethality,Creature.Other,other,111,24,0.969
+e64-lethality,Creature.powerLE#,number,96,23,0.969
+e64-lethality,Creature.nonMount,other,58,22,0.886
+e64-lethality,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+e64-lethality,"Creature,Vehicle",card type only,37,15,1
+e64-lethality,Permanent.YouCtrl,controller,32,17,1
+e128-lethality,Creature,card type only,5752,1380,0.999
+e128-lethality,Any,card type only,1643,389,1
+e128-lethality,Creature.YouCtrl,controller,992,161,1
+e128-lethality,"Creature,Planeswalker",card type only,477,137,1
+e128-lethality,Permanent.nonLand,other,435,133,0.989
+e128-lethality,"Artifact,Enchantment",card type only,250,27,0.997
+e128-lethality,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.991
+e128-lethality,Creature.nonBlack,colour,206,32,0.953
+e128-lethality,Land,card type only,196,143,0.655
+e128-lethality,Creature.nonArtifact,other,128,22,0.957
+e128-lethality,Creature.nonBlack+nonArtifact,colour,115,27,0.971
+e128-lethality,Creature.Other,other,111,24,0.959
+e128-lethality,Creature.powerLE#,number,96,23,0.914
+e128-lethality,Creature.nonMount,other,58,22,0.888
+e128-lethality,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+e128-lethality,"Creature,Vehicle",card type only,37,15,1
+e128-lethality,Permanent.YouCtrl,controller,32,17,1
+e256-lethality,Creature,card type only,5752,1380,0.999
+e256-lethality,Any,card type only,1643,389,1
+e256-lethality,Creature.YouCtrl,controller,992,161,0.999
+e256-lethality,"Creature,Planeswalker",card type only,477,137,1
+e256-lethality,Permanent.nonLand,other,435,133,1
+e256-lethality,"Artifact,Enchantment",card type only,250,27,0.977
+e256-lethality,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.977
+e256-lethality,Creature.nonBlack,colour,206,32,0.949
+e256-lethality,Land,card type only,196,143,0.677
+e256-lethality,Creature.nonArtifact,other,128,22,0.97
+e256-lethality,Creature.nonBlack+nonArtifact,colour,115,27,0.981
+e256-lethality,Creature.Other,other,111,24,0.971
+e256-lethality,Creature.powerLE#,number,96,23,0.941
+e256-lethality,Creature.nonMount,other,58,22,0.903
+e256-lethality,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+e256-lethality,"Creature,Vehicle",card type only,37,15,1
+e256-lethality,Permanent.YouCtrl,controller,32,17,1
+A64 best,Creature,card type only,5752,1380,1
+A64 best,Any,card type only,1643,389,1
+A64 best,Creature.YouCtrl,controller,992,161,1
+A64 best,"Creature,Planeswalker",card type only,477,137,1
+A64 best,Permanent.nonLand,other,435,133,1
+A64 best,"Artifact,Enchantment",card type only,250,27,1
+A64 best,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.998
+A64 best,Creature.nonBlack,colour,206,32,0.979
+A64 best,Land,card type only,196,143,0.958
+A64 best,Creature.nonArtifact,other,128,22,0.977
+A64 best,Creature.nonBlack+nonArtifact,colour,115,27,0.99
+A64 best,Creature.Other,other,111,24,0.946
+A64 best,Creature.powerLE#,number,96,23,0.972
+A64 best,Creature.nonMount,other,58,22,0.883
+A64 best,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+A64 best,"Creature,Vehicle",card type only,37,15,1
+A64 best,Permanent.YouCtrl,controller,32,17,1
+A64 last,Creature,card type only,5752,1380,1
+A64 last,Any,card type only,1643,389,1
+A64 last,Creature.YouCtrl,controller,992,161,0.999
+A64 last,"Creature,Planeswalker",card type only,477,137,1
+A64 last,Permanent.nonLand,other,435,133,1
+A64 last,"Artifact,Enchantment",card type only,250,27,0.999
+A64 last,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.997
+A64 last,Creature.nonBlack,colour,206,32,0.964
+A64 last,Land,card type only,196,143,0.856
+A64 last,Creature.nonArtifact,other,128,22,0.988
+A64 last,Creature.nonBlack+nonArtifact,colour,115,27,0.986
+A64 last,Creature.Other,other,111,24,0.96
+A64 last,Creature.powerLE#,number,96,23,0.974
+A64 last,Creature.nonMount,other,58,22,0.902
+A64 last,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+A64 last,"Creature,Vehicle",card type only,37,15,1
+A64 last,Permanent.YouCtrl,controller,32,17,1
+B64 best,Creature,card type only,5752,1380,1
+B64 best,Any,card type only,1643,389,1
+B64 best,Creature.YouCtrl,controller,992,161,1
+B64 best,"Creature,Planeswalker",card type only,477,137,1
+B64 best,Permanent.nonLand,other,435,133,1
+B64 best,"Artifact,Enchantment",card type only,250,27,1
+B64 best,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.997
+B64 best,Creature.nonBlack,colour,206,32,0.966
+B64 best,Land,card type only,196,143,0.938
+B64 best,Creature.nonArtifact,other,128,22,0.981
+B64 best,Creature.nonBlack+nonArtifact,colour,115,27,0.988
+B64 best,Creature.Other,other,111,24,0.938
+B64 best,Creature.powerLE#,number,96,23,0.97
+B64 best,Creature.nonMount,other,58,22,0.884
+B64 best,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+B64 best,"Creature,Vehicle",card type only,37,15,1
+B64 best,Permanent.YouCtrl,controller,32,17,1
+B64 last,Creature,card type only,5752,1380,1
+B64 last,Any,card type only,1643,389,1
+B64 last,Creature.YouCtrl,controller,992,161,1
+B64 last,"Creature,Planeswalker",card type only,477,137,1
+B64 last,Permanent.nonLand,other,435,133,1
+B64 last,"Artifact,Enchantment",card type only,250,27,1
+B64 last,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.996
+B64 last,Creature.nonBlack,colour,206,32,0.968
+B64 last,Land,card type only,196,143,0.911
+B64 last,Creature.nonArtifact,other,128,22,0.977
+B64 last,Creature.nonBlack+nonArtifact,colour,115,27,0.982
+B64 last,Creature.Other,other,111,24,0.961
+B64 last,Creature.powerLE#,number,96,23,0.98
+B64 last,Creature.nonMount,other,58,22,0.876
+B64 last,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+B64 last,"Creature,Vehicle",card type only,37,15,1
+B64 last,Permanent.YouCtrl,controller,32,17,1
+A128 best,Creature,card type only,5752,1380,1
+A128 best,Any,card type only,1643,389,1
+A128 best,Creature.YouCtrl,controller,992,161,1
+A128 best,"Creature,Planeswalker",card type only,477,137,1
+A128 best,Permanent.nonLand,other,435,133,0.994
+A128 best,"Artifact,Enchantment",card type only,250,27,0.999
+A128 best,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.988
+A128 best,Creature.nonBlack,colour,206,32,0.952
+A128 best,Land,card type only,196,143,0.906
+A128 best,Creature.nonArtifact,other,128,22,0.962
+A128 best,Creature.nonBlack+nonArtifact,colour,115,27,0.975
+A128 best,Creature.Other,other,111,24,0.982
+A128 best,Creature.powerLE#,number,96,23,0.946
+A128 best,Creature.nonMount,other,58,22,0.896
+A128 best,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+A128 best,"Creature,Vehicle",card type only,37,15,1
+A128 best,Permanent.YouCtrl,controller,32,17,0.949
+A128 last,Creature,card type only,5752,1380,0.999
+A128 last,Any,card type only,1643,389,1
+A128 last,Creature.YouCtrl,controller,992,161,1
+A128 last,"Creature,Planeswalker",card type only,477,137,1
+A128 last,Permanent.nonLand,other,435,133,1
+A128 last,"Artifact,Enchantment",card type only,250,27,1
+A128 last,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.995
+A128 last,Creature.nonBlack,colour,206,32,0.993
+A128 last,Land,card type only,196,143,0.901
+A128 last,Creature.nonArtifact,other,128,22,0.975
+A128 last,Creature.nonBlack+nonArtifact,colour,115,27,1
+A128 last,Creature.Other,other,111,24,0.974
+A128 last,Creature.powerLE#,number,96,23,0.942
+A128 last,Creature.nonMount,other,58,22,0.938
+A128 last,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+A128 last,"Creature,Vehicle",card type only,37,15,1
+A128 last,Permanent.YouCtrl,controller,32,17,1
+B128 best,Creature,card type only,5752,1380,1
+B128 best,Any,card type only,1643,389,1
+B128 best,Creature.YouCtrl,controller,992,161,1
+B128 best,"Creature,Planeswalker",card type only,477,137,1
+B128 best,Permanent.nonLand,other,435,133,0.999
+B128 best,"Artifact,Enchantment",card type only,250,27,1
+B128 best,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.993
+B128 best,Creature.nonBlack,colour,206,32,0.964
+B128 best,Land,card type only,196,143,0.883
+B128 best,Creature.nonArtifact,other,128,22,0.974
+B128 best,Creature.nonBlack+nonArtifact,colour,115,27,0.988
+B128 best,Creature.Other,other,111,24,0.969
+B128 best,Creature.powerLE#,number,96,23,0.945
+B128 best,Creature.nonMount,other,58,22,0.876
+B128 best,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+B128 best,"Creature,Vehicle",card type only,37,15,1
+B128 best,Permanent.YouCtrl,controller,32,17,1
+B128 last,Creature,card type only,5752,1380,1
+B128 last,Any,card type only,1643,389,1
+B128 last,Creature.YouCtrl,controller,992,161,1
+B128 last,"Creature,Planeswalker",card type only,477,137,1
+B128 last,Permanent.nonLand,other,435,133,0.996
+B128 last,"Artifact,Enchantment",card type only,250,27,1
+B128 last,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.996
+B128 last,Creature.nonBlack,colour,206,32,0.969
+B128 last,Land,card type only,196,143,0.912
+B128 last,Creature.nonArtifact,other,128,22,0.989
+B128 last,Creature.nonBlack+nonArtifact,colour,115,27,1
+B128 last,Creature.Other,other,111,24,0.971
+B128 last,Creature.powerLE#,number,96,23,0.957
+B128 last,Creature.nonMount,other,58,22,0.87
+B128 last,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+B128 last,"Creature,Vehicle",card type only,37,15,1
+B128 last,Permanent.YouCtrl,controller,32,17,1
+A256 best,Creature,card type only,5752,1380,0.999
+A256 best,Any,card type only,1643,389,1
+A256 best,Creature.YouCtrl,controller,992,161,1
+A256 best,"Creature,Planeswalker",card type only,477,137,1
+A256 best,Permanent.nonLand,other,435,133,1
+A256 best,"Artifact,Enchantment",card type only,250,27,0.984
+A256 best,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.993
+A256 best,Creature.nonBlack,colour,206,32,0.962
+A256 best,Land,card type only,196,143,0.981
+A256 best,Creature.nonArtifact,other,128,22,0.986
+A256 best,Creature.nonBlack+nonArtifact,colour,115,27,0.976
+A256 best,Creature.Other,other,111,24,0.982
+A256 best,Creature.powerLE#,number,96,23,0.968
+A256 best,Creature.nonMount,other,58,22,0.932
+A256 best,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+A256 best,"Creature,Vehicle",card type only,37,15,1
+A256 best,Permanent.YouCtrl,controller,32,17,1
+A256 last,Creature,card type only,5752,1380,0.999
+A256 last,Any,card type only,1643,389,1
+A256 last,Creature.YouCtrl,controller,992,161,1
+A256 last,"Creature,Planeswalker",card type only,477,137,1
+A256 last,Permanent.nonLand,other,435,133,1
+A256 last,"Artifact,Enchantment",card type only,250,27,0.984
+A256 last,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.993
+A256 last,Creature.nonBlack,colour,206,32,0.962
+A256 last,Land,card type only,196,143,0.981
+A256 last,Creature.nonArtifact,other,128,22,0.986
+A256 last,Creature.nonBlack+nonArtifact,colour,115,27,0.976
+A256 last,Creature.Other,other,111,24,0.982
+A256 last,Creature.powerLE#,number,96,23,0.968
+A256 last,Creature.nonMount,other,58,22,0.932
+A256 last,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+A256 last,"Creature,Vehicle",card type only,37,15,1
+A256 last,Permanent.YouCtrl,controller,32,17,1
+B256 best,Creature,card type only,5752,1380,0.999
+B256 best,Any,card type only,1643,389,1
+B256 best,Creature.YouCtrl,controller,992,161,1
+B256 best,"Creature,Planeswalker",card type only,477,137,1
+B256 best,Permanent.nonLand,other,435,133,1
+B256 best,"Artifact,Enchantment",card type only,250,27,0.992
+B256 best,"Creature.attacking,Creature.blocking",combat or tapped,249,20,0.998
+B256 best,Creature.nonBlack,colour,206,32,0.965
+B256 best,Land,card type only,196,143,0.991
+B256 best,Creature.nonArtifact,other,128,22,0.986
+B256 best,Creature.nonBlack+nonArtifact,colour,115,27,0.978
+B256 best,Creature.Other,other,111,24,0.961
+B256 best,Creature.powerLE#,number,96,23,0.971
+B256 best,Creature.nonMount,other,58,22,0.944
+B256 best,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+B256 best,"Creature,Vehicle",card type only,37,15,1
+B256 best,Permanent.YouCtrl,controller,32,17,1
+B256 last,Creature,card type only,5752,1380,1
+B256 last,Any,card type only,1643,389,1
+B256 last,Creature.YouCtrl,controller,992,161,1
+B256 last,"Creature,Planeswalker",card type only,477,137,1
+B256 last,Permanent.nonLand,other,435,133,1
+B256 last,"Artifact,Enchantment",card type only,250,27,0.995
+B256 last,"Creature.attacking,Creature.blocking",combat or tapped,249,20,1
+B256 last,Creature.nonBlack,colour,206,32,0.969
+B256 last,Land,card type only,196,143,0.996
+B256 last,Creature.nonArtifact,other,128,22,0.985
+B256 last,Creature.nonBlack+nonArtifact,colour,115,27,0.992
+B256 last,Creature.Other,other,111,24,0.971
+B256 last,Creature.powerLE#,number,96,23,0.99
+B256 last,Creature.nonMount,other,58,22,0.928
+B256 last,"Permanent.inZoneBattlefield+YouCtrl,Card.suspended+YouOwn",controller,39,23,1
+B256 last,"Creature,Vehicle",card type only,37,15,1
+B256 last,Permanent.YouCtrl,controller,32,17,1

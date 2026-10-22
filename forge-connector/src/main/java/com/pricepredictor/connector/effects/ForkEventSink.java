@@ -1,27 +1,7 @@
 package com.pricepredictor.connector.effects;
 
-import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
-import forge.game.card.Card;
-import forge.game.card.CardView;
-import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
-import forge.game.event.GameEventCardCounters;
-import forge.game.event.GameEventCardDamaged;
-import forge.game.event.GameEventCardRegenerated;
-import forge.game.event.GameEventCardStatsChanged;
-import forge.game.event.GameEventCardTapped;
-import forge.game.event.GameEventDayTimeChanged;
-import forge.game.event.GameEventGameOutcome;
-import forge.game.event.GameEventPlayerCounters;
-import forge.game.event.GameEventPlayerDamaged;
-import forge.game.event.GameEventPlayerLivesChanged;
-import forge.game.event.GameEventPlayerPoisoned;
-import forge.game.event.GameEventPlayerRadiation;
-import forge.game.event.GameEventScry;
-import forge.game.event.GameEventShuffle;
-import forge.game.event.GameEventSpeedChanged;
-import forge.game.event.GameEventSurveil;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
@@ -35,34 +15,23 @@ import java.util.Set;
  *
  * <p>The bracket collector sorts events into a resolution bracket or a combat
  * one, because a real game interleaves them. A fork has no such problem: it is
- * created, one ability is forced to resolve, and it is thrown away, so every
- * event the bus publishes in that window belongs to that resolution. Appending
- * them flat is the whole job.
+ * created, one ability is forced to resolve or one damage step is dealt, and it
+ * is thrown away, so every event the bus publishes in that window belongs to
+ * that one thing. Appending them flat is the whole job.
  *
- * <p>Shapes each event through {@link BusEvents}, the same reading the bracket
- * collector uses, so an interventional record and an observed one describe the
- * same outcome the same way. <b>That claim is only true if this subscribes to
- * the same events</b>, and for the first collected corpus it did not: the sink
- * listened to seven of the sixteen the bracket collector listens to, so a fork
- * of "draw a card" or "gets +2/+2 and gains flying" recorded an empty event
- * list and the counterfactual read as "the ability did nothing". The whole fork
- * vocabulary measured across that corpus was {@code zone_change} and
- * {@code counter_change}, against seventeen types on real resolutions.
- *
- * <p>Its own {@link StatDiffer}, primed by nothing: a fork lives for one
- * resolution, so the first computed characteristics it sees are the baseline
- * the resolution moved away from.
+ * <p>The events are read by {@link BusEventReader}, the same reader the bracket
+ * collector uses, so an interventional or probe record and an observed one
+ * describe the same outcome the same way: the same subscriptions, the same
+ * shaping, and the same cause the bus names for a damage, a poison or a
+ * radiation counter.
  *
  * <p>Every event is stamped by {@link EventAttribution} on its way in, for the
  * same reason: {@code attributed_to} and {@code duration} are how a reader asks
  * which clause of the line did this and how long it lasts, and a fork that
  * answered null to both was not describing the outcome the same way after all.
- * Across the smoke corpus that silence was most of the 30.9% of events with no
- * attribution at all.
  */
-final class ForkEventSink {
+final class ForkEventSink extends BusEventReader {
 
-    private final Game fork;
     /**
      * The line whose resolution is being watched, or null when nothing resolves.
      *
@@ -73,14 +42,33 @@ final class ForkEventSink {
      * — from the pointer alone, which for a turn-based action names nothing.
      */
     private final SpellAbility acting;
-    private final StatDiffer stats = new StatDiffer();
+    /**
+     * Whether a card damaged in this fork is damaged in combat: true for a
+     * damage-step probe, which deals one combat damage step, and false for an
+     * intervention, whose forced resolution is not one. The flag is what a
+     * reader uses to tell the two apart, and a probe's damage is compared
+     * against the observed combat record's.
+     */
+    private final boolean combatDamage;
     private final List<EffectEvent> events = new ArrayList<>();
     /** Positions in {@link #events} of moves off the battlefield during a state-based check. */
     private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
-    ForkEventSink(Game fork, SpellAbility acting) {
-        this.fork = fork;
+    private ForkEventSink(Game fork, SpellAbility acting, boolean combatDamage) {
+        super(fork);
         this.acting = acting;
+        this.combatDamage = combatDamage;
+        primeBattlefield();
+    }
+
+    /** A sink for a forced resolution of {@code acting}. */
+    static ForkEventSink forIntervention(Game fork, SpellAbility acting) {
+        return new ForkEventSink(fork, acting, false);
+    }
+
+    /** A sink for a damage step dealt in a fork, with no ability resolving. */
+    static ForkEventSink forProbe(Game fork) {
+        return new ForkEventSink(fork, null, true);
     }
 
     List<EffectEvent> events() {
@@ -100,197 +88,37 @@ final class ForkEventSink {
         return events.isEmpty();
     }
 
+    @Override
+    boolean cardDamageIsCombat() {
+        return combatDamage;
+    }
+
+    @Override
+    void fileDamage(EffectEvent damage, String namedCause, boolean combat) {
+        fileOutcome(damage, namedCause);
+    }
+
     /**
      * File one event, attributed.
      *
-     * <p>The single door in, so a new subscriber cannot forget the stamp —
-     * which is exactly how the fork paths came to write events with a null
-     * {@code attributed_to} while the observed path stamped every one of its
-     * own. The bracket collector's {@code record} is the sibling of this.
+     * <p>The single door in, so no event can miss the stamp. The bracket
+     * collector's {@code fileOutcome} is the sibling of this.
      */
-    private void file(EffectEvent event) {
-        if (event != null) {
-            events.add(EventAttribution.stamp(event, acting));
-        }
+    @Override
+    void fileOutcome(EffectEvent event, String namedCause) {
+        events.add(EventAttribution.stamp(event, acting, namedCause));
     }
 
-    /** File a reading that produced several events, all from the same clause. */
-    private void fileAll(List<EffectEvent> produced) {
-        for (EffectEvent event : produced) {
-            file(event);
-        }
-    }
-
-    @Subscribe
-    public void onCardDamaged(GameEventCardDamaged event) {
-        // Not combat: a forced resolution is not a combat damage step, and the
-        // flag is what a reader uses to tell the two apart.
-        file(BusEvents.cardDamaged(event, false));
-    }
-
-    @Subscribe
-    public void onPlayerDamaged(GameEventPlayerDamaged event) {
-        file(BusEvents.playerDamaged(event));
-    }
-
-    @Subscribe
-    public void onLifeChanged(GameEventPlayerLivesChanged event) {
-        file(BusEvents.lifeChanged(event));
-    }
-
-    @Subscribe
-    public void onPoisoned(GameEventPlayerPoisoned event) {
-        file(BusEvents.poisoned(event));
-    }
-
-    @Subscribe
-    public void onCounters(GameEventCardCounters event) {
-        file(BusEvents.counters(event));
-    }
-
-    /**
-     * Energy, read the same way the bracket collector reads it — see
-     * {@code BusBracketCollector.onPlayerCounters}. Kept in step by {@link
-     * ForkEventSinkTest#aForkHearsEveryOutcomeAnObservedRecordHears}, so this
-     * one cannot drift from that one the way the sink's whole subscription
-     * list once did.
-     */
-    @Subscribe
-    public void onPlayerCounters(GameEventPlayerCounters event) {
-        file(BusEvents.playerCounter(event));
-    }
-
-    @Subscribe
-    public void onRadiation(GameEventPlayerRadiation event) {
-        file(BusEvents.radiation(event));
-    }
-
-    @Subscribe
-    public void onSpeed(GameEventSpeedChanged event) {
-        file(BusEvents.speed(event));
-    }
-
-    @Subscribe
-    public void onDayTime(GameEventDayTimeChanged event) {
-        file(BusEvents.dayTime(event));
-    }
-
-    /**
-     * A regeneration shield doing its job, read the same way the bracket
-     * collector reads it — see {@code BusBracketCollector.onRegenerated}. Kept
-     * in step by {@link ForkEventSinkTest#aForkHearsEveryOutcomeAnObservedRecordHears}.
-     */
-    @Subscribe
-    public void onRegenerated(GameEventCardRegenerated event) {
-        file(BusEvents.regenerated(event));
-    }
-
-    /** A library shuffled, read the same way — see {@code BusBracketCollector.onShuffle}. */
-    @Subscribe
-    public void onShuffle(GameEventShuffle event) {
-        file(BusEvents.libraryShuffled(event));
-    }
-
-    /**
-     * The game ended, read the same way — see {@code
-     * BusBracketCollector.onGameOutcome}. {@code file} already skips a null
-     * event (a draw, or a winning name this fork's own game cannot resolve).
-     */
-    @Subscribe
-    public void onGameOutcome(GameEventGameOutcome event) {
-        file(BusEvents.gameOutcome(event, fork));
-    }
-
-    @Subscribe
-    public void onTapped(GameEventCardTapped event) {
-        file(BusEvents.tapped(event));
-    }
-
-    /**
-     * A completed move, and the draw, discard or mill it may also be.
-     *
-     * <p>One event per move, from the event that carries both ends of it. The
-     * per-zone-list notification the sink used to read fires three times for one
-     * cast and names the wrong destination on the first, which is why the fork
-     * event lists were both duplicated and wrong.
-     */
-    @Subscribe
-    public void onCardChangeZone(GameEventCardChangeZone event) {
-        EffectEvent moved = BusEvents.cardMoved(event);
-        if (moved != null && event.from() != null
+    @Override
+    void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
+        if (event.from() != null
                 && event.from().zoneType() == ZoneType.Battlefield
-                && fork != null && fork.getTracker().isFrozen()) {
+                && game != null && game.getTracker().isFrozen()) {
             // A state-based check is running -- the same reading the live
             // collector takes -- so this is a death the forced resolution
             // left behind, which a modal fork files by the live rule.
             stateBasedLeaves.add(events.size());
         }
-        file(moved);
-        file(BusEvents.libraryMovement(event));
-        if (event.card() != null && event.from() != null
-                && event.from().zoneType() == ZoneType.Battlefield) {
-            // Off the battlefield a card's computed characteristics stop
-            // meaning anything, and one that returns is a new object.
-            stats.forget(event.card().getId());
-        }
-    }
-
-    /**
-     * The engine says a card's stats moved; this says what moved.
-     *
-     * <p>The bus publishes one event for a pump, an anthem recompute, an
-     * animation and a colour change alike, and names only the card — so without
-     * the difference the whole "gets +2/+2 and gains flying" family, which is
-     * most of what a limited deck does, forks into an empty event list.
-     */
-    @Subscribe
-    public void onStatsChanged(GameEventCardStatsChanged event) {
-        if (event.cards() == null) {
-            return;
-        }
-        for (CardView view : event.cards()) {
-            if (view == null) {
-                continue;
-            }
-            Card card = cardById(view.getId());
-            if (card != null) {
-                fileAll(stats.diff(card));
-            }
-        }
-    }
-
-    @Subscribe
-    public void onAttachment(GameEventCardAttachment event) {
-        file(BusEvents.attachment(event));
-    }
-
-    @Subscribe
-    public void onScry(GameEventScry event) {
-        fileAll(BusEvents.scry(event));
-    }
-
-    @Subscribe
-    public void onSurveil(GameEventSurveil event) {
-        fileAll(BusEvents.surveil(event));
-    }
-
-    /**
-     * The fork's battlefield card an id names, or null.
-     *
-     * <p>The bus hands out views rather than cards, and a view carries the id
-     * and not the object. The battlefield is small enough that a scan costs less
-     * than an index kept in step with every zone change — and a fork's is
-     * shorter still, because it lives for one resolution.
-     */
-    private Card cardById(int id) {
-        if (fork == null) {
-            return null;
-        }
-        for (Card card : fork.getCardsIn(ZoneType.Battlefield)) {
-            if (card.getId() == id) {
-                return card;
-            }
-        }
-        return null;
+        fileOutcome(moved, null);
     }
 }

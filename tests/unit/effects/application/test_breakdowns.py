@@ -13,13 +13,14 @@ from pathlib import Path
 import pytest
 
 from effects.application import breakdowns as bd
-from effects.application.breakdowns import RecordResult
-from effects.application.evaluate_effect_model import (
+from effects.application.breakdowns import (
     CARD_DISJOINT,
     GAME_DISJOINT,
-    CheckStatus,
+    RecordResult,
     breakdown_checks,
 )
+from effects.domain.evaluation_report import CheckStatus
+from effects.domain.records import WHAT_IF_SUBKINDS, LegalityDecision
 from effects.domain.rule_families import rule_family
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
@@ -136,7 +137,7 @@ class TestPolicyAndDecisionSlices:
         assert groups[bd.ON_POLICY].per_record.records == len(rows) - 1
 
     def test_legality_records_split_into_real_what_if_and_unknown(self, rows):
-        legality = [r for r in rows if r.subkind in bd.LEGALITY_SUBKINDS]
+        legality = [r for r in rows if r.subkind in WHAT_IF_SUBKINDS]
         assert len(legality) >= 3
         marked = [
             replace(legality[0], what_if=False),
@@ -144,9 +145,9 @@ class TestPolicyAndDecisionSlices:
             *legality[2:],
         ]
         groups = bd.decision_slice([*marked, *rows])
-        assert groups[bd.REAL].per_record.records == 1
-        assert groups[bd.WHAT_IF].per_record.records == 1
-        assert bd.UNKNOWN in groups
+        assert groups[LegalityDecision.REAL].per_record.records == 1
+        assert groups[LegalityDecision.WHAT_IF].per_record.records == 1
+        assert LegalityDecision.UNKNOWN in groups
 
     def test_decision_records_never_enter_the_legality_slice(self, rows):
         decisions = [r for r in rows if r.subkind == "decision"]
@@ -167,13 +168,10 @@ class TestWithheldKeyword:
         assert groups[bd.WITHHELD].per_record.records == 1
         assert groups[bd.TRAINED].per_record.records == 1
 
-    def test_a_keyword_value_is_not_part_of_its_name(self):
-        assert bd.normalize_keyword("Ward:2") == "ward"
-
 
 class TestTheReport:
     def test_every_section_appears_for_a_gen2_shaped_set(self, rows):
-        legality = next(r for r in rows if r.subkind in bd.LEGALITY_SUBKINDS)
+        legality = next(r for r in rows if r.subkind in WHAT_IF_SUBKINDS)
         card = [*rows, replace(rows[0], random_seat=True),
                 replace(legality, what_if=False)]
         checks = breakdown_checks(

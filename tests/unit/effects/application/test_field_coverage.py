@@ -40,27 +40,21 @@ from effects.domain.state_snapshot import (
     PlayerState,
     StateSnapshot,
 )
+from tests.unit.effects.builders import make_record, make_snapshot
 
 
 def _snapshot(*entities: EntityState) -> StateSnapshot:
-    return StateSnapshot(
-        global_=GlobalState(
-            turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-        ),
+    return make_snapshot(
         players=(PlayerState(id="P0", life=20, hand=7, library=53, graveyard=0),),
         entities=entities,
     )
 
 
 def _record(payload, state: StateSnapshot | None = None, **kwargs) -> EffectRecord:
-    return EffectRecord(
+    return make_record(
+        kwargs.pop("kind", RecordKind.CONTINUOUS),
         record_id=kwargs.pop("record_id", "r1"),
-        run_id="run",
         timestamp="2026-09-08T00:00:00Z",
-        game_id="g1",
-        kind=kwargs.pop("kind", RecordKind.CONTINUOUS),
-        moment=kwargs.pop("moment", None),
-        actor_player=kwargs.pop("actor_player", "P0"),
         state=state or _snapshot(),
         payload=payload,
         **kwargs,

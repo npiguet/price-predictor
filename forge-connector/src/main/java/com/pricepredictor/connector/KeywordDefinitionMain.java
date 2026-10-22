@@ -45,23 +45,14 @@ import java.util.regex.Pattern;
 public class KeywordDefinitionMain {
 
     public static void main(String[] args) {
-        String outputPath = "output/effects/keyword-definitions.json";
-        for (int i = 0; i < args.length; i++) {
-            if ("--output".equals(args[i]) && i + 1 < args.length) {
-                outputPath = args[++i];
-            }
-        }
+        String outputPath = ToolMain.args(args, "--output")
+                .get("--output", "output/effects/keyword-definitions.json");
 
-        try {
+        ToolMain.run(() -> {
             ForgeEnvironmentInitializer.initialize();
             System.out.println("Wrote keyword definitions to "
                     + writeTo(Path.of(outputPath)));
-            System.exit(0);
-        } catch (IOException | RuntimeException e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
-        }
+        });
     }
 
     /** Render the document and write it, creating the parent directory. */

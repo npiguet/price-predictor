@@ -1,0 +1,55 @@
+checkpoint,api,records,targeted_before,targeted_after,other_before,other_after
+e64 (earlier inputs),Draw,23,1.15,0.85,0.07,0.12
+e64 (earlier inputs),Discard,44,1.18,0.96,0.09,0.37
+e64 (earlier inputs),Mill,25,2.98,2.67,0.15,1.3
+e64,Draw,23,0.6,0.25,0.06,0.38
+e64,Discard,44,1.01,0.34,0.05,0.83
+e64,Mill,25,3.19,0.07,0.03,2.92
+e128,Draw,23,0.93,0.67,0.64,0.71
+e128,Discard,44,0.83,0.54,0.04,0.22
+e128,Mill,25,2.64,2.19,0.06,1.4
+e64-lethality,Draw,23,1.27,0.48,0.11,0.82
+e64-lethality,Discard,44,0.77,0.18,0.03,0.55
+e64-lethality,Mill,25,2.39,0.85,0.13,2.22
+e128-lethality,Draw,23,1.15,0.55,0.49,0.91
+e128-lethality,Discard,44,1.01,0.71,0.05,0.31
+e128-lethality,Mill,25,3.98,3.41,0.08,1.83
+e256-lethality,Draw,23,0.91,0.29,0.06,0.35
+e256-lethality,Discard,44,0.82,0.32,0.06,0.63
+e256-lethality,Mill,25,1.8,0.32,0.1,1.92
+A64 best,Draw,23,0.77,0.36,0.09,0.54
+A64 best,Discard,44,0.45,0.03,0.01,0.54
+A64 best,Mill,25,3.23,1.18,0.08,1.77
+A64 last,Draw,23,1.05,0.23,0.03,0.77
+A64 last,Discard,44,0.59,0.02,0,0.69
+A64 last,Mill,25,2.4,0.34,0.04,1.97
+B64 best,Draw,23,0.72,0.3,0.03,0.4
+B64 best,Discard,44,0.64,0.03,0.01,0.82
+B64 best,Mill,25,3.05,1.09,0.1,2.03
+B64 last,Draw,23,1.05,0.33,0.01,0.59
+B64 last,Discard,44,0.71,0.01,0,0.83
+B64 last,Mill,25,3.77,0.54,0.04,2.96
+A128 best,Draw,23,1.34,0.46,0.07,0.96
+A128 best,Discard,44,0.98,0.58,0.13,0.67
+A128 best,Mill,25,3,0.81,0.03,1.83
+A128 last,Draw,23,0.92,0.19,0.01,0.35
+A128 last,Discard,44,0.97,0.11,0.05,0.93
+A128 last,Mill,25,2.62,0.17,0.06,2.22
+B128 best,Draw,23,1.29,0.38,0.04,0.77
+B128 best,Discard,44,0.8,0.26,0.02,0.39
+B128 best,Mill,25,3.59,0.92,0.04,2.74
+B128 last,Draw,23,1.16,0.34,0.03,0.63
+B128 last,Discard,44,1,0.36,0.05,0.63
+B128 last,Mill,25,3.08,0.92,0.08,2.62
+A256 best,Draw,23,1.24,0.25,0.07,0.45
+A256 best,Discard,44,0.65,0.08,0.02,0.34
+A256 best,Mill,25,1.98,0.07,0.02,1.81
+A256 last,Draw,23,1.24,0.25,0.07,0.45
+A256 last,Discard,44,0.65,0.08,0.02,0.34
+A256 last,Mill,25,1.98,0.07,0.02,1.81
+B256 best,Draw,23,1.31,0.24,0.04,0.51
+B256 best,Discard,44,0.75,0.08,0.01,0.47
+B256 best,Mill,25,2.82,0.13,0.01,2.48
+B256 last,Draw,23,1.35,0.26,0.04,0.66
+B256 last,Discard,44,0.7,0.05,0.01,0.45
+B256 last,Mill,25,3.04,0.06,0.01,2.58

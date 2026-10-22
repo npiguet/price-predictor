@@ -15,6 +15,9 @@ Three rules:
 - **A variant of a held-out card is held out with it** (FR-057). Otherwise a
   variant would put a held-out card's mechanics in front of the model under a
   different name, and the card-disjoint split would stop meaning what it says.
+  Nor may a variant of any other card print a held-out text, or under
+  ``--holdout-unit template`` its template: the perturbation can land on one,
+  and once its sidecar exists such a variant is deleted before it is decked.
 - **A variant lives on the script surface only** and is never converted to
   prose. There is no oracle text for a card nobody printed, and writing one
   would put text in the corpus no card has. It still gets a sidecar — that is
@@ -32,8 +35,22 @@ import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from effects.application.collect_coverage import (
+    build_coverage_decks,
+    collector_supervisor,
+    load_exclusions,
+    play_decks,
+)
 from effects.domain.collection_caps import CollectionCaps
-from effects.domain.script_variants import perturb, variant_name
+from effects.domain.coverage import DeckCandidate
+from effects.domain.script_variants import (
+    is_multi_face,
+    perturb,
+    renamed_script,
+    script_card_name,
+    variant_name,
+)
+from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOutCards
 from effects.infrastructure.variant_sidecar_connector import VariantSidecarConnector
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
@@ -79,6 +96,13 @@ class CollectVariantsConfig:
     exclude_cards: Path | None = None
     workers: int = 12
     caps: CollectionCaps = field(default_factory=CollectionCaps)
+    #: The converted trees and the rule the holdout is chosen by, so a variant
+    #: printing a held-out text or template is dropped. The same as
+    #: ``build-corpus``'s, which must agree for the drop to mean anything.
+    cards_folders: tuple[str, ...] = ("output/cardsfolder", "output/tokenscripts")
+    holdout_permille: int = HOLDOUT_PERMILLE
+    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
+    holdout_unit: str = "template"
 
     def volume_source(self) -> Path:
         """The directory the volume cap counts records in."""
@@ -121,7 +145,7 @@ def volume_ceiling(source_scripts: int, volume: float) -> int:
 
 
 #: Written by VariantSidecarMain: every variant name Forge's card database
-#: accepted, by the same lookup MatchGenerator.materializeDeck uses.
+#: accepted, by the same lookup DeckMaterializer.resolve uses.
 LOADABLE_FILE = "loadable.txt"
 
 
@@ -148,7 +172,7 @@ def loadable_variants(
             f"{listing}: VariantSidecarMain writes the loadable-name list "
             "beside the variant scripts, and without it there is no way to "
             "tell which perturbations Forge accepted. Rebuild the connector "
-            "JAR (cd forge-connector && mvn package -DskipTests)."
+            "JAR (cd forge-connector && mvn install -DskipTests)."
         )
     accepted = {
         line.strip() for line in listing.read_text(encoding="utf-8").splitlines()
@@ -188,24 +212,6 @@ def perturb_script(
     return None
 
 
-def is_multi_face(source_lines: list[str]) -> bool:
-    """Whether a Forge script declares more than one card face.
-
-    A variant takes its own name, and renaming is a rewrite of the script's
-    first ``Name:`` line -- which on a two-faced card renames the front and
-    leaves the back answering to the original. Forge then builds card rules
-    whose faces disagree, and the failure is not a skipped card: ``StaticData``
-    throws while constructing the whole database, so every Forge startup that
-    sees the script dies, including runs with nothing to do with variants.
-
-    Perturbing one parameter of one face is not what these scripts are for
-    anyway, so they are left alone rather than renamed more cleverly.
-    """
-    return any(
-        line.strip().startswith("ALTERNATE") for line in source_lines
-    )
-
-
 def generate_variants(
     forge_cards_path: Path,
     output_path: Path,
@@ -243,7 +249,7 @@ def generate_variants(
             lines = source.read_text(encoding="utf-8").splitlines()
         except OSError:
             continue
-        card_name = _card_name(lines)
+        card_name = script_card_name(lines)
         if card_name is None or fold_card_name(card_name) in held_out:
             continue
         if is_multi_face(lines):
@@ -259,32 +265,10 @@ def generate_variants(
         # sidecar at exactly that path.
         path = output_path / f"{sanitize_card_name(name)}.txt"
         path.write_text(
-            "\n".join(_rename(perturbed, name)) + "\n", encoding="utf-8",
+            "\n".join(renamed_script(perturbed, name)) + "\n", encoding="utf-8",
         )
         generated.append(GeneratedVariant(name, card_name, path, description))
     return generated
-
-
-def _card_name(lines: list[str]) -> str | None:
-    for line in lines:
-        if line.startswith("Name:"):
-            return line[len("Name:"):].strip()
-    return None
-
-
-def _rename(lines: list[str], name: str) -> list[str]:
-    """Give the variant its own name so Forge files it as a separate card."""
-    return [
-        f"Name:{name}" if line.startswith("Name:") else line for line in lines
-    ]
-
-
-def held_out_cards(
-    split_from: Path | None, exclude_cards: Path | None = None,
-) -> frozenset[str]:
-    from effects.application.collect_coverage import load_exclusions
-
-    return load_exclusions(split_from=split_from, exclude_cards=exclude_cards)
 
 
 def _brace_wrap_mana_cost(cost: str) -> str:
@@ -308,40 +292,49 @@ def _brace_wrap_mana_cost(cost: str) -> str:
     return "".join(f"{{{shard}}}" for shard in cost.split())
 
 
-def _deck_text(variant: GeneratedVariant) -> str:
-    """The converted-shaped text `compute_basic_lands` needs for a variant.
+def _deck_candidate(variant: GeneratedVariant) -> DeckCandidate:
+    """The deck candidate ``compute_basic_lands`` reads for a variant.
 
     A variant has no converted prose by design (FR-056), and the manabase
-    heuristic reads only the name, mana cost and type line, so those are
-    rendered from the perturbed script rather than the tree.
+    heuristic reads only the mana cost, so that is taken from the perturbed
+    script rather than the tree.
     """
     lines = variant.path.read_text(encoding="utf-8").splitlines()
     cost = next(
         (ln.split(":", 1)[1] for ln in lines if ln.startswith("ManaCost:")), "",
     )
-    types = next(
-        (ln.split(":", 1)[1] for ln in lines if ln.startswith("Types:")), "",
-    )
-    return (
-        f"name: {variant.name}\n"
-        f"mana cost: {_brace_wrap_mana_cost(cost)}\n"
-        f"types: {types}\n"
-    )
+    return DeckCandidate(variant.name, _brace_wrap_mana_cost(cost) or None)
 
 
 def run(config: CollectVariantsConfig) -> int:
     """Generate variants, then play them through the records-only worker."""
-    from effects.application.collect_coverage import build_coverage_decks
-    from effects.infrastructure.collector_connector import CollectorSupervisor
-    from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
-    from effects.infrastructure.record_io import count_records
-
     if not Path(config.forge_cards_path).is_dir():
         logger.error(
             "No Forge card scripts at %s. This command reads the *source* "
             "scripts, not the converted ones.", config.forge_cards_path,
         )
         return 1
+    budget = _size_budget(config)
+    if budget <= 0:
+        return 1
+    variants = _generate(config, budget)
+    if not variants:
+        return 1
+    code = _write_sidecars(Path(config.variant_scripts))
+    if code != 0:
+        return code
+    variants = _keep_loadable(variants, Path(config.variant_scripts))
+    if not variants:
+        return 1
+    variants = _keep_unheld(config, variants)
+    if not variants:
+        return 1
+    return _play_and_check_growth(config, variants, budget)
+
+
+def _size_budget(config: CollectVariantsConfig) -> int:
+    """How many variant scripts this run may generate; says why when none."""
+    from effects.infrastructure.record_io import count_records
 
     # A directory listing, not a corpus read: it bounds how many variants can
     # exist, which is what says how far the record count has to go.
@@ -359,9 +352,13 @@ def run(config: CollectVariantsConfig) -> int:
             "the corpus when variants are written to a directory of their own.",
             source, existing, config.variant_volume, budget,
         )
-        return 1
+    return budget
 
-    held_out = held_out_cards(config.split_from, config.exclude_cards)
+
+def _generate(config: CollectVariantsConfig, budget: int) -> list[GeneratedVariant]:
+    held_out = load_exclusions(
+        split_from=config.split_from, exclude_cards=config.exclude_cards,
+    )
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
         held_out=held_out, limit=budget, seed=config.seed,
@@ -373,23 +370,35 @@ def run(config: CollectVariantsConfig) -> int:
     )
     if not variants:
         logger.error("No script had a perturbable parameter")
-        return 1
+    return variants
 
-    # A variant without a sidecar produces records nothing can join, and the
-    # join fails loudly, so this runs before the first game rather than after.
-    code = VariantSidecarConnector().run(Path(config.variant_scripts))
+
+def _write_sidecars(variant_scripts: Path) -> int:
+    """Write every variant's sidecar before the first game rather than after.
+
+    A variant without a sidecar produces records nothing can join, and the
+    join fails loudly.
+    """
+    code = VariantSidecarConnector().run(variant_scripts)
     if code != 0:
         logger.error(
             "VariantSidecarMain exited %d; variant records would have no "
             "sidecar to join against", code,
         )
-        return code
+    return code
 
-    # Forge decides which perturbations it will load, and it has just told us:
-    # the sidecar pass staged the variants and wrote the list. Decking a name
-    # Forge rejected kills the worker that draws it, because a decks-only round
-    # refuses the deck rather than playing basics.
-    deckable = loadable_variants(variants, Path(config.variant_scripts))
+
+def _keep_loadable(
+    variants: list[GeneratedVariant], variant_scripts: Path,
+) -> list[GeneratedVariant]:
+    """The variants Forge loaded, saying how many it rejected.
+
+    Forge decides which perturbations it will load, and the sidecar pass has
+    just told us: it staged the variants and wrote the list. Decking a name
+    Forge rejected kills the worker that draws it, because a decks-only round
+    refuses the deck rather than playing basics.
+    """
+    deckable = loadable_variants(variants, variant_scripts)
     rejected = len(variants) - len(deckable)
     if rejected:
         logger.warning(
@@ -404,37 +413,107 @@ def run(config: CollectVariantsConfig) -> int:
             "Forge loaded none of the %d perturbed scripts, so there is "
             "nothing to deck.", len(variants),
         )
-        return 1
-    variants = deckable
+    return deckable
 
-    supervisor = CollectorSupervisor(
-        worker_count=config.workers, effect_records=config.effect_records,
-        caps=config.caps, variant_scripts=Path(config.variant_scripts),
+
+def drop_held_out_variants(
+    variants: list[GeneratedVariant], held_out: HeldOutCards,
+) -> list[GeneratedVariant]:
+    """The variants whose sidecar prints no held-out text, deleting the rest.
+
+    Read off the sidecar ``VariantSidecarMain`` just wrote, because the
+    chained text the holdout is keyed on exists only there. A dropped
+    variant's script and sidecar are deleted, so the tree holds no held-out
+    text for a later round to stage. A variant with no sidecar is kept: Forge
+    did not load it, and the loadable filter has already decided its fate.
+    """
+    from effects.infrastructure.sidecar_io import read_sidecar, sidecar_path_for
+
+    kept: list[GeneratedVariant] = []
+    for variant in variants:
+        sidecar_path = sidecar_path_for(variant.path)
+        try:
+            sidecar = read_sidecar(sidecar_path)
+        except FileNotFoundError:
+            kept.append(variant)
+            continue
+        if any(
+            line.script_text and held_out.holds_text(line.script_text)
+            for line in sidecar.lines
+        ):
+            variant.path.unlink(missing_ok=True)
+            sidecar_path.unlink(missing_ok=True)
+            continue
+        kept.append(variant)
+    return kept
+
+
+def _keep_unheld(
+    config: CollectVariantsConfig, variants: list[GeneratedVariant],
+) -> list[GeneratedVariant]:
+    """:func:`drop_held_out_variants` under the holdout ``build-corpus`` chooses."""
+    from effects.domain.split import text_keyed_holdout
+    from effects.infrastructure.card_sources import load_card_files, load_card_texts
+    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
+
+    roots = sidecar_roots(config.cards_folders)
+    cards_folder = roots.get("cardsfolder")
+    if cards_folder is None or not cards_folder.is_dir():
+        logger.warning(
+            "No converted card tree among %s, so no variant is checked against "
+            "the held-out texts; build-corpus drops a training record acting "
+            "through one, but the variant still reaches training games' boards.",
+            ", ".join(config.cards_folders),
+        )
+        return variants
+    card_files = load_card_files(cards_folder)
+    held_out = text_keyed_holdout(
+        card_files, load_card_texts(card_files, SidecarCache(roots)),
+        permille=config.holdout_permille, max_carriers=config.holdout_max_carriers,
+        unit=config.holdout_unit, token_texts=load_tree_texts(roots.get("tokenscripts")),
     )
+    kept = drop_held_out_variants(variants, held_out)
+    if len(kept) < len(variants):
+        logger.info(
+            "Dropped %d of %d variant(s) printing a held-out %s.",
+            len(variants) - len(kept), len(variants), config.holdout_unit,
+        )
+    if not kept:
+        logger.error("Every variant printed a held-out text; there is nothing to deck.")
+    return kept
+
+
+def _play_and_check_growth(
+    config: CollectVariantsConfig, variants: list[GeneratedVariant], budget: int,
+) -> int:
+    """Play one round of variant decks and fail it when it collected nothing."""
+    from effects.infrastructure.record_io import count_records
+
     # Every variant is weighted equally: coverage's shortfall weighting has
     # nothing to weight against here, since a variant round exists to get
     # each freshly-generated script into a game at all, not to balance
     # against records the corpus already has for it.
     decks_file = Path(config.effect_records) / "variant-decks.txt"
-    texts = {variant.name: _deck_text(variant) for variant in variants}
     decks = build_coverage_decks(
-        {variant.name: 1.0 for variant in variants}, texts, config.decks_per_round,
+        {variant.name: 1.0 for variant in variants},
+        {variant.name: _deck_candidate(variant) for variant in variants},
+        config.decks_per_round,
         rng=random.Random(config.seed),
     )
-    write_deck_file(decks, decks_file, label="variant", set_code=COVERAGE_SET_CODE)
-    # The destination's own count, which is what the growth check compares
-    # against. `existing` sized the volume cap and may have come from another
-    # directory entirely.
-    before = count_records(config.effect_records)
-    try:
-        supervisor.play_round(decks_file, matches=config.decks_per_round)
-    finally:
-        # Closes the worker log files and shuts the pool down (final-fix-3.md
-        # item 5) -- see collect_coverage.run's identical finally for why.
-        supervisor.stop()
+    with collector_supervisor(
+        workers=config.workers, effect_records=config.effect_records,
+        caps=config.caps, variant_scripts=Path(config.variant_scripts),
+    ) as supervisor:
+        # The destination's own count, which is what the growth check compares
+        # against. The budget's count may have come from another directory.
+        before = count_records(config.effect_records)
+        play_decks(
+            supervisor, decks, decks_file,
+            label="variant", matches=config.decks_per_round,
+        )
 
-    # Counted again rather than assumed. The pre-flight count above exists
-    # only to size the budget, so without this the command returns 0 with no
+    # Counted again rather than assumed. The pre-flight count exists only to
+    # size the budget, so without this the command returns 0 with no
     # evidence that a single variant record was ever written -- and the
     # whole-run failure is a real one: if the staged scripts do not reach
     # Forge's card database under the names the decks file spells, every deck

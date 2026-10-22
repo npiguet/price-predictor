@@ -22,7 +22,7 @@ class CardsPlayedRowTest {
     private static CardsPlayedRow sample(
             List<String> cardsPlayedA, List<String> cardsPlayedB,
             List<String> cardsNotPlayedA, List<String> cardsNotPlayedB,
-            char winner, char starter) {
+            Side winner, Side starter) {
         return new CardsPlayedRow(
                 TS, RUN_ID, "RVR", "forge-best", "gen-2",
                 cardsPlayedA, cardsPlayedB, cardsNotPlayedA, cardsNotPlayedB,
@@ -34,7 +34,7 @@ class CardsPlayedRowTest {
         CardsPlayedRow row = sample(
                 List.of("Lightning Bolt"), List.of("Counterspell"),
                 List.of("Mountain"), List.of("Island"),
-                'A', 'B');
+                Side.A, Side.B);
         String[] parts = row.toLine().split(";", -1);
         assertEquals(11, parts.length);
     }
@@ -42,7 +42,7 @@ class CardsPlayedRowTest {
     @Test
     void noTrailingSemicolon() {
         CardsPlayedRow row = sample(
-                List.of("X"), List.of("Y"), List.of(), List.of(), 'A', 'A');
+                List.of("X"), List.of("Y"), List.of(), List.of(), Side.A, Side.A);
         String line = row.toLine();
         assertFalse(line.endsWith(";"), "line must not end with ';'");
     }
@@ -54,7 +54,7 @@ class CardsPlayedRowTest {
                 List.of("Counterspell"),
                 List.of("Snapcaster Mage"),
                 List.of("Brainstorm"),
-                'A', 'B');
+                Side.A, Side.B);
         String[] parts = row.toLine().split(";", -1);
         assertEquals(DateTimeFormatter.ISO_INSTANT.format(TS), parts[0]);
         assertEquals(RUN_ID, parts[1]);
@@ -73,7 +73,7 @@ class CardsPlayedRowTest {
     void emptyCardListsRoundTripAsEmptyString() {
         CardsPlayedRow row = sample(
                 List.of(), List.of(), List.of(), List.of(),
-                'A', 'B');
+                Side.A, Side.B);
         String[] parts = row.toLine().split(";", -1);
         assertEquals("", parts[5]);
         assertEquals("", parts[6]);
@@ -89,7 +89,7 @@ class CardsPlayedRowTest {
                 List.of("Lightning Bolt", "Counterspell", "Tarmogoyf"),
                 List.of("Brainstorm"),
                 List.of(), List.of(),
-                'A', 'A');
+                Side.A, Side.A);
         String[] parts = row.toLine().split(";", -1);
         assertEquals("Lightning Bolt|Counterspell|Tarmogoyf", parts[5]);
     }
@@ -98,23 +98,9 @@ class CardsPlayedRowTest {
     void timestampUsesIsoInstantFormat() {
         CardsPlayedRow row = sample(
                 List.of(), List.of(), List.of(), List.of(),
-                'A', 'B');
+                Side.A, Side.B);
         String[] parts = row.toLine().split(";", -1);
         // Should round-trip through ISO_INSTANT parser
         assertEquals(TS, Instant.from(DateTimeFormatter.ISO_INSTANT.parse(parts[0])));
-    }
-
-    @Test
-    void invalidWinnerCharRejected() {
-        assertThrows(IllegalArgumentException.class, () -> sample(
-                List.of(), List.of(), List.of(), List.of(),
-                'X', 'A'));
-    }
-
-    @Test
-    void invalidStarterCharRejected() {
-        assertThrows(IllegalArgumentException.class, () -> sample(
-                List.of(), List.of(), List.of(), List.of(),
-                'A', 'C'));
     }
 }

@@ -18,11 +18,11 @@ from effects.application.build_vocab import (
     DEFAULT_SCRIPT_VOCAB_PATH,
     DEFAULT_VOCAB_PATH,
     SEEDED_SPECIALS,
-    SURFACE_SCRIPT,
     BuildVocabConfig,
     EmptyCardsFolderError,
     run,
 )
+from effects.domain.ability_tokenizer import SURFACE_SCRIPT
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary

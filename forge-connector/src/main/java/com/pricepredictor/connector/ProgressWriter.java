@@ -18,8 +18,7 @@ import java.nio.file.StandardOpenOption;
  * ({@link MatchResultWriter}, {@link CardsPlayedWriter}): a counter must not
  * ride the same gate that keeps a coverage or variant round out of
  * {@code match-outcomes.txt} / {@code cards-played.txt}, or the round it
- * exists to bound could never end (that was Task 4's original defect — see
- * {@code MatchWorkerMain#recordMatch}).
+ * exists to bound could never end (see {@code MatchWorkerMain#recordMatch}).
  *
  * <p>Mirrors {@link CardsPlayedWriter}'s open-write-close-per-call pattern —
  * each call opens the file, writes one line, and closes it, so writes are

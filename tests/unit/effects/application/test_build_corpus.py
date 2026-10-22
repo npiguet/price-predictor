@@ -43,13 +43,13 @@ import pytest
 from effects.application.build_corpus import (
     BuildCorpusConfig,
     BuildCorpusError,
-    WriteResult,
-    _check_refusals,
-    _check_samples,
-    _output_name,
     build,
-    source_of,
 )
+from effects.application.corpus_report import check_refusals as _check_refusals
+from effects.application.corpus_report import check_samples as _check_samples
+from effects.application.corpus_survey import RefusalTally, source_of
+from effects.application.corpus_write import TrainingTally, WriteResult
+from effects.application.corpus_write import output_name as _output_name
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (
@@ -60,10 +60,11 @@ from effects.domain.records import (
     ResolutionPayload,
     RewritePayload,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.state_snapshot import StateSnapshot
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from tests.unit.effects.builders import make_entity, make_snapshot
 
 _HELD_OUT_CARD = "Held Out Bears"
 #: Found by brute force over ``text_is_held_out(..., permille=20)`` (the
@@ -172,14 +173,9 @@ def _write_forge_tokenscripts(root: Path) -> Path:
 
 
 def _snapshot(entity_names: tuple[str, ...] = ()) -> StateSnapshot:
-    return StateSnapshot(
-        global_=GlobalState(
-            turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-        ),
-        players=(),
+    return make_snapshot(
         entities=tuple(
-            EntityState(id=f"E{index}", name=name, zone="battlefield", controller="P0")
-            for index, name in enumerate(entity_names)
+            make_entity(f"E{index}", name) for index, name in enumerate(entity_names)
         ),
     )
 
@@ -391,7 +387,7 @@ def test_no_training_record_belongs_to_a_withheld_game(tmp_path, a_corpus):
 
 def test_no_training_record_names_a_held_out_card(tmp_path, a_corpus):
     """FR-088: the exclusion is by game, and every held-out game is dropped."""
-    from effects.application.train_effect_model import (
+    from effects.domain.split import (
         HeldOutCards,
         record_names_held_out_card,
     )
@@ -720,7 +716,7 @@ def _mixture_config(output: Path, fixture: CorpusFixture):
 
 
 def _delivered_shares(training_dir: Path) -> dict[str, float]:
-    from effects.application.train_effect_model import sampling_class
+    from effects.domain.sampling import sampling_class
 
     counts: Counter[str] = Counter()
     for record in read_records(training_dir):
@@ -1164,9 +1160,23 @@ def test_a_record_acting_through_an_unjoinable_key_is_refused_not_fatal(tmp_path
     assert "g-clean-3.level" in written
 
 
+def _written(
+    *, read: Counter, refused_by_class: Counter, quality_dropped: Counter,
+    unjoinable_scripts: Counter | None = None,
+) -> WriteResult:
+    """A write pass's tallies holding only what the refusal guard reads."""
+    return WriteResult(
+        refusals=RefusalTally(
+            by_reason=quality_dropped, by_class=refused_by_class,
+            unjoinable_scripts=unjoinable_scripts or Counter(),
+        ),
+        training=TrainingTally(read=read),
+    )
+
+
 def test_unjoinable_keys_past_the_share_stop_the_build():
     """Many records failing the join is a reconversion, not a collector gap."""
-    written = WriteResult(
+    written = _written(
         read=Counter({"resolution-effect": 990}),
         refused_by_class=Counter({"resolution-effect": 30}),
         quality_dropped=Counter({"unjoinable-key": 30}),
@@ -1182,7 +1192,7 @@ def test_unjoinable_keys_past_the_share_stop_the_build():
 
 
 def test_unjoinable_keys_under_the_share_raise_nothing():
-    _check_refusals(WriteResult(
+    _check_refusals(_written(
         read=Counter({"resolution-effect": 99_970}),
         refused_by_class=Counter({"resolution-effect": 30}),
         quality_dropped=Counter({"unjoinable-key": 30}),
@@ -1191,7 +1201,7 @@ def test_unjoinable_keys_under_the_share_raise_nothing():
 
 def test_a_few_unjoinable_keys_in_a_small_corpus_raise_nothing():
     """A pilot of a few hundred records holding one Flashback cast builds."""
-    _check_refusals(WriteResult(
+    _check_refusals(_written(
         read=Counter({"resolution-effect": 14}),
         refused_by_class=Counter({"resolution-effect": 1}),
         quality_dropped=Counter({"unjoinable-key": 1}),
@@ -1588,11 +1598,11 @@ def test_the_cli_exposes_the_remap_flags():
     args = build_parser().parse_args([
         "build-corpus", "--forge-tokenscripts", "x", "--no-remap-token-keys",
     ])
-    assert args.forge_tokenscripts == "x"
+    assert args.forge_tokenscripts == Path("x")
     assert args.remap_token_keys is False
     defaults = build_parser().parse_args(["build-corpus"])
     assert defaults.remap_token_keys is True
-    assert defaults.forge_tokenscripts == "../forge/forge-gui/res/tokenscripts"
+    assert defaults.forge_tokenscripts == Path("../forge/forge-gui/res/tokenscripts")
 
 
 def test_a_class_lost_to_no_acting_text_is_told_to_reconvert():
@@ -1601,7 +1611,7 @@ def test_a_class_lost_to_no_acting_text_is_told_to_reconvert():
     the traits whose text its lines carry. An operator reading only "unpatched
     checkout" would go looking at Forge, and the corpus is the thing to fix.
     """
-    written = WriteResult(
+    written = _written(
         read=Counter({"resolution-effect": 10}),
         refused_by_class=Counter({"resolution-effect": 90}),
         quality_dropped=Counter({"no-acting-text": 88, "no-ability": 2}),
@@ -1618,7 +1628,7 @@ def test_a_class_lost_to_no_acting_text_is_told_to_reconvert():
 def test_a_class_that_keeps_most_of_its_records_raises_nothing():
     """The guard is for a class lost whole, not for the few percent the rules
     are there to take."""
-    _check_refusals(WriteResult(
+    _check_refusals(_written(
         read=Counter({"resolution-effect": 95}),
         refused_by_class=Counter({"resolution-effect": 5}),
         quality_dropped=Counter({"no-acting-text": 5}),
@@ -1751,7 +1761,7 @@ def test_the_manifest_records_families_policy_and_the_flags(tmp_path, a_corpus):
     assert manifest.game_disjoint_target is None
     effect = manifest.families["resolution-effect"]
     assert all(
-        set(row) == {"available", "share", "written", "repeats", "shortfall"}
+        set(row) == {"available", "share", "planned", "written", "repeats", "shortfall"}
         for row in effect.values()
     )
     written = sum(row["written"] for row in effect.values())
@@ -1792,48 +1802,143 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
     # Records with no acting text are sampled by hash rate: 14 in expectation.
     what_if = families["what-if:none"]["written"]
     assert 8 <= what_if <= 20
-    assert manifest.legality_counts["blockers"] == {"real": 8, "what_if": what_if}
+    assert manifest.legality_counts["blockers"] == {"real": 8, "what-if": what_if}
 
 
-class TestLegalityFamilies:
-    """A legality record is placed in its rarest mode's family (FR-047a)."""
+# ── what the plan counts, and what it may train on (G4, G13, G14) ──────
 
-    def _survey(self, keyless):
-        from collections import Counter
 
-        from effects.application.build_corpus import Survey
+def _legacy_build(a_corpus: CorpusFixture, out: Path, **overrides) -> BuildCorpusConfig:
+    fields = dict(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
+        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out, workers=1,
+        **_LEGACY_RULES,
+    )
+    fields.update(overrides)
+    assert build(BuildCorpusConfig(**fields)) == 0
+    return BuildCorpusConfig(**fields)
 
-        return Survey(
-            shards=(), records=sum(keyless.values()), key_games={}, key_records=Counter(),
-            class_records=Counter(), cell_key_records=Counter(), cell_key_heaps={},
-            cell_keyless=Counter(keyless), keyword_combat_games=frozenset(),
-            held_out_text_games={}, held_out_games=frozenset(), games=frozenset(),
-        )
 
-    def test_combination_cells_fold_into_their_rarest_mode(self):
-        from effects.application.build_corpus import (
-            Cell,
-            legality_mode_counts,
-            resolve_legality_families,
-        )
-        from effects.domain.effect_model import CLASS_PLAYABILITY_LEGALITY as LEGALITY
+def test_a_held_back_game_takes_no_training_slot(tmp_path, a_corpus):
+    """A text's capped slots go to its training games' records (G4).
 
-        survey = self._survey({
-            Cell(LEGALITY, "real", "none"): 500,
-            Cell(LEGALITY, "real", "CantAttack"): 30,
-            Cell(LEGALITY, "real", "CantAttack+CantBlock"): 5,
-            Cell(LEGALITY, "real", "CantBlock+Defender"): 2,
-            Cell(LEGALITY, "real", "Defender"): 40,
-            Cell("combat", "", "none"): 9,
-        })
-        counts = legality_mode_counts(survey)
-        assert counts == {"CantAttack": 35, "CantBlock": 7, "Defender": 42}
+    Counted over every kept record, a text's smallest hashes could all sit in
+    a held-out game: the plan's threshold admitted those, the write pass then
+    routed the game away, and the text's slots went unwritten. Gen-2 wrote
+    82% of the records it planned.
+    """
+    write_shard(a_corpus.records / "full-strength" / "run.0-held.jsonl.gz", [
+        _resolution(
+            "g-held-2.0", "g-held-2", ability=(_BOLT_KEY,),
+            entity_names=(_HELD_OUT_CARD,),
+        ),
+        *(
+            _resolution(f"g-held-2.shock{n}", "g-held-2", ability=(_SHOCK_KEY,))
+            for n in range(60)
+        ),
+    ])
+    out = tmp_path / "curated"
+    _legacy_build(a_corpus, out, text_cap=2)
 
-        folded = resolve_legality_families(survey, counts).cell_keyless
-        assert folded == {
-            Cell(LEGALITY, "real", "none"): 500,
-            Cell(LEGALITY, "real", "CantAttack"): 30,
-            Cell(LEGALITY, "real", "CantBlock"): 7,
-            Cell(LEGALITY, "real", "Defender"): 40,
-            Cell("combat", "", "none"): 9,
-        }
+    shock = [
+        r for r in read_records(CorpusStore(out).training_dir) if r.ability == (_SHOCK_KEY,)
+    ]
+    assert len(shock) == 2
+
+
+def test_every_class_delivers_its_target(tmp_path, a_corpus):
+    """The manifest shows targeted beside delivered, so a shortfall is visible."""
+    out = tmp_path / "curated"
+    _legacy_build(a_corpus, out, text_cap=2)
+    manifest = CorpusStore(out).load()
+
+    assert manifest.class_targets
+    for klass, target in manifest.class_targets.items():
+        assert manifest.per_class[klass].kept == target
+
+
+def test_a_held_out_game_resolving_no_held_out_text_is_dropped(tmp_path, a_corpus):
+    """Only a resolution counts a game toward its held-out text (G13, FR-142).
+
+    Gate 1 and the gate-one slice score resolution records, so a game whose
+    held-out text appears only on a rewrite holds nothing gate 1 measures.
+    """
+    write_shard(a_corpus.records / "full-strength" / "run.0-rewrite.jsonl.gz", [
+        _rewrite("g-held-3.0", "g-held-3", ability=(_HELD_OUT_KEY,)),
+        _resolution(
+            "g-held-3.1", "g-held-3", ability=(_SHOCK_KEY,),
+            entity_names=(_HELD_OUT_CARD,),
+        ),
+    ])
+    out = tmp_path / "curated"
+    _legacy_build(a_corpus, out)
+    manifest = CorpusStore(out).load()
+
+    assert "g-held-3" not in manifest.card_disjoint_games
+    assert "g-tainted" in manifest.card_disjoint_games
+    trained = {r.game_id for r in read_records(CorpusStore(out).training_dir)}
+    assert "g-held-3" not in trained
+
+
+def test_a_token_printing_a_held_out_text_holds_its_game_out(tmp_path, a_corpus):
+    """A token script is a carrier, so a game it appears in is held out (G14)."""
+    token_file = "tokenscripts/r_2_2_goblin_held.txt"
+    token_key = ProvenanceKey(token_file, 0, "spell", 1)
+    _write_card(
+        tmp_path / "source", token_file, "Goblin Held", _HELD_OUT_TEXT,
+        index_within_kind=1,
+    )
+    write_shard(a_corpus.records / "full-strength" / "run.0-token.jsonl.gz", [
+        replace(
+            _resolution("g-token.0", "g-token", ability=(_SHOCK_KEY,)),
+            state=make_snapshot(entities=(
+                make_entity("E1", "Goblin Token", printed=(token_key,)),
+            )),
+        ),
+    ])
+    out = tmp_path / "curated"
+    _legacy_build(a_corpus, out)
+
+    trained = {r.game_id for r in read_records(CorpusStore(out).training_dir)}
+    assert "g-token" not in trained
+    assert "g-token" not in CorpusStore(out).load().game_disjoint_games
+
+
+def test_a_variant_printing_a_held_out_text_trains_on_nothing(tmp_path, a_corpus):
+    """A training game's record acting through a held-out text is dropped (G14).
+
+    The game names no held-out card, so it stays in training; the one record
+    would teach the very text the card-disjoint stratum measures.
+    """
+    variant_file = "variant-scripts/held_out_bears_variant_1.txt"
+    variant_key = ProvenanceKey(variant_file, 0, "spell", 0)
+    root = tmp_path / "source"
+    path = root / "variant-scripts" / "held_out_bears_variant_1.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_HELD_OUT_TEXT + "\n", encoding="utf-8")
+    write_sidecar(
+        ProvenanceSidecar(
+            card="Held Out Bears Variant", script_file=variant_file,
+            lines=(SidecarLine(
+                line_index=0, line_kind="spell", provenance=(variant_key,),
+                script_text=_HELD_OUT_TEXT,
+            ),),
+        ),
+        sidecar_path_for(path),
+    )
+    write_shard(a_corpus.records / "variants" / "run.0-v.jsonl.gz", [
+        _resolution("g-var.0", "g-var", ability=(variant_key,)),
+        _resolution("g-var.1", "g-var", ability=(_SHOCK_KEY,)),
+    ])
+    out = tmp_path / "curated"
+    # Every resolution record the class can supply is wanted, so only the
+    # held-out text can keep the variant's record out.
+    _legacy_build(
+        a_corpus, out, variant_scripts=str(root / "variant-scripts"), text_cap=0,
+        class_mix={"resolution-effect": 1.0},
+    )
+
+    training = list(read_records(CorpusStore(out).training_dir))
+    assert not [r for r in training if r.ability == (variant_key,)]
+    assert any(r.game_id == "g-var" for r in training)
+    assert CorpusStore(out).load().per_stratum["dropped-held-out-text"] == 1

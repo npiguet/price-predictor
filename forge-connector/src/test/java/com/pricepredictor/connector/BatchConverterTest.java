@@ -26,7 +26,7 @@ class BatchConverterTest {
     @Test
     void batchProcessesAllFixtureFiles() throws IOException {
         BatchConverter converter = new BatchConverter();
-        BatchConverter.BatchResult result = converter.convert(getFixtureDir(), tempDir);
+        BatchConverter.BatchResult result = converter.convert(getFixtureDir(), tempDir, SourceTree.CARDSFOLDER);
 
         assertEquals(3, result.totalFiles());
         assertTrue(result.succeeded() >= 2, "At least 2 valid files should succeed");
@@ -35,7 +35,7 @@ class BatchConverterTest {
     @Test
     void outputDirectoryMirrorsInput() throws IOException {
         BatchConverter converter = new BatchConverter();
-        converter.convert(getFixtureDir(), tempDir);
+        converter.convert(getFixtureDir(), tempDir, SourceTree.CARDSFOLDER);
 
         assertTrue(Files.exists(tempDir.resolve("t/test_bear.txt")));
         assertTrue(Files.exists(tempDir.resolve("t/test_flyer.txt")));
@@ -44,7 +44,7 @@ class BatchConverterTest {
     @Test
     void malformedFileLogsWarningAndContinues() throws IOException {
         BatchConverter converter = new BatchConverter();
-        BatchConverter.BatchResult result = converter.convert(getFixtureDir(), tempDir);
+        BatchConverter.BatchResult result = converter.convert(getFixtureDir(), tempDir, SourceTree.CARDSFOLDER);
 
         assertTrue(result.warningCount() >= 1, "Malformed file should produce a warning");
         assertTrue(result.succeeded() >= 2, "Valid files should still be converted");
@@ -53,7 +53,7 @@ class BatchConverterTest {
     @Test
     void outputFileCountMatchesValidInput() throws IOException {
         BatchConverter converter = new BatchConverter();
-        BatchConverter.BatchResult result = converter.convert(getFixtureDir(), tempDir);
+        BatchConverter.BatchResult result = converter.convert(getFixtureDir(), tempDir, SourceTree.CARDSFOLDER);
 
         // Count output files
         long outputFiles = Files.walk(tempDir)

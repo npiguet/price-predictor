@@ -29,8 +29,6 @@ import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -279,13 +277,12 @@ class BusBracketCollectorTest {
      */
     @Test
     void aRepeatedStateTransitionIsFiledOnce() {
-        List<EffectEvent> into = new ArrayList<>();
-        Set<String> seen = new LinkedHashSet<>();
+        EventBuffer into = new EventBuffer();
 
-        assertTrue(BusBracketCollector.fileEvent(zoneChange(), into, seen));
-        assertFalse(BusBracketCollector.fileEvent(zoneChange(), into, seen));
+        assertTrue(into.file(zoneChange()));
+        assertFalse(into.file(zoneChange()));
 
-        assertEquals(1, into.size());
+        assertEquals(1, into.events().size());
     }
 
     /**
@@ -296,13 +293,12 @@ class BusBracketCollectorTest {
      */
     @Test
     void aRepeatedQuantityIsFiledEveryTime() {
-        List<EffectEvent> into = new ArrayList<>();
-        Set<String> seen = new LinkedHashSet<>();
+        EventBuffer into = new EventBuffer();
 
-        assertTrue(BusBracketCollector.fileEvent(oneDamage(), into, seen));
-        assertTrue(BusBracketCollector.fileEvent(oneDamage(), into, seen));
+        assertTrue(into.file(oneDamage()));
+        assertTrue(into.file(oneDamage()));
 
-        assertEquals(2, into.size());
+        assertEquals(2, into.events().size());
     }
 
     private static EffectEvent zoneChange() {
@@ -758,6 +754,48 @@ class BusBracketCollectorTest {
                 records.get(0));
         assertTrue(records.get(0).contains("\"cause\":\"E" + attacker.getId() + "\""),
                 records.get(0));
+    }
+
+    /**
+     * What resolves in a damage step after its damage belongs to its own
+     * record, not the combat's.
+     *
+     * <p>A damage step has a priority window after the damage, and a
+     * combat-damage trigger resolves in it. Routed by the step alone, the
+     * trigger's events joined the combat record and left its own resolution
+     * without them, and its damage to a creature read as combat damage.
+     */
+    @Test
+    void whatResolvesAfterTheDamageIsNotTheCombats() throws IOException {
+        Game game = gameInACombatDamageStep();
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        BusBracketCollector collector = new BusBracketCollector(
+                game, writer, "run.0-l1.0");
+        Card attacker = TestCards.build("Grizzly Bears");
+        collector.onCardDamaged(new GameEventCardDamaged(
+                TestCards.build("Runeclaw Bear").getView(), attacker.getView(), 2,
+                GameEventCardDamaged.DamageType.Normal));
+
+        SpellAbility bolt = damageAbility();
+        collector.beginBracket(bolt);
+        collector.onCardDamaged(new GameEventCardDamaged(
+                TestCards.build("Llanowar Elves").getView(),
+                bolt.getHostCard().getView(), 3,
+                GameEventCardDamaged.DamageType.Normal));
+        collector.endBracket(bolt.getId(), false);
+        collector.finishGame(Set.of());
+
+        List<String> records = written();
+        List<String> combat = records.stream()
+                .filter(r -> r.contains("\"kind\":\"combat\"")).toList();
+        assertEquals(1, combat.size(), records.toString());
+        assertTrue(combat.get(0).contains("\"amount\":2"), combat.get(0));
+        assertFalse(combat.get(0).contains("\"amount\":3"),
+                "the bolt's damage is not the combat's: " + combat.get(0));
+        String bolted = records.stream()
+                .filter(r -> r.contains("\"amount\":3")).findFirst().orElseThrow();
+        assertTrue(bolted.contains("\"kind\":\"resolution\""), bolted);
+        assertTrue(bolted.contains("\"combat\":false"), bolted);
     }
 
     /**

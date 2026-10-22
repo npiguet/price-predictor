@@ -23,13 +23,8 @@ import java.nio.file.Path;
 public class VariantSidecarMain {
 
     public static void main(String[] args) {
-        String variantsPath = "output/effects/variant-scripts/";
-
-        for (int i = 0; i < args.length; i++) {
-            if ("--variants-path".equals(args[i]) && i + 1 < args.length) {
-                variantsPath = args[++i];
-            }
-        }
+        String variantsPath = ToolMain.args(args, "--variants-path")
+                .get("--variants-path", "output/effects/variant-scripts/");
 
         Path variants = Path.of(variantsPath);
         if (!Files.isDirectory(variants)) {
@@ -37,7 +32,7 @@ public class VariantSidecarMain {
             System.exit(1);
         }
 
-        try {
+        ToolMain.run(() -> {
             // Staged, not bare: the loadable list below has to be taken from a
             // card database that actually holds the variants, and it is the
             // same database a worker will build.
@@ -58,12 +53,7 @@ public class VariantSidecarMain {
             System.out.println(
                     "  Loadable:     " + loadable + " of " + result.totalFiles()
                             + " (written to " + LOADABLE_FILE + ")");
-            System.exit(0);
-        } catch (Exception e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
-        }
+        });
     }
 
     /** Where the names Forge's card database accepted are written. */
@@ -82,7 +72,7 @@ public class VariantSidecarMain {
      * every deck of 23 nonlands holds at least one and the round collects
      * nearly nothing while every worker dies on it.
      *
-     * <p>The lookup is the one {@code MatchGenerator.materializeDeck} uses, so
+     * <p>The lookup is the one {@code DeckMaterializer.resolve} uses, so
      * a name on this list is a name that will resolve there.
      *
      * @return how many of the variant scripts Forge accepted
@@ -94,7 +84,7 @@ public class VariantSidecarMain {
                 if (!script.toString().endsWith(".txt")) {
                     continue;
                 }
-                String name = nameLineOf(script);
+                String name = ScriptHeader.of(Files.readAllLines(script)).name();
                 if (name == null) {
                     continue;
                 }
@@ -107,15 +97,5 @@ public class VariantSidecarMain {
         java.util.Collections.sort(accepted);
         Files.write(variants.resolve(LOADABLE_FILE), accepted);
         return accepted.size();
-    }
-
-    /** The {@code Name:} a Forge card script declares, or null. */
-    private static String nameLineOf(Path script) throws java.io.IOException {
-        for (String line : Files.readAllLines(script)) {
-            if (line.startsWith("Name:")) {
-                return line.substring("Name:".length()).trim();
-            }
-        }
-        return null;
     }
 }

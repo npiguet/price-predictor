@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.Json;
 import forge.StaticData;
 import forge.card.CardEdition;
 import forge.gamemodes.limited.BoosterDraft;
@@ -42,7 +43,7 @@ class DraftWorkerMainTest {
     /**
      * An eligible set whose Draft boosters always hold the same number of cards.
      *
-     * <p>{@code generateDraft} returns null when its 24 boosters are not all one size,
+     * <p>{@code generateDraft} skips a draft whose 24 boosters are not all one size,
      * because the reconstruction geometry needs a fixed pack size. Some sets do not
      * oblige: Secrets of Strixhaven yields a 13-card booster instead of 14 about 2 % of
      * the time, which is a 38 % chance that a 24-booster draft is skipped. Those skips
@@ -100,14 +101,6 @@ class DraftWorkerMainTest {
     }
 
     @Test
-    void jsonEscapeHandlesQuotesAndControlChars() {
-        assertEquals("Lim-Dûl", DraftWorkerMain.jsonEscape("Lim-Dûl")); // accented passes through
-        assertEquals("a\\\"b", DraftWorkerMain.jsonEscape("a\"b"));
-        assertEquals("a\\\\b", DraftWorkerMain.jsonEscape("a\\b"));
-        assertEquals("a\\nb", DraftWorkerMain.jsonEscape("a\nb"));
-    }
-
-    @Test
     void agentMixSamplesByWeight() {
         DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("forge-full:9,forge-r100:1");
         Random random = new Random(42);
@@ -138,8 +131,9 @@ class DraftWorkerMainTest {
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
         DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("forge-full:1");
 
-        String line = DraftWorkerMain.generateDraft(context, setCode, mix, new Random(0));
-        assertNotNull(line, "draft should produce a transcript for " + setCode);
+        String line = completedLine(
+                DraftWorkerMain.generateDraft(context, setCode, mix, new Random(0),
+                        DraftWorkerMain.PickChannel.NONE, "test-draft", null));
         assertTrue(line.startsWith(DraftWorkerMain.SENTINEL), "line must start with sentinel");
         assertFalse(line.substring(DraftWorkerMain.SENTINEL.length()).contains("\n"),
                 "transcript must be a single newline-free line");
@@ -151,6 +145,31 @@ class DraftWorkerMainTest {
         assertTrue(json.contains("\"draft_id\""));
         // Each booster has a non-empty drained picks array.
         assertEquals(24, countOccurrences(json, "\"picks\":["), "every booster lists picks");
+    }
+
+    private static String completedLine(DraftWorkerMain.DraftResult result) {
+        DraftWorkerMain.DraftResult.Completed completed = assertInstanceOf(
+                DraftWorkerMain.DraftResult.Completed.class, result,
+                "the draft should produce a transcript");
+        return completed.line();
+    }
+
+    @Test
+    void aSetWithNoBoosterTemplateIsSkippedNamingTheSet() {
+        // Returned rather than thrown, so the worker loop must count it: a bad
+        // -Ddraft.set once skipped every draft in silence, forever.
+        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
+        DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("forge-full:1");
+
+        DraftWorkerMain.DraftResult result =
+                DraftWorkerMain.generateDraft(context, "NOT-A-SET", mix, new Random(0),
+                        DraftWorkerMain.PickChannel.NONE, "test-draft", null);
+
+        DraftWorkerMain.DraftResult.Skipped skipped =
+                assertInstanceOf(DraftWorkerMain.DraftResult.Skipped.class, result);
+        assertTrue(skipped.reason().contains("NOT-A-SET"), skipped.reason());
+        assertEquals(WorkerLoop.Outcome.SKIPPED,
+                DraftWorkerMain.emit(result, "NOT-A-SET", System.out));
     }
 
     private static int countOccurrences(String haystack, String needle) {
@@ -196,7 +215,7 @@ class DraftWorkerMainTest {
                             + "\",\"seat\":" + jsonIntField(json, "seat")
                             + ",\"pack_number\":" + jsonIntField(json, "pack_number")
                             + ",\"pick_number\":" + jsonIntField(json, "pick_number")
-                            + ",\"pick\":\"" + DraftWorkerMain.jsonEscape(firstPackCard(json)) + "\"}");
+                            + ",\"pick\":" + Json.string(firstPackCard(json)) + "}");
                 }
             } catch (IOException e) {
                 // The request pipe closed when the draft finished; expected.
@@ -207,12 +226,13 @@ class DraftWorkerMainTest {
 
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
         DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("draft-agent:1");
-        String line = DraftWorkerMain.generateDraft(
-                context, setCode, mix, new Random(0), out, stdin,
-                Set.of("draft-agent"), "test-draft");
+        DraftWorkerMain.DraftResult result = DraftWorkerMain.generateDraft(
+                context, setCode, mix, new Random(0),
+                new DraftWorkerMain.PickChannel(out, stdin, Set.of("draft-agent")),
+                "test-draft", null);
         out.close();  // signal the responder EOF
 
-        assertNotNull(line, "model-piloted draft should produce a transcript");
+        String line = completedLine(result);
         assertTrue(line.startsWith(DraftWorkerMain.SENTINEL));
         String json = line.substring(DraftWorkerMain.SENTINEL.length());
         assertTrue(json.contains("\"draft_id\":\"test-draft\""));

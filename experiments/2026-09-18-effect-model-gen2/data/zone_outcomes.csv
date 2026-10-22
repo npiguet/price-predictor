@@ -1,0 +1,343 @@
+checkpoint,zone_before,outcome,cards,p_outcome_mean,top_right,predicted_instead
+e64 (earlier inputs),battlefield,died,419,0.92,1,exiled
+e64 (earlier inputs),battlefield,exiled,152,0.77,0.8,to_hand
+e64 (earlier inputs),battlefield,to_hand,141,0.67,0.74,library_top
+e64 (earlier inputs),battlefield,library_top,45,0.88,0.93,died
+e64 (earlier inputs),battlefield,blinked,10,0.3,0.3,exiled
+e64 (earlier inputs),graveyard,exiled,76,0.96,1,
+e64 (earlier inputs),graveyard,to_hand,49,0.51,0.61,blinked
+e64 (earlier inputs),graveyard,blinked,34,0.7,0.71,to_hand
+e64 (earlier inputs),graveyard,library_top,28,0.96,1,
+e64 (earlier inputs),hand,died,156,0.9,0.99,blinked
+e64 (earlier inputs),hand,exiled,33,0.84,0.88,died
+e64 (earlier inputs),hand,library_top,27,0.92,1,
+e64 (earlier inputs),hand,blinked,9,0.87,0.89,library_top
+e64 (earlier inputs),hand,to_hand,1,0.01,0,library_top
+e64 (earlier inputs),exile,blinked,2,0.75,1,
+e64 (earlier inputs),stack,countered,2,1,1,
+e64 (earlier inputs),stack,library_top,2,0.96,1,
+e64 (earlier inputs),stack,exiled,2,0.95,1,
+e64 (earlier inputs),stack,to_hand,1,0.18,0,exiled
+e64,battlefield,died,419,0.85,0.93,exiled
+e64,battlefield,exiled,152,0.89,0.95,died
+e64,battlefield,to_hand,141,0.8,0.93,died
+e64,battlefield,library_top,45,0.8,0.89,to_hand
+e64,battlefield,blinked,10,0.56,0.7,exiled
+e64,graveyard,exiled,76,0.97,0.99,library_top
+e64,graveyard,to_hand,49,0.77,0.76,blinked
+e64,graveyard,blinked,34,0.62,0.59,to_hand
+e64,graveyard,library_top,28,0.95,1,
+e64,hand,died,156,0.84,0.91,exiled
+e64,hand,exiled,33,0.93,0.94,died
+e64,hand,library_top,27,0.9,1,
+e64,hand,blinked,9,0.57,0.56,library_top
+e64,hand,to_hand,1,0.03,0,library_top
+e64,exile,blinked,2,0.84,1,
+e64,stack,countered,2,1,1,
+e64,stack,library_top,2,0.98,1,
+e64,stack,exiled,2,0.96,1,
+e64,stack,to_hand,1,0.61,1,
+e128,battlefield,died,419,0.86,0.97,exiled
+e128,battlefield,exiled,152,0.89,0.96,blinked
+e128,battlefield,to_hand,141,0.92,0.99,died
+e128,battlefield,library_top,45,0.78,0.89,to_hand
+e128,battlefield,blinked,10,0.79,0.9,to_hand
+e128,graveyard,exiled,76,0.98,0.99,countered
+e128,graveyard,to_hand,49,0.87,0.94,blinked
+e128,graveyard,blinked,34,0.6,0.62,to_hand
+e128,graveyard,library_top,28,0.76,0.79,to_hand
+e128,hand,died,156,0.77,0.81,exiled
+e128,hand,exiled,33,0.89,0.88,blinked
+e128,hand,library_top,27,0.69,0.78,to_hand
+e128,hand,blinked,9,0.48,0.44,library_top
+e128,hand,to_hand,1,0.01,0,library_top
+e128,exile,blinked,2,0.35,1,
+e128,stack,countered,2,0.99,1,
+e128,stack,library_top,2,0.97,1,
+e128,stack,exiled,2,0.97,1,
+e128,stack,to_hand,1,0.98,1,
+e64-lethality,battlefield,died,419,0.79,0.88,exiled
+e64-lethality,battlefield,exiled,152,0.82,0.93,library_top
+e64-lethality,battlefield,to_hand,141,0.86,0.91,library_top
+e64-lethality,battlefield,library_top,45,0.88,0.98,died
+e64-lethality,battlefield,blinked,10,0.61,0.7,exiled
+e64-lethality,graveyard,exiled,76,0.96,0.97,library_top
+e64-lethality,graveyard,to_hand,49,0.68,0.67,blinked
+e64-lethality,graveyard,blinked,34,0.87,0.85,to_hand
+e64-lethality,graveyard,library_top,28,0.94,1,
+e64-lethality,hand,died,156,0.86,0.91,exiled
+e64-lethality,hand,exiled,33,0.92,0.94,died
+e64-lethality,hand,library_top,27,0.95,1,
+e64-lethality,hand,blinked,9,0.82,0.78,library_top
+e64-lethality,hand,to_hand,1,0.02,0,library_top
+e64-lethality,exile,blinked,2,0.02,0,to_hand
+e64-lethality,stack,countered,2,1,1,
+e64-lethality,stack,library_top,2,1,1,
+e64-lethality,stack,exiled,2,0.99,1,
+e64-lethality,stack,to_hand,1,0.16,0,library_top
+e128-lethality,battlefield,died,419,0.91,0.97,exiled
+e128-lethality,battlefield,exiled,152,0.79,0.83,to_hand
+e128-lethality,battlefield,to_hand,141,0.93,0.96,died
+e128-lethality,battlefield,library_top,45,0.62,0.73,to_hand
+e128-lethality,battlefield,blinked,10,0.56,0.9,exiled
+e128-lethality,graveyard,exiled,76,0.97,0.97,library_top
+e128-lethality,graveyard,to_hand,49,0.87,0.92,library_top
+e128-lethality,graveyard,blinked,34,0.67,0.71,to_hand
+e128-lethality,graveyard,library_top,28,0.87,1,
+e128-lethality,hand,died,156,0.72,0.79,exiled
+e128-lethality,hand,exiled,33,0.92,1,
+e128-lethality,hand,library_top,27,0.77,1,
+e128-lethality,hand,blinked,9,0.57,0.78,library_top
+e128-lethality,hand,to_hand,1,0.05,0,library_top
+e128-lethality,exile,blinked,2,0.22,0.5,to_hand
+e128-lethality,stack,countered,2,1,1,
+e128-lethality,stack,library_top,2,0.98,1,
+e128-lethality,stack,exiled,2,0.88,1,
+e128-lethality,stack,to_hand,1,0.99,1,
+e256-lethality,battlefield,died,419,0.89,0.96,exiled
+e256-lethality,battlefield,exiled,152,0.71,0.76,to_hand
+e256-lethality,battlefield,to_hand,141,0.89,0.96,died
+e256-lethality,battlefield,library_top,45,0.87,0.98,died
+e256-lethality,battlefield,blinked,10,0.64,0.8,to_hand
+e256-lethality,graveyard,exiled,76,0.95,0.97,library_top
+e256-lethality,graveyard,to_hand,49,0.83,0.84,blinked
+e256-lethality,graveyard,blinked,34,0.69,0.65,to_hand
+e256-lethality,graveyard,library_top,28,0.96,1,
+e256-lethality,hand,died,156,0.95,0.97,exiled
+e256-lethality,hand,exiled,33,0.75,0.79,died
+e256-lethality,hand,library_top,27,0.87,1,
+e256-lethality,hand,blinked,9,0.79,0.78,library_top
+e256-lethality,hand,to_hand,1,0.03,0,library_top
+e256-lethality,exile,blinked,2,0.61,1,
+e256-lethality,stack,countered,2,0.99,1,
+e256-lethality,stack,library_top,2,0.99,1,
+e256-lethality,stack,exiled,2,0.71,1,
+e256-lethality,stack,to_hand,1,0.87,1,
+A64 best,battlefield,died,419,0.82,0.89,exiled
+A64 best,battlefield,exiled,152,0.94,0.96,library_top
+A64 best,battlefield,to_hand,141,0.94,0.98,exiled
+A64 best,battlefield,library_top,45,0.89,0.93,to_hand
+A64 best,battlefield,blinked,10,0.47,0.7,exiled
+A64 best,graveyard,exiled,76,0.99,0.99,blinked
+A64 best,graveyard,to_hand,49,0.81,0.82,blinked
+A64 best,graveyard,blinked,34,0.91,0.97,to_hand
+A64 best,graveyard,library_top,28,0.96,1,
+A64 best,hand,died,156,0.72,0.74,exiled
+A64 best,hand,exiled,33,0.98,1,
+A64 best,hand,library_top,27,0.82,1,
+A64 best,hand,blinked,9,0.79,0.78,library_top
+A64 best,hand,to_hand,1,0.1,0,library_top
+A64 best,exile,blinked,2,0.42,0.5,exiled
+A64 best,stack,countered,2,1,1,
+A64 best,stack,library_top,2,1,1,
+A64 best,stack,exiled,2,1,1,
+A64 best,stack,to_hand,1,0.89,1,
+A64 last,battlefield,died,419,0.86,0.92,exiled
+A64 last,battlefield,exiled,152,0.95,0.97,died
+A64 last,battlefield,to_hand,141,0.92,0.98,exiled
+A64 last,battlefield,library_top,45,0.95,0.98,to_hand
+A64 last,battlefield,blinked,10,0.46,0.6,exiled
+A64 last,graveyard,exiled,76,1,1,
+A64 last,graveyard,to_hand,49,0.9,0.94,blinked
+A64 last,graveyard,blinked,34,0.89,0.91,to_hand
+A64 last,graveyard,library_top,28,0.88,0.86,to_hand
+A64 last,hand,died,156,0.72,0.79,library_top
+A64 last,hand,exiled,33,0.94,0.94,died
+A64 last,hand,library_top,27,0.83,1,
+A64 last,hand,blinked,9,0.87,0.89,exiled
+A64 last,hand,to_hand,1,0.1,0,library_top
+A64 last,exile,blinked,2,0.05,0,to_hand
+A64 last,stack,countered,2,1,1,
+A64 last,stack,library_top,2,0.87,1,
+A64 last,stack,exiled,2,1,1,
+A64 last,stack,to_hand,1,0.84,1,
+B64 best,battlefield,died,419,0.85,0.91,exiled
+B64 best,battlefield,exiled,152,0.93,0.95,library_top
+B64 best,battlefield,to_hand,141,0.94,0.97,exiled
+B64 best,battlefield,library_top,45,0.93,0.98,to_hand
+B64 best,battlefield,blinked,10,0.63,0.7,exiled
+B64 best,graveyard,exiled,76,0.99,1,
+B64 best,graveyard,to_hand,49,0.86,0.88,blinked
+B64 best,graveyard,blinked,34,0.9,1,
+B64 best,graveyard,library_top,28,0.99,1,
+B64 best,hand,died,156,0.82,0.86,exiled
+B64 best,hand,exiled,33,0.96,0.97,died
+B64 best,hand,library_top,27,0.85,1,
+B64 best,hand,blinked,9,0.8,0.78,library_top
+B64 best,hand,to_hand,1,0.09,0,library_top
+B64 best,exile,blinked,2,0.46,0.5,exiled
+B64 best,stack,countered,2,1,1,
+B64 best,stack,library_top,2,1,1,
+B64 best,stack,exiled,2,1,1,
+B64 best,stack,to_hand,1,0.86,1,
+B64 last,battlefield,died,419,0.84,0.9,exiled
+B64 last,battlefield,exiled,152,0.94,0.96,library_top
+B64 last,battlefield,to_hand,141,0.94,0.98,exiled
+B64 last,battlefield,library_top,45,0.96,0.98,to_hand
+B64 last,battlefield,blinked,10,0.71,0.7,exiled
+B64 last,graveyard,exiled,76,0.99,0.99,library_top
+B64 last,graveyard,to_hand,49,0.91,0.92,library_top
+B64 last,graveyard,blinked,34,0.86,0.88,to_hand
+B64 last,graveyard,library_top,28,0.97,1,
+B64 last,hand,died,156,0.79,0.82,exiled
+B64 last,hand,exiled,33,0.96,0.97,died
+B64 last,hand,library_top,27,0.86,1,
+B64 last,hand,blinked,9,0.83,0.89,exiled
+B64 last,hand,to_hand,1,0.07,0,library_top
+B64 last,exile,blinked,2,0.35,0.5,exiled
+B64 last,stack,countered,2,1,1,
+B64 last,stack,library_top,2,1,1,
+B64 last,stack,exiled,2,1,1,
+B64 last,stack,to_hand,1,0.64,1,
+A128 best,battlefield,died,419,0.9,0.96,exiled
+A128 best,battlefield,exiled,152,0.86,0.9,died
+A128 best,battlefield,to_hand,141,0.89,0.91,died
+A128 best,battlefield,library_top,45,0.86,0.89,exiled
+A128 best,battlefield,blinked,10,0.65,0.7,exiled
+A128 best,graveyard,exiled,76,0.96,0.97,countered
+A128 best,graveyard,to_hand,49,0.92,0.94,library_top
+A128 best,graveyard,blinked,34,0.9,0.94,exiled
+A128 best,graveyard,library_top,28,1,1,
+A128 best,hand,died,156,0.78,0.79,exiled
+A128 best,hand,exiled,33,0.95,0.97,blinked
+A128 best,hand,library_top,27,0.86,0.93,exiled
+A128 best,hand,blinked,9,0.37,0.44,exiled
+A128 best,hand,to_hand,1,0.03,0,library_top
+A128 best,exile,blinked,2,0.5,0.5,exiled
+A128 best,stack,countered,2,1,1,
+A128 best,stack,library_top,2,0.96,1,
+A128 best,stack,exiled,2,1,1,
+A128 best,stack,to_hand,1,0.84,1,
+A128 last,battlefield,died,419,0.91,0.98,exiled
+A128 last,battlefield,exiled,152,0.88,0.92,died
+A128 last,battlefield,to_hand,141,0.94,0.98,died
+A128 last,battlefield,library_top,45,0.94,0.98,died
+A128 last,battlefield,blinked,10,0.57,0.5,exiled
+A128 last,graveyard,exiled,76,0.95,0.95,blinked
+A128 last,graveyard,to_hand,49,0.86,0.88,blinked
+A128 last,graveyard,blinked,34,0.92,0.94,died
+A128 last,graveyard,library_top,28,0.98,1,
+A128 last,hand,died,156,0.92,0.96,exiled
+A128 last,hand,exiled,33,0.86,0.85,blinked
+A128 last,hand,library_top,27,0.89,1,
+A128 last,hand,blinked,9,0.87,0.89,exiled
+A128 last,hand,to_hand,1,0.06,0,library_top
+A128 last,exile,blinked,2,0.33,0.5,to_hand
+A128 last,stack,countered,2,1,1,
+A128 last,stack,library_top,2,1,1,
+A128 last,stack,exiled,2,0.98,1,
+A128 last,stack,to_hand,1,0.93,1,
+B128 best,battlefield,died,419,0.83,0.89,exiled
+B128 best,battlefield,exiled,152,0.88,0.93,library_top
+B128 best,battlefield,to_hand,141,0.93,0.96,died
+B128 best,battlefield,library_top,45,0.91,0.93,exiled
+B128 best,battlefield,blinked,10,0.68,0.7,exiled
+B128 best,graveyard,exiled,76,0.96,0.97,library_top
+B128 best,graveyard,to_hand,49,0.9,0.92,library_top
+B128 best,graveyard,blinked,34,0.91,0.94,died
+B128 best,graveyard,library_top,28,0.99,1,
+B128 best,hand,died,156,0.79,0.86,exiled
+B128 best,hand,exiled,33,0.94,0.97,blinked
+B128 best,hand,library_top,27,0.93,1,
+B128 best,hand,blinked,9,0.7,0.78,library_top
+B128 best,hand,to_hand,1,0.02,0,library_top
+B128 best,exile,blinked,2,0.54,1,
+B128 best,stack,countered,2,1,1,
+B128 best,stack,library_top,2,1,1,
+B128 best,stack,exiled,2,0.99,1,
+B128 best,stack,to_hand,1,0.97,1,
+B128 last,battlefield,died,419,0.85,0.9,exiled
+B128 last,battlefield,exiled,152,0.88,0.91,died
+B128 last,battlefield,to_hand,141,0.94,0.96,died
+B128 last,battlefield,library_top,45,0.93,0.93,exiled
+B128 last,battlefield,blinked,10,0.64,0.7,exiled
+B128 last,graveyard,exiled,76,0.95,0.96,library_top
+B128 last,graveyard,to_hand,49,0.9,0.9,library_top
+B128 last,graveyard,blinked,34,0.88,0.94,died
+B128 last,graveyard,library_top,28,0.99,1,
+B128 last,hand,died,156,0.9,0.92,exiled
+B128 last,hand,exiled,33,0.95,0.97,died
+B128 last,hand,library_top,27,0.92,1,
+B128 last,hand,blinked,9,0.69,0.89,exiled
+B128 last,hand,to_hand,1,0.02,0,library_top
+B128 last,exile,blinked,2,0.52,1,
+B128 last,stack,countered,2,1,1,
+B128 last,stack,library_top,2,1,1,
+B128 last,stack,exiled,2,0.94,1,
+B128 last,stack,to_hand,1,1,1,
+A256 best,battlefield,died,419,0.83,0.9,exiled
+A256 best,battlefield,exiled,152,0.93,0.97,to_hand
+A256 best,battlefield,to_hand,141,0.97,1,
+A256 best,battlefield,library_top,45,0.95,0.98,to_hand
+A256 best,battlefield,blinked,10,0.39,0.4,exiled
+A256 best,graveyard,exiled,76,0.97,0.99,countered
+A256 best,graveyard,to_hand,49,0.91,0.92,library_top
+A256 best,graveyard,blinked,34,0.63,0.62,to_hand
+A256 best,graveyard,library_top,28,0.88,0.89,to_hand
+A256 best,hand,died,156,0.82,0.86,exiled
+A256 best,hand,exiled,33,0.79,0.79,library_top
+A256 best,hand,library_top,27,0.94,1,
+A256 best,hand,blinked,9,0.78,0.78,library_top
+A256 best,hand,to_hand,1,0.07,0,library_top
+A256 best,exile,blinked,2,0.11,0,to_hand
+A256 best,stack,countered,2,1,1,
+A256 best,stack,library_top,2,0.95,1,
+A256 best,stack,exiled,2,0.98,1,
+A256 best,stack,to_hand,1,1,1,
+A256 last,battlefield,died,419,0.83,0.9,exiled
+A256 last,battlefield,exiled,152,0.93,0.97,to_hand
+A256 last,battlefield,to_hand,141,0.97,1,
+A256 last,battlefield,library_top,45,0.95,0.98,to_hand
+A256 last,battlefield,blinked,10,0.39,0.4,exiled
+A256 last,graveyard,exiled,76,0.97,0.99,countered
+A256 last,graveyard,to_hand,49,0.91,0.92,library_top
+A256 last,graveyard,blinked,34,0.63,0.62,to_hand
+A256 last,graveyard,library_top,28,0.88,0.89,to_hand
+A256 last,hand,died,156,0.82,0.86,exiled
+A256 last,hand,exiled,33,0.79,0.79,library_top
+A256 last,hand,library_top,27,0.94,1,
+A256 last,hand,blinked,9,0.78,0.78,library_top
+A256 last,hand,to_hand,1,0.07,0,library_top
+A256 last,exile,blinked,2,0.11,0,to_hand
+A256 last,stack,countered,2,1,1,
+A256 last,stack,library_top,2,0.95,1,
+A256 last,stack,exiled,2,0.98,1,
+A256 last,stack,to_hand,1,1,1,
+B256 best,battlefield,died,419,0.86,0.92,exiled
+B256 best,battlefield,exiled,152,0.93,0.98,blinked
+B256 best,battlefield,to_hand,141,0.96,0.99,died
+B256 best,battlefield,library_top,45,0.92,0.96,to_hand
+B256 best,battlefield,blinked,10,0.65,0.6,exiled
+B256 best,graveyard,exiled,76,0.98,0.99,countered
+B256 best,graveyard,to_hand,49,0.89,0.9,library_top
+B256 best,graveyard,blinked,34,0.76,0.82,to_hand
+B256 best,graveyard,library_top,28,0.96,1,
+B256 best,hand,died,156,0.83,0.87,exiled
+B256 best,hand,exiled,33,0.88,0.91,library_top
+B256 best,hand,library_top,27,0.93,1,
+B256 best,hand,blinked,9,0.85,0.89,exiled
+B256 best,hand,to_hand,1,0.06,0,library_top
+B256 best,exile,blinked,2,0.05,1,
+B256 best,stack,countered,2,1,1,
+B256 best,stack,library_top,2,0.9,1,
+B256 best,stack,exiled,2,0.98,1,
+B256 best,stack,to_hand,1,0.97,1,
+B256 last,battlefield,died,419,0.87,0.92,exiled
+B256 last,battlefield,exiled,152,0.94,0.98,died
+B256 last,battlefield,to_hand,141,0.96,0.99,library_top
+B256 last,battlefield,library_top,45,0.97,1,
+B256 last,battlefield,blinked,10,0.61,0.7,exiled
+B256 last,graveyard,exiled,76,0.98,0.99,countered
+B256 last,graveyard,to_hand,49,0.89,0.88,blinked
+B256 last,graveyard,blinked,34,0.73,0.74,to_hand
+B256 last,graveyard,library_top,28,0.99,1,
+B256 last,hand,died,156,0.85,0.88,exiled
+B256 last,hand,exiled,33,0.82,0.85,library_top
+B256 last,hand,library_top,27,0.91,1,
+B256 last,hand,blinked,9,0.87,0.89,exiled
+B256 last,hand,to_hand,1,0.06,0,library_top
+B256 last,exile,blinked,2,0.01,1,
+B256 last,stack,countered,2,1,1,
+B256 last,stack,library_top,2,0.98,1,
+B256 last,stack,exiled,2,0.99,1,
+B256 last,stack,to_hand,1,0.97,1,

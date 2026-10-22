@@ -1,0 +1,5 @@
+"damage, 40 training shards",lethal,not lethal
+a spell or ability's damage to a targeted creature,170,36
+its damage to a creature it did not target,567,254
+-X/-X on a targeted creature,14,21
+combat damage to a creature,3252,1314

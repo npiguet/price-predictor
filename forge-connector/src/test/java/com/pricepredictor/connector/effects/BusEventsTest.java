@@ -121,10 +121,10 @@ class BusEventsTest {
     }
 
     /**
-     * Regeneration and shuffle, the two types the mode table's own dead and
-     * misfiled entries left unreachable — {@code "Regenerated"} matches no
-     * real Forge trigger or replacement mode, and reading the bus instead is
-     * what makes the type reachable at all.
+     * Regeneration and shuffle, two types the run-parameter mode table cannot
+     * reach — no Forge trigger or replacement mode is the regeneration
+     * itself, and reading the bus instead is what makes the type reachable at
+     * all.
      */
     @Test
     void aRegeneratedCardNamesTheCard() {
@@ -148,7 +148,7 @@ class BusEventsTest {
 
     /**
      * A real two-player game, each seat a distinct lobby name -- the shape
-     * {@code GamePlayer.registeredPlayers} itself builds, minus the deck.
+     * {@code GamePlayer} registers for a match, minus the decks.
      */
     private static Game twoPlayerGame(String nameA, String nameB) {
         List<RegisteredPlayer> players = List.of(

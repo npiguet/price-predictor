@@ -169,7 +169,7 @@ class ClauseContractTest {
                 TestCards.game(), writer, "run.0-l1.0");
         try (PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0",
-                PatchedCollectors.CollectionCaps.defaults(), 1L)) {
+                CollectionCaps.defaults(), 1L)) {
             collector.withBracket(bracket);
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(sa);
@@ -226,7 +226,7 @@ class ClauseContractTest {
                 TestCards.game(), writer, "run.0-l1.0");
         try (PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0",
-                PatchedCollectors.CollectionCaps.defaults(), 1L)) {
+                CollectionCaps.defaults(), 1L)) {
             collector.withBracket(bracket);
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(outer);
@@ -288,7 +288,7 @@ class ClauseContractTest {
                     TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collector = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0",
-                    PatchedCollectors.CollectionCaps.defaults(), 1L)) {
+                    CollectionCaps.defaults(), 1L)) {
                 collector.withBracket(bracket);
                 InvocationHandler handler = collector.clauseHandler();
                 bracket.beginBracket(forkAbility);
@@ -370,7 +370,7 @@ class ClauseContractTest {
                     TestCards.game(), writer, "run.0-l1.0");
             try (PatchedCollectors collector = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0",
-                    PatchedCollectors.CollectionCaps.defaults(), 1L)) {
+                    CollectionCaps.defaults(), 1L)) {
                 collector.withBracket(bracket);
                 InvocationHandler handler = collector.clauseHandler();
                 System.setErr(new PrintStream(captured, true));
@@ -434,7 +434,7 @@ class ClauseContractTest {
                 TestCards.game(), writer, "run.0-l1.0");
         try (PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0",
-                PatchedCollectors.CollectionCaps.defaults(), 1L)) {
+                CollectionCaps.defaults(), 1L)) {
             collector.withBracket(bracket);
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(sa);

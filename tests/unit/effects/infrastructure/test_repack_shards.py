@@ -1,7 +1,8 @@
-"""Repacking per-source parts into uniform shards cut at game boundaries."""
+"""Repacking per-source parts into uniform shards of whole, mixed games."""
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -25,26 +26,81 @@ def parts(tmp_path, make_record) -> list[Path]:
     return out
 
 
-def test_every_record_survives_in_order(tmp_path, parts):
-    written = repack_shards(parts, tmp_path / "out", shard_records=4)
-    before = [r.record_id for p in parts for r in read_shard(p)]
-    after = [r.record_id for r in read_records(tmp_path / "out")]
+@pytest.fixture
+def runs(tmp_path, make_record) -> list[Path]:
+    """Eight parts, one per collection run, each eight games of five records.
+
+    The shape the write pass leaves: a part per source shard, so a part is one
+    JVM lifetime of one run and its games sit side by side.
+    """
+    out = []
+    for run in range(8):
+        records = [
+            make_record(record_id=f"r{run}.g{game}.{n}", game_id=f"r{run}.g{game}")
+            for game in range(8) for n in range(5)
+        ]
+        path = tmp_path / "parts" / f"run{run}.jsonl.gz"
+        write_shard(path, records)
+        out.append(path)
+    return out
+
+
+def _games(path: Path) -> list[str]:
+    return [record.game_id for record in read_shard(path)]
+
+
+def test_every_record_survives_once(tmp_path, parts):
+    repack_shards(parts, tmp_path / "out", shard_records=4)
+    before = Counter(r.record_id for p in parts for r in read_shard(p))
+    after = Counter(r.record_id for r in read_records(tmp_path / "out"))
     assert after == before
-    assert [p.name for p in written] == sorted(p.name for p in written)
 
 
-def test_a_shard_closes_at_a_game_boundary_once_full(tmp_path, parts):
-    written = repack_shards(parts, tmp_path / "out", shard_records=4)
-    games = [[r.game_id for r in read_shard(p)] for p in written]
-    # 4 records fill the first shard; it closes at the first game boundary once full.
-    assert games[0] == ["g1", "g1", "g2", "g2"]
-    assert games[1] == ["g3", "g3", "g3", "g4", "g4"]
-    assert games[2] == ["g5", "g6", "g7"]
-    # No game spans two shards.
-    seen = {}
-    for index, shard in enumerate(games):
-        for gid in shard:
-            assert seen.setdefault(gid, index) == index
+def test_no_game_spans_two_shards(tmp_path, runs):
+    written = repack_shards(runs, tmp_path / "out", shard_records=40)
+    seen: dict[str, int] = {}
+    for index, path in enumerate(written):
+        for game in _games(path):
+            assert seen.setdefault(game, index) == index
+
+
+def test_a_shard_mixes_the_games_of_many_runs(tmp_path, runs):
+    """Not a run of consecutive lifetimes: the trainer draws whole shards and
+    shuffles only inside the resident one, so a shard holding one run's
+    games makes every batch drawn from it correlated by run."""
+    written = repack_shards(runs, tmp_path / "out", shard_records=40)
+    runs_per_shard = [len({game.split(".")[0] for game in _games(p)}) for p in written]
+    assert max(runs_per_shard) >= 4
+    assert sum(runs_per_shard) / len(runs_per_shard) > 2
+
+
+def test_records_are_shuffled_within_a_shard(tmp_path, runs):
+    written = repack_shards(runs, tmp_path / "out", shard_records=40)
+    largest = max(written, key=lambda p: len(_games(p)))
+    ids = [record.record_id for record in read_shard(largest)]
+    assert ids != sorted(ids)
+
+
+def test_the_shard_count_follows_the_size(tmp_path, runs):
+    written = repack_shards(runs, tmp_path / "out", shard_records=40)
+    total = sum(1 for _ in read_records(tmp_path / "out"))
+    assert total == 320
+    assert 6 <= len(written) <= 8
+
+
+def test_the_deal_is_a_function_of_the_seed(tmp_path, runs):
+    def deal(name: str, seed: int) -> list[list[str]]:
+        written = repack_shards(runs, tmp_path / name, shard_records=40, seed=seed)
+        return [[r.record_id for r in read_shard(p)] for p in written]
+
+    assert deal("a", 1) == deal("b", 1)
+    assert deal("a2", 1) != deal("c", 2)
+
+
+def test_scratch_buckets_are_removed(tmp_path, runs):
+    out = tmp_path / "stratum"
+    repack_shards(runs, out, shard_records=40)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["parts", "stratum"]
 
 
 def test_zero_means_one_shard_per_part(tmp_path, parts):
@@ -53,10 +109,11 @@ def test_zero_means_one_shard_per_part(tmp_path, parts):
     assert [sum(1 for _ in read_shard(p)) for p in written] == [3, 7, 2]
 
 
-def test_names_are_zero_padded_and_sequential(tmp_path, parts):
-    written = repack_shards(parts, tmp_path / "out", shard_records=2)
-    assert written[0].name == "shard-00001.jsonl.gz"
-    assert written[1].name == "shard-00002.jsonl.gz"
+def test_names_are_zero_padded_and_sequential(tmp_path, runs):
+    written = repack_shards(runs, tmp_path / "out", shard_records=40)
+    assert [p.name for p in written] == [
+        f"shard-{index:05d}.jsonl.gz" for index in range(1, len(written) + 1)
+    ]
 
 
 def test_no_parts_writes_nothing(tmp_path):

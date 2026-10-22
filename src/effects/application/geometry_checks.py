@@ -15,14 +15,27 @@ next.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
-from effects.application.evaluate_effect_model import CheckResult, CheckStatus
 from effects.domain.ability_cache_layout import ARRAY_KEY, CACHE_SUFFIX
+from effects.domain.evaluation_report import (
+    CheckName,
+    CheckResult,
+    CheckStatus,
+    breaches,
+    margin,
+)
+from effects.domain.gate_metrics import (
+    GATE3_MAX_MEAN_COSINE,
+    GATE3_MAX_TOP_COMPONENT,
+    cosine_distance,
+    mean_pairwise_cosine,
+    top_component_share,
+)
 from effects.domain.line_query import LineQuery, normalize_prose
 
 logger = logging.getLogger(__name__)
@@ -34,6 +47,25 @@ class Resolution:
 
     key: str | None
     problem: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class CacheGeometry:
+    """The two collapse measures of one set of vectors (FR-123).
+
+    Measured once per cache: gate 3 reads the shipping cache's, and every
+    baseline comparison reads it again beside the baseline's own.
+    """
+
+    mean_pairwise_cosine: float
+    top_component_share: float
+
+    @classmethod
+    def of(cls, vectors: np.ndarray, *, seed: int = 42) -> CacheGeometry:
+        return cls(
+            mean_pairwise_cosine(vectors, seed=seed),
+            top_component_share(vectors),
+        )
 
 
 @dataclass
@@ -59,11 +91,18 @@ class CachedVectors:
     by_card: dict[str, np.ndarray] = field(default_factory=dict)
     display: dict[str, str] = field(default_factory=dict)
     by_prose: dict[str, dict[str, set[str]]] = field(default_factory=dict)
+    _geometry: CacheGeometry | None = field(default=None, repr=False)
 
     def matrix(self) -> np.ndarray:
         if not self.by_text:
             return np.zeros((0, 0), dtype=np.float32)
         return np.stack(list(self.by_text.values()))
+
+    def geometry(self) -> CacheGeometry:
+        """The cache's collapse measures, computed on first use and kept."""
+        if self._geometry is None:
+            self._geometry = CacheGeometry.of(self.matrix())
+        return self._geometry
 
     def texts(self) -> list[str]:
         return list(self.by_text)
@@ -180,7 +219,69 @@ def pooled(matrix: np.ndarray) -> np.ndarray:
     return pooled_card_vector(matrix)
 
 
+# ── gate 3: collapse canaries ───────────────────────────────────────────
+
+
+def evaluate_gate_three(vectors: np.ndarray, *, seed: int = 42) -> CheckResult:
+    """Two collapse canaries, both of which block shipping (FR-123)."""
+    return gate_three_verdict(CacheGeometry.of(vectors, seed=seed))
+
+
+def gate_three_verdict(geometry: CacheGeometry) -> CheckResult:
+    """Gate 3 on measured geometry.
+
+    One vector per unique ability text. A collapsed space passes every
+    average-case metric — every prediction is the corpus mean and every mean is
+    close — so this is checked on the geometry rather than on the loss.
+    """
+    cosine = geometry.mean_pairwise_cosine
+    top = geometry.top_component_share
+    values = {"mean_pairwise_cosine": cosine, "top_component_share": top}
+    failures = breaches(
+        margin(
+            "mean pairwise cosine", cosine, cosine > GATE3_MAX_MEAN_COSINE,
+            f"{cosine:.3f} > {GATE3_MAX_MEAN_COSINE}",
+        ),
+        margin(
+            "top principal component", top, top > GATE3_MAX_TOP_COMPONENT,
+            f"explains {top:.1%} > {GATE3_MAX_TOP_COMPONENT:.0%}",
+        ),
+    )
+    if failures:
+        return CheckResult(
+            CheckName.GATE_3, CheckStatus.FAIL,
+            "the embedding space has collapsed: " + "; ".join(failures), values,
+        )
+    return CheckResult(CheckName.GATE_3, CheckStatus.PASS, "no collapse", values)
+
+
+def run_gate_three(cached: CachedVectors, abilities_root: Path) -> CheckResult:
+    """Gate 3, read off the cache, or a skip where there is none to read."""
+    logger.info("gate 3: geometry over %d unique cached texts", len(cached.by_text))
+    if len(cached) < 2:
+        return CheckResult(
+            CheckName.GATE_3, CheckStatus.SKIPPED,
+            f"no ability cache under {abilities_root}; run "
+            "encode-abilities first",
+        )
+    return gate_three_verdict(cached.geometry())
+
+
 # ── nearest neighbours ──────────────────────────────────────────────────
+
+#: Lines whose neighbours a reader can judge at a glance. Reported rather than
+#: scored: the point is for a person to see whether the neighbours of a removal
+#: spell are removal spells, which no metric asks. Each prose line is printed
+#: with several scripts across the corpus, so each pins the card whose script
+#: the query stands for (see :mod:`effects.domain.line_query`).
+NEIGHBOUR_QUERIES: tuple[LineQuery, ...] = (
+    LineQuery("destroy target creature.", card="murder"),
+    LineQuery("draw a card.", card="think twice"),
+    LineQuery("CARDNAME deals 3 damage to any target.", card="lightning bolt"),
+    LineQuery(
+        "target creature gets +2/+2 until end of turn.", card="artful maneuver",
+    ),
+)
 
 
 def nearest_neighbours(
@@ -240,7 +341,7 @@ def check_nearest_neighbours(
     """
     if len(cached) < 2:
         return CheckResult(
-            "nearest-neighbour", CheckStatus.SKIPPED,
+            CheckName.NEAREST_NEIGHBOUR, CheckStatus.SKIPPED,
             "the ability cache is empty; run encode-abilities first",
         )
     lines = []
@@ -258,7 +359,7 @@ def check_nearest_neighbours(
         )
         lines.append(f"{query.label()!r} → {rendered}")
     return CheckResult(
-        "nearest-neighbour", CheckStatus.REPORTED, "; ".join(lines),
+        CheckName.NEAREST_NEIGHBOUR, CheckStatus.REPORTED, "; ".join(lines),
         {"unresolved_queries": float(unresolved)},
     )
 
@@ -267,16 +368,66 @@ def check_umap(cached: CachedVectors) -> CheckResult:
     projection = umap_projection(cached.matrix())
     if projection is None:
         return CheckResult(
-            "umap", CheckStatus.SKIPPED,
+            CheckName.UMAP, CheckStatus.SKIPPED,
             "too few vectors, or umap-learn is not installed",
         )
     return CheckResult(
-        "umap", CheckStatus.REPORTED,
+        CheckName.UMAP, CheckStatus.REPORTED,
         f"projected {projection.shape[0]} unique ability texts to 2-D",
     )
 
 
-# ── the ward canary ─────────────────────────────────────────────────────
+# ── the ward canary (FR-112) ────────────────────────────────────────────
+
+
+def evaluate_ward_canary(
+    ward: np.ndarray,
+    twins: list[np.ndarray],
+    bare_keywords: list[np.ndarray],
+    *,
+    unresolved: Sequence[str] = (),
+) -> CheckResult:
+    """Is ward nearer its meaning than it is to keyword-shaped text in general?
+
+    Passes when ward is closer to **each** functional twin than to the median of
+    its distances to all bare single-keyword vectors. A median rather than a
+    fixed threshold, so the criterion stays meaningful whatever scale the
+    embedding settles at.
+
+    ``unresolved`` names the checked-in lines the cache had no vector for. They
+    are carried into the detail, and the counts compared into the values, so a
+    verdict over fewer twins than the table lists says so.
+    """
+    tail = f"; unresolved: {'; '.join(unresolved)}" if unresolved else ""
+    if not twins or not bare_keywords:
+        return CheckResult(
+            CheckName.WARD_CANARY, CheckStatus.SKIPPED,
+            "no ward, twin, or bare-keyword vectors in the cache" + tail,
+        )
+    reference = float(np.median([cosine_distance(ward, k) for k in bare_keywords]))
+    distances = [cosine_distance(ward, twin) for twin in twins]
+    farther = [d for d in distances if not (d < reference)]
+    values = {
+        "median_bare_keyword_distance": reference,
+        "min_twin_distance": min(distances),
+        "max_twin_distance": max(distances),
+        "twins_compared": float(len(twins)),
+        "bare_keywords_compared": float(len(bare_keywords)),
+    }
+    if farther:
+        return CheckResult(
+            CheckName.WARD_CANARY, CheckStatus.REPORTED,
+            f"{len(farther)} of {len(twins)} functional twins sit farther from "
+            f"ward than the median bare keyword ({reference:.3f})" + tail,
+            values,
+        )
+    return CheckResult(
+        CheckName.WARD_CANARY, CheckStatus.REPORTED,
+        f"every functional twin is nearer than the median bare keyword "
+        f"({reference:.3f})" + tail,
+        values,
+    )
+
 
 
 def check_ward(cached: CachedVectors) -> CheckResult:
@@ -287,13 +438,12 @@ def check_ward(cached: CachedVectors) -> CheckResult:
     than dropped: a canary quietly comparing against fewer twins than it lists
     is weaker than it claims to be.
     """
-    from effects.application.evaluate_effect_model import evaluate_ward_canary
     from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
 
     ward = cached.resolve(WARD)
     if ward.key is None:
         return CheckResult(
-            "ward-canary", CheckStatus.SKIPPED,
+            CheckName.WARD_CANARY, CheckStatus.SKIPPED,
             f"ward is not in the cache: {ward.problem}",
         )
     unresolved: list[str] = []
@@ -330,12 +480,12 @@ def check_decodability(
     """
     if not cached.by_card:
         return CheckResult(
-            "decodability", CheckStatus.SKIPPED,
+            CheckName.DECODABILITY, CheckStatus.SKIPPED,
             "the ability cache is empty; run encode-abilities first",
         )
     if not Path(win_rates_path).exists():
         return CheckResult(
-            "decodability", CheckStatus.SKIPPED,
+            CheckName.DECODABILITY, CheckStatus.SKIPPED,
             f"no win-rate table at {win_rates_path}",
         )
     from price_predictor.application.ridge_probes import (
@@ -351,10 +501,12 @@ def check_decodability(
     # still describes embedding row i.
     canonical = {name.casefold(): name for name in load_labels(Path(win_rates_path))}
     labelled = [canonical.get(name.casefold(), name) for name in shared]
-    if sum(name in canonical.values() for name in labelled) < 50:
+    with_rate = sum(name.casefold() in canonical for name in shared)
+    if with_rate < 50:
         return CheckResult(
-            "decodability", CheckStatus.SKIPPED,
-            f"only {len(shared)} cached cards, too few with a win rate to fit probes",
+            CheckName.DECODABILITY, CheckStatus.SKIPPED,
+            f"only {with_rate} of {len(shared)} cached cards have a win rate, "
+            "too few to fit probes",
         )
     table = build_label_table(
         labelled,
@@ -364,7 +516,7 @@ def check_decodability(
     effects_matrix = np.stack([cached.by_card[name] for name in shared])
     effects_probes = fit_probes(table, effects_matrix, mode="honest")
     return CheckResult(
-        "decodability", CheckStatus.REPORTED, _probe_summary("effects", effects_probes),
+        CheckName.DECODABILITY, CheckStatus.REPORTED, _probe_summary("effects", effects_probes),
     )
 
 
@@ -380,8 +532,8 @@ def _probe_summary(label: str, probes) -> str:
 # ── the average-effect control and the taxonomy comparison ──────────────
 
 
-def check_variant_geometry(
-    full: CachedVectors, variant: CachedVectors, name: str,
+def check_baseline_geometry(
+    full: CachedVectors, baseline_vectors: CachedVectors, name: str,
 ) -> CheckResult:
     """Compare a baseline's cache geometry against the shipping one.
 
@@ -390,26 +542,21 @@ def check_variant_geometry(
     because what they test is whether the encoder's space carries more than
     theirs does.
     """
-    if len(variant) < 2 or len(full) < 2:
+    if len(baseline_vectors) < 2 or len(full) < 2:
         return CheckResult(
-            f"{name}-comparison", CheckStatus.SKIPPED,
+            CheckName.baseline_comparison(name), CheckStatus.SKIPPED,
             f"no {name} cache; run encode-abilities --variant {name}",
         )
-    from effects.application.evaluate_effect_model import (
-        mean_pairwise_cosine,
-        top_component_share,
-    )
-
-    full_matrix, variant_matrix = full.matrix(), variant.matrix()
+    shipping, baseline = full.geometry(), baseline_vectors.geometry()
     return CheckResult(
-        f"{name}-comparison", CheckStatus.REPORTED,
-        f"mean pairwise cosine {mean_pairwise_cosine(full_matrix):.3f} vs "
-        f"{mean_pairwise_cosine(variant_matrix):.3f}; top component "
-        f"{top_component_share(full_matrix):.1%} vs "
-        f"{top_component_share(variant_matrix):.1%}",
+        CheckName.baseline_comparison(name), CheckStatus.REPORTED,
+        f"mean pairwise cosine {shipping.mean_pairwise_cosine:.3f} vs "
+        f"{baseline.mean_pairwise_cosine:.3f}; top component "
+        f"{shipping.top_component_share:.1%} vs "
+        f"{baseline.top_component_share:.1%}",
         {
-            "full_cosine": mean_pairwise_cosine(full_matrix),
-            f"{name}_cosine": mean_pairwise_cosine(variant_matrix),
+            "full_cosine": shipping.mean_pairwise_cosine,
+            f"{name}_cosine": baseline.mean_pairwise_cosine,
         },
     )
 

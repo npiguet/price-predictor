@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityType;
 import com.pricepredictor.connector.MultiCard;
+import com.pricepredictor.connector.RenderedLine;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -68,29 +69,27 @@ public record ProvenanceSidecar(
     /**
      * Build the sidecar for one converted card.
      *
-     * @param renderedLines the file's lines, exactly as written
-     * @param owners        the ability that produced each line, null for headers
+     * @param renderedLines the file's lines, exactly as written, with what
+     *                      produced each
      * @param recorders     one recorder per face, in face order
      */
     public static ProvenanceSidecar build(
             String cardName,
             String scriptFile,
-            MultiCard card,
-            List<String> renderedLines,
-            List<Ability> owners,
-            List<Integer> faceOfLine,
+            List<RenderedLine> renderedLines,
             List<ProvenanceRecorder> recorders
     ) {
+        List<Ability> owners = renderedLines.stream().map(RenderedLine::owner).toList();
         for (ProvenanceRecorder recorder : recorders) {
             recorder.claimModesUnderEveryRoot(owners);
         }
         List<Line> lines = new ArrayList<>();
         Set<Ability> seen = new LinkedHashSet<>();
         for (int i = 0; i < renderedLines.size(); i++) {
-            Ability owner = owners.get(i);
+            Ability owner = renderedLines.get(i).owner();
             if (owner == null) continue;
             seen.add(owner);
-            int face = faceOfLine.get(i);
+            int face = renderedLines.get(i).face();
             ProvenanceRecorder recorder = face >= 0 && face < recorders.size()
                     ? recorders.get(face) : null;
             ProvenanceRecorder.Source source =
@@ -103,7 +102,7 @@ public record ProvenanceSidecar(
                     source == null ? List.of() : List.copyOf(source.keys()),
                     source == null ? TraitScript.of(null) : source.script(),
                     RoleSpans.of(
-                            prose(renderedLines.get(i)),
+                            prose(renderedLines.get(i).text()),
                             owner.type() == AbilityType.ACTIVATED)));
         }
 
