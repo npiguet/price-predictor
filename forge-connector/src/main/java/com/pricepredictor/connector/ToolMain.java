@@ -1,5 +1,10 @@
 package com.pricepredictor.connector;
 
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -9,6 +14,12 @@ import java.util.Set;
  * exit protocol the Python side relies on — 0 when the work returns, 1 with a
  * stack trace on stderr when it throws. The callers only check for non-zero,
  * so every failure is one exit code; the message is for the operator.
+ *
+ * <p>It also owns the stream encoding of the workers whose pipes Python reads:
+ * Python decodes them strictly as UTF-8, but the JVM encodes {@code System.out}
+ * and {@code System.err} with the platform default (Cp1252 on Windows), so one
+ * accented card name such as {@code Éowyn} would abort the supervisor with a
+ * {@code UnicodeDecodeError}.
  */
 final class ToolMain {
 
@@ -31,6 +42,22 @@ final class ToolMain {
             e.printStackTrace(System.err);
             System.exit(1);
         }
+    }
+
+    /**
+     * A UTF-8 stream bound to the real stdout descriptor; Forge's incidental
+     * logging on {@code System.out} goes to a UTF-8 {@code System.err} instead,
+     * so the pipe the supervisor reads carries only the caller's own lines.
+     */
+    static PrintStream claimStdout() {
+        PrintStream protocolOut = utf8(new FileOutputStream(FileDescriptor.out));
+        System.setErr(utf8(new FileOutputStream(FileDescriptor.err)));
+        System.setOut(System.err);
+        return protocolOut;
+    }
+
+    static PrintStream utf8(OutputStream sink) {
+        return new PrintStream(sink, true, StandardCharsets.UTF_8);
     }
 
     /**

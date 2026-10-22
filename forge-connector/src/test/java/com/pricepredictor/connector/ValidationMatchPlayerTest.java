@@ -60,9 +60,15 @@ class ValidationMatchPlayerTest {
     }
 
     @Test
-    void crashRecoveryNoFileReturnsZero(@TempDir Path tmp) {
+    void crashRecoveryNoFileReturnsZero(@TempDir Path tmp) throws IOException {
         Path outcomes = tmp.resolve("nonexistent.txt");
         long completed = ValidationMatchPlayer.countCompletedMatches(outcomes);
         assertEquals(0, completed);
+    }
+
+    @Test
+    void crashRecoveryUnreadableFileThrowsInsteadOfReplayingMatches(@TempDir Path tmp) {
+        // A directory exists but cannot be read as a file; reporting 0 would replay every match.
+        assertThrows(IOException.class, () -> ValidationMatchPlayer.countCompletedMatches(tmp));
     }
 }
