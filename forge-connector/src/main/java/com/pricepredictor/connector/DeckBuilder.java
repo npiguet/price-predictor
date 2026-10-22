@@ -1,14 +1,13 @@
 package com.pricepredictor.connector;
 
 import forge.StaticData;
+import forge.card.CardDb;
 import forge.card.CardEdition;
 import forge.card.CardType;
 import forge.card.MagicColor;
 import forge.card.mana.ManaCost;
 import forge.card.mana.ManaCostShard;
-import forge.deck.CardPool;
 import forge.deck.Deck;
-import forge.deck.DeckSection;
 import forge.gamemodes.limited.BoosterDeckBuilder;
 import forge.gamemodes.limited.DeckColors;
 import forge.gamemodes.limited.DraftedColorCommitment;
@@ -201,9 +200,32 @@ public class DeckBuilder {
      */
     Deck rebalanceLands(List<PaperCard> spells, List<PaperCard> nonbasicLands) {
         int basicLandsNeeded = DECK_SIZE - spells.size() - nonbasicLands.size();
+        if (basicLandsNeeded < 0) {
+            throw new IllegalArgumentException("Cannot build a " + DECK_SIZE + "-card deck from "
+                    + spells.size() + " spells and " + nonbasicLands.size() + " non-basic lands");
+        }
 
-        // Count WUBRG mana pips across spells to determine basic land proportions.
-        // Non-basic lands are intentionally excluded — they have no mana cost.
+        int[] basicCounts = distributeBasics(countColourPips(spells), basicLandsNeeded);
+
+        // Source basic land cards from a set in the spell pool, else the fallback
+        String setCode = findBasicLandSet(spells);
+        List<PaperCard> cards = new ArrayList<>(spells);
+        cards.addAll(nonbasicLands);
+        for (int i = 0; i < basicCounts.length; i++) {
+            if (basicCounts[i] == 0) continue;
+            PaperCard landCard = basicLand(MagicColor.Constant.BASIC_LANDS.get(i), setCode);
+            for (int j = 0; j < basicCounts[i]; j++) {
+                cards.add(landCard);
+            }
+        }
+        return DeckMaterializer.deckOf(cards);
+    }
+
+    /**
+     * Count WUBRG mana pips across spells to determine basic land proportions.
+     * Non-basic lands are intentionally excluded — they have no mana cost.
+     */
+    private static int[] countColourPips(List<PaperCard> spells) {
         int[] pips = new int[MagicColor.WUBRG.length]; // W=0, U=1, B=2, R=3, G=4
         for (PaperCard card : spells) {
             ManaCost mc = card.getRules().getMainPart().getManaCost();
@@ -215,46 +237,52 @@ public class DeckBuilder {
                 }
             }
         }
+        return pips;
+    }
 
+    /**
+     * Distribute basic land slots proportionally to the pips (greedy, WUBRG order;
+     * the last required colour absorbs any rounding remainder).
+     */
+    private static int[] distributeBasics(int[] pips, int basicLandsNeeded) {
         int totalPips = Arrays.stream(pips).sum();
         if (totalPips == 0) {
             // Colorless deck: distribute equally across all five types
+            pips = new int[pips.length];
             Arrays.fill(pips, 1);
             totalPips = pips.length;
         }
 
-        // Source basic land cards from a set in the spell pool, else the fallback
-        String setCode = findBasicLandSet(spells);
-
-        // Distribute basic land slots proportionally (greedy, WUBRG order;
-        // last required color absorbs any rounding remainder)
-        List<PaperCard> basicLands = new ArrayList<>(basicLandsNeeded);
+        int[] counts = new int[pips.length];
         int remaining = basicLandsNeeded;
         int remainingPips = totalPips;
-
         for (int i = 0; i < pips.length; i++) {
             if (pips[i] == 0 || remaining == 0) continue;
             int count = (remainingPips == pips[i])
                     ? remaining
                     : Math.round((float) remaining * pips[i] / remainingPips);
-            count = Math.max(0, Math.min(count, remaining));
-
-            String landName = MagicColor.Constant.BASIC_LANDS.get(i);
-            PaperCard landCard = FModel.getMagicDb().getCommonCards().getCard(landName, setCode);
-            for (int j = 0; j < count && landCard != null; j++) {
-                basicLands.add(landCard);
-            }
-            remaining -= count;
+            counts[i] = Math.max(0, Math.min(count, remaining));
+            remaining -= counts[i];
             remainingPips -= pips[i];
         }
+        return counts;
+    }
 
-        // Assemble: spells + non-basic lands + basic lands
-        Deck deck = new Deck();
-        CardPool main = deck.getOrCreate(DeckSection.Main);
-        for (PaperCard card : spells) main.add(card);
-        for (PaperCard land : nonbasicLands) main.add(land);
-        for (PaperCard land : basicLands) main.add(land);
-        return deck;
+    /**
+     * The basic land from {@code setCode}, or its default printing when that set has none —
+     * a missing land must fail loudly, since a silently skipped slot leaves the deck short.
+     */
+    static PaperCard basicLand(String landName, String setCode) {
+        CardDb cards = FModel.getMagicDb().getCommonCards();
+        PaperCard land = cards.getCard(landName, setCode);
+        if (land == null) {
+            land = cards.getCard(landName);
+        }
+        if (land == null) {
+            throw new IllegalStateException(
+                    "No printing of basic land '" + landName + "' (requested set " + setCode + ")");
+        }
+        return land;
     }
 
     private String findBasicLandSet(List<PaperCard> cards) {
