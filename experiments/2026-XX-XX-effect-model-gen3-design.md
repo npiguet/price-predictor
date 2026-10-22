@@ -158,7 +158,7 @@ record is a real declaration and there is nothing left to sample
 
 **The knowledge probes' observed-mana target sums each event's `mana_by_color`.** In gen-2 it read
 `params.amount`, a field the collector never writes, so every event counted as one mana whatever it
-produced ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#the-observed-mana-probe-target-counted-mana-events-rather-than-mana)).
+produced ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#the-observed-mana-probe-label-counted-mana-events-rather-than-mana)).
 
 **The collector's map is the mana actually produced, not the colours a land could make.** The
 collector counts the colour letters of the mana string Forge reports once the mana is in the pool,
@@ -583,7 +583,7 @@ The combat grid measures the result on blocks from the validation strata, which 
 
 ## The corpus build, the targets and the probes were reviewed, and gen-3 trains without the defects found
 
-A review of `src/effects` and the probe scripts after the gen-2 runs found fifteen defects that shaped gen-2's results ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#fifteen-defects-in-the-corpus-build-the-training-targets-the-evaluator-and-the-probes-shaped-gen-2s-results-and-gen-3-is-built-without-them)) and thirteen more on paths gen-2 never ran. All of them are fixed on master before gen-3's first collection. Several fixes change what a field means or how the loss weighs it, so no gen-3 number is comparable with gen-2's on those fields.
+A review of `src/effects` and the probe scripts after the gen-2 runs found fifteen defects that shaped gen-2's results ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#sixteen-defects-in-the-corpus-build-the-training-labels-the-evaluator-and-the-probes-shaped-gen-2s-results-and-gen-3-is-built-without-them)) and thirteen more on paths gen-2 never ran. All of them are fixed on master before gen-3's first collection. Several fixes change what a field means or how the loss weighs it, so no gen-3 number is comparable with gen-2's on those fields.
 
 ### What the model trains on
 
