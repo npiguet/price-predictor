@@ -25,6 +25,13 @@ public record MultiCard(String layout, List<CardFace> faces) {
         return new MultiCard(layout, faces);
     }
 
+    /** This card with its first face replaced. */
+    public MultiCard withFirstFace(CardFace replacement) {
+        List<CardFace> replaced = new ArrayList<>(faces);
+        replaced.set(0, replacement);
+        return new MultiCard(layout, replaced);
+    }
+
     /** Format the complete card as text output. */
     public String formatText() {
         return String.join("\n", renderLines(null, null));

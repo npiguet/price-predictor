@@ -30,6 +30,12 @@ public record CardFace(
         abilities = List.copyOf(abilities);
     }
 
+    /** This face with its abilities replaced. */
+    public CardFace withAbilities(List<Ability> replacement) {
+        return new CardFace(name, manaCost, types, powerToughness, loyalty, defense,
+                colors, text, replacement);
+    }
+
     /** Format as text output. */
     public String formatText() {
         return String.join("\n", renderLines(null));
