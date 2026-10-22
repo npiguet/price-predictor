@@ -585,11 +585,6 @@ public final class ForkCollector {
         }
     }
 
-    /** The fork's mode draw, for a test of the draw alone. */
-    boolean chooseModes(SpellAbility ability) {
-        return choices.chooseModes(ability);
-    }
-
     /** The fork's target draw, for a test of the draw alone. */
     boolean chooseTargets(SpellAbility ability) {
         return choices.chooseTargets(ability);

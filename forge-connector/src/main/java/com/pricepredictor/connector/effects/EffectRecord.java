@@ -279,11 +279,6 @@ public final class EffectRecord {
                 + ",\"payload\":" + payloadJson + "}";
     }
 
-    /** Why {@link #abilityJson()} is empty, or null where it names a line. */
-    String abilityUnresolved() {
-        return abilityUnresolved;
-    }
-
     String abilityJson() {
         return ability == null ? "null" : ProvenanceKey.toJsonArray(ability);
     }

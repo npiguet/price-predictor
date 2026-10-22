@@ -180,20 +180,6 @@ public final class SnapshotBuilder {
     }
 
     /**
-     * Render the snapshot, naming the event a record is about to handle.
-     *
-     * @param pending the incoming event on a {@code rewrite} or {@code trigger}
-     *                record. The event itself lives in the payload; the snapshot
-     *                carries it so the entities it is about to affect are
-     *                nameable from the board the model is shown
-     */
-    public String toJson(
-            SpellAbility acting, Iterable<Card> referenced, Long withoutStatic,
-            EffectEvent pending) {
-        return toJson(acting, referenced, withoutStatic, pending, null);
-    }
-
-    /**
      * Render the snapshot for a record whose acting line is not a spell ability.
      *
      * <p>A trigger and a replacement effect are traits, not {@link SpellAbility}
