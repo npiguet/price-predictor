@@ -205,7 +205,7 @@ public class GamePlayer {
 
         while (!match.isMatchOver()) {
             var game = match.createGame();
-            var collector = new PlayedCardCollector();
+            var collector = new PlayedCardCollector(game);
             game.subscribeToEvents(collector);
             PatchedCollectors patched = null;
             // The seat exists before the collectors do: the match creates the

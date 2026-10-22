@@ -38,14 +38,6 @@ public final class MissingSVarReport {
         entries.add(new Entry(card, line, parameter, label));
     }
 
-    public List<Entry> entries() {
-        return List.copyOf(entries);
-    }
-
-    public boolean isEmpty() {
-        return entries.isEmpty();
-    }
-
     /** Take every entry collected so far, leaving the report empty for the next tree. */
     public List<Entry> drain() {
         List<Entry> taken = List.copyOf(entries);

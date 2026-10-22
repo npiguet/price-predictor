@@ -48,6 +48,17 @@ class CardsPlayedRowOfTest {
     }
 
     @Test
+    void aBasicLandReportedAsPlayedIsDropped() {
+        MatchResult parent = match(deck("Shock"), deck("Opt"));
+        CardsPlayedRow row = CardsPlayedRow.of(parent, new GamePlayer.GameOutcome(
+                Side.A, Side.A, List.of("Mountain", "Shock"), List.of("Snow-Covered Island")));
+
+        assertEquals(List.of("Shock"), row.cardsPlayedA());
+        assertTrue(row.cardsPlayedB().isEmpty());
+        assertEquals(List.of("Opt"), row.cardsNotPlayedB());
+    }
+
+    @Test
     void aSideThatPlayedNothingKeepsEveryNonBasicNotPlayed() {
         MatchResult parent = match(deck("Shock"), deck("Opt"));
         CardsPlayedRow row = CardsPlayedRow.of(parent,

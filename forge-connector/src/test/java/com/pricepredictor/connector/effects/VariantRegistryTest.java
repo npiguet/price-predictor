@@ -46,20 +46,27 @@ class VariantRegistryTest {
     @Test
     void aNonScriptFileIsIgnored(@TempDir Path dir) throws IOException {
         write(dir, "bolt_variant_2.txt", "Bolt Variant 2");
+        // Only the extension tells a script from these: each holds a Name: line.
         Files.writeString(dir.resolve("bolt_variant_2.provenance.json"),
-                "{\"card\": \"Sidecar Not A Script\"}");
-        Files.writeString(dir.resolve("loadable.lst"), "Listed Not A Script\n");
+                "Name:Sidecar Not A Script\n");
+        Files.writeString(dir.resolve("loadable.lst"), "Name:Listed Not A Script\n");
 
         VariantRegistry.registerAll(dir);
 
         assertTrue(VariantRegistry.isVariant("Bolt Variant 2"));
         assertFalse(VariantRegistry.isVariant("Listed Not A Script"));
+        assertFalse(VariantRegistry.isVariant("Sidecar Not A Script"));
     }
 
     @Test
-    void aMissingDirectoryRegistersNothing(@TempDir Path dir) {
+    void aMissingOrNonDirectorySourceRegistersNothing(@TempDir Path dir) throws IOException {
+        write(dir, "lonely.txt", "Lonely Variant 3");
+
         VariantRegistry.registerAll(dir.resolve("absent"));
-        assertFalse(VariantRegistry.isVariant("Absent Variant 3"));
+        // A script file is not a tree to walk, even though it holds a name.
+        VariantRegistry.registerAll(dir.resolve("lonely.txt"));
+
+        assertFalse(VariantRegistry.isVariant("Lonely Variant 3"));
     }
 
     @Test

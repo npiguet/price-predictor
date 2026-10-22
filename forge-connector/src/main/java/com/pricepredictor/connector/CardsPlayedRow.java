@@ -62,13 +62,12 @@ public record CardsPlayedRow(
      * The row for one game of {@code parent}, from the cards that game played.
      *
      * <p>The card columns are distinct sets: a name appears once however many
-     * copies the deck holds, basic lands never appear in the not-played
-     * columns, and a card is in at most one of a side's two columns — played
+     * copies the deck holds, basic lands appear in none of them, and a card is in at most one of a side's two columns — played
      * if any copy was.
      */
     static CardsPlayedRow of(MatchResult parent, GamePlayer.GameOutcome game) {
-        List<String> playedA = distinct(game.cardsPlayedA());
-        List<String> playedB = distinct(game.cardsPlayedB());
+        List<String> playedA = distinctNonBasic(game.cardsPlayedA());
+        List<String> playedB = distinctNonBasic(game.cardsPlayedB());
         return new CardsPlayedRow(
                 parent.timestamp(),
                 parent.runId(),
@@ -83,8 +82,14 @@ public record CardsPlayedRow(
                 game.playFirst());
     }
 
-    private static List<String> distinct(List<String> names) {
-        return new ArrayList<>(new LinkedHashSet<>(names));
+    private static List<String> distinctNonBasic(List<String> names) {
+        Set<String> kept = new LinkedHashSet<>();
+        for (String name : names) {
+            if (!BasicLands.isBasic(name)) {
+                kept.add(name);
+            }
+        }
+        return new ArrayList<>(kept);
     }
 
     /** The deck's distinct non-basic names, in deck order, that {@code played} lacks. */

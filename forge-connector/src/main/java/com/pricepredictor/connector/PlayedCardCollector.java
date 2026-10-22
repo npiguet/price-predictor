@@ -2,20 +2,19 @@ package com.pricepredictor.connector;
 
 import com.google.common.eventbus.Subscribe;
 import forge.card.GamePieceType;
+import forge.game.Game;
+import forge.game.card.Card;
 import forge.game.card.CardView;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.IGameEventVisitor;
 import forge.game.player.PlayerView;
 import forge.game.zone.ZoneType;
-import forge.item.PaperCard;
-import forge.model.FModel;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Per-game eventbus visitor that records every non-basic, non-token card
@@ -52,7 +51,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
 
+    private final Game game;
     private final Map<Side, List<String>> cardsBySide = new EnumMap<>(Side.class);
+
+    public PlayedCardCollector(Game game) {
+        this.game = game;
+    }
 
     /** Return the recorded card names for one side. */
     public List<String> getCards(Side side) {
@@ -115,15 +119,32 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
         if (!shouldRecord(controllerEqualsOwner, isToken, isBasicLand, isRealDeckCard)) {
             return;
         }
-        String name = resolveRecordedName(card);
+        String name = recordedName(card);
         if (name == null || name.isEmpty()) {
             return;
         }
-        name = canonicalName(name);
         // Throws on a name neither side registered, as the winner mapping
         // does: a card credited to the wrong deck is a corrupt row.
         Side side = Side.ofLobbyName(owner.getLobbyPlayerName());
         cardsBySide.computeIfAbsent(side, s -> new ArrayList<>()).add(name);
+    }
+
+    /**
+     * The name the deck lists for the played card: its printing's own name,
+     * which is the whole name of a Room or split card, not the name of the
+     * door or half that was cast. The printing is read from the game's card
+     * object rather than looked up by name, so two cards sharing a face name
+     * cannot be confused. A copy credits the card it copies (its backup).
+     * A game object with no printing (e.g. a dungeon) falls back to
+     * {@link #resolveRecordedName}.
+     */
+    private String recordedName(CardView card) {
+        CardView origin = card.getBackup() != null ? card.getBackup() : card;
+        Card source = game.findById(origin.getId());
+        if (source != null && source.getPaperCard() != null) {
+            return source.getPaperCard().getName();
+        }
+        return resolveRecordedName(card);
     }
 
     /**
@@ -145,22 +166,6 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
                 ? card.getCurrentState().getOracleName()
                 : null;
     }
-
-    /**
-     * The name a deck lists for the card whose face or half is called
-     * {@code stateName}: a Room's door, a split card's half, an adventure, or a
-     * transform or modal back face is cast under the face's own name, while the
-     * deck holds the card under {@code PaperCard.getName()}. A name Forge
-     * cannot resolve is returned as given.
-     */
-    static String canonicalName(String stateName) {
-        return CANONICAL_NAMES.computeIfAbsent(stateName, name -> {
-            PaperCard paper = FModel.getMagicDb().getCommonCards().getCard(name);
-            return paper == null ? name : paper.getName();
-        });
-    }
-
-    private static final Map<String, String> CANONICAL_NAMES = new ConcurrentHashMap<>();
 
     /** Static filter: returns {@code true} iff the card should be recorded. */
     static boolean shouldRecord(
