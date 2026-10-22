@@ -936,7 +936,7 @@ class BusBracketCollectorTest {
      * fork's ability's own host card already carries a different {@code Game}
      * than this collector's.
      *
-     * <p>Companion to {@code PatchedCollectorTest
+     * <p>Companion to {@code OutcomeHandlerTest
      * .anOutcomeFromAnotherGameDoesNotReachThisGamesBracket} and {@code
      * ClauseContractTest.aClauseFromAnotherGameDoesNotReachThisGamesBracket},
      * which cover the same fix on {@code PatchedCollectors}'s two hooks; this

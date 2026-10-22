@@ -235,7 +235,7 @@ class ClauseContractTest {
      * a fork's clause's own host card already carries a different
      * {@code Game} than this collector's.
      *
-     * <p>Companion to {@code PatchedCollectorTest
+     * <p>Companion to {@code OutcomeHandlerTest
      * .anOutcomeFromAnotherGameDoesNotReachThisGamesBracket}, which covers
      * the same fix on the outcome hook's half.
      */
