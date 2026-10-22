@@ -2817,7 +2817,9 @@ SHARE_RELIANCE = [("pt_until_end_of_turn", "pt_duration", "pump lasts until end 
 
 
 #: Label offsets in points for the crowded medians: ``(dx, dy, ha)``.
-SHARE_LABEL_OFFSETS = {"dies": (-30, 52, "center"), "affected": (60, -48, "left")}
+SHARE_LABEL_OFFSETS = {"dies": (-30, 52, "center"), "affected": (60, -48, "left"),
+                       "pt_until_end_of_turn": (40, -62, "left"),
+                       "damage_taken": (95, 22, "left")}
 
 
 def share_vs_reliance() -> None:
