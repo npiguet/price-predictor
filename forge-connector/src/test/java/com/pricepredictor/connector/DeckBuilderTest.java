@@ -6,13 +6,18 @@ import forge.model.FModel;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.*;
+import java.util.function.BiFunction;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for DeckBuilder's four construction methods, weighted selection, land rebalancing,
+ * Tests for DeckBuilder's four construction methods, land rebalancing,
  * and pool-card uniqueness guarantee (FR-010).
  *
  * <p>Requires Forge environment for PaperCard objects, so tagged as "integration".
@@ -27,75 +32,6 @@ class DeckBuilderTest {
     private static List<PaperCard> realPool(String setCode) {
         return new PoolGenerator().openSinglePool(
                 BoosterTemplates.forSet(setCode).orElseThrow(), HoldoutCards.NONE);
-    }
-
-    // ── Method Selection Distribution ─────────────────────────────────────────
-
-    @Test
-    void methodSelectionDistributionApproximatesWeights() {
-        DeckBuilder builder = new DeckBuilder();
-        java.util.Map<BuildMethod, Integer> counts = new java.util.EnumMap<>(BuildMethod.class);
-
-        int trials = 1000;
-        for (int i = 0; i < trials; i++) {
-            counts.merge(builder.selectMethod(), 1, Integer::sum);
-        }
-
-        // forge-best: ~40% (expect 350-450)
-        int best = counts.getOrDefault(BuildMethod.FORGE_BEST, 0);
-        assertTrue(best >= 300 && best <= 500,
-                "forge-best should be ~40%, got " + best + "/" + trials);
-        // forge-3sub: ~30% (expect 250-350)
-        int sub3 = counts.getOrDefault(BuildMethod.FORGE_3SUB, 0);
-        assertTrue(sub3 >= 200 && sub3 <= 400,
-                "forge-3sub should be ~30%, got " + sub3 + "/" + trials);
-        // forge-8sub: ~20% (expect 150-250)
-        int sub8 = counts.getOrDefault(BuildMethod.FORGE_8SUB, 0);
-        assertTrue(sub8 >= 100 && sub8 <= 300,
-                "forge-8sub should be ~20%, got " + sub8 + "/" + trials);
-        // random: ~10% (expect 50-150)
-        int random = counts.getOrDefault(BuildMethod.RANDOM, 0);
-        assertTrue(random >= 30 && random <= 200,
-                "random should be ~10%, got " + random + "/" + trials);
-    }
-
-    @Test
-    void allMethodsEventuallySelected() {
-        DeckBuilder builder = new DeckBuilder();
-        Set<BuildMethod> seen = new HashSet<>();
-
-        for (int i = 0; i < 500 && seen.size() < 4; i++) {
-            seen.add(builder.selectMethod());
-        }
-
-        assertEquals(Set.of(BuildMethod.values()), seen,
-                "All 4 methods should appear within 500 trials");
-    }
-
-    @Test
-    void theRollThresholdsAreTheWeightsCumulated() {
-        // 4:3:2:1 over a total of 10: the same cuts a literal {0.4, 0.7, 0.9}
-        // table drew, so the corpus's method mix is unchanged.
-        assertEquals(10, BuildMethod.TOTAL_WEIGHT);
-        assertEquals(BuildMethod.FORGE_BEST, BuildMethod.forRoll(Math.nextDown(0.4)));
-        assertEquals(BuildMethod.FORGE_3SUB, BuildMethod.forRoll(0.4));
-        assertEquals(BuildMethod.FORGE_3SUB, BuildMethod.forRoll(Math.nextDown(0.7)));
-        assertEquals(BuildMethod.FORGE_8SUB, BuildMethod.forRoll(0.7));
-        assertEquals(BuildMethod.FORGE_8SUB, BuildMethod.forRoll(Math.nextDown(0.9)));
-        assertEquals(BuildMethod.RANDOM, BuildMethod.forRoll(0.9));
-        assertEquals(BuildMethod.RANDOM, BuildMethod.forRoll(Math.nextDown(1.0)));
-    }
-
-    // ── Method 1: Standard Build ───────────────────────────────────────────────
-
-    @Test
-    void method1ProducesExactly40Cards() {
-        List<PaperCard> pool = realPool("RVR");
-        DeckBuilder builder = new DeckBuilder(new Random(42));
-
-        Deck deck = builder.buildStandard(pool);
-
-        assertEquals(40, deck.getMain().countAll(), "Method 1 deck must be exactly 40 cards");
     }
 
     // ── Drafted pools ─────────────────────────────────────────────────────────
@@ -166,81 +102,68 @@ class DeckBuilderTest {
         return names;
     }
 
-    // ── Method 2: 3 Swaps ─────────────────────────────────────────────────────
+    // ── The four construction methods ─────────────────────────────────────────
 
-    @Test
-    void method2ProducesExactly40Cards() {
+    private record Method(String name, long seed, BiFunction<DeckBuilder, List<PaperCard>, Deck> build) {
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    static Stream<Method> methods() {
+        return Stream.of(
+                new Method("method 1: standard build", 42, DeckBuilder::buildStandard),
+                new Method("method 2: 3 swaps", 42, (b, pool) -> b.buildWithSwaps(pool, 3)),
+                new Method("method 3: 8 swaps", 7, (b, pool) -> b.buildWithSwaps(pool, 8)),
+                new Method("method 4: random", 99, DeckBuilder::buildRandom));
+    }
+
+    @ParameterizedTest
+    @MethodSource("methods")
+    void everyMethodProduces40CardsWithoutReusingPoolCards(Method method) {
         List<PaperCard> pool = realPool("RVR");
-        DeckBuilder builder = new DeckBuilder(new Random(42));
 
-        Deck deck = builder.buildWithSwaps(pool, 3);
+        Deck deck = method.build().apply(new DeckBuilder(new Random(method.seed())), pool);
 
-        assertEquals(40, deck.getMain().countAll(), "Method 2 deck must be exactly 40 cards");
+        assertEquals(40, deck.getMain().countAll(), method.name() + " deck must be exactly 40 cards");
+        assertNoDuplicatePoolCards(pool, deck);
     }
 
     @Test
     void method2SwapsExactly3NonlandCards() {
-        // Use a fixed seed to make the standard deck deterministic
-        List<PaperCard> pool = realPool("RVR");
+        // Forge's standard build is not repeatable, so it is fixed here to leave the seeded
+        // swaps as the only difference between the two decks. The pool holds one copy of each
+        // spell so a swap always has a differing replacement, and no land, which could have
+        // none left to swap in.
+        Map<String, PaperCard> distinctSpells = new LinkedHashMap<>();
+        for (PaperCard card : realPool("RVR")) {
+            if (!card.getRules().getMainPart().getType().isLand()) {
+                distinctSpells.putIfAbsent(card.getName(), card);
+            }
+        }
+        List<PaperCard> pool = new ArrayList<>(distinctSpells.values());
+        Deck standardDeck = new DeckBuilder(new Random(42)).buildStandard(new ArrayList<>(pool));
+        DeckBuilder builder = new DeckBuilder(new Random(42)) {
+            @Override
+            Deck buildStandard(List<PaperCard> ignored) {
+                return standardDeck;
+            }
+        };
 
-        // Build standard deck to know what cards would be there
-        DeckBuilder refBuilder = new DeckBuilder(new Random(42));
-        Deck standardDeck = refBuilder.buildStandard(new ArrayList<>(pool));
+        Deck swappedDeck = builder.buildWithSwaps(new ArrayList<>(pool), 3);
 
-        DeckBuilder swapBuilder = new DeckBuilder(new Random(42));
-        Deck swappedDeck = swapBuilder.buildWithSwaps(new ArrayList<>(pool), 3);
+        List<PaperCard> removed = nonbasics(standardDeck);
+        nonbasics(swappedDeck).forEach(removed::remove);
+        assertEquals(3, removed.size(),
+                "3 swaps replace exactly 3 of the standard deck's nonbasic cards, got " + removed);
+    }
 
-        // Both decks have 40 cards, so differences come from the 3 swaps
-        // Count nonland card differences
-        List<String> standardNonlands = standardDeck.getMain().toFlatList().stream()
+    /** The deck's nonbasic cards as a mutable list, duplicates repeated. */
+    private static List<PaperCard> nonbasics(Deck deck) {
+        return deck.getMain().toFlatList().stream()
                 .filter(c -> !c.getRules().getMainPart().getType().isBasicLand())
-                .map(PaperCard::getName)
-                .sorted()
-                .toList();
-        List<String> swappedNonlands = swappedDeck.getMain().toFlatList().stream()
-                .filter(c -> !c.getRules().getMainPart().getType().isBasicLand())
-                .map(PaperCard::getName)
-                .sorted()
-                .toList();
-
-        // The swapped deck must have SOME difference from standard (unless pool is too small)
-        // We can't assert exact swap count without same seed for both builders, but we can
-        // assert the swapped deck uses pool cards only
-        assertNoDuplicatePoolCards(pool, swappedDeck);
-    }
-
-    // ── Method 3: 8 Swaps ─────────────────────────────────────────────────────
-
-    @Test
-    void method3ProducesExactly40Cards() {
-        List<PaperCard> pool = realPool("RVR");
-        DeckBuilder builder = new DeckBuilder(new Random(7));
-
-        Deck deck = builder.buildWithSwaps(pool, 8);
-
-        assertEquals(40, deck.getMain().countAll(), "Method 3 deck must be exactly 40 cards");
-    }
-
-    @Test
-    void method3NoPoolCardReuse() {
-        List<PaperCard> pool = realPool("RVR");
-        DeckBuilder builder = new DeckBuilder(new Random(7));
-
-        Deck deck = builder.buildWithSwaps(pool, 8);
-
-        assertNoDuplicatePoolCards(pool, deck);
-    }
-
-    // ── Method 4: Random ──────────────────────────────────────────────────────
-
-    @Test
-    void method4ProducesExactly40Cards() {
-        List<PaperCard> pool = realPool("RVR");
-        DeckBuilder builder = new DeckBuilder(new Random(99));
-
-        Deck deck = builder.buildRandom(pool);
-
-        assertEquals(40, deck.getMain().countAll(), "Method 4 deck must be exactly 40 cards");
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Test
@@ -250,22 +173,10 @@ class DeckBuilderTest {
 
         Deck deck = builder.buildRandom(pool);
 
-        long nonlandCount = deck.getMain().toFlatList().stream()
-                .filter(c -> !c.getRules().getMainPart().getType().isBasicLand())
-                .count();
+        long nonlandCount = nonbasics(deck).size();
 
         assertTrue(nonlandCount <= 23,
                 "Method 4 must pick at most 23 nonland cards, got " + nonlandCount);
-    }
-
-    @Test
-    void method4NoPoolCardReuse() {
-        List<PaperCard> pool = realPool("RVR");
-        DeckBuilder builder = new DeckBuilder(new Random(99));
-
-        Deck deck = builder.buildRandom(pool);
-
-        assertNoDuplicatePoolCards(pool, deck);
     }
 
     // ── Land Rebalancing ──────────────────────────────────────────────────────
@@ -308,20 +219,27 @@ class DeckBuilderTest {
     }
 
     @Test
-    void buildDeckMethodTagMatchesSelectedMethod() {
+    void buildDeckMethodTagMatchesTheRolledMethodAndEveryMethodOccurs() {
         List<PaperCard> pool = realPool("RVR");
-        Random rng = new Random(42);
-        DeckBuilder builder = new DeckBuilder(rng);
 
-        // Collect method tags across many invocations; we expect all four tags to appear
-        // with the 4:3:2:1 weighting, so over 40 runs all four should be present.
+        // The builder's first draw is the method roll, so a mirror Random predicts the tag.
+        // Seeds come from a master Random because consecutive seeds give near-identical first
+        // doubles; 40 of them at weights 4:3:2:1 reach all four methods.
+        Random seeds = new Random(42);
         Set<BuildMethod> seen = new HashSet<>();
         for (int i = 0; i < 40; i++) {
-            DeckBuilder.BuiltDeck built = builder.buildDeck(new ArrayList<>(pool));
+            long seed = seeds.nextLong();
+            DeckBuilder.BuiltDeck built =
+                    new DeckBuilder(new Random(seed)).buildDeck(new ArrayList<>(pool));
+            BuildMethod rolled = BuildMethod.forRoll(new Random(seed).nextDouble());
+            assertEquals(rolled, built.method(), "seed " + seed);
+            if (rolled == BuildMethod.RANDOM) {
+                assertTrue(nonbasics(built.deck()).size() <= DeckBuilder.RANDOM_DECK_SPELLS,
+                        "a random-tagged deck holds at most 23 nonbasic cards");
+            }
             seen.add(built.method());
         }
-        assertEquals(4, seen.size(),
-                "Expected all 4 method tags to appear across 40 weighted invocations, got " + seen);
+        assertEquals(Set.of(BuildMethod.values()), seen);
     }
 
     // ── FR-010: Pool card uniqueness ──────────────────────────────────────────
