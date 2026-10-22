@@ -121,13 +121,13 @@ public record ProvenanceKey(
      * {@code ability_unresolved}, which is collection metadata and never a
      * model input.
      */
-    public record Resolved(ProvenanceKey key, String reason) {
+    public record Resolved(ProvenanceKey key, UnresolvedReason reason) {
 
         /**
          * No line, for a trait that is none of the kinds a printed line can be,
          * or no trait at all.
          */
-        public static final Resolved UNKNOWN = new Resolved(null, UNRESOLVED_UNKNOWN_KIND);
+        public static final Resolved UNKNOWN = new Resolved(null, UnresolvedReason.UNKNOWN_KIND);
 
         public Resolved {
             if ((key == null) == (reason == null)) {
@@ -151,48 +151,6 @@ public record ProvenanceKey(
             return key == null ? List.of() : List.of(key);
         }
     }
-
-    /** The trait names no state, so there is nothing to index it against. */
-    public static final String UNRESOLVED_NO_CARD_STATE = "no_card_state";
-    /** The trait is none of the five kinds a printed line can be. */
-    public static final String UNRESOLVED_UNKNOWN_KIND = "unknown_kind";
-    /** The acting card is engine-built and has no script file in any tree. */
-    public static final String UNRESOLVED_ENGINE_EFFECT = "engine_effect";
-    /**
-     * The trait came from a keyword the card does not print, and the permanent
-     * that handed it out is no longer reachable.
-     *
-     * <p>Truthful rather than alarming: a keyword an anthem or a pump spell
-     * granted names no printed line <em>on the recipient</em>, so there is
-     * nothing to key even when nothing is broken. The static-granted case does
-     * key — through the grantor — so what is left here is the spell-granted
-     * one, where Forge keeps no back-reference to the ability that granted it.
-     */
-    public static final String UNRESOLVED_GRANTED_KEYWORD = "granted_keyword";
-
-    /**
-     * The trait was built at runtime from another card's script and lives on a
-     * card other than the one whose text it came from.
-     *
-     * <p>An aura's or an equipment's granted trigger, an {@code Animate}'s
-     * granted ability, and an effect card's own traits are all parsed from an
-     * SVar of the donor. Forge points them at the donor's {@code CardState},
-     * which is enough to name the donor's script file, but the SVar is not a
-     * member of any of that state's trait slices and nothing records which
-     * printed line named the SVar — so the card is known and the line is not.
-     * Distinct from {@link #UNRESOLVED_UNINDEXABLE} because it is a property of
-     * how Forge grants traits, not evidence of a resolver that regressed.
-     */
-    public static final String UNRESOLVED_GRANTED_TRAIT = "granted_trait";
-
-    /**
-     * A keyable kind, printed on the state it names, whose position in that
-     * state could not be established.
-     *
-     * <p>The alarm. Every shape that legitimately has no printed line now has a
-     * reason of its own, so this one means the resolver regressed.
-     */
-    public static final String UNRESOLVED_UNINDEXABLE = "unindexable";
 
     /** How many donor hops {@link #resolve} will take before giving up. */
     private static final int MAX_HOPS = 8;
@@ -297,7 +255,7 @@ public record ProvenanceKey(
         Set<CardTraitBase> seen =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         CardTraitBase t = trait;
-        String reason = UNRESOLVED_UNINDEXABLE;
+        UnresolvedReason reason = UnresolvedReason.UNINDEXABLE;
         for (int hop = 0; t != null && hop < MAX_HOPS && seen.add(t); hop++) {
             // 1. Unwrap to something that could be a slice member.
             if (t instanceof WrappedAbility wrapped) {
@@ -514,25 +472,25 @@ public record ProvenanceKey(
      * own test for a trait living on a card other than the one whose script
      * text it came from.
      */
-    private static String reasonFor(CardTraitBase trait, CardState state, Card host) {
+    private static UnresolvedReason reasonFor(CardTraitBase trait, CardState state, Card host) {
         if (isScriptless(host)) {
-            return UNRESOLVED_ENGINE_EFFECT;
+            return UnresolvedReason.ENGINE_EFFECT;
         }
         if (state == null) {
-            return UNRESOLVED_NO_CARD_STATE;
+            return UnresolvedReason.NO_CARD_STATE;
         }
         if (trait.getKeyword() != null) {
             // keyFor refuses a keyword the state does not print, and the
             // grantor hop has already been tried, so this is the granted one.
-            return UNRESOLVED_GRANTED_KEYWORD;
+            return UnresolvedReason.GRANTED_KEYWORD;
         }
         if (kindOf(trait) == null) {
-            return UNRESOLVED_UNKNOWN_KIND;
+            return UnresolvedReason.UNKNOWN_KIND;
         }
         if (trait.isCopiedTrait()) {
-            return UNRESOLVED_GRANTED_TRAIT;
+            return UnresolvedReason.GRANTED_TRAIT;
         }
-        return UNRESOLVED_UNINDEXABLE;
+        return UnresolvedReason.UNINDEXABLE;
     }
 
     /**

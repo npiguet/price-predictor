@@ -68,7 +68,7 @@ public final class EffectRecord {
     private Boolean whatIf;
     private String actorPlayer;
     private List<ProvenanceKey> ability;
-    private String abilityUnresolved;
+    private UnresolvedReason abilityUnresolved;
     private String stateJson = "{}";
     private String payloadJson = "{}";
 
@@ -196,9 +196,8 @@ public final class EffectRecord {
             return this;
         }
         this.ability = List.of();
-        String reason = resolved == null ? null : resolved.reason();
-        this.abilityUnresolved = reason == null
-                ? ProvenanceKey.UNRESOLVED_UNKNOWN_KIND : reason;
+        UnresolvedReason reason = resolved == null ? null : resolved.reason();
+        this.abilityUnresolved = reason == null ? UnresolvedReason.UNKNOWN_KIND : reason;
         return this;
     }
 
@@ -257,7 +256,8 @@ public final class EffectRecord {
                 + (whatIf == null ? "" : ",\"what_if\":" + whatIf)
                 + ",\"actor_player\":" + Json.string(actorPlayer)
                 + ",\"ability\":" + abilityJson()
-                + ",\"ability_unresolved\":" + Json.string(abilityUnresolved)
+                + ",\"ability_unresolved\":"
+                + Json.string(abilityUnresolved == null ? null : abilityUnresolved.wireName())
                 + ",\"state\":" + stateJson
                 + ",\"payload\":" + payloadJson + "}";
     }

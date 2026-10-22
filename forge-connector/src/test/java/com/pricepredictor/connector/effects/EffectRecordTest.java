@@ -191,7 +191,7 @@ class EffectRecordTest {
     void anUnattributableLineIsEmptyRatherThanNull() {
         assertTrue(record(RecordKind.TRIGGER)
                 .ability(new ProvenanceKey.Resolved(
-                        null, ProvenanceKey.UNRESOLVED_ENGINE_EFFECT))
+                        null, UnresolvedReason.ENGINE_EFFECT))
                 .toJson().contains("\"ability\":[]"));
         assertTrue(record(RecordKind.COMBAT).toJson()
                 .contains("\"ability\":null"));
@@ -209,7 +209,7 @@ class EffectRecordTest {
     void anEmptyLineSaysWhyItIsEmpty() {
         String json = record(RecordKind.TRIGGER)
                 .ability(new ProvenanceKey.Resolved(
-                        null, ProvenanceKey.UNRESOLVED_ENGINE_EFFECT))
+                        null, UnresolvedReason.ENGINE_EFFECT))
                 .toJson();
 
         assertTrue(json.contains("\"ability\":[]"), json);

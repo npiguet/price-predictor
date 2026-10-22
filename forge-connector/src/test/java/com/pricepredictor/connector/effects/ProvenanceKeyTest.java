@@ -388,7 +388,7 @@ class ProvenanceKeyTest {
 
         assertNull(resolved.key(),
                 "an engine-built card names no script file in any tree");
-        assertEquals(ProvenanceKey.UNRESOLVED_ENGINE_EFFECT, resolved.reason());
+        assertEquals(UnresolvedReason.ENGINE_EFFECT, resolved.reason());
     }
 
     /**
@@ -493,7 +493,7 @@ class ProvenanceKeyTest {
 
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(detached);
         assertNull(resolved.key());
-        assertEquals(ProvenanceKey.UNRESOLVED_NO_CARD_STATE, resolved.reason());
+        assertEquals(UnresolvedReason.NO_CARD_STATE, resolved.reason());
     }
 
     /** A key that was found carries no reason, and the reverse. */
@@ -521,7 +521,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(null);
 
         assertNull(resolved.key());
-        assertEquals(ProvenanceKey.UNRESOLVED_UNKNOWN_KIND, resolved.reason());
+        assertEquals(UnresolvedReason.UNKNOWN_KIND, resolved.reason());
         assertTrue(resolved.keys().isEmpty());
     }
 
@@ -816,7 +816,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
 
         assertNull(resolved.key(), "two SVars parse the same; neither is the answer");
-        assertEquals(ProvenanceKey.UNRESOLVED_GRANTED_TRAIT, resolved.reason());
+        assertEquals(UnresolvedReason.GRANTED_TRAIT, resolved.reason());
     }
 
     /**
@@ -839,7 +839,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
 
         assertNull(resolved.key(), "no SVar of the donor carries this text");
-        assertEquals(ProvenanceKey.UNRESOLVED_GRANTED_TRAIT, resolved.reason());
+        assertEquals(UnresolvedReason.GRANTED_TRAIT, resolved.reason());
     }
 
     /** A granted trait still names the donor's card, even when the line is lost. */
@@ -878,7 +878,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
 
         assertNull(resolved.key(), "the recipient prints no such keyword");
-        assertEquals(ProvenanceKey.UNRESOLVED_GRANTED_KEYWORD, resolved.reason());
+        assertEquals(UnresolvedReason.GRANTED_KEYWORD, resolved.reason());
     }
 
     /**
@@ -896,7 +896,7 @@ class ProvenanceKeyTest {
         ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(stray);
 
         assertNull(resolved.key());
-        assertEquals(ProvenanceKey.UNRESOLVED_UNINDEXABLE, resolved.reason());
+        assertEquals(UnresolvedReason.UNINDEXABLE, resolved.reason());
     }
 
     // -- a charm mode's key: the root key plus its Choices$ position -----
@@ -955,13 +955,8 @@ class ProvenanceKeyTest {
     /** Every reason is distinct, because a reason that collides says nothing. */
     @Test
     void theReasonVocabularyHasNoDuplicates() {
-        List<String> reasons = List.of(
-                ProvenanceKey.UNRESOLVED_NO_CARD_STATE,
-                ProvenanceKey.UNRESOLVED_UNKNOWN_KIND,
-                ProvenanceKey.UNRESOLVED_ENGINE_EFFECT,
-                ProvenanceKey.UNRESOLVED_GRANTED_KEYWORD,
-                ProvenanceKey.UNRESOLVED_GRANTED_TRAIT,
-                ProvenanceKey.UNRESOLVED_UNINDEXABLE);
+        List<String> reasons = java.util.Arrays.stream(UnresolvedReason.values())
+                .map(UnresolvedReason::wireName).toList();
 
         assertEquals(reasons.size(), new java.util.HashSet<>(reasons).size());
     }
@@ -973,7 +968,7 @@ class ProvenanceKeyTest {
                 "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0);
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> new ProvenanceKey.Resolved(key, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND));
+                () -> new ProvenanceKey.Resolved(key, UnresolvedReason.UNKNOWN_KIND));
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> new ProvenanceKey.Resolved(null, null));
     }
