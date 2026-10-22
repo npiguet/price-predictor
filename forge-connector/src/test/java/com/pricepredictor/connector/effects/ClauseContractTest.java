@@ -1,14 +1,8 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.StaticData;
-import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Assumptions;
@@ -17,17 +11,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -163,25 +152,16 @@ class ClauseContractTest {
     @Test
     void aSwappedCallWritesNoEvent() throws Throwable {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                TestCards.game(), writer, "run.0-l1.0");
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                CollectionCaps.defaults(), 1L)) {
-            collector.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(sa);
             handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
                     new Object[]{Boolean.FALSE, sa});
             bracket.endBracket(sa.getId(), false);
             bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+        });
 
-        String effectHalf = readShard(path).get(1);
+        String effectHalf = records.get(1);
         assertFalse(effectHalf.contains("\"type\":\"turn_added\""), effectHalf);
     }
 
@@ -220,14 +200,7 @@ class ClauseContractTest {
         inner.resetTargets();
         inner.getTargets().add(innerTarget);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                TestCards.game(), writer, "run.0-l1.0");
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                CollectionCaps.defaults(), 1L)) {
-            collector.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(outer);
             handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
@@ -240,11 +213,9 @@ class ClauseContractTest {
                     new Object[]{outer, false});
             bracket.endBracket(outer.getId(), false);
             bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+        });
 
-        String effectHalf = readShard(path).get(1);
+        String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
                 + SnapshotBuilder.playerId(outerTarget) + "\"]"), effectHalf);
         assertTrue(effectHalf.contains("\"type\":\"turn_skipped\",\"subjects\":[\""
@@ -270,40 +241,25 @@ class ClauseContractTest {
      */
     @Test
     void aClauseFromAnotherGameDoesNotReachThisGamesBracket() throws Throwable {
-        GameRules forkRules = new GameRules(GameType.Constructed);
-        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
-        Card forkHost = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Grizzly Bears"),
-                null, 900001, fork);
+        Card forkHost = TestBoard.cardInAnotherGame("Grizzly Bears");
         SpellAbility forkAbility = AbilityFactory.getAbility(
                 "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
-        Player forkTarget = new Player("fork-target", fork, 92201);
+        Player forkTarget = new Player("fork-target", forkHost.getGame(), 92201);
         forkAbility.resetTargets();
         forkAbility.getTargets().add(forkTarget);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collector = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0",
-                    CollectionCaps.defaults(), 1L)) {
-                collector.withBracket(bracket);
-                InvocationHandler handler = collector.clauseHandler();
-                bracket.beginBracket(forkAbility);
-                handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
-                        new Object[]{forkAbility});
-                handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
-                        new Object[]{forkAbility, false});
-                bracket.endBracket(forkAbility.getId(), false);
-                bracket.flushHeldResolution();
-            }
-        } finally {
-            writer.close();
-        }
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            InvocationHandler handler = collector.clauseHandler();
+            bracket.beginBracket(forkAbility);
+            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+                    new Object[]{forkAbility});
+            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+                    new Object[]{forkAbility, false});
+            bracket.endBracket(forkAbility.getId(), false);
+            bracket.flushHeldResolution();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertFalse(shard.contains("turn_added"),
                 "a fork's clause must not land in the live game's record: " + shard);
     }
@@ -361,37 +317,32 @@ class ClauseContractTest {
                 },
                 (sa, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED)));
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
         PrintStream originalErr = System.err;
+        List<String> records;
         try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collector = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0",
-                    CollectionCaps.defaults(), 1L)) {
-                collector.withBracket(bracket);
+            records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
                 InvocationHandler handler = collector.clauseHandler();
                 System.setErr(new PrintStream(captured, true));
-                bracket.beginBracket(outer);
-                resolvingContained(handler, outer);
-                resolvingContained(handler, inner);
-                handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
-                        new Object[]{inner, false});
-                handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
-                        new Object[]{outer, false});
-                bracket.endBracket(outer.getId(), false);
-                bracket.flushHeldResolution();
-            } finally {
-                System.setErr(originalErr);
-            }
+                try {
+                    bracket.beginBracket(outer);
+                    resolvingContained(handler, outer);
+                    resolvingContained(handler, inner);
+                    handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+                            new Object[]{inner, false});
+                    handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+                            new Object[]{outer, false});
+                    bracket.endBracket(outer.getId(), false);
+                    bracket.flushHeldResolution();
+                } finally {
+                    System.setErr(originalErr);
+                }
+            });
         } finally {
-            writer.close();
             ApiEvents.clearRuleOverridesForTest();
         }
 
-        String effectHalf = readShard(path).get(1);
+        String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
                 + SnapshotBuilder.playerId(outerTarget) + "\"]"),
                 "the outer clause's own event must be unaffected by the inner "
@@ -428,14 +379,7 @@ class ClauseContractTest {
      * resolved, on a real bracket -- and return the shard's rendered lines.
      */
     private List<String> resolveClause(SpellAbility sa, boolean threw) throws Throwable {
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                TestCards.game(), writer, "run.0-l1.0");
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                CollectionCaps.defaults(), 1L)) {
-            collector.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
             InvocationHandler handler = collector.clauseHandler();
             bracket.beginBracket(sa);
             handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
@@ -444,19 +388,8 @@ class ClauseContractTest {
                     new Object[]{sa, threw});
             bracket.endBracket(sa.getId(), false);
             bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
-        List<String> records = readShard(path);
+        });
         assertEquals(2, records.size(), records.toString());
         return records;
-    }
-
-    private static List<String> readShard(Path path) throws Exception {
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
     }
 }
