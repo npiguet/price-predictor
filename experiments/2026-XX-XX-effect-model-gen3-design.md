@@ -202,6 +202,44 @@ instead, with methods such as GradNorm and uncertainty weighting.
 - **Validation stays out of the loop.** The controller reads training loss. If the card-disjoint
   validation steered training, it would stop being an unbiased measure.
 
+### A record drawn for a rule trains only that rule's outputs
+
+**A record drawn extra times for one rule also repeats every other label it carries.** A trample
+combat drawn three extra times to balance rule 702.19 also teaches damage taken, life change and
+the gate three extra times. None of those outputs was short of records. Rebalancing by rule would
+therefore unbalance the outputs it did not target. Multi-label learning calls this label
+co-occurrence: oversampling an example for a rare label oversamples the common labels it carries.
+
+**Gen-3 starts with a hard mask: a record drawn for a rule trains that rule's outputs and nothing
+else.** The heads map names each rule's outputs, existing and new, so the mask needs no labelling
+by hand. The rebalancer knows which rule it drew a record for once the detectors tag each record
+with the rules it shows. A record drawn at its natural share, for no rule, keeps every output.
+Gen-2 already has the mechanism: the loss skips a field the record says nothing about, and the
+verdict head takes a mask per column. Fine-tuning a language model uses the same technique when it
+leaves the prompt out of the loss.
+
+**The gate stays on for the rule's own entities.** When a rule's effect does not happen, the model
+usually learns it as an entity left unaffected. A creature that survives Shock has no event, and
+its only label is the gate at zero. Masking the gate would remove the negative half of every
+minimal pair.
+
+**The mask removes the bias in the labels, not in the boards.** The trunk still reads the boards a
+rule's copies bring, such as many infect boards when infect is rebalanced. That skews what the
+model reads, not what it is told the answer is, and training on varied boards limits it. The
+rule's own outputs still need the importance weight of the calibration constraint above.
+
+**A soft mask replaces the hard one if the hard mask is shown to cost the other outputs.** Under
+the soft mask, a record drawn k times keeps its other outputs at weight 1/k on each copy. Its
+copies then add up to one natural example for those outputs, and no correct label is thrown away.
+The hard mask is the soft mask with that weight at zero.
+
+**The cost to look for is in records that exist only for one rule.** A record from a directed fork
+is collected for its rule alone, so under the hard mask its other labels never train anything. The
+sign is an output the mask switches off on many records staying weak. The test is two arms on the
+same corpus, one per mask. If the soft-mask arm scores the switched-off outputs better on the
+card-disjoint validation while the rule tests score the same, the hard mask is costing them data,
+and the soft mask replaces it.
+
 ### The Comprehensive Rules could index what the corpus covers, rule by rule
 
 **Gen-2 measures coverage by card text and by rule family, not by the rules of the game.** A rule
