@@ -54,6 +54,17 @@ class PatchedCollectorTest {
     @TempDir
     Path tempDir;
 
+    private static final Method ON_CONDITION_EVALUATED =
+            HookShapes.method(HookShapes.TriggerFire.class, "onConditionEvaluated");
+    private static final Method ON_CANDIDATE =
+            HookShapes.method(HookShapes.Playability.class, "onCandidate");
+    private static final Method ON_ATTACKERS_DECLARABLE =
+            HookShapes.method(HookShapes.CombatLegality.class, "onAttackersDeclarable");
+    private static final Method ON_BLOCKERS_DECLARABLE =
+            HookShapes.method(HookShapes.CombatLegality.class, "onBlockersDeclarable");
+    private static final Method ON_MANA_PRODUCED =
+            HookShapes.method(HookShapes.Mana.class, "onManaProduced");
+
     // ── continuous coalescing ───────────────────────────────────────────
 
     /**
@@ -431,17 +442,6 @@ class PatchedCollectorTest {
 
     // ── final-fix-3.md item 2: the other four handlers ───────────────────
 
-    private static final Method ON_CONDITION_EVALUATED =
-            HookShapes.method(HookShapes.TriggerFire.class, "onConditionEvaluated");
-    private static final Method ON_CANDIDATE =
-            HookShapes.method(HookShapes.Playability.class, "onCandidate");
-    private static final Method ON_ATTACKERS_DECLARABLE =
-            HookShapes.method(HookShapes.CombatLegality.class, "onAttackersDeclarable");
-    private static final Method ON_BLOCKERS_DECLARABLE =
-            HookShapes.method(HookShapes.CombatLegality.class, "onBlockersDeclarable");
-    private static final Method ON_MANA_PRODUCED =
-            HookShapes.method(HookShapes.Mana.class, "onManaProduced");
-
     /**
      * final-fix-3.md item 2: {@code triggerFireHandler} had no game check at
      * all before this fix. A fork's own trigger evaluations
@@ -454,8 +454,7 @@ class PatchedCollectorTest {
         Trigger forkTrigger = forkCard.getCurrentState().getTriggers().get(0);
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.triggerFireHandler().invoke(null,
-                        ON_CONDITION_EVALUATED,
+                collectors.triggerFireHandler().invoke(null, ON_CONDITION_EVALUATED,
                         new Object[]{forkTrigger, Map.of(), true}));
 
         assertFalse(Files.exists(shard),
@@ -474,8 +473,7 @@ class PatchedCollectorTest {
                 "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", forkCard);
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), caps(0, 1.0),
-                (bracket, collectors) -> collectors.playabilityHandler().invoke(null,
-                        ON_CANDIDATE,
+                (bracket, collectors) -> collectors.playabilityHandler().invoke(null, ON_CANDIDATE,
                         new Object[]{forkCandidate}));
 
         assertFalse(Files.exists(shard),
@@ -494,8 +492,7 @@ class PatchedCollectorTest {
         Card candidate = TestCards.build("Grizzly Bears");
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.combatLegalityHandler().invoke(null,
-                        ON_ATTACKERS_DECLARABLE,
+                collectors.combatLegalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
                         new Object[]{null, forkDefender, List.of(candidate), List.of(candidate)}));
 
         assertFalse(Files.exists(shard), "another game's defender must not land in the live shard");
@@ -515,8 +512,7 @@ class PatchedCollectorTest {
         Player forkPlayer = new Player("fork-player", forkCard.getGame(), 92302);
 
         Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.manaHandler().invoke(null,
-                        ON_MANA_PRODUCED,
+                collectors.manaHandler().invoke(null, ON_MANA_PRODUCED,
                         new Object[]{forkAbility, forkPlayer, "G"}));
 
         assertFalse(Files.exists(shard),
@@ -542,8 +538,7 @@ class PatchedCollectorTest {
         Trigger liveTrigger = liveCard.getCurrentState().getTriggers().get(0);
 
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.triggerFireHandler().invoke(null,
-                        ON_CONDITION_EVALUATED,
+                collectors.triggerFireHandler().invoke(null, ON_CONDITION_EVALUATED,
                         new Object[]{liveTrigger, Map.of(), true}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"trigger\"")),
                 "a live trigger evaluation must reach the shard: " + lines);
@@ -560,8 +555,7 @@ class PatchedCollectorTest {
         // roughly nine times in ten, and a flaky pass here is exactly as
         // uninformative as the vacuous one item 3 exists to close.
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), caps(0, 1.0),
-                (bracket, collectors) -> collectors.playabilityHandler().invoke(null,
-                        ON_CANDIDATE,
+                (bracket, collectors) -> collectors.playabilityHandler().invoke(null, ON_CANDIDATE,
                         new Object[]{liveCandidate}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"playability\"")),
                 "a live playability candidate must reach the shard: " + lines);
@@ -573,8 +567,7 @@ class PatchedCollectorTest {
         Card candidate = TestCards.build("Grizzly Bears");
 
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.combatLegalityHandler().invoke(null,
-                        ON_ATTACKERS_DECLARABLE,
+                collectors.combatLegalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
                         new Object[]{null, liveDefender, List.of(candidate), List.of(candidate)}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"subkind\":\"attackers\"")),
                 "a live defender's legality answer must reach the shard: " + lines);
@@ -590,8 +583,7 @@ class PatchedCollectorTest {
         // immediately (PatchedCollectors#manaReservoir); only flushMana(),
         // called when the run closes the collectors, writes them out.
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) ->
-                collectors.manaHandler().invoke(null,
-                        ON_MANA_PRODUCED,
+                collectors.manaHandler().invoke(null, ON_MANA_PRODUCED,
                         new Object[]{liveAbility, livePlayer, "G"}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("mana_produced")),
                 "live mana production must reach the shard: " + lines);
@@ -633,8 +625,7 @@ class PatchedCollectorTest {
                 CollectionCaps.defaults().probeKeywords(), 0.0, 0.0);
 
         Path solo = ShardRun.shardOf(tempDir.resolve("solo"), TestCards.game(), halfRate,
-                (bracket, collectors) -> collectors.playabilityHandler().invoke(null,
-                        ON_CANDIDATE,
+                (bracket, collectors) -> collectors.playabilityHandler().invoke(null, ON_CANDIDATE,
                         new Object[]{liveCandidate}));
         boolean soloAdmitted = admitsAPlayabilityRecord(solo);
 
@@ -643,11 +634,9 @@ class PatchedCollectorTest {
                 "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", forkCard);
         Path paired = ShardRun.shardOf(tempDir.resolve("paired"), TestCards.game(), halfRate,
                 (bracket, collectors) -> {
-                    collectors.playabilityHandler().invoke(null,
-                            ON_CANDIDATE,
+                    collectors.playabilityHandler().invoke(null, ON_CANDIDATE,
                             new Object[]{forkCandidate});
-                    collectors.playabilityHandler().invoke(null,
-                            ON_CANDIDATE,
+                    collectors.playabilityHandler().invoke(null, ON_CANDIDATE,
                             new Object[]{liveCandidate});
                 });
         boolean pairedAdmitted = admitsAPlayabilityRecord(paired);
@@ -691,8 +680,7 @@ class PatchedCollectorTest {
         tapped.setTapped(true);
 
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            collectors.combatLegalityHandler().invoke(null,
-                    ON_ATTACKERS_DECLARABLE,
+            collectors.combatLegalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
                     new Object[]{active, other, List.of(ready, tapped), List.of(ready)});
         });
 
@@ -723,8 +711,7 @@ class PatchedCollectorTest {
         Card theirs = TestBoard.inPlay(game, other, "Grizzly Bears");
 
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            collectors.combatLegalityHandler().invoke(null,
-                    ON_ATTACKERS_DECLARABLE,
+            collectors.combatLegalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
                     new Object[]{other, active, List.of(theirs), List.of(theirs)});
         });
 
@@ -752,8 +739,7 @@ class PatchedCollectorTest {
         game.getPhaseHandler().setCombat(combat);
 
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            collectors.combatLegalityHandler().invoke(null,
-                    ON_BLOCKERS_DECLARABLE,
+            collectors.combatLegalityHandler().invoke(null, ON_BLOCKERS_DECLARABLE,
                     new Object[]{blocking, attacker, List.of(blocker), List.of(blocker), 1});
         });
 
@@ -781,14 +767,13 @@ class PatchedCollectorTest {
         Card mine = TestBoard.inPlay(game, active, "Grizzly Bears");
 
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
-            Method declarable = ON_ATTACKERS_DECLARABLE;
             for (int turn = 0; turn < 20; turn++) {
                 // A life total that moves is enough to make each snapshot new.
                 active.setLife(20 - turn, null);
-                collectors.combatLegalityHandler().invoke(null, declarable,
+                collectors.combatLegalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
                         new Object[]{active, other, List.of(mine), List.of(mine)});
             }
-            collectors.combatLegalityHandler().invoke(null, declarable,
+            collectors.combatLegalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
                     new Object[]{active, other, List.of(mine), List.of(mine)});
         });
 
@@ -808,8 +793,7 @@ class PatchedCollectorTest {
 
         List<String> lines = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(active));
-            collectors.combatLegalityHandler().invoke(null,
-                    ON_ATTACKERS_DECLARABLE,
+            collectors.combatLegalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
                     new Object[]{active, other, List.of(mine), List.of(mine)});
         });
 
@@ -832,8 +816,7 @@ class PatchedCollectorTest {
         candidate.setActivatingPlayer(other);
 
         List<String> lines = ShardRun.records(tempDir, game, caps(0, 1.0), (bracket, collectors) -> {
-            collectors.playabilityHandler().invoke(null,
-                    ON_CANDIDATE,
+            collectors.playabilityHandler().invoke(null, ON_CANDIDATE,
                     new Object[]{candidate});
         });
 
