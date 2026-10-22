@@ -109,16 +109,27 @@ final class PatchedCollectors implements AutoCloseable {
         return installed;
     }
 
+    /**
+     * Write what is still held and take every hook down.
+     *
+     * <p>The hooks come down even when the flush throws: they are JVM statics,
+     * and one left installed would hand the next game's callbacks to this
+     * game's channels.
+     */
     @Override
     public void close() {
-        // Before the hooks come down: this is the last moment the game can be
-        // said to have ended, and the mana reservoir is only decided then.
-        mana.flush();
-        for (Listener listener : listeners) {
-            listener.hook().uninstall();
+        try {
+            // Before the hooks come down: this is the last moment the game can
+            // be said to have ended, and the mana reservoir is only decided then.
+            mana.flush();
+        } finally {
+            for (Listener listener : listeners) {
+                listener.hook().uninstall();
+            }
+            // Last, and outside the hook teardown: the question the tally
+            // answers is about the run, so it is asked once per game whatever
+            // the game did.
+            RewriteChannel.JVM_REWRITES.endOfGame();
         }
-        // Last, and outside the hook teardown: the question the tally answers
-        // is about the run, so it is asked once per game whatever the game did.
-        RewriteChannel.JVM_REWRITES.endOfGame();
     }
 }

@@ -106,12 +106,15 @@ public final class GameRecording implements AutoCloseable {
      * Stop recording: write what is still held and take every hook down.
      *
      * <p>Called once the game is over, which is the moment the mana reservoir
-     * is decided.
+     * is decided. Every hook comes down even when writing what is held throws.
      */
     @Override
     public void close() {
-        patched.close();
-        PatchHooks.CONFIRM_LISTENER.uninstall();
+        try {
+            patched.close();
+        } finally {
+            PatchHooks.CONFIRM_LISTENER.uninstall();
+        }
     }
 
     /** Where the random seat writes the decisions its own draws made (FR-022d). */
