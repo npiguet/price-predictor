@@ -13,17 +13,6 @@ public record CollectionCaps(
         double randomSeatShare,
         double randomSeatProbability) {
 
-    /** The gen-1 caps alone: no random seat, which is the default anyway. */
-    public CollectionCaps(
-            int manaCap,
-            double playabilityRate,
-            int interventionsPerGame,
-            int probesPerGame,
-            List<String> probeKeywords) {
-        this(manaCap, playabilityRate, interventionsPerGame, probesPerGame,
-                probeKeywords, 0.0, 0.0);
-    }
-
     public static CollectionCaps defaults() {
         return new CollectionCaps(
                 1, 0.1, 2, 2, List.of(), 0.0, 0.0);

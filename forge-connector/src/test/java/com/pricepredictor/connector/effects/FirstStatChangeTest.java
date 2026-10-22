@@ -89,7 +89,7 @@ class FirstStatChangeTest {
         Player caster = game.getPlayers().get(0);
         Card bears = onBattlefield(game, "Grizzly Bears", caster);
         SpellAbility growth = spellOf(inHand(game, "Giant Growth", caster), caster);
-        CollectionCaps caps = new CollectionCaps(2000, 0.1, 1, 0, List.of());
+        CollectionCaps caps = new CollectionCaps(2000, 0.1, 1, 0, List.of(), 0.0, 0.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {

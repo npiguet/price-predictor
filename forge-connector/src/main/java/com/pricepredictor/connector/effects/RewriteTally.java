@@ -153,10 +153,6 @@ final class RewriteTally {
         return rewritten;
     }
 
-    synchronized long named() {
-        return named;
-    }
-
     /** The rendered summary, its own method so a test can read it. */
     synchronized String summary() {
         StringBuilder out = new StringBuilder();

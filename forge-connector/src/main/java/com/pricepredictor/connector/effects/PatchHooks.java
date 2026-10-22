@@ -427,16 +427,6 @@ public final class PatchHooks {
         }
     }
 
-    /** Whether every named no-argument-or-long method is present on a class. */
-    public static boolean present(String className, String... methodNames) {
-        for (String methodName : methodNames) {
-            if (!find(className, methodName).present()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /** The sub-ability currently resolving, when the pointer hook is present. */
     public static Object currentSubAbility() {
         return readStatic(SUB_ABILITY.owner(), SUB_ABILITY.method());

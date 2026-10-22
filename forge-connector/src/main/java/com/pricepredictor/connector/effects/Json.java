@@ -43,15 +43,6 @@ public final class Json {
         return sb.append('"').toString();
     }
 
-    /** A JSON array of already-rendered element fragments. */
-    public static String array(Collection<String> rendered) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (String element : rendered) {
-            joiner.add(element);
-        }
-        return joiner.toString();
-    }
-
     /** A JSON array of strings. */
     public static String stringArray(Collection<String> values) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");

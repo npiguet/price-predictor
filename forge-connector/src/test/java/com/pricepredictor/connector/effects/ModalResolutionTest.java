@@ -378,7 +378,7 @@ class ModalResolutionTest {
         // fork's stack frozen and the forced ability parked off it.
         game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of());
+                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
@@ -428,7 +428,7 @@ class ModalResolutionTest {
         creatureSpell.setActivatingPlayer(caster);
         game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of());
+                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();

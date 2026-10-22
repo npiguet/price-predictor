@@ -97,7 +97,7 @@ public record ProvenanceKey(
     }
 
     /** The root this key names: itself, or the charm a mode key belongs to. */
-    public ProvenanceKey root() {
+    ProvenanceKey root() {
         return option == null ? this : new ProvenanceKey(scriptFile, face, traitKind, indexWithinKind);
     }
 

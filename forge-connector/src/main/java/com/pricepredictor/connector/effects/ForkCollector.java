@@ -153,8 +153,7 @@ public final class ForkCollector {
     private final int interventionsPerGame;
     private final int probesPerGame;
     private final List<String> probeKeywords;
-    private final Random random;
-    /** The draws a forced resolution makes, over the same seeded source. */
+    /** The draws a forced resolution makes, from the game's seed. */
     private final RandomChoices choices;
 
     private int interventionsUsed;
@@ -170,13 +169,11 @@ public final class ForkCollector {
         this.interventionsPerGame = caps.interventionsPerGame();
         this.probesPerGame = caps.probesPerGame();
         this.probeKeywords = List.copyOf(caps.probeKeywords());
-        // Seeded so both branches of a probe see the same shuffles: a
-        // difference between them has to be the keyword, not the draw.
-        // Scrambled as the sampler's seed is: games are seeded consecutively,
-        // and the first draw here is now a mode or target count, which an
-        // unscrambled seed would make nearly the same in every game.
-        this.random = new Random(PatchedCollectors.scramble(seed));
-        this.choices = new RandomChoices(random);
+        // Seeded so a rerun of a game forces the same choices. Scrambled as
+        // the sampler's seed is: games are seeded consecutively, and the first
+        // draw here is a mode or target count, which an unscrambled seed would
+        // make nearly the same in every game.
+        this.choices = new RandomChoices(new Random(PatchedCollectors.scramble(seed)));
     }
 
     public long recordsWritten() {
@@ -191,7 +188,7 @@ public final class ForkCollector {
     /** Forks created and thrown away rather than written: a copy the score
      *  check rejected, a resolution that observed nothing, a branch whose own
      *  damage step wrote no record for it to mirror. */
-    public int discardedForks() {
+    int discardedForks() {
         return discarded;
     }
 
@@ -638,35 +635,6 @@ public final class ForkCollector {
     // ── damage-step probes ──────────────────────────────────────────────
 
     /**
-     * Record a probe branch as an ordinary combat record.
-     *
-     * <p>{@code fork = true}, {@code interventional = false} — which is what
-     * distinguishes a probe from an intervention by flags alone — and
-     * {@code mirror_of} naming the real record it varies.
-     *
-     * <p>The real-versus-fork <b>difference is never computed here</b> and never
-     * becomes a training target: it is a diagnostic about the model, computed at
-     * evaluation time, and training on it would teach the model to reproduce its
-     * own errors.
-     */
-    public boolean recordProbeBranch(
-            String keyword, String mirrorOfRecordId, String snapshotJson,
-            String payloadJson, String actorPlayerId) {
-        if (!mayProbe(keyword)) {
-            return false;
-        }
-        probesUsed++;
-        context.emit(context.newRecord(EffectRecord.KIND_COMBAT)
-                .fork(true)
-                .interventional(false)
-                .mirrorOf(mirrorOfRecordId)
-                .actor(actorPlayerId)
-                .state(snapshotJson)
-                .payload(payloadJson));
-        return true;
-    }
-
-    /**
      * Re-run this damage step without one creature's keyword.
      *
      * <p>Called <b>before</b> the real step, which is the only moment the fork
@@ -830,6 +798,14 @@ public final class ForkCollector {
     /**
      * Write a held branch, now that the record it mirrors has an id.
      *
+     * <p>As an ordinary combat record with {@code fork = true} and {@code
+     * interventional = false} — which is what distinguishes a probe from an
+     * intervention by flags alone — and {@code mirror_of} naming the real
+     * record it varies. The real-versus-fork <b>difference is never computed
+     * here</b> and never becomes a training target: it is a diagnostic about
+     * the model, computed at evaluation time, and training on it would teach
+     * the model to reproduce its own errors.
+     *
      * <p>Only if the two describe the same moment. A branch is completed
      * against the next combat record of its own substep, and a damage step that
      * wrote no real record leaves its branch waiting for one — in the smoke
@@ -872,18 +848,6 @@ public final class ForkCollector {
                 .state(held.state())
                 .payload(held.payload()));
         return true;
-    }
-
-    /**
-     * The seeded source both probe branches draw from.
-     *
-     * <p>Forge's own restore of the random source is not in a {@code finally},
-     * so a branch that throws would leave the live game with the probe's
-     * sequence. Callers must install this and restore the original in a
-     * {@code finally} of their own.
-     */
-    public Random seededRandom() {
-        return random;
     }
 
     // ── plumbing ────────────────────────────────────────────────────────

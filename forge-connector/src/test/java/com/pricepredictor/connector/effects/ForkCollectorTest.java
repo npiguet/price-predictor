@@ -54,7 +54,7 @@ class ForkCollectorTest {
     private static CollectionCaps caps(
             int interventions, int probes, List<String> keywords) {
         return new CollectionCaps(
-                2000, 0.1, interventions, probes, keywords);
+                2000, 0.1, interventions, probes, keywords, 0.0, 0.0);
     }
 
     private ForkCollector collector(CollectionCaps caps) {
@@ -172,25 +172,17 @@ class ForkCollectorTest {
 
     @Test
     void theProbeBudgetIsSpentByTakingProbes() {
+        // Spent even by a fork that fails: a null game makes every copy fail.
         ForkCollector collector = collector(caps(2, 1, List.of("wither")));
-        assertTrue(collector.recordProbeBranch(
-                "wither", "run.0.1", "{}", "{}", "P0"));
+        assertNull(collector.probe("wither", TestCards.build("Grizzly Bears"), false));
         assertFalse(collector.mayProbe("wither"));
     }
 
     @Test
-    void aProbeBranchIsRecordedAsAnOrdinaryCombatRecord() {
-        ForkCollector collector = collector(caps(2, 2, List.of("wither")));
-        assertTrue(collector.recordProbeBranch(
-                "wither", "run.0.1", "{}", "{}", "P0"));
-        assertEquals(1L, collector.recordsWritten());
-    }
-
-    @Test
-    void aProbeForAnUnnamedKeywordWritesNothing() {
-        ForkCollector collector = collector(caps(2, 2, List.of("wither")));
-        assertFalse(collector.recordProbeBranch(
-                "lifelink", "run.0.1", "{}", "{}", "P0"));
+    void aProbeForAnUnnamedKeywordSpendsNothing() {
+        ForkCollector collector = collector(caps(2, 1, List.of("wither")));
+        assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), false));
+        assertTrue(collector.mayProbe("wither"));
         assertEquals(0L, collector.recordsWritten());
     }
 
@@ -345,19 +337,6 @@ class ForkCollectorTest {
         return new ForkCollector.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
                 DamageStep.REGULAR.wireName(), turn);
-    }
-
-    // ── the seeded source ───────────────────────────────────────────────
-
-    @Test
-    void bothBranchesDrawFromOneSeededSource() {
-        // A difference between the branches has to be the keyword, not the
-        // draw, so the source is seeded per fork rather than per branch.
-        ForkCollector first = collector(caps(2, 2, List.of()));
-        ForkCollector second = collector(caps(2, 2, List.of()));
-        assertEquals(
-                first.seededRandom().nextInt(1000),
-                second.seededRandom().nextInt(1000));
     }
 
     // ── a probe branch reads damage as the observed record does ─────────

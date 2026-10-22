@@ -57,12 +57,6 @@ public final class EffectRecord {
     public static final String OUTCOME_DECLINED = "declined";
     public static final String OUTCOME_COUNTERED = "countered";
 
-    public static final String REWRITE_REPLACED = "replaced";
-    public static final String REWRITE_NOT_REPLACED = "not_replaced";
-    public static final String REWRITE_PREVENTED = "prevented";
-    public static final String REWRITE_UPDATED = "updated";
-    public static final String REWRITE_SKIPPED = "skipped";
-
     private final String recordId;
     private final String runId;
     private final String timestamp;

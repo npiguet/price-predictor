@@ -79,7 +79,7 @@ class PatchedCollectorTest {
 
     private static CollectionCaps caps(int manaCap, double playabilityRate) {
         return new CollectionCaps(
-                manaCap, playabilityRate, 2, 2, List.of());
+                manaCap, playabilityRate, 2, 2, List.of(), 0.0, 0.0);
     }
 
     private static PatchedCollectors collectors(CollectionCaps caps) {
@@ -158,7 +158,7 @@ class PatchedCollectorTest {
     void probesAreOffUntilKeywordsAreNamed() {
         assertFalse(CollectionCaps.defaults().probesEnabled());
         assertTrue(new CollectionCaps(
-                2000, 0.1, 2, 2, List.of("wither"))
+                2000, 0.1, 2, 2, List.of("wither"), 0.0, 0.0)
                 .probesEnabled());
     }
 
@@ -1363,7 +1363,7 @@ class PatchedCollectorTest {
 
     private PatchedCollectors withForks(RecordShardWriter writer) {
         CollectionCaps probing = new CollectionCaps(
-                1, 1.0, 2, 2, List.of("trample"));
+                1, 1.0, 2, 2, List.of("trample"), 0.0, 0.0);
         PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0", probing, 1L);
         collector.withForks(
@@ -3015,7 +3015,7 @@ class PatchedCollectorTest {
         CollectionCaps halfRate = new CollectionCaps(
                 CollectionCaps.defaults().manaCap(), 0.5,
                 CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords());
+                CollectionCaps.defaults().probeKeywords(), 0.0, 0.0);
 
         RecordShardWriter soloWriter = new RecordShardWriter(tempDir, "solo", 0, "l1");
         Path soloPath = soloWriter.path();

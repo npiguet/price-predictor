@@ -1222,7 +1222,7 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /** Branches taken and not yet completed. */
-    public int heldProbeCount() {
+    int heldProbeCount() {
         return heldProbes.size();
     }
 
