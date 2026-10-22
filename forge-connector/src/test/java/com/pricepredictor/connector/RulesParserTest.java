@@ -1035,6 +1035,37 @@ class RulesParserTest {
                 "Outcome descriptions should use '|' separator: " + spells);
     }
 
+    @Test
+    void aSpellsRollUnderARepeatPrintsItsOutcomes() {
+        // Strategy, Schmategy: SP → Repeat → RepeatSubAbility$ RollDice with
+        // six outcomes. The roll is reached through the repeat, not the
+        // sub-ability chain, and its outcomes still print.
+        var spells = abilitiesOfType(face("s/strategy_schmategy.txt"), AbilityType.SPELL);
+        assertEquals(7, spells.size(), "The roll plus six outcomes: " + spells);
+        assertTrue(spells.get(0).descriptionText().contains("roll a six-sided die"), spells.toString());
+        assertTrue(spells.get(1).descriptionText().contains("do nothing"), spells.toString());
+        assertTrue(spells.get(6).descriptionText().contains("repeat this process two more times"),
+                spells.toString());
+    }
+
+    @Test
+    void anActivatedRollUnderARepeatPrintsItsOutcomesAsOptions() {
+        // No printed card activates a roll under a repeat, so the script is
+        // synthetic; the walk is the one spells and triggers use.
+        Ability act = abilitiesOfType(convert(
+                "Name:Repeat Roller", "ManaCost:2", "Types:Artifact",
+                "A:AB$ Repeat | Cost$ T | RepeatSubAbility$ DBRoll | RepeatCount$ 2"
+                        + " | SpellDescription$ Roll a d6 twice.",
+                "SVar:DBRoll:DB$ RollDice | Sides$ 6 | ResultSubAbilities$ 1-3:DBDraw,4-6:DBGain",
+                "SVar:DBDraw:DB$ Draw | NumCards$ 1 | SpellDescription$ 1-3 VERT Draw a card.",
+                "SVar:DBGain:DB$ GainLife | LifeAmount$ 2 | SpellDescription$ 4-6 VERT Gain 2 life.",
+                "Oracle:").faces().get(0), AbilityType.ACTIVATED).get(0);
+        List<Ability> options = act.subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertEquals(List.of("1-3 | draw a card.", "4-6 | gain 2 life."),
+                options.stream().map(Ability::descriptionText).toList());
+    }
+
     // --- Pattern 6: Activated dice-roll result sub-abilities as OPTION ---
 
     @Test

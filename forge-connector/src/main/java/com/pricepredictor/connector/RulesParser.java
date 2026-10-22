@@ -6,6 +6,7 @@ import com.pricepredictor.connector.ability.ChapterAbility;
 import com.pricepredictor.connector.ability.CharmAbility;
 import com.pricepredictor.connector.ability.ClassLevelAbility;
 import com.pricepredictor.connector.ability.CompanionKeyword;
+import com.pricepredictor.connector.ability.DiceOutcomes;
 import com.pricepredictor.connector.ability.EtbReplacementAbility;
 import com.pricepredictor.connector.ability.GiftKeyword;
 import com.pricepredictor.connector.ability.HauntKeyword;
@@ -350,7 +351,7 @@ public class RulesParser {
                 if ("ETBReplacement".equals(mode)) continue;
                 addIfNotNull(abilities, SpellAdditionalCost.of(sa));
                 abilities.addAll(SpellEffect.fromChain(sa));
-                abilities.addAll(diceOutcomesFromSA(sa));
+                abilities.addAll(DiceOutcomes.of(sa, text -> new SpellEffect(text, List.of())));
             }
             if (recorder != null) {
                 recorder.attribute(
@@ -726,38 +727,6 @@ public class RulesParser {
 
     private static void addIfNotNull(List<Ability> list, Ability item) {
         if (item != null) list.add(item);
-    }
-
-    /**
-     * Expand {@code ResultSubAbilities} dice-outcome entries into SpellEffect nodes.
-     * Each entry has the form {@code "range:SvarName"} (e.g. {@code "1-9:DBTapAll"}).
-     * The SVar's SpellDescription is used as the description text; VERT placeholders
-     * are replaced so "1—9 VERT Tap all…" becomes "1—9 | Tap all…".
-     */
-    private static List<Ability> diceOutcomesFromSA(SpellAbility sa) {
-        // Walk the sub-ability chain to find a SA with ResultSubAbilities.
-        // Some cards place the RollDice SA (with ResultSubAbilities) as a sub-ability of the root SA.
-        for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
-            String resultSubAbilities = cur.getParam("ResultSubAbilities");
-            if (resultSubAbilities == null || resultSubAbilities.isEmpty()) continue;
-            List<Ability> result = new ArrayList<>();
-            for (String entry : resultSubAbilities.split(",")) {
-                String[] kv = entry.trim().split(":", 2);
-                if (kv.length < 2) continue;
-                String range = kv[0].trim();
-                SpellAbility sub = cur.getAdditionalAbility(range);
-                if (sub == null) continue;
-                String rawDesc = sub.getParam("SpellDescription");
-                if (rawDesc == null || rawDesc.isEmpty()) continue;
-                String desc = AbilityDescription.replaceVert(rawDesc);
-                String normalized = AbilityDescription.normalize(desc);
-                if (normalized != null) {
-                    result.add(new SpellEffect(AbilityDescription.applyCasing(normalized), List.of()));
-                }
-            }
-            return result;
-        }
-        return List.of();
     }
 
     /**
