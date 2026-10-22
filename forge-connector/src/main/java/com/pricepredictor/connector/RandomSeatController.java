@@ -114,11 +114,6 @@ public final class RandomSeatController extends PlayerControllerAi {
         return random.nextDouble() < probability;
     }
 
-    /** Whether the last play decision was a random draw, for a test of the gate. */
-    boolean lastDrawWasRandom() {
-        return randomlyDrawn != null;
-    }
-
     // ── the play decision ───────────────────────────────────────────────
 
     /**
