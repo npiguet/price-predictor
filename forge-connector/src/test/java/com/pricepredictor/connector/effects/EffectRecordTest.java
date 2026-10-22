@@ -245,7 +245,7 @@ class EffectRecordTest {
     void anEmptyCombatRendersEveryField() {
         assertEquals(
                 "{\"attackers\":[],\"blocks\":{},\"assignment_choices\":{},\"events\":[]}",
-                EffectRecord.combatPayload(CombatShape.empty().fields(), List.of()));
+                EffectRecord.combatPayload(CombatShape.of(null).fields(), List.of()));
     }
 
     /** A probe branch's perturbation follows the fields it shares with the record. */
@@ -255,7 +255,7 @@ class EffectRecordTest {
                 "{\"attackers\":[],\"blocks\":{},\"assignment_choices\":{},\"events\":[],"
                         + "\"probed_keyword\":\"trample\",\"probed_entity\":null}",
                 EffectRecord.probePayload(
-                        CombatShape.empty().fields(), List.of(), "trample", null));
+                        CombatShape.of(null).fields(), List.of(), "trample", null));
     }
 
     // ── events ──────────────────────────────────────────────────────────

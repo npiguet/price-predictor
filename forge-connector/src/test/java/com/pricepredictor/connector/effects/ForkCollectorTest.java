@@ -207,7 +207,7 @@ class ForkCollectorTest {
     void aBranchWithNoTurnIsPairedAsBefore() {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
         ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", CombatShape.empty().fields(),
+                "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null).fields(),
                 DamageStep.REGULAR, ForkCollector.TURN_UNKNOWN);
 
         assertEquals(ForkCollector.TURN_UNKNOWN, held.turn());
@@ -217,7 +217,7 @@ class ForkCollectorTest {
     /** A branch from a named turn, otherwise like every other hand-built one. */
     private static ForkCollector.HeldProbe branch(int turn) {
         return new ForkCollector.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", CombatShape.empty().fields(),
+                "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null).fields(),
                 DamageStep.REGULAR, turn);
     }
 

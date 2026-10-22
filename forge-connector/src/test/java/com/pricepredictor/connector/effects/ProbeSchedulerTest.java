@@ -22,7 +22,7 @@ class ProbeSchedulerTest {
 
     private static ForkCollector.HeldProbe branch(DamageStep substep) {
         return new ForkCollector.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", CombatShape.empty().fields(), substep,
+                "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null).fields(), substep,
                 ForkCollector.TURN_UNKNOWN);
     }
 
