@@ -50,12 +50,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 /**
  * Parses Forge card scripts into domain objects (MultiCard/CardFace/Ability).
  * Acts as a router, delegating to variant Ability implementations in the ability sub-package.
  */
 public class RulesParser {
+
+    /** A {@code [Developer's note: …]} bracket: Forge-internal metadata, not oracle content. */
+    private static final Pattern DEVELOPER_NOTE =
+            Pattern.compile("(?i)\\[Developer's note:[^]]*]");
 
     private final CardRules.Reader reader = new CardRules.Reader();
     private int nextCardId = 1;
@@ -508,8 +513,7 @@ public class RulesParser {
 
         String text = nullIfEmpty(face.getNonAbilityText());
         if (text != null) {
-            // Strip [Developer's note: …] brackets — Forge-internal metadata, not oracle content.
-            text = text.replaceAll("(?i)\\[Developer's note:[^]]*]", "").strip();
+            text = DEVELOPER_NOTE.matcher(text).replaceAll("").strip();
             if (text.isEmpty()) text = null;
         }
         if (text != null) text = AbilityDescription.applyCasing(text);

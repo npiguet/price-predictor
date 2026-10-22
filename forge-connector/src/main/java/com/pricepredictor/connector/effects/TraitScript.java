@@ -80,10 +80,8 @@ public record TraitScript(
         return new TraitScript("Keyword", List.of(), original, List.of());
     }
 
-    /** Read the script behind a trait; never null, but may be all-empty. */
-    public static TraitScript of(CardTraitBase trait) {
-        return of(trait, null, null);
-    }
+    /** The script of a line no trait stands behind. */
+    public static final TraitScript EMPTY = new TraitScript(null, List.of(), null, List.of());
 
     /**
      * Read the script behind a trait, reporting the SVars its chain names but
@@ -95,22 +93,10 @@ public record TraitScript(
     public static TraitScript of(CardTraitBase trait, ProvenanceKey key,
                                  MissingSVarReport report) {
         if (trait == null) {
-            return new TraitScript(null, List.of(), null, List.of());
+            return EMPTY;
         }
         SpellAbility effect = effectOf(trait);
-        Map<String, String> params = new TreeMap<>(trait.getMapParams());
-        String apiType = apiTypeOf(trait, effect);
-        List<SubAbilityLink> links = new ArrayList<>();
-        if (effect != null) {
-            collectSubAbilities(effect, links);
-        }
-        String text = params.isEmpty() ? null
-                : new ChainRenderer(trait, key, report).render(null, trait, params);
-        return new TraitScript(
-                apiType,
-                List.copyOf(params.keySet()),
-                text,
-                List.copyOf(links));
+        return build(trait, effect, apiTypeOf(trait, effect), null, key, report);
     }
 
     /**
@@ -126,16 +112,28 @@ public record TraitScript(
     public static TraitScript ofMode(SpellAbility mode, String label, ProvenanceKey key,
                                      MissingSVarReport report) {
         if (mode == null) {
-            return new TraitScript(null, List.of(), null, List.of());
+            return EMPTY;
         }
-        Map<String, String> params = new TreeMap<>(mode.getMapParams());
         ApiType api = mode.getApi();
+        return build(mode, mode, api == null ? null : api.name(), label, key, report);
+    }
+
+    /**
+     * The script of {@code trait}: its parameters, the sub-ability links below
+     * {@code effect} (none when null), and its chain opened by {@code label}.
+     */
+    private static TraitScript build(CardTraitBase trait, SpellAbility effect, String apiType,
+                                     String label, ProvenanceKey key,
+                                     MissingSVarReport report) {
+        Map<String, String> params = new TreeMap<>(trait.getMapParams());
         List<SubAbilityLink> links = new ArrayList<>();
-        collectSubAbilities(mode, links);
+        if (effect != null) {
+            collectSubAbilities(effect, links);
+        }
         String text = params.isEmpty() ? null
-                : new ChainRenderer(mode, key, report).render(label, mode, params);
+                : new ChainRenderer(trait, key, report).render(label, trait, params);
         return new TraitScript(
-                api == null ? null : api.name(),
+                apiType,
                 List.copyOf(params.keySet()),
                 text,
                 List.copyOf(links));

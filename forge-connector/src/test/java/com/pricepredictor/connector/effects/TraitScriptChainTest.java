@@ -445,9 +445,12 @@ class TraitScriptChainTest {
     }
 
     @Test
-    void aLineWithNoParametersHasNoText() {
-        assertNull(TraitScript.of(null).scriptText());
-        assertEquals(List.of(), TraitScript.of(null).paramKeys());
+    void aLineWithNoTraitHasNoTextAndNoParameters() {
+        TraitScript script = TraitScript.of(null, null, null);
+
+        assertNull(script.scriptText());
+        assertEquals(List.of(), script.paramKeys());
+        assertEquals(TraitScript.EMPTY, script);
     }
 
     // ── a charm line carrying several roots ─────────────────────────────
