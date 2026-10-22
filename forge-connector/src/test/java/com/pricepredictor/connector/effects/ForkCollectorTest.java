@@ -307,6 +307,33 @@ class ForkCollectorTest {
                 records.get(0));
     }
 
+    /**
+     * A forced X spell's record carries the X it resolved with.
+     *
+     * <p>The fork announces X itself, from its own seeded source, between one
+     * and what the caster's lands could pay, so the seed fixes the value:
+     * Blaze with five Mountains, which could pay X up to four, and a seed that
+     * draws neither bound.
+     */
+    @Test
+    void aForcedXSpellsRecordCarriesItsX() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        for (int i = 0; i < 5; i++) {
+            TestBoard.inPlay(game, caster, "Mountain");
+        }
+        Card blaze = TestBoard.inHand(game, caster, "Blaze");
+        SpellAbility spell = blaze.getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps(1, 0, List.of()), 9L, spell);
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
+
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        assertTrue(records.get(0).contains("\"modes\":[],\"x\":3,"), records.get(0));
+    }
+
     private static EffectEvent damageTo(List<EffectEvent> events, Card card) {
         return events.stream()
                 .filter(e -> EffectEvent.DAMAGE_DEALT.equals(e.type())
