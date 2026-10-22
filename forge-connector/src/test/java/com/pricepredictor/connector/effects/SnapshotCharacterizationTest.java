@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.ability.AbilityKey;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
 import forge.game.phase.PhaseType;
@@ -102,5 +103,23 @@ class SnapshotCharacterizationTest {
         Characterization.assertMatches("snapshot-for-trait.json",
                 new SnapshotBuilder(board.game).toJsonForTrait(warden, List.of(warden), pending)
                         + "\n");
+    }
+
+    /**
+     * {@code global.emblems} with an emblem that carries an activated ability.
+     *
+     * <p>The full board's Elspeth emblem holds only a static, so its emblem
+     * list renders empty; Ob Nixilis's ultimate makes one whose ability is
+     * keyed into the list.
+     */
+    @Test
+    void anEmblemWithAnAbilityIsNamedInTheGlobalBlock() {
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        Card obNixilis = board.battlefield("Ob Nixilis of the Black Oath", board.you);
+        board.resolve(board.ability(obNixilis, ApiType.Effect), board.you);
+        board.battlefield("Grizzly Bears", board.you);
+
+        Characterization.assertMatches("snapshot-with-emblem.json",
+                new SnapshotBuilder(board.game).toJson(null, List.of()) + "\n");
     }
 }
