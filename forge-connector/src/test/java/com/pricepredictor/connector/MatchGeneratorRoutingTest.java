@@ -3,6 +3,8 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.GeneratedDecksIndex.GeneratedDeck;
 import com.pricepredictor.connector.MatchGenerator.DeckSource;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
 import java.util.Random;
@@ -75,36 +77,25 @@ class MatchGeneratorRoutingTest {
         }
     }
 
-    @Test
-    void rollIsFileSampleApproximatesWeightFraction() {
-        // Weight 4 → fraction 4/(10+4) = 4/14 ≈ 0.286
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            // Weight 4 -> fraction 4/(10+4) = 4/14 = 0.286
+            "weight 4 is 4/14,                   4,  123, 14000, 0.255, 0.315",
+            // Weight 8 -> fraction 8/(10+8) = 8/18 = 0.444: the fraction grows with the weight
+            "weight 8 is 8/18 (scales with weight), 8, 456, 18000, 0.42,  0.47",
+    })
+    void rollIsFileSampleApproximatesWeightFraction(
+            String ignoredCase, int weight, long seed, int trials, double low, double high) {
         MatchGenerator gen = generator()
-                .sideB(oneDeckFile(), 4).random(new Random(123)).build();
+                .sideB(oneDeckFile(), weight).random(new Random(seed)).build();
 
-        int trials = 14_000;
         int hits = 0;
         for (int i = 0; i < trials; i++) {
             if (gen.rollIsFileSample()) hits++;
         }
         double frac = hits / (double) trials;
-        assertTrue(frac >= 0.255 && frac <= 0.315,
-                "Fraction should be ~4/14 (≈0.286), got " + frac);
-    }
-
-    @Test
-    void rollIsFileSampleScalesWithWeight() {
-        // Weight 8 → fraction 8/(10+8) = 8/18 ≈ 0.444
-        MatchGenerator gen = generator()
-                .sideB(oneDeckFile(), 8).random(new Random(456)).build();
-
-        int trials = 18_000;
-        int hits = 0;
-        for (int i = 0; i < trials; i++) {
-            if (gen.rollIsFileSample()) hits++;
-        }
-        double frac = hits / (double) trials;
-        assertTrue(frac >= 0.42 && frac <= 0.47,
-                "Fraction should be ~8/18 (≈0.444), got " + frac);
+        assertTrue(frac >= low && frac <= high,
+                "Fraction should be in [" + low + ", " + high + "], got " + frac);
     }
 
     // ── decksOnly ────────────────────────────────────────────────────────────

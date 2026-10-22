@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import forge.game.keyword.Keyword;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,29 +28,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class KeywordDefinitionMainTest {
 
-    private String write(@TempDir Path dir) throws IOException {
+    @TempDir
+    static Path dir;
+
+    /** The captured table, built once: every test reads the same file. */
+    private static String json;
+
+    @BeforeAll
+    static void captureTheTable() throws IOException {
         Path output = dir.resolve("keyword-definitions.json");
         KeywordDefinitionMain.writeTo(output);
-        return Files.readString(output, StandardCharsets.UTF_8);
+        json = Files.readString(output, StandardCharsets.UTF_8);
     }
 
     @Test
-    void everyKeywordGetsAnEntry(@TempDir Path dir) throws IOException {
-        String json = write(dir);
+    void everyKeywordGetsAnEntry() {
         assertTrue(json.startsWith("{"));
         assertTrue(json.contains("\"Flying\""), "Flying is missing");
         assertTrue(json.contains("\"Cascade\""), "Cascade is missing");
     }
 
     @Test
-    void pluralMarkupIsExpandedRatherThanShipped(@TempDir Path dir)
-            throws IOException {
+    void pluralMarkupIsExpandedRatherThanShipped() {
         // Forge fills the count in from the card and expands {count:noun}
         // afterwards, so an instance never sees the markup. A template has no
         // instance, so it survived — and braces delimit an atom to the
         // tokenizer, which turned each one into a single vocabulary entry:
         // "{%1$d:tapped and attacking 1/1 red Warrior creature token}".
-        String json = write(dir);
         assertFalse(json.contains("{%"),
                 "a reminder template still carries {count:noun} markup");
     }
@@ -84,20 +89,8 @@ class KeywordDefinitionMainTest {
     }
 
     @Test
-    void reminderTemplatesAreCaptured(@TempDir Path dir) throws IOException {
-        assertTrue(write(dir).contains("reminder_template"));
-    }
-
-    @Test
-    void someKeywordsCaptureTheirGeneratedScript(@TempDir Path dir)
-            throws IOException {
-        String json = write(dir);
-        assertFalse(
-                json.contains("\"generated_script\":null")
-                        && !json.contains("\"generated_script\":\""),
-                "no keyword captured a generated script: createTraits was "
-                        + "probably not called, and the script surface reads "
-                        + "nothing");
+    void reminderTemplatesAreCaptured() {
+        assertTrue(json.contains("reminder_template"));
     }
 
     /**
@@ -106,8 +99,7 @@ class KeywordDefinitionMainTest {
      * Forge does rather than pasting it raw (FR-018).
      */
     @Test
-    void everyKeywordRecordsHowForgeFormatsItsValues(@TempDir Path dir) throws IOException {
-        String json = write(dir);
+    void everyKeywordRecordsHowForgeFormatsItsValues() {
         assertFalse(json.contains("\"formatter\":null"),
                 "a keyword reports no formatter: the reflective read of Keyword.type failed");
         assertEquals("SimpleKeyword", KeywordDefinitionMain.formatterOf(Keyword.FLYING));
@@ -117,8 +109,7 @@ class KeywordDefinitionMainTest {
     }
 
     @Test
-    void theFormatterIsWrittenIntoEachEntry(@TempDir Path dir) throws IOException {
-        String json = write(dir);
+    void theFormatterIsWrittenIntoEachEntry() {
         int at = json.indexOf("\"Flying\"");
         assertTrue(at >= 0, "Flying is missing");
         String entry = json.substring(at, json.indexOf('}', at) + 1);
@@ -126,8 +117,7 @@ class KeywordDefinitionMainTest {
     }
 
     @Test
-    void aScriptGeneratingKeywordHasOne(@TempDir Path dir) throws IOException {
-        String json = write(dir);
+    void aScriptGeneratingKeywordHasOne() {
         int at = json.indexOf("\"Cascade\"");
         assertTrue(at >= 0, "Cascade is missing");
         String entry = json.substring(at, Math.min(at + 2000, json.length()));
@@ -135,6 +125,7 @@ class KeywordDefinitionMainTest {
         assertTrue(script >= 0);
         assertFalse(
                 entry.startsWith("null", script + "\"generated_script\":".length()),
-                "Cascade generates a trigger and should carry its script");
+                "Cascade generates a trigger and should carry its script: createTraits "
+                        + "was probably not called, and the script surface reads nothing");
     }
 }
