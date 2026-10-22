@@ -6,7 +6,6 @@ import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 
 /**
@@ -67,6 +66,18 @@ public class MatchWorkerMain {
     static final int DEFAULT_BEST_OF = 7;
     static final int DEFAULT_SIDE_B_WEIGHT = 4;
 
+    static final String OUTPUT_FILE = "output.file";
+    static final String EFFECT_RECORDS_DIR = "effect.records.dir";
+    static final String RUN_ID = "match.run.id";
+    static final String BEST_OF = "match.best.of";
+    static final String SIDE_A_DECKS_FILE = "side.a.decks.file";
+    static final String SIDE_B_DECKS_FILE = "side.b.decks.file";
+    static final String SIDE_B_DECKS_WEIGHT = "side.b.decks.weight";
+    static final String DECKS_ONLY = "sealed.decks.only";
+    static final String EFFECT_WORKER_INDEX = "effect.worker.index";
+    static final String PROGRESS_FILE = "sealed.progress.file";
+    static final String EFFECT_VARIANT_SCRIPTS = "effect.variant.scripts";
+
     /**
      * Validated worker configuration parsed from the JVM system properties.
      * A pure value object — no Forge or filesystem touching here so the parse
@@ -113,44 +124,43 @@ public class MatchWorkerMain {
     /**
      * Read every JVM system property the worker depends on, validate it, and
      * package the result as a {@link WorkerConfig}. Exits the process with
-     * code {@code 2} on any malformed input.
+     * {@link WorkerProperties#BAD_CONFIG_EXIT} on any malformed input.
      */
     static WorkerConfig parseConfig() {
-        String outputFileProp = System.getProperty("output.file");
-        String effectRecordsProp = System.getProperty("effect.records.dir");
+        String outputFileProp = System.getProperty(OUTPUT_FILE);
+        String effectRecordsProp = System.getProperty(EFFECT_RECORDS_DIR);
         if (outputFileProp == null && effectRecordsProp == null) {
-            System.err.println(
-                    "Error: -Doutput.file is required unless -Deffect.records.dir"
+            throw WorkerProperties.badConfig(
+                    "-D" + OUTPUT_FILE + " is required unless -D" + EFFECT_RECORDS_DIR
                             + " is set (records-only mode)");
-            System.exit(2);
         }
 
-        String runId = WorkerProperties.require("match.run.id");
+        String runId = WorkerProperties.require(RUN_ID);
 
-        int bestOf = WorkerProperties.bestOf("match.best.of", DEFAULT_BEST_OF);
+        int bestOf = WorkerProperties.bestOf(BEST_OF, DEFAULT_BEST_OF);
 
-        String sideAProp = System.getProperty("side.a.decks.file");
-        String sideBProp = System.getProperty("side.b.decks.file");
-        String sideBWeightProp = System.getProperty("side.b.decks.weight");
+        String sideAProp = System.getProperty(SIDE_A_DECKS_FILE);
+        String sideBProp = System.getProperty(SIDE_B_DECKS_FILE);
+        String sideBWeightProp = System.getProperty(SIDE_B_DECKS_WEIGHT);
 
         if (sideBProp == null && sideBWeightProp != null) {
-            System.err.println(
-                    "Error: -Dside.b.decks.weight is only valid with -Dside.b.decks.file");
-            System.exit(2);
+            throw WorkerProperties.badConfig(
+                    "-D" + SIDE_B_DECKS_WEIGHT + " is only valid with -D" + SIDE_B_DECKS_FILE);
         }
 
         int sideBWeight = WorkerProperties.intProperty(
-                "side.b.decks.weight", DEFAULT_SIDE_B_WEIGHT,
+                SIDE_B_DECKS_WEIGHT, DEFAULT_SIDE_B_WEIGHT, WorkerProperties.OnMalformed.EXIT,
                 v -> v >= 1, "must be >= 1");
 
         // A coverage or variant deck belongs to no set, so the roll's
         // Forge-method branch would resolve its sentinel set code against
         // Forge's booster/edition tables and throw. This forces the roll to
         // the decks file every time. See MatchGenerator.rollIsFileSample().
-        boolean decksOnly = WorkerProperties.flag("sealed.decks.only");
+        boolean decksOnly = WorkerProperties.flag(DECKS_ONLY);
 
         int workerIndex = WorkerProperties.intProperty(
-                "effect.worker.index", 0, v -> v >= 0, "must be >= 0");
+                EFFECT_WORKER_INDEX, 0, WorkerProperties.OnMalformed.EXIT,
+                v -> v >= 0, "must be >= 0");
 
         // The supervisor recycles the longest-running worker every status interval
         // and restarts anything that crashes, so one run is hundreds of JVM
@@ -166,7 +176,7 @@ public class MatchWorkerMain {
         // because a progress tally must be obtainable even in records-only
         // mode -- that independence is the whole point (see the class-level
         // Javadoc entry for this property).
-        String progressFileProp = System.getProperty("sealed.progress.file");
+        String progressFileProp = System.getProperty(PROGRESS_FILE);
 
         return new WorkerConfig(
                 outputFileProp == null ? null : Path.of(outputFileProp),
@@ -185,7 +195,7 @@ public class MatchWorkerMain {
         // that one shared directory while the others walk it during
         // FModel.initialize is a race, and a worker that reads it half-written
         // has a card database missing the very variants its decks name.
-        String variantScripts = System.getProperty("effect.variant.scripts");
+        String variantScripts = System.getProperty(EFFECT_VARIANT_SCRIPTS);
         ForgeEnvironmentInitializer.initialize(
                 variantScripts == null ? null : Path.of(variantScripts), false);
         System.out.println("Forge initialized. Starting match generation.");
@@ -325,14 +335,10 @@ public class MatchWorkerMain {
      * (files.md), so we only need to swap the filename.
      */
     static Path cardsPlayedPath(Path matchOutcomesFile) {
-        Path parent = matchOutcomesFile.getParent();
-        if (parent == null) {
-            return Paths.get("cards-played.txt");
-        }
-        return parent.resolve("cards-played.txt");
+        return matchOutcomesFile.resolveSibling("cards-played.txt");
     }
 
-    /** Forge-built decks when no file is named; exits 2 on a file that does not load. */
+    /** Forge-built decks when no file is named; exits with {@link WorkerProperties#BAD_CONFIG_EXIT} on a file that does not load. */
     private static MatchGenerator.DeckSource loadDecks(String pathProp, String label) {
         if (pathProp == null) {
             return MatchGenerator.DeckSource.FORGE_BUILT;
@@ -344,10 +350,8 @@ public class MatchWorkerMain {
             System.out.println("Loaded " + index.size() + " " + label + " decks.");
             return new MatchGenerator.DeckSource.FileSampled(index);
         } catch (Exception e) {
-            System.err.println(
-                    "Error loading " + label + " decks file: " + e.getMessage());
-            System.exit(2);
-            return null;  // unreachable
+            throw WorkerProperties.badConfig(
+                    "loading " + label + " decks file: " + e.getMessage());
         }
     }
 }

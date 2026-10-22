@@ -45,6 +45,16 @@ final class ToolMain {
     }
 
     /**
+     * Exit with {@code status}. Declared to return an exception only so a
+     * caller can write {@code throw exit(..)} and have the compiler see that
+     * control does not continue.
+     */
+    static IllegalStateException exit(int status) {
+        System.exit(status);
+        return new IllegalStateException("exit(" + status + ") returned");
+    }
+
+    /**
      * A UTF-8 stream bound to the real stdout descriptor; Forge's incidental
      * logging on {@code System.out} goes to a UTF-8 {@code System.err} instead,
      * so the pipe the supervisor reads carries only the caller's own lines.
@@ -86,6 +96,24 @@ final class ToolMain {
         /** The flag's value, or {@code defaultValue} when it was not given. */
         String get(String flag, String defaultValue) {
             return values.getOrDefault(flag, defaultValue);
+        }
+
+        /**
+         * The flag's value as an integer, or {@code defaultValue} when it was
+         * not given.
+         *
+         * @throws IllegalArgumentException when the value is not an integer
+         */
+        int intValue(String flag, int defaultValue) {
+            String value = values.get(flag);
+            if (value == null) {
+                return defaultValue;
+            }
+            try {
+                return Integer.parseInt(value);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException(flag + " must be an integer, got: " + value);
+            }
         }
 
         /** The flag's value, or null when it was not given. */

@@ -137,13 +137,13 @@ public class MatchGenerator {
     /**
      * How a generator is configured. Every setting but the eligible sets and
      * the run id has a default: Forge-built decks on both sides, no holdout,
-     * not decks-only, a default {@link DeckBuilder}, a best-of-3
-     * {@link GamePlayer} with no effect records, and Forge's shared random.
+     * not decks-only, a best-of-3 {@link GamePlayer} with no effect records,
+     * and Forge's shared random.
      */
     static final class Builder {
         private final List<String> eligibleSetCodes;
         private final String runId;
-        private DeckBuilder deckBuilder = new DeckBuilder();
+        private final DeckBuilder deckBuilder = new DeckBuilder();
         private GamePlayer gamePlayer = new GamePlayer(3);
         private DeckSource sideA = DeckSource.FORGE_BUILT;
         private DeckSource sideB = DeckSource.FORGE_BUILT;
@@ -155,11 +155,6 @@ public class MatchGenerator {
         private Builder(List<String> eligibleSetCodes, String runId) {
             this.eligibleSetCodes = eligibleSetCodes;
             this.runId = runId;
-        }
-
-        Builder deckBuilder(DeckBuilder deckBuilder) {
-            this.deckBuilder = deckBuilder;
-            return this;
         }
 
         Builder gamePlayer(GamePlayer gamePlayer) {
@@ -260,72 +255,12 @@ public class MatchGenerator {
                 played.durationSeconds()
         );
 
-        java.util.LinkedHashSet<String> deckASet = distinctNonBasic(a.cardNames);
-        java.util.LinkedHashSet<String> deckBSet = distinctNonBasic(b.cardNames);
-
         List<CardsPlayedRow> rows = new ArrayList<>(played.games().size());
-        for (GamePlayer.GameOutcome g : played.games()) {
-            rows.add(buildRow(timestamp, matchResult, g, deckASet, deckBSet));
+        for (GamePlayer.GameOutcome game : played.games()) {
+            rows.add(CardsPlayedRow.of(matchResult, game));
         }
         return new MatchGenerationResult(matchResult, rows, played.randomSeat());
     }
-
-    private CardsPlayedRow buildRow(
-            Instant timestamp,
-            MatchResult parent,
-            GamePlayer.GameOutcome g,
-            java.util.LinkedHashSet<String> deckASet,
-            java.util.LinkedHashSet<String> deckBSet) {
-        List<String> playedA = distinct(g.cardsPlayedA());
-        List<String> playedB = distinct(g.cardsPlayedB());
-        return new CardsPlayedRow(
-                timestamp,
-                parent.runId(),
-                parent.setCode(),
-                parent.methodA(),
-                parent.methodB(),
-                playedA,
-                playedB,
-                deckMinusPlayed(deckASet, playedA),
-                deckMinusPlayed(deckBSet, playedB),
-                g.winner(),
-                g.playFirst());
-    }
-
-    private static java.util.LinkedHashSet<String> distinctNonBasic(List<String> deck) {
-        java.util.LinkedHashSet<String> distinct = new java.util.LinkedHashSet<>();
-        for (String name : deck) {
-            if (BASIC_LAND_NAMES.contains(name)) {
-                continue;
-            }
-            distinct.add(name);
-        }
-        return distinct;
-    }
-
-    private static List<String> distinct(List<String> names) {
-        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>(names);
-        return new ArrayList<>(seen);
-    }
-
-    private static List<String> deckMinusPlayed(
-            java.util.LinkedHashSet<String> deckSet, List<String> playedNames) {
-        java.util.LinkedHashSet<String> playedSet = new java.util.LinkedHashSet<>(playedNames);
-        List<String> remaining = new ArrayList<>();
-        for (String name : deckSet) {
-            if (!playedSet.contains(name)) {
-                remaining.add(name);
-            }
-        }
-        return remaining;
-    }
-
-    /** Card names whose printed type is "Basic Land — X" or Wastes / snow basics. */
-    private static final java.util.Set<String> BASIC_LAND_NAMES = java.util.Set.of(
-            "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
-            "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
-            "Snow-Covered Mountain", "Snow-Covered Forest", "Snow-Covered Wastes"
-    );
 
     /**
      * Pick deck A. Forge-built: roll the 4 Forge methods

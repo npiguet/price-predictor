@@ -5,11 +5,9 @@ import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.ProvenanceSidecar;
 
 import java.io.IOException;
-import java.nio.file.FileVisitResult;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,18 +59,7 @@ public class BatchConverter {
         int succeeded = 0;
         List<String> warnings = new ArrayList<>();
 
-        List<Path> scriptFiles = new ArrayList<>();
-        Files.walkFileTree(cardsPath, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (file.toString().endsWith(".txt")) {
-                    scriptFiles.add(file);
-                }
-                return FileVisitResult.CONTINUE;
-            }
-        });
-
-        for (Path scriptFile : scriptFiles) {
+        for (Path scriptFile : ScriptFiles.under(cardsPath)) {
             totalFiles++;
             try {
                 List<String> lines = Files.readAllLines(scriptFile);
@@ -139,6 +126,20 @@ public class BatchConverter {
 
         public int warningCount() {
             return warnings.size();
+        }
+
+        /** Print the counts for {@code tree}, then each warning under a header. */
+        public void report(PrintStream out, String tree) {
+            out.println("  [" + tree + "]");
+            out.println("  Total files:  " + totalFiles);
+            out.println("  Succeeded:    " + succeeded);
+            out.println("  Warnings:     " + warningCount());
+            if (!warnings.isEmpty()) {
+                out.println("\nWarnings:");
+                for (String warning : warnings) {
+                    out.println("  " + warning);
+                }
+            }
         }
     }
 }

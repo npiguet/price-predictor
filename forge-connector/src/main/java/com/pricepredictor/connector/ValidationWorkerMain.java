@@ -37,7 +37,7 @@ public class ValidationWorkerMain {
         } catch (IOException e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace(System.err);
-            System.exit(2);
+            System.exit(WorkerProperties.BAD_CONFIG_EXIT);
         }
     }
 }

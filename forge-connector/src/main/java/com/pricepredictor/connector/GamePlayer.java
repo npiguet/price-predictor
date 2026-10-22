@@ -67,18 +67,18 @@ public class GamePlayer {
 
         /** Per-game winner sequence, e.g. {@code "ABA"}: the {@code games} field of a match row. */
         public String winnerSequence() {
-            StringBuilder sb = new StringBuilder(games.size());
-            for (GameOutcome game : games) {
-                sb.append(game.winner());
-            }
-            return sb.toString();
+            return sequence(GameOutcome::winner);
         }
 
         /** Per-game play-first sequence, same length as {@link #winnerSequence()}. */
         public String playSequence() {
+            return sequence(GameOutcome::playFirst);
+        }
+
+        private String sequence(java.util.function.Function<GameOutcome, Side> sideOf) {
             StringBuilder sb = new StringBuilder(games.size());
             for (GameOutcome game : games) {
-                sb.append(game.playFirst());
+                sb.append(sideOf.apply(game));
             }
             return sb.toString();
         }
@@ -205,7 +205,7 @@ public class GamePlayer {
 
         while (!match.isMatchOver()) {
             var game = match.createGame();
-            var collector = new PlayedCardCollector();
+            var collector = new PlayedCardCollector(game);
             game.subscribeToEvents(collector);
             PatchedCollectors patched = null;
             // The seat exists before the collectors do: the match creates the

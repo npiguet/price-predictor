@@ -35,18 +35,11 @@ public class PoolMain {
         String setCode = cli.get("--set");
         String poolsPath = cli.get("--pools-path", "./output/sealed/pools/");
         String excludePath = cli.get("--exclude-cards");
-        int poolCount = 10000;
-        try {
-            poolCount = Integer.parseInt(cli.get("--size", "10000"));
-        } catch (NumberFormatException e) {
-            System.err.println("Error: --size must be an integer");
-            System.exit(1);
-        }
-        final int count = poolCount;
 
         ToolMain.run(() -> {
+            int poolCount = cli.intValue("--size", 10000);
             ForgeEnvironmentInitializer.initialize();
-            writePools(setCode, count, Path.of(poolsPath), excludePath);
+            writePools(setCode, poolCount, Path.of(poolsPath), excludePath);
         });
     }
 
@@ -98,7 +91,7 @@ public class PoolMain {
                 List<List<String>> pools = generator.generate(poolSetCode, batch, excluded);
                 for (List<String> pool : pools) {
                     writer.write(poolSetCode);
-                    writer.write(";");
+                    writer.write(CardNameList.FIELD_SEPARATOR);
                     writer.write(CardNameList.format(pool));
                     writer.newLine();
                     written++;
@@ -111,7 +104,6 @@ public class PoolMain {
             }
         }
 
-        System.out.println("Done");
         System.out.println("Done: " + poolCount + " pools written to " + outputFile);
     }
 }

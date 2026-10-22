@@ -18,6 +18,9 @@ final class CardNameList {
 
     static final String SEPARATOR = "|";
 
+    /** Between the fields of a corpus line; card names never contain it. */
+    static final String FIELD_SEPARATOR = ";";
+
     private CardNameList() {
     }
 

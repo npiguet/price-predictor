@@ -11,12 +11,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(ForgeExtension.class)
 class PoolGeneratorTest {
 
-    private static final Set<String> BASIC_LAND_NAMES = Set.of(
-            "Plains", "Island", "Swamp", "Mountain", "Forest",
-            "Wastes", "Snow-Covered Plains", "Snow-Covered Island",
-            "Snow-Covered Swamp", "Snow-Covered Mountain", "Snow-Covered Forest"
-    );
-
     @Test
     void generateReturnsCorrectPoolCount() {
         PoolGenerator generator = new PoolGenerator();
@@ -37,7 +31,7 @@ class PoolGeneratorTest {
         List<List<String>> pools = generator.generate("RVR", 3, HoldoutCards.NONE);
         for (List<String> pool : pools) {
             for (String cardName : pool) {
-                assertFalse(BASIC_LAND_NAMES.contains(cardName),
+                assertFalse(BasicLands.isBasic(cardName),
                         "Basic land found in pool: " + cardName);
             }
         }

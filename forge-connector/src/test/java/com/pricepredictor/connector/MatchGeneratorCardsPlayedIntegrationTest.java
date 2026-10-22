@@ -21,11 +21,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(ForgeExtension.class)
 class MatchGeneratorCardsPlayedIntegrationTest {
 
-    private static final Set<String> BASIC_LANDS = Set.of(
-            "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
-            "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
-            "Snow-Covered Mountain", "Snow-Covered Forest");
-
     /**
      * {@link MatchGeneratorTest#sharedMatch}. Nothing here counts its rows:
      * one row per played game is {@link MatchGenerationResult}'s own invariant.
@@ -91,7 +86,7 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
     private static void assertNoBasicsIn(List<String> names, String column) {
         for (String name : names) {
-            assertFalse(BASIC_LANDS.contains(name),
+            assertFalse(BasicLands.isBasic(name),
                     column + " must not contain basic land: " + name);
         }
     }
@@ -114,7 +109,7 @@ class MatchGeneratorCardsPlayedIntegrationTest {
     private static Set<String> distinctNonBasic(List<String> deck) {
         Set<String> distinct = new LinkedHashSet<>();
         for (String name : deck) {
-            if (!BASIC_LANDS.contains(name)) {
+            if (!BasicLands.isBasic(name)) {
                 distinct.add(name);
             }
         }

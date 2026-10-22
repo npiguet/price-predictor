@@ -37,7 +37,7 @@ public class ConvertMain {
                     Path.of(cardsPath), Path.of(outputPath), SourceTree.CARDSFOLDER);
 
             System.out.println("Conversion complete:");
-            report("cardsfolder", cards);
+            cards.report(System.out, "cardsfolder");
             List<MissingSVarReport.Entry> missingSVars =
                     new ArrayList<>(cards.missingSVars());
 
@@ -46,7 +46,7 @@ public class ConvertMain {
                 BatchConverter.BatchResult tokens = batchConverter.convert(
                         tokensSource, Path.of(tokensOutputPath),
                         SourceTree.TOKENSCRIPTS);
-                report("tokenscripts", tokens);
+                tokens.report(System.out, "tokenscripts");
                 System.out.println("  Token output: " + tokensOutputPath);
                 missingSVars.addAll(tokens.missingSVars());
             } else {
@@ -65,19 +65,6 @@ public class ConvertMain {
                 System.err.flush();
             }
         });
-    }
-
-    private static void report(String tree, BatchConverter.BatchResult result) {
-        System.out.println("  [" + tree + "]");
-        System.out.println("  Total files:  " + result.totalFiles());
-        System.out.println("  Succeeded:    " + result.succeeded());
-        System.out.println("  Warnings:     " + result.warningCount());
-        if (!result.warnings().isEmpty()) {
-            System.out.println("\nWarnings:");
-            for (String warning : result.warnings()) {
-                System.out.println("  " + warning);
-            }
-        }
     }
 
     /** A sibling of {@code path} named {@code name} — the token tree's default. */

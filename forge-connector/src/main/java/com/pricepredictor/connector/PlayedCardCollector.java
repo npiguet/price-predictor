@@ -2,6 +2,8 @@ package com.pricepredictor.connector;
 
 import com.google.common.eventbus.Subscribe;
 import forge.card.GamePieceType;
+import forge.game.Game;
+import forge.game.card.Card;
 import forge.game.card.CardView;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventSpellAbilityCast;
@@ -49,7 +51,12 @@ import java.util.Map;
  */
 public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
 
+    private final Game game;
     private final Map<Side, List<String>> cardsBySide = new EnumMap<>(Side.class);
+
+    public PlayedCardCollector(Game game) {
+        this.game = game;
+    }
 
     /** Return the recorded card names for one side. */
     public List<String> getCards(Side side) {
@@ -112,7 +119,7 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
         if (!shouldRecord(controllerEqualsOwner, isToken, isBasicLand, isRealDeckCard)) {
             return;
         }
-        String name = resolveRecordedName(card);
+        String name = recordedName(card);
         if (name == null || name.isEmpty()) {
             return;
         }
@@ -120,6 +127,23 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
         // does: a card credited to the wrong deck is a corrupt row.
         Side side = Side.ofLobbyName(owner.getLobbyPlayerName());
         cardsBySide.computeIfAbsent(side, s -> new ArrayList<>()).add(name);
+    }
+
+    /**
+     * The name the deck lists for the played card: its printing's own name,
+     * which is the whole name of a Room or split card, not the name of the
+     * door or half that was cast. The printing is read from the game's card
+     * object rather than looked up by name, so two cards sharing a face name
+     * cannot be confused. When the game holds no such card or it has no printing
+     * (a dungeon, say), the name is {@link #resolveRecordedName}'s: the backup's
+     * or current state's oracle name.
+     */
+    private String recordedName(CardView card) {
+        Card source = game.findById(card.getId());
+        if (source != null && source.getPaperCard() != null) {
+            return source.getPaperCard().getName();
+        }
+        return resolveRecordedName(card);
     }
 
     /**

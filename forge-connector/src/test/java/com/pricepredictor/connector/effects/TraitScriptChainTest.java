@@ -252,7 +252,7 @@ class TraitScriptChainTest {
         assertFalse(text.contains("SV2: "), "the undefined segment is left out: " + text);
         assertEquals(1, count(text, "[SEG]"), text);
 
-        List<MissingSVarReport.Entry> entries = undefined.report().entries();
+        List<MissingSVarReport.Entry> entries = undefined.report().drain();
         assertEquals(1, entries.size(), entries.toString());
         MissingSVarReport.Entry entry = entries.get(0);
         assertEquals("Undefined SVar", entry.card());
@@ -265,8 +265,8 @@ class TraitScriptChainTest {
 
     @Test
     void aCardWithEveryLabelDefinedReportsNothing() {
-        assertTrue(convert("c/cryptic_command.txt").report().isEmpty());
-        assertTrue(convert("a/anticausal_vestige.txt").report().isEmpty());
+        assertTrue(convert("c/cryptic_command.txt").report().drain().isEmpty());
+        assertTrue(convert("a/anticausal_vestige.txt").report().drain().isEmpty());
     }
 
     // ── charms: shared sub-abilities, no description, triggers, chapters ──
@@ -388,7 +388,8 @@ class TraitScriptChainTest {
         String mode = linesOfKind(season, "option").get(0).script().scriptText();
 
         assertTrue(mode.contains("Choices$ Creature.YouCtrl"), mode);
-        assertTrue(season.report().isEmpty(), season.report().entries().toString());
+        List<MissingSVarReport.Entry> left = season.report().drain();
+        assertTrue(left.isEmpty(), left.toString());
     }
 
     @Test

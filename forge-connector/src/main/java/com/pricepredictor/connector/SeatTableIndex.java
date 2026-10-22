@@ -154,7 +154,7 @@ public class SeatTableIndex {
     // ── Static helpers (package-visible for testing) ────────────────
 
     static SeatEntry parseLine(String line) {
-        String[] parts = line.split(";", 5);
+        String[] parts = line.split(CardNameList.FIELD_SEPARATOR, 5);
         if (parts.length < 5) {
             throw new IllegalArgumentException(
                     "seat line needs 5 ';'-separated fields, got " + parts.length + ": " + line);

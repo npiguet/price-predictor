@@ -74,11 +74,4 @@ class PlayedCardCollectorTest {
         // is a corrupt row.
         assertThrows(IllegalArgumentException.class, () -> Side.ofLobbyName("nobody"));
     }
-
-    @Test
-    void getCardsReturnsEmptyListForUnknownSide() {
-        PlayedCardCollector collector = new PlayedCardCollector();
-        assertTrue(collector.getCards(Side.A).isEmpty());
-        assertTrue(collector.getCards(Side.B).isEmpty());
-    }
 }

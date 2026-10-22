@@ -147,14 +147,22 @@ class PatchedCollectorTest {
 
     @Test
     void aMalformedPropertyKeepsItsDefaultRatherThanFailing() {
-        System.setProperty("effect.mana.cap", "not-a-number");
+        System.setProperty(CollectionCaps.MANA_CAP, "not-a-number");
+        PrintStream realErr = System.err;
+        ByteArrayOutputStream warnings = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(warnings, true, StandardCharsets.UTF_8));
         try {
             assertEquals(
                     CollectionCaps.defaults().manaCap(),
                     CollectionCaps.fromSystemProperties().manaCap());
         } finally {
-            System.clearProperty("effect.mana.cap");
+            System.setErr(realErr);
+            System.clearProperty(CollectionCaps.MANA_CAP);
         }
+        String warning = warnings.toString(StandardCharsets.UTF_8).strip();
+        assertEquals(1, warning.lines().count(), warning);
+        assertTrue(warning.contains(CollectionCaps.MANA_CAP) && warning.contains("not-a-number"),
+                warning);
     }
 
     @Test
