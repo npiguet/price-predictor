@@ -122,6 +122,6 @@ final class WorkerLoop {
                 + "non-zero so the supervisor restarts the slot and the operator sees "
                 + "a failing worker rather than a run that never finishes.");
         System.err.flush();
-        System.exit(1);
+        throw ToolMain.exit(1);
     }
 }
