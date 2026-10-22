@@ -38,12 +38,7 @@ final class CombatShape {
     private CombatShape() {
     }
 
-    /** An empty shape, for a record written outside combat. */
-    static CombatShape empty() {
-        return new CombatShape();
-    }
-
-    /** Who is attacking and who is blocking them, right now. */
+    /** Who is attacking and who is blocking them, right now; empty outside combat. */
     static CombatShape of(Combat combat) {
         CombatShape shape = new CombatShape();
         if (combat == null) {

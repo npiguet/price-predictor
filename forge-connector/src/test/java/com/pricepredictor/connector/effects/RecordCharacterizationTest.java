@@ -378,7 +378,7 @@ class RecordCharacterizationTest {
                     opponent.getView(), confluence.getView(), 2, false, false));
             board.game.fireEvent(new GameEventPlayerLivesChanged(opponent, 20, 18));
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         } finally {
             writer.close();
         }

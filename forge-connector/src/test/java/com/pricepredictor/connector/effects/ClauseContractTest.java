@@ -113,7 +113,7 @@ class ClauseContractTest {
             handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{Boolean.FALSE, sa});
             bracket.endBracket(sa.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         String effectHalf = records.get(1);
@@ -167,7 +167,7 @@ class ClauseContractTest {
             handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{outer, false});
             bracket.endBracket(outer.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         String effectHalf = records.get(1);
@@ -211,7 +211,7 @@ class ClauseContractTest {
             handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{forkAbility, false});
             bracket.endBracket(forkAbility.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         String shard = String.join("\n", records);
@@ -285,7 +285,7 @@ class ClauseContractTest {
                 handler.invoke(null, clauseMethod("onClauseResolved"),
                         new Object[]{outer, false});
                 bracket.endBracket(outer.getId(), false);
-                bracket.flushHeldResolution();
+                bracket.onNextAction();
             }));
         });
 
@@ -334,7 +334,7 @@ class ClauseContractTest {
             handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{sa, threw});
             bracket.endBracket(sa.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
         assertEquals(2, records.size(), records.toString());
         return records;

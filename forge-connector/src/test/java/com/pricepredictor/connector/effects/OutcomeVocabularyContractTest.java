@@ -100,7 +100,7 @@ class OutcomeVocabularyContractTest {
             collectors.clauses().outcomeHandler().invoke(null, onOutcome(),
                     new Object[]{liveAbility, type, Map.of()});
             bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         assertTrue(String.join("\n", records).contains("\"type\":\"" + type + "\""),
@@ -120,7 +120,7 @@ class OutcomeVocabularyContractTest {
                     new Object[]{liveAbility, EffectEvent.TEXT_CHANGE,
                             Map.of("subjects", List.of(card, player))});
             bracket.endBracket(liveAbility.getId(), false);
-            bracket.flushHeldResolution();
+            bracket.onNextAction();
         });
 
         String shard = String.join("\n", records);

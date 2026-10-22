@@ -123,9 +123,9 @@ class EventAttributionTest {
         SpellAbility root = threeClauseAbility();
         AbilitySub second = (AbilitySub) root.getSubAbility().getSubAbility();
 
-        String json = EventAttribution.stamp(
+        String json = EventAttribution.stampAt(
                 new EffectEvent(EffectEvent.CARD_DRAWN).subject("P0"),
-                root, second).toJson();
+                root, second, null).toJson();
 
         assertTrue(json.contains("\"attributed_to\":\"1\""), json);
     }
@@ -146,9 +146,9 @@ class EventAttributionTest {
                         + " | SubAbility$ DBPump", host);
 
         assertEquals(EventDuration.PERMANENT,
-                EventAttribution.duration(root, root.getSubAbility()));
+                EventAttribution.duration(root, root.getSubAbility(), EffectEvent.PT_CHANGE));
         assertEquals(EventDuration.INSTANT,
-                EventAttribution.duration(root, root));
+                EventAttribution.duration(root, root, EffectEvent.LIFE_CHANGE));
     }
 
     /**
@@ -171,8 +171,8 @@ class EventAttributionTest {
         assertEquals(EventDuration.INSTANT,
                 EventAttribution.duration(pump, pump, EffectEvent.DAMAGE_DEALT));
 
-        String json = EventAttribution.stamp(
-                new EffectEvent(EffectEvent.PT_CHANGE).subject("E1"), pump, pump).toJson();
+        String json = EventAttribution.stampAt(
+                new EffectEvent(EffectEvent.PT_CHANGE).subject("E1"), pump, pump, null).toJson();
         assertTrue(json.contains("\"duration\":\"end_of_turn\""), json);
     }
 
