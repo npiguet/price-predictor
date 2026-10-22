@@ -35,9 +35,7 @@ import forge.game.cost.Cost;
 import forge.game.keyword.Companion;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
-import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
-import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
 import forge.item.PaperCard;
 

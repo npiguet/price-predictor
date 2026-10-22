@@ -3,7 +3,6 @@ package com.pricepredictor.connector;
 import com.esotericsoftware.minlog.Log;
 import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.ProvenanceSidecar;
-import com.pricepredictor.connector.effects.SourceTree;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
