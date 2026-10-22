@@ -6,10 +6,10 @@ import forge.game.combat.Combat;
 import forge.game.player.Player;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.StringJoiner;
 
 /**
  * A damage step's combat, as a record describes it.
@@ -105,34 +105,17 @@ final class CombatShape {
     }
 
     /**
-     * The three combat fields, without the surrounding braces.
+     * The three combat fields, in the order the payload writes them.
      *
-     * <p>Rendered as a fragment so a caller can add the fields only its own
-     * kind of record carries — the probe branch adds what it perturbed.
+     * <p>Handed over as fields rather than as a whole object so a caller can
+     * add the fields only its own kind of record carries — the probe branch
+     * adds what it perturbed.
      */
-    String fields() {
-        StringJoiner attackerJson = new StringJoiner(",", "[", "]");
-        for (String attacker : attackers) {
-            attackerJson.add(Json.string(attacker));
-        }
-        StringJoiner blockJson = new StringJoiner(",", "{", "}");
-        for (Map.Entry<String, List<String>> block : blocks.entrySet()) {
-            StringJoiner blockers = new StringJoiner(",", "[", "]");
-            for (String blocker : block.getValue()) {
-                blockers.add(Json.string(blocker));
-            }
-            blockJson.add(Json.string(block.getKey()) + ":" + blockers);
-        }
-        StringJoiner assignmentJson = new StringJoiner(",", "{", "}");
-        for (Map.Entry<String, Map<String, Integer>> from : assignment.entrySet()) {
-            StringJoiner targets = new StringJoiner(",", "{", "}");
-            for (Map.Entry<String, Integer> to : from.getValue().entrySet()) {
-                targets.add(Json.string(to.getKey()) + ":" + to.getValue());
-            }
-            assignmentJson.add(Json.string(from.getKey()) + ":" + targets);
-        }
-        return "\"attackers\":" + attackerJson
-                + ",\"blocks\":" + blockJson
-                + ",\"assignment_choices\":" + assignmentJson;
+    Map<String, Object> fields() {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("attackers", attackers);
+        fields.put("blocks", blocks);
+        fields.put("assignment_choices", assignment);
+        return Collections.unmodifiableMap(fields);
     }
 }

@@ -273,10 +273,13 @@ public final class EffectRecord {
 
     /**
      * ``{<combat fields>, "events": [...]}`` — an observed damage step, its
-     * combat rendered by {@link CombatShape#fields}.
+     * combat as {@link CombatShape#fields} hands it over.
      */
-    static String combatPayload(String combatFields, List<EffectEvent> events) {
-        return "{" + combatFields + ",\"events\":" + eventArray(events) + "}";
+    static String combatPayload(Map<String, Object> combatFields, List<EffectEvent> events) {
+        return Json.object()
+                .values(combatFields)
+                .raw("events", eventArray(events))
+                .render();
     }
 
     /**
@@ -284,11 +287,14 @@ public final class EffectRecord {
      * perturbed: the keyword it stripped and the creature it stripped it from.
      */
     static String probePayload(
-            String combatFields, List<EffectEvent> events, String keyword, String carrier) {
-        return "{" + combatFields
-                + ",\"events\":" + eventArray(events)
-                + ",\"probed_keyword\":" + Json.string(keyword)
-                + ",\"probed_entity\":" + Json.string(carrier) + "}";
+            Map<String, Object> combatFields, List<EffectEvent> events,
+            String keyword, String carrier) {
+        return Json.object()
+                .values(combatFields)
+                .raw("events", eventArray(events))
+                .raw("probed_keyword", Json.string(keyword))
+                .raw("probed_entity", Json.string(carrier))
+                .render();
     }
 
     private static String eventArray(List<EffectEvent> events) {

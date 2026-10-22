@@ -721,7 +721,7 @@ public final class ForkCollector {
      */
     public record HeldProbe(
             String keyword, String carrier, String state,
-            List<EffectEvent> events, String actor, String combatFields,
+            List<EffectEvent> events, String actor, Map<String, Object> combatFields,
             DamageStep substep, int turn) {
 
         /**
@@ -731,7 +731,7 @@ public final class ForkCollector {
          * tramplers gives the keyword alone two readings, and the evaluator
          * reproducing this perturbation model-side would strip the wrong one.
          *
-         * <p>{@code combatFields} is the fork's own combat, rendered when the
+         * <p>{@code combatFields} is the fork's own combat, read when the
          * branch was taken. It is the counterfactual's half of what gate 2
          * compares: the observed record says who blocked whom and how the
          * damage was split with the keyword, and this says the same about the
