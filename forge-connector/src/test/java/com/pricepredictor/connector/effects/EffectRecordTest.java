@@ -132,7 +132,7 @@ class EffectRecordTest {
                 // No ability: a countered spell's costs are still readable in
                 // a real game, but the record's shape does not depend on them.
                 .payload(EffectRecord.costPayload(
-                        EffectRecord.costsJson(null), EffectRecord.OUTCOME_COUNTERED))
+                        EffectRecord.costsJson(null), ActivationOutcome.COUNTERED))
                 .toJson();
         assertTrue(json.contains("\"link_id\":null"), json);
         assertTrue(json.contains("\"outcome\":\"countered\""), json);

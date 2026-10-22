@@ -342,13 +342,13 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /** What became of a cast that has left the stack through a resolution. */
-    private String settledOutcome(
+    private ActivationOutcome settledOutcome(
             int abilityId, boolean fizzled, boolean declined, boolean bracketIsThisAbility) {
         if (fizzled) {
-            return EffectRecord.OUTCOME_FIZZLED;
+            return ActivationOutcome.FIZZLED;
         }
         if (declined) {
-            return EffectRecord.OUTCOME_DECLINED;
+            return ActivationOutcome.DECLINED;
         }
         return outcomeOf(
                 findPending(abilityId).map(PendingActivation::targetsAtCast).orElse(0),
@@ -742,7 +742,7 @@ public final class BusBracketCollector extends BusEventReader {
      * @return the link the effect half may claim, or null when there is to be
      *         no effect half or nothing was held for this ability
      */
-    String settleActivation(int abilityId, String outcome, boolean linked) {
+    String settleActivation(int abilityId, ActivationOutcome outcome, boolean linked) {
         Optional<PendingActivation> found = findPending(abilityId);
         if (found.isEmpty()) {
             return null;
@@ -754,7 +754,7 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     private void emitActivation(
-            PendingActivation activation, String outcome, boolean linked) {
+            PendingActivation activation, ActivationOutcome outcome, boolean linked) {
         context.emit(context.newResolution(
                 Moment.ACTIVATION, activation.recordId(), activation.timestamp())
                 .actor(activation.actor())
@@ -780,14 +780,14 @@ public final class BusBracketCollector extends BusEventReader {
      * is the {@code CantFizzle} case (Gilded Drake), where the spell still does
      * what it does: that is {@code resolved} too.
      */
-    static String outcomeOf(int targetsAtCast, SpellAbility resolved) {
+    static ActivationOutcome outcomeOf(int targetsAtCast, SpellAbility resolved) {
         if (resolved == null) {
-            return EffectRecord.OUTCOME_RESOLVED;
+            return ActivationOutcome.RESOLVED;
         }
         int surviving = targetCount(resolved);
         return surviving > 0 && surviving < targetsAtCast
-                ? EffectRecord.OUTCOME_PARTIALLY_FIZZLED
-                : EffectRecord.OUTCOME_RESOLVED;
+                ? ActivationOutcome.PARTIALLY_FIZZLED
+                : ActivationOutcome.RESOLVED;
     }
 
     private static int targetCount(SpellAbility ability) {
@@ -843,7 +843,7 @@ public final class BusBracketCollector extends BusEventReader {
             PendingActivation activation = held.next();
             if (!onStack.contains(activation.abilityId())) {
                 held.remove();
-                emitActivation(activation, EffectRecord.OUTCOME_COUNTERED, false);
+                emitActivation(activation, ActivationOutcome.COUNTERED, false);
                 removed++;
             }
         }

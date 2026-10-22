@@ -35,12 +35,6 @@ import java.util.StringJoiner;
  */
 public final class EffectRecord {
 
-    public static final String OUTCOME_RESOLVED = "resolved";
-    public static final String OUTCOME_FIZZLED = "fizzled";
-    public static final String OUTCOME_PARTIALLY_FIZZLED = "partially_fizzled";
-    public static final String OUTCOME_DECLINED = "declined";
-    public static final String OUTCOME_COUNTERED = "countered";
-
     private final String recordId;
     private final String runId;
     private final String timestamp;
@@ -386,9 +380,9 @@ public final class EffectRecord {
      * keeping a reference to a {@link SpellAbility} whose paid lists the next
      * activation will overwrite.
      */
-    public static String costPayload(String costsJson, String outcome) {
+    public static String costPayload(String costsJson, ActivationOutcome outcome) {
         return "{\"costs\":" + costsJson
-                + ",\"outcome\":" + Json.string(outcome) + "}";
+                + ",\"outcome\":" + Json.string(outcome.wireName()) + "}";
     }
 
     /** What a cost payload says when there is no ability to read. */

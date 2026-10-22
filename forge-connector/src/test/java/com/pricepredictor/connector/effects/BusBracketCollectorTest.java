@@ -218,15 +218,15 @@ class BusBracketCollectorTest {
         bolt.getTargets().add(TestCards.build("Grizzly Bears"));
         bolt.getTargets().add(TestCards.build("Grizzly Bears"));
 
-        assertEquals(EffectRecord.OUTCOME_RESOLVED,
+        assertEquals(ActivationOutcome.RESOLVED,
                 BusBracketCollector.outcomeOf(2, bolt));
 
         bolt.getTargets().remove(bolt.getTargets().get(0));
-        assertEquals(EffectRecord.OUTCOME_PARTIALLY_FIZZLED,
+        assertEquals(ActivationOutcome.PARTIALLY_FIZZLED,
                 BusBracketCollector.outcomeOf(2, bolt));
 
         bolt.resetTargets();
-        assertEquals(EffectRecord.OUTCOME_RESOLVED,
+        assertEquals(ActivationOutcome.RESOLVED,
                 BusBracketCollector.outcomeOf(2, bolt));
     }
 
@@ -237,7 +237,7 @@ class BusBracketCollectorTest {
                 "SP$ GainLife | Cost$ W | Defined$ You | LifeAmount$ 3",
                 TestCards.build("Healing Salve"));
 
-        assertEquals(EffectRecord.OUTCOME_RESOLVED,
+        assertEquals(ActivationOutcome.RESOLVED,
                 BusBracketCollector.outcomeOf(0, gain));
     }
 

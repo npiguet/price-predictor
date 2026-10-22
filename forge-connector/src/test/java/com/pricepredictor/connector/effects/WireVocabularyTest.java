@@ -44,4 +44,12 @@ class WireVocabularyTest {
         assertEquals(List.of("decision", "attackers", "blockers"),
                 wireNames(PlayabilitySubkind.values(), PlayabilitySubkind::wireName));
     }
+
+    /** {@code ResolutionOutcome} in {@code records.py}. */
+    @Test
+    void activationOutcomes() {
+        assertEquals(
+                List.of("resolved", "fizzled", "partially_fizzled", "declined", "countered"),
+                wireNames(ActivationOutcome.values(), ActivationOutcome::wireName));
+    }
 }
