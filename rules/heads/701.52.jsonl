@@ -1,1 +1,1 @@
-{"id": "701.52a", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:die_result", "new:lit_up_numbers", "planned:every_line"], "note": ""}
+{"id": "701.52a", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:die_result", "new:lit_up_numbers", "planned:every_line"], "note": "", "gen3_inputs": ["in.random_results", "planned.every_line"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": ["new:lit_up_numbers"], "learnable_after_gen3": false}

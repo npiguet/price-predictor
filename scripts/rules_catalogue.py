@@ -293,7 +293,26 @@ def validate_heads(unit, rows, triage):
         for i in missing:
             if not i.startswith(INPUT_TAGS):
                 errs.append(f"{rid}: untagged missing input {i!r}")
+        if GEN3_FIELDS.exists():
+            if any(k not in r for k in GEN3_KEYS):
+                errs.append(f"{rid}: gen3 fields missing; run gen3-fields")
+            else:
+                ids = set(gen3_ids())
+                for k in ("gen3_inputs", "gen3_outputs", "gen3_fixes"):
+                    for i in r[k]:
+                        if i not in ids:
+                            errs.append(f"{rid}: unknown {k} id {i!r}")
     return errs
+
+
+_GEN3_IDS = None
+
+
+def gen3_ids():
+    global _GEN3_IDS
+    if _GEN3_IDS is None:
+        _GEN3_IDS = gen3_registry()[1].keys()
+    return _GEN3_IDS
 
 
 def validate_triage(unit, rows, rule_ids):
@@ -391,6 +410,148 @@ class _AnyName:
         return True
 
 
+GEN3_FIELDS = RULES / "gen3-fields.json"
+GEN3_KEYS = ("gen3_inputs", "gen3_outputs", "gen3_fixes", "gen3_dropped", "learnable_after_gen3")
+
+
+def gen3_registry():
+    """``(entries by id, {context: {name: id or None}})`` from gen3-fields.json.
+
+    A name is looked up in its own context: a missing input among the inputs, an
+    untrained output among the outputs, because a few names (``new:text_change``,
+    ``new:room_unlocked``) were proposed in both roles. Within a context a name maps
+    to one entry; ``None`` is covered or dropped.
+    """
+    reg = json.loads(GEN3_FIELDS.read_text(encoding="utf-8"))
+    entries = {}
+    by_context = {"input": defaultdict(set), "output": defaultdict(set)}
+
+    def add(entry, contexts):
+        entries[entry["id"]] = entry
+        for name in entry["names"]:
+            for c in contexts:
+                by_context[c][name].add(entry["id"])
+
+    for e in reg["inputs"]:
+        add(e, ["input"])
+    for e in reg["outputs"] + reg["fixes"]:
+        add(e, ["output"])
+    for e in reg["extensions"]:
+        add(e, [c for c in ("input", "output") if c in e["applies_to"]])
+    for e in reg["planned"]:
+        add(e, ["output"] if e["id"] in ("planned.timing", "planned.failed_checks") else ["input"])
+    lookup = {}
+    for c, names in by_context.items():
+        lookup[c] = {}
+        for name, ids in names.items():
+            if len(ids) > 1:
+                raise ValueError(f"{name} maps to {sorted(ids)} as an {c}")
+            lookup[c][name] = next(iter(ids))
+        for name in reg["covered"]["names"]:
+            lookup[c].setdefault(name, "covered")
+        for group in reg["dropped"]:
+            for name in group["names"]:
+                lookup[c].setdefault(name, None)
+    overrides = {(o["rule"], o["name"]): o["to"] for o in reg["overrides"]}
+    return reg, entries, lookup, overrides
+
+
+def gen3_line(row, entries, lookup, overrides):
+    """The gen3_* fields of one heads line, and the names nothing maps."""
+    ins, outs, fixes, dropped, unmapped = set(), set(), set(), set(), []
+    tagged_outputs = [o for o in row["outputs"] if o.startswith(OUTPUT_TAGS)]
+    for context, names in (("input", row["inputs_missing"]), ("output", tagged_outputs)):
+        for name in names:
+            key = (row["id"], name)
+            if key in overrides:
+                target = overrides[key]
+            elif name in lookup[context]:
+                target = lookup[context][name]
+            else:
+                unmapped.append(name)
+                continue
+            if target is None:
+                dropped.add(name)
+            elif target == "covered":
+                continue
+            elif target.startswith("fix."):
+                fixes.add(target)
+            elif context == "input" and not target.startswith("planned.timing") and not target.startswith("planned.failed"):
+                ins.add(target)
+            else:
+                outs.add(target)
+    learnable = not dropped and not unmapped
+    return {
+        "gen3_inputs": sorted(ins), "gen3_outputs": sorted(outs), "gen3_fixes": sorted(fixes),
+        "gen3_dropped": sorted(dropped), "learnable_after_gen3": learnable,
+    }, unmapped
+
+
+def cmd_gen3_fields(_args):
+    reg, entries, lookup, overrides = gen3_registry()
+    all_rows, n_unmapped = [], 0
+    for path in sorted((RULES / "heads").glob("*.jsonl"), key=lambda p: unit_sort_key(p.stem)):
+        rows = read_jsonl(path)
+        for row in rows:
+            fields, unmapped = gen3_line(row, entries, lookup, overrides)
+            for name in unmapped:
+                print(f"UNMAPPED {row['id']}: {name}")
+            n_unmapped += len(unmapped)
+            for k in GEN3_KEYS:
+                row.pop(k, None)
+            row.update(fields)
+            all_rows.append(row)
+        path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8", newline="\n")
+    if n_unmapped:
+        print(f"{n_unmapped} unmapped names")
+        sys.exit(1)
+    write_gen3_summary(reg, all_rows)
+
+
+def write_gen3_summary(reg, rows):
+    """rules/GEN3-FIELDS.md: each canonical field, with the rules it serves."""
+    serves, alone = Counter(), Counter()
+    for r in rows:
+        ids = r["gen3_inputs"] + r["gen3_outputs"] + r["gen3_fixes"]
+        serves.update(ids)
+        if len(ids) == 1 and not r["gen3_dropped"]:
+            alone[ids[0]] += 1
+    now = sum(1 for r in rows if r["output"] == "trained" and r["input"] == "complete")
+    after = sum(1 for r in rows if r["learnable_after_gen3"])
+    out = ["# Gen-3 inputs and outputs", "",
+           "Generated by `python scripts/rules_catalogue.py gen3-fields` from `rules/gen3-fields.json` "
+           "and `rules/heads/`; do not edit by hand. Each rule's line in `rules/heads/<unit>.jsonl` "
+           "carries `gen3_inputs`, `gen3_outputs`, `gen3_fixes`, `gen3_dropped` and `learnable_after_gen3`.", "",
+           f"Rules: {len(rows)}. Learnable today: {now}. Learnable once every field, extension, "
+           f"planned item and fix below is in: {after}. Left out by a dropped name: {len(rows) - after}.", "",
+           "Columns: rules = rules that need it; alone = rules for which it is the only change needed.", ""]
+
+    def table(title, items, cols):
+        out.extend([f"## {title} ({len(items)})", "", "| id | " + " | ".join(cols) + " | rules | alone |",
+                    "|---|" + "---|" * len(cols) + "---:|---:|"])
+        for e in sorted(items, key=lambda e: -serves[e["id"]]):
+            cells = " | ".join(str(e.get(c, "")) for c in cols)
+            out.append(f"| `{e['id']}` | {cells} | {serves[e['id']]} | {alone[e['id']]} |")
+        out.append("")
+
+    table("New inputs", reg["inputs"], ["slot", "shape", "source", "what"])
+    table("New outputs", reg["outputs"], ["slot", "shape", "source", "what"])
+    table("Extensions of existing inputs and outputs", reg["extensions"], ["applies_to", "what"])
+    table("Already planned in the gen-3 design record", reg["planned"], ["what"])
+    table("Collection and curation fixes", reg["fixes"], ["what"])
+    dropped = Counter(n for r in rows for n in r["gen3_dropped"])
+    out.extend(["## Dropped names", "", "| reason | names | rules |", "|---|---|---:|"])
+    for group in reg["dropped"]:
+        hit = sum(1 for r in rows if set(r["gen3_dropped"]) & set(group["names"]))
+        out.append(f"| {group['reason']} | {', '.join(f'`{n}`' for n in group['names'])} | {hit} |")
+    for o in reg["overrides"]:
+        if o["to"] is None:
+            out.append(f"| {o['reason']} ({o['rule']}) | `{o['name']}` | 1 |")
+    out.append("")
+    (RULES / "GEN3-FIELDS.md").write_text("\n".join(out), encoding="utf-8", newline="\n")
+    print(f"learnable today {now}, after gen-3 {after}, of {len(rows)}")
+
+
 def cmd_status(_args):
     rules = load_rules()
     sizes, counts = units_with_sizes(rules)
@@ -446,9 +607,10 @@ def main():
     p.add_argument("--heads", action="store_true", help="also check rules/heads/")
     sub.add_parser("status")
     sub.add_parser("premark")
+    sub.add_parser("gen3-fields")
     args = ap.parse_args()
     {"split": cmd_split, "packets": cmd_packets, "validate": cmd_validate, "status": cmd_status,
-     "premark": cmd_premark}[args.cmd](args)
+     "premark": cmd_premark, "gen3-fields": cmd_gen3_fields}[args.cmd](args)
 
 
 if __name__ == "__main__":

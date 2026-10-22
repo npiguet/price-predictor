@@ -1,1 +1,1 @@
-{"id": "701.53a", "output": "trained", "outputs": ["created_objects"], "input": "complete", "inputs_missing": [], "note": "Counters on the created token are only partly captured by created_objects."}
+{"id": "701.53a", "output": "trained", "outputs": ["created_objects"], "input": "complete", "inputs_missing": [], "note": "Counters on the created token are only partly captured by created_objects.", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

@@ -1,1 +1,1 @@
-{"id": "701.35a", "output": "trained", "outputs": ["blocker_legal", "attacker_legal", "can_play"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Detained status and its expiry are not in the snapshot."}
+{"id": "701.35a", "output": "trained", "outputs": ["blocker_legal", "attacker_legal", "can_play"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "Detained status and its expiry are not in the snapshot.", "gen3_inputs": ["in.designations"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

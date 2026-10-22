@@ -1,1 +1,1 @@
-{"id": "702.152a", "output": "trained", "outputs": ["keywords_gained", "cards_drawn", "zone_outcome"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": ""}
+{"id": "702.152a", "output": "trained", "outputs": ["keywords_gained", "cards_drawn", "zone_outcome"], "input": "incomplete", "inputs_missing": ["new:chosen_values"], "note": "", "gen3_inputs": ["in.chosen_values"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

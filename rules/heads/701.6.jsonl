@@ -1,2 +1,2 @@
-{"id": "701.6a", "output": "trained", "outputs": ["zone_outcome", "life_delta"], "input": "complete", "inputs_missing": [], "note": "a countered spell is zone_outcome countered; a countered ability shows as its effect not occurring"}
-{"id": "701.6b", "output": "trained", "outputs": ["tap_state", "zone_outcome", "mana_paid"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.6a", "output": "trained", "outputs": ["zone_outcome", "life_delta"], "input": "complete", "inputs_missing": [], "note": "a countered spell is zone_outcome countered; a countered ability shows as its effect not occurring", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "701.6b", "output": "trained", "outputs": ["tap_state", "zone_outcome", "mana_paid"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

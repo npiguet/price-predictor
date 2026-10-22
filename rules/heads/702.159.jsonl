@@ -1,1 +1,1 @@
-{"id": "702.159a", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "snapshot:subtypes"], "note": ""}
+{"id": "702.159a", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "snapshot:subtypes"], "note": "", "gen3_inputs": ["in.history", "in.subtypes"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

@@ -1,1 +1,1 @@
-{"id": "702.163a", "output": "trained", "outputs": ["created_objects", "attached_to_change", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": "Token subtypes are not in created_objects."}
+{"id": "702.163a", "output": "trained", "outputs": ["created_objects", "attached_to_change", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": "Token subtypes are not in created_objects.", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

@@ -1,2 +1,2 @@
-{"id": "300.2", "output": "trained", "outputs": ["has_legal_target", "can_play"], "input": "complete", "inputs_missing": [], "note": ""}
-{"id": "300.2a", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "300.2", "output": "trained", "outputs": ["has_legal_target", "can_play"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "300.2a", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

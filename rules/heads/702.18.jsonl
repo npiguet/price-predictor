@@ -1,1 +1,1 @@
-{"id": "702.18a", "output": "trained", "outputs": ["target_legal"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.18a", "output": "trained", "outputs": ["target_legal"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

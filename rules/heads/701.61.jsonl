@@ -1,1 +1,1 @@
-{"id": "701.61a", "output": "trained", "outputs": ["zone_outcome", "cards_drawn", "can_play"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:chosen_values"], "note": "Food is a subtype."}
+{"id": "701.61a", "output": "trained", "outputs": ["zone_outcome", "cards_drawn", "can_play"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:chosen_values"], "note": "Food is a subtype.", "gen3_inputs": ["in.chosen_values", "in.subtypes"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

@@ -1,1 +1,1 @@
-{"id": "702.27a", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": ""}
+{"id": "702.27a", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": "", "gen3_inputs": ["in.costs_paid"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

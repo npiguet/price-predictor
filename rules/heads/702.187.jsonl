@@ -1,2 +1,2 @@
-{"id": "702.187b", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": ""}
-{"id": "702.187c", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "planned:every_line"], "note": ""}
+{"id": "702.187b", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["new:this_turn_history"], "note": "", "gen3_inputs": ["in.history"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "702.187c", "output": "trained", "outputs": ["can_play"], "input": "incomplete", "inputs_missing": ["new:this_turn_history", "planned:every_line"], "note": "", "gen3_inputs": ["in.history", "planned.every_line"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

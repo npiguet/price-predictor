@@ -1,1 +1,1 @@
-{"id": "702.181a", "output": "trained", "outputs": ["trigger_fired", "created_objects"], "input": "complete", "inputs_missing": [], "note": "Created tokens enter tapped and attacking, which created_objects does not carry."}
+{"id": "702.181a", "output": "trained", "outputs": ["trigger_fired", "created_objects"], "input": "complete", "inputs_missing": [], "note": "Created tokens enter tapped and attacking, which created_objects does not carry.", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

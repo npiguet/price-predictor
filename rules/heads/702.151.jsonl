@@ -1,2 +1,2 @@
-{"id": "702.151a", "output": "trained", "outputs": ["attached_to_change", "target_legal", "can_play", "planned:timing"], "input": "complete", "inputs_missing": [], "note": "The sorcery-timing check is the planned timing column."}
-{"id": "702.151b", "output": "trained", "outputs": ["types_lost", "types_gained"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.151a", "output": "trained", "outputs": ["attached_to_change", "target_legal", "can_play", "planned:timing"], "input": "complete", "inputs_missing": [], "note": "The sorcery-timing check is the planned timing column.", "gen3_inputs": [], "gen3_outputs": ["planned.timing"], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "702.151b", "output": "trained", "outputs": ["types_lost", "types_gained"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

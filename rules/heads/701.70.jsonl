@@ -1,1 +1,1 @@
-{"id": "701.70a", "output": "trained", "outputs": ["cards_drawn", "cards_discarded", "created_objects"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "701.70a", "output": "trained", "outputs": ["cards_drawn", "cards_discarded", "created_objects"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

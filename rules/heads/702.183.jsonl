@@ -1,1 +1,1 @@
-{"id": "702.183a", "output": "trained", "outputs": ["damage_taken", "zone_outcome", "can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": "The chosen tier shows as a mode slot."}
+{"id": "702.183a", "output": "trained", "outputs": ["damage_taken", "zone_outcome", "can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": "The chosen tier shows as a mode slot.", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

@@ -1,1 +1,1 @@
-{"id": "702.87a", "output": "trained", "outputs": ["counters_delta_level", "can_play"], "input": "complete", "inputs_missing": [], "note": "Sorcery-speed timing is planned:timing."}
+{"id": "702.87a", "output": "trained", "outputs": ["counters_delta_level", "can_play"], "input": "complete", "inputs_missing": [], "note": "Sorcery-speed timing is planned:timing.", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

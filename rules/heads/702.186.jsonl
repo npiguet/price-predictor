@@ -1,1 +1,1 @@
-{"id": "702.186b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": ""}
+{"id": "702.186b", "output": "trained", "outputs": ["trigger_fired"], "input": "incomplete", "inputs_missing": ["new:designations"], "note": "", "gen3_inputs": ["in.designations"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

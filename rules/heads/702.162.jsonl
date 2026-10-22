@@ -1,1 +1,1 @@
-{"id": "702.162a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": "The converted cast is its own candidate ability, so its line is the [ACT] vector."}
+{"id": "702.162a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "complete", "inputs_missing": [], "note": "The converted cast is its own candidate ability, so its line is the [ACT] vector.", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

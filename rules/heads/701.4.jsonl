@@ -1,1 +1,1 @@
-{"id": "701.4b", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": "whether a Dragon was beheld is not recorded"}
+{"id": "701.4b", "output": "trained", "outputs": ["zone_outcome"], "input": "incomplete", "inputs_missing": ["new:optional_costs_paid"], "note": "whether a Dragon was beheld is not recorded", "gen3_inputs": ["in.costs_paid"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

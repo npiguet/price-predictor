@@ -1,2 +1,2 @@
-{"id": "702.46a", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "Spirit is a subtype"}
-{"id": "702.46b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.46a", "output": "trained", "outputs": ["zone_outcome", "trigger_fired"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "Spirit is a subtype", "gen3_inputs": ["in.subtypes"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "702.46b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

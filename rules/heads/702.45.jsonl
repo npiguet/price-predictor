@@ -1,2 +1,2 @@
-{"id": "702.45a", "output": "trained", "outputs": ["power_delta", "toughness_delta", "pt_duration", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
-{"id": "702.45b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": ""}
+{"id": "702.45a", "output": "trained", "outputs": ["power_delta", "toughness_delta", "pt_duration", "trigger_fired"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "702.45b", "output": "trained", "outputs": ["trigger_fired"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

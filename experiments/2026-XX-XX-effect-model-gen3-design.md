@@ -768,7 +768,102 @@ same holds for a player losing the game, a permanent being copied, or day becomi
   and entering the battlefield from any zone reads as a blink. A card shuffled into its library, put
   on the bottom, or returned from the graveyard to the battlefield is labelled as something else.
 
-### Steps still to take, as the catalogue and the heads map set them
+### Step 3, the gen-3 fields: 34 new inputs and 22 new outputs make all but 77 rules learnable
+
+**Every name the heads map proposed is merged into one list of fields, each with a slot, a shape
+and a source.** The heads map named what each rule lacks one rule at a time, so it used many
+names for one thing. A choice remembered by a permanent appeared as chosen values, a linked
+choice and stored die results, for example. Each name now maps to one field, to one of the
+extensions or fixes, or to a reason it is left out. Each rule's line in `rules/heads/` carries the
+fields it needs and whether it is learnable once they are in. `rules/gen3-fields.json` holds the
+list and the merge, and `rules/GEN3-FIELDS.md` gives every field's shape and the rules it serves.
+
+| change | count |
+|---|---:|
+| new inputs | 34 |
+| new outputs | 22 |
+| existing inputs or outputs extended | 5 |
+| already planned in this record | 7 |
+| fixes to collection and curation | 2 |
+
+**With every change in, the model can learn three times as many rules as today.** The 77 left
+out need something the design leaves out on purpose.
+
+| rules | count |
+|---|---:|
+| learnable today | 505 |
+| learnable with every change above | 1,570 |
+| left out | 77 |
+
+#### The card slot takes the most new inputs, and seven only expose what the snapshot records
+
+**The 34 inputs fall into six places in the model's input.** A relation is a link between two
+slots, read as an attention bias of its own type, as the block-pairing section proposes for
+blockers.
+
+| where | inputs |
+|---|---|
+| card slot (16) | subtypes, face state, is a copy, name, is a token, pending-event details, mana cost, printed loyalty and defense, designations, Class level, Room doors unlocked, X paid, chosen values, costs paid, history, order rank |
+| relations (8) | attached to, attacks, targets, source of a stack object, soulbond pair, a battle's protector, exiled with, merged with |
+| player slot (6) | speed, city's blessing, dungeon and room, rad counters, monarch, initiative |
+| global slot (1) | day or night |
+| new slot kinds (2) | floating effects (shields, delayed triggers, cast permissions, restrictions), library cards an effect touches |
+| acting-ability slot (1) | die rolls and coin flips, taken as given |
+
+**Seven inputs need no new collection.** Subtypes, face state, whether a card is a copy, its name,
+whether it is a token, what it is attached to, what an attacker attacks and what a stack object
+targets are already in the snapshot. Pending-event details and a face-down card's real face are
+partly there.
+
+**Chosen values, history and subtypes are the inputs the most rules need.**
+
+| input | rules needing it | rules for which it is the only change |
+|---|---:|---:|
+| chosen values | 119 | 35 |
+| history | 91 | 29 |
+| subtypes | 90 | 14 |
+| designations | 61 | 15 |
+| face state | 57 | 21 |
+| floating effects | 57 | 30 |
+| costs paid | 45 | 20 |
+| library cards | 38 | 14 |
+
+Every line of a permanent, already planned, still leads all of them: 438 rules need it, and it is
+the only change for 166.
+
+#### The new outputs are each small, and most train on a field the records already carry
+
+**Copies, designation changes and the face a card ends on are the outputs the most rules need.**
+No new output serves more than 40 rules. A player winning or losing and a spell fizzling serve
+fewer, but for more of their rules they are the only change.
+
+| output | rules needing it | rules for which it is the only change |
+|---|---:|---:|
+| copies of spells and permanents | 40 | 4 |
+| designations changed | 39 | 4 |
+| face after a face change | 33 | 8 |
+| cost after adjustment | 30 | 3 |
+| player state changed (monarch, initiative, dungeon, speed) | 27 | 2 |
+| game result | 26 | 20 |
+| combat status changed | 20 | 7 |
+| resolution outcome | 18 | 10 |
+
+The other 14 outputs serve between 2 and 19 rules each. The five extensions change existing
+outputs and inputs. The largest is the zone outcome, which 64 rules need to tell apart the
+destinations it now merges. Sixteen of the 22 outputs need no new collection, because the
+records already carry the event or field they would be trained on, and four more need it only in
+part.
+
+#### The 77 rules left out are subgames, banding, casual variants and engine procedure
+
+**No left-out rule needs a field the design meant to keep.** Subgames and the restart of the game
+(Shahrazad, Karn Liberated) and controlling another player (Mindslaver) leave out 20 rules.
+Attractions, sideboards and other casual mechanics leave out 17, procedure in the middle of an
+action, such as the order of pending extra turns, 15, and banding 8. The rest are characteristics
+the input already shows with no change to predict, such as a colour derived from a mana cost, and
+a few names of one or two rules. A rule can fall in more than one group. `rules/GEN3-FIELDS.md` lists each with its reason.
+
+### Steps still to take, as the catalogue, the heads map and the gen-3 fields set them
 
 #### Each scenario specifies its rule's detector, and the detectors run over gen-2's corpus first
 

@@ -1,2 +1,2 @@
-{"id": "702.10b", "output": "trained", "outputs": ["attacker_legal"], "input": "complete", "inputs_missing": [], "note": ""}
-{"id": "702.10c", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": "Fervor's haste rides Prodigal Sorcerer's own keyword overlay, which lists every current keyword."}
+{"id": "702.10b", "output": "trained", "outputs": ["attacker_legal"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "702.10c", "output": "trained", "outputs": ["can_play"], "input": "complete", "inputs_missing": [], "note": "Fervor's haste rides Prodigal Sorcerer's own keyword overlay, which lists every current keyword.", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

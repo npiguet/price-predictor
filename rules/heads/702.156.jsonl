@@ -1,1 +1,1 @@
-{"id": "702.156a", "output": "trained", "outputs": ["counters_delta_p1p1", "trigger_fired", "cards_drawn"], "input": "incomplete", "inputs_missing": ["new:x_paid_on_permanent"], "note": ""}
+{"id": "702.156a", "output": "trained", "outputs": ["counters_delta_p1p1", "trigger_fired", "cards_drawn"], "input": "incomplete", "inputs_missing": ["new:x_paid_on_permanent"], "note": "", "gen3_inputs": ["in.x_paid"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

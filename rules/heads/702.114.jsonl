@@ -1,1 +1,1 @@
-{"id": "702.114a", "output": "trained", "outputs": ["colors_lost", "target_legal", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": "Colour is read from the current snapshot, so devoid needs no line."}
+{"id": "702.114a", "output": "trained", "outputs": ["colors_lost", "target_legal", "zone_outcome"], "input": "complete", "inputs_missing": [], "note": "Colour is read from the current snapshot, so devoid needs no line.", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

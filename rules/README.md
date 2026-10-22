@@ -28,6 +28,8 @@ survives, the spell resolves or fizzles, the trigger fires or does not.
 | `scenarios/<unit>.json` | phase 2: scenarios for the unit's mechanical and legality rules, with their variants | scenario agents |
 | `MODEL-FIELDS.md` | what the gen-2 effect model reads and is trained on, compiled from the code; the reference the heads pass checks against | by hand |
 | `heads/<unit>.jsonl` | heads pass: for each mechanical or legality rule, whether an output is trained on its outcome and which deciding facts the model does not read | heads agents (`scripts/rules_heads_workflow.js`) |
+| `gen3-fields.json` | the canonical gen-3 inputs, outputs, extensions, planned items and fixes, with every heads-pass name merged into one of them or dropped with a reason | by hand |
+| `GEN3-FIELDS.md` | each canonical field's slot, shape and source, and the rules it serves | `gen3-fields` |
 | `STATUS.md` | per-unit checklist and totals | `status` |
 | `FINDINGS.md` | implementation notes: the rules that need new record fields, by family; why rules were skipped; the writers' Forge notes by kind and the suspected Forge departures to test first; the verifier's error types; limits of the scenarios as written | by hand, from the sidecars |
 | `RUN-NOTES.md` | per chunk of units, what the scenario writer flagged (interactions whose outcome depends on Forge's implementation, rules skipped as unreachable) and what the verifier fixed | from the workflow results |
@@ -81,7 +83,13 @@ One line per rule whose category is `mechanical` or `legality` and whose observa
   `incomplete`; `inputs_missing` lists those facts tagged `snapshot:` (recorded, not read),
   `planned:` (planned in gen-3) or `new:` (not recorded).
 
-`validate --heads` checks completeness and the enums. Rerun the pass whenever the input layout or
+`gen3-fields` adds, from `gen3-fields.json`, the canonical ids each rule needs:
+`gen3_inputs`, `gen3_outputs` (new outputs, extensions and planned verdict columns),
+`gen3_fixes`, `gen3_dropped` (the names left out by design), and `learnable_after_gen3`. A name
+is looked up in its own role, so `new:text_change` as a missing input and as an output can map to
+different fields. Rerun it after editing either the registry or a heads line.
+
+`validate --heads` checks completeness, the enums and the gen-3 ids. Rerun the pass whenever the input layout or
 the heads change, to count what the change made learnable.
 
 ## Triage schema (`triage/<unit>.jsonl`)

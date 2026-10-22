@@ -1,2 +1,2 @@
-{"id": "114.2", "output": "missing", "outputs": ["new:emblem_created"], "input": "complete", "inputs_missing": [], "note": "Emblem count is an input only."}
-{"id": "114.4", "output": "trained", "outputs": ["trigger_fired", "power_delta", "toughness_delta"], "input": "incomplete", "inputs_missing": ["snapshot:emblem_abilities"], "note": ""}
+{"id": "114.2", "output": "missing", "outputs": ["new:emblem_created"], "input": "complete", "inputs_missing": [], "note": "Emblem count is an input only.", "gen3_inputs": [], "gen3_outputs": ["ext.created_objects"], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "114.4", "output": "trained", "outputs": ["trigger_fired", "power_delta", "toughness_delta"], "input": "incomplete", "inputs_missing": ["snapshot:emblem_abilities"], "note": "", "gen3_inputs": ["planned.every_line"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

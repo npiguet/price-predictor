@@ -1,2 +1,2 @@
-{"id": "702.191a", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:mana_spent"], "note": ""}
-{"id": "702.191b", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:mana_spent"], "note": "Skipped scenario."}
+{"id": "702.191a", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:mana_spent"], "note": "", "gen3_inputs": ["in.costs_paid"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "702.191b", "output": "trained", "outputs": ["trigger_fired", "counters_delta_p1p1"], "input": "incomplete", "inputs_missing": ["new:mana_spent"], "note": "Skipped scenario.", "gen3_inputs": ["in.costs_paid"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

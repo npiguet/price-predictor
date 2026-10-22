@@ -1,2 +1,2 @@
-{"id": "109.4b", "output": "trained", "outputs": ["life_delta"], "input": "complete", "inputs_missing": [], "note": ""}
-{"id": "109.5", "output": "trained", "outputs": ["power_delta", "toughness_delta", "cards_drawn"], "input": "complete", "inputs_missing": [], "note": "Benalish Marshal's static is the acting ability of its continuous record and its controller is read."}
+{"id": "109.4b", "output": "trained", "outputs": ["life_delta"], "input": "complete", "inputs_missing": [], "note": "", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "109.5", "output": "trained", "outputs": ["power_delta", "toughness_delta", "cards_drawn"], "input": "complete", "inputs_missing": [], "note": "Benalish Marshal's static is the acting ability of its continuous record and its controller is read.", "gen3_inputs": [], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

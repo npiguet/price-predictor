@@ -1,2 +1,2 @@
-{"id": "702.67a", "output": "trained", "outputs": ["attached_to_change"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "sorcery timing is planned:timing"}
-{"id": "702.67c", "output": "trained", "outputs": ["attached_to_change"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": ""}
+{"id": "702.67a", "output": "trained", "outputs": ["attached_to_change"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "sorcery timing is planned:timing", "gen3_inputs": ["in.subtypes"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
+{"id": "702.67c", "output": "trained", "outputs": ["attached_to_change"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes"], "note": "", "gen3_inputs": ["in.subtypes"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

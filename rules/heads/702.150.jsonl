@@ -1,1 +1,1 @@
-{"id": "702.150a", "output": "trained", "outputs": ["counters_delta_loyalty"], "input": "incomplete", "inputs_missing": ["new:mana_spent"], "note": "Life paid for Phyrexian symbols is not an input."}
+{"id": "702.150a", "output": "trained", "outputs": ["counters_delta_loyalty"], "input": "incomplete", "inputs_missing": ["new:mana_spent"], "note": "Life paid for Phyrexian symbols is not an input.", "gen3_inputs": ["in.costs_paid"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}

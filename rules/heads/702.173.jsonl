@@ -1,1 +1,1 @@
-{"id": "702.173a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:damage_sources_this_turn"], "note": ""}
+{"id": "702.173a", "output": "trained", "outputs": ["can_play", "affordable"], "input": "incomplete", "inputs_missing": ["snapshot:subtypes", "new:damage_sources_this_turn"], "note": "", "gen3_inputs": ["in.history", "in.subtypes"], "gen3_outputs": [], "gen3_fixes": [], "gen3_dropped": [], "learnable_after_gen3": true}
