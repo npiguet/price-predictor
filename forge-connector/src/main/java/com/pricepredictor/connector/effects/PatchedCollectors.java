@@ -36,7 +36,7 @@ import java.util.function.Supplier;
  */
 final class PatchedCollectors implements AutoCloseable {
 
-    private final AttributionMode mode;
+    private final CollectorContext context;
     private final RewriteChannel rewrites;
     private final TriggerChannel triggers;
     private final PlayabilityChannel playability;
@@ -61,7 +61,7 @@ final class PatchedCollectors implements AutoCloseable {
         LiveGame live = new LiveGame(game);
         RecordDedup dedup = new RecordDedup();
         Random sampler = new Random(GameRecording.scramble(seed));
-        this.mode = context.mode();
+        this.context = context;
         this.rewrites = new RewriteChannel(live, context, dedup);
         this.triggers = new TriggerChannel(
                 live, context, dedup, new TriggerNegativeSampler(sampler));
@@ -97,7 +97,7 @@ final class PatchedCollectors implements AutoCloseable {
      * @return how many were found
      */
     int install() {
-        if (mode == AttributionMode.DEGRADED) {
+        if (context.mode() == AttributionMode.DEGRADED) {
             return 0;
         }
         int installed = 0;
