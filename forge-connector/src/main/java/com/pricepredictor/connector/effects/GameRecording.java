@@ -4,6 +4,7 @@ import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.event.GameEventTurnPhase;
 
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -26,6 +27,10 @@ public final class GameRecording implements AutoCloseable {
     private final Game game;
     private final BusBracketCollector bracket;
     private final PatchedCollectors patched;
+    /** Stage three's forced resolutions, when the run takes any. */
+    private final Optional<InterventionScheduler> interventions;
+    /** Stage three's damage-step probes, when the run takes any. */
+    private final Optional<ProbeScheduler> probes;
 
     /**
      * Build one game's collectors.
@@ -47,17 +52,20 @@ public final class GameRecording implements AutoCloseable {
         // One context per collector, because each counts its own records.
         Supplier<CollectorContext> context =
                 () -> new CollectorContext(writer, gameId, mode, randomSeatPlayerId);
-        this.bracket = new BusBracketCollector(game, context.get());
         // Stage three. Nothing is copied unless a budget says so, because a
-        // fork costs a game copy and a stack resolution.
-        ForkCollector forks = caps.interventionsPerGame() > 0 || caps.probesEnabled()
-                ? new ForkCollector(game, context.get(), caps, seed)
-                : null;
-        this.patched = new PatchedCollectors(
-                game, context.get(), caps, seed, bracket, forks);
+        // fork costs a game copy and a stack resolution, and nothing on a
+        // stock checkout, where no fork could be attributed.
+        Optional<ForkCollector> forks = mode == AttributionMode.PATCHED
+                && (caps.interventionsPerGame() > 0 || caps.probesEnabled())
+                ? Optional.of(new ForkCollector(game, context.get(), caps, seed))
+                : Optional.empty();
+        this.interventions = forks.map(fork -> new InterventionScheduler(game, fork));
+        this.probes = forks.map(fork -> new ProbeScheduler(game, gameId, caps, fork));
         // A probe forks before the damage step and cannot know which combat
         // record it mirrors until that record is written.
-        bracket.onCombatRecord(patched::writeHeldProbes);
+        this.bracket = new BusBracketCollector(game, context.get(),
+                recordId -> probes.ifPresent(probe -> probe.writeHeldProbes(recordId)));
+        this.patched = new PatchedCollectors(game, context.get(), caps, seed, bracket);
     }
 
     /**
@@ -126,11 +134,11 @@ public final class GameRecording implements AutoCloseable {
         @Subscribe
         public void onPhase(GameEventTurnPhase event) {
             patched.collectContinuous();
-            patched.collectInterventions();
+            interventions.ifPresent(InterventionScheduler::collect);
             // Before the turn-based action that deals the damage: the phase
             // event fires ahead of it, which is the only moment a probe can
             // fork from a board where nothing has been dealt yet.
-            patched.collectProbes();
+            probes.ifPresent(ProbeScheduler::collect);
         }
     }
 }

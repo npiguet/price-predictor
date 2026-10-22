@@ -99,10 +99,11 @@ final class ShardRun {
         RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId));
+                    game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
+                    recordId -> { });
             try (PatchedCollectors collectors = new PatchedCollectors(
                     game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
-                    caps, SEED, bracket, null)) {
+                    caps, SEED, bracket)) {
                 body.run(bracket, collectors);
             }
         } finally {
@@ -187,7 +188,7 @@ final class ShardRun {
         boolean wrote;
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, TestCollectors.context(writer, GAME_ID), caps, SEED,
-                TestCollectors.bracket(game, writer, GAME_ID), null)) {
+                TestCollectors.bracket(game, writer, GAME_ID))) {
             collectors.install();
             wrote = new ForkCollector(game, TestCollectors.context(writer, GAME_ID), caps, seed)
                     .intervene(ability, 1);

@@ -186,25 +186,25 @@ public final class BusBracketCollector extends BusEventReader {
     private boolean bracketDeclined;
 
     /** Told each combat record's id, for a probe that mirrors it. */
-    private java.util.function.Consumer<String> onCombatRecord;
+    private final java.util.function.Consumer<String> onCombatRecord;
 
-    BusBracketCollector(Game game, CollectorContext context) {
+    /**
+     * @param onCombatRecord told the id of each {@code combat} record as it is
+     *                       written. A damage-step probe forks before the step
+     *                       and cannot know what it mirrors until the real
+     *                       record exists, so the pairing is handed over
+     *                       rather than reconstructed. Reconstructing it from
+     *                       board state would not work: two combats in one
+     *                       turn can look identical, and a wrong pairing makes
+     *                       the difference between them meaningless.
+     */
+    BusBracketCollector(
+            Game game, CollectorContext context,
+            java.util.function.Consumer<String> onCombatRecord) {
         super(game);
         this.context = context;
         this.snapshots = new SnapshotBuilder(game);
-    }
-
-    /**
-     * Be told the id of each {@code combat} record as it is written.
-     *
-     * <p>A damage-step probe forks before the step and cannot know what it
-     * mirrors until the real record exists, so the pairing is handed over here
-     * rather than reconstructed. Reconstructing it from board state would not
-     * work: two combats in one turn can look identical, and a wrong pairing
-     * makes the difference between them meaningless.
-     */
-    public void onCombatRecord(java.util.function.Consumer<String> listener) {
-        this.onCombatRecord = listener;
+        this.onCombatRecord = onCombatRecord;
     }
 
     // ── brackets ────────────────────────────────────────────────────────
@@ -1054,9 +1054,7 @@ public final class BusBracketCollector extends BusEventReader {
         // A damage-step probe forked before this step and has been holding its
         // branch since: it needs this record's id to say which combat it
         // mirrors, and the id does not exist until the record is written.
-        if (onCombatRecord != null) {
-            onCombatRecord.accept(record.recordId());
-        }
+        onCombatRecord.accept(record.recordId());
         combatEvents.clear();
         combatShape = CombatShape.empty();
         combatState = null;

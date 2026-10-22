@@ -364,7 +364,8 @@ class RecordCharacterizationTest {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {
             BusBracketCollector bracket = new BusBracketCollector(board.game,
-                    new CollectorContext(writer, GAME_ID, AttributionMode.DEGRADED, null));
+                    new CollectorContext(writer, GAME_ID, AttributionMode.DEGRADED, null),
+                    recordId -> { });
             board.game.subscribeToEvents(bracket);
             bracket.beginBracket(charm);
             board.game.fireEvent(new GameEventCardDamaged(
@@ -411,15 +412,22 @@ class RecordCharacterizationTest {
         board.game.getPhaseHandler().setCombat(combat);
         CollectionCaps caps = new CollectionCaps(1, 1.0, 0, 1, List.of("trample"), 0.0, 0.0);
 
-        List<String> records = records(board, caps, (bracket, collectors) -> {
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        try {
+            ProbeScheduler probing = new ProbeScheduler(board.game, GAME_ID, caps,
+                    new ForkCollector(board.game, TestCollectors.context(writer, GAME_ID), caps, 1L));
+            BusBracketCollector bracket = new BusBracketCollector(
+                    board.game, TestCollectors.context(writer, GAME_ID), probing::writeHeldProbes);
             board.game.subscribeToEvents(bracket);
-            bracket.onCombatRecord(collectors::writeHeldProbes);
-            collectors.collectProbes();
+            probing.collect();
             assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
             combat.dealAssignedDamage();
             board.game.getAction().checkStateEffects(false);
             board.game.fireEvent(new GameEventTurnPhase(you, PhaseType.COMBAT_END, ""));
-        });
+        } finally {
+            writer.close();
+        }
+        List<String> records = ShardRun.readShard(writer.path());
 
         List<String> observed = new ArrayList<>();
         List<String> probes = new ArrayList<>();
@@ -482,14 +490,11 @@ class RecordCharacterizationTest {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {
             BusBracketCollector bracket = new BusBracketCollector(
-                    board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId));
-            ForkCollector forks = caps.interventionsPerGame() > 0 || caps.probesEnabled()
-                    ? new ForkCollector(board.game,
-                            TestCollectors.context(writer, GAME_ID, randomSeatPlayerId), caps, 1L)
-                    : null;
+                    board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
+                    recordId -> { });
             try (PatchedCollectors collectors = new PatchedCollectors(
                     board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
-                    caps, 1L, bracket, forks)) {
+                    caps, 1L, bracket)) {
                 body.run(bracket, collectors);
             }
         } finally {

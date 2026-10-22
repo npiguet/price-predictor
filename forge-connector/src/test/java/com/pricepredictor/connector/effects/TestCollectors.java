@@ -40,7 +40,7 @@ final class TestCollectors {
 
     /** A bracket writing to {@code writer}, which nothing is told a combat record of. */
     static BusBracketCollector bracket(Game game, RecordShardWriter writer, String gameId) {
-        return new BusBracketCollector(game, context(writer, gameId));
+        return new BusBracketCollector(game, context(writer, gameId), recordId -> { });
     }
 
     /**
@@ -52,7 +52,7 @@ final class TestCollectors {
      */
     static PatchedCollectors unwired(CollectionCaps caps) {
         return new PatchedCollectors(
-                null, context(null, "game-1"), caps, 42L, bracket(null, null, "game-1"), null);
+                null, context(null, "game-1"), caps, 42L, bracket(null, null, "game-1"));
     }
 
     /**
@@ -68,7 +68,7 @@ final class TestCollectors {
         RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
         return new PatchedCollectors(
                 game, context(writer, "run.0-l1.0"), CollectionCaps.defaults(), 1L,
-                bracket(game, writer, "run.0-l1.0"), null);
+                bracket(game, writer, "run.0-l1.0"));
     }
 
     /**

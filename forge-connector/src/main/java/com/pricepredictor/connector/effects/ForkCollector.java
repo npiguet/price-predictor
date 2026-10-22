@@ -203,7 +203,7 @@ public final class ForkCollector {
         // would have made every probe silently decline here.
         if (keyword == null || probeKeywords.isEmpty()
                 || !probeKeywords.contains(
-                        PatchedCollectors.normalizeKeyword(keyword))) {
+                        ProbeScheduler.normalizeKeyword(keyword))) {
             return false;
         }
         return probesUsed < probesPerGame;
@@ -685,7 +685,7 @@ public final class ForkCollector {
                 return null;
             }
             return new HeldProbe(
-                    PatchedCollectors.normalizeKeyword(keyword),
+                    ProbeScheduler.normalizeKeyword(keyword),
                     SnapshotBuilder.entityId(carrier), state, sink.events(),
                     SnapshotBuilder.playerId(perspective), shape.fields(),
                     step,
