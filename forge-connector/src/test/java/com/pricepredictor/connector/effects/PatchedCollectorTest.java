@@ -32,6 +32,7 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -1857,9 +1858,7 @@ class PatchedCollectorTest {
     void theOutcomeStandInIsForgesOwnDeclaration() {
         PatchHooks.Lookup setter = PatchHooks.find(
                 PatchHooks.EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener");
-        if (!setter.present()) {
-            return;
-        }
+        Assumptions.assumeTrue(setter.present(), "the checkout lacks the outcome hook");
         Class<?> declared = setter.method().getParameterTypes()[0];
         Class<?>[] theirs = methodNamed(declared, "onOutcome").getParameterTypes();
         Class<?>[] ours = methodNamed(OutcomeListenerShape.class, "onOutcome").getParameterTypes();
@@ -2478,12 +2477,7 @@ class PatchedCollectorTest {
                             }
                             return null;
                         });
-                if (!installed) {
-                    // Reflective, so an unpatched checkout skips the assertion
-                    // rather than failing it -- the same degradation every
-                    // other hook lookup in this suite makes.
-                    return;
-                }
+                Assumptions.assumeTrue(installed, "the checkout lacks the clause hook");
                 try {
                     AbilityUtils.resolve(forkAbility);
                 } finally {
@@ -2544,9 +2538,7 @@ class PatchedCollectorTest {
                             }
                             return null;
                         });
-                if (!installed) {
-                    return;
-                }
+                Assumptions.assumeTrue(installed, "the checkout lacks the clause hook");
                 try {
                     AbilityUtils.resolve(liveAbility);
                 } finally {
