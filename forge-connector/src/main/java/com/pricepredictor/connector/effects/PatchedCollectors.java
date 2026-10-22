@@ -115,7 +115,6 @@ public final class PatchedCollectors implements AutoCloseable {
             int interventionsPerGame,
             int probesPerGame,
             List<String> probeKeywords,
-            double legalityRate,
             double randomSeatShare,
             double randomSeatProbability) {
 
@@ -125,15 +124,14 @@ public final class PatchedCollectors implements AutoCloseable {
                 double playabilityRate,
                 int interventionsPerGame,
                 int probesPerGame,
-                List<String> probeKeywords,
-                double legalityRate) {
+                List<String> probeKeywords) {
             this(manaCap, playabilityRate, interventionsPerGame, probesPerGame,
-                    probeKeywords, legalityRate, 0.0, 0.0);
+                    probeKeywords, 0.0, 0.0);
         }
 
         public static CollectionCaps defaults() {
             return new CollectionCaps(
-                    1, 0.1, 2, 2, List.of(), 0.0, 0.0, 0.0);
+                    1, 0.1, 2, 2, List.of(), 0.0, 0.0);
         }
 
         /**
@@ -152,7 +150,6 @@ public final class PatchedCollectors implements AutoCloseable {
                             defaults.interventionsPerGame()),
                     intProperty("effect.probes.per.game", defaults.probesPerGame()),
                     listProperty("effect.probe.keywords"),
-                    doubleProperty("effect.legality.rate", defaults.legalityRate()),
                     // The random seat's two knobs (FR-021). A share of matches
                     // and a per-decision P: both are drawn in the JVM, so the
                     // supervisor can only name them. The Python side refuses a

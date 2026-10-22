@@ -18,7 +18,6 @@ import pytest
 
 from effects.domain.collection_caps import (
     DEFAULT_INTERVENTIONS_PER_GAME,
-    DEFAULT_LEGALITY_RATE,
     DEFAULT_MANA_CAP,
     DEFAULT_PLAYABILITY_RATE,
     DEFAULT_PROBE_KEYWORDS,
@@ -31,7 +30,6 @@ from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
 from effects.infrastructure.cli import announce_probe_state as effects_announce
 from sealed.infrastructure.cli import (
     EFFECT_INTERVENTIONS_PER_GAME,
-    EFFECT_LEGALITY_RATE,
     EFFECT_MANA_CAP,
     EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBE_KEYWORDS,
@@ -104,7 +102,6 @@ class TestTheTwoSidesAgree:
         assert EFFECT_INTERVENTIONS_PER_GAME == DEFAULT_INTERVENTIONS_PER_GAME
         assert EFFECT_PROBES_PER_GAME == DEFAULT_PROBES_PER_GAME
         assert EFFECT_PROBE_KEYWORDS == CollectionCaps().probe_keywords
-        assert EFFECT_LEGALITY_RATE == DEFAULT_LEGALITY_RATE
         assert EFFECT_RANDOM_SEAT_SHARE == DEFAULT_RANDOM_SEAT_SHARE
         assert EFFECT_RANDOM_SEAT_PROBABILITY == DEFAULT_RANDOM_SEAT_PROBABILITY
 
@@ -131,7 +128,6 @@ class TestPropertyNames:
         assert "effect.mana.cap" in properties
         assert "effect.interventions.per.game" in properties
         assert "effect.probe.keywords" in properties
-        assert "effect.legality.rate" in properties
 
     def test_values_are_strings(self):
         """They become -D arguments, so a non-string would stringify later and
@@ -180,12 +176,9 @@ _JAVA_CAPS = (
 class TestTheJvmReadsExactlyWhatThePythonSideWrites:
     """The caps the worker reads and the caps a supervisor can set are one set.
 
-    They were not. ``effect.legality.rate`` was read by
-    ``CollectionCaps.fromSystemProperties`` and settable by no command, so the
-    legality sampler ran at a rate a javadoc called ``--legality-rate``, a flag
-    that did not exist.
     A property one side reads and the other never writes is invisible from
-    both.
+    both: the worker runs at its default, or the flag does nothing, and no
+    record says so.
     """
 
     def _java_property_names(self) -> set[str]:
@@ -222,17 +215,6 @@ class TestNoSnapshotDepthKnob:
         assert "effect.snapshot.tiers" not in _effect_collection_caps(
             argparse.Namespace()
         )
-
-
-class TestTheLegalityRate:
-    def test_what_if_queries_are_off_by_default(self):
-        """Real declarations are written whatever the rate; the rate keeps
-        only what-ifs, which are oversampled by how often the AI re-asks."""
-        assert CollectionCaps().legality_rate == DEFAULT_LEGALITY_RATE == 0.0
-
-    def test_it_reaches_the_property_the_worker_samples_from(self):
-        properties = CollectionCaps(legality_rate=0.25).as_system_properties()
-        assert properties["effect.legality.rate"] == "0.25"
 
 
 class TestTheRandomSeat:

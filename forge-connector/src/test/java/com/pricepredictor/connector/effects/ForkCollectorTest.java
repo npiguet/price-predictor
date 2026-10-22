@@ -55,7 +55,7 @@ class ForkCollectorTest {
     private static CollectionCaps caps(
             int interventions, int probes, List<String> keywords) {
         return new CollectionCaps(
-                2000, 0.1, interventions, probes, keywords, 0.1);
+                2000, 0.1, interventions, probes, keywords);
     }
 
     private ForkCollector collector(CollectionCaps caps) {

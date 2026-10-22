@@ -75,14 +75,13 @@ class TestSharedCapFlags:
             "first_strike,double_strike,deathtouch,lifelink,trample,"
             "indestructible,wither,infect"
         )
-        assert args.legality_rate == 0.0
 
     def test_the_constants_and_the_parsed_defaults_agree(self):
         """Every cap in the table, not a list this test has to be told about.
 
         Spelled out one by one, a cap added to `CollectionCaps` and to only one
-        of the two parsers passed here — which is how `legality_rate` came to
-        be readable by the JVM and settable by nobody.
+        of the two parsers would pass here, readable by the JVM and settable by
+        nobody.
         """
         args = parse("collect-coverage")
         for name, default in CAP_DEFAULTS.items():
@@ -110,12 +109,11 @@ class TestSharedCapFlags:
         args = parse(
             "collect-coverage",
             "--mana-cap", "10", "--playability-rate", "1.0",
-            "--probe-keywords", "wither", "--legality-rate", "0.25",
+            "--probe-keywords", "wither",
         )
         assert args.mana_cap == 10
         assert args.playability_rate == 1.0
         assert args.probe_keywords == "wither"
-        assert args.legality_rate == 0.25
 
 
 class TestNoSnapshotTierFlag:

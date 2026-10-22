@@ -582,7 +582,7 @@ class StateBasedDeathTest {
             assertNotNull(charm);
             charm.setActivatingPlayer(caster);
             CollectionCaps caps = new CollectionCaps(
-                    2000, 0.1, 2, 0, List.of(), 0.1);
+                    2000, 0.1, 2, 0, List.of());
 
             Path dir = tempDir.resolve("fork-" + seed);
             RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
@@ -787,7 +787,7 @@ class StateBasedDeathTest {
         // A one-creature board: the fork's random target draw has bears or a
         // player to choose from, so try seeds until one picks the bears.
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 50, 0, List.of(), 0.1);
+                2000, 0.1, 50, 0, List.of());
 
         RecordShardWriter writer = writer();
         try (PatchedCollectors patched = new PatchedCollectors(

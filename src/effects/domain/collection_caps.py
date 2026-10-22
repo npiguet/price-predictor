@@ -33,10 +33,6 @@ DEFAULT_PROBES_PER_GAME = 2
 #: Every damage-step keyword gate 2 checks, in its table's order and spelling,
 #: which is the spelling the JVM compares a normalized Forge keyword against.
 DEFAULT_PROBE_KEYWORDS = ",".join(row.keyword for row in DAMAGE_STEP_KEYWORDS)
-#: Share of what-if legality queries kept; real decisions are always written.
-#: Off: the AI re-asks one combat many times while planning, so a query is
-#: kept in proportion to how long the AI deliberated over its board.
-DEFAULT_LEGALITY_RATE = 0.0
 #: Share of matches with one random seat (FR-021). Off unless a run asks.
 DEFAULT_RANDOM_SEAT_SHARE = 0.0
 #: The random seat's ``P``. No default a run could rely on: a share above zero
@@ -66,11 +62,6 @@ class CollectionCaps:
     #: state — the runtime switch is deliberately separate from the build
     #: decision gate 2 drives.
     probe_keywords: str = DEFAULT_PROBE_KEYWORDS
-    #: Share of the `legality` playability subkinds kept, sampled *after* the
-    #: dedup so a coalesced answer is not counted twice. Its own rate rather
-    #: than `playability_rate`'s, because the two subkinds arrive at wildly
-    #: different volumes from the same priority pass.
-    legality_rate: float = DEFAULT_LEGALITY_RATE
     #: Share of matches in which one seat, chosen at random per match, is the
     #: random seat (FR-021). Per worker for the same reason as every cap: the
     #: match draw happens in the JVM.

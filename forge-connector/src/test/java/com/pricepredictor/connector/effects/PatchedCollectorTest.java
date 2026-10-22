@@ -80,8 +80,7 @@ class PatchedCollectorTest {
 
     private static CollectionCaps caps(int manaCap, double playabilityRate) {
         return new CollectionCaps(
-                manaCap, playabilityRate, 2, 2, List.of(),
-                CollectionCaps.defaults().legalityRate());
+                manaCap, playabilityRate, 2, 2, List.of());
     }
 
     private static PatchedCollectors collectors(CollectionCaps caps) {
@@ -106,9 +105,6 @@ class PatchedCollectorTest {
         // A worker started without the property probes nothing; the eight
         // keywords a run probes by default are the supervisor's to send.
         assertTrue(defaults.probeKeywords().isEmpty());
-        // What-if legality queries are off: real decisions are written
-        // whatever the rate, and they alone fill the legality class.
-        assertEquals(0.0, defaults.legalityRate());
     }
 
     /**
@@ -125,8 +121,7 @@ class PatchedCollectorTest {
                 "effect.playability.rate", "0.5",
                 "effect.interventions.per.game", "3",
                 "effect.probes.per.game", "4",
-                "effect.probe.keywords", "wither, infect",
-                "effect.legality.rate", "0.25");
+                "effect.probe.keywords", "wither, infect");
         properties.forEach(System::setProperty);
         try {
             CollectionCaps caps = CollectionCaps.fromSystemProperties();
@@ -135,7 +130,6 @@ class PatchedCollectorTest {
             assertEquals(3, caps.interventionsPerGame());
             assertEquals(4, caps.probesPerGame());
             assertEquals(List.of("wither", "infect"), caps.probeKeywords());
-            assertEquals(0.25, caps.legalityRate());
         } finally {
             properties.keySet().forEach(System::clearProperty);
         }
@@ -165,7 +159,7 @@ class PatchedCollectorTest {
     void probesAreOffUntilKeywordsAreNamed() {
         assertFalse(CollectionCaps.defaults().probesEnabled());
         assertTrue(new CollectionCaps(
-                2000, 0.1, 2, 2, List.of("wither"), 0.1)
+                2000, 0.1, 2, 2, List.of("wither"))
                 .probesEnabled());
     }
 
@@ -1370,7 +1364,7 @@ class PatchedCollectorTest {
 
     private PatchedCollectors withForks(RecordShardWriter writer) {
         CollectionCaps probing = new CollectionCaps(
-                1, 1.0, 2, 2, List.of("trample"), 0.1);
+                1, 1.0, 2, 2, List.of("trample"));
         PatchedCollectors collector = new PatchedCollectors(
                 TestCards.game(), writer, "run.0-l1.0", probing, 1L);
         collector.withForks(
@@ -3022,7 +3016,7 @@ class PatchedCollectorTest {
         CollectionCaps halfRate = new CollectionCaps(
                 CollectionCaps.defaults().manaCap(), 0.5,
                 CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().legalityRate());
+                CollectionCaps.defaults().probeKeywords());
 
         RecordShardWriter soloWriter = new RecordShardWriter(tempDir, "solo", 0, "l1");
         Path soloPath = soloWriter.path();

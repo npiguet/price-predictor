@@ -428,7 +428,7 @@ class RandomSeatControllerTest {
     @Test
     void closeToOneMatchInEightSeatsARandomPlayerOnEitherSide() {
         CollectionCaps caps = new CollectionCaps(
-                1, 0.1, 2, 2, List.of(), 0.1, 0.125, 0.5);
+                1, 0.1, 2, 2, List.of(), 0.125, 0.5);
         Random random = new Random(11L);
         int draws = 40_000;
         int a = 0;
