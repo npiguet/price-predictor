@@ -10,8 +10,10 @@ To regenerate, from the repository root:
 ```
 python scripts/effect_gen2_report/build_data.py     # data/ from models/effects/runs/
 python scripts/effect_gen2_report/make_charts.py    # the data charts, from data/ alone
-python scripts/effect_gen2_report/make_diagrams.py  # the four diagrams, which read no data
+python scripts/effect_gen2_report/make_diagrams.py  # the six diagrams, which read no data
 ```
+
+Both drawing scripts also take function names on the command line and then redraw only those charts or diagrams, as in `make_charts.py ping_deaths`.
 
 `build_data.py` reads the run directories under `models/effects/runs/`, which are not in the repository. A run that does not exist yet is skipped, so re-running it as the sweep continues adds the new runs. Figures that exist only in the records' text are kept in `scripts/effect_gen2_report/transcribed.py`, each block naming where it was measured.
 
@@ -56,12 +58,13 @@ Every data chart uses one visual language. Colour is the width of `e`: blue 64, 
 | `zone_amounts.csv` | checkpoint and API: predicted count at the affected player for `NumCards$` 1 to 6 | `zone-effects.txt` |
 | `zone_who.csv` | checkpoint and API: predicted count at the targeted and the other player, before and after the target is handed over | `zone-effects.txt` |
 | `noise_pilot.csv`, `pilot_collections.csv`, `first_strike_repair.csv`, `lethal_hits_in_corpus.csv`, `gen1_vs_e64_field_terms.csv`, `legality_planned_blocks.csv`, `hook_defects_in_corpus.csv` | the smaller tables of the gen-2 record's details and its gen-1 comparison | transcribed |
+| `rule_families.csv` | rule family in the rarity table of gen-1's corpus: distinct texts and games | transcribed from the gen-2 record's design section |
 
 Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, `1` the board plus `e`, `1w` a random vector of the same width, `1o` the true script values, `2` the trunk's output, `3` the model's own prediction (probe `model`).
 
 ## Charts
 
-`make_charts.py` draws every data chart below, and `make_diagrams.py` the four diagrams.
+`make_charts.py` draws every data chart below, and `make_diagrams.py` the six diagrams.
 
 | chart | shows | data |
 |---|---|---|
@@ -73,24 +76,32 @@ Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, 
 | `fields-explained.png` | explained deviance by epoch for six fields | `fields_by_epoch.csv` |
 | `damage-grids.png` | damage-by-toughness grids, with each panel's error against the rule | `damage_grids.csv` |
 | `toughness-sweep-records.png` | toughness sweep by damage group: range of records as a band, median as a line | `sweep_records.csv`, `toughness_sweep_records.csv` |
+| `lethal-hits.png` | lethal and not-lethal hits by kind of damage in 40 training shards | `lethal_hits_in_corpus.csv` |
+| `ping-deaths.png` | each checkpoint's predicted death of a toughness-1 creature under four activated pings | `sweep_records.csv`, `toughness_sweep_records.csv` |
 | `boundary-by-epoch.png` | predicted death given affected, for hits lethal by one, exactly lethal and short by one, per epoch | `boundary_by_epoch.csv` |
 | `damage-sweep.png` | the damage sweep for every checkpoint, with the wrong side of the rule shaded | `sweeps.csv` |
-| `ping-gate-edits.png` | the gate at a ping's targeted creature under six edits, four checkpoints | `ping_gate_edits.csv` |
+| `damage-sweep-triggered.png` | the damage sweep on a triggered ability, whose amount sits in the line it executes | `sweeps.csv` |
+| `ping-gate-edits.png` | the affected gate at a ping's targeted creature under six edits, each from the record as collected, four checkpoints | `ping_gate_edits.csv` |
 | `combat-grids.png` | combat grids of B64 last: plain deaths, and the change with deathtouch and with first strike | `combat_grids.csv` |
 | `combat-keywords.png` | the share of the rule's change each combat keyword produces, per checkpoint | `combat_grids.csv` |
 | `gate2-keywords.png` | gate 2 agreement by keyword and checkpoint, against the sampling noise at each row's median | `gate2.csv` |
 | `width.png` | losses, probe mean and participation ratio across the three stages, per width | `checkpoints.csv`, `probe_ladder.csv`, `gate3.csv` |
-| `scorecard.png` | thirteen measures by seventeen checkpoints, coloured by rank, with a mean rank | `checkpoints.csv`, `probe_ladder.csv`, `damage_grids.csv`, `sweeps.csv`, `sweep_records.csv`, `gate2.csv`, `evasion_ranking.csv`, `colour_pips_ranking.csv`, `zone_amounts.csv`, `zone_who.csv`, `target_flips.csv` |
+| `scorecard.png` | thirteen measures by seventeen checkpoints, coloured by how far each goes toward the rule, with each checkpoint's mean distance toward it | `checkpoints.csv`, `probe_ladder.csv`, `damage_grids.csv`, `sweeps.csv`, `sweep_records.csv`, `gate2.csv`, `evasion_ranking.csv`, `colour_pips_ranking.csv`, `zone_amounts.csv`, `zone_who.csv`, `target_flips.csv` |
 | `planned-block-labels.png` | shares of the "may not block" labels and block records that reflect the AI's block plan | `legality_planned_blocks.csv` |
+| `embedding-probes.png` | linear probes on `e` for gen-1 and every gen-2 checkpoint, and each checkpoint's participation ratio | `embedding_probes.csv`, `gate3.csv` |
+| `gen1-vs-first-arm.png` | the shared field terms by epoch for gen-1 and the two `e64` runs, and the gap at epoch 18 by field | `fields_by_epoch.csv` |
+| `noise-pilot.png` | the stage-0 noise pilots: validation measures and the shape of `e` at three noise ratios | `noise_pilot.csv`, `gate3.csv` |
+| `rule-families.png` | distinct texts and games per rule family in gen-1's corpus | `rule_families.csv` |
 | `probe-ladder.png` | the read-out ladder per board target, and the share `e` closes | `probe_ladder.csv` |
 | `e-over-random.png` | rung 1 minus rung 1w: what `e` adds over a random vector of its width, per target and checkpoint | `probe_ladder.csv` |
-| `line-properties.png` | line properties read from `e` alone, trained and held-out lines | `probe_ladder.csv` |
+| `line-properties.png` | line properties and the outcome spread across boards read from `e` alone, trained and held-out lines | `probe_ladder.csv` |
 | `board-abilities.png` | loss on restricted records over loss on unrestricted controls, per checkpoint | `board_abilities.csv` |
 | `ablation.png` | loss increase when `e` is replaced, by replacement and scope | `ablation.csv` |
+| `share-vs-reliance.png` | the share `e` carries against the trunk's reliance on the acting ability's `e`, per board question | `probe_ladder.csv`, `ablation.csv` |
 | `other-sweeps.png` | affordability sweep and board-size sweep | `sweeps.csv` |
 | `evasion-grid.png` | median lift in predicted block legality by attacker keyword and blocker trait, rule-allowed cells marked | `evasion_grid.csv` |
 | `evasion-ranking.png` | ranking AUC per attacker keyword across checkpoints | `evasion_ranking.csv` |
-| `target-flips.png` | predicted target legality before and after breaking a restriction's condition | `target_flips.csv` |
+| `target-flips.png` | the change in predicted target legality when a restriction's condition is broken | `target_flips.csv` |
 | `colour-pips.png` | change in the affordable verdict from the exact board per land configuration, and the ranking AUCs | `colour_pips.csv`, `colour_pips_ranking.csv` |
 | `zone-outcomes.png` | share of moved cards whose most probable destination is right, by starting zone and destination | `zone_outcomes.csv` |
 | `zone-amounts.png` | predicted cards at the affected player as `NumCards$` runs from 1 to 6 | `zone_amounts.csv` |
@@ -102,3 +113,5 @@ Rung names in `probe_ladder.csv` follow the probes record: `0` the board alone, 
 | `diagram-validation-strata.png` | how whole games are split into training and the two validation strata |
 | `diagram-combat-step.png` | one combat's two damage steps, what a gen-2 combat record captured, and the collector defects |
 | `diagram-encoder-reads.png` | what the encoder reads for a trigger, a chain and a charm, gen-1 against gen-2 |
+| `diagram-design-changes.png` | gen-2's pipeline from the Forge scripts to the evaluation, each design change under the stage where it acts |
+| `diagram-noise-shapes.png` | the training noise on one `e` under each noise option the design weighed, on a schematic cloud of `e` vectors |
