@@ -82,7 +82,7 @@ public class VariantSidecarMain {
      * every deck of 23 nonlands holds at least one and the round collects
      * nearly nothing while every worker dies on it.
      *
-     * <p>The lookup is the one {@code MatchGenerator.materializeDeck} uses, so
+     * <p>The lookup is the one {@code DeckMaterializer.resolve} uses, so
      * a name on this list is a name that will resolve there.
      *
      * @return how many of the variant scripts Forge accepted

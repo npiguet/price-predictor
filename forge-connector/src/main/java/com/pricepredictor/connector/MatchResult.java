@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -60,6 +61,25 @@ public record MatchResult(
             throw new IllegalArgumentException(
                     "durationSeconds must be non-negative, got " + durationSeconds);
         }
+    }
+
+    /**
+     * Format this result as one line of {@code match-outcomes.txt}: ten
+     * semicolon-separated fields,
+     * {@code timestamp;run_id;set_code;method_A;method_B;deck_A;deck_B;games;play;duration_s},
+     * the two decks as pipe-separated card names.
+     */
+    public String toLine() {
+        return DateTimeFormatter.ISO_INSTANT.format(timestamp)
+                + ";" + runId
+                + ";" + setCode
+                + ";" + methodA
+                + ";" + methodB
+                + ";" + CardNameList.format(deckA)
+                + ";" + CardNameList.format(deckB)
+                + ";" + games
+                + ";" + play
+                + ";" + durationSeconds;
     }
 
     /** Count of games won by deck A, derived from {@link #games}. */

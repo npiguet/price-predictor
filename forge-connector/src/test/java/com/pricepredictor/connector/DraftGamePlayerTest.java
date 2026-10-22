@@ -9,9 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * Unit tests for the pieces of {@link DraftGamePlayer} that do not need a live
- * Forge game: the per-game sequences a match-outcome row is built from, and the
- * row's field bindings.
+ * Unit tests for the pieces of a draft-game row that do not need a live Forge
+ * game: the per-game sequences {@link GamePlayer.PlayedMatch} gives the row,
+ * and the row's field bindings.
  *
  * <p>Playing an actual match needs an initialised Forge environment and belongs
  * to the integration profile.
@@ -30,14 +30,12 @@ class DraftGamePlayerTest {
 
     @Test
     void winnerSequenceIsOneCharPerGame() {
-        assertEquals("ABA", DraftGamePlayer.winnerSequence(
-                match(game("A", "A"), game("B", "B"), game("A", "A"))));
+        assertEquals("ABA", match(game("A", "A"), game("B", "B"), game("A", "A")).winnerSequence());
     }
 
     @Test
     void playSequenceIsOneCharPerGame() {
-        assertEquals("BAB", DraftGamePlayer.playSequence(
-                match(game("A", "B"), game("B", "A"), game("A", "B"))));
+        assertEquals("BAB", match(game("A", "B"), game("B", "A"), game("A", "B")).playSequence());
     }
 
     @Test
@@ -45,13 +43,13 @@ class DraftGamePlayerTest {
         GamePlayer.PlayedMatch played = match(game("A", "B"), game("A", "A"));
 
         assertEquals(
-                DraftGamePlayer.winnerSequence(played).length(),
-                DraftGamePlayer.playSequence(played).length());
+                played.winnerSequence().length(),
+                played.playSequence().length());
     }
 
     @Test
     void aBestOfOneMatchIsASingleChar() {
-        assertEquals("B", DraftGamePlayer.winnerSequence(match(game("B", "A"))));
+        assertEquals("B", match(game("B", "A")).winnerSequence());
     }
 
     // ── Row construction ────────────────────────────────────────────
@@ -68,8 +66,8 @@ class DraftGamePlayerTest {
                 "forge-native",
                 List.of("Forest", "Island"),
                 List.of("Mountain", "Plains"),
-                DraftGamePlayer.winnerSequence(played),
-                DraftGamePlayer.playSequence(played),
+                played.winnerSequence(),
+                played.playSequence(),
                 played.durationSeconds());
 
         assertEquals("gen4", result.methodA());
@@ -89,12 +87,13 @@ class DraftGamePlayerTest {
                 Instant.parse("2026-08-11T00:00:00Z"),
                 "eval-1", "BLB", "gen4", "gen1",
                 List.of("Forest"), List.of("Island"),
-                DraftGamePlayer.winnerSequence(played),
-                DraftGamePlayer.playSequence(played),
+                played.winnerSequence(),
+                played.playSequence(),
                 played.durationSeconds());
 
-        assertEquals(2, result.winsA());
-        assertEquals(1, result.winsB());
+        assertEquals(2, played.winsA());
+        assertEquals(1, played.winsB());
+        assertEquals("ABA", result.games());
     }
 
     @Test
@@ -107,8 +106,8 @@ class DraftGamePlayerTest {
                 Instant.parse("2026-08-11T00:00:00Z"),
                 "eval-1", "BLB", "gen4", "gen1",
                 List.of("Forest"), List.of("Island"),
-                DraftGamePlayer.winnerSequence(empty),
-                DraftGamePlayer.playSequence(empty),
+                empty.winnerSequence(),
+                empty.playSequence(),
                 empty.durationSeconds()));
     }
 }

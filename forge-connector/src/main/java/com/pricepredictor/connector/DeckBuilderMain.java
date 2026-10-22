@@ -1,17 +1,13 @@
 package com.pricepredictor.connector;
 
 import forge.deck.Deck;
-import forge.deck.DeckSection;
 import forge.item.PaperCard;
-import forge.model.FModel;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.StringJoiner;
 
 /**
  * CLI entry point for batch Forge deck building.
@@ -53,8 +49,8 @@ public class DeckBuilderMain {
                 line = line.trim();
                 if (line.isEmpty()) continue;
 
-                List<String> cardNames = List.of(line.split("\\|", -1));
-                List<PaperCard> pool = resolveCards(cardNames);
+                List<PaperCard> pool = DeckMaterializer.resolve(CardNameList.parse(line),
+                        DeckMaterializer.UnresolvedPolicy.FAIL, UNRESOLVED_POOL);
                 Deck deck = deckBuilder.buildStandard(pool);
                 realOut.println(deckToLine(deck));
                 realOut.flush();
@@ -69,22 +65,18 @@ public class DeckBuilderMain {
         }
     }
 
-    private static List<PaperCard> resolveCards(List<String> names) {
-        List<PaperCard> cards = new ArrayList<>();
-        for (String name : names) {
-            PaperCard card = FModel.getMagicDb().getCommonCards().getCard(name);
-            if (card != null) {
-                cards.add(card);
-            }
-        }
-        return cards;
-    }
+    /**
+     * Why a pool with a name Forge cannot resolve fails the whole call. This
+     * deck is the Forge baseline the scorer's deck for the same pool is
+     * compared against; built from fewer cards, the comparison would be
+     * between two different pools. The Python side reads one deck per pool
+     * line, so there is no per-line way to skip one: exit 1 and say why.
+     */
+    static final String UNRESOLVED_POOL =
+            "The Forge baseline must be built from the very pool the scorer saw, "
+                    + "and a pool missing cards is a different pool.";
 
     static String deckToLine(Deck deck) {
-        StringJoiner joiner = new StringJoiner("|");
-        for (PaperCard card : deck.get(DeckSection.Main).toFlatList()) {
-            joiner.add(card.getName());
-        }
-        return joiner.toString();
+        return CardNameList.format(DeckMaterializer.names(deck));
     }
 }

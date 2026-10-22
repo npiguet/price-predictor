@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -154,9 +153,7 @@ public class SeatTableIndex {
             throw new IllegalArgumentException(
                     "seat line needs 5 ';'-separated fields, got " + parts.length + ": " + line);
         }
-        List<String> cards = parts[4].isEmpty()
-                ? List.of()
-                : Arrays.asList(parts[4].split("\\|", -1));
-        return new SeatEntry(parts[0], parts[1], parts[2], parts[3], cards);
+        return new SeatEntry(
+                parts[0], parts[1], parts[2], parts[3], CardNameList.parse(parts[4]));
     }
 }

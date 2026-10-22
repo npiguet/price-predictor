@@ -9,7 +9,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.StringJoiner;
 
 /**
  * CLI entry point for sealed pool generation.
@@ -113,13 +112,9 @@ public class PoolMain {
 
                     List<List<String>> pools = generator.generate(poolSetCode, batch, excluded);
                     for (List<String> pool : pools) {
-                        StringJoiner joiner = new StringJoiner("|");
-                        for (String name : pool) {
-                            joiner.add(name);
-                        }
                         writer.write(poolSetCode);
                         writer.write(";");
-                        writer.write(joiner.toString());
+                        writer.write(CardNameList.format(pool));
                         writer.newLine();
                         written++;
                     }

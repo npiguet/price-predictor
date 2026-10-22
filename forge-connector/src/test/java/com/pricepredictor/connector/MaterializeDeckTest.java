@@ -8,14 +8,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.pricepredictor.connector.DeckMaterializer.UnresolvedPolicy.FAIL;
+import static com.pricepredictor.connector.DeckMaterializer.UnresolvedPolicy.WARN;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * {@link MatchGenerator#materializeDeck} against Forge's real card database.
+ * {@link DeckMaterializer#materialize} against Forge's real card database.
  *
  * <p>Tagged {@code integration} because resolving a card name needs
  * {@code FModel}; the policy half — what a miss does once counted — is a pure
- * unit test in {@link MatchGeneratorRoutingTest}. Kept in its own class rather
+ * unit test in {@link DeckMaterializerTest}. Kept in its own class rather
  * than in {@link MatchGeneratorTest} so it can be run on its own without
  * playing whole Forge matches first.
  */
@@ -26,6 +28,7 @@ class MaterializeDeckTest {
     /** The exact spelling a coverage deck carries: converted text is lowercase. */
     private static final String CONVERTED_SPELLING = "llanowar elves";
     private static final String NOT_A_CARD = "Definitely Not A Real Card 0";
+    private static final String WHY = MatchGenerator.DECKS_ONLY_UNRESOLVED;
 
     @Test
     void aConvertedLowercaseNameResolves() {
@@ -34,7 +37,7 @@ class MaterializeDeckTest {
         // case-sensitive, every coverage deck would be 17 basics -- so this
         // is the assertion that says strict mode is a guard rather than a
         // landmine on the ordinary path.
-        Deck deck = MatchGenerator.materializeDeck(List.of(CONVERTED_SPELLING), true);
+        Deck deck = DeckMaterializer.materialize(List.of(CONVERTED_SPELLING), FAIL, WHY);
 
         assertEquals(1, deck.getMain().countAll(),
                 "Forge did not resolve the converted tree's lowercase spelling");
@@ -49,7 +52,7 @@ class MaterializeDeckTest {
         List<String> names = new ArrayList<>(List.of(CONVERTED_SPELLING, NOT_A_CARD));
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> MatchGenerator.materializeDeck(names, true));
+                () -> DeckMaterializer.materialize(names, FAIL, WHY));
 
         assertTrue(ex.getMessage().contains(NOT_A_CARD),
                 "the exception must name what did not resolve, got: " + ex.getMessage());
@@ -59,8 +62,8 @@ class MaterializeDeckTest {
     void anOrdinarySealedDeckStillDropsTheMiss() {
         // Sealed self-play's names came out of Forge in the first place, and
         // killing an overnight run over one surprise is worse than logging it.
-        Deck deck = MatchGenerator.materializeDeck(
-                List.of(CONVERTED_SPELLING, NOT_A_CARD), false);
+        Deck deck = DeckMaterializer.materialize(
+                List.of(CONVERTED_SPELLING, NOT_A_CARD), WARN, WHY);
 
         assertEquals(1, deck.getMain().countAll());
     }
@@ -73,7 +76,7 @@ class MaterializeDeckTest {
         }
         names.add(CONVERTED_SPELLING);
 
-        Deck deck = MatchGenerator.materializeDeck(names, true);
+        Deck deck = DeckMaterializer.materialize(names, FAIL, WHY);
 
         assertEquals(18, deck.getMain().countAll());
     }

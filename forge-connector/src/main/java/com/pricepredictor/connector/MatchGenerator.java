@@ -3,13 +3,9 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.GeneratedDecksIndex.GeneratedDeck;
 import forge.StaticData;
 import forge.card.CardEdition;
-import forge.deck.CardPool;
 import forge.deck.Deck;
-import forge.deck.DeckSection;
 import forge.item.PaperCard;
 import forge.item.SealedTemplate;
-import forge.item.generation.UnOpenedProduct;
-import forge.model.FModel;
 import forge.util.MyRandom;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -223,13 +219,6 @@ public class MatchGenerator {
 
         GamePlayer.PlayedMatch played = gamePlayer.playMatch(a.deck, b.deck);
 
-        StringBuilder games = new StringBuilder(played.games().size());
-        StringBuilder play = new StringBuilder(played.games().size());
-        for (GamePlayer.GameOutcome g : played.games()) {
-            games.append(g.winner());
-            play.append(g.playFirst());
-        }
-
         Instant timestamp = Instant.now();
         MatchResult matchResult = new MatchResult(
                 timestamp,
@@ -239,8 +228,8 @@ public class MatchGenerator {
                 b.method,
                 a.cardNames,
                 b.cardNames,
-                games.toString(),
-                play.toString(),
+                played.winnerSequence(),
+                played.playSequence(),
                 played.durationSeconds()
         );
 
@@ -382,7 +371,7 @@ public class MatchGenerator {
         List<PaperCard> pool = generatePool(setCode);
         DeckBuilder.BuiltDeck built = deckBuilder.buildDeck(pool);
         return new DeckSelection(
-                built.deck(), toNames(built.deck()), built.method(), setCode);
+                built.deck(), DeckMaterializer.names(built.deck()), built.method(), setCode);
     }
 
     /**
@@ -443,78 +432,30 @@ public class MatchGenerator {
     }
 
     /**
-     * Materialize a list of card names into a Forge {@link Deck}.
+     * Why a decks-only round refuses a deck with a name Forge cannot resolve.
      *
-     * @param strict what to do about a name Forge's card database does not
-     *               know — see {@link #reportUnresolved}. True for a
-     *               decks-only round, whose names did not come from Forge.
+     * <p>A sealed self-play deck's names came out of Forge in the first place,
+     * so a miss there is only logged. A coverage or variant deck's names come
+     * from {@code output/cardsfolder/} and from {@code VariantRegistry}: a name
+     * Forge misses is dropped, the deck materializes as 17 basic lands, a game
+     * plays, a progress line is appended, effect records are written — and the
+     * card the round exists to reach never enters a game, then retires as
+     * "castable but short". For {@code collect-variants} this can be the whole
+     * run: if the staged custom scripts do not land in {@code getCommonCards()}
+     * under exactly the names the decks file spells, every deck is basics and
+     * the command exits 0 having collected nothing.
      */
-    static Deck materializeDeck(List<String> cardNames, boolean strict) {
-        Deck deck = new Deck();
-        CardPool main = deck.getOrCreate(DeckSection.Main);
-        List<String> unresolved = new ArrayList<>();
-        for (String name : cardNames) {
-            PaperCard card = FModel.getMagicDb().getCommonCards().getCard(name);
-            if (card != null) {
-                main.add(card);
-            } else {
-                unresolved.add(name);
-            }
-        }
-        reportUnresolved(unresolved, cardNames.size(), strict);
-        return deck;
-    }
+    static final String DECKS_ONLY_UNRESOLVED =
+            "A decks-only deck's names come from the converted tree or from "
+                    + "VariantRegistry rather than from Forge, so dropping them "
+                    + "would play a deck of basic lands and collect nothing "
+                    + "while reporting a completed match.";
 
-    /** At most this many names are listed before the rest are counted. */
-    private static final int UNRESOLVED_NAMES_LISTED = 8;
-
-    /**
-     * Say something about names {@code getCommonCards()} could not resolve.
-     *
-     * <p>Dropping them silently is safe for sealed self-play, whose card
-     * names came out of Forge in the first place — a miss there is a
-     * surprise, and killing a long run over one is worse than logging it.
-     *
-     * <p>It is not safe for a coverage or variant deck. Those names come from
-     * {@code output/cardsfolder/} and from {@code VariantRegistry}, so a name
-     * Forge misses is dropped, the deck materializes as 17 basic lands, a
-     * game plays, a progress line is appended, effect records are written —
-     * and the card the round exists to reach never enters a game, then
-     * retires as "castable but short". For {@code collect-variants} this can
-     * be the whole run: if the staged custom scripts do not land in
-     * {@code getCommonCards()} under exactly the names the decks file spells,
-     * every deck is basics and the command exits 0 having collected nothing.
-     * So under {@code strict} this throws, naming them.
-     */
-    static void reportUnresolved(List<String> unresolved, int requested, boolean strict) {
-        if (unresolved.isEmpty()) {
-            return;
-        }
-        List<String> distinct = new ArrayList<>(new java.util.LinkedHashSet<>(unresolved));
-        String listed = String.join(", ",
-                distinct.subList(0, Math.min(UNRESOLVED_NAMES_LISTED, distinct.size())));
-        if (distinct.size() > UNRESOLVED_NAMES_LISTED) {
-            listed += " (and " + (distinct.size() - UNRESOLVED_NAMES_LISTED) + " more)";
-        }
-        String detail = unresolved.size() + " of " + requested
-                + " card names did not resolve against Forge's card database: " + listed;
-        if (strict) {
-            throw new IllegalStateException(
-                    "decks-only deck cannot be materialized: " + detail
-                            + ". These names come from the converted tree or from "
-                            + "VariantRegistry rather than from Forge, so dropping them "
-                            + "would play a deck of basic lands and collect nothing "
-                            + "while reporting a completed match.");
-        }
-        System.err.println("WARNING: " + detail);
-    }
-
-    static List<String> toNames(Deck deck) {
-        List<String> names = new ArrayList<>();
-        for (PaperCard card : deck.getMain().toFlatList()) {
-            names.add(card.getName());
-        }
-        return names;
+    /** What a file-sampled deck's unresolvable name does in this round. */
+    private static DeckMaterializer.UnresolvedPolicy filePolicy(boolean decksOnly) {
+        return decksOnly
+                ? DeckMaterializer.UnresolvedPolicy.FAIL
+                : DeckMaterializer.UnresolvedPolicy.WARN;
     }
 
     /**
@@ -534,11 +475,12 @@ public class MatchGenerator {
          * where same-set pairing is enforced upstream). {@code strict} is the
          * generator's {@code decksOnly}: a coverage or variant deck's names
          * did not come from Forge, so one it cannot resolve is a broken round
-         * rather than a curiosity — see {@link #reportUnresolved}.
+         * rather than a curiosity — see {@link #DECKS_ONLY_UNRESOLVED}.
          */
         static DeckSelection fromFile(GeneratedDeck deck, String setCode, boolean strict) {
             return new DeckSelection(
-                    materializeDeck(deck.cardNames(), strict),
+                    DeckMaterializer.materialize(
+                            deck.cardNames(), filePolicy(strict), DECKS_ONLY_UNRESOLVED),
                     deck.cardNames(),
                     deck.label(),
                     setCode);

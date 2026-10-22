@@ -73,6 +73,34 @@ public class GamePlayer {
         public PlayedMatch(List<GameOutcome> games, int durationSeconds) {
             this(games, durationSeconds, false);
         }
+
+        /** Per-game winner sequence, e.g. {@code "ABA"}: the {@code games} field of a match row. */
+        public String winnerSequence() {
+            StringBuilder sb = new StringBuilder(games.size());
+            for (GameOutcome game : games) {
+                sb.append(game.winner());
+            }
+            return sb.toString();
+        }
+
+        /** Per-game play-first sequence, same length as {@link #winnerSequence()}. */
+        public String playSequence() {
+            StringBuilder sb = new StringBuilder(games.size());
+            for (GameOutcome game : games) {
+                sb.append(game.playFirst());
+            }
+            return sb.toString();
+        }
+
+        /** Games deck A won. */
+        public int winsA() {
+            return (int) games.stream().filter(g -> "A".equals(g.winner())).count();
+        }
+
+        /** Games deck B won. */
+        public int winsB() {
+            return games.size() - winsA();
+        }
     }
 
     /** Which seat, if any, the match's random seat takes. */

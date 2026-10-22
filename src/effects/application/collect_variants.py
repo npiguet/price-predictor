@@ -145,7 +145,7 @@ def volume_ceiling(source_scripts: int, volume: float) -> int:
 
 
 #: Written by VariantSidecarMain: every variant name Forge's card database
-#: accepted, by the same lookup MatchGenerator.materializeDeck uses.
+#: accepted, by the same lookup DeckMaterializer.resolve uses.
 LOADABLE_FILE = "loadable.txt"
 
 

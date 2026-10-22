@@ -72,8 +72,8 @@ public class GeneratedDecksIndex {
             }
             String label = line.substring(0, firstSep);
             String setCode = line.substring(firstSep + 1, secondSep);
-            String[] names = line.substring(secondSep + 1).split("\\|", -1);
-            decks.add(new GeneratedDeck(label, setCode, List.of(names)));
+            decks.add(new GeneratedDeck(label, setCode,
+                    CardNameList.parse(line.substring(secondSep + 1))));
         }
         if (decks.isEmpty()) {
             throw new IOException("Generated-decks file is empty: " + file);

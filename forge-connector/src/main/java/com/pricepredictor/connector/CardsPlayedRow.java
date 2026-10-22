@@ -59,15 +59,11 @@ public record CardsPlayedRow(
                 + ";" + setCode
                 + ";" + methodA
                 + ";" + methodB
-                + ";" + encode(cardsPlayedA)
-                + ";" + encode(cardsPlayedB)
-                + ";" + encode(cardsNotPlayedA)
-                + ";" + encode(cardsNotPlayedB)
+                + ";" + CardNameList.format(cardsPlayedA)
+                + ";" + CardNameList.format(cardsPlayedB)
+                + ";" + CardNameList.format(cardsNotPlayedA)
+                + ";" + CardNameList.format(cardsNotPlayedB)
                 + ";" + winner
                 + ";" + starter;
-    }
-
-    private static String encode(List<String> names) {
-        return String.join("|", names);
     }
 }
