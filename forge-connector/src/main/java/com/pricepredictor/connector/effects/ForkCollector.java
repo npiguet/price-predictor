@@ -389,8 +389,7 @@ public final class ForkCollector {
     private EffectRecord forkedHalf(
             String actorId, ProvenanceKey.Resolved keys, String state,
             List<EffectEvent> events) {
-        return context.newRecord(EffectRecord.KIND_RESOLUTION)
-                .moment(EffectRecord.MOMENT_RESOLUTION)
+        return context.newResolution(Moment.RESOLUTION)
                 .interventional(true)
                 .fork(true)
                 .actor(actorId)
@@ -786,7 +785,7 @@ public final class ForkCollector {
                             + "; its own damage step wrote no record");
             return false;
         }
-        context.emit(context.newRecord(EffectRecord.KIND_COMBAT)
+        context.emit(context.newRecord(RecordKind.COMBAT)
                 .fork(true)
                 .interventional(false)
                 .mirrorOf(mirrorOfRecordId)

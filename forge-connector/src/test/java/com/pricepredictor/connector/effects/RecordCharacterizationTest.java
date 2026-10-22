@@ -325,10 +325,9 @@ class RecordCharacterizationTest {
         board.battlefield("Grizzly Bears", board.you);
         board.battlefield("Serra Angel", board.opponent);
 
-        String record = new EffectRecord(
+        String record = EffectRecord.playability(
                 "run.0-l1.0", "run", RecordShardWriter.timestamp(), GAME_ID,
-                EffectRecord.KIND_PLAYABILITY, AttributionMode.detect())
-                .subkind(EffectRecord.SUBKIND_BLOCKERS)
+                PlayabilitySubkind.BLOCKERS, AttributionMode.detect())
                 .actor(SnapshotBuilder.playerId(board.opponent))
                 .whatIf(true)
                 .state(new SnapshotBuilder(board.game).toJson(null, List.of()))

@@ -39,23 +39,42 @@ final class CollectorContext {
         return gameId;
     }
 
-    /** A record of {@code kind}, with an id and a timestamp taken now. */
-    EffectRecord newRecord(String kind) {
-        return newRecord(kind, writer.nextRecordId(), RecordShardWriter.timestamp());
+    /**
+     * A record of {@code kind}, with an id and a timestamp taken now; the two
+     * kinds that need more say so through {@link #newResolution} and
+     * {@link #newPlayability}.
+     */
+    EffectRecord newRecord(RecordKind kind) {
+        return new EffectRecord(
+                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
+                gameId, kind, mode);
+    }
+
+    /** A resolution half at {@code moment}, with an id and a timestamp taken now. */
+    EffectRecord newResolution(Moment moment) {
+        return newResolution(moment, writer.nextRecordId(), RecordShardWriter.timestamp());
     }
 
     /**
-     * A record of {@code kind} with an id and a timestamp taken earlier.
+     * A resolution half at {@code moment} with an id and a timestamp taken
+     * earlier.
      *
      * <p>For a record held from the moment it describes until something it
      * carries is known, such as a cast's outcome: it keeps saying when the
      * spell was cast rather than when it was written.
      */
-    EffectRecord newRecord(String kind, String recordId, String timestamp) {
-        return new EffectRecord(recordId, writer.runId(), timestamp, gameId, kind, mode);
+    EffectRecord newResolution(Moment moment, String recordId, String timestamp) {
+        return EffectRecord.resolution(recordId, writer.runId(), timestamp, gameId, moment, mode);
     }
 
-    /** An id for a record built later, by {@link #newRecord(String, String, String)}. */
+    /** A playability verdict of {@code subkind}, with an id and a timestamp taken now. */
+    EffectRecord newPlayability(PlayabilitySubkind subkind) {
+        return EffectRecord.playability(
+                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
+                gameId, subkind, mode);
+    }
+
+    /** An id for a record built later, by {@link #newResolution(Moment, String, String)}. */
     String nextRecordId() {
         return writer.nextRecordId();
     }

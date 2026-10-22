@@ -569,9 +569,8 @@ public final class BusBracketCollector extends BusEventReader {
         HeldResolution writing = held;
         held = null;
         for (HeldHalf half : writing.halves()) {
-            context.emit(context.newRecord(
-                    EffectRecord.KIND_RESOLUTION, half.recordId(), half.timestamp())
-                    .moment(EffectRecord.MOMENT_RESOLUTION)
+            context.emit(context.newResolution(
+                    Moment.RESOLUTION, half.recordId(), half.timestamp())
                     .actor(writing.actor())
                     .ability(half.keys())
                     .linkId(writing.linkId())
@@ -756,9 +755,8 @@ public final class BusBracketCollector extends BusEventReader {
 
     private void emitActivation(
             PendingActivation activation, String outcome, boolean linked) {
-        context.emit(context.newRecord(
-                EffectRecord.KIND_RESOLUTION, activation.recordId(), activation.timestamp())
-                .moment(EffectRecord.MOMENT_ACTIVATION)
+        context.emit(context.newResolution(
+                Moment.ACTIVATION, activation.recordId(), activation.timestamp())
                 .actor(activation.actor())
                 .ability(activation.ability())
                 .linkId(linked ? activation.linkId() : null)
@@ -1067,7 +1065,7 @@ public final class BusBracketCollector extends BusEventReader {
         var phase = game.getPhaseHandler();
         String actor = phase == null || phase.getPlayerTurn() == null
                 ? null : SnapshotBuilder.playerId(phase.getPlayerTurn());
-        EffectRecord record = context.newRecord(EffectRecord.KIND_COMBAT)
+        EffectRecord record = context.newRecord(RecordKind.COMBAT)
                 .actor(actor)
                 .state(combatState)
                 .payload(combatPayload());
@@ -1144,8 +1142,7 @@ public final class BusBracketCollector extends BusEventReader {
         if (resolving != null || bracketEvents.isEmpty()) {
             return;
         }
-        context.emit(context.newRecord(EffectRecord.KIND_RESOLUTION)
-                .moment(EffectRecord.MOMENT_RESOLUTION)
+        context.emit(context.newResolution(Moment.RESOLUTION)
                 .actor(resolvingActor)
                 .ability(resolvingKeys)
                 .state(snapshots.toJson(null, List.of()))

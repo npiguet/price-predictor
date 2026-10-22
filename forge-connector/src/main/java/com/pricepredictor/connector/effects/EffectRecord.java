@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.StringJoiner;
 
@@ -34,23 +35,6 @@ import java.util.StringJoiner;
  */
 public final class EffectRecord {
 
-    public static final String KIND_RESOLUTION = "resolution";
-    public static final String KIND_REWRITE = "rewrite";
-    public static final String KIND_CONTINUOUS = "continuous";
-    public static final String KIND_COMBAT = "combat";
-    public static final String KIND_TRIGGER = "trigger";
-    public static final String KIND_PLAYABILITY = "playability";
-
-    public static final String MOMENT_ACTIVATION = "activation";
-    public static final String MOMENT_RESOLUTION = "resolution";
-
-    /** A candidate the AI weighed at priority, with the verdict on it. */
-    public static final String SUBKIND_DECISION = "decision";
-    /** Who may attack, declared at the attackers step. */
-    public static final String SUBKIND_ATTACKERS = "attackers";
-    /** Who may block an attacker, declared at the blockers step. */
-    public static final String SUBKIND_BLOCKERS = "blockers";
-
     public static final String OUTCOME_RESOLVED = "resolved";
     public static final String OUTCOME_FIZZLED = "fizzled";
     public static final String OUTCOME_PARTIALLY_FIZZLED = "partially_fizzled";
@@ -61,10 +45,10 @@ public final class EffectRecord {
     private final String runId;
     private final String timestamp;
     private final String gameId;
-    private final String kind;
+    private final RecordKind kind;
+    private final Moment moment;
+    private final PlayabilitySubkind subkind;
     private final String mode;
-    private String moment;
-    private String subkind;
     private String linkId;
     private String mirrorOf;
     private boolean interventional;
@@ -94,25 +78,53 @@ public final class EffectRecord {
     private String stateJson = "{}";
     private String payloadJson = "{}";
 
+    /**
+     * A record of one of the four kinds that take neither a moment nor a
+     * subkind.
+     *
+     * <p>The other two are made by {@link #resolution} and {@link #playability},
+     * because a resolution record without its moment and a playability record
+     * without its subkind cannot be read, and a setter left uncalled is not
+     * something a reader can catch.
+     */
     public EffectRecord(
             String recordId, String runId, String timestamp, String gameId,
-            String kind, AttributionMode mode) {
+            RecordKind kind, AttributionMode mode) {
+        this(recordId, runId, timestamp, gameId, kind, null, null, mode);
+        if (kind == RecordKind.RESOLUTION || kind == RecordKind.PLAYABILITY) {
+            throw new IllegalArgumentException(
+                    "a " + kind.wireName() + " record is made with its moment or subkind");
+        }
+    }
+
+    private EffectRecord(
+            String recordId, String runId, String timestamp, String gameId,
+            RecordKind kind, Moment moment, PlayabilitySubkind subkind,
+            AttributionMode mode) {
         this.recordId = recordId;
         this.runId = runId;
         this.timestamp = timestamp;
         this.gameId = gameId;
-        this.kind = kind;
+        this.kind = Objects.requireNonNull(kind, "kind");
+        this.moment = moment;
+        this.subkind = subkind;
         this.mode = mode.wireValue();
     }
 
-    public EffectRecord moment(String value) {
-        this.moment = value;
-        return this;
+    /** A {@code resolution} record: one half of a resolution pair. */
+    public static EffectRecord resolution(
+            String recordId, String runId, String timestamp, String gameId,
+            Moment moment, AttributionMode mode) {
+        return new EffectRecord(recordId, runId, timestamp, gameId, RecordKind.RESOLUTION,
+                Objects.requireNonNull(moment, "moment"), null, mode);
     }
 
-    public EffectRecord subkind(String value) {
-        this.subkind = value;
-        return this;
+    /** A {@code playability} record: one rules verdict. */
+    public static EffectRecord playability(
+            String recordId, String runId, String timestamp, String gameId,
+            PlayabilitySubkind subkind, AttributionMode mode) {
+        return new EffectRecord(recordId, runId, timestamp, gameId, RecordKind.PLAYABILITY,
+                null, Objects.requireNonNull(subkind, "subkind"), mode);
     }
 
     /**
@@ -231,9 +243,9 @@ public final class EffectRecord {
                 + ",\"run_id\":" + Json.string(runId)
                 + ",\"timestamp\":" + Json.string(timestamp)
                 + ",\"game_id\":" + Json.string(gameId)
-                + ",\"kind\":" + Json.string(kind)
-                + ",\"moment\":" + Json.string(moment)
-                + ",\"subkind\":" + Json.string(subkind)
+                + ",\"kind\":" + Json.string(kind.wireName())
+                + ",\"moment\":" + Json.string(moment == null ? null : moment.wireName())
+                + ",\"subkind\":" + Json.string(subkind == null ? null : subkind.wireName())
                 + ",\"link_id\":" + Json.string(linkId)
                 + ",\"mirror_of\":" + Json.string(mirrorOf)
                 // Frozen schema fields no collector sets: a reader still
