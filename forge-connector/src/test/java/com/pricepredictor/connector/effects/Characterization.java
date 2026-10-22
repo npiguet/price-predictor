@@ -50,6 +50,10 @@ final class Characterization {
 
     private static final String TIMESTAMP_PLACEHOLDER = "<timestamp>";
 
+    /** The literal runs of the head {@link #TIMESTAMP} matches, around the two ids. */
+    private static final List<String> ENVELOPE_HEAD = List.of(
+            "{\"record_id\":\"", "\",\"run_id\":\"", "\",\"timestamp\":\"");
+
     /** Characters either side of the first difference shown on a mismatch. */
     private static final int CONTEXT = 160;
 
@@ -59,16 +63,19 @@ final class Characterization {
     /** Record lines, each with its timestamp fixed, as one file's text. */
     static String recordLines(List<String> records) {
         StringBuilder text = new StringBuilder();
-        for (String record : records) {
-            text.append(withFixedTimestamp(record)).append('\n');
+        for (int i = 0; i < records.size(); i++) {
+            text.append(withFixedTimestamp(i + 1, records.get(i))).append('\n');
         }
         return text.toString();
     }
 
-    private static String withFixedTimestamp(String record) {
+    private static String withFixedTimestamp(int line, String record) {
         Matcher matcher = TIMESTAMP.matcher(record);
         if (!matcher.find()) {
-            fail("no envelope timestamp at the head of " + record);
+            int at = envelopeDeparture(record);
+            fail("record " + line + " leaves the envelope head "
+                    + String.join("...", ENVELOPE_HEAD) + " at offset " + at + ": "
+                    + excerpt(record, at));
         }
         try {
             Instant.parse(matcher.group(2));
@@ -77,6 +84,31 @@ final class Characterization {
         }
         return matcher.group(1) + TIMESTAMP_PLACEHOLDER + matcher.group(3)
                 + record.substring(matcher.end());
+    }
+
+    /**
+     * Where a record first departs from the envelope head: the offset of the
+     * first character that breaks one of its literal runs, or the record's
+     * length when the head is all there but the timestamp never closes.
+     */
+    private static int envelopeDeparture(String record) {
+        int at = 0;
+        for (int run = 0; run < ENVELOPE_HEAD.size(); run++) {
+            if (run > 0) {
+                int close = record.indexOf('"', at);
+                if (close < 0) {
+                    return record.length();
+                }
+                at = close;
+            }
+            String literal = ENVELOPE_HEAD.get(run);
+            for (int i = 0; i < literal.length(); i++, at++) {
+                if (at >= record.length() || record.charAt(at) != literal.charAt(i)) {
+                    return at;
+                }
+            }
+        }
+        return record.length();
     }
 
     /** Assert {@code actual} is the expected file's text, byte for byte. */
