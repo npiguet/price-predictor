@@ -1464,48 +1464,30 @@ class PatchedCollectorTest {
     }
 
     /**
-     * Exactly the hooks the checkout offers get installed, and no others.
+     * Exactly the listener hooks the checkout offers get installed, and no
+     * others -- and none at all in degraded mode, where install() declines
+     * before it looks.
      *
      * <p>Asserted against the checkout rather than against a fixed count: the
-     * sibling Forge is patched or not independently of this repository, so a
-     * test expecting zero passes only until someone applies the patches. What
-     * must hold either way is that install() finds what is there — a worker
-     * degrades on a stock checkout and collects fully on a patched one.
+     * sibling Forge is patched or not independently of this repository. The
+     * expected set is derived from {@link PatchHooks#REQUIRED}, so a listener
+     * hook added there is expected here without editing the test. The confirm
+     * listener is excluded because the bracket collector installs it, not this
+     * class.
      */
     @Test
     void everyHookTheCheckoutOffersIsInstalledAndNoOthers() {
-        int available = 0;
-        if (PatchHooks.find(PatchHooks.REPLACEMENT_HANDLER,
-                "setEffectRecordListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.TRIGGER_HANDLER,
-                "setEffectRecordTriggerListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.AI_CONTROLLER,
-                "setEffectRecordPlayabilityListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.ABILITY_MANA_PART,
-                "setEffectRecordManaListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.AI_CONTROLLER,
-                "setEffectRecordCombatListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.ABILITY_UTILS,
-                "setEffectRecordClauseListener").present()) {
-            available++;
-        }
-        if (PatchHooks.find(PatchHooks.EFFECT_RECORD_OUTCOMES,
-                "setEffectRecordOutcomeListener").present()) {
-            available++;
-        }
+        long expected = AttributionMode.detect() == AttributionMode.DEGRADED
+                ? 0
+                : PatchHooks.REQUIRED.stream()
+                        .filter(hook -> hook.method().startsWith("setEffectRecord")
+                                && hook.method().endsWith("Listener")
+                                && !PatchHooks.PLAYER_CONTROLLER_AI.equals(hook.owner()))
+                        .filter(PatchHooks.Hook::present)
+                        .count();
         try (PatchedCollectors collector = collectors(CollectionCaps.defaults())) {
-            assertEquals(available, collector.install());
-            assertEquals(available, collector.installedHooks().size());
+            assertEquals(expected, collector.install());
+            assertEquals(expected, collector.installedHooks().size());
         }
     }
 
@@ -2569,11 +2551,6 @@ class PatchedCollectorTest {
      * ForkCollector#runAsForkForTest} stands in for that call without needing
      * a real combat to fork. No live bracket is open, matching a probe's own
      * timing: like {@code intervene}, it does not run nested inside a live
-
-                // The event reaches the bracket's buffer, which only a flush
-                // writes; without one the shard is empty whether or not the
-                // gate exists.
-                bracket.finishGame(Set.of());
      * resolution.
      */
     @Test
@@ -2600,6 +2577,11 @@ class PatchedCollectorTest {
                 assertNotNull(collectors.lastClauseEvent(),
                         "the event must still be built -- only its delivery to "
                                 + "the live bracket is gated");
+
+                // The event reaches the bracket's buffer, which only a flush
+                // writes; without one the shard is empty whether or not the
+                // gate exists.
+                bracket.finishGame(Set.of());
             }
         } finally {
             writer.close();
