@@ -58,6 +58,7 @@ final class ForkEventSink extends BusEventReader {
         super(fork);
         this.acting = acting;
         this.combatDamage = combatDamage;
+        primeBattlefield();
     }
 
     /** A sink for a forced resolution of {@code acting}. */

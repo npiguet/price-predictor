@@ -79,8 +79,9 @@ final class StatDiffer {
     /**
      * Remember a card's characteristics without reporting a change.
      *
-     * <p>Used when a card arrives on the battlefield, so that its first real
-     * change is a change rather than its whole self.
+     * <p>Used when a card arrives on the battlefield, and for every card on a
+     * forked board, so that its first real change is a change rather than
+     * nothing at all: Forge publishes a stats change only after applying it.
      */
     void prime(Card card) {
         if (card != null) {

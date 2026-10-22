@@ -192,11 +192,36 @@ abstract class BusEventReader {
             fileMove(event, moved);
         }
         file(BusEvents.libraryMovement(event), null);
-        if (event.card() != null && event.from() != null
-                && event.from().zoneType() == ZoneType.Battlefield) {
+        if (event.card() == null) {
+            return;
+        }
+        if (event.from() != null && event.from().zoneType() == ZoneType.Battlefield) {
             // Off the battlefield a card's computed characteristics stop
             // meaning anything, and one that returns is a new object.
             stats.forget(event.card().getId());
+        }
+        if (event.to() != null && event.to().zoneType() == ZoneType.Battlefield) {
+            // Forge publishes a stats change after applying it, so without a
+            // reading taken now the first pump finds no earlier value and
+            // reports nothing. Read off the battlefield object, which the
+            // statics and the counters it entered with have already reached.
+            stats.prime(cardById(event.card().getId()));
+        }
+    }
+
+    /**
+     * Take a reading of every card on the battlefield.
+     *
+     * <p>For a reader that starts listening to a game already in progress, such
+     * as a fork: every card on the board is new to it, and its first change
+     * would otherwise be its baseline.
+     */
+    void primeBattlefield() {
+        if (game == null) {
+            return;
+        }
+        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+            stats.prime(card);
         }
     }
 
