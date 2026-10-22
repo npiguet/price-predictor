@@ -21,6 +21,7 @@ import java.util.function.Supplier;
  * @param keys         the candidate's printed line, as a list of at most one
  * @param legalTargets refs of what the rules allow it to target
  * @param manaCost     its total mana cost, or null where it has no costs
+ * @param verdict      what the rules say of it on this board
  */
 record DecisionCandidate(
         List<ProvenanceKey> keys,

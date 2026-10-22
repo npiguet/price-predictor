@@ -115,8 +115,8 @@ public class GamePlayer {
      * <p>Both {@link LobbyPlayerAi} instances are built with a null
      * {@code Set<AIOption>}, which matters beyond style: {@code AiController}
      * only enters full- or hybrid-simulation mode when an {@code AIOption} is
-     * set, and every effect-record listener installed by
-     * {@code PatchedCollectors} is a plain JVM-wide static with no
+     * set, and every effect-record listener a {@link GameRecording} installs
+     * is a plain JVM-wide static with no
      * {@code Game} reference. If simulation ever ran during collection, the
      * hooks could not tell a hypothetical resolution — replayed against a
      * {@code GameCopier} clone purely to evaluate it — from a real one, and
