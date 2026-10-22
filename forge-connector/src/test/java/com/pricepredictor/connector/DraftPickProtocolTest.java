@@ -93,14 +93,6 @@ class DraftPickProtocolTest {
     }
 
     @Test
-    void parseExternalAgentsSplitsAndTrims() {
-        assertEquals(java.util.Set.of("a", "b"),
-                DraftWorkerMain.parseExternalAgents(" a , b "));
-        assertTrue(DraftWorkerMain.parseExternalAgents(null).isEmpty());
-        assertTrue(DraftWorkerMain.parseExternalAgents("  ").isEmpty());
-    }
-
-    @Test
     void parseResponseRejectsMissingSentinel() {
         assertThrows(DraftPickProtocol.DraftAbandonedException.class,
                 () -> DraftPickProtocol.parseResponse("{\"pick\":\"X\"}"));  // no sentinel

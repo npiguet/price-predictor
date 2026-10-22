@@ -23,8 +23,6 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -76,6 +74,10 @@ import java.util.UUID;
 public class DraftWorkerMain {
 
     static final String SENTINEL = "<<DRAFT-EVENT-JSON>>";
+    static final String AGENT_MIX = "draft.agent.mix";
+    static final String SET = "draft.set";
+    static final String EXTERNAL_AGENTS = "draft.external.agents";
+    static final String REQUIRED_AGENT = "draft.required.agent";
     static final int POD_SIZE = 8;
     static final int PACKS = 3;
 
@@ -84,11 +86,11 @@ public class DraftWorkerMain {
         // names; diagnostics keep using System.err.
         PrintStream out = ToolMain.claimStdout();
 
-        String agentMixSpec = WorkerProperties.require("draft.agent.mix");
-        String setCode = System.getProperty("draft.set");  // null => random per draft
-        Set<String> externalAgents = parseExternalAgents(
-                System.getProperty("draft.external.agents"));
-        String requiredAgent = System.getProperty("draft.required.agent");
+        String agentMixSpec = WorkerProperties.require(AGENT_MIX);
+        String setCode = System.getProperty(SET);  // null => random per draft
+        Set<String> externalAgents = Set.copyOf(
+                WorkerProperties.listProperty(EXTERNAL_AGENTS));
+        String requiredAgent = System.getProperty(REQUIRED_AGENT);
         PickChannel channel = new PickChannel(out, new BufferedReader(
                 new InputStreamReader(System.in, StandardCharsets.UTF_8)), externalAgents);
 
@@ -128,8 +130,7 @@ public class DraftWorkerMain {
                         // The supervisor closed our stdin (it stopped or crashed); exit
                         // so it can restart a fresh worker if it still wants more drafts.
                         System.err.println("Pick channel closed: " + e.getMessage());
-                        System.exit(0);
-                        return WorkerLoop.Outcome.ABANDONED;  // unreachable
+                        throw ToolMain.exit(0);
                     }
                     return emit(result, draftSet, out);
                 },
@@ -357,19 +358,5 @@ public class DraftWorkerMain {
             return pack.get(random.nextInt(pack.size()));
         }
         return aiPick;
-    }
-
-    static Set<String> parseExternalAgents(String spec) {
-        if (spec == null || spec.isBlank()) {
-            return Collections.emptySet();
-        }
-        Set<String> labels = new LinkedHashSet<>();
-        for (String token : spec.split(",")) {
-            String trimmed = token.trim();
-            if (!trimmed.isEmpty()) {
-                labels.add(trimmed);
-            }
-        }
-        return labels;
     }
 }

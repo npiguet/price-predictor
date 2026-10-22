@@ -54,16 +54,15 @@ public class CastabilityMain {
 
     public static void main(String[] args) {
         ToolMain.Args cli = ToolMain.args(args, "--cards", "--output");
-        String cardsArg = cli.get("--cards");
-        String outputArg = cli.get("--output");
-        if (cardsArg == null || outputArg == null) {
-            System.err.println("Error: --cards and --output are required");
-            System.exit(2);
-        }
-        Path cardsFile = Path.of(cardsArg);
-        Path output = Path.of(outputArg);
 
         ToolMain.run(() -> {
+            String cardsArg = cli.get("--cards");
+            String outputArg = cli.get("--output");
+            if (cardsArg == null || outputArg == null) {
+                throw new IllegalArgumentException("--cards and --output are required");
+            }
+            Path cardsFile = Path.of(cardsArg);
+            Path output = Path.of(outputArg);
             ForgeEnvironmentInitializer.initialize();
             List<String> names = Files.readAllLines(cardsFile, StandardCharsets.UTF_8)
                     .stream().map(String::trim).filter(s -> !s.isEmpty()).toList();

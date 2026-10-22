@@ -22,6 +22,9 @@ import java.util.Set;
  */
 final class HoldoutCards {
 
+    /** The system property naming the list file. */
+    static final String EXCLUDE_CARDS = "sealed.exclude.cards";
+
     /** A full-strength run: nothing held out. */
     static final HoldoutCards NONE = new HoldoutCards(Set.of());
 
@@ -57,7 +60,7 @@ final class HoldoutCards {
      *         full-strength pools would put held-out cards in training games
      */
     static HoldoutCards fromSystemProperty() {
-        String path = System.getProperty("sealed.exclude.cards");
+        String path = System.getProperty(EXCLUDE_CARDS);
         if (path == null || path.isBlank()) {
             return NONE;
         }
@@ -65,7 +68,7 @@ final class HoldoutCards {
             return load(Path.of(path.trim()));
         } catch (IOException e) {
             throw new IllegalStateException(
-                    "Cannot read -Dsealed.exclude.cards=" + path
+                    "Cannot read -D" + EXCLUDE_CARDS + "=" + path
                             + ". A depleted run that silently fell back to full-strength "
                             + "pools would put held-out cards in training games.", e);
         }

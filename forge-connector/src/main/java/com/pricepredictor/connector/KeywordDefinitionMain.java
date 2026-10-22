@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.google.common.base.Strings;
 import com.pricepredictor.connector.effects.Json;
 import forge.game.card.Card;
 import forge.game.keyword.Keyword;
@@ -84,7 +85,7 @@ public class KeywordDefinitionMain {
             }
             entries.add(Json.string(keyword.toString()) + ":{"
                     + "\"reminder_template\":"
-                    + Json.string(emptyToNull(expandPlurals(keyword.getReminderText())))
+                    + Json.string(Strings.emptyToNull(expandPlurals(keyword.getReminderText())))
                     + ",\"generated_script\":" + Json.string(generatedScript(keyword))
                     + ",\"formatter\":" + Json.string(formatterOf(keyword))
                     + "}");
@@ -220,10 +221,5 @@ public class KeywordDefinitionMain {
             sb.append(entry.getKey()).append("$ ").append(entry.getValue());
         }
         return sb.toString();
-    }
-
-    /** Null rather than "" for a keyword with no reminder text of its own. */
-    private static String emptyToNull(String value) {
-        return value == null || value.isEmpty() ? null : value;
     }
 }

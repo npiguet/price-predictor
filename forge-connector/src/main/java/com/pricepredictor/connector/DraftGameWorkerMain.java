@@ -58,9 +58,7 @@ public class DraftGameWorkerMain {
         try {
             index = SeatTableIndex.load(seatsFile, includeMirrors);
         } catch (IOException e) {
-            System.err.println("Fatal error reading " + seatsFile + ": " + e.getMessage());
-            System.exit(2);
-            return;
+            throw WorkerProperties.badConfig("reading " + seatsFile + ": " + e.getMessage());
         }
 
         System.out.println(
@@ -68,9 +66,7 @@ public class DraftGameWorkerMain {
                         + index.eligiblePodCount() + " pods able to yield a pairing");
 
         if (index.eligiblePodCount() == 0) {
-            System.err.println("Error: no pod in the seat table can yield a pairing");
-            System.exit(2);
-            return;
+            throw WorkerProperties.badConfig("no pod in the seat table can yield a pairing");
         }
 
         DraftGamePlayer player = new DraftGamePlayer(

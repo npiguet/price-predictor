@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.google.common.base.Strings;
 import com.pricepredictor.connector.ability.ActivatedAbilityEntry;
 import com.pricepredictor.connector.ability.AlternateCostSpell;
 import com.pricepredictor.connector.ability.ChapterAbility;
@@ -458,10 +459,10 @@ public class RulesParser {
         String typeLine = formatTypeLine(face);
         String pt = (face.getPower() != null && face.getToughness() != null)
                 ? face.getPower() + "/" + face.getToughness() : null;
-        String loyalty = nullIfEmpty(face.getInitialLoyalty());
-        String defense = nullIfEmpty(face.getDefense());
+        String loyalty = Strings.emptyToNull(face.getInitialLoyalty());
+        String defense = Strings.emptyToNull(face.getDefense());
 
-        String text = nullIfEmpty(face.getNonAbilityText());
+        String text = Strings.emptyToNull(face.getNonAbilityText());
         if (text != null) {
             // Strip [Developer's note: …] brackets — Forge-internal metadata, not oracle content.
             text = text.replaceAll("(?i)\\[Developer's note:[^]]*]", "").strip();
@@ -722,10 +723,6 @@ public class RulesParser {
         String typeStr = face.getType().toString();
         typeStr = typeStr.replace(" - ", " ");
         return typeStr.toLowerCase();
-    }
-
-    private static String nullIfEmpty(String s) {
-        return (s == null || s.isEmpty()) ? null : s;
     }
 
     private static void addIfNotNull(List<Ability> list, Ability item) {

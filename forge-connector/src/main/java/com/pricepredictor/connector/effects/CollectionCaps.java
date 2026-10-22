@@ -1,6 +1,8 @@
 package com.pricepredictor.connector.effects;
 
-import java.util.ArrayList;
+import com.pricepredictor.connector.WorkerProperties;
+import com.pricepredictor.connector.WorkerProperties.OnMalformed;
+
 import java.util.List;
 
 /** The caps and budgets every collecting supervisor shares (FR-028). */
@@ -18,69 +20,48 @@ public record CollectionCaps(
                 1, 0.1, 2, 2, List.of(), 0.0, 0.0);
     }
 
+    public static final String MANA_CAP = "effect.mana.cap";
+    public static final String PLAYABILITY_RATE = "effect.playability.rate";
+    public static final String INTERVENTIONS_PER_GAME = "effect.interventions.per.game";
+    public static final String PROBES_PER_GAME = "effect.probes.per.game";
+    public static final String PROBE_KEYWORDS = "effect.probe.keywords";
+    public static final String RANDOM_SEAT_SHARE = "effect.random.seat.share";
+    public static final String RANDOM_SEAT_PROBABILITY = "effect.random.seat.probability";
+
     /**
      * Read from the {@code effect.*} system properties the supervisor sets.
      *
      * <p>Each falls back to its default rather than failing, because a
      * worker started without instrumentation sets none of them and one
-     * started by an older supervisor may set only some.
+     * started by an older supervisor may set only some. A malformed value
+     * keeps the default too, and says so once on stderr.
      */
     public static CollectionCaps fromSystemProperties() {
         CollectionCaps defaults = defaults();
+        OnMalformed policy = OnMalformed.WARN_AND_DEFAULT;
         return new CollectionCaps(
-                intProperty("effect.mana.cap", defaults.manaCap()),
-                doubleProperty("effect.playability.rate", defaults.playabilityRate()),
-                intProperty("effect.interventions.per.game",
-                        defaults.interventionsPerGame()),
-                intProperty("effect.probes.per.game", defaults.probesPerGame()),
-                listProperty("effect.probe.keywords"),
+                WorkerProperties.intProperty(MANA_CAP, defaults.manaCap(), policy),
+                WorkerProperties.doubleProperty(
+                        PLAYABILITY_RATE, defaults.playabilityRate(), policy),
+                WorkerProperties.intProperty(
+                        INTERVENTIONS_PER_GAME, defaults.interventionsPerGame(), policy),
+                WorkerProperties.intProperty(
+                        PROBES_PER_GAME, defaults.probesPerGame(), policy),
+                WorkerProperties.listProperty(PROBE_KEYWORDS),
                 // The random seat's two knobs (FR-021). A share of matches
                 // and a per-decision P: both are drawn in the JVM, so the
                 // supervisor can only name them. The Python side refuses a
                 // share without a P before any worker starts (FR-026); a
                 // worker reads what it is given and defaults the rest.
-                doubleProperty("effect.random.seat.share", defaults.randomSeatShare()),
-                doubleProperty("effect.random.seat.probability",
-                        defaults.randomSeatProbability()));
+                WorkerProperties.doubleProperty(
+                        RANDOM_SEAT_SHARE, defaults.randomSeatShare(), policy),
+                WorkerProperties.doubleProperty(
+                        RANDOM_SEAT_PROBABILITY, defaults.randomSeatProbability(), policy));
     }
 
     /** Whether any match of this run may seat a random player at all. */
     public boolean randomSeatEnabled() {
         return randomSeatShare > 0.0;
-    }
-
-    private static int intProperty(String name, int fallback) {
-        try {
-            String value = System.getProperty(name);
-            return value == null || value.isBlank()
-                    ? fallback : Integer.parseInt(value.trim());
-        } catch (NumberFormatException e) {
-            return fallback;
-        }
-    }
-
-    private static double doubleProperty(String name, double fallback) {
-        try {
-            String value = System.getProperty(name);
-            return value == null || value.isBlank()
-                    ? fallback : Double.parseDouble(value.trim());
-        } catch (NumberFormatException e) {
-            return fallback;
-        }
-    }
-
-    private static List<String> listProperty(String name) {
-        String value = System.getProperty(name);
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-        List<String> parsed = new ArrayList<>();
-        for (String part : value.split(",")) {
-            if (!part.isBlank()) {
-                parsed.add(part.trim());
-            }
-        }
-        return List.copyOf(parsed);
     }
 
     /**
