@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import forge.StaticData;
+import forge.card.CardEdition;
 import forge.item.SealedTemplate;
 
 import java.util.Optional;
@@ -25,7 +26,22 @@ final class BoosterTemplates {
      * {@code NullPointerException} from inside the lookup.
      */
     static Optional<SealedTemplate> forSet(String setCode) {
-        return Optional.ofNullable(StaticData.instance().getEditions().get(setCode))
-                .map(edition -> edition.getBoosterTemplate("Draft"));
+        return edition(setCode).map(edition -> edition.getBoosterTemplate("Draft"));
+    }
+
+    /**
+     * The code the set's edition goes by, which an alias resolves to, or
+     * {@code setCode} unchanged when Forge knows no such set.
+     *
+     * <p>What a corpus line records: every downstream join compares set codes
+     * as strings, so a pool opened under {@code CON} and one opened under
+     * {@code CFX} must not read as two sets.
+     */
+    static String canonicalCode(String setCode) {
+        return edition(setCode).map(CardEdition::getCode).orElse(setCode);
+    }
+
+    private static Optional<CardEdition> edition(String setCode) {
+        return Optional.ofNullable(StaticData.instance().getEditions().get(setCode));
     }
 }

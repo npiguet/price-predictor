@@ -62,6 +62,25 @@ class RandomSeatControllerTest {
         return seat;
     }
 
+    /**
+     * Seat A holding Pacifism, whose one legal target is A's own creature.
+     *
+     * <p>The AI never enchants its own creature with it, so on this board a
+     * Pacifism chosen is a random draw's choice and anything else is the AI's.
+     */
+    private static Card pacifismWithOnlyAnOwnTarget(Game game, Player a) {
+        TestBoard.inPlay(game, a, "Plains");
+        TestBoard.inPlay(game, a, "Plains");
+        TestBoard.inPlay(game, a, "Grizzly Bears");
+        return TestBoard.inHand(game, a, "Pacifism");
+    }
+
+    /** Whether {@code chosen} plays a card named {@code name}. */
+    private static boolean plays(List<SpellAbility> chosen, String name) {
+        return chosen != null && chosen.stream()
+                .anyMatch(sa -> name.equals(sa.getHostCard().getName()));
+    }
+
     // ── the play decision ───────────────────────────────────────────────
 
     /** Scenario 3: a seat whose only playable abilities are mana abilities passes. */
@@ -77,14 +96,15 @@ class RandomSeatControllerTest {
         assertNull(seat.chooseSpellAbilityToPlay(), "nothing but mana to play: pass");
     }
 
-    /** Scenario 3 and the one-option edge case: the single playable spell is taken. */
+    /**
+     * Scenario 3 and the one-option edge case: the single playable spell is
+     * taken, though it is one the AI would pass on.
+     */
     @Test
     void aSingleLegalOptionIsTaken() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        TestBoard.inPlay(game, a, "Forest");
-        TestBoard.inPlay(game, a, "Forest");
-        Card bears = TestBoard.inHand(game, a, "Grizzly Bears");
+        Card pacifism = pacifismWithOnlyAnOwnTarget(game, a);
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
@@ -92,8 +112,7 @@ class RandomSeatControllerTest {
 
         assertNotNull(chosen, "a random draw never passes while anything is playable");
         assertEquals(1, chosen.size());
-        assertEquals(bears, chosen.get(0).getHostCard());
-        assertTrue(seat.lastDrawWasRandom());
+        assertEquals(pacifism, chosen.get(0).getHostCard());
     }
 
     /**
@@ -125,16 +144,14 @@ class RandomSeatControllerTest {
     void landFirstThenTheDraw() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        TestBoard.inPlay(game, a, "Forest");
-        TestBoard.inPlay(game, a, "Forest");
-        Card land = TestBoard.inHand(game, a, "Forest");
-        TestBoard.inHand(game, a, "Grizzly Bears");
+        pacifismWithOnlyAnOwnTarget(game, a);
+        Card land = TestBoard.inHand(game, a, "Plains");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
+        // A draw never picks a land, so a land played is the AI deciding.
         List<SpellAbility> first = seat.chooseSpellAbilityToPlay();
-        assertFalse(seat.lastDrawWasRandom(), "no draw while a land drop is open");
-        assertNotNull(first, "the AI plays the land");
+        assertNotNull(first, "no draw while a land drop is open: the AI plays the land");
         assertTrue(first.get(0).isLandAbility(), first.toString());
         assertEquals(land, first.get(0).getHostCard());
 
@@ -142,9 +159,7 @@ class RandomSeatControllerTest {
         assertEquals(1, a.getLandsPlayedThisTurn());
 
         List<SpellAbility> second = seat.chooseSpellAbilityToPlay();
-        assertTrue(seat.lastDrawWasRandom(), "the drop is used: the draw is made");
-        assertNotNull(second);
-        assertEquals("Grizzly Bears", second.get(0).getHostCard().getName());
+        assertTrue(plays(second, "Pacifism"), "the drop is used: the draw is made, " + second);
     }
 
     /** Scenario 2's other branch: a draw that fails leaves the decision to the AI. */
@@ -152,15 +167,13 @@ class RandomSeatControllerTest {
     void aFailedDrawLeavesThePlayToTheAi() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 0.0, 1L);
         Player a = game.getPlayers().get(0);
-        TestBoard.inPlay(game, a, "Forest");
-        TestBoard.inPlay(game, a, "Forest");
-        TestBoard.inHand(game, a, "Grizzly Bears");
+        pacifismWithOnlyAnOwnTarget(game, a);
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
         for (int i = 0; i < 20; i++) {
-            seat.chooseSpellAbilityToPlay();
-            assertFalse(seat.lastDrawWasRandom(), "P = 0 never draws");
+            List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
+            assertFalse(plays(chosen, "Pacifism"), "P = 0 never draws: " + chosen);
         }
     }
 
@@ -271,9 +284,7 @@ class RandomSeatControllerTest {
     void aForkOfTheGameDoesNotActAtRandom() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        TestBoard.inPlay(game, a, "Forest");
-        TestBoard.inPlay(game, a, "Forest");
-        TestBoard.inHand(game, a, "Grizzly Bears");
+        pacifismWithOnlyAnOwnTarget(game, a);
         seatOf(game).attach(game, null);
 
         Game fork = new GameCopier(game).makeCopy();
@@ -281,8 +292,8 @@ class RandomSeatControllerTest {
         assertNotNull(forked, "the fork keeps the lobby-player subclass");
         assertFalse(forked.isLive());
 
-        forked.chooseSpellAbilityToPlay();
-        assertFalse(forked.lastDrawWasRandom(), "a fork's seat defers to the AI");
+        List<SpellAbility> chosen = forked.chooseSpellAbilityToPlay();
+        assertFalse(plays(chosen, "Pacifism"), "a fork's seat defers to the AI: " + chosen);
     }
 
     // ── attacks and blocks ──────────────────────────────────────────────

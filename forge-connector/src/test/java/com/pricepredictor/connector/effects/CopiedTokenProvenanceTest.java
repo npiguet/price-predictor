@@ -147,7 +147,7 @@ class CopiedTokenProvenanceTest {
      *
      * <p>Takes the first one in the snapshot, which names the token only
      * because the fixture puts nothing else on the board -- see
-     * {@link #twoPlayerGameInAMainPhase}.
+     * {@link #boardWithFoodTokenAndItsFork}.
      */
     private static String printedBlock(String snapshot) {
         int open = snapshot.indexOf(PRINTED_KEY);

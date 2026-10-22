@@ -121,9 +121,8 @@ class RecordShardWriterTest {
     // ── identity across worker lifetimes ────────────────────────────────
     //
     // Both counters live in one JVM's heap, and the supervisor replaces that
-    // JVM hundreds of times over an overnight run, so without the lifetime
-    // token in the shard name the record ids and game ids of successive JVMs
-    // collide.
+    // JVM many times over a run, so without the lifetime token in the shard
+    // name the record ids and game ids of successive JVMs collide.
     //
     // The restarts are not the problem and are not going away: the small heap and
     // the timed recycle are deliberate containment for Forge misbehaving late

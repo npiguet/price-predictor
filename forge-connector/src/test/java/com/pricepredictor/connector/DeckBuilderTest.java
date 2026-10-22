@@ -157,6 +157,15 @@ class DeckBuilderTest {
         nonbasics(swappedDeck).forEach(removed::remove);
         assertEquals(3, removed.size(),
                 "3 swaps replace exactly 3 of the standard deck's nonbasic cards, got " + removed);
+        // The other direction too: a nonbasic swapped for a basic land would
+        // leave the count above unchanged and bring in one card too few here.
+        // Basics are left out because the builder re-balances them for the
+        // swapped deck's colours.
+        List<PaperCard> added = nonbasics(swappedDeck);
+        nonbasics(standardDeck).forEach(added::remove);
+        assertEquals(3, added.size(), "3 swaps bring in exactly 3 nonbasic cards, got " + added);
+        assertTrue(added.stream().noneMatch(c -> c.getRules().getMainPart().getType().isLand()),
+                "every card a swap brings in is a nonland card, got " + added);
     }
 
     /** The deck's nonbasic cards as a mutable list, duplicates repeated. */

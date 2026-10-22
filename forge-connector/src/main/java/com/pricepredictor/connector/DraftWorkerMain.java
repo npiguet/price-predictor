@@ -107,7 +107,7 @@ public class DraftWorkerMain {
             eligibleSets = MatchGenerator.computeEligibleSets();
             if (eligibleSets.isEmpty()) {
                 System.err.println("Error: no eligible sealed-legal sets found");
-                System.exit(1);
+                throw ToolMain.exit(1);
             }
         }
 

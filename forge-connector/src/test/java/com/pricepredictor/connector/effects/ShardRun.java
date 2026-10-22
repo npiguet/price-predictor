@@ -39,7 +39,7 @@ final class ShardRun {
     /** What a test does with the two collectors. */
     @FunctionalInterface
     interface Body {
-        void run(BusBracketCollector bracket, TestCollectors.Channels collectors) throws Throwable;
+        void run(BusBracketCollector bracket, Channels collectors) throws Throwable;
     }
 
     /** What a test does with a bracket the game's bus is feeding. */
@@ -101,7 +101,7 @@ final class ShardRun {
             BusBracketCollector bracket = new BusBracketCollector(
                     game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
                     recordId -> { });
-            try (TestCollectors.Channels collectors = TestCollectors.Channels.of(
+            try (Channels collectors = Channels.of(
                     game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
                     caps, SEED, bracket)) {
                 body.run(bracket, collectors);

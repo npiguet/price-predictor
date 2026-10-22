@@ -43,9 +43,17 @@ public class PoolMain {
         });
     }
 
-    private static void writePools(
-            String setCode, int poolCount, Path outputDir, String excludePath)
+    /**
+     * Write {@code poolCount} pools to {@code pools.txt} under {@code outputDir}.
+     *
+     * @param requestedSet the set every pool is opened from, as given — an
+     *                     alias is written under its edition's own code — or
+     *                     null for a random set per pool
+     */
+    static void writePools(
+            String requestedSet, int poolCount, Path outputDir, String excludePath)
             throws java.io.IOException {
+        String setCode = BoosterTemplates.canonicalCode(requestedSet);
         // A depleted run: the named cards never enter a booster, so no
         // training game holds one and none has to be discarded later.
         HoldoutCards excluded = HoldoutCards.NONE;

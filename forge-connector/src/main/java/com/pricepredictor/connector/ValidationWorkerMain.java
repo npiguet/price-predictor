@@ -18,6 +18,13 @@ import java.nio.file.Path;
  */
 public class ValidationWorkerMain {
 
+    /**
+     * Exit code when the matches or outcomes file cannot be read or written.
+     * The supervisor checks only for non-zero, so it need not differ from
+     * {@link WorkerProperties#BAD_CONFIG_EXIT}.
+     */
+    static final int IO_FAILURE_EXIT = 2;
+
     public static void main(String[] args) {
         String matchesFileProp = WorkerProperties.require("matches.file");
         int bestOf = WorkerProperties.bestOf("best.of", 3);
@@ -37,7 +44,7 @@ public class ValidationWorkerMain {
         } catch (IOException e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace(System.err);
-            System.exit(WorkerProperties.BAD_CONFIG_EXIT);
+            throw ToolMain.exit(IO_FAILURE_EXIT);
         }
     }
 }

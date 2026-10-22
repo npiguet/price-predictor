@@ -85,7 +85,7 @@ public final class SnapshotBuilder {
      * collector that left it out wrote a record naming a target its own state
      * did not hold.
      */
-    static List<Card> referencedOf(SpellAbility ability) {
+    private static List<Card> referencedOf(SpellAbility ability) {
         List<Card> referenced = new ArrayList<>();
         if (ability == null) {
             return referenced;
@@ -111,12 +111,20 @@ public final class SnapshotBuilder {
      *                   legality question with no candidate — whose refs then
      *                   render empty, as {@link #ofBoard}'s do
      * @param referenced the cards the record points at, carried whatever zone
-     *                   they sit in (tier 1) — {@link #referencedOf} for an
-     *                   ability being cast or forced, the host alone for a
-     *                   playability candidate, which has no targets yet
+     *                   they sit in (tier 1) — the host alone for a playability
+     *                   candidate, which has no targets yet; an ability being
+     *                   cast or forced takes {@link #ofResolving} instead
      */
     Snapshot ofAbility(SpellAbility acting, Iterable<Card> referenced) {
         return snapshot(referenced, null, acting, null, null);
+    }
+
+    /**
+     * The snapshot for an ability being cast or forced: {@link #ofAbility}
+     * with its host and targets as the referenced list.
+     */
+    Snapshot ofResolving(SpellAbility acting) {
+        return ofAbility(acting, referencedOf(acting));
     }
 
     /**

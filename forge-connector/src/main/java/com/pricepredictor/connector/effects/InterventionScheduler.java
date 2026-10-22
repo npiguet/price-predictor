@@ -54,7 +54,7 @@ final class InterventionScheduler {
                 if (!forks.mayIntervene(candidate.getId())) {
                     return;
                 }
-                interveneSeen.add(ManaChannel.abilityText(candidate, ""));
+                interveneSeen.add(AbilityLines.key(candidate));
                 forks.intervene(candidate, candidate.getId());
             }
         }
@@ -76,6 +76,6 @@ final class InterventionScheduler {
         if (candidate.isLandAbility() || candidate.isManaAbility()) {
             return false;
         }
-        return !interveneSeen.contains(ManaChannel.abilityText(candidate, ""));
+        return !interveneSeen.contains(AbilityLines.key(candidate));
     }
 }

@@ -32,15 +32,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Resolving a live Forge trait to the printed line it came from.
  *
- * <p>Every case here is a shape Forge actually hands the collectors, and every
- * one of them failed to key in the first collected corpus: the stack replaces
+ * <p>Every case here is a shape Forge actually hands the collectors, and none
+ * of them keys by looking the trait up as parsed: the stack replaces
  * an activated ability with a copy before pushing it, a triggered ability
  * arrives wrapped around an SVar ability that belongs to no trait list, the
  * cost-variant helpers copy with no back-reference at all, and an effect card's
  * traits sit on a card that has no script file in any tree. The tests build
  * those objects the way the engine builds them rather than asserting on the
- * pristine parse, because keying the pristine parse always worked — it is the
- * object that comes back from the engine that did not.
+ * pristine parse, because the pristine parse keys trivially — it is the
+ * object that comes back from the engine that does not.
  */
 @ExtendWith(ForgeExtension.class)
 class ProvenanceResolverTest {

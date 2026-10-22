@@ -156,39 +156,34 @@ public class RulesParser {
 
         String layout = splitType.name().toLowerCase();
         List<CardFace> faces = new ArrayList<>();
-
-        CardStateName mainState = (splitType == CardSplitType.Split)
-                ? CardStateName.LeftSplit : CardStateName.Original;
-        card.setState(mainState, false);
-        faces.add(parseFace(card, rules.getMainPart(),
-                nextRecorder(recorders), 0, scriptFile));
-
-        if (splitType == CardSplitType.Specialize) {
-            // In the state enum's order, not the parts map's: CardRules holds
-            // them in a HashMap keyed by enum constants, whose order changes
-            // from one JVM to the next, while the collectors number faces in
-            // the live card's EnumMap order (FaceOrder.faceOrder). A face
-            // index taken from the map's order resolved a record to another
-            // face's lines, and the converted text came out reordered.
-            Map<CardStateName, ICardFace> parts = rules.getSpecializeParts();
-            for (CardStateName state : CardStateName.values()) {
-                ICardFace part = parts.get(state);
-                if (part != null) {
-                    card.setState(state, false);
-                    faces.add(parseFace(card, part,
-                            nextRecorder(recorders), faces.size(), scriptFile));
-                }
-            }
-        } else {
-            ICardFace otherFace = rules.getOtherPart();
-            if (otherFace != null) {
-                card.setState(splitType.getChangedStateName(), false);
-                faces.add(parseFace(card, otherFace,
+        // In the order the collectors number faces, read from the same method,
+        // because a key's face ordinal is joined by value: CardRules holds the
+        // specialize parts in a HashMap keyed by enum constants, whose order
+        // changes from one JVM to the next.
+        for (CardStateName state : FaceOrder.faceOrder(card)) {
+            ICardFace part = partOf(rules, splitType, state);
+            if (part != null) {
+                card.setState(state, false);
+                faces.add(parseFace(card, part,
                         nextRecorder(recorders), faces.size(), scriptFile));
             }
         }
 
         return MultiCard.multiFace(layout, faces);
+    }
+
+    /** The printed face a multi-face card shows in {@code state}, or null for none. */
+    private static ICardFace partOf(
+            CardRules rules, CardSplitType splitType, CardStateName state) {
+        CardStateName mainState = splitType == CardSplitType.Split
+                ? CardStateName.LeftSplit : CardStateName.Original;
+        if (state == mainState) {
+            return rules.getMainPart();
+        }
+        if (splitType == CardSplitType.Specialize) {
+            return rules.getSpecializeParts().get(state);
+        }
+        return state == splitType.getChangedStateName() ? rules.getOtherPart() : null;
     }
 
     /** Append and return a fresh recorder for the next face. */

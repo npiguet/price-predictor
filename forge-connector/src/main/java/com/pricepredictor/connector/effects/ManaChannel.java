@@ -48,7 +48,7 @@ final class ManaChannel {
             if (ability == null || produced.isEmpty() || !live.owns(ability)) {
                 return;
             }
-            String key = abilityText(ability, produced);
+            String key = capKey(ability, produced);
             int slot = reservoir.slot(key);
             if (slot < 0) {
                 return;
@@ -73,18 +73,12 @@ final class ManaChannel {
     }
 
     /**
-     * The cap's key: the ability, not the instance.
-     *
-     * <p>Every Mountain shares one text, so counting by text caps the whole
-     * class rather than each copy. The produced string rides along because a
-     * filter land producing {@code W} and the same land producing {@code U} are
-     * different observations of the same line. {@link InterventionScheduler}
-     * keys its once-per-line memory the same way, with nothing produced.
+     * The cap's key: the ability's {@link AbilityLines#key}, and what it
+     * produced, because a filter land producing {@code W} and the same land
+     * producing {@code U} are different observations of the same line.
      */
-    static String abilityText(SpellAbility ability, String produced) {
-        Object api = ability.getApi();
-        return (api == null ? "?" : api.toString()) + "|"
-                + ability.getHostCard().getName() + "|" + produced;
+    private static String capKey(SpellAbility ability, String produced) {
+        return AbilityLines.key(ability) + "|" + produced;
     }
 
     /**

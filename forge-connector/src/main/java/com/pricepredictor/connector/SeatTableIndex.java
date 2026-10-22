@@ -151,9 +151,7 @@ public class SeatTableIndex {
         return false;  // every seat shares one label; excluded so the retry terminates
     }
 
-    // ── Static helpers (package-visible for testing) ────────────────
-
-    static SeatEntry parseLine(String line) {
+    private static SeatEntry parseLine(String line) {
         String[] parts = line.split(CardNameList.FIELD_SEPARATOR, 5);
         if (parts.length < 5) {
             throw new IllegalArgumentException(

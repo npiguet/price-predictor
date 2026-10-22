@@ -493,8 +493,7 @@ public final class ForkCollector {
                     && forcedKey.equals(ProvenanceResolver.resolve(start.charm()).key())) {
                 modes.add(new ModeBoundary(
                         start.option(), sink.beginMode(),
-                        snapshots.ofAbility(ability, SnapshotBuilder.referencedOf(ability))
-                                .render()));
+                        snapshots.ofResolving(ability).render()));
             }
         });
         try {
@@ -511,8 +510,7 @@ public final class ForkCollector {
             // observed resolution's state is read once its targets are
             // chosen. Read after the resolution it would hand the model the
             // answer.
-            String state = snapshots.ofAbility(ability, SnapshotBuilder.referencedOf(ability))
-                    .render();
+            String state = snapshots.ofResolving(ability).render();
             fork.copyLastState();
             fork.getStack().add(ability);
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());

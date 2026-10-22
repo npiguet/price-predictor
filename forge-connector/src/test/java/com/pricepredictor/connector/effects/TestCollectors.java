@@ -8,7 +8,6 @@ import forge.game.trigger.TriggerHandler;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Random;
 
 /**
  * Patched collectors and their channels built the ways a test drives them by
@@ -18,48 +17,6 @@ import java.util.Random;
  * through {@link ShardRun} instead.
  */
 final class TestCollectors {
-
-    /**
-     * One game's channels, built over one game, one dedup set and one sampling
-     * stream as {@link PatchedCollectors} builds them, for a test that calls
-     * a channel's handler or record builder by hand.
-     *
-     * <p>Closing writes what the mana channel holds and ends the game for the
-     * rewrite tally, as closing the patched collectors does; no hook is
-     * installed, so none comes down.
-     */
-    record Channels(
-            RewriteChannel rewrites,
-            TriggerChannel triggers,
-            PlayabilityChannel playability,
-            ManaChannel mana,
-            ClauseOutcomeRouter clauses,
-            ContinuousChannel continuous) implements AutoCloseable {
-
-        static Channels of(
-                Game game, CollectorContext context, CollectionCaps caps, long seed,
-                BusBracketCollector bracket) {
-            LiveGame live = new LiveGame(game);
-            RecordDedup dedup = new RecordDedup();
-            Random sampler = new Random(GameRecording.scramble(seed));
-            return new Channels(
-                    new RewriteChannel(live, context, dedup),
-                    new TriggerChannel(live, context, dedup, new TriggerNegativeSampler(sampler)),
-                    new PlayabilityChannel(live, context, dedup, sampler, caps.playabilityRate()),
-                    new ManaChannel(live, context, new ManaReservoir(caps.manaCap(), sampler)),
-                    new ClauseOutcomeRouter(live, bracket),
-                    new ContinuousChannel(live, context, dedup));
-        }
-
-        @Override
-        public void close() {
-            try {
-                mana.flush();
-            } finally {
-                RewriteChannel.JVM_REWRITES.endOfGame();
-            }
-        }
-    }
 
     private TestCollectors() {
     }
