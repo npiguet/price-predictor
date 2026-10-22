@@ -17,6 +17,7 @@ import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -397,6 +398,45 @@ class ForkCollectorTest {
                 held.events().stream().map(EffectEvent::toJson).toList().toString());
     }
 
+    // ── a forced resolution's state is the board it acted on ────────────
+
+    /**
+     * A forced targeted spell's record names the target it resolved at, as
+     * an observed resolution record does.
+     *
+     * <p>The fork draws its targets itself, so a state rendered before that
+     * draw holds an ability with no target: Disfigure resolving at the one
+     * creature on the board, recorded as aimed at nothing.
+     */
+    @Test
+    void aForcedTargetedSpellsRecordNamesItsTarget() throws IOException {
+        Game game = gameIn(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card bears = onBattlefield(game, "Grizzly Bears", game.getPlayers().get(1));
+        // In hand, where the fork's copier can find it.
+        Card disfigure = game.getAction().moveTo(ZoneType.Hand,
+                CardFactory.getCard(StaticData.instance().getCommonCards()
+                        .getCard("Disfigure"), caster, game),
+                null, null);
+        SpellAbility spell = disfigure.getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        try {
+            ForkCollector forks = new ForkCollector(
+                    game, writer, "run.0-l1.0", caps(1, 0, List.of()), 1L);
+            assertTrue(forks.intervene(spell, 1), "the forced resolution observed nothing");
+        } finally {
+            writer.close();
+        }
+
+        List<String> records = readShard(writer.path());
+        assertEquals(1, records.size(), records.toString());
+        String target = "\"E" + bears.getId() + "\"";
+        assertTrue(records.get(0).contains("\"refs\":{\"targets\":[" + target + "]"),
+                records.get(0));
+    }
+
     private static EffectEvent damageTo(List<EffectEvent> events, Card card) {
         return events.stream()
                 .filter(e -> EffectEvent.DAMAGE_DEALT.equals(e.type())
@@ -408,12 +448,17 @@ class ForkCollectorTest {
 
     /** A two-player game in the regular damage step, past the start. */
     private static Game gameInADamageStep() {
+        return gameIn(PhaseType.COMBAT_DAMAGE);
+    }
+
+    /** A two-player game in {@code phase}, past the start. */
+    private static Game gameIn(PhaseType phase) {
         List<RegisteredPlayer> players = List.of(
                 new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("a", null)),
                 new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("b", null)));
         GameRules rules = new GameRules(GameType.Constructed);
         Game game = new Game(players, rules, new Match(rules, players, "ForkCollectorTest"));
-        game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DAMAGE, game.getPlayers().get(0));
+        game.getPhaseHandler().devModeSet(phase, game.getPlayers().get(0));
         game.setAge(GameStage.Play);
         return game;
     }

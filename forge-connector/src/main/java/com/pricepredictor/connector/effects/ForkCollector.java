@@ -357,12 +357,8 @@ public final class ForkCollector {
                 return false;
             }
 
-            // The fork's own state, not the live game's, and read *before* the
-            // resolution: the record's state is the board the ability acted on, and
-            // reading it after would hand the model the answer.
+            // The fork's own state, not the live game's.
             SnapshotBuilder snapshots = new SnapshotBuilder(fork);
-            String state = snapshots.toJson(forked, SnapshotBuilder.referencedOf(forked));
-
             ForcedResolution resolution = forceResolution(fork, forked, actor, snapshots);
             if (resolution == null || resolution.events().isEmpty()) {
                 // An empty event list is not an observation. "The ability resolved
@@ -383,7 +379,7 @@ public final class ForkCollector {
             ProvenanceKey.Resolved keys = ProvenanceKey.resolve(ability);
             String actorId = SnapshotBuilder.playerId(perspective);
             if (resolution.modes().isEmpty()) {
-                context.emit(forkedHalf(actorId, keys, state, resolution.events()));
+                context.emit(forkedHalf(actorId, keys, resolution.state(), resolution.events()));
             } else {
                 emitModeHalves(actorId, keys, resolution);
             }
@@ -442,9 +438,13 @@ public final class ForkCollector {
     /**
      * What a forced resolution produced, where its modes began, and which of
      * its events are permanents leaving the battlefield in a state-based check.
+     *
+     * @param state the fork's board as the ability began to resolve, its
+     *              targets and X already drawn: a non-modal record's state
      */
     private record ForcedResolution(
-            List<EffectEvent> events, List<ModeBoundary> modes, Set<Integer> stateBasedLeaves) {
+            String state, List<EffectEvent> events, List<ModeBoundary> modes,
+            Set<Integer> stateBasedLeaves) {
     }
 
     /**
@@ -563,11 +563,17 @@ public final class ForkCollector {
             // target does, and the fork never pays, so the leftover mana of
             // the forked actor is what bounds the draw above it.
             choices.announceX(ability, actor, 1);
+            // Read after the draw and before the resolution: the board the
+            // ability acted on, with the targets and X it acted with, as an
+            // observed resolution's state is read once its targets are
+            // chosen. Read after the resolution it would hand the model the
+            // answer.
+            String state = snapshots.toJson(ability, SnapshotBuilder.referencedOf(ability));
             fork.copyLastState();
             fork.getStack().add(ability);
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
             return new ForcedResolution(
-                    sink.events(), List.copyOf(modes), sink.stateBasedLeaves());
+                    state, sink.events(), List.copyOf(modes), sink.stateBasedLeaves());
         } catch (RuntimeException | StackOverflowError e) {
             // A forced resolution reaches states ordinary play does not — an
             // ability resolving with no legal target, a cost that was never
