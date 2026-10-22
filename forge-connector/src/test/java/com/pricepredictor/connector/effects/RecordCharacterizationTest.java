@@ -330,7 +330,7 @@ class RecordCharacterizationTest {
                 PlayabilitySubkind.BLOCKERS, AttributionMode.detect())
                 .actor(SnapshotBuilder.playerId(board.opponent))
                 .whatIf(true)
-                .state(new SnapshotBuilder(board.game).toJson(null, List.of()))
+                .state(new SnapshotBuilder(board.game).ofBoard().render())
                 .toJson();
 
         Characterization.assertMatches(

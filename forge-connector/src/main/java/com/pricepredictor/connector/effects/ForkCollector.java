@@ -524,7 +524,8 @@ public final class ForkCollector {
                     && forcedKey.equals(ProvenanceKey.resolve(start.charm()).key())) {
                 modes.add(new ModeBoundary(
                         start.option(), sink.beginMode(),
-                        snapshots.toJson(ability, SnapshotBuilder.referencedOf(ability))));
+                        snapshots.ofAbility(ability, SnapshotBuilder.referencedOf(ability))
+                                .render()));
             }
         });
         try {
@@ -542,7 +543,8 @@ public final class ForkCollector {
             // observed resolution's state is read once its targets are
             // chosen. Read after the resolution it would hand the model the
             // answer.
-            String state = snapshots.toJson(ability, SnapshotBuilder.referencedOf(ability));
+            String state = snapshots.ofAbility(ability, SnapshotBuilder.referencedOf(ability))
+                    .render();
             fork.copyLastState();
             fork.getStack().add(ability);
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
@@ -657,7 +659,7 @@ public final class ForkCollector {
                 forkCarrier.addChangedCardKeywords(
                         null, List.of(keyword), false,
                         fork.getNextTimestamp(), null);
-                state = snapshots.toJson(null, List.of());
+                state = snapshots.ofBoard().render();
                 // Listening from here, once the keyword is gone: the stripped
                 // keyword is the branch's input, and a sink primed before it
                 // would report its removal as something the step did. No root:
