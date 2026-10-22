@@ -218,8 +218,8 @@ public class MatchWorkerMain {
                 ? null : new CardsPlayedWriter(cardsPlayedPath(config.outputFile()));
         // Never gated by recordsOnly(): a progress tally is not a corpus, and
         // gating it on the same guard that keeps records-only mode out of the
-        // sealed corpus is exactly the bug this property exists to fix (a
-        // records-only round's progress file would otherwise never grow).
+        // sealed corpus would leave a records-only round's progress file never
+        // growing.
         ProgressWriter progressWriter = config.progressFile() == null
                 ? null : new ProgressWriter(config.progressFile());
 

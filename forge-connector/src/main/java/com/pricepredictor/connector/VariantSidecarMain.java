@@ -62,8 +62,8 @@ public class VariantSidecarMain {
      * script is still on disk and still has a sidecar, so nothing before this
      * point can tell the difference, and a deck built over the generated names
      * then carries cards no worker can materialize. A decks-only round refuses
-     * such a deck outright rather than playing basics, so on a real run this is
-     * not a rounding error: at roughly one variant in nine unloadable, almost
+     * such a deck outright rather than playing basics, so this is not a
+     * rounding error: with even a modest share of variants unloadable, almost
      * every deck of 23 nonlands holds at least one and the round collects
      * nearly nothing while every worker dies on it.
      *

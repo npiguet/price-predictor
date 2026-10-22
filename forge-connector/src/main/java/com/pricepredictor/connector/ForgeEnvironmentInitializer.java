@@ -61,9 +61,8 @@ public class ForgeEnvironmentInitializer {
      * once. Each copying thousands of scripts into it while the others walk it
      * during {@code FModel.initialize} is a plain race: a worker reads a
      * partial directory, its card database is missing variants the decks file
-     * names, and every deck holding one is refused. A real run lost 350 of its
-     * 354 workers that way, reporting names as unresolvable that were on disk
-     * the whole time.
+     * names, and every deck holding one is refused, reporting names as
+     * unresolvable that are on disk the whole time.
      *
      * <p>So exactly one process stages: {@code VariantSidecarMain}, which runs
      * to completion before the first worker starts. Workers pass
@@ -149,13 +148,12 @@ public class ForgeEnvironmentInitializer {
     /**
      * Remove what a previous staging left in Forge's custom-cards directory.
      *
-     * <p>That directory is persistent and shared, and staging used to only
-     * ever add to it — so every variant run's scripts piled on top of the
-     * last's. One machine reached 17,700 files from runs whose variant trees
-     * were long gone, and a single malformed script among them is not a
-     * skipped card: {@code StaticData}'s constructor throws on it, so every
-     * Forge startup afterwards dies, including runs that have nothing to do
-     * with variants.
+     * <p>That directory is persistent and shared, so a staging that only ever
+     * added to it would pile every variant run's scripts on top of the last's,
+     * long after their variant trees are gone. A single malformed script among
+     * them is not a skipped card: {@code StaticData}'s constructor throws on
+     * it, so every Forge startup afterwards dies, including runs that have
+     * nothing to do with variants.
      *
      * <p>Only files this code copied are removed, named by the manifest it
      * wrote. A card a person put there by hand is not ours to delete.
