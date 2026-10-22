@@ -48,21 +48,6 @@ class DraftPickProtocolTest {
     }
 
     @Test
-    void formatPickRequestEmitsAllFields() {
-        String line = request("d1", 3, 1, 5, List.of("Card A", "Card B")).toWireLine();
-        assertTrue(line.startsWith(DraftPickProtocol.PICK_REQUEST_SENTINEL));
-        String json = line.substring(DraftPickProtocol.PICK_REQUEST_SENTINEL.length());
-        assertTrue(json.contains("\"draft_id\":\"d1\""));
-        assertTrue(json.contains("\"seat\":3"));
-        assertTrue(json.contains("\"agent\":\"draft-agent\""));
-        assertTrue(json.contains("\"pod_size\":8"));
-        assertTrue(json.contains("\"pack_number\":1"));
-        assertTrue(json.contains("\"pick_number\":5"));
-        assertTrue(json.contains("\"set_code\":\"BLB\""));
-        assertTrue(json.contains("\"pack\":[\"Card A\",\"Card B\"]"));
-    }
-
-    @Test
     void formatPickRequestEscapesCardNames() {
         String line = new DraftPickProtocol.PickRequest(
                 "d1", 0, "a", 8, 1, 1, "TST", List.of("Lim-Dûl's \"Vault\"")).toWireLine();

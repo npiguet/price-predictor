@@ -30,32 +30,17 @@ class CardsPlayedRowTest {
     }
 
     @Test
-    void lineHasElevenSemicolonSeparatedFields() {
-        CardsPlayedRow row = sample(
-                List.of("Lightning Bolt"), List.of("Counterspell"),
-                List.of("Mountain"), List.of("Island"),
-                Side.A, Side.B);
-        String[] parts = row.toLine().split(";", -1);
-        assertEquals(11, parts.length);
-    }
-
-    @Test
-    void noTrailingSemicolon() {
-        CardsPlayedRow row = sample(
-                List.of("X"), List.of("Y"), List.of(), List.of(), Side.A, Side.A);
-        String line = row.toLine();
-        assertFalse(line.endsWith(";"), "line must not end with ';'");
-    }
-
-    @Test
-    void fieldsAppearInExpectedOrder() {
+    void aLineIsElevenFieldsInTheDocumentedOrder() {
         CardsPlayedRow row = sample(
                 List.of("Lightning Bolt", "Tarmogoyf"),
                 List.of("Counterspell"),
                 List.of("Snapcaster Mage"),
                 List.of("Brainstorm"),
                 Side.A, Side.B);
-        String[] parts = row.toLine().split(";", -1);
+        String line = row.toLine();
+        assertFalse(line.endsWith(";"), "line must not end with ';'");
+        String[] parts = line.split(";", -1);
+        assertEquals(11, parts.length);
         assertEquals(DateTimeFormatter.ISO_INSTANT.format(TS), parts[0]);
         assertEquals(RUN_ID, parts[1]);
         assertEquals("RVR", parts[2]);
@@ -79,28 +64,5 @@ class CardsPlayedRowTest {
         assertEquals("", parts[6]);
         assertEquals("", parts[7]);
         assertEquals("", parts[8]);
-    }
-
-    @Test
-    void cardListPreservesIterationOrder() {
-        // Row writer emits names in the order the input list provides; it does
-        // not deduplicate (that's the caller's job — see MatchGenerator).
-        CardsPlayedRow row = sample(
-                List.of("Lightning Bolt", "Counterspell", "Tarmogoyf"),
-                List.of("Brainstorm"),
-                List.of(), List.of(),
-                Side.A, Side.A);
-        String[] parts = row.toLine().split(";", -1);
-        assertEquals("Lightning Bolt|Counterspell|Tarmogoyf", parts[5]);
-    }
-
-    @Test
-    void timestampUsesIsoInstantFormat() {
-        CardsPlayedRow row = sample(
-                List.of(), List.of(), List.of(), List.of(),
-                Side.A, Side.B);
-        String[] parts = row.toLine().split(";", -1);
-        // Should round-trip through ISO_INSTANT parser
-        assertEquals(TS, Instant.from(DateTimeFormatter.ISO_INSTANT.parse(parts[0])));
     }
 }
