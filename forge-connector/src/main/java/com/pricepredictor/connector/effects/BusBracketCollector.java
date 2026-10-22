@@ -504,7 +504,7 @@ public final class BusBracketCollector extends BusEventReader {
         }
         HeldHalf into = held.halves().get(
                 halfForDeath(touched, Refs.of(event.card())));
-        into.events().file(EventAttribution.stamp(moved, held.root(), null, null));
+        into.events().file(EventAttribution.stampAt(moved, held.root(), null, null));
         return true;
     }
 

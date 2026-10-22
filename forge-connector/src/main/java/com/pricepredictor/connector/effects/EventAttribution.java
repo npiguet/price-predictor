@@ -133,21 +133,12 @@ final class EventAttribution {
     }
 
     /**
-     * How long the acting script says its effect lasts.
+     * How long the acting script says an event of {@code eventType} lasts.
      *
      * <p>Read from the resolving clause's own {@code Duration$}, falling back to
      * the root line's — a sub-ability that declares none inherits the line's.
      * The source is the script rather than the engine's cleanup registration
-     * because the script is where the answer is written down; an effect whose
-     * duration lives only in Java reads as {@code instant}, which is also the
-     * right answer for the many events that do not last at all.
-     */
-    static EventDuration duration(SpellAbility root, Object pointer) {
-        return duration(root, pointer, null);
-    }
-
-    /**
-     * The duration of an event of {@code eventType}, from the script.
+     * because the script is where the answer is written down.
      *
      * <p>A declared {@code Duration$} is bucketed as it says. An undeclared one
      * is instant for an event with no lasting state, and otherwise whatever
@@ -189,8 +180,8 @@ final class EventAttribution {
      * <p>Null when nothing was resolving — a combat damage step, a turn-based
      * action — which writes no {@code cause} at all rather than a placeholder.
      * A caller that has a better answer than the bracket, such as the source
-     * the bus itself named on a damage event, passes it to
-     * {@link #stamp(EffectEvent, SpellAbility, Object, String)} and it wins.
+     * the bus itself named on a damage event, passes it to {@link #stamp} and
+     * it wins.
      */
     static String cause(SpellAbility root, Object pointer) {
         Card host = hostOf(pointer instanceof SpellAbility resolving ? resolving : null);
@@ -223,17 +214,10 @@ final class EventAttribution {
     }
 
     /**
-     * Stamp all three onto an event, from the bracket alone.
+     * Stamp all three onto an event, for the clause resolving now.
      *
      * <p>Applied where an event is filed rather than where it is built, because
      * only the collector knows which ability's bracket it landed in.
-     */
-    static EffectEvent stamp(EffectEvent event, SpellAbility root) {
-        return stamp(event, root, PatchHooks.currentSubAbility(), null);
-    }
-
-    /**
-     * The same, with a cause the caller read off the event itself.
      *
      * <p>{@code namedCause} wins over the bracket's, and null defers to it.
      * The precedence is the caller's to state rather than something read back
@@ -246,14 +230,17 @@ final class EventAttribution {
         // Read once: all three fields answer the same question about the same
         // instant, and reading the hook twice could straddle a clause boundary
         // in a nested resolution.
-        return stamp(event, root, PatchHooks.currentSubAbility(), namedCause);
+        return stampAt(event, root, PatchHooks.currentSubAbility(), namedCause);
     }
 
-    static EffectEvent stamp(EffectEvent event, SpellAbility root, Object pointer) {
-        return stamp(event, root, pointer, null);
-    }
-
-    static EffectEvent stamp(
+    /**
+     * The same, for a clause the caller names rather than the hook.
+     *
+     * <p>A null {@code pointer} says no clause produced the event, which
+     * attributes it to {@link #UNRESOLVED} and takes its duration and cause
+     * from {@code root} alone.
+     */
+    static EffectEvent stampAt(
             EffectEvent event, SpellAbility root, Object pointer, String namedCause) {
         if (event == null) {
             return null;
