@@ -1,9 +1,12 @@
 package com.pricepredictor.connector;
 
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Per-game card-play record written to {@code output/sealed/cards-played.txt}
@@ -49,16 +52,50 @@ public record CardsPlayedRow(
 
     /** Format this row as one line of {@code cards-played.txt}. */
     public String toLine() {
-        return DateTimeFormatter.ISO_INSTANT.format(timestamp)
-                + ";" + runId
-                + ";" + setCode
-                + ";" + methodA
-                + ";" + methodB
-                + ";" + CardNameList.format(cardsPlayedA)
-                + ";" + CardNameList.format(cardsPlayedB)
-                + ";" + CardNameList.format(cardsNotPlayedA)
-                + ";" + CardNameList.format(cardsNotPlayedB)
-                + ";" + winner
-                + ";" + starter;
+        return CorpusLine.of(timestamp, runId, setCode, methodA, methodB,
+                CardNameList.format(cardsPlayedA), CardNameList.format(cardsPlayedB),
+                CardNameList.format(cardsNotPlayedA), CardNameList.format(cardsNotPlayedB),
+                winner.toString(), starter.toString());
+    }
+
+    /**
+     * The row for one game of {@code parent}, from the cards that game played.
+     *
+     * <p>The card columns are distinct sets: a name appears once however many
+     * copies the deck holds, basic lands never appear in the not-played
+     * columns, and a card is in at most one of a side's two columns — played
+     * if any copy was.
+     */
+    static CardsPlayedRow of(MatchResult parent, GamePlayer.GameOutcome game) {
+        List<String> playedA = distinct(game.cardsPlayedA());
+        List<String> playedB = distinct(game.cardsPlayedB());
+        return new CardsPlayedRow(
+                parent.timestamp(),
+                parent.runId(),
+                parent.setCode(),
+                parent.methodA(),
+                parent.methodB(),
+                playedA,
+                playedB,
+                nonBasicMinus(parent.deckA(), playedA),
+                nonBasicMinus(parent.deckB(), playedB),
+                game.winner(),
+                game.playFirst());
+    }
+
+    private static List<String> distinct(List<String> names) {
+        return new ArrayList<>(new LinkedHashSet<>(names));
+    }
+
+    /** The deck's distinct non-basic names, in deck order, that {@code played} lacks. */
+    private static List<String> nonBasicMinus(List<String> deck, List<String> played) {
+        Set<String> playedSet = new HashSet<>(played);
+        Set<String> remaining = new LinkedHashSet<>();
+        for (String name : deck) {
+            if (!BasicLands.isBasic(name) && !playedSet.contains(name)) {
+                remaining.add(name);
+            }
+        }
+        return new ArrayList<>(remaining);
     }
 }

@@ -34,7 +34,22 @@ public class GeneratedDecksIndex {
      * @param setCode   MTG set code (the second {@code ';'}-delimited field)
      * @param cardNames 40 card names (the pipe-separated tail)
      */
-    public record GeneratedDeck(String label, String setCode, List<String> cardNames) {}
+    public record GeneratedDeck(String label, String setCode, List<String> cardNames) {
+
+        /**
+         * One {@code LABEL;SET_CODE;Card1|...} line.
+         *
+         * @throws IOException when the line lacks either separator
+         */
+        static GeneratedDeck parse(String line) throws IOException {
+            String[] fields = line.split(CardNameList.FIELD_SEPARATOR, 3);
+            if (fields.length < 3) {
+                throw new IOException(
+                        "Malformed generated-decks line (need 'LABEL;SET_CODE;Cards'): " + line);
+            }
+            return new GeneratedDeck(fields[0], fields[1], CardNameList.parse(fields[2]));
+        }
+    }
 
     private final List<GeneratedDeck> allDecks;
     private final Map<String, List<GeneratedDeck>> decksBySet;
@@ -65,16 +80,7 @@ public class GeneratedDecksIndex {
         List<GeneratedDeck> decks = new ArrayList<>();
         for (String line : Files.readAllLines(file)) {
             if (line.isBlank()) continue;
-            int firstSep = line.indexOf(';');
-            int secondSep = firstSep < 0 ? -1 : line.indexOf(';', firstSep + 1);
-            if (firstSep < 0 || secondSep < 0) {
-                throw new IOException(
-                        "Malformed generated-decks line (need 'LABEL;SET_CODE;Cards'): " + line);
-            }
-            String label = line.substring(0, firstSep);
-            String setCode = line.substring(firstSep + 1, secondSep);
-            decks.add(new GeneratedDeck(label, setCode,
-                    CardNameList.parse(line.substring(secondSep + 1))));
+            decks.add(GeneratedDeck.parse(line));
         }
         if (decks.isEmpty()) {
             throw new IOException("Generated-decks file is empty: " + file);

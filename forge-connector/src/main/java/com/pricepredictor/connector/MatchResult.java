@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -71,15 +70,8 @@ public record MatchResult(
      * the two decks as pipe-separated card names.
      */
     public String toLine() {
-        return DateTimeFormatter.ISO_INSTANT.format(timestamp)
-                + ";" + runId
-                + ";" + setCode
-                + ";" + methodA
-                + ";" + methodB
-                + ";" + CardNameList.format(deckA)
-                + ";" + CardNameList.format(deckB)
-                + ";" + games
-                + ";" + play
-                + ";" + durationSeconds;
+        return CorpusLine.of(timestamp, runId, setCode, methodA, methodB,
+                CardNameList.format(deckA), CardNameList.format(deckB),
+                games, play, String.valueOf(durationSeconds));
     }
 }

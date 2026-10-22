@@ -91,7 +91,7 @@ public class PoolMain {
                 List<List<String>> pools = generator.generate(poolSetCode, batch, excluded);
                 for (List<String> pool : pools) {
                     writer.write(poolSetCode);
-                    writer.write(";");
+                    writer.write(CardNameList.FIELD_SEPARATOR);
                     writer.write(CardNameList.format(pool));
                     writer.newLine();
                     written++;
