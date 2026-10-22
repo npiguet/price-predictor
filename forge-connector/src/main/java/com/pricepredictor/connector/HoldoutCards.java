@@ -79,10 +79,6 @@ final class HoldoutCards {
         return folded.contains(fold(cardName));
     }
 
-    boolean isEmpty() {
-        return folded.isEmpty();
-    }
-
     int size() {
         return folded.size();
     }

@@ -40,10 +40,6 @@ public enum BuildMethod {
         return label;
     }
 
-    int weight() {
-        return weight;
-    }
-
     /** How many spells or nonbasic lands are swapped out of Forge's deck. */
     int swaps() {
         return swaps;

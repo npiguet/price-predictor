@@ -41,7 +41,7 @@ class HoldoutCardsTest {
 
     @Test
     void anUnsetPropertyIsAFullStrengthRun() {
-        assertTrue(HoldoutCards.fromSystemProperty().isEmpty());
+        assertSame(HoldoutCards.NONE, HoldoutCards.fromSystemProperty());
     }
 
     @Test

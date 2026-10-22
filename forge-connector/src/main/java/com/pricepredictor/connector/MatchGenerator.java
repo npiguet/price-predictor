@@ -137,13 +137,13 @@ public class MatchGenerator {
     /**
      * How a generator is configured. Every setting but the eligible sets and
      * the run id has a default: Forge-built decks on both sides, no holdout,
-     * not decks-only, a default {@link DeckBuilder}, a best-of-3
-     * {@link GamePlayer} with no effect records, and Forge's shared random.
+     * not decks-only, a best-of-3 {@link GamePlayer} with no effect records,
+     * and Forge's shared random.
      */
     static final class Builder {
         private final List<String> eligibleSetCodes;
         private final String runId;
-        private DeckBuilder deckBuilder = new DeckBuilder();
+        private final DeckBuilder deckBuilder = new DeckBuilder();
         private GamePlayer gamePlayer = new GamePlayer(3);
         private DeckSource sideA = DeckSource.FORGE_BUILT;
         private DeckSource sideB = DeckSource.FORGE_BUILT;
@@ -155,11 +155,6 @@ public class MatchGenerator {
         private Builder(List<String> eligibleSetCodes, String runId) {
             this.eligibleSetCodes = eligibleSetCodes;
             this.runId = runId;
-        }
-
-        Builder deckBuilder(DeckBuilder deckBuilder) {
-            this.deckBuilder = deckBuilder;
-            return this;
         }
 
         Builder gamePlayer(GamePlayer gamePlayer) {
