@@ -81,25 +81,9 @@ final class PatchedCollectors implements AutoCloseable {
                 new Listener(PatchHooks.OUTCOME_LISTENER, clauses::outcomeHandler));
     }
 
-    RewriteChannel rewrites() {
-        return rewrites;
-    }
-
-    TriggerChannel triggers() {
-        return triggers;
-    }
-
     /** The decision and legality channel, which the random seat also writes through. */
     PlayabilityChannel playability() {
         return playability;
-    }
-
-    ManaChannel mana() {
-        return mana;
-    }
-
-    ClauseOutcomeRouter clauses() {
-        return clauses;
     }
 
     /** The continuous channel, collected at each phase boundary rather than on a hook. */

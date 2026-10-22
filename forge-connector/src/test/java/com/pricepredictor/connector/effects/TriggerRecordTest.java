@@ -278,7 +278,7 @@ class TriggerRecordTest {
 
     // ── the cause channel ───────────────────────────────────────────────
 
-    private static String eventOf(PatchedCollectors collector, Trigger trigger,
+    private static String eventOf(TestCollectors.Channels collector, Trigger trigger,
             Map<String, Object> runParams) {
         return collector.triggers().record(trigger, runParams, true).toJson();
     }

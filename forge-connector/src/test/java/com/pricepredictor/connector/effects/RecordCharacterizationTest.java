@@ -144,15 +144,18 @@ class RecordCharacterizationTest {
         charm.setChosenList(chosen);
         CharmEffect.chainAbilities(charm, chosen);
 
-        List<String> records = records(board, CAPS, (bracket, collectors) -> {
-            board.game.subscribeToEvents(bracket);
-            Assumptions.assumeTrue(
-                    collectors.install() > 0
-                            && PatchHooks.CLAUSE_LISTENER.present(),
-                    "../forge has no clause hook to split the modes");
+        Assumptions.assumeTrue(PatchHooks.CLAUSE_LISTENER.present(),
+                "../forge has no clause hook to split the modes");
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        try (GameRecording recording =
+                new GameRecording(board.game, writer, GAME_ID, CAPS, 1L, null)) {
+            recording.open();
             resolveAll(board, charm);
             nextStep(board);
-        });
+        } finally {
+            writer.close();
+        }
+        List<String> records = ShardRun.readShard(writer.path());
 
         Characterization.assertMatches(
                 "record-resolution-modal.jsonl", Characterization.recordLines(records));
@@ -468,7 +471,7 @@ class RecordCharacterizationTest {
     /** What a test does with a game's two collectors. */
     @FunctionalInterface
     private interface Body {
-        void run(BusBracketCollector bracket, PatchedCollectors collectors) throws Throwable;
+        void run(BusBracketCollector bracket, TestCollectors.Channels collectors) throws Throwable;
     }
 
     private RecordShardWriter writer;
@@ -492,7 +495,7 @@ class RecordCharacterizationTest {
             BusBracketCollector bracket = new BusBracketCollector(
                     board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
                     recordId -> { });
-            try (PatchedCollectors collectors = new PatchedCollectors(
+            try (TestCollectors.Channels collectors = TestCollectors.Channels.of(
                     board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
                     caps, 1L, bracket)) {
                 body.run(bracket, collectors);

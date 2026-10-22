@@ -462,7 +462,7 @@ class RewriteContractTest {
      */
     private Tally tallyAfter(Map<String, Object> before, Map<String, Object> after,
             ReplacementResult result) throws Throwable {
-        PatchedCollectors game = recording(tempDir);
+        TestCollectors.Channels game = recording(tempDir);
         game.rewrites().record(replacementOfMode("Moved"), before, after, result, null);
         String printed = StdStreams.captureStdout(game::close);
         for (int games = 1; printed.isEmpty() && games < GAMES_PER_SUMMARY; games++) {
