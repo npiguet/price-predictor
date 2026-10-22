@@ -27,14 +27,14 @@ public enum AttributionMode {
      */
     DEGRADED("degraded");
 
-    private final String wireValue;
+    private final String wireName;
 
-    AttributionMode(String wireValue) {
-        this.wireValue = wireValue;
+    AttributionMode(String wireName) {
+        this.wireName = wireName;
     }
 
-    public String wireValue() {
-        return wireValue;
+    public String wireName() {
+        return wireName;
     }
 
     private static AttributionMode detected;

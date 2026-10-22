@@ -230,7 +230,7 @@ public class MatchWorkerMain {
                     config.workerLifetime());
             System.out.println(
                     "Effect records: " + effectRecords.path()
-                            + " [mode=" + AttributionMode.detect().wireValue() + "]");
+                            + " [mode=" + AttributionMode.detect().wireName() + "]");
             // The mode is one hook's answer, so a partly-applied patch still
             // reads "patched" while a channel this run meant to collect is
             // quietly empty. This is what names that.

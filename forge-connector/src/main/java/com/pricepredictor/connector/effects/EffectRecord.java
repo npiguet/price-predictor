@@ -102,7 +102,7 @@ public final class EffectRecord {
         this.kind = Objects.requireNonNull(kind, "kind");
         this.moment = moment;
         this.subkind = subkind;
-        this.mode = mode.wireValue();
+        this.mode = mode.wireName();
     }
 
     /** A {@code resolution} record: one half of a resolution pair. */
