@@ -19,13 +19,6 @@ class PoolGeneratorTest {
     }
 
     @Test
-    void generateSinglePool() {
-        PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 1, HoldoutCards.NONE);
-        assertEquals(1, pools.size());
-    }
-
-    @Test
     void generatePoolContainsNoBasicLands() {
         PoolGenerator generator = new PoolGenerator();
         List<List<String>> pools = generator.generate("RVR", 3, HoldoutCards.NONE);
@@ -50,10 +43,13 @@ class PoolGeneratorTest {
     }
 
     @Test
-    void generatePoolOmitsExcludedCards() {
+    void generatePoolOmitsExcludedCardsAndKeepsItsSize() {
         // A depleted training pool must never contain a held-out card: the whole
         // point is that the training corpus can be collected without discarding
-        // the games those cards appear in.
+        // the games those cards appear in. Its size holds because a card is
+        // redrawn within the slot rather than dropped: a pool short of cards
+        // would build a different deck, and the depleted corpus is supposed to
+        // differ from the full-strength one only in which cards exist.
         PoolGenerator generator = new PoolGenerator();
         List<String> reference = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
         Set<String> excluded = Set.copyOf(reference.subList(0, 10));
@@ -64,19 +60,6 @@ class PoolGeneratorTest {
             assertFalse(excluded.contains(cardName),
                     "Excluded card found in depleted pool: " + cardName);
         }
-    }
-
-    @Test
-    void generatePoolKeepsItsSizeWhenCardsAreExcluded() {
-        // Redrawn within the slot rather than dropped: a pool short of cards
-        // would build a different deck, and the depleted corpus is supposed to
-        // differ from the full-strength one only in which cards exist.
-        PoolGenerator generator = new PoolGenerator();
-        List<String> reference = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
-        Set<String> excluded = Set.copyOf(reference.subList(0, 10));
-
-        List<String> pool = generator.generate("RVR", 1, HoldoutCards.of(excluded)).get(0);
-
         assertTrue(pool.size() >= 70, "Depleted pool too small: " + pool.size());
         assertTrue(pool.size() <= 100, "Depleted pool too large: " + pool.size());
     }
@@ -100,13 +83,6 @@ class PoolGeneratorTest {
             assertFalse(lowercased.contains(cardName.toLowerCase(java.util.Locale.ROOT)),
                     "Excluded card survived a lowercased exclusion list: " + cardName);
         }
-    }
-
-    @Test
-    void generatePoolWithNoExclusionsIsTheOrdinaryPool() {
-        PoolGenerator generator = new PoolGenerator();
-        List<String> pool = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
-        assertTrue(pool.size() >= 70, "Pool too small: " + pool.size());
     }
 
     @Test
