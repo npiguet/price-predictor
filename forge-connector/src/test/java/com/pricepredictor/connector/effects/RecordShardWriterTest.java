@@ -55,14 +55,6 @@ class RecordShardWriterTest {
     }
 
     @Test
-    void twoWorkersProduceDisjointIds() {
-        try (RecordShardWriter first = new RecordShardWriter(tempDir, "run", 0, "l1");
-             RecordShardWriter second = new RecordShardWriter(tempDir, "run", 1, "l1")) {
-            assertNotEquals(first.nextRecordId(), second.nextRecordId());
-        }
-    }
-
-    @Test
     void theDirectoryIsCreated() {
         Path nested = tempDir.resolve("output/effects/records");
         try (RecordShardWriter writer = new RecordShardWriter(nested, "run", 0, "l1")) {
@@ -94,6 +86,11 @@ class RecordShardWriterTest {
             }
         }
         assertTrue(members >= 2, "expected one member per writer, saw " + members);
+
+        // And the lifetime token must not split a single JVM's output, or the
+        // append and gzip-member behaviour stops applying.
+        assertEquals(1, shards().size());
+        assertEquals(List.of("{\"a\":1}", "{\"a\":2}"), ShardRun.readShard(shards().get(0)));
     }
 
     @Test
@@ -213,20 +210,6 @@ class RecordShardWriterTest {
                 assertTrue(all.add(line), "duplicate record across shards: " + line);
             }
         }
-    }
-
-    @Test
-    void oneLifetimeKeepsOneShardAndKeepsCounting() throws IOException {
-        // The other half of the guarantee: the token must not split a single
-        // JVM's output, or the append and gzip-member behaviour stops applying.
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.write("{\"a\":1}");
-        }
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
-            writer.write("{\"a\":2}");
-        }
-        assertEquals(1, shards().size());
-        assertEquals(List.of("{\"a\":1}", "{\"a\":2}"), ShardRun.readShard(shards().get(0)));
     }
 
     @Test
