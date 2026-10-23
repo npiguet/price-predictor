@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.card.CounterEnumType;
 import forge.game.combat.Combat;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
@@ -483,13 +484,37 @@ class ForkCollectorTest {
     }
 
     /**
-     * The held window closes when the next ability reaches the stack, as the
-     * live one does: Flametongue Kavu's enters trigger kills a creature after
-     * the Kavu has resolved, and that death is the trigger's. The forced
-     * Kavu's record equals the observed Kavu's.
+     * Nothing in the aftermath of an item above the forced spell is the
+     * spell's, though the spell is the top of the stack again: it has not
+     * begun to resolve, and live sends that aftermath to no record.
+     * Managorger Hydra's cast trigger puts a +1/+1 counter on a Hydra that
+     * carries a -1/-1 counter, above a forced Lava Spike, and the state-based
+     * check after the trigger removes the pair: an outcome of that check
+     * that is no death, and not Lava Spike's.
      */
     @Test
-    void theHeldWindowClosesWhenTheTriggerReachesTheStack() throws Throwable {
+    void theAftermathOfACastTriggerIsNotTheForcedSpells() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        // The anthem keeps the 1/1 Hydra alive under its -1/-1 counter.
+        TestBoard.inPlay(game, caster, "Glorious Anthem");
+        Card hydra = TestBoard.inPlay(game, caster, "Managorger Hydra");
+        hydra.addCounterInternal(CounterEnumType.M1M1, 1, caster, false, null, null);
+        TestBoard.inHand(game, caster, "Lava Spike");
+
+        String payload = forcedPayload(game, firstSpellInHand(game), 1L);
+
+        assertTrue(payload.contains("\"type\":\"damage_dealt\",\"subjects\":[\"P"), payload);
+        assertFalse(payload.contains("\"E" + hydra.getId() + "\""), payload);
+    }
+
+    /**
+     * A death the forced Kavu's enters trigger causes is the trigger's, as
+     * live files it: the Kavu's held window is closed by the time it
+     * happens. The forced Kavu's record equals the observed Kavu's.
+     */
+    @Test
+    void aDeathTheForcedKavusTriggerCausesIsNotTheKavus() throws Throwable {
         Game observedGame = kavuBoard();
         String observed = observedEffectPayload(observedGame, firstSpellInHand(observedGame));
 

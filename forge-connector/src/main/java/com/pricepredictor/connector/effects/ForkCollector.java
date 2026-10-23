@@ -422,8 +422,9 @@ public final class ForkCollector {
      * when no mode began.
      *
      * <p>Every event belongs to the mode in whose span it was filed, except a
-     * state-based death. {@code GameSimulator.resolveStack} runs the check
-     * only after the whole charm has resolved, so by position every death
+     * death in the state-based check after the resolution. {@code
+     * GameSimulator.resolveStack} runs that check only after the whole charm
+     * has resolved, so by position every such death
      * would fall into the last mode's half, whichever mode killed. Those are
      * filed by the live collector's rule instead ({@link
      * BusBracketCollector#halfForDeath}): the last half whose own events named
@@ -438,8 +439,9 @@ public final class ForkCollector {
      * @param modeStarts       the position in {@code events} where each chosen
      *                         mode's span begins, in order; the first span
      *                         also takes what precedes it
-     * @param stateBasedLeaves positions in {@code events} of moves off the
-     *                         battlefield during a state-based check
+     * @param stateBasedLeaves positions in {@code events} of the deaths filed
+     *                         after the forced ability resolved, in the check
+     *                         that follows it ({@link ForkEventSink#stateBasedLeaves})
      */
     static List<List<EffectEvent>> splitByMode(
             List<EffectEvent> events, List<Integer> modeStarts, Set<Integer> stateBasedLeaves) {
@@ -505,8 +507,10 @@ public final class ForkCollector {
      * <p>Resolution drains the whole stack: the cast's own triggers above the
      * forced ability, and the triggers its effect causes after it. Neither is
      * the forced ability's record live, where each has a bracket of its own,
-     * so the sink files only the forced ability's own resolution and the
-     * deaths of the check that follows it ({@link ForkEventSink}).
+     * so the sink files what live would put in the forced ability's own
+     * bracket ({@link ForkEventSink}): what happens while it is the top of
+     * the stack before it resolves, except an item above's aftermath; its
+     * resolution; and the deaths of the check that follows it.
      *
      * <p>The modes, targets and X are drawn at random from the legal options,
      * out of the fork's own seeded source, rather than through the AI. That

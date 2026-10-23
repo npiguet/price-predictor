@@ -77,15 +77,20 @@ final class ForkEventSink extends BusEventReader {
      *   filed, as live files the state-based check before priority into the
      *   spell's bracket. While anything sits above it — a cast trigger:
      *   prowess, a "whenever you cast" or becomes-target trigger, storm,
-     *   cascade — nothing is, and once that item has resolved its held
-     *   window keeps the deaths of the check that follows it ({@link
-     *   #aboveHeld}). That is the item's own record live, whether the live
-     *   bracket is one slot the trigger takes over or one per stack
-     *   item.</li>
+     *   cascade — nothing is: that is the item's own record live. Nor is
+     *   anything in that item's aftermath ({@link #aboveHeld}), though the
+     *   forced ability is the top again: live keeps the deaths for the
+     *   item's held half and sends the rest to no record, since none of it
+     *   belongs to an ability that has not begun to resolve. What was filed
+     *   before an item was pushed above is kept.</li>
      *   <li>{@link #RESOLVING}: from the first event published while the
      *   forced ability is the one resolving, until its {@code
      *   GameEventSpellResolved}: everything is filed, as live files the open
-     *   bracket's events.</li>
+     *   bracket's events. A permanent leaving the battlefield while the
+     *   tracker is frozen mid-resolution — an end-the-turn effect's own
+     *   state-based check, a token or counter batch — is filed as an
+     *   ordinary event, checked for a repeat in its span, as live files it
+     *   into the open bracket.</li>
      *   <li>{@link #HELD}: only the permanents leaving the battlefield in a
      *   state-based check, as live holds a resolved half for the deaths it
      *   caused. A stat change a static makes once the ability is gone, or the
@@ -100,13 +105,16 @@ final class ForkEventSink extends BusEventReader {
 
     private Phase phase = Phase.BEFORE;
     /**
-     * Whether an item that resolved above the forced ability is in its held
-     * window: from its resolved event until the next ability reaches the
-     * stack or resolves. A permanent leaving the battlefield in a state-based
-     * check then is that item's death, as live holds it.
+     * Whether an item that resolved above the forced ability is in its
+     * aftermath: from its resolved event until the next ability reaches the
+     * stack or resolves. Nothing published then is the forced ability's.
      */
     private boolean aboveHeld;
-    /** Positions in {@link #events()} of moves off the battlefield during a state-based check. */
+    /**
+     * Positions in {@link #events()} of the deaths filed in {@link
+     * Phase#HELD}, or of any state-based leave a probe or an ungated sink
+     * filed: the moves a modal fork files by {@code halfForDeath}.
+     */
     private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
     private ForkEventSink(Game fork, SpellAbility acting, boolean combatDamage) {
@@ -151,9 +159,10 @@ final class ForkEventSink extends BusEventReader {
     }
 
     /**
-     * Where in {@link #events()} a permanent left the battlefield while a
-     * state-based check was running, by the reading the bracket collector
-     * takes too ({@link #isStateBasedLeave}).
+     * Where in {@link #events()} the deaths a modal fork files by {@code
+     * halfForDeath} sit: an intervention's in {@link Phase#HELD}, a probe's or
+     * an ungated sink's in any state-based check, each read as the bracket
+     * collector reads one ({@link #isStateBasedLeave}).
      */
     Set<Integer> stateBasedLeaves() {
         return Set.copyOf(stateBasedLeaves);
@@ -227,17 +236,16 @@ final class ForkEventSink extends BusEventReader {
         if (!gated()) {
             return true;
         }
-        boolean leave = move != null && isStateBasedLeave(move);
         if (phase == Phase.BEFORE && forcedOnTop()) {
             if (game.getStack().isResolving()) {
                 phase = Phase.RESOLVING;
             } else {
-                return !(aboveHeld && leave);
+                return !aboveHeld;
             }
         }
         return switch (phase) {
             case RESOLVING -> true;
-            case HELD -> leave;
+            case HELD -> move != null && isStateBasedLeave(move);
             case BEFORE, CLOSED -> false;
         };
     }
@@ -279,10 +287,13 @@ final class ForkEventSink extends BusEventReader {
      * buffer refused has no position, and the next free one belongs to
      * whatever is filed next.
      *
-     * <p>A death in the check before the forced ability resolves is not
-     * marked. Live files it into the open bracket like any other event, so on
-     * a modal resolution it rides with the first mode rather than joining a
-     * half by {@code halfForDeath}, which is a resolved half's rule.
+     * <p>Only an intervention's death in {@link Phase#HELD} is marked. One in
+     * the check before the forced ability resolves, or one while the tracker
+     * is frozen mid-resolution, is filed as an ordinary event, checked for a
+     * repeat in its span: live files either into the open bracket like any
+     * other event, so on a modal resolution it rides with the mode in whose
+     * span it fell rather than joining a half by {@code halfForDeath}, which
+     * is a resolved half's rule.
      */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
