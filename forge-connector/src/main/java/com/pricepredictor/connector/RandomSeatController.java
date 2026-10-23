@@ -73,12 +73,8 @@ public final class RandomSeatController extends PlayerControllerAi {
     /** Where the seat's own records go, or null when the run collects none. */
     private PlayabilityChannel decisions;
 
-    /** The play the last successful draw picked, until it is played. */
-    private SpellAbility randomlyDrawn;
-    /** The other playable candidates of that draw, for a redraw (FR-022c). */
-    private List<SpellAbility> remainingCandidates = new ArrayList<>();
-    /** Set when every candidate of a draw was abandoned: the next priority passes. */
-    private boolean passNextPriority;
+    /** The play decision's draw, carried from one engine call to the next. */
+    private final RandomPlayDraw playDraw;
 
     public RandomSeatController(
             Game game, Player player, LobbyPlayer lobbyPlayer,
@@ -87,6 +83,7 @@ public final class RandomSeatController extends PlayerControllerAi {
         this.probability = probability;
         this.random = random;
         this.choices = new RandomChoices(random);
+        this.playDraw = new RandomPlayDraw(random);
     }
 
     /**
@@ -114,7 +111,79 @@ public final class RandomSeatController extends PlayerControllerAi {
         return random.nextDouble() < probability;
     }
 
-    // ── the play decision ───────────────────────────────────────────────
+    /**
+     * One random play decision, from the draw at a priority to the play that
+     * completes or the pass owed when none does (FR-022c).
+     *
+     * <p>The decision spans two engine calls, which is why it is state rather
+     * than a local: {@link #chooseSpellAbilityToPlay} draws a candidate and
+     * {@link #playChosenSpellAbility} plays it, redrawing over the rest when it
+     * cannot be completed. When every candidate is abandoned the play returns
+     * false, the engine asks for a play again at the same priority, and the
+     * answer then is a pass, not another draw.
+     */
+    private static final class RandomPlayDraw {
+        private final Random random;
+        /** The play the last successful draw picked, until it is played. */
+        private SpellAbility drawn;
+        /** The other playable candidates of that draw, for a redraw. */
+        private List<SpellAbility> remaining = new ArrayList<>();
+        /** Set when every candidate of a draw was abandoned: the next priority passes. */
+        private boolean passOwed;
+
+        RandomPlayDraw(Random random) {
+            this.random = random;
+        }
+
+        /**
+         * Begin a priority: drop a pick the engine never played, and consume
+         * the pass an exhausted draw owes.
+         *
+         * @return whether this priority must pass
+         */
+        boolean beginPriority() {
+            drawn = null;
+            if (!passOwed) {
+                return false;
+            }
+            passOwed = false;
+            return true;
+        }
+
+        /** Pick one of {@code candidates}, none empty, keeping them all for a redraw. */
+        SpellAbility draw(List<SpellAbility> candidates) {
+            remaining = candidates;
+            drawn = pick();
+            return drawn;
+        }
+
+        /**
+         * Whether {@code sa} is the play the last draw picked; claiming it
+         * clears the pick, so the engine's next call is the AI's again.
+         */
+        boolean claims(SpellAbility sa) {
+            if (sa != drawn) {
+                return false;
+            }
+            drawn = null;
+            return true;
+        }
+
+        /** The next candidate once {@code abandoned} could not be completed, or null when none remain. */
+        SpellAbility nextAfterAbandon(SpellAbility abandoned) {
+            remaining.removeIf(candidate -> candidate == abandoned);
+            return remaining.isEmpty() ? null : pick();
+        }
+
+        /** Every candidate was abandoned: the seat passes at its next priority. */
+        void exhausted() {
+            passOwed = true;
+        }
+
+        private SpellAbility pick() {
+            return remaining.get(random.nextInt(remaining.size()));
+        }
+    }
 
     /**
      * Every priority is a decision point with its own draw (FR-022a).
@@ -131,12 +200,7 @@ public final class RandomSeatController extends PlayerControllerAi {
         if (!isLive()) {
             return super.chooseSpellAbilityToPlay();
         }
-        randomlyDrawn = null;
-        if (passNextPriority) {
-            // Every candidate of the last draw was abandoned (FR-022c): the
-            // engine asked again because the play returned false, and the
-            // answer is a pass, not another draw.
-            passNextPriority = false;
+        if (playDraw.beginPriority()) {
             return null;
         }
         if (landDropPending() || !draw()) {
@@ -146,10 +210,8 @@ public final class RandomSeatController extends PlayerControllerAi {
         if (candidates.isEmpty()) {
             return null;
         }
-        remainingCandidates = candidates;
-        randomlyDrawn = candidates.get(random.nextInt(candidates.size()));
         List<SpellAbility> chosen = new ArrayList<>(1);
-        chosen.add(randomlyDrawn);
+        chosen.add(playDraw.draw(candidates));
         return chosen;
     }
 
@@ -230,25 +292,19 @@ public final class RandomSeatController extends PlayerControllerAi {
         if (!isLive()) {
             return super.playChosenSpellAbility(sa);
         }
-        if (sa != randomlyDrawn) {
+        if (!playDraw.claims(sa)) {
             if (!sa.isLandAbility() && draw()) {
                 redrawTargets(sa);
             }
             return super.playChosenSpellAbility(sa);
         }
-        randomlyDrawn = null;
-        SpellAbility current = sa;
-        while (current != null) {
+        for (SpellAbility current = sa; current != null;
+                current = playDraw.nextAfterAbandon(current)) {
             if (playAtRandom(current)) {
                 return true;
             }
-            final SpellAbility abandoned = current;
-            remainingCandidates.removeIf(candidate -> candidate == abandoned);
-            current = remainingCandidates.isEmpty()
-                    ? null
-                    : remainingCandidates.get(random.nextInt(remainingCandidates.size()));
         }
-        passNextPriority = true;
+        playDraw.exhausted();
         return false;
     }
 
@@ -384,8 +440,6 @@ public final class RandomSeatController extends PlayerControllerAi {
         return super.chooseTargetsFor(currentAbility);
     }
 
-    // ── combat declarations ─────────────────────────────────────────────
-
     /**
      * For each of {@code keys}, the creatures that may legally be declared
      * against it, both in the order given.
@@ -449,8 +503,6 @@ public final class RandomSeatController extends PlayerControllerAi {
         fallBack.run();
     }
 
-    // ── attacks ─────────────────────────────────────────────────────────
-
     /**
      * Each creature that can attack attacks with probability one half, at a
      * defender drawn among those it may attack (FR-022b).
@@ -471,18 +523,21 @@ public final class RandomSeatController extends PlayerControllerAi {
                 (defender, creature) -> CombatUtil.canAttack(creature, defender));
         drawUntilAccepted(
                 combat::clearAttackers,
-                () -> {
-                    for (Card creature : mine) {
-                        List<GameEntity> options = optionsFor(creature, legalByDefender);
-                        if (!options.isEmpty() && random.nextBoolean()) {
-                            combat.addAttacker(
-                                    creature, options.get(random.nextInt(options.size())));
-                        }
-                    }
-                    removeUnpayableAttackers(combat);
-                },
+                () -> drawAttacks(combat, mine, legalByDefender),
                 () -> CombatUtil.validateAttackers(combat),
                 () -> super.declareAttackers(attacker, combat));
+    }
+
+    /** One draw of the attack declaration, before the engine validates it. */
+    private void drawAttacks(
+            Combat combat, CardCollection mine, Map<GameEntity, List<Card>> legalByDefender) {
+        for (Card creature : mine) {
+            List<GameEntity> options = optionsFor(creature, legalByDefender);
+            if (!options.isEmpty() && random.nextBoolean()) {
+                combat.addAttacker(creature, options.get(random.nextInt(options.size())));
+            }
+        }
+        removeUnpayableAttackers(combat);
     }
 
     /**
@@ -508,8 +563,6 @@ public final class RandomSeatController extends PlayerControllerAi {
             }
         }
     }
-
-    // ── blocks ──────────────────────────────────────────────────────────
 
     /**
      * Each creature that can block picks uniformly from no block plus the
@@ -540,19 +593,26 @@ public final class RandomSeatController extends PlayerControllerAi {
                 (attacker, blocker) -> CombatUtil.canBlock(attacker, blocker, combat));
         drawUntilAccepted(
                 () -> clearBlocks(combat),
-                () -> {
-                    for (Card blocker : candidates) {
-                        List<Card> options = new ArrayList<>();
-                        options.add(null);
-                        options.addAll(optionsFor(blocker, legalByAttacker));
-                        Card attacker = options.get(random.nextInt(options.size()));
-                        if (attacker != null) {
-                            combat.addBlocker(attacker, blocker);
-                        }
-                    }
-                },
+                () -> drawBlocks(combat, candidates, legalByAttacker),
                 () -> CombatUtil.validateBlocks(combat, player) == null,
                 () -> super.declareBlockers(defender, combat));
+    }
+
+    /**
+     * One draw of the block declaration: each candidate picks from no block,
+     * listed first, then the attackers it may block.
+     */
+    private void drawBlocks(
+            Combat combat, List<Card> candidates, Map<Card, List<Card>> legalByAttacker) {
+        for (Card blocker : candidates) {
+            List<Card> options = new ArrayList<>();
+            options.add(null);
+            options.addAll(optionsFor(blocker, legalByAttacker));
+            Card attacker = options.get(random.nextInt(options.size()));
+            if (attacker != null) {
+                combat.addBlocker(attacker, blocker);
+            }
+        }
     }
 
     private void clearBlocks(Combat combat) {
