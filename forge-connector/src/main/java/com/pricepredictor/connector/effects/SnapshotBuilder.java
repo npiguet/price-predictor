@@ -61,6 +61,13 @@ public final class SnapshotBuilder {
 
     private static final char[] COLORS = {'W', 'U', 'B', 'R', 'G'};
 
+    /**
+     * The mana symbols a player's pool and untapped production are counted
+     * in: the five colours plus colourless, which a card's colours never
+     * include but a Sol Ring or a Wastes produces.
+     */
+    private static final char[] MANA_SYMBOLS = {'W', 'U', 'B', 'R', 'G', 'C'};
+
     private final Game game;
 
     public SnapshotBuilder(Game game) {
@@ -264,7 +271,7 @@ public final class SnapshotBuilder {
                 if (part == null) {
                     continue;
                 }
-                for (char color : COLORS) {
+                for (char color : MANA_SYMBOLS) {
                     if (part.canProduce(String.valueOf(color), ability)) {
                         production.merge(color, 1, Integer::sum);
                     }
@@ -314,7 +321,7 @@ public final class SnapshotBuilder {
         StringJoiner floating = new StringJoiner(",", "{", "}");
         StringJoiner production = new StringJoiner(",", "{", "}");
         Map<Character, Integer> untapped = untappedProduction(player);
-        for (char color : COLORS) {
+        for (char color : MANA_SYMBOLS) {
             byte shard = MagicColor.fromName(String.valueOf(color));
             floating.add(
                     Json.string(String.valueOf(color)) + ":"

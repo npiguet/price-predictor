@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.hash.Hashing;
 import forge.game.card.Card;
 import forge.game.staticability.StaticAbility;
 import forge.game.zone.ZoneType;
@@ -116,6 +117,10 @@ final class ContinuousChannel {
      * <p>Names and computed power/toughness of everything in play. Two boards
      * that hash the same produce the same contributions, so the second record
      * would repeat the first exactly.
+     *
+     * <p>64-bit for the reason {@link RecordDedup} is: a collision coalesces
+     * a board the static has not been recorded on, silently dropping a record
+     * that was not a repeat.
      */
     private String boardHash() {
         StringBuilder shape = new StringBuilder();
@@ -124,7 +129,7 @@ final class ContinuousChannel {
                     .append(':').append(card.getNetPower())
                     .append('/').append(card.getNetToughness()).append(';');
         }
-        return Integer.toHexString(shape.toString().hashCode());
+        return Long.toHexString(Hashing.murmur3_128().hashUnencodedChars(shape).asLong());
     }
 
     /**

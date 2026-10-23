@@ -223,6 +223,7 @@ public class MatchWorkerMain {
         ProgressWriter progressWriter = config.progressFile() == null
                 ? null : new ProgressWriter(config.progressFile());
 
+        CollectionCaps caps = CollectionCaps.fromSystemProperties();
         RecordShardWriter effectRecords = null;
         if (config.collectsEffectRecords()) {
             effectRecords = new RecordShardWriter(
@@ -235,8 +236,6 @@ public class MatchWorkerMain {
             // reads "patched" while a channel this run meant to collect is
             // quietly empty. This is what names that.
             System.out.println(PatchHooks.report());
-            CollectionCaps caps =
-                    CollectionCaps.fromSystemProperties();
             if (caps.randomSeatEnabled()) {
                 // Named at startup the way the probe state is: a run whose
                 // random-seat matches wrote no sealed rows is a run someone
@@ -254,7 +253,7 @@ public class MatchWorkerMain {
 
         SilencedHookReport silencedHookReport = new SilencedHookReport();
         MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
-                .gamePlayer(new GamePlayer(config.bestOf(), effectRecords))
+                .gamePlayer(new GamePlayer(config.bestOf(), effectRecords, caps))
                 .sideA(sideA)
                 .sideB(sideB, config.sideBWeight())
                 .excludedCards(HoldoutCards.fromSystemProperty())

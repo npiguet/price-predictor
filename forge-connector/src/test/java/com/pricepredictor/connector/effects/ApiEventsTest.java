@@ -895,6 +895,32 @@ class ApiEventsTest {
         return sa;
     }
 
+    @Test
+    void endingTheCombatPhaseNamesTheAttackingPlayer() {
+        Game game = TestBoard.anotherGame();
+        Card attacker = TestBoard.cardIn(game, "Grizzly Bears");
+        Combat combat = combatOf(game, 93205, new Player("defender", game, 93206), attacker);
+        Player attacking = combat.getAttackingPlayer();
+        SpellAbility sa = AbilityFactory.getAbility("SP$ EndCombatPhase", attacker);
+
+        Object memo = before(sa);
+        game.getPhaseHandler().setCombat(null);
+        EffectEvent event = after(sa, memo);
+
+        assertEquals(EffectEvent.COMBAT_ENDED, event.type());
+        assertEquals(List.of(SnapshotBuilder.playerId(attacking)), event.subjects());
+    }
+
+    @Test
+    void endingTheCombatPhaseOutsideCombatEmitsNothing() {
+        Game game = TestBoard.anotherGame();
+        Card host = TestBoard.cardIn(game, "Grizzly Bears");
+        game.getPhaseHandler().setCombat(null);
+        SpellAbility sa = AbilityFactory.getAbility("SP$ EndCombatPhase", host);
+
+        assertNull(after(sa, before(sa)));
+    }
+
     /**
      * Two real attacking creatures, both removed -- not a single-entry
      * fixture where "first only" and "both" would agree.

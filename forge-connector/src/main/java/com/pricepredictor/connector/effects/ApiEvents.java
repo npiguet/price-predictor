@@ -298,6 +298,19 @@ final class ApiEvents {
                         (sa, host) -> attackerDefendersBefore(sa, host),
                         (sa, host, memo) -> reselectedAttackers(host, memo)),
                 "ChangeCombatants");
+        // combat_ended: the attacking player whose combat phase the clause
+        // ended. EndCombatPhaseEffect does nothing outside a combat phase
+        // (CR 723.2g), so the memo is that combat's attacker, read before the
+        // clause clears it, and no combat emits nothing.
+        put(rules, Rule.shaped(EffectEvent.COMBAT_ENDED,
+                        (sa, host) -> {
+                            Combat combat = host.getGame().getCombat();
+                            return combat == null ? null : combat.getAttackingPlayer();
+                        },
+                        (event, sa, host, memo) -> memo instanceof Player attacker
+                                ? event.subject(SnapshotBuilder.playerId(attacker))
+                                : null),
+                "EndCombatPhase");
 
         // initiative_taken: the player taking the initiative.
         // GameAction.takeInitiative fires its trigger unconditionally --

@@ -6,7 +6,8 @@ import com.pricepredictor.connector.MultiCard;
 import com.pricepredictor.connector.RenderedLine;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -84,7 +85,10 @@ public record ProvenanceSidecar(
             recorder.claimModesUnderEveryRoot(owners);
         }
         List<Line> lines = new ArrayList<>();
-        Set<Ability> seen = new LinkedHashSet<>();
+        // By identity, as the recorders key abilities: the faces of a card
+        // render equal abilities (both faces' flying) as distinct objects,
+        // and an equality set would keep only the first face's.
+        Set<Ability> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (int i = 0; i < renderedLines.size(); i++) {
             Ability owner = renderedLines.get(i).owner();
             if (owner == null) continue;

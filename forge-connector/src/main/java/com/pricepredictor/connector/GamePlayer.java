@@ -36,6 +36,13 @@ public class GamePlayer {
     private final RecordShardWriter effectRecords;
 
     /**
+     * The collection caps, read once: the supervisor sets them when it spawns
+     * the worker and they do not change under it, and a malformed value is
+     * reported once rather than on every match.
+     */
+    private final CollectionCaps caps;
+
+    /**
      * Per-game outcome: which side won, which side was on the play, and the
      * non-basic, non-token card names that each side played during that game
      * (controlled by the side that owns them, paperCard names, multiplicities
@@ -94,7 +101,7 @@ public class GamePlayer {
 
     /** Create a player with a configurable best-of-K match format. */
     public GamePlayer(int gamesPerMatch) {
-        this(gamesPerMatch, null);
+        this(gamesPerMatch, null, CollectionCaps.fromSystemProperties());
     }
 
     /**
@@ -103,9 +110,10 @@ public class GamePlayer {
      * <p>The instrumentation costs no extra simulation: it rides matches that
      * were going to be played anyway.
      */
-    public GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords) {
+    public GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords, CollectionCaps caps) {
         this.gamesPerMatch = gamesPerMatch;
         this.effectRecords = effectRecords;
+        this.caps = caps;
     }
 
     /**
@@ -177,10 +185,6 @@ public class GamePlayer {
      */
     public PlayedMatch playMatch(Deck deckA, Deck deckB) {
         long startMillis = System.currentTimeMillis();
-        // Read once per match rather than per game: the supervisor sets them
-        // when it spawns the worker and they do not change under it.
-        CollectionCaps caps =
-                CollectionCaps.fromSystemProperties();
         // The match's own seeded source, scrambled for the reason the
         // collectors' sampler is: consecutive matches start milliseconds
         // apart, and a linear congruential generator's first draw is nearly
