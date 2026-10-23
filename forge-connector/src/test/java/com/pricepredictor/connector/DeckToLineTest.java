@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import forge.deck.Deck;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -15,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * {@link DeckBuilderMain#deckToLine} against Forge's real card database: the
  * line Python reads back as one deck per pool.
  */
-@Tag("integration")
 @ExtendWith(ForgeExtension.class)
 class DeckToLineTest {
 

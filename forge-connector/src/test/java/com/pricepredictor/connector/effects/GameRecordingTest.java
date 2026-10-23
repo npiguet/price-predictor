@@ -15,7 +15,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -44,10 +43,10 @@ class GameRecordingTest {
         SpellAbility mana = AbilityFactory.getAbility(
                 "AB$ Mana | Cost$ T | Produced$ G", TestCards.build("Llanowar Elves"));
         Player producer = new Player("live-player", TestCards.game(), 93201);
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = ShardRun.writer(tempDir);
         GameRecording recording = new GameRecording(
-                TestCards.game(), writer, "run.0-l1.0",
-                new CollectionCaps(1, 1.0, 0, 0, List.of(), 0.0, 0.0), 1L, null);
+                TestCards.game(), writer, ShardRun.GAME_ID,
+                TestCaps.caps().playabilityRate(1.0).interventions(0).probes(0).build(), 1L, null);
 
         recording.open();
         Object manaListener = installed(AbilityManaPart.class, "MANA_HOOK");
@@ -75,9 +74,9 @@ class GameRecordingTest {
                         && PatchHooks.MANA_LISTENER.present()
                         && PatchHooks.CONFIRM_LISTENER.present(),
                 "../forge has no mana or confirm hook");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = ShardRun.writer(tempDir);
         GameRecording recording = new GameRecording(
-                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L, null);
+                TestCards.game(), writer, ShardRun.GAME_ID, CollectionCaps.defaults(), 1L, null);
         // What an open() that threw after its first hook leaves behind.
         PatchHooks.CONFIRM_LISTENER.install((proxy, method, args) -> null);
         assertNotNull(installed(PlayerControllerAi.class, "CONFIRM_HOOK"));

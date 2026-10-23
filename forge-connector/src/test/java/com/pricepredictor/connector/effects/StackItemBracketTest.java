@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordLines.eventsNaming;
 import static com.pricepredictor.connector.effects.RecordLines.linkOf;
 import static com.pricepredictor.connector.effects.RecordLines.only;
 import static com.pricepredictor.connector.effects.RecordLines.outcomeOf;
@@ -475,7 +476,7 @@ class StackItemBracketTest {
 
         String shockHalf = linkedHalf(all, SHOCK);
         assertEquals(DAMAGE, eventTypes(shockHalf), shockHalf);
-        assertFalse(shockHalf.contains("\"subjects\":[\"P0\"]"),
+        assertEquals(List.of(), eventsNaming(shockHalf, "P0"),
                 "nothing dealt to the Reef's controller: " + shockHalf);
     }
 
@@ -600,10 +601,9 @@ class StackItemBracketTest {
             collector.finishGame(Set.of());
         });
 
-        String ref = "\"E" + craghorn[0].getId() + "\"";
+        String ref = "E" + craghorn[0].getId();
         for (String record : all) {
-            String payload = record.substring(record.indexOf("\"payload\":"));
-            assertFalse(payload.contains("\"subjects\":[" + ref + "]"),
+            assertEquals(List.of(), eventsNaming(record, ref),
                     "an action's events written in a record: " + record);
         }
     }
@@ -650,7 +650,7 @@ class StackItemBracketTest {
         });
 
         String shockHalf = linkedHalf(all, SHOCK);
-        assertFalse(shockHalf.contains("\"subjects\":[\"E" + bears[0].getId() + "\"]"),
+        assertEquals(List.of(), eventsNaming(shockHalf, "E" + bears[0].getId()),
                 "the Bears' death after the action is not the Shock's: " + shockHalf);
         assertEquals(DAMAGE, eventTypes(shockHalf), shockHalf);
     }
@@ -710,7 +710,7 @@ class StackItemBracketTest {
         SpellAbility bolt = inHand(game, caster, "Lightning Bolt").getFirstSpellAbility();
         bolt.setActivatingPlayer(caster);
         game.getAction().checkStateEffects(false);
-        CollectionCaps caps = new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         List<String> records = ShardRun.forked(tempDir, game, caps, 5L, bolt).records();
 

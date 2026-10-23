@@ -5,10 +5,6 @@ import com.pricepredictor.connector.RulesParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,25 +27,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class TraitScriptChainTest {
 
-    private static final Path GOLDEN_CARDS =
-            Path.of("src/test/resources/golden-024/cardsfolder");
-
     private record Converted(List<String> lines, ProvenanceSidecar sidecar,
                              MissingSVarReport report) {
     }
 
     private static Converted convert(String relativePath) {
         RulesParser parser = new RulesParser();
-        Path file = GOLDEN_CARDS.resolve(relativePath);
-        List<String> source;
-        try {
-            source = Files.readAllLines(file);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        String scriptFile = new ScriptFile(SourceTree.CARDSFOLDER, relativePath).key();
-        RulesParser.ParsedCard parsed = parser.parseScript(source, scriptFile);
-        return converted(parsed, scriptFile, parser);
+        ConvertedScript converted =
+                ConvertedScript.fromFile(parser, ConvertedScript.GOLDEN_024_CARDS, relativePath);
+        return new Converted(converted.texts(), converted.sidecar(), parser.missingSVars());
     }
 
     private static Converted convertInline(String relativePath, String script) {

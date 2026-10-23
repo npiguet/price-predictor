@@ -84,9 +84,7 @@ public final class RandomChoices {
         }
         int max = AbilityUtils.calculateAmount(
                 host, charm.getParamOrDefault("CharmNum", "1"), charm);
-        int min = charm.hasParam("MinCharmNum")
-                ? AbilityUtils.calculateAmount(host, charm.getParam("MinCharmNum"), charm)
-                : max;
+        int min = CharmModes.minimumModes(charm);
         if (!repeat) {
             max = Math.min(max, options.size());
         }

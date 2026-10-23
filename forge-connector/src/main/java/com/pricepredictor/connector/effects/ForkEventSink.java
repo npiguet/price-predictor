@@ -61,12 +61,11 @@ final class ForkEventSink extends BusEventReader {
      */
     private final boolean combatDamage;
     /**
-     * The events of the open span: the whole fork, or the chosen mode now
-     * resolving, which is the unit a repeat is recognised within, as it is
-     * a mode's half on the live side.
+     * What the fork filed, split by the forced resolution's chosen modes as
+     * they resolve: a repeat is recognised within the open span — the whole
+     * fork, or the chosen mode now resolving — as it is within a mode's half
+     * on the live side.
      */
-    private final EventBuffer open = new EventBuffer();
-    /** The forced resolution's chosen modes, split as they resolve. */
     private final ModeSplit modes = new ModeSplit();
     /**
      * The forced resolution's effect halves once it has resolved, which the
@@ -218,7 +217,7 @@ final class ForkEventSink extends BusEventReader {
                 all.addAll(half.events());
             }
         }
-        all.addAll(open.events());
+        all.addAll(modes.buffer().events());
         return List.copyOf(all);
     }
 
@@ -248,7 +247,7 @@ final class ForkEventSink extends BusEventReader {
      *               bracket's {@code beginMode} reads it
      */
     void beginMode(Integer option, Snapshot state) {
-        modes.begin(option, state, open);
+        modes.begin(option, state);
     }
 
     /**
@@ -259,11 +258,12 @@ final class ForkEventSink extends BusEventReader {
         if (held == null) {
             // The last mode's half closes with the resolution, since no next
             // mode's first clause comes to close it.
-            modes.close(open);
+            modes.close();
             held = new HeldHalves<>();
-            for (ModeSplit.ModeHalf half : modes.halves(castState, open.drain())) {
+            for (ModeSplit.ModeHalf half : modes.halves(castState)) {
                 held.add(half.mode(), half.events());
             }
+            modes.buffer().clear();
         }
         return held;
     }
@@ -368,9 +368,8 @@ final class ForkEventSink extends BusEventReader {
      * mid-resolution does not end its span, the resolved event does.
      */
     private boolean forcedOnTop() {
-        var top = game.getStack().peek();
-        return top != null && top.getSpellAbility() != null
-                && top.getSpellAbility().getId() == acting.getId();
+        SpellAbility top = StackActions.topAbility(game.getStack());
+        return top != null && top.getId() == acting.getId();
     }
 
     /**
@@ -405,6 +404,6 @@ final class ForkEventSink extends BusEventReader {
     }
 
     private void file(EffectEvent event, String namedCause) {
-        open.file(EventAttribution.stamp(event, acting, namedCause));
+        modes.buffer().file(EventAttribution.stamp(event, acting, namedCause));
     }
 }

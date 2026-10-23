@@ -4,14 +4,11 @@ import com.pricepredictor.connector.ability.TextAbility;
 import com.pricepredictor.connector.effects.FaceOrder;
 import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.ProvenanceRecorder;
-import forge.card.CardRarity;
 import forge.card.CardRules;
 import forge.card.CardSplitType;
 import forge.card.CardStateName;
 import forge.card.ICardFace;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
-import forge.item.PaperCard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +21,6 @@ import java.util.List;
 public class RulesParser {
 
     private final CardRules.Reader reader = new CardRules.Reader();
-    private int nextCardId = 1;
     /**
      * The undefined SVars every recorder of this parser reports into: a run's
      * worth, drained by whoever converts a tree, so the operator sees one block
@@ -150,8 +146,7 @@ public class RulesParser {
     }
 
     private Card buildFullCard(CardRules rules) {
-        PaperCard paperCard = new PaperCard(rules, "UNK", CardRarity.Common);
-        return CardFactory.getCard(paperCard, null, nextCardId++, OfflineGame.instance());
+        return OfflineGame.card(rules);
     }
 
     /**

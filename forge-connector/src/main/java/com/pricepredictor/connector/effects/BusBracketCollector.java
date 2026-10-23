@@ -53,8 +53,7 @@ import java.util.Set;
  * HeldResolutionWindow} the effect halves waiting for their state-based
  * consequences, {@link CombatStepBracket} the damage step's record and
  * {@link CastsUnderWay} the cast on its way onto the stack. What the bus
- * publishes is classified by {@link #now}, after {@link #syncWithEngine} has
- * brought what it reads up to date.
+ * publishes is classified by {@link #classifyNow}.
  */
 public final class BusBracketCollector extends BusEventReader {
 
@@ -114,8 +113,7 @@ public final class BusBracketCollector extends BusEventReader {
     public void onCast(GameEventSpellAbilityCast event) {
         // Read through peek() rather than peekAbility(), which dereferences the
         // top of an empty stack. The bus is not a promise about the stack.
-        var top = game.getStack().peek();
-        SpellAbility ability = top == null ? null : top.getSpellAbility();
+        SpellAbility ability = StackActions.topAbility(game.getStack());
         // A spell taken off the stack without resolving publishes nothing this
         // collector can tell from a resolution, so the absence is noticed
         // whenever the stack is next observed. A new cast is one such moment.
@@ -154,7 +152,7 @@ public final class BusBracketCollector extends BusEventReader {
             brackets.openCast(cast);
             // What the card's move onto the stack set off is this cast's.
             if (cast != null) {
-                castsUnderWay.fileHeldInto(cast.ability, cast.events);
+                castsUnderWay.fileHeldInto(cast.ability, cast.modes.buffer());
             }
             // Any other card still on its way was given up: one cast at a time.
             castsUnderWay.abandonAll();
@@ -217,19 +215,16 @@ public final class BusBracketCollector extends BusEventReader {
         // half, if any, is still stamped with its real outcome without a link
         // to a half nobody is going to write.
         OpenResolution resolved = brackets.closeAfterResolution(abilityId);
-        boolean declined = resolved != null && !fizzled && wasDeclined(resolved);
+        boolean declined = resolved != null && !fizzled && resolved.wasDeclined();
         boolean writesEffectHalf = resolved != null && !fizzled && !declined;
 
         String link = ledger.settle(
-                abilityId,
-                ledger.settledOutcome(
-                        abilityId, fizzled, declined, resolved == null ? null : resolved.ability),
-                writesEffectHalf);
+                abilityId, fizzled, declined, resolved == null ? null : resolved.ability);
 
         if (resolved != null) {
             // The last mode's half closes with the resolution, since no next
             // mode's first clause comes to close it.
-            resolved.modes.close(resolved.events);
+            resolved.modes.close();
         }
         if (writesEffectHalf) {
             // Held rather than written: the deaths this resolution causes
@@ -322,8 +317,7 @@ public final class BusBracketCollector extends BusEventReader {
             EventAttribution.stamp(damage, brackets.resolving(), namedCause);
             combatStep.file(damage);
         } else {
-            syncWithEngine();
-            route(damage, namedCause, now(), false);
+            route(damage, namedCause, false);
         }
     }
 
@@ -376,8 +370,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
-        syncWithEngine();
-        route(event, namedCause, now(), true);
+        route(event, namedCause, true);
     }
 
     /**
@@ -454,16 +447,26 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * Bring this collector's view of the engine up to date, so that what
-     * {@link #now} reads off it is current: a resolution that has begun is
-     * followed ({@link StackBrackets#followResolving}), and the marks of the
-     * casts under way are kept ({@link CastsUnderWay#keepMarksCurrent}).
+     * What an event published now is a consequence of, with this collector's
+     * view of the engine brought up to date first.
      *
      * <p>Called once at each entry point that classifies an event or a
      * refusal, before the open bracket is read: Forge publishes nothing when a
      * resolution starts, so the first thing it does is what opens its
-     * bracket. The two halves run under exactly the conditions {@link #now}
-     * reads them under.
+     * bracket.
+     */
+    private Now classifyNow() {
+        syncWithEngine();
+        return now();
+    }
+
+    /**
+     * Bring this collector's view of the engine up to date, so that what
+     * {@link #now} reads off it is current: a resolution that has begun is
+     * followed ({@link StackBrackets#followResolving}), and the marks of the
+     * casts under way are kept ({@link CastsUnderWay#keepMarksCurrent}). The
+     * two halves run under exactly the conditions {@link #now} reads them
+     * under.
      */
     private void syncWithEngine() {
         if (game.getStack().isResolving()) {
@@ -523,7 +526,8 @@ public final class BusBracketCollector extends BusEventReader {
      *                    the bus says is not combat damage goes to the open
      *                    bracket ({@link #fileDamage})
      */
-    private void route(EffectEvent event, String namedCause, Now now, boolean mayBeCombat) {
+    private void route(EffectEvent event, String namedCause, boolean mayBeCombat) {
+        Now now = classifyNow();
         if (now.cause() != Cause.CAST && now.cause() != Cause.PAYMENT) {
             // The cast under way has been announced or abandoned: what its
             // window held is taken or dropped.
@@ -561,8 +565,7 @@ public final class BusBracketCollector extends BusEventReader {
         if (brackets.open() == null || game.getStack().isResolving()) {
             return;
         }
-        syncWithEngine();
-        if (now().cause() == Cause.ACTION) {
+        if (classifyNow().cause() == Cause.ACTION) {
             brackets.closeForAction();
         }
     }
@@ -604,12 +607,12 @@ public final class BusBracketCollector extends BusEventReader {
      *               {@link CharmModes} could not place
      */
     void beginMode(SpellAbility clause, Integer option) {
-        syncWithEngine();
+        Cause cause = classifyNow().cause();
         OpenResolution open = brackets.open();
-        if (open == null || !fromOpenBracket(now().cause()) || !open.hosts(clause)) {
+        if (open == null || !fromOpenBracket(cause) || !open.hosts(clause)) {
             return;
         }
-        open.modes.begin(option, snapshots.ofResolving(open.ability), open.events);
+        open.modes.begin(option, snapshots.ofResolving(open.ability));
     }
 
     private static String actorOf(SpellAbility ability) {
@@ -763,26 +766,11 @@ public final class BusBracketCollector extends BusEventReader {
      * no resolution's.
      */
     void noteDeclined() {
-        syncWithEngine();
+        Cause cause = classifyNow().cause();
         OpenResolution open = brackets.open();
-        if (open != null && fromOpenBracket(now().cause())) {
-            open.declined = true;
+        if (open != null && fromOpenBracket(cause)) {
+            open.markDeclined();
         }
-    }
-
-    /**
-     * Whether a resolution is a refusal rather than a resolution.
-     *
-     * <p>Both halves are required. A refusal alone is not enough: a line whose
-     * mandatory clause drew a card and whose optional clause was declined did
-     * something, and {@code resolved} is the honest word for it. An empty event
-     * list alone is not enough either — plenty of resolutions produce nothing
-     * this collector can observe. Together they are the shape the schema
-     * describes: offered, turned down, and nothing happened.
-     */
-    private static boolean wasDeclined(OpenResolution resolved) {
-        // The events of an earlier mode have already moved into its half.
-        return resolved.declined && resolved.events.isEmpty() && !resolved.modes.anyEvents();
     }
 
     /**

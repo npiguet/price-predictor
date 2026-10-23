@@ -447,7 +447,7 @@ final class FaceParser {
             ProvenanceKey key = key(TraitKind.TRIGGER, triggerIndex);
             recorder.declare(key);
             String exec = t.getParam("Execute");
-            boolean secondary = "True".equalsIgnoreCase(t.getParam("Secondary"));
+            boolean secondary = t.isSecondary();
             if (secondary && exec != null && primaryExecuteSVars.contains(exec)) {
                 recorder.attribute(primaryByExecute.get(exec), key, t);
                 continue;
@@ -588,7 +588,7 @@ final class FaceParser {
         }
         if (text != null) text = AbilityDescription.applyCasing(text);
 
-        return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, null, text, abilities);
+        return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, text, abilities);
     }
 
     private static String formatTypeLine(ICardFace face) {

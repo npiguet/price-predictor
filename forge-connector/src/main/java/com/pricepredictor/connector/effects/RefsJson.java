@@ -127,8 +127,7 @@ final class RefsJson {
         }
         Card host = acting.getHostCard();
         addChoice(choices, "named_card", host.getNamedCard());
-        addChoice(choices, "chosen_color", host.getChosenColors() == null
-                ? null : String.join("|", host.getChosenColors()));
+        addChoice(choices, "chosen_color", String.join("|", host.getChosenColors()));
         addChoice(choices, "chosen_type", host.getChosenType());
         if (host.hasChosenNumber()) {
             choices.value("chosen_number", host.getChosenNumber());

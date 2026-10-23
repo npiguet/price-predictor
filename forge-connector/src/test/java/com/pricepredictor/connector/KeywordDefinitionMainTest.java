@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import forge.game.keyword.Keyword;
+import org.eclipse.jetty.util.ajax.JSON;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,9 +11,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -34,18 +37,33 @@ class KeywordDefinitionMainTest {
     /** The captured table, built once: every test reads the same file. */
     private static String json;
 
+    /** The same table, parsed: display name to entry. */
+    private static Map<String, Object> table;
+
     @BeforeAll
+    @SuppressWarnings("unchecked")
     static void captureTheTable() throws IOException {
         Path output = dir.resolve("keyword-definitions.json");
         KeywordDefinitionMain.writeTo(output);
         json = Files.readString(output, StandardCharsets.UTF_8);
+        table = (Map<String, Object>) JSON.parse(json);
+    }
+
+    /** The entry of the keyword displayed as {@code name}. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> entry(String name) {
+        Map<String, Object> entry = (Map<String, Object>) table.get(name);
+        assertNotNull(entry, name + " is missing");
+        return entry;
     }
 
     @Test
     void everyKeywordGetsAnEntry() {
-        assertTrue(json.startsWith("{"));
-        assertTrue(json.contains("\"Flying\""), "Flying is missing");
-        assertTrue(json.contains("\"Cascade\""), "Cascade is missing");
+        for (Keyword keyword : Keyword.values()) {
+            if (keyword != Keyword.UNDEFINED) {
+                entry(keyword.toString());
+            }
+        }
     }
 
     @Test
@@ -115,21 +133,15 @@ class KeywordDefinitionMainTest {
 
     @Test
     void theFormatterIsWrittenIntoEachEntry() {
-        int at = json.indexOf("\"Flying\"");
-        assertTrue(at >= 0, "Flying is missing");
-        String entry = json.substring(at, json.indexOf('}', at) + 1);
-        assertTrue(entry.contains("\"formatter\":\"SimpleKeyword\""), entry);
+        table.forEach((name, entry) -> assertTrue(
+                ((Map<?, ?>) entry).get("formatter") instanceof String,
+                name + " carries no formatter"));
+        assertEquals("SimpleKeyword", entry("Flying").get("formatter"));
     }
 
     @Test
     void aScriptGeneratingKeywordHasOne() {
-        int at = json.indexOf("\"Cascade\"");
-        assertTrue(at >= 0, "Cascade is missing");
-        String entry = json.substring(at, Math.min(at + 2000, json.length()));
-        int script = entry.indexOf("\"generated_script\":");
-        assertTrue(script >= 0);
-        assertFalse(
-                entry.startsWith("null", script + "\"generated_script\":".length()),
+        assertNotNull(entry("Cascade").get("generated_script"),
                 "Cascade generates a trigger and should carry its script: createTraits "
                         + "was probably not called, and the script surface reads nothing");
     }

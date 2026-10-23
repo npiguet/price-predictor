@@ -16,7 +16,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.effects.TestCollectors.caps;
+import static com.pricepredictor.connector.effects.TestCaps.caps;
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
 import static com.pricepredictor.connector.effects.TestCollectors.triggerOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.unwired;
@@ -115,7 +115,7 @@ class PatchedCollectorTest {
 
     /**
      * {@code PlayabilityChannel.decisionHandler} checks the game too.
-     * {@code caps(0, 1.0)} forces {@code playabilityRate} to 1.0 so
+     * {@code playabilityRate(1.0)} forces the rate to 1.0 so
      * the sampling gate ahead of the game check cannot flakily hide it.
      */
     @Test
@@ -124,7 +124,8 @@ class PatchedCollectorTest {
         SpellAbility forkCandidate = AbilityFactory.getAbility(
                 "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", forkCard);
 
-        Path shard = ShardRun.shardOf(tempDir, TestCards.game(), caps(0, 1.0),
+        Path shard = ShardRun.shardOf(tempDir, TestCards.game(),
+                caps().manaCap(0).playabilityRate(1.0).build(),
                 (bracket, collectors) -> collectors.playability().decisionHandler()
                         .invoke(null, ON_CANDIDATE, new Object[]{forkCandidate}));
 
@@ -206,7 +207,8 @@ class PatchedCollectorTest {
         // playabilityRate forced to 1.0: at the default 0.1 this record would
         // be sampled out at random roughly nine times in ten, and a flaky pass
         // here is exactly as uninformative as a vacuous one.
-        List<String> lines = ShardRun.records(tempDir, TestCards.game(), caps(0, 1.0),
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(),
+                caps().manaCap(0).playabilityRate(1.0).build(),
                 (bracket, collectors) -> collectors.playability().decisionHandler()
                         .invoke(null, ON_CANDIDATE, new Object[]{liveCandidate}));
         assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"playability\"")),

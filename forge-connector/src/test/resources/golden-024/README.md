@@ -1,10 +1,11 @@
-# golden-024: converter output captured before the gen-2 chain renderer
+# golden-024: pinned card scripts and the converted text they must produce
 
 Feature 024 changes the sidecar's `script_text` to the whole chained ability (FR-001) and keys
 charm modes (FR-005a) while leaving the converted `.txt` byte-identical (FR-004, SC-001).
-This directory holds the inputs and the outputs of the converter **as it was before that
-change**, so the byte-identity test (`BatchConverterTest`) has something fixed to compare
-against and the chain tests (`TraitScriptChainTest`) run on the same scripts.
+This directory holds a fixed set of card scripts and the converted text expected of them, so
+the byte-identity test (`BatchConverterTest`) has something fixed to compare against, and the
+tests that read the sidecar side of a conversion (`TraitScriptChainTest`,
+`ProvenanceSidecarTest`) run on scripts an upstream card edit cannot move.
 
 Layout:
 
@@ -13,11 +14,13 @@ Layout:
   like Forge's so every provenance key reads `cardsfolder/<letter>/<name>.txt`.
 - `tokenscripts/<name>.txt` — one token script, flat like Forge's token tree.
 - `expected/cardsfolder/…`, `expected/tokenscripts/…` — the `.txt` that `python -m price_predictor convert`
-  wrote for them before the change: the byte-identity reference. The gen-1 sidecars are not kept:
-  no test compares them, and the gen-2 sidecars differ by design.
+  writes for them: the byte-identity reference. The gen-1 sidecars are not kept: no test
+  compares them, and the gen-2 sidecars differ by design.
 
-Regenerate the `expected/` tree only with the pre-024 converter; after it, the `.txt` files
-must still match.
+The `expected/` tree was first captured with the pre-024 converter and is maintained by hand
+since: a converter change that is meant to alter the converted text edits the affected
+expected lines in the same commit, and any other difference is a regression. There is no
+regeneration switch, because regenerating would accept whatever the converter now writes.
 
 One line was re-captured by hand: `expected/cardsfolder/t/tundra.txt`'s synthetic mana line.
 The pre-024 converter rendered a dual land's colours in the iteration order of a `Map.of`,

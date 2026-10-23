@@ -37,6 +37,11 @@ final class CombatShape {
     private CombatShape() {
     }
 
+    /** Whether {@code card} is attacking or blocking in {@code combat}; never outside combat. */
+    static boolean isCombatant(Combat combat, Card card) {
+        return combat != null && (combat.isAttacking(card) || combat.isBlocking(card));
+    }
+
     /** Who is attacking and who is blocking them, right now; empty outside combat. */
     static CombatShape of(Combat combat) {
         CombatShape shape = new CombatShape();

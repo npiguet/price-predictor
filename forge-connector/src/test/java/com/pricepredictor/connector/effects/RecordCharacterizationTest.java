@@ -1,12 +1,10 @@
 package com.pricepredictor.connector.effects;
 
-import com.pricepredictor.connector.ForgeExtension;
 import forge.card.MagicColor;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.ApiType;
 import forge.game.ability.SpellAbilityEffect;
-import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
 import forge.game.event.GameEventCardDamaged;
@@ -17,14 +15,12 @@ import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
-import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
@@ -47,14 +43,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * sit in expected files of their own, so a change to what a fork writes
  * regenerates exactly those.
  */
-@ExtendWith({ForgeExtension.class, Characterization.PinnedForgeIds.class})
+@CharacterizationTest
 class RecordCharacterizationTest {
-
-    private static final String GAME_ID = "run.0-l1.0";
 
     /** Every sampled channel at full rate, no forks unless a test adds them. */
     private static final CollectionCaps CAPS =
-            new CollectionCaps(1, 1.0, 0, 0, List.of(), 0.0, 0.0);
+            TestCaps.caps().playabilityRate(1.0).interventions(0).probes(0).build();
 
     @TempDir
     Path tempDir;
@@ -133,21 +127,16 @@ class RecordCharacterizationTest {
         Player you = board.you;
         board.battlefield("Llanowar Elves", board.opponent);
         board.battlefield("Hill Giant", board.opponent);
-        SpellAbility charm = board.ability(
+        SpellAbility charm = TestBoard.charmOf(
                 board.game.getAction().moveToStack(board.card("Fiery Confluence", you), null),
-                ApiType.Charm);
-        charm.setActivatingPlayer(you);
-        List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
-        List<AbilitySub> chosen = new ArrayList<>(
-                List.of(choices.get(0), choices.get(1), choices.get(1)));
-        charm.setChosenList(chosen);
-        CharmEffect.chainAbilities(charm, chosen);
+                you);
+        TestBoard.chain(charm, 0, 1, 1);
 
         Assumptions.assumeTrue(PatchHooks.CLAUSE_LISTENER.present(),
                 "../forge has no clause hook to split the modes");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = ShardRun.writer(tempDir);
         try (GameRecording recording =
-                new GameRecording(board.game, writer, GAME_ID, CAPS, 1L, null)) {
+                new GameRecording(board.game, writer, ShardRun.GAME_ID, CAPS, 1L, null)) {
             recording.open();
             board.castAndResolve(charm);
             board.nextStep();
@@ -327,7 +316,7 @@ class RecordCharacterizationTest {
         board.battlefield("Serra Angel", board.opponent);
 
         String record = EffectRecord.playability(
-                "run.0-l1.0", "run", RecordShardWriter.timestamp(), GAME_ID,
+                "run.0-l1.0", "run", RecordShardWriter.timestamp(), ShardRun.GAME_ID,
                 PlayabilitySubkind.BLOCKERS, AttributionMode.detect())
                 .actor(Refs.of(board.opponent))
                 .whatIf(true)
@@ -357,17 +346,13 @@ class RecordCharacterizationTest {
         Card elves = board.battlefield("Llanowar Elves", opponent);
         Card confluence = board.game.getAction().moveToStack(
                 board.card("Fiery Confluence", you), null);
-        SpellAbility charm = board.ability(confluence, ApiType.Charm);
-        charm.setActivatingPlayer(you);
-        List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
-        List<AbilitySub> chosen = new ArrayList<>(List.of(choices.get(0), choices.get(1)));
-        charm.setChosenList(chosen);
-        CharmEffect.chainAbilities(charm, chosen);
+        SpellAbility charm = TestBoard.charmOf(confluence, you);
+        TestBoard.chain(charm, 0, 1);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = ShardRun.writer(tempDir);
         try {
             BusBracketCollector bracket = new BusBracketCollector(board.game,
-                    new CollectorContext(writer, GAME_ID, AttributionMode.DEGRADED, null),
+                    new CollectorContext(writer, ShardRun.GAME_ID, AttributionMode.DEGRADED, null),
                     recordId -> { });
             board.game.subscribeToEvents(bracket);
             bracket.beginBracket(charm);
@@ -414,14 +399,15 @@ class RecordCharacterizationTest {
         Card bears = board.battlefield("Grizzly Bears", opponent);
         Combat combat = TestBoard.blockedCombat(
                 board.game, you, opponent, dreadmaw, bears, soldier);
-        CollectionCaps caps = new CollectionCaps(1, 1.0, 0, 1, List.of("trample"), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().playabilityRate(1.0)
+                .interventions(0).probes(1).probeKeywords("trample").build();
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = ShardRun.writer(tempDir);
         try {
-            ProbeScheduler probing = new ProbeScheduler(board.game, GAME_ID, caps,
-                    new DamageStepProbe(board.game, TestCollectors.context(writer, GAME_ID), new ForkBudget(caps)));
+            ProbeScheduler probing = new ProbeScheduler(board.game, ShardRun.GAME_ID, caps,
+                    new DamageStepProbe(board.game, TestCollectors.context(writer, ShardRun.GAME_ID), new ForkBudget(caps)));
             BusBracketCollector bracket = new BusBracketCollector(
-                    board.game, TestCollectors.context(writer, GAME_ID), probing::writeHeldProbes);
+                    board.game, TestCollectors.context(writer, ShardRun.GAME_ID), probing::writeHeldProbes);
             board.game.subscribeToEvents(bracket);
             probing.collect();
             assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
@@ -455,7 +441,8 @@ class RecordCharacterizationTest {
         board.battlefield("Mountain", you);
         board.battlefield("Grizzly Bears", board.opponent);
         SpellAbility pyroclasm = board.spell(board.hand("Pyroclasm", you), you);
-        CollectionCaps caps = new CollectionCaps(1, 1.0, 1, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().playabilityRate(1.0)
+                .interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forked(tempDir, board.game, caps, 1L, pyroclasm);
         assertTrue(fork.wrote(), "the fork observed nothing");

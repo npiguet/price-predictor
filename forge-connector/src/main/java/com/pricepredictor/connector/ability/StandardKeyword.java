@@ -8,6 +8,8 @@ import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.keyword.KeywordWithTypeInterface;
 
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,6 +18,10 @@ import java.util.regex.Pattern;
  * Covers KICKER dual cost, AFFINITY type description, and internal keyword reminder text.
  */
 public record StandardKeyword(AbilityType type, String descriptionText) implements Ability {
+
+    /** Keywords Forge uses internally, which no card prints by name. */
+    private static final Set<Keyword> INTERNAL_KEYWORDS =
+            EnumSet.of(Keyword.MAYFLASHCOST, Keyword.MAYFLASHSAC);
 
     public static StandardKeyword of(KeywordInterface ki, Keyword kw) {
         boolean activatable = !ki.getAbilities().isEmpty();
@@ -61,7 +67,7 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
         if (kw == Keyword.UNDEFINED) {
             return title == null || title.isEmpty() ? ki.getOriginal() : title;
         }
-        if (AbilityType.isInternalKeyword(kw)) {
+        if (INTERNAL_KEYWORDS.contains(kw)) {
             String reminder = ki.getReminderText();
             if (reminder != null && !reminder.isEmpty()) {
                 return reminder;

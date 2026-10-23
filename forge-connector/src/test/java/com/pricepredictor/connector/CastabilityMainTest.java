@@ -1,6 +1,5 @@
 package com.pricepredictor.connector;
 
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,13 +14,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The castability consult's verdicts, against a live Forge.
  *
- * <p>Integration-tagged because the verdict is the engine's own answer to
- * "does this card have a spell ability", which needs the card database and
- * the card factory. The card names are deliberately the most ordinary
- * representative of each kind, so a wrong verdict here is a wrong verdict
- * for the whole kind.
+ * <p>The verdict is the engine's own answer to "does this card have a spell
+ * ability", which needs the card database and the card factory. The card
+ * names are deliberately the most ordinary representative of each kind, so a
+ * wrong verdict here is a wrong verdict for the whole kind.
  */
-@Tag("integration")
 @ExtendWith(ForgeExtension.class)
 class CastabilityMainTest {
 

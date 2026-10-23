@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.json.Json;
+import com.google.common.base.CaseFormat;
 import com.google.common.collect.Table;
 import forge.card.CardChangedType;
 import forge.card.CardTypeView;
@@ -164,8 +165,7 @@ final class LayerContributions {
 
     /** {@code CreatureTypes} as {@code creature-types}. */
     private static String kebab(String name) {
-        return name.replaceAll("(?<=.)(?=\\p{Upper})", "-")
-                .toLowerCase(java.util.Locale.ROOT);
+        return CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_HYPHEN, name);
     }
 
     /**

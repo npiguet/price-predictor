@@ -18,7 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-import static com.pricepredictor.connector.effects.TestCollectors.caps;
+import static com.pricepredictor.connector.effects.TestCaps.caps;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -72,10 +72,7 @@ class PlayabilityChannelTest {
         Card liveCard = TestCards.build("Grizzly Bears");
         SpellAbility liveCandidate = AbilityFactory.getAbility(
                 "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", liveCard);
-        CollectionCaps halfRate = new CollectionCaps(
-                CollectionCaps.defaults().manaCap(), 0.5,
-                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
-                CollectionCaps.defaults().probeKeywords(), 0.0, 0.0);
+        CollectionCaps halfRate = caps().playabilityRate(0.5).build();
 
         Path solo = ShardRun.shardOf(tempDir.resolve("solo"), TestCards.game(), halfRate,
                 (bracket, collectors) -> collectors.playability().decisionHandler().invoke(null, ON_CANDIDATE,
@@ -268,7 +265,7 @@ class PlayabilityChannelTest {
                 "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", theirs);
         candidate.setActivatingPlayer(other);
 
-        List<String> lines = ShardRun.records(tempDir, game, caps(0, 1.0), (bracket, collectors) -> {
+        List<String> lines = ShardRun.records(tempDir, game, caps().manaCap(0).playabilityRate(1.0).build(), (bracket, collectors) -> {
             collectors.playability().decisionHandler().invoke(null, ON_CANDIDATE,
                     new Object[]{candidate});
         });

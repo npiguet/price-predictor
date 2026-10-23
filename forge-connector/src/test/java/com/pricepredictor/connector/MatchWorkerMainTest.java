@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -9,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
 
 import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
 import static com.pricepredictor.connector.MatchFixtures.cardsPlayedRow;
@@ -31,15 +33,23 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class MatchWorkerMainTest {
 
+    /** The system properties as they stood before the test. */
+    private Properties before;
+
+    @BeforeEach
+    void snapshotSystemProperties() {
+        before = (Properties) System.getProperties().clone();
+    }
+
+    /**
+     * System properties are JVM-global and Surefire reuses one fork across
+     * every test class by default, so whatever a test set is put back: a
+     * property left set here would leak into whichever test class runs next.
+     */
     @AfterEach
-    void clearSystemProperties() {
-        // System properties are JVM-global and Surefire reuses one fork across
-        // every test class by default, so a property left set here would leak
-        // into whichever test class runs next.
-        System.clearProperty("output.file");
-        System.clearProperty("effect.records.dir");
-        System.clearProperty("match.run.id");
-        System.clearProperty("sealed.progress.file");
+    void restoreSystemProperties() {
+        System.getProperties().keySet().removeIf(key -> !before.containsKey(key));
+        before.forEach((key, value) -> System.getProperties().put(key, value));
     }
 
     // ── parseConfig(): -Dsealed.progress.file ──────────────────────────────

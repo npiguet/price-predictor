@@ -7,7 +7,6 @@ import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
 
 import java.nio.file.Path;
-import java.util.List;
 
 /**
  * Patched collectors and their channels built the ways a test drives them by
@@ -19,12 +18,6 @@ import java.util.List;
 final class TestCollectors {
 
     private TestCollectors() {
-    }
-
-    /** The two caps these tests vary; two interventions and two probes, no keyword. */
-    static CollectionCaps caps(int manaCap, double playabilityRate) {
-        return new CollectionCaps(
-                manaCap, playabilityRate, 2, 2, List.of(), 0.0, 0.0);
     }
 
     /** A collector's context for a match with no random seat, in this checkout's mode. */
@@ -65,10 +58,10 @@ final class TestCollectors {
      */
     static Channels recording(Path dir) {
         Game game = TestCards.game();
-        RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
+        RecordShardWriter writer = ShardRun.writer(dir);
         return Channels.of(
-                game, context(writer, "run.0-l1.0"), CollectionCaps.defaults(), 1L,
-                bracket(game, writer, "run.0-l1.0"));
+                game, context(writer, ShardRun.GAME_ID), CollectionCaps.defaults(), 1L,
+                bracket(game, writer, ShardRun.GAME_ID));
     }
 
     /**

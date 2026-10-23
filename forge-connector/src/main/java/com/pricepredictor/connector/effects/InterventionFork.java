@@ -338,8 +338,7 @@ final class InterventionFork {
             }
             // Read off the stack, as the live bracket reads it: an activated
             // ability goes on as a copy of the line it was handed.
-            var top = fork.getStack().peek();
-            onStack = top == null ? null : top.getSpellAbility();
+            onStack = StackActions.topAbility(fork.getStack());
             if (onStack != null) {
                 state = snapshots.ofResolving(onStack);
             }

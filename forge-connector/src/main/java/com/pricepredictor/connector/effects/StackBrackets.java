@@ -81,7 +81,7 @@ final class StackBrackets {
 
     /** Where an event filed now goes: the open bracket's buffer, or the orphans. */
     EventBuffer filing() {
-        return open == null ? orphans : open.events;
+        return open == null ? orphans : open.modes.buffer();
     }
 
     /**

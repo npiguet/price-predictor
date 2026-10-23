@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.TestCaps;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.RecordShardWriter;
@@ -57,9 +58,8 @@ class RandomSeatControllerTest {
     }
 
     private static RandomSeatController seatOf(Game game) {
-        RandomSeatController seat = GamePlayer.randomSeatOf(game);
-        assertNotNull(seat, "the lobby player installs the controller");
-        return seat;
+        return GamePlayer.randomSeatOf(game).orElseThrow(
+                () -> new AssertionError("the lobby player installs the controller"));
     }
 
     /**
@@ -288,8 +288,8 @@ class RandomSeatControllerTest {
         seatOf(game).attach(game, null);
 
         Game fork = new GameCopier(game).makeCopy();
-        RandomSeatController forked = GamePlayer.randomSeatOf(fork);
-        assertNotNull(forked, "the fork keeps the lobby-player subclass");
+        RandomSeatController forked = GamePlayer.randomSeatOf(fork).orElseThrow(
+                () -> new AssertionError("the fork keeps the lobby-player subclass"));
         assertFalse(forked.isLive());
 
         List<SpellAbility> chosen = forked.chooseSpellAbilityToPlay();
@@ -400,8 +400,7 @@ class RandomSeatControllerTest {
     /** Scenario 1: one match in eight seats a random player, A or B alike. */
     @Test
     void closeToOneMatchInEightSeatsARandomPlayerOnEitherSide() {
-        CollectionCaps caps = new CollectionCaps(
-                1, 0.1, 2, 2, List.of(), 0.125, 0.5);
+        CollectionCaps caps = TestCaps.caps().randomSeat(0.125, 0.5).build();
         Random random = new Random(11L);
         int draws = 40_000;
         int a = 0;

@@ -15,14 +15,13 @@ final class OpenResolution {
     final String actor;
     /** The board at the cast, paired at the resolution with the refs read then. */
     final Snapshot state;
-    /** This resolution's chosen modes, split as they resolve; its own and no other's. */
-    final ModeSplit modes = new ModeSplit();
     /**
-     * What the bus filed for this item: the consequences of its cast — what
-     * its card's move onto the stack set off, the state-based check after it,
+     * What the bus filed for this item, split by chosen mode as it resolves;
+     * its own and no other's. That is the consequences of its cast — what its
+     * card's move onto the stack set off, the state-based check after it,
      * until the next action — and what it does while it resolves.
      */
-    final EventBuffer events = new EventBuffer();
+    final ModeSplit modes = new ModeSplit();
 
     /**
      * Whether the controller turned something down while this bracket was open.
@@ -32,11 +31,11 @@ final class OpenResolution {
      * and an id comparison would silently never match — the same reason
      * {@link EventAttribution} counts a clause upward from the pointer instead
      * of downward from the root. What keeps the flag from over-claiming is the
-     * second half of the test in {@link BusBracketCollector}'s
-     * {@code wasDeclined}: a resolution that produced any outcome at all is
-     * {@code resolved} however many optional clauses inside it were declined.
+     * second half of the test in {@link #wasDeclined}: a resolution that
+     * produced any outcome at all is {@code resolved} however many optional
+     * clauses inside it were declined.
      */
-    boolean declined;
+    private boolean declined;
 
     OpenResolution(
             SpellAbility ability, ProvenanceKey.Resolved keys, String actor, Snapshot state) {
@@ -44,6 +43,25 @@ final class OpenResolution {
         this.keys = keys;
         this.actor = actor;
         this.state = state;
+    }
+
+    /** The controller turned something down while this bracket was open. */
+    void markDeclined() {
+        declined = true;
+    }
+
+    /**
+     * Whether this resolution is a refusal rather than a resolution.
+     *
+     * <p>Both halves are required. A refusal alone is not enough: a line whose
+     * mandatory clause drew a card and whose optional clause was declined did
+     * something, and {@code resolved} is the honest word for it. An empty event
+     * list alone is not enough either — plenty of resolutions produce nothing
+     * this collector can observe. Together they are the shape the schema
+     * describes: offered, turned down, and nothing happened.
+     */
+    boolean wasDeclined() {
+        return declined && modes.isEmpty();
     }
 
     /** Whether this is the bracket of the ability the engine names by id. */

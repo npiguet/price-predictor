@@ -1,13 +1,11 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.card.Card;
-import forge.game.keyword.KeywordInterface;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -142,13 +140,7 @@ final class StatDiffer {
     }
 
     private static Stats read(Card card) {
-        Set<String> keywords = new LinkedHashSet<>();
-        for (KeywordInterface keyword : card.getKeywords()) {
-            String original = keyword.getOriginal();
-            if (original != null && !original.isEmpty()) {
-                keywords.add(original.toLowerCase(Locale.ROOT));
-            }
-        }
+        Set<String> keywords = new LinkedHashSet<>(CardSpelling.keywordNames(card.getKeywords()));
         Set<String> types = new LinkedHashSet<>(TypeLine.names(card.getType()));
         return new Stats(
                 card.getNetPower(), card.getNetToughness(), keywords, types,

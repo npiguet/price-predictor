@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import forge.item.PaperCard;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -12,10 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Basic-land sourcing and the size guard of {@link DeckBuilder#rebalanceLands}.
- *
- * <p>Tagged {@code integration} because resolving a basic land needs Forge's card database.
  */
-@Tag("integration")
 @ExtendWith(ForgeExtension.class)
 class DeckBuilderLandsTest {
 

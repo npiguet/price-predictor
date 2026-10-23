@@ -29,11 +29,27 @@ final class ShardRun {
 
     private static final String RUN = "run";
     private static final String LIFETIME = "l1";
-    private static final String GAME_ID = RUN + ".0-" + LIFETIME + ".0";
+    /** The id of the first game a test's shard writer records. */
+    static final String GAME_ID = RUN + ".0-" + LIFETIME + ".0";
     /** The sampler's seed: what a worker's first game would draw from. */
     private static final long SEED = 1L;
 
     private ShardRun() {
+    }
+
+    /** A writer for a test's shard, under the run, worker and lifetime {@link #GAME_ID} names. */
+    static RecordShardWriter writer(Path dir) {
+        return new RecordShardWriter(dir, RUN, 0, LIFETIME);
+    }
+
+    /**
+     * The writer's shard, closed so every record written so far is on disk.
+     * The writer creates the file with its first record, so a collector that
+     * wrote nothing leaves none.
+     */
+    static Path closed(RecordShardWriter writer) {
+        writer.close();
+        return writer.path();
     }
 
     /** What a test does with the two collectors. */
@@ -103,7 +119,7 @@ final class ShardRun {
     private static Path shardOf(
             Path dir, Game game, CollectionCaps caps, String randomSeatPlayerId, Body body)
             throws Throwable {
-        RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
+        RecordShardWriter writer = writer(dir);
         try {
             BusBracketCollector bracket = new BusBracketCollector(
                     game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
@@ -131,11 +147,8 @@ final class ShardRun {
     static List<String> recordsWithClauseHook(Path dir, Game game, String why, Played body)
             throws Throwable {
         assumeClauseHook(why);
-        CollectionCaps defaults = CollectionCaps.defaults();
-        CollectionCaps noForks = new CollectionCaps(
-                defaults.manaCap(), defaults.playabilityRate(), 0, 0, List.of(),
-                defaults.randomSeatShare(), defaults.randomSeatProbability());
-        RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
+        CollectionCaps noForks = TestCaps.caps().interventions(0).probes(0).build();
+        RecordShardWriter writer = writer(dir);
         try (GameRecording recording =
                 new GameRecording(game, writer, GAME_ID, noForks, SEED, null)) {
             recording.open();
@@ -154,7 +167,7 @@ final class ShardRun {
      * Nothing skips it.
      */
     static List<String> observed(Path dir, Game game, Observed body) throws Throwable {
-        RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
+        RecordShardWriter writer = writer(dir);
         try {
             BusBracketCollector bracket = TestCollectors.bracket(game, writer, GAME_ID);
             game.subscribeToEvents(bracket);
@@ -169,7 +182,7 @@ final class ShardRun {
 
     /** Fork {@code game} once and force {@code ability} to resolve, with no hook installed. */
     static Fork forked(Path dir, Game game, CollectionCaps caps, long seed, SpellAbility ability) {
-        RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
+        RecordShardWriter writer = writer(dir);
         boolean wrote;
         try {
             wrote = new InterventionFork(game, TestCollectors.context(writer, GAME_ID), new ForkBudget(caps), seed)
@@ -191,7 +204,7 @@ final class ShardRun {
             Path dir, Game game, CollectionCaps caps, long seed, SpellAbility ability,
             String why) {
         assumeClauseHook(why);
-        RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
+        RecordShardWriter writer = writer(dir);
         boolean wrote;
         try (PatchedCollectors collectors = new PatchedCollectors(
                 game, TestCollectors.context(writer, GAME_ID), caps, SEED,

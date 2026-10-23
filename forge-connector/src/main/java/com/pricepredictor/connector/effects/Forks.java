@@ -124,11 +124,11 @@ final class Forks {
      * <b>still counts against the budget</b> — otherwise a systematically
      * failing copy would retry until the game ended.
      */
-    static boolean scoreCheck(Game live, Game fork, Player perspective) {
+    static boolean scoreCheck(Game live, GameCopier copier, Game fork, Player perspective) {
         try {
             GameStateEvaluator evaluator = new GameStateEvaluator();
             int original = evaluator.getScoreForGameState(live, perspective).value;
-            Player forkPerspective = matchingPlayer(fork, perspective);
+            Player forkPerspective = mappedPlayer(copier, perspective);
             if (forkPerspective == null) {
                 return false;
             }
@@ -178,19 +178,10 @@ final class Forks {
             return Optional.empty();
         }
         Player from = perspective.get();
-        if (from == null || !scoreCheck(live, fork, from)) {
+        if (from == null || !scoreCheck(live, copier, fork, from)) {
             return Optional.empty();
         }
         return Optional.of(new VerifiedFork(copier, fork, from));
-    }
-
-    private static Player matchingPlayer(Game fork, Player original) {
-        for (Player candidate : fork.getPlayers()) {
-            if (candidate.getId() == original.getId()) {
-                return candidate;
-            }
-        }
-        return null;
     }
 
     // ── mapping live objects into the copy ──────────────────────────────

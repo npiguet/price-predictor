@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.base.Strings;
 import forge.game.GameEntity;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
@@ -282,15 +283,15 @@ final class ApiEvents {
 
     private static void turnAndPhaseRules(Map<String, Rule<?>> rules) {
         put(rules, Rule.shaped(EventType.TURN_ADDED,
-                        (sa, host) -> affectedPlayers(sa), ApiEvents::turns),
+                        (sa, host) -> ClauseTargets.affectedPlayers(sa), ApiEvents::turns),
                 "AddTurn");
         put(rules, Rule.shaped(EventType.TURN_SKIPPED,
-                        (sa, host) -> affectedPlayers(sa), ApiEvents::turns),
+                        (sa, host) -> ClauseTargets.affectedPlayers(sa), ApiEvents::turns),
                 "SkipTurn");
         put(rules, Rule.shaped(EventType.PHASE_ADDED, null, ApiEvents::addedPhase),
                 "AddPhase");
         put(rules, Rule.shaped(EventType.PHASE_SKIPPED,
-                        (sa, host) -> affectedPlayers(sa), ApiEvents::skippedPhase),
+                        (sa, host) -> ClauseTargets.affectedPlayers(sa), ApiEvents::skippedPhase),
                 "SkipPhase");
     }
 
@@ -313,32 +314,6 @@ final class ApiEvents {
     private static EffectEvent skippedPhase(
             EffectEvent event, SpellAbility sa, Card host, List<Player> players) {
         return withSubjects(event.param("phase", sa.getParamOrDefault("Phase", "?")), players);
-    }
-
-    /**
-     * Every player {@code AddTurn}, {@code SkipTurn} and {@code SkipPhase}
-     * actually affect -- the ones their own {@code resolve()} iterates, not
-     * whoever activated them.
-     *
-     * <p>All three iterate {@code SpellAbilityEffect.getPlayers(false,
-     * "Defined", sa)}, which is private to its package and so mirrored here:
-     * <b>targeting wins over {@code Defined$}</b> whenever the ability
-     * targets at all. The activator is not a safe default: most
-     * {@code SkipPhase} scripts, and {@code empty_city_ruse.txt}'s
-     * {@code Opponent} target, name someone else.
-     *
-     * <p>Captured as a memo, before the clause resolves: none of the three
-     * changes {@code sa}'s targets, so either side reads the same, and the
-     * memo is what pins the clause hook's push/pop pairing against a
-     * non-null value.
-     */
-    private static List<Player> affectedPlayers(SpellAbility sa) {
-        if (sa.usesTargeting()) {
-            List<Player> targeted = new ArrayList<>();
-            sa.getTargets().getTargetPlayers().forEach(targeted::add);
-            return targeted;
-        }
-        return definedPlayers(sa, sa.getParamOrDefault("Defined", "You"));
     }
 
     /**
@@ -386,7 +361,7 @@ final class ApiEvents {
      */
     private static String ownerOf(SpellAbility sa) {
         if (sa.hasParam("DefinedPlayer")) {
-            List<Player> named = definedPlayers(sa, sa.getParam("DefinedPlayer"));
+            List<Player> named = ClauseTargets.definedPlayers(sa, sa.getParam("DefinedPlayer"));
             if (!named.isEmpty()) {
                 return Refs.of(named.get(0));
             }
@@ -453,7 +428,7 @@ final class ApiEvents {
      * method as a colour choice, direction and number and all. {@code
      * hasChosenColor()} is what {@code Card} itself defines for this
      * distinction, so this reads that instead; the named-card branch is
-     * guarded by {@link #nonEmpty}.
+     * guarded by {@link Strings#emptyToNull}.
      *
      * <p>The direction, even/odd and mode readings are not optional extras,
      * though few cards reach them: {@code event_schema.py}'s {@code
@@ -512,10 +487,10 @@ final class ApiEvents {
     private static final List<ChoiceReading> CHOICES = List.of(
             new ChoiceReading("color",
                     host -> host.hasChosenColor() ? host.getChosenColor() : null),
-            new ChoiceReading("type", host -> nonEmpty(host.getChosenType())),
+            new ChoiceReading("type", host -> Strings.emptyToNull(host.getChosenType())),
             new ChoiceReading("number", host -> host.getChosenNumber() == null
                     ? null : String.valueOf(host.getChosenNumber())),
-            new ChoiceReading("card_name", host -> nonEmpty(host.getNamedCard())),
+            new ChoiceReading("card_name", host -> Strings.emptyToNull(host.getNamedCard())),
             new ChoiceReading("player", host -> Refs.ofNullable(host.getChosenPlayer())),
             new ChoiceReading("cards",
                     host -> host.getChosenCards() == null || host.getChosenCards().isEmpty()
@@ -524,11 +499,7 @@ final class ApiEvents {
                     ? null : host.getChosenDirection().name()),
             new ChoiceReading("even_odd", host -> host.getChosenEvenOdd() == null
                     ? null : host.getChosenEvenOdd().name()),
-            new ChoiceReading("mode", host -> nonEmpty(host.getChosenMode())));
-
-    private static String nonEmpty(String value) {
-        return value == null || value.isEmpty() ? null : value;
-    }
+            new ChoiceReading("mode", host -> Strings.emptyToNull(host.getChosenMode())));
 
     // ── healed damage, granted abilities, retargets ─────────────────────
 
@@ -549,7 +520,7 @@ final class ApiEvents {
     /**
      * Damage on the clause's affected cards, before it heals any of it away.
      *
-     * <p>Read through {@link #affectedCards} rather than off {@code
+     * <p>Read through {@link ClauseTargets#affectedCards} rather than off {@code
      * sa.getTargets().getTargetCards()}, the clause's own {@code
      * TargetChoices}. {@code HealDamageEffect.resolve()} finds its cards
      * through {@code
@@ -568,7 +539,7 @@ final class ApiEvents {
      */
     private static Integer damageBefore(SpellAbility sa, Card host) {
         int total = 0;
-        for (Card card : affectedCards(sa)) {
+        for (Card card : ClauseTargets.affectedCards(sa)) {
             total += card.getDamage();
         }
         return total;
@@ -671,8 +642,8 @@ final class ApiEvents {
      * one emitter.
      *
      * <p>This is a strict subset of the {@code rewrite} record this connector
-     * already writes for every replacement, from {@code
-     * ReplacementObserver.observe} -- see the comment on {@code
+     * already writes for every replacement, from {@link
+     * RewriteChannel#record} -- see the comment on {@code
      * EventType.REPLACEMENT_APPLIED} in {@code event_schema.py} for why the two
      * must not be read as independent evidence of the same replacement.
      */
@@ -771,7 +742,7 @@ final class ApiEvents {
     private static EffectEvent initiativeTaker(
             EffectEvent event, SpellAbility sa, Card host, Object memo) {
         Player holder = host.getGame().getHasInitiative();
-        if (holder == null || !affectedPlayers(sa).contains(holder)) {
+        if (holder == null || !ClauseTargets.affectedPlayers(sa).contains(holder)) {
             return null;
         }
         return event.subject(Refs.of(holder));
@@ -809,8 +780,8 @@ final class ApiEvents {
         Combat combat = host.getGame().getCombat();
         List<Card> inCombat = new ArrayList<>();
         if (combat != null) {
-            for (Card c : affectedCards(sa)) {
-                if (combat.isAttacking(c) || combat.isBlocking(c)) {
+            for (Card c : ClauseTargets.affectedCards(sa)) {
+                if (CombatShape.isCombatant(combat, c)) {
                     inCombat.add(c);
                 }
             }
@@ -826,7 +797,7 @@ final class ApiEvents {
         Combat combat = host.getGame().getCombat();
         EffectEvent event = new EffectEvent(EventType.REMOVED_FROM_COMBAT);
         for (Card c : before) {
-            if (combat == null || !(combat.isAttacking(c) || combat.isBlocking(c))) {
+            if (!CombatShape.isCombatant(combat, c)) {
                 event.subject(Refs.of(c));
             }
         }
@@ -847,7 +818,7 @@ final class ApiEvents {
         Combat combat = host.getGame().getCombat();
         Map<Card, GameEntity> map = new LinkedHashMap<>();
         if (combat != null) {
-            for (Card c : affectedCards(sa)) {
+            for (Card c : ClauseTargets.affectedCards(sa)) {
                 map.put(c, combat.getDefenderByAttacker(c));
             }
         }
@@ -932,37 +903,10 @@ final class ApiEvents {
             return null;
         }
         EffectEvent event = new EffectEvent(EventType.TEXT_CHANGE);
-        for (Card c : cardsFromTargets(sa)) {
+        for (Card c : ClauseTargets.cardsFromTargets(sa)) {
             event.subject(Refs.of(c));
         }
         return event.subjects().isEmpty() ? null : event;
-    }
-
-    /**
-     * {@code SpellAbilityEffect.getCardsfromTargets(sa)}, mirrored
-     * the way {@link #affectedCards} already mirrors {@code getTargetCards}.
-     *
-     * <p>The {@code getTargetSpells()} union below is NOT dead for today's
-     * cardsfolder. Seven of {@code ChangeText}'s seventeen
-     * occurrences are {@code ValidTgts$ Card | TgtZone$ Stack,Battlefield} --
-     * {@code artificial_evolution}, {@code sleight_of_mind} and {@code
-     * magical_hack} among them -- which can target a spell on the stack, and
-     * {@code TargetChoices} stores a spell target as the {@code SpellAbility}
-     * itself ({@code getTargetCards()} filters to {@code Card.class}
-     * instances only, per {@code TargetChoices.java}; a targeted spell is a
-     * {@code SpellAbility}, not one). For that shape this union is not an
-     * extra path -- it is the <em>only</em> one that produces a subject at
-     * all; {@link #affectedCards}'s targeting branch reads {@code
-     * getTargetCards()} alone and would see nothing.
-     */
-    private static List<Card> cardsFromTargets(SpellAbility sa) {
-        List<Card> cards = new ArrayList<>(affectedCards(sa));
-        if (sa.getTargets() != null) {
-            for (SpellAbility spellTarget : sa.getTargets().getTargetSpells()) {
-                cards.add(spellTarget.getHostCard());
-            }
-        }
-        return cards;
     }
 
     // ── readings several families share ─────────────────────────────────
@@ -973,53 +917,5 @@ final class ApiEvents {
 
     private static String playerOf(SpellAbility sa) {
         return Refs.ofNullable(sa.getActivatingPlayer());
-    }
-
-    /**
-     * {@code AbilityUtils.getDefinedPlayers} for one {@code Defined$}/
-     * {@code DefinedPlayer$} value, extended to the {@code " & "}-joined
-     * multi-value form {@code SpellAbilityEffect.getPlayers} also accepts:
-     * {@code String[] def =
-     * sa.getParamOrDefault(definedParam, "You").split(" & ")}, one lookup per
-     * token, unioned. No card in the cardsfolder uses this today for either
-     * {@code Defined$} on these three rules or {@code DefinedPlayer$} on
-     * {@code GainOwnership}, but an approximation this cheap to close is not
-     * worth keeping.
-     */
-    private static List<Player> definedPlayers(SpellAbility sa, String def) {
-        List<Player> players = new ArrayList<>();
-        for (String token : def.split(" & ")) {
-            players.addAll(AbilityUtils.getDefinedPlayers(sa.getHostCard(), token, sa));
-        }
-        return players;
-    }
-
-    /**
-     * The cards a clause with no dedicated targeting concept of its own
-     * acts on -- {@link #affectedPlayers}'s gate, mirrored for cards rather
-     * than players, because {@code HealDamage} is exactly that shape:
-     * {@code SpellAbilityEffect.getCards} (which {@code
-     * HealDamageEffect.resolve()} calls through {@code getTargetCards(sa)})
-     * reads {@code sa.getTargets()} only when {@code sa.usesTargeting()}
-     * is true, and otherwise falls back to a {@code " & "}-split {@code
-     * Defined$}, defaulted to {@code "Self"} -- the same default used here, not
-     * a different one invented for this file.
-     */
-    private static List<Card> affectedCards(SpellAbility sa) {
-        if (sa.usesTargeting()) {
-            List<Card> targeted = new ArrayList<>();
-            sa.getTargets().getTargetCards().forEach(targeted::add);
-            return targeted;
-        }
-        return definedCards(sa, sa.getParamOrDefault("Defined", "Self"));
-    }
-
-    /** {@link #definedPlayers}, mirrored for cards via {@code AbilityUtils.getDefinedCards}. */
-    private static List<Card> definedCards(SpellAbility sa, String def) {
-        List<Card> cards = new ArrayList<>();
-        for (String token : def.split(" & ")) {
-            cards.addAll(AbilityUtils.getDefinedCards(sa.getHostCard(), token, sa));
-        }
-        return cards;
     }
 }

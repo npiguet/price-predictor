@@ -259,8 +259,7 @@ class ModalResolutionTest {
         // no counterpart in the copy.
         SpellAbility charm = TestBoard.charmOf(
                 TestBoard.inHand(game, caster, "Fiery Confluence"), caster);
-        CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
                 tempDir, game, caps, 5L, charm, STOCK_FORK);
@@ -291,7 +290,7 @@ class ModalResolutionTest {
         Game forkedGame = confluenceBoard();
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
                 tempDir.resolve("forked"), forkedGame,
-                new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0), 5L,
+                TestCaps.caps().manaCap(2000).probes(0).build(), 5L,
                 confluenceIn(forkedGame), STOCK_FORK);
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> forced = fork.records();
@@ -329,7 +328,7 @@ class ModalResolutionTest {
         TestBoard.inPlay(game, game.getPlayers().get(0), "Double Vision");
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                tempDir, game, new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0), 5L,
+                tempDir, game, TestCaps.caps().manaCap(2000).probes(0).build(), 5L,
                 confluenceIn(game), STOCK_FORK);
 
         assertTrue(fork.wrote(), "the forced resolution observed something");
@@ -369,8 +368,7 @@ class ModalResolutionTest {
         SpellAbility creatureSpell = barbarian.getFirstSpellAbility();
         assertNotNull(creatureSpell);
         creatureSpell.setActivatingPlayer(caster);
-        CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
                 tempDir, game, caps, 5L, creatureSpell, STOCK_FORK);

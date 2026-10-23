@@ -18,6 +18,7 @@ import java.util.Set;
 
 import static com.pricepredictor.connector.effects.RecordLines.count;
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordLines.eventsNaming;
 import static com.pricepredictor.connector.effects.RecordLines.linkOf;
 import static com.pricepredictor.connector.effects.RecordLines.optionOf;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
@@ -201,7 +202,7 @@ class StateBasedDeathTest {
         assertEquals(1, halves.size(), records.toString());
         assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
         for (String record : records) {
-            assertFalse(record.contains("\"subjects\":[\"E" + mountain.getId() + "\"]"),
+            assertEquals(List.of(), eventsNaming(record, "E" + mountain.getId()),
                     "the land joined a record: " + record);
         }
     }
@@ -322,7 +323,8 @@ class StateBasedDeathTest {
         String effect = halves.get(0);
         assertTrue(effect.contains(deathOf(bears)), effect);
         assertTrue(effect.contains(deathOf(aura)), "the Aura fell off: " + effect);
-        assertFalse(effect.contains("\"type\":\"pt_change\",\"subjects\":[\"E" + bears.getId()),
+        assertFalse(eventsNaming(effect, "E" + bears.getId()).stream()
+                        .anyMatch(event -> "pt_change".equals(event.get("type"))),
                 "the static's shrink is not the spell's event: " + effect);
     }
 
@@ -402,8 +404,7 @@ class StateBasedDeathTest {
         Card elves = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Llanowar Elves");
         SpellAbility charm = TestBoard.charmOf(
                 TestBoard.inHand(game, caster, "Fiery Confluence"), caster);
-        CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         // A seed whose draw chooses the creature mode and ends on the opponent mode.
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
@@ -545,8 +546,7 @@ class StateBasedDeathTest {
         Player caster = game.getPlayers().get(0);
         Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
         Card slashCard = TestBoard.inHand(game, caster, "Flame Slash");
-        CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 1, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps, 1L, spellOf(slashCard, caster));
         assertTrue(fork.wrote(), "the forced resolution observed nothing");

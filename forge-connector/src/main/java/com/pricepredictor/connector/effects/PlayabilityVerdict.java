@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import forge.ai.ComputerUtilMana;
-import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
 import forge.game.cost.Cost;
 import forge.game.cost.CostPayment;
@@ -97,8 +96,7 @@ public record PlayabilityVerdict(boolean canPlay, boolean affordable, boolean ha
                 choosable++;
             }
         }
-        String minimum = charm.getParamOrDefault("MinCharmNum", charm.getParamOrDefault("CharmNum", "1"));
-        int required = AbilityUtils.calculateAmount(charm.getHostCard(), minimum, charm);
+        int required = CharmModes.minimumModes(charm);
         if (charm.hasParam("CanRepeatModes")) {
             required = Math.min(required, 1);
         }

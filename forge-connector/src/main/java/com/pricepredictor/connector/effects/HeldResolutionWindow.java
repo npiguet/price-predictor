@@ -72,7 +72,7 @@ final class HeldResolutionWindow {
         // what the schema says of any resolution that did nothing observable.
         HeldHalves<HalfRecord> halves = new HeldHalves<>();
         for (ModeSplit.ModeHalf half
-                : resolved.modes.halves(resolved.state, resolved.events.events())) {
+                : resolved.modes.halves(resolved.state)) {
             halves.add(HalfRecord.of(
                     context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
                     half.mode().state().withRefs(refs).render()), half.events());

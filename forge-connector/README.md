@@ -22,5 +22,6 @@ The fat JAR the Python side runs is
 
 ## Tests
 
-`mvn install` runs the unit tests. Tests that need an initialised Forge
-environment are tagged `integration` and run with `mvn test -Pintegration`.
+`mvn install` runs the unit tests, including those that need an initialised
+Forge environment. Tests that play a whole match or draft are tagged
+`integration` and run with `mvn test -Pintegration`.

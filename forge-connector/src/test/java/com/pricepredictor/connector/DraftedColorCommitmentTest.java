@@ -5,7 +5,6 @@ import forge.gamemodes.limited.DeckColors;
 import forge.gamemodes.limited.DraftedColorCommitment;
 import forge.item.PaperCard;
 import forge.model.FModel;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -21,10 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>This is the rule {@code forge-native} decks are built against, so it has to match
  * {@code LimitedPlayerAI}'s: commit as you pick, at most two colours, colourless picks
  * never consuming a slot.
- *
- * <p>Needs real {@link PaperCard} objects, so tagged as "integration".
  */
-@Tag("integration")
 @ExtendWith(ForgeExtension.class)
 class DraftedColorCommitmentTest {
 

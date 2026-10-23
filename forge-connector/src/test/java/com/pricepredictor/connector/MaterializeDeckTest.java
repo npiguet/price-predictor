@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import forge.deck.Deck;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -16,13 +15,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@link DeckMaterializer#lookUp} and {@link DeckMaterializer#materialize}
  * against Forge's real card database.
  *
- * <p>Tagged {@code integration} because resolving a card name needs
- * {@code FModel}; the policy half — what a miss does once counted — is a pure
- * unit test in {@link DeckMaterializerTest}. Kept in its own class rather
- * than in {@link MatchGeneratorTest} so it can be run on its own without
- * playing whole Forge matches first.
+ * <p>The policy half — what a miss does once counted — is a pure unit test
+ * in {@link DeckMaterializerTest}. Kept out of {@link MatchGeneratorTest},
+ * which plays a whole Forge match first.
  */
-@Tag("integration")
 @ExtendWith(ForgeExtension.class)
 class MaterializeDeckTest {
 

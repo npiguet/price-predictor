@@ -14,17 +14,11 @@ final class SpellAbilityUtils {
     private SpellAbilityUtils() {}
 
     static String findParamInChain(SpellAbility sa, String param) {
-        String value = sa.getParam(param);
-        if (value != null && !value.isEmpty()) {
-            return value;
-        }
-        SpellAbility sub = sa.getSubAbility();
-        while (sub != null) {
-            value = sub.getParam(param);
+        for (SpellAbility s = sa; s != null; s = s.getSubAbility()) {
+            String value = s.getParam(param);
             if (value != null && !value.isEmpty()) {
                 return value;
             }
-            sub = sub.getSubAbility();
         }
         return null;
     }

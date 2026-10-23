@@ -144,9 +144,7 @@ final class ProbeScheduler {
 
     /** Is this creature in the combat about to deal damage? */
     private boolean inCombat(Card card) {
-        var combat = game.getCombat();
-        return combat != null
-                && (combat.isAttacking(card) || combat.isBlocking(card));
+        return CombatShape.isCombatant(game.getCombat(), card);
     }
 
     /**

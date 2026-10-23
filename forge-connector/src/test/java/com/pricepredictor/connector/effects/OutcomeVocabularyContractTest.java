@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -105,8 +106,13 @@ class OutcomeVocabularyContractTest {
             bracket.onNextAction();
         });
 
-        String shard = String.join("\n", records);
-        assertTrue(shard.contains(Refs.of(card)), shard);
-        assertTrue(shard.contains(Refs.of(player)), shard);
+        List<String> carrying = RecordLines.withEventOfType(records,
+                EventType.TEXT_CHANGE.wireName());
+        assertEquals(1, carrying.size(), records.toString());
+        Map<String, Object> event = RecordLines.events(carrying.get(0)).stream()
+                .filter(e -> EventType.TEXT_CHANGE.wireName().equals(e.get("type")))
+                .findFirst().orElseThrow();
+        assertEquals(List.of(Refs.of(card), Refs.of(player)), event.get("subjects"),
+                carrying.get(0));
     }
 }
