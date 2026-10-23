@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.CardTraitBase;
-import forge.game.card.Card;
 
 import java.lang.reflect.InvocationHandler;
 
@@ -78,14 +77,11 @@ final class TriggerChannel {
      * is the hook that fires most often in the whole collector.
      */
     EffectRecord record(Object trait, Object runParams, boolean fired) {
-        CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
-        Card source = acting == null ? null : acting.getHostCard();
         EffectEvent event = RunParamNormalizer.describeParams(trait, runParams);
-        return context.newRecord(RecordKind.TRIGGER)
-                .actor(live.controllerOf(source))
-                .ability(ProvenanceResolver.resolve(acting))
-                .state(live.snapshots().ofTrait(source, event).render())
-                .payload("{\"event\":" + event.toJson()
-                        + ",\"fired\":" + fired + "}");
+        return live.traitRecord(context, RecordKind.TRIGGER, trait, event)
+                .payload(Json.object()
+                        .raw("event", event.toJson())
+                        .value("fired", fired)
+                        .render());
     }
 }

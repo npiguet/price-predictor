@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.CardTraitBase;
-import forge.game.card.Card;
 
 import java.lang.reflect.InvocationHandler;
 import java.util.List;
@@ -98,8 +97,6 @@ final class RewriteChannel {
     EffectRecord record(
             Object trait, Object before, Object after, Object result,
             Object replacedBy) {
-        CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
-        Card source = acting == null ? null : acting.getHostCard();
         EffectEvent incoming = RunParamNormalizer.describeParams(trait, before);
         EffectEvent rendered = RunParamNormalizer.describeParams(trait, after);
         // Null rather than a copy, and this is the whole of the contract. A
@@ -123,10 +120,7 @@ final class RewriteChannel {
         JVM_REWRITES.record(
                 RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
                 !ranKeys.isEmpty(), before, after);
-        return context.newRecord(RecordKind.REWRITE)
-                .actor(live.controllerOf(source))
-                .ability(ProvenanceResolver.resolve(acting))
-                .state(live.snapshots().ofTrait(source, incoming).render())
+        return live.traitRecord(context, RecordKind.REWRITE, trait, incoming)
                 .payload(EffectRecord.rewritePayload(
                         incoming, outgoing, wireResult, ranKeys));
     }
