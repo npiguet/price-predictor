@@ -71,7 +71,7 @@ public final class PlayabilityChannel {
             // avoids by running first. A null candidate is let through: its
             // record names no ability either way.
             SpellAbility candidate = args.get(0, SpellAbility.class);
-            if (candidate != null && !live.owns(candidate)) {
+            if (live.foreign(candidate)) {
                 return;
             }
             recordCandidate(deciderOf(candidate), candidate,
@@ -128,16 +128,14 @@ public final class PlayabilityChannel {
                 candidate,
                 candidate == null || candidate.getHostCard() == null
                         ? List.of() : List.of(candidate.getHostCard())).render();
-        String payload = read.get().payloadJson();
         // Deduplicated because the AI re-asks the same question about the
-        // same board, and the answer repeats verbatim.
-        if (!dedup.allowDistinct(PlayabilitySubkind.DECISION.wireName(), payload, state)) {
-            return;
-        }
-        context.emit(context.newPlayability(PlayabilitySubkind.DECISION)
+        // same board, and the answer repeats verbatim. The record names no
+        // acting line of its own; the candidate's key is in the payload, so
+        // two candidates on one host stay two records.
+        context.emitDistinct(context.newPlayability(PlayabilitySubkind.DECISION)
                 .actor(live.playerIdOrActive(decider))
                 .state(state)
-                .payload(payload));
+                .payload(read.get().payloadJson()), dedup);
     }
 
     // ── the legality subkinds ───────────────────────────────────────────
@@ -268,14 +266,11 @@ public final class PlayabilityChannel {
         // Keyed on the snapshot as well as the payload (FR-028): the same
         // answer on a board that moved is a second observation, which a
         // payload-only key would drop as a repeat of the first.
-        if (!dedup.allowDistinct(subkind.wireName(), payload, state)) {
-            return;
-        }
-        context.emit(context.newPlayability(subkind)
+        context.emitDistinct(context.newPlayability(subkind)
                 .actor(live.playerIdOrActive(decider))
                 .whatIf(false)
                 .state(state)
-                .payload(payload));
+                .payload(payload), dedup);
     }
 
     /**

@@ -52,18 +52,13 @@ final class RewriteChannel {
             // pipeline, which is where replacements apply). args[0] is
             // declared ReplacementEffect on Forge's side -- always a
             // CardTraitBase with a real host -- so a positively-identified
-            // other game is dropped; anything this cannot identify is kept.
-            CardTraitBase trait = args.get(0, CardTraitBase.class);
-            if (trait != null && !live.owns(trait)) {
+            // other game is dropped.
+            if (live.foreign(args.get(0))) {
                 return;
             }
-            EffectRecord record = record(
-                    args.get(0), args.get(1), args.get(2), args.optional(3), args.optional(4));
-            if (!dedup.allowDistinct(
-                    RecordKind.REWRITE.wireName(), record.payloadJson(), record.stateJson())) {
-                return;
-            }
-            context.emit(record);
+            context.emitDistinct(record(
+                    args.get(0), args.get(1), args.get(2), args.optional(3), args.optional(4)),
+                    dedup);
         });
     }
 

@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,10 +36,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Built straight off the record builder the trigger hook calls, because
  * what is under test is what the collector reads off the trait and the run
  * parameters it is handed; the handler around it is
- * {@link PatchedCollectorTest}'s.
+ * {@link PatchedCollectorTest}'s, except for which of one card's evaluations
+ * are written, which only the handler decides.
  */
 @ExtendWith(ForgeExtension.class)
 class TriggerRecordTest {
+
+    private static final Method ON_CONDITION_EVALUATED =
+            HookShapes.method(HookShapes.TriggerFire.class, "onConditionEvaluated");
 
     @TempDir
     Path tempDir;
@@ -85,6 +90,44 @@ class TriggerRecordTest {
         // reader cannot follow a source it cannot find.
         assertTrue(json.contains("\"id\":\"" + entity + "\""),
                 "the host must be in state.entities: " + json);
+    }
+
+    // ── which evaluations are written ───────────────────────────────────
+
+    /**
+     * Two same-mode triggers on one card each get their verdict written.
+     *
+     * <p>Garruk's Uprising prints two {@code ChangesZone} triggers -- "when
+     * this enters" and "whenever a creature with power 4 or greater enters" --
+     * so one entry is evaluated by both. A trigger snapshot names the host and
+     * the event, not which of the host's triggers is evaluating, so the two
+     * evaluations render the same state and payload; only the acting line
+     * tells them apart. Without it the second line's records would be
+     * coalesced away as repeats of the first's, and the negatives that teach
+     * the second condition would be lost.
+     *
+     * <p>Both fire first so the mode owes two negatives: a non-fired
+     * evaluation is offered only against a deficit.
+     */
+    @Test
+    void twoSameModeTriggersOnOneCardEachWriteTheirVerdicts() throws Throwable {
+        List<Trigger> triggers = triggersOf(TestCards.build("Garruk's Uprising"));
+        assertEquals(2, triggers.size(), "Garruk's Uprising declares two T: lines");
+
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            for (boolean fired : new boolean[]{true, false}) {
+                for (Trigger trigger : triggers) {
+                    collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
+                            new Object[]{trigger, Map.of(), fired});
+                }
+            }
+        });
+
+        List<String> written = lines.stream()
+                .map(line -> RecordLines.abilityKeys(line).get(0).get("index_within_kind")
+                        + "/" + RecordLines.payload(line).get("fired"))
+                .toList();
+        assertEquals(List.of("0/true", "1/true", "0/false", "1/false"), written, lines.toString());
     }
 
     /**

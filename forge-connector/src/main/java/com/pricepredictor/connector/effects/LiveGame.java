@@ -73,6 +73,24 @@ final class LiveGame {
     }
 
     /**
+     * Whether a hook's argument is a trait positively identified as another
+     * game's — the one case a trait-handing hook drops.
+     *
+     * <p>Not simply the negation of {@link #owns(CardTraitBase)}: an argument
+     * that is not a trait at all — null, or whatever a drifted hook signature
+     * passes in its place — cannot be identified, so it is kept and its record
+     * names no line. Dropping it would make a signature change look like a
+     * game in which nothing triggered.
+     *
+     * <p>Checked first in each handler, before the evaluation can spend any
+     * sampling or dedup budget: a fork's evaluations must not skew the live
+     * game's bookkeeping any more than they may reach its shard.
+     */
+    boolean foreign(Object hookArgument) {
+        return hookArgument instanceof CardTraitBase trait && !owns(trait);
+    }
+
+    /**
      * As {@link #owns(CardTraitBase)}, for the combat-legality hook: the
      * attacker or defender Forge hands it is a {@code Card} or {@code Player}
      * directly, never a trait with a host, so the game comes straight off the
@@ -129,7 +147,8 @@ final class LiveGame {
      * <p>The actor is the host's controller ({@link #controllerOf}), the acting
      * line is the trait's own, and the state is {@link SnapshotBuilder#ofTrait}.
      * Shared so the trigger and rewrite channels describe a trait the same way;
-     * the payload and the dedup that follows differ per channel and stay there.
+     * the payload and the gates around the write differ per channel and stay
+     * there.
      *
      * @param trait   the trait as the hook handed it over; anything that is not
      *                a {@link CardTraitBase} names no line and no host
@@ -137,12 +156,28 @@ final class LiveGame {
      */
     EffectRecord traitRecord(
             CollectorContext context, RecordKind kind, Object trait, EffectEvent pending) {
-        CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
-        Card source = acting == null ? null : acting.getHostCard();
+        return traitRecord(context, kind, trait, lineOf(trait), pending);
+    }
+
+    /**
+     * The same, with the acting line already resolved by a caller that gated
+     * on it before paying for the snapshot.
+     *
+     * @param line {@link #lineOf}{@code (trait)}
+     */
+    EffectRecord traitRecord(
+            CollectorContext context, RecordKind kind, Object trait,
+            ProvenanceKey.Resolved line, EffectEvent pending) {
+        Card source = trait instanceof CardTraitBase acting ? acting.getHostCard() : null;
         return context.newRecord(kind)
                 .actor(controllerOf(source))
-                .ability(ProvenanceResolver.resolve(acting))
+                .ability(line)
                 .state(snapshots.ofTrait(source, pending).render());
+    }
+
+    /** The printed line a hook's trait argument names, or why it names none. */
+    static ProvenanceKey.Resolved lineOf(Object trait) {
+        return ProvenanceResolver.resolve(trait instanceof CardTraitBase ctb ? ctb : null);
     }
 
     /**

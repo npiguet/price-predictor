@@ -99,14 +99,14 @@ final class ContinuousChannel {
         // two copies of one aura -- resolve to the same key, the same
         // contributions and the same suppressed board, so they render
         // identically and the board hash says they are different statics.
-        if (!dedup.allowDistinct(RecordKind.CONTINUOUS.wireName(), payload, state)) {
-            return;
-        }
-        context.emit(context.newRecord(RecordKind.CONTINUOUS)
+        // The key is part of what the gate compares, so two different lines
+        // on one card whose contributions and suppressed boards happen to
+        // agree are still two records.
+        context.emitDistinct(context.newRecord(RecordKind.CONTINUOUS)
                 .actor(SnapshotBuilder.playerId(source.getHostCard().getController()))
                 .ability(acting)
                 .state(state)
-                .payload(payload));
+                .payload(payload), dedup);
     }
 
     /**

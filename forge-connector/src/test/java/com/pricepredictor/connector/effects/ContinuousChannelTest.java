@@ -61,7 +61,31 @@ class ContinuousChannelTest {
         ContinuousChannel collector = channel(dedup);
         assertTrue(collector.allowContinuousRecord("11", "board-1"));
         assertTrue(collector.allowContinuousRecord("12", "board-1"));
-        assertTrue(dedup.allowDistinct("continuous", "{anthem}", "{board}"));
-        assertFalse(dedup.allowDistinct("continuous", "{anthem}", "{board}"));
+        assertTrue(dedup.allowDistinct(anthem(0, "{+1/+1}", "{board}")));
+        assertFalse(dedup.allowDistinct(anthem(0, "{+1/+1}", "{board}")));
+    }
+
+    /**
+     * But two lines that happen to render the same are two records.
+     *
+     * <p>Two statics on one card granting the same creatures the same bonus
+     * each leave the other's bonus on their suppressed board, so the
+     * contributions and the snapshot agree, and only the acting line says
+     * there were two of them.
+     */
+    @Test
+    void twoLinesThatRenderIdenticallyAreEachWritten() {
+        RecordDedup dedup = new RecordDedup();
+        assertTrue(dedup.allowDistinct(anthem(0, "{+1/+1}", "{board}")));
+        assertTrue(dedup.allowDistinct(anthem(1, "{+1/+1}", "{board}")));
+    }
+
+    /** A continuous record of the {@code index}-th static line of one anthem card. */
+    private static EffectRecord anthem(int index, String contributions, String board) {
+        return RecordDedupTest.ofKind(
+                RecordKind.CONTINUOUS,
+                new ProvenanceKey(
+                        "cardsfolder/g/glorious_anthem.txt", 0, TraitKind.STATIC, index, null),
+                contributions, board);
     }
 }
