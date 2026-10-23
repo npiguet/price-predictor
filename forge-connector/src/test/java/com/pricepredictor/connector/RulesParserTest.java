@@ -1765,6 +1765,26 @@ class RulesParserTest {
         return found;
     }
 
+    /**
+     * A Class level adding a trait with no text renders the text it does have.
+     *
+     * <p>Advanced Floral Invocations' third level adds a static and a
+     * {@code Static$ True} helper trigger with no {@code TriggerDescription$}.
+     * Forge joins the level's descriptions unchecked, so its own level static
+     * reads {@code null} followed by the static's text on a second line; the
+     * level must print as one line carrying only the static's text.
+     */
+    @Test
+    void aClassLevelAddingAnUndescribedTraitPrintsOnlyTheDescribedText() {
+        String output = rendered(face("a/advanced_floral_invocations.txt"));
+
+        assertFalse(output.contains("null"), output);
+        assertTrue(output.contains("level[3]: {4}{B/G}{B/G}: you may play lands and cast"
+                + " creature spells from your graveyard."), output);
+        assertEquals(6, output.split("\n").length,
+                "name, mana cost, types and three level lines: " + output);
+    }
+
     /** {@code needle} appears in {@code text}, and only once: a duplicated clause would repeat it. */
     private static void assertOccursOnce(String text, String needle) {
         assertEquals(1, occurrences(text, needle), "'" + needle + "' must appear exactly once: " + text);
