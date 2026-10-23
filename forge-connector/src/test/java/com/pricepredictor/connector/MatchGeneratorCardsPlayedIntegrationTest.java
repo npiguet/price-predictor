@@ -38,14 +38,9 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
         for (int i = 0; i < result.cardsPlayedRows().size(); i++) {
             CardsPlayedRow row = result.cardsPlayedRows().get(i);
-            assertEquals(parent.runId(), row.runId());
-            assertEquals(parent.setCode(), row.setCode());
-            assertEquals(parent.methodA(), row.methodA());
-            assertEquals(parent.methodB(), row.methodB());
-            assertEquals(String.valueOf(parent.games().charAt(i)), row.winner().toString(),
-                    "winner at index " + i + " must align with parent games string");
-            assertEquals(String.valueOf(parent.play().charAt(i)), row.starter().toString(),
-                    "starter at index " + i + " must align with parent play string");
+            assertEquals(parent.header(), row.header());
+            assertEquals(parent.games().get(i), new GameResult(row.winner(), row.starter()),
+                    "winner and starter at index " + i + " must align with the parent's game");
         }
     }
 

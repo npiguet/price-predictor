@@ -2,61 +2,37 @@ package com.pricepredictor.connector;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Value object capturing the outcome of one sealed best-of-N match, including
  * the metadata needed to slice the training corpus later (run ID, set code,
  * deck-build methods, per-game winner/play-first sequences, duration).
  *
- * @param timestamp        When the match finished (UTC).
- * @param runId            UUID identifying the supervisor invocation that produced this match.
- * @param setCode          MTG set code both decks were drawn from.
- * @param methodA          How deck A was built (see {@link DeckBuilder} method tags, or the
- *                         per-deck {@code LABEL} field when deck A came from a generated-decks file).
- * @param methodB          How deck B was built (same enum as {@code methodA}).
+ * @param header           The five leading fields this row shares with its cards-played rows.
  * @param deckA            All 40 cards in deck A (including basic lands, duplicates repeat).
  * @param deckB            All 40 cards in deck B.
- * @param games            Per-game winner sequence, e.g. {@code "ABB"} means A won game 1,
- *                         B won games 2 and 3. Between {@code ceil(N/2)} and {@code N}
- *                         long for a best-of-N match.
- * @param play             Per-game play-first sequence, same length as {@code games}, e.g.
- *                         {@code "BAB"} means B was on the play in games 1 and 3.
+ * @param games            One entry per game played, in game order: between
+ *                         {@code ceil(N/2)} and {@code N} of them for a best-of-N match.
+ *                         Written as the row's {@code games} (winners) and {@code play}
+ *                         (starters) sequences, e.g. {@code ABB} and {@code BAB}.
  * @param durationSeconds  Wall-clock seconds spent playing the match.
  */
 public record MatchResult(
-        Instant timestamp,
-        String runId,
-        String setCode,
-        String methodA,
-        String methodB,
+        MatchHeader header,
         List<String> deckA,
         List<String> deckB,
-        String games,
-        String play,
+        List<GameResult> games,
         int durationSeconds
 ) {
 
     public MatchResult {
         if (games == null || games.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "games must be non-empty, got: " + games);
+            // GamePlayer skips draws and aborted games, so a match can end
+            // with none; a row with empty sequences would be blank corpus.
+            throw new IllegalArgumentException("games must be non-empty, got: " + games);
         }
-        if (play == null || play.length() != games.length()) {
-            throw new IllegalArgumentException(
-                    "play length must match games length: games=" + games + " play=" + play);
-        }
-        for (int i = 0; i < games.length(); i++) {
-            char g = games.charAt(i);
-            char p = play.charAt(i);
-            if (g != 'A' && g != 'B') {
-                throw new IllegalArgumentException(
-                        "games must contain only 'A' or 'B', got: " + games);
-            }
-            if (p != 'A' && p != 'B') {
-                throw new IllegalArgumentException(
-                        "play must contain only 'A' or 'B', got: " + play);
-            }
-        }
+        games = List.copyOf(games);
         if (durationSeconds < 0) {
             throw new IllegalArgumentException(
                     "durationSeconds must be non-negative, got " + durationSeconds);
@@ -79,8 +55,8 @@ public record MatchResult(
             List<String> deckB,
             GamePlayer.PlayedMatch played) {
         return new MatchResult(
-                Instant.now(), runId, setCode, methodA, methodB, deckA, deckB,
-                played.winnerSequence(), played.playSequence(), played.durationSeconds());
+                new MatchHeader(Instant.now(), runId, setCode, methodA, methodB),
+                deckA, deckB, played.results(), played.durationSeconds());
     }
 
     /**
@@ -90,8 +66,18 @@ public record MatchResult(
      * the two decks as pipe-separated card names.
      */
     public String toLine() {
-        return CorpusLine.of(timestamp, runId, setCode, methodA, methodB,
+        return header.line(
                 CardNameList.format(deckA), CardNameList.format(deckB),
-                games, play, String.valueOf(durationSeconds));
+                sequence(GameResult::winner), sequence(GameResult::starter),
+                String.valueOf(durationSeconds));
+    }
+
+    /** One side character per game, in game order. */
+    private String sequence(Function<GameResult, Side> sideOf) {
+        StringBuilder sb = new StringBuilder(games.size());
+        for (GameResult game : games) {
+            sb.append(sideOf.apply(game));
+        }
+        return sb.toString();
     }
 }

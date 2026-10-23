@@ -10,9 +10,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.pricepredictor.connector.MatchFixtures.HEADER;
 import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
 import static com.pricepredictor.connector.MatchFixtures.TS;
 import static com.pricepredictor.connector.MatchFixtures.deck40;
+import static com.pricepredictor.connector.MatchFixtures.games;
+import static com.pricepredictor.connector.MatchFixtures.matchResult;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -20,13 +23,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@link LineAppenderTest}'s.
  */
 class MatchResultWriterTest {
-
-    private static MatchResult sampleResult(List<String> deckA, List<String> deckB, String games, String play) {
-        return new MatchResult(
-                TS, RUN_ID, "RVR", "forge-best", "gen-2",
-                deckA, deckB, games, play, 47
-        );
-    }
 
     @Test
     void aLineIsTenFieldsInTheDocumentedOrder(@TempDir Path tmp) throws IOException {
@@ -39,7 +35,7 @@ class MatchResultWriterTest {
         }
         List<String> deckB = deck40("B");
 
-        writer.write(sampleResult(deckA, deckB, "ABA", "BAB"));
+        writer.write(matchResult(deckA, deckB, "ABA", "BAB"));
 
         List<String> lines = Files.readAllLines(file);
         assertEquals(1, lines.size());
@@ -59,47 +55,31 @@ class MatchResultWriterTest {
     }
 
     @Test
-    void invalidGamesOrPlayCharacterRejected() {
-        // Non-A/B characters are rejected in either sequence, each by its own check.
-        IllegalArgumentException games = assertThrows(IllegalArgumentException.class, () ->
-                sampleResult(deck40("A"), deck40("B"), "ABCD", "ABAB"));
-        assertTrue(games.getMessage().startsWith("games must contain"), games.getMessage());
-        IllegalArgumentException play = assertThrows(IllegalArgumentException.class, () ->
-                sampleResult(deck40("A"), deck40("B"), "AB", "BC"));
-        assertTrue(play.getMessage().startsWith("play must contain"), play.getMessage());
+    void theSequencesAreOneCharacterPerGameInGameOrder() {
+        // Match length is configurable via --best-of, so any non-empty number
+        // of games is a row: Bo1 up to a long Bo9.
+        List<List<String>> cases = List.of(
+                List.of("A", "B"), List.of("AA", "BA"),
+                List.of("ABABAAB", "BABABAB"), List.of("ABABABABA", "BABABABAB"));
+        for (List<String> sequences : cases) {
+            String[] parts = matchResult(deck40("A"), deck40("B"), sequences.get(0), sequences.get(1))
+                    .toLine().split(";", -1);
+            assertEquals(sequences.get(0), parts[7]);
+            assertEquals(sequences.get(1), parts[8]);
+        }
     }
 
     @Test
-    void emptyGamesStringRejected() {
+    void aMatchWithNoGamesIsRejected() {
+        // GamePlayer skips draws and aborted games, so a match can end up
+        // empty; a blank row must not reach the corpus.
         assertThrows(IllegalArgumentException.class, () ->
-                sampleResult(deck40("A"), deck40("B"), "", ""));
-    }
-
-    @Test
-    void variedGameLengthsAccepted() {
-        // Match length is configurable via --best-of, so MatchResult must accept any
-        // non-empty A/B string. Spot-check Bo3 (len 2-3), Bo5 (len 3-5), Bo7 (len 4-7),
-        // and a large Bo9 example (len 5-9).
-        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "AA", "BA"));
-        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "ABA", "BAB"));
-        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "AABA", "BABA"));
-        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "ABABA", "BABAB"));
-        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "ABABAAB", "BABABAB"));
-        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "AAAAA", "BBBBB"));
-        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "ABABABABA", "BABABABAB"));
-    }
-
-    @Test
-    void mismatchedGamesAndPlayLengthRejected() {
-        assertThrows(IllegalArgumentException.class, () ->
-                sampleResult(deck40("A"), deck40("B"), "AA", "BAB"));
+                new MatchResult(HEADER, deck40("A"), deck40("B"), List.of(), 0));
     }
 
     @Test
     void negativeDurationRejected() {
         assertThrows(IllegalArgumentException.class, () -> new MatchResult(
-                TS, RUN_ID, "RVR", "forge-best", "gen-2",
-                deck40("A"), deck40("B"), "AA", "BA", -1
-        ));
+                HEADER, deck40("A"), deck40("B"), games("AA", "BA"), -1));
     }
 }

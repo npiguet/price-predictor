@@ -3,7 +3,6 @@ package com.pricepredictor.connector;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,8 +21,7 @@ class CardsPlayedRowOfTest {
     }
 
     private static MatchResult match(List<String> deckA, List<String> deckB) {
-        return new MatchResult(Instant.parse("2026-04-22T14:30:05Z"), "run", "RVR",
-                "forge-best", "random", deckA, deckB, "A", "B", 1);
+        return MatchFixtures.matchResult(deckA, deckB, "A", "B");
     }
 
     @Test
@@ -43,8 +41,7 @@ class CardsPlayedRowOfTest {
         assertEquals(List.of("Counterspell"), row.cardsNotPlayedB());
         assertEquals(Side.A, row.winner());
         assertEquals(Side.B, row.starter());
-        assertEquals("run", row.runId());
-        assertEquals("forge-best", row.methodA());
+        assertEquals(parent.header(), row.header());
     }
 
     @Test

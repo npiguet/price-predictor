@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+import static com.pricepredictor.connector.MatchFixtures.HEADER;
 import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
 import static com.pricepredictor.connector.MatchFixtures.TS;
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,7 +23,7 @@ class CardsPlayedRowTest {
             List<String> cardsNotPlayedA, List<String> cardsNotPlayedB,
             Side winner, Side starter) {
         return new CardsPlayedRow(
-                TS, RUN_ID, "RVR", "forge-best", "gen-2",
+                HEADER,
                 cardsPlayedA, cardsPlayedB, cardsNotPlayedA, cardsNotPlayedB,
                 winner, starter);
     }

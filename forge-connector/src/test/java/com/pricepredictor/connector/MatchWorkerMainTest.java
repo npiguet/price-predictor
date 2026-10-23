@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
-import static com.pricepredictor.connector.MatchFixtures.TS;
-import static com.pricepredictor.connector.MatchFixtures.deck40;
+import static com.pricepredictor.connector.MatchFixtures.cardsPlayedRow;
+import static com.pricepredictor.connector.MatchFixtures.matchResult;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -103,19 +103,10 @@ class MatchWorkerMainTest {
 
     // ── recordMatch(): the progress line rides no writer's gate ────────────
 
-    private static CardsPlayedRow cardsPlayedRow() {
-        return new CardsPlayedRow(
-                TS, RUN_ID, "RVR", "forge-best", "gen-2",
-                List.of("X"), List.of("Y"), List.of(), List.of(), Side.A, Side.B);
-    }
-
     /** A two-game match result, built without Forge or a live game. */
     private static MatchGenerationResult twoGameResult() {
-        MatchResult matchResult = new MatchResult(
-                TS, RUN_ID, "RVR", "forge-best", "gen-2",
-                deck40("A"), deck40("B"), "AA", "BA", 47);
-        List<CardsPlayedRow> rows = List.of(cardsPlayedRow(), cardsPlayedRow());
-        return new MatchGenerationResult(matchResult, rows, false);
+        return new MatchGenerationResult(
+                matchResult(), List.of(cardsPlayedRow(), cardsPlayedRow()), false);
     }
 
     @Test

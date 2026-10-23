@@ -59,6 +59,11 @@ public class GamePlayer {
             cardsPlayedA = List.copyOf(cardsPlayedA);
             cardsPlayedB = List.copyOf(cardsPlayedB);
         }
+
+        /** The game's winner and starter, without the cards it played. */
+        public GameResult result() {
+            return new GameResult(winner, playFirst);
+        }
     }
 
     /**
@@ -70,22 +75,9 @@ public class GamePlayer {
      */
     public record PlayedMatch(List<GameOutcome> games, int durationSeconds, boolean randomSeat) {
 
-        /** Per-game winner sequence, e.g. {@code "ABA"}: the {@code games} field of a match row. */
-        public String winnerSequence() {
-            return sequence(GameOutcome::winner);
-        }
-
-        /** Per-game play-first sequence, same length as {@link #winnerSequence()}. */
-        public String playSequence() {
-            return sequence(GameOutcome::playFirst);
-        }
-
-        private String sequence(java.util.function.Function<GameOutcome, Side> sideOf) {
-            StringBuilder sb = new StringBuilder(games.size());
-            for (GameOutcome game : games) {
-                sb.append(sideOf.apply(game));
-            }
-            return sb.toString();
+        /** Each game's winner and starter, in game order: what a match row records of it. */
+        public List<GameResult> results() {
+            return games.stream().map(GameOutcome::result).toList();
         }
 
         /** Games deck A won. */

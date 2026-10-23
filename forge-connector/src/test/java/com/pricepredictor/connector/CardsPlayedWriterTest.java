@@ -8,8 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
-import static com.pricepredictor.connector.MatchFixtures.TS;
+import static com.pricepredictor.connector.MatchFixtures.cardsPlayedRow;
+import static com.pricepredictor.connector.MatchFixtures.header;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -19,10 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class CardsPlayedWriterTest {
 
     private static CardsPlayedRow row(String tag) {
-        return new CardsPlayedRow(
-                TS, RUN_ID, "RVR", "forge-best", "gen-" + tag,
-                List.of("X"), List.of("Y"), List.of(), List.of(),
-                Side.A, Side.B);
+        return cardsPlayedRow(header("gen-" + tag));
     }
 
     @Test

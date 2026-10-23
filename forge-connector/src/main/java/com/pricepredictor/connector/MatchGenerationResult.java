@@ -8,7 +8,7 @@ import java.util.List;
  * {@link MatchGenerator#generateMatch()}.
  *
  * <p>The {@code cardsPlayedRows} list has the same length as the parent's
- * {@code games} string — one entry per played game, in game order. The two
+ * {@code games} — one entry per played game, in game order. The two
  * pieces are written to different files by the match worker
  * ({@code match-outcomes.txt} via {@link MatchResultWriter},
  * {@code cards-played.txt} via {@link CardsPlayedWriter}).
@@ -31,12 +31,12 @@ public record MatchGenerationResult(
         if (cardsPlayedRows == null) {
             throw new IllegalArgumentException("cardsPlayedRows must not be null");
         }
-        boolean rowsMatch = cardsPlayedRows.size() == matchResult.games().length();
+        boolean rowsMatch = cardsPlayedRows.size() == matchResult.games().size();
         if (!rowsMatch && !(randomSeat && cardsPlayedRows.isEmpty())) {
             throw new IllegalArgumentException(
                     "cardsPlayedRows size (" + cardsPlayedRows.size()
                             + ") must match parent games length ("
-                            + matchResult.games().length() + ")");
+                            + matchResult.games().size() + ")");
         }
     }
 }
