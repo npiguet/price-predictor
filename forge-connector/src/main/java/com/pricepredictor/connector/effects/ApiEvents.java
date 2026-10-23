@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 /**
@@ -474,34 +473,31 @@ final class ApiEvents {
         return rule == null ? ClauseObservation.NOTHING : new ClauseObservation<>(sa, rule, null);
     }
 
-    /** Set the first time any rule's emitter throws, so the line below prints once. */
-    private static final AtomicBoolean EMITTER_FAILURE_REPORTED = new AtomicBoolean(false);
+    /** Raised the first time any rule's emitter throws. */
+    private static final OnceWarning EMITTER_FAILURE = new OnceWarning();
 
     /**
-     * Mirror the treatment {@code AbilityUtils.reportClauseListenerFailure}
-     * gives this same hook's other end, in the forge repo: latched to the
-     * first throw, naming what failed and why, rather than repeated once per
-     * clause -- a real playthrough resolves thousands of them, and a broken
-     * rule would flood the log for the whole run instead of announcing itself
-     * once.
+     * Mirror the treatment Forge's {@code EffectRecordHook.contain} gives
+     * this same hook's other end: latched to the first throw, naming what
+     * failed and why, rather than repeated once per clause -- a real
+     * playthrough resolves thousands of them, and a broken rule would flood
+     * the log for the whole run instead of announcing itself once.
      *
      * <p>Package-private rather than private, the same reason {@code
      * clauseHandler} is: forcing a rule to throw reliably would mean
-     * contriving a malformed script value or a null host card, and this is
-     * what {@code AbilityUtils} does instead for the hook's other end --
-     * {@code EffectRecordClauseHookTest} calls {@code
-     * reportClauseListenerFailure} through a seam, not through a real throw.
+     * contriving a malformed script value or a null host card, so a test
+     * calls this with a synthetic exception instead -- as Forge's {@code
+     * OnceOnlyWarningTest} raises its warning directly rather than through a
+     * real listener throw.
      */
     static void reportEmitterFailure(EventType eventType, RuntimeException e) {
-        if (EMITTER_FAILURE_REPORTED.compareAndSet(false, true)) {
-            System.err.println("ApiEvents: the emitter for \"" + eventType.wireName()
-                    + "\" threw and was ignored; further emitter failures will "
-                    + "not be logged: " + e);
-        }
+        EMITTER_FAILURE.raise(() -> "ApiEvents: the emitter for \"" + eventType.wireName()
+                + "\" threw and was ignored; further emitter failures will "
+                + "not be logged: " + e);
     }
 
-    /** Set the first time any rule's memo throws, so the line below prints once. */
-    private static final AtomicBoolean MEMO_FAILURE_REPORTED = new AtomicBoolean(false);
+    /** Raised the first time any rule's memo throws. */
+    private static final OnceWarning MEMO_FAILURE = new OnceWarning();
 
     /**
      * As {@link #reportEmitterFailure}, for a rule's memo instead of its
@@ -510,16 +506,14 @@ final class ApiEvents {
      * <p>Its own message, because a memo ({@link #observe}) and an emitter
      * ({@link ClauseObservation#finish}) are different halves of one {@link Rule}, and a memo
      * failure reported as "the emitter" sends its reader to the wrong one.
-     * Its own latch, because a memo failure latching
-     * {@link #EMITTER_FAILURE_REPORTED} would silence a later, unrelated
-     * emitter failure for the rest of the JVM.
+     * Its own latch, because a memo failure raising
+     * {@link #EMITTER_FAILURE} would silence a later, unrelated emitter
+     * failure for the rest of the JVM.
      */
     static void reportMemoFailure(EventType eventType, RuntimeException e) {
-        if (MEMO_FAILURE_REPORTED.compareAndSet(false, true)) {
-            System.err.println("ApiEvents: the memo for \"" + eventType.wireName()
-                    + "\" threw and was ignored; further memo failures will "
-                    + "not be logged: " + e);
-        }
+        MEMO_FAILURE.raise(() -> "ApiEvents: the memo for \"" + eventType.wireName()
+                + "\" threw and was ignored; further memo failures will "
+                + "not be logged: " + e);
     }
 
     /**

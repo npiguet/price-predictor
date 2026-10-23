@@ -55,8 +55,8 @@ class ClauseContractTest {
      */
     @BeforeEach
     void resetFailureLatches() {
-        TestLatches.reset(ApiEvents.class, "EMITTER_FAILURE_REPORTED");
-        TestLatches.reset(ApiEvents.class, "MEMO_FAILURE_REPORTED");
+        TestLatches.reset(ApiEvents.class, "EMITTER_FAILURE");
+        TestLatches.reset(ApiEvents.class, "MEMO_FAILURE");
     }
 
     private static Method clauseMethod(String name) {
@@ -232,8 +232,8 @@ class ClauseContractTest {
      * state the engine never produces.
      *
      * <p>The {@code onClauseResolving} calls go through {@link
-     * #resolvingContained}, the way {@code
-     * AbilityUtils.notifyClauseResolving} calls them in production: that
+     * #resolvingContained}, the way Forge's {@code
+     * EffectRecordHook.contain} calls them in production: that
      * containment is what lets resolution continue past the throw at all,
      * and unless {@link ApiEvents#observe} contains the throw itself, it is
      * what swallows the throw <em>before</em> {@code clauseObservations.push(...)}
@@ -299,8 +299,8 @@ class ClauseContractTest {
     }
 
     /**
-     * Calls {@code onClauseResolving} the way {@code
-     * AbilityUtils.notifyClauseResolving} calls it in production --
+     * Calls {@code onClauseResolving} the way Forge's {@code
+     * EffectRecordHook.contain} calls it in production --
      * containing a {@code RuntimeException} from the listener rather than
      * letting it escape -- so {@link #aThrowingMemoDoesNotDesyncTheSiblingsPop}
      * exercises the same shape a real game would, not a shape only a direct
@@ -312,7 +312,7 @@ class ClauseContractTest {
             handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{clause});
         } catch (RuntimeException e) {
-            // Mirrors AbilityUtils.notifyClauseResolving's own containment,
+            // Mirrors EffectRecordHook.contain's own containment,
             // which catches RuntimeException and nothing wider --
             // an Error is left to propagate here too.
         }

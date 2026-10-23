@@ -12,7 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 /**
@@ -160,26 +159,24 @@ final class ClauseOutcomeRouter {
             EventType.TOKEN_CREATED, EventType.DICE_ROLLED, EventType.TURN_ENDED,
             EventType.TEXT_CHANGE);
 
-    /** Set the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
-    private static final AtomicBoolean UNKNOWN_OUTCOME_TYPE_REPORTED = new AtomicBoolean();
+    /** Raised the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
+    private static final OnceWarning UNKNOWN_OUTCOME_TYPE = new OnceWarning();
 
     /**
      * Prints one line to stderr the first time {@link #outcomeHandler()}
      * receives a type outside {@link #KNOWN_OUTCOME_TYPES}, then stays quiet
      * for every one after it — the same latched-once treatment
-     * {@code ApiEvents.reportEmitterFailure} and
-     * {@code AbilityUtils.reportClauseListenerFailure} give their own hooks'
-     * failures, for the same reason: a deleted {@code note(...)} call or a
-     * misspelled event name must not go dark silently.
+     * {@code ApiEvents.reportEmitterFailure} and Forge's
+     * {@code EffectRecordHook.contain} give their own hooks' failures, for
+     * the same reason: a deleted {@code note(...)} call or a misspelled event
+     * name must not go dark silently.
      */
     private static void reportUnknownOutcomeType(String type) {
-        if (UNKNOWN_OUTCOME_TYPE_REPORTED.compareAndSet(false, true)) {
-            System.err.println("ClauseOutcomeRouter: outcomeHandler() received "
-                    + "an outcome type not in KNOWN_OUTCOME_TYPES (\"" + type
-                    + "\"); further unrecognized types will not be logged. A "
-                    + "renamed or deleted EffectRecordOutcomes.note(...) call "
-                    + "in Forge would produce exactly this.");
-        }
+        UNKNOWN_OUTCOME_TYPE.raise(() -> "ClauseOutcomeRouter: outcomeHandler() received "
+                + "an outcome type not in KNOWN_OUTCOME_TYPES (\"" + type
+                + "\"); further unrecognized types will not be logged. A "
+                + "renamed or deleted EffectRecordOutcomes.note(...) call "
+                + "in Forge would produce exactly this.");
     }
 
     /**
@@ -190,8 +187,8 @@ final class ClauseOutcomeRouter {
      * the event type, 2 the parameters. The event type is a plain string the
      * effect names for itself rather than an enum the engine shares with this
      * side -- {@code EffectRecordOutcomes}'s own javadoc explains why: "the
-     * caller names the event type, which keeps the vocabulary in the
-     * collector that consumes it" -- read here through
+     * event type names the outcome, and the collector that consumes it owns
+     * what each type means" -- read here through
      * {@link EventType#fromWire} and checked against
      * {@link #KNOWN_OUTCOME_TYPES}, the real vocabulary.
      *

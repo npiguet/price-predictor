@@ -48,8 +48,8 @@ class ApiEventsTest {
      */
     @BeforeEach
     void resetFailureLatches() {
-        TestLatches.reset(ApiEvents.class, "EMITTER_FAILURE_REPORTED");
-        TestLatches.reset(ApiEvents.class, "MEMO_FAILURE_REPORTED");
+        TestLatches.reset(ApiEvents.class, "EMITTER_FAILURE");
+        TestLatches.reset(ApiEvents.class, "MEMO_FAILURE");
     }
 
     /**
@@ -589,8 +589,8 @@ class ApiEventsTest {
     }
 
     /**
-     * Mirrors {@code EffectRecordClauseHookTest
-     * .testAThrowingListenerIsReportedExactlyOnceOnStderr} in the forge repo:
+     * Mirrors {@code OnceOnlyWarningTest.testRaisedThreeTimesPrintsOneLine}
+     * in the forge repo:
      * call the report directly with a synthetic exception rather than contrive
      * a rule that reliably throws, and assert both halves of the promise --
      * one line naming the half that failed, the event type and the exception,
