@@ -75,14 +75,46 @@ output to predict when it changes.
 **`SnapshotBuilder.printedKeys` fills a permanent's card-slot lines from Forge's
 `getSpellAbilities()`, which holds the cast spell and the activated abilities.** Attachment-granted
 lines come from the same call on each attachment. About a quarter of the permanents on the
-battlefield carry a line this leaves out, and the knowledge-probes record gives the counts. Keyword
-lines are unaffected, because the keyword flags carry them.
+battlefield carry a line this leaves out, and the knowledge-probes record gives the counts. A
+keyword's own statics and triggers are left out with them
+([keywords](#keywords-reach-the-model-only-as-flags-so-it-infers-what-each-one-does-from-outcomes-alone)).
 
 **What a static has already done reaches the model, and what it decides at the moment of the
 record does not.** An anthem's +1/+1 is in the toughness and a granted keyword is in the flags. A
 "can't block" static, a replacement that exiles instead of destroying, a damage doubler, or a lord
 whose removal shrinks its creatures are text the model needs and never sees. Pacifism shows it an
 enchantment attached to a creature and nothing more.
+
+### Keywords reach the model only as flags, so it infers what each one does from outcomes alone
+
+**Gen-2's snapshot gives a keyword to the model only as a flag.** The keyword factory attaches a
+keyword's script to the card as a static or a trigger, and the snapshot lists neither, so no
+keyword's text reaches a card slot. The model has to infer what each flag means from the outcomes it
+sees.
+
+**The knowledge probes' evasion grid shows what that costs.** A horsemanship blocker raises the
+predicted chance of a block against every evasive attacker: against a flying attacker more than a
+flying blocker does, and against a fear attacker more than the artifact and black blockers the rule
+allows. A reach blocker barely moves the prediction against a flyer, though the rule treats reach
+exactly like flying there. Flying's ranking of allowed over forbidden blocks sits near chance ([the
+evasion
+grid](2026-09-19-effect-knowledge-probes-design.md#evasion-the-model-knows-an-evasive-attacker-is-hard-to-block-and-which-blocker-answers-it-only-for-horsemanship-and-fear)).
+
+**Forge already writes most of what a keyword does as a script fragment.** The keyword factory turns
+75 of Forge's 202 keywords into statics and triggers. `extract-keyword-definitions` records each
+fragment as `generated_script`, and flying's fragment names its own answer:
+
+```
+Flying        Mode$ CantBlockBy | ValidAttacker$ Creature.Self | ValidBlocker$ Creature.withoutFlying+withoutReach
+Horsemanship  Mode$ CantBlockBy | ValidAttacker$ Creature.Self | ValidBlocker$ Creature.withoutHorsemanship
+Hexproof      Mode$ CantTarget  | Activator$ Opponent | ValidTarget$ Card.Self
+```
+
+Shroud, ward, protection, flanking, prowess, exalted, vigilance, defender and cascade have a
+fragment too. Reach, shadow, first strike, deathtouch, trample, lifelink, menace and indestructible
+have none: the engine implements them in code. The capture records each keyword's template without
+an instance's value, and several keywords that take a value, such as annihilator and bushido, show
+no fragment there, so the count of 75 is a floor.
 
 ### Some output fields stay weak while the others improve
 
@@ -253,9 +285,9 @@ record](2026-09-18-effect-model-gen2-improvements-design.md#where-the-model-doub
 
 **Gen-2's keyword flags collapse every protection into one flag.** The overlay maps
 `protection_from_red`, `protection_from_blue` and every other protection onto a single `protection`
-slot. A printed protection line still reaches the model through its text in `e`. A granted one,
-such as Gods Willing's "gains protection from the color of your choice", reaches it only through
-the flag, and the flag cannot say which colour. Gen-2's evasion grid shows the cost: its two
+slot. Protection's text never reaches a card slot, printed or granted, because its fragment is a
+static the snapshot leaves out. Gods Willing's "gains protection from the color of your choice"
+therefore reaches the model only as the flag, and the flag cannot say which colour. Gen-2's evasion grid shows the cost: its two
 protection rows, protection from the blocker's colour and from another colour, give the model
 identical inputs and so identical predictions, where the rule forbids the first block and allows
 the second.
@@ -821,6 +853,40 @@ beside controls of the same kinds. A gen-3 model that reads the new lines should
 subsets' loss toward their controls, and noise in its card slots should start to cost something
 there.
 
+### A keyword with a Forge script gets its own `e`, and keeps its flag only where other text names it
+
+**Every keyword whose fragment Forge can produce gets a line, and so an `e`, in its card slot.** The
+fragment need not be printed on the card: the factory's copy, attached at runtime, is the line. The
+snapshot fix in the section above reads it with the rest of the card's statics and triggers, and
+with each instance's own value, such as annihilator 2 or ward {2}. Two collector rules make that
+happen. A trait Forge marks `Secondary$ True` is kept rather than skipped. Its provenance key names
+the keyword line the card prints, so the sidecar joins it
+([keywords](#keywords-reach-the-model-only-as-flags-so-it-infers-what-each-one-does-from-outcomes-alone)).
+
+**A keyword keeps its flag where other text tests for it by name, or where the engine still checks
+it.** A keyword plays two parts. One is what it does, which the fragment carries. The other is a
+property other text tests. Flying's own fragment asks whether the blocker is `withoutFlying`, and
+"destroy each creature with flying" and "creature without flying" ask the same. A flag answers that
+in one bit, where an `e` would make the trunk recognise a flying line from its vector. Flying,
+horsemanship and every other keyword a selector names therefore keep their flag beside the new line.
+
+**A hybrid keyword keeps its flag too.** Where the engine checks a keyword by name as well as
+running its fragment, the fragment does not carry the whole keyword. Protection is the case to
+check: its fragment prevents damage and forbids blocking, targeting and attaching, and the engine
+may still test it elsewhere. Only a scripted keyword that no selector names and the engine never
+checks loses its flag. The list follows from the selectors in Forge's card scripts and the keyword
+checks in its engine code.
+
+**A keyword with neither a flag nor a fragment keeps the reminder-text fallback.** For a known
+keyword the engine implements, the flag is exact, and a text would hold nothing the flag does not. A
+new set's keyword that the engine implements has no flag slot, and its reminder text, which an
+unknown keyword already expands to, is the only signal the model gets.
+
+**Gen-2's evasion grid is the measure.** With flying's fragment in the attacker's `e`, a flying or a
+reach blocker should lift the predicted block against a flyer, and a horsemanship blocker should
+lift it only against a horsemanship attacker. The flying row's ranking should rise from near chance,
+and the horsemanship blocker's lift against flying and fear attackers should fall.
+
 ### The model has to learn every rule that depends on whose turn or which step it is, and collection records which check decided each one
 
 **Gen-3 computes all three verdict bits in the collector, from the rules alone, for both seats.** The
@@ -920,15 +986,14 @@ collection, since the snapshot already holds the pairing.
 
 ### The keyword flags should say what a creature has protection from
 
-**Gen-3 gives each granted protection its quality.** Two forms would carry it:
-
-- **Fixed flags for the common qualities and one open slot.** One flag per colour, per card type,
-  for multicolored and monocolored, and for everything, plus an "other" flag for a creature type or
-  a condition. Cheap, but the open slot cannot say which creature type.
-- **Every granted keyword encoded as a line.** The overlay's granted keywords pass through the
-  encoder as their expanded definition, "protection from Goblins", the way a printed keyword line
-  already does. Any quality then reaches the trunk as text, including ones no flag anticipates, at
-  the cost of an encoder pass per granted keyword.
+**Gen-3 gives each protection its quality through its line.** [The keyword
+decision](#a-keyword-with-a-forge-script-gets-its-own-e-and-keeps-its-flag-only-where-other-text-names-it)
+gives protection a line from its fragment, and an instance's fragment names what it protects from.
+Any quality then reaches the trunk as text, including ones no flag anticipates. The keyword file's
+capture shows the template with the quality left blank, so the collector reads the instance's
+fragment rather than the template. Protection also keeps its flag, since the engine may test it by
+name. Fixed flags per colour, per card type and for everything remain the fallback if an instance's
+fragment turns out not to carry the quality.
 
 **The rare qualities need built examples, or the flags carry nothing the model learned.** Rule
 702.16 says what protection does: damage from a source with the quality is prevented, and the
