@@ -36,7 +36,7 @@ import java.util.Optional;
 public class CastabilityMain {
 
     /** A card's answer; {@link #wireName()} is what the Python side reads. */
-    enum Verdict {
+    enum Verdict implements WireNamed {
         CASTABLE("castable"),
         UNCASTABLE("uncastable");
 
@@ -46,7 +46,8 @@ public class CastabilityMain {
             this.wireName = wireName;
         }
 
-        String wireName() {
+        @Override
+        public String wireName() {
             return wireName;
         }
     }
@@ -132,7 +133,7 @@ public class CastabilityMain {
     static String render(Map<String, Verdict> verdicts) {
         Json.ObjectWriter json = Json.object();
         for (Map.Entry<String, Verdict> entry : verdicts.entrySet()) {
-            json.value(entry.getKey(), entry.getValue().wireName());
+            json.value(entry.getKey(), entry.getValue());
         }
         return json.render();
     }

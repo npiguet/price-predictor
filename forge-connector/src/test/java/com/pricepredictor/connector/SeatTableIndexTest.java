@@ -77,7 +77,10 @@ class SeatTableIndexTest {
     @Test
     void anUnknownKindIsRejectedRatherThanPlayedAsADeck() throws IOException {
         Path table = table("d1;BLB;gen4;dek;A|B", "d1;BLB;other;deck;Forest");
-        assertThrows(IllegalArgumentException.class, () -> SeatTableIndex.load(table, false));
+        IllegalArgumentException e = assertThrows(
+                IllegalArgumentException.class, () -> SeatTableIndex.load(table, false));
+        assertEquals("seat kind must be 'deck' or 'pool', got 'dek': d1;BLB;gen4;dek;A|B",
+                e.getMessage());
     }
 
     @Test
