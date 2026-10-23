@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -125,10 +124,8 @@ public class SeatTableIndex {
     /** Load a seat table from disk. */
     public static SeatTableIndex load(Path seatsFile, boolean includeMirrors) throws IOException {
         List<SeatEntry> seats = new ArrayList<>();
-        for (String line : Files.readAllLines(seatsFile)) {
-            String trimmed = line.trim();
-            if (trimmed.isEmpty()) continue;
-            seats.add(parseLine(trimmed));
+        for (String line : CorpusFiles.nonBlankLines(seatsFile)) {
+            seats.add(parseLine(line));
         }
         return new SeatTableIndex(seats, includeMirrors);
     }

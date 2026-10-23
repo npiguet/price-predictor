@@ -2,8 +2,8 @@ package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
 
@@ -19,28 +19,22 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class DraftWorkerRequiredAgentTest {
 
-    private static String[] draw(String... agents) {
-        return agents.clone();
-    }
-
     @Test
     void overwritesExactlyOneSeatWhenTheDrawContainsNone() {
-        String[] agents = draw(
+        List<String> before = List.of(
                 "forge-full", "forge-full", "gen-1", "forge-r30",
                 "gen-1", "forge-full", "forge-r100", "gen-1");
-        String[] before = agents.clone();
 
-        DraftWorkerMain.forceRequiredAgent(agents, "gen-3", new Random(7));
+        List<String> agents = DraftWorkerMain.withRequiredAgent(before, "gen-3", new Random(7));
 
-        long carrying = Arrays.stream(agents).filter("gen-3"::equals).count();
-        assertEquals(1, carrying, "exactly one seat should be forced to the learner");
-
+        assertEquals(1, agents.stream().filter("gen-3"::equals).count(),
+                "exactly one seat should be forced to the learner");
         // Every other seat is untouched — the rest of the draw is preserved.
         int changed = 0;
-        for (int s = 0; s < agents.length; s++) {
-            if (!agents[s].equals(before[s])) {
+        for (int s = 0; s < agents.size(); s++) {
+            if (!agents.get(s).equals(before.get(s))) {
                 changed++;
-                assertEquals("gen-3", agents[s]);
+                assertEquals("gen-3", agents.get(s));
             }
         }
         assertEquals(1, changed, "only the forced seat should differ");
@@ -48,27 +42,23 @@ class DraftWorkerRequiredAgentTest {
 
     @Test
     void leavesADrawThatAlreadyCarriesTheLabelUnchanged() {
-        String[] agents = draw(
+        List<String> before = List.of(
                 "forge-full", "gen-3", "gen-1", "forge-r30",
                 "gen-1", "forge-full", "forge-r100", "gen-1");
-        String[] before = agents.clone();
 
-        DraftWorkerMain.forceRequiredAgent(agents, "gen-3", new Random(7));
-
-        assertArrayEquals(before, agents);
+        assertEquals(before, DraftWorkerMain.withRequiredAgent(before, "gen-3", new Random(7)));
     }
 
     @Test
     void absentOrBlankLabelLeavesSamplingByteForByteAsBefore() {
-        String[] agents = draw("forge-full", "gen-1", "forge-r30", "forge-full");
-        String[] before = agents.clone();
+        List<String> before = List.of("forge-full", "gen-1", "forge-r30", "forge-full");
 
         for (String label : new String[] {null, "", "   "}) {
             // A fresh Random with the same seed must be left un-advanced, so a
             // run without the property draws exactly the sequence it always did.
             Random random = new Random(99);
-            DraftWorkerMain.forceRequiredAgent(agents, label, random);
-            assertArrayEquals(before, agents, "seats unchanged for label " + label);
+            assertEquals(before, DraftWorkerMain.withRequiredAgent(before, label, random),
+                    "seats unchanged for label " + label);
             assertEquals(new Random(99).nextInt(1000), random.nextInt(1000),
                     "the random stream must not be advanced for label " + label);
         }
@@ -78,16 +68,11 @@ class DraftWorkerRequiredAgentTest {
     void theForcedSeatIsChosenUniformly() {
         Set<Integer> seatsHit = new HashSet<>();
         Random random = new Random(3);
+        List<String> pod = List.of(
+                "forge-full", "forge-full", "forge-full", "forge-full",
+                "forge-full", "forge-full", "forge-full", "forge-full");
         for (int trial = 0; trial < 400; trial++) {
-            String[] agents = draw(
-                    "forge-full", "forge-full", "forge-full", "forge-full",
-                    "forge-full", "forge-full", "forge-full", "forge-full");
-            DraftWorkerMain.forceRequiredAgent(agents, "gen-3", random);
-            for (int s = 0; s < agents.length; s++) {
-                if ("gen-3".equals(agents[s])) {
-                    seatsHit.add(s);
-                }
-            }
+            seatsHit.add(DraftWorkerMain.withRequiredAgent(pod, "gen-3", random).indexOf("gen-3"));
         }
         assertEquals(8, seatsHit.size(), "every seat index should be reachable");
     }

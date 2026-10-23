@@ -55,8 +55,8 @@ import java.util.Optional;
  *       to this file per completed match via {@link ProgressWriter}, so a
  *       caller that never touches {@code output.file} (records-only mode) can
  *       still bound a run by counting matches played. Written unconditionally
- *       — independent of {@link WorkerConfig#recordsOnly()} and of both sealed
- *       writers — because a progress tally is not a corpus and must not ride
+ *       — independent of {@link WorkerConfig#recordsOnly()} and of the
+ *       {@link SealedCorpus} — because a progress tally is not a corpus and must not ride
  *       the gate that keeps records-only mode out of one.</li>
  * </ul>
  *
@@ -66,6 +66,8 @@ public class MatchWorkerMain {
 
     static final int DEFAULT_BEST_OF = 7;
     static final int DEFAULT_SIDE_B_WEIGHT = 4;
+    /** A progress line every this many matches. */
+    static final int PROGRESS_EVERY = 10;
 
     static final String OUTPUT_FILE = "output.file";
     static final String EFFECT_RECORDS_DIR = "effect.records.dir";
@@ -125,13 +127,13 @@ public class MatchWorkerMain {
     /**
      * Read every JVM system property the worker depends on, validate it, and
      * package the result as a {@link WorkerConfig}. Exits the process with
-     * {@link WorkerProperties#BAD_CONFIG_EXIT} on any malformed input.
+     * {@link ExitCode#BAD_CONFIG} on any malformed input.
      */
     static WorkerConfig parseConfig() {
         Optional<Path> outputFile = WorkerProperties.optionalPath(OUTPUT_FILE);
         Optional<Path> effectRecordsDir = WorkerProperties.optionalPath(EFFECT_RECORDS_DIR);
         if (outputFile.isEmpty() && effectRecordsDir.isEmpty()) {
-            throw WorkerProperties.badConfig(
+            throw ToolMain.badConfig(
                     "-D" + OUTPUT_FILE + " is required unless -D" + EFFECT_RECORDS_DIR
                             + " is set (records-only mode)");
         }
@@ -144,7 +146,7 @@ public class MatchWorkerMain {
         Optional<Path> sideBDecks = WorkerProperties.optionalPath(SIDE_B_DECKS_FILE);
 
         if (sideBDecks.isEmpty() && WorkerProperties.optional(SIDE_B_DECKS_WEIGHT).isPresent()) {
-            throw WorkerProperties.badConfig(
+            throw ToolMain.badConfig(
                     "-D" + SIDE_B_DECKS_WEIGHT + " is only valid with -D" + SIDE_B_DECKS_FILE);
         }
 
@@ -184,7 +186,6 @@ public class MatchWorkerMain {
     }
 
     private static void initializeForge(WorkerConfig config) {
-        System.out.println("Initializing Forge environment...");
         // Stage four's variant scripts are already in Forge's custom-cards
         // directory: VariantSidecarMain put them there, in one process, before
         // the first worker started. This one registers their names and does
@@ -192,9 +193,9 @@ public class MatchWorkerMain {
         // that one shared directory while the others walk it during
         // FModel.initialize is a race, and a worker that reads it half-written
         // has a card database missing the very variants its decks name.
-        ForgeEnvironmentInitializer.initialize(
-                WorkerProperties.optionalPath(EFFECT_VARIANT_SCRIPTS).orElse(null), false);
-        System.out.println("Forge initialized. Starting match generation.");
+        ForgeEnvironmentInitializer.initializeWorker(System.out,
+                WorkerProperties.optionalPath(EFFECT_VARIANT_SCRIPTS).orElse(null),
+                "Starting match generation.");
         System.out.println("Match format: best-of-" + config.bestOf());
     }
 
@@ -205,19 +206,15 @@ public class MatchWorkerMain {
         MatchGenerator.DeckSource sideA = loadDecks(config.sideADecksFile(), "side-A");
         MatchGenerator.DeckSource sideB = loadDecks(config.sideBDecksFile(), "side-B");
 
-        // In records-only mode neither sealed writer is constructed at all —
+        // In records-only mode the sealed corpus is not constructed at all —
         // not constructed-and-unused, so there is no path by which a coverage
-        // or variant run can append to the sealed corpus.
-        MatchResultWriter writer =
-                config.outputFile().map(MatchResultWriter::new).orElse(null);
-        CardsPlayedWriter cardsPlayedWriter = config.outputFile()
-                .map(output -> new CardsPlayedWriter(cardsPlayedPath(output))).orElse(null);
+        // or variant run can append to it.
+        Optional<SealedCorpus> sealedCorpus = config.outputFile().map(SealedCorpus::beside);
         // Never gated by recordsOnly(): a progress tally is not a corpus, and
         // gating it on the same guard that keeps records-only mode out of the
         // sealed corpus would leave a records-only round's progress file never
         // growing.
-        ProgressWriter progressWriter =
-                config.progressFile().map(ProgressWriter::new).orElse(null);
+        Optional<ProgressWriter> progress = config.progressFile().map(ProgressWriter::new);
 
         CollectionCaps caps = CollectionCaps.fromSystemProperties();
         RecordShardWriter effectRecords = openEffectRecords(config, caps);
@@ -233,13 +230,12 @@ public class MatchWorkerMain {
 
         WorkerLoop.runUntilBroken(
                 () -> {
-                    recordMatch(generator.generateMatch(),
-                            writer, cardsPlayedWriter, progressWriter);
+                    recordMatch(generator.generateMatch(), sealedCorpus, progress);
                     silencedHookReport.afterMatch();
                     return WorkerLoop.Outcome.COMPLETED;
                 },
                 new WorkerLoop.Progress(
-                        System.out, 10, "matches generated", "Error generating match"));
+                        System.out, PROGRESS_EVERY, "matches generated", "Error generating match"));
     }
 
     /**
@@ -299,50 +295,32 @@ public class MatchWorkerMain {
     }
 
     /**
-     * Record one completed match to whichever of the three writers are wired
-     * up. Factored out of {@link #runForever}'s infinite loop so the
-     * independence this method's contract depends on — the progress line is
-     * written whether or not {@code writer}/{@code cardsPlayedWriter} are
-     * {@code null} — is exercisable by a plain unit test that constructs a
+     * Record one completed match to the sealed corpus and the progress file,
+     * each when the worker has one. Factored out of {@link #runForever}'s
+     * infinite loop so the independence this method's contract depends on —
+     * the progress line is written whether or not there is a sealed corpus —
+     * is exercisable by a plain unit test that constructs a
      * {@link MatchGenerationResult} fixture and never touches Forge.
      */
     static void recordMatch(
             MatchGenerationResult result,
-            MatchResultWriter writer,
-            CardsPlayedWriter cardsPlayedWriter,
-            ProgressWriter progressWriter) {
-        // Records-only per match (FR-025), beside the per-worker mode the
-        // writers' nulls express: a random-seat match had one seat playing
+            Optional<SealedCorpus> sealedCorpus,
+            Optional<ProgressWriter> progress) {
+        // Records-only per match (FR-025), beside the per-worker mode an
+        // absent corpus expresses: a random-seat match had one seat playing
         // at random, so its outcome says nothing about either deck and
-        // neither sealed corpus may take a row from it. Its effect records
+        // neither sealed file may take a row from it. Its effect records
         // were written as the games ran; only the progress line is left.
-        boolean sealedRows = !result.randomSeat();
-        if (writer != null && sealedRows) {
-            writer.write(result.matchResult());
+        if (!result.randomSeat()) {
+            sealedCorpus.ifPresent(corpus -> corpus.record(result));
         }
-        if (cardsPlayedWriter != null && sealedRows) {
-            for (CardsPlayedRow row : result.cardsPlayedRows()) {
-                cardsPlayedWriter.write(row);
-            }
-        }
-        // Unconditional on writer/cardsPlayedWriter: a records-only round
-        // (both null) must still advance its progress file, or a bounded
-        // round built on this worker can never observe that it is done.
-        if (progressWriter != null) {
-            progressWriter.write();
-        }
+        // Unconditional on the corpus: a records-only round (none) must still
+        // advance its progress file, or a bounded round built on this worker
+        // can never observe that it is done.
+        progress.ifPresent(ProgressWriter::write);
     }
 
-    /**
-     * Resolve the cards-played output path next to the match-outcomes file.
-     * Both files share the {@code output/sealed/} directory by spec
-     * (files.md), so we only need to swap the filename.
-     */
-    static Path cardsPlayedPath(Path matchOutcomesFile) {
-        return matchOutcomesFile.resolveSibling("cards-played.txt");
-    }
-
-    /** Forge-built decks when no file is named; exits with {@link WorkerProperties#BAD_CONFIG_EXIT} on a file that does not load. */
+    /** Forge-built decks when no file is named; exits with {@link ExitCode#BAD_CONFIG} on a file that does not load. */
     private static MatchGenerator.DeckSource loadDecks(Optional<Path> file, String label) {
         if (file.isEmpty()) {
             return MatchGenerator.DeckSource.FORGE_BUILT;
@@ -354,7 +332,7 @@ public class MatchWorkerMain {
             System.out.println("Loaded " + index.size() + " " + label + " decks.");
             return new MatchGenerator.DeckSource.FileSampled(index);
         } catch (Exception e) {
-            throw WorkerProperties.badConfig(
+            throw ToolMain.badConfig(
                     "loading " + label + " decks file: " + e.getMessage());
         }
     }

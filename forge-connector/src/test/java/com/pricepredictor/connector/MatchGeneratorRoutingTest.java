@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import java.util.List;
 import java.util.Random;
 
+import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -20,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class MatchGeneratorRoutingTest {
 
-    private static final String RUN_ID = "test-run-id";
     private static final List<String> ELIGIBLE = List.of("MH3", "BLB", "RVR");
 
     private static DeckSource oneDeckFile() {

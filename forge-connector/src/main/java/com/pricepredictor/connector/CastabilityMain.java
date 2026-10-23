@@ -55,16 +55,10 @@ public class CastabilityMain {
         ToolMain.Args cli = ToolMain.args(args, "--cards", "--output");
 
         ToolMain.run(() -> {
-            String cardsArg = cli.get("--cards");
-            String outputArg = cli.get("--output");
-            if (cardsArg == null || outputArg == null) {
-                throw new IllegalArgumentException("--cards and --output are required");
-            }
-            Path cardsFile = Path.of(cardsArg);
-            Path output = Path.of(outputArg);
+            Path cardsFile = Path.of(cli.require("--cards"));
+            Path output = Path.of(cli.require("--output"));
             ForgeEnvironmentInitializer.initialize();
-            List<String> names = Files.readAllLines(cardsFile, StandardCharsets.UTF_8)
-                    .stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
+            List<String> names = CorpusFiles.nonBlankLines(cardsFile);
             Map<String, Verdict> verdicts = consult(names);
             if (output.getParent() != null) {
                 Files.createDirectories(output.getParent());
@@ -109,6 +103,13 @@ public class CastabilityMain {
      * game at all, three cards' ability setup throws and would be misread as
      * uncastable.
      */
+    /**
+     * The edition code the consult's printing carries: none in particular.
+     * Castability is a property of the card's rules, which every printing
+     * shares, so the printing is built without looking one up.
+     */
+    private static final String NO_EDITION = "UNK";
+
     private static Optional<Verdict> verdictFor(String name) {
         // allowAltNames: a double-faced card's back-face name still names the
         // card the coverage unit is keyed on.
@@ -118,7 +119,7 @@ public class CastabilityMain {
             return Optional.empty();
         }
         try {
-            PaperCard paper = new PaperCard(rules, "UNK", CardRarity.Common);
+            PaperCard paper = new PaperCard(rules, NO_EDITION, CardRarity.Common);
             Game game = OfflineGame.instance();
             Card card = CardFactory.getCard(paper, null, game.nextCardId(), game);
             return Optional.of(card.getSpells().isEmpty() ? Verdict.UNCASTABLE : Verdict.CASTABLE);

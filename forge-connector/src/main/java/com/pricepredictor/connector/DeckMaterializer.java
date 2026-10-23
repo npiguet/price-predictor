@@ -9,6 +9,7 @@ import forge.model.FModel;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Turns card names into Forge cards and decks, and decks back into names.
@@ -21,7 +22,7 @@ import java.util.List;
  * a deck nobody asked for.
  *
  * <p>{@link ForgeEnvironmentInitializer#initialize()} must have been called
- * before {@link #resolve} or {@link #materialize}.
+ * before {@link #lookUp}, {@link #resolve} or {@link #materialize}.
  */
 final class DeckMaterializer {
 
@@ -44,6 +45,18 @@ final class DeckMaterializer {
     }
 
     /**
+     * The card Forge's card database holds under {@code name}, or empty when
+     * it holds none.
+     *
+     * <p>The one name lookup every caller shares, so "a name Forge knows"
+     * means the same thing to the deck a worker plays, the basic-land rule
+     * and the list of variants a round may build from.
+     */
+    static Optional<PaperCard> lookUp(String name) {
+        return Optional.ofNullable(FModel.getMagicDb().getCommonCards().getCard(name));
+    }
+
+    /**
      * Resolve {@code names} in order, duplicates kept.
      *
      * @param why appended to the exception under {@link UnresolvedPolicy#FAIL}:
@@ -53,12 +66,7 @@ final class DeckMaterializer {
         List<PaperCard> cards = new ArrayList<>(names.size());
         List<String> unresolved = new ArrayList<>();
         for (String name : names) {
-            PaperCard card = FModel.getMagicDb().getCommonCards().getCard(name);
-            if (card != null) {
-                cards.add(card);
-            } else {
-                unresolved.add(name);
-            }
+            lookUp(name).ifPresentOrElse(cards::add, () -> unresolved.add(name));
         }
         reportUnresolved(unresolved, names.size(), policy, why);
         return cards;
@@ -89,7 +97,7 @@ final class DeckMaterializer {
     }
 
     /**
-     * Say something about names {@code getCommonCards()} could not resolve:
+     * Say something about names {@link #lookUp} could not resolve:
      * a warning on stderr, or an exception under {@link UnresolvedPolicy#FAIL}.
      */
     static void reportUnresolved(

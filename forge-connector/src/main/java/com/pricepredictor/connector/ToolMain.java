@@ -11,9 +11,10 @@ import java.util.Set;
 
 /**
  * What the one-shot tool mains share: {@code --flag value} arguments, and the
- * exit protocol the Python side relies on — 0 when the work returns, 1 with a
- * stack trace on stderr when it throws. The callers only check for non-zero,
- * so every failure is one exit code; the message is for the operator.
+ * exit protocol the Python side relies on — {@link ExitCode#OK} when the work
+ * returns, {@link ExitCode#FAILURE} with a stack trace on stderr when it
+ * throws. The callers only check for non-zero; the message is for the
+ * operator.
  *
  * <p>It also owns the stream encoding of the workers whose pipes Python reads:
  * Python decodes them strictly as UTF-8, but the JVM encodes {@code System.out}
@@ -32,26 +33,36 @@ final class ToolMain {
     private ToolMain() {
     }
 
-    /** Run {@code body}, then exit 0, or exit 1 if it throws. */
+    /** Run {@code body}, then exit {@link ExitCode#OK}, or {@link ExitCode#FAILURE} if it throws. */
     static void run(Body body) {
         try {
             body.run();
-            System.exit(0);
+            System.exit(ExitCode.OK.status());
         } catch (Exception e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace(System.err);
-            System.exit(1);
+            System.exit(ExitCode.FAILURE.status());
         }
     }
 
     /**
-     * Exit with {@code status}. Declared to return an exception only so a
+     * Exit with {@code code}. Declared to return an exception only so a
      * caller can write {@code throw exit(..)} and have the compiler see that
      * control does not continue.
      */
-    static IllegalStateException exit(int status) {
-        System.exit(status);
-        return new IllegalStateException("exit(" + status + ") returned");
+    static IllegalStateException exit(ExitCode code) {
+        System.exit(code.status());
+        return new IllegalStateException("exit(" + code + ") returned");
+    }
+
+    /**
+     * Exit with {@link ExitCode#BAD_CONFIG} after naming the problem on
+     * stderr; the result is for the caller to {@code throw}, as in
+     * {@link #exit}.
+     */
+    static IllegalStateException badConfig(String problem) {
+        System.err.println("Error: " + problem);
+        return exit(ExitCode.BAD_CONFIG);
     }
 
     /**
@@ -119,6 +130,19 @@ final class ToolMain {
         /** The flag's value, or null when it was not given. */
         String get(String flag) {
             return values.get(flag);
+        }
+
+        /**
+         * The flag's value.
+         *
+         * @throws IllegalArgumentException naming the flag when it was not given
+         */
+        String require(String flag) {
+            String value = values.get(flag);
+            if (value == null) {
+                throw new IllegalArgumentException(flag + " is required");
+            }
+            return value;
         }
     }
 }

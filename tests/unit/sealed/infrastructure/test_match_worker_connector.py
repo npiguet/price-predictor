@@ -208,7 +208,7 @@ class TestMatchWorkerConnectorProgressFile:
     never grew because nothing appended to it. The fix is this parameter --
     a channel of its own, so a caller can request a progress tally without
     also passing a real ``output_file`` (which would flip records-only mode
-    off and construct a real ``CardsPlayedWriter``, see
+    off and construct a real sealed corpus (``SealedCorpus``), see
     ``MatchWorkerMain.java``'s ``recordsOnly()``)."""
 
     def test_progress_file_passed_as_system_property(self, tmp_path, stub_classpath):

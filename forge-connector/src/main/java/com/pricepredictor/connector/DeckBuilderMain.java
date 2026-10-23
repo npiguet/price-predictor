@@ -47,17 +47,13 @@ public class DeckBuilderMain {
         DeckBuilder deckBuilder = new DeckBuilder();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty()) continue;
-
+            CorpusFiles.nonBlankLines(reader).forEach(line -> {
                 List<PaperCard> pool = DeckMaterializer.resolve(CardNameList.parse(line),
                         DeckMaterializer.UnresolvedPolicy.FAIL, UNRESOLVED_POOL);
                 Deck deck = deckBuilder.buildStandard(pool);
                 out.println(deckToLine(deck));
                 out.flush();
-            }
+            });
         }
     }
 

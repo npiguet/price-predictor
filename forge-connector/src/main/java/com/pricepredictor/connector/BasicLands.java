@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import forge.item.PaperCard;
-import forge.model.FModel;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,12 +19,14 @@ final class BasicLands {
     private BasicLands() {
     }
 
+    /** Whether the card Forge knows by this name is a basic land; false for a name it does not know. */
     static boolean isBasic(String cardName) {
-        return BY_NAME.computeIfAbsent(cardName, BasicLands::lookUp);
+        return BY_NAME.computeIfAbsent(cardName,
+                name -> DeckMaterializer.lookUp(name).map(BasicLands::isBasic).orElse(false));
     }
 
-    private static boolean lookUp(String cardName) {
-        PaperCard card = FModel.getMagicDb().getCommonCards().getCard(cardName);
-        return card != null && card.getRules().getMainPart().getType().isBasicLand();
+    /** Whether the card's main face carries the basic land type, by Forge's type rule. */
+    static boolean isBasic(PaperCard card) {
+        return card.getRules().getMainPart().getType().isBasicLand();
     }
 }

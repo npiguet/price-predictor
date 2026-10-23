@@ -1,10 +1,11 @@
 package com.pricepredictor.connector;
 
+import com.google.common.collect.ImmutableMultiset;
+import com.google.common.collect.Multiset;
+
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,37 +50,35 @@ public class GeneratedDecksIndex {
             }
             return new GeneratedDeck(fields[0], fields[1], CardNameList.parse(fields[2]));
         }
+
+        /**
+         * Whether this deck holds exactly {@code cards}, in any order: the
+         * same names with the same number of copies each. Content rather than
+         * identity, so a deck read from another index instance with the same
+         * line still counts as a mirror.
+         */
+        boolean isMirrorOf(Multiset<String> cards) {
+            return cards.equals(ImmutableMultiset.copyOf(cardNames));
+        }
     }
 
     private final List<GeneratedDeck> allDecks;
+    /** Never holds an empty list: a set is a key only once a deck of it is added. */
     private final Map<String, List<GeneratedDeck>> decksBySet;
-    /**
-     * Per-deck sorted card-name list, indexed by the deck's identity in
-     * {@link #allDecks}. Pre-computed at load time so the same-content
-     * mirror-match check in {@link #randomDeckFromSet(String, List, Random)}
-     * is O(40) per candidate instead of O(40 log 40).
-     */
-    private final Map<GeneratedDeck, List<String>> sortedCardsByDeck;
 
     GeneratedDecksIndex(List<GeneratedDeck> decks) {
         this.allDecks = List.copyOf(decks);
         Map<String, List<GeneratedDeck>> grouped = new HashMap<>();
-        Map<GeneratedDeck, List<String>> sorted = new HashMap<>();
         for (GeneratedDeck deck : decks) {
             grouped.computeIfAbsent(deck.setCode(), k -> new ArrayList<>()).add(deck);
-            List<String> sortedCards = new ArrayList<>(deck.cardNames());
-            Collections.sort(sortedCards);
-            sorted.put(deck, List.copyOf(sortedCards));
         }
         this.decksBySet = grouped;
-        this.sortedCardsByDeck = sorted;
     }
 
     /** Load and parse a generated-decks file. */
     public static GeneratedDecksIndex load(Path file) throws IOException {
         List<GeneratedDeck> decks = new ArrayList<>();
-        for (String line : Files.readAllLines(file)) {
-            if (line.isBlank()) continue;
+        for (String line : CorpusFiles.nonBlankLines(file)) {
             decks.add(GeneratedDeck.parse(line));
         }
         if (decks.isEmpty()) {
@@ -114,25 +113,17 @@ public class GeneratedDecksIndex {
      */
     public Optional<GeneratedDeck> randomDeckFromSet(
             String setCode, List<String> excludeCards, Random random) {
-        List<GeneratedDeck> candidates = decksBySet.get(setCode);
-        if (candidates == null || candidates.isEmpty()) {
-            return Optional.empty();
-        }
-        List<String> excludeSorted = new ArrayList<>(excludeCards);
-        Collections.sort(excludeSorted);
+        Multiset<String> excluded = ImmutableMultiset.copyOf(excludeCards);
         // Filter to non-mirror candidates first, then sample uniformly. This
         // keeps the sample distribution flat when there are many mirrors,
         // unlike rejection sampling.
-        List<GeneratedDeck> nonMirror = new ArrayList<>(candidates.size());
-        for (GeneratedDeck c : candidates) {
-            if (!sortedCardsByDeck.get(c).equals(excludeSorted)) {
-                nonMirror.add(c);
+        List<GeneratedDeck> nonMirror = new ArrayList<>();
+        for (GeneratedDeck candidate : decksBySet.getOrDefault(setCode, List.of())) {
+            if (!candidate.isMirrorOf(excluded)) {
+                nonMirror.add(candidate);
             }
         }
-        if (nonMirror.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(nonMirror.get(random.nextInt(nonMirror.size())));
+        return anyOf(nonMirror, random);
     }
 
     /**
@@ -148,10 +139,13 @@ public class GeneratedDecksIndex {
      * a game, which is all a coverage or variant round requires.
      */
     public Optional<GeneratedDeck> randomAnyDeckFromSet(String setCode, Random random) {
-        List<GeneratedDeck> candidates = decksBySet.get(setCode);
-        if (candidates == null || candidates.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(candidates.get(random.nextInt(candidates.size())));
+        return anyOf(decksBySet.getOrDefault(setCode, List.of()), random);
+    }
+
+    /** A uniformly drawn element of {@code decks}, or empty for none. */
+    private static Optional<GeneratedDeck> anyOf(List<GeneratedDeck> decks, Random random) {
+        return decks.isEmpty()
+                ? Optional.empty()
+                : Optional.of(decks.get(random.nextInt(decks.size())));
     }
 }

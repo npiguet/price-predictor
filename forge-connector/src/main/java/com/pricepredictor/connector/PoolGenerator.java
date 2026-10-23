@@ -83,7 +83,7 @@ public class PoolGenerator {
 
         for (int b = 0; b < BOOSTERS_PER_POOL; b++) {
             for (PaperCard card : new UnOpenedProduct(boosterTemplate).get()) {
-                if (card.getRules().getMainPart().getType().isBasicLand()) {
+                if (BasicLands.isBasic(card)) {
                     continue;
                 }
                 if (!excluded.contains(card.getName())) {
@@ -117,8 +117,7 @@ public class PoolGenerator {
             SealedTemplate boosterTemplate,
             HoldoutCards excluded) {
         for (PaperCard card : new UnOpenedProduct(boosterTemplate).get()) {
-            if (card.getRules().getMainPart().getType().isBasicLand()
-                    || excluded.contains(card.getName())) {
+            if (BasicLands.isBasic(card) || excluded.contains(card.getName())) {
                 continue;
             }
             spares.computeIfAbsent(card.getRarity(), r -> new ArrayDeque<>()).add(card);

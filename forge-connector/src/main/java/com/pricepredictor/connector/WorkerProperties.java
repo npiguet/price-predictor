@@ -22,12 +22,9 @@ import java.util.function.Predicate;
  */
 public final class WorkerProperties {
 
-    /** Exit code for a missing or malformed property. */
-    static final int BAD_CONFIG_EXIT = 2;
-
     /** What a value that does not parse, or fails its constraint, does. */
     public enum OnMalformed {
-        /** Name the property on stderr and exit with {@link #BAD_CONFIG_EXIT}. */
+        /** Name the property on stderr and exit with {@link ExitCode#BAD_CONFIG}. */
         EXIT,
         /** Name the property and the bad value on one stderr line; use the default. */
         WARN_AND_DEFAULT
@@ -39,7 +36,7 @@ public final class WorkerProperties {
     /** The property's value, or exit naming it when it is unset or blank. */
     static String require(String name) {
         return optional(name).orElseThrow(
-                () -> badConfig("-D" + name + " system property is required"));
+                () -> ToolMain.badConfig("-D" + name + " system property is required"));
     }
 
     /**
@@ -145,18 +142,9 @@ public final class WorkerProperties {
 
     private static <T> T malformed(String name, String problem, T defaultValue, OnMalformed policy) {
         if (policy == OnMalformed.EXIT) {
-            throw badConfig("-D" + name + " " + problem);
+            throw ToolMain.badConfig("-D" + name + " " + problem);
         }
         System.err.println("Warning: -D" + name + " " + problem + "; using default " + defaultValue);
         return defaultValue;
-    }
-
-    /**
-     * Exit with {@link #BAD_CONFIG_EXIT} after naming the problem; the result
-     * is for the caller to {@code throw}, as in {@link ToolMain#exit}.
-     */
-    static IllegalStateException badConfig(String problem) {
-        System.err.println("Error: " + problem);
-        return ToolMain.exit(BAD_CONFIG_EXIT);
     }
 }
