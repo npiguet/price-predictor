@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.Json;
-import forge.gamemodes.limited.DraftPack;
 import forge.item.PaperCard;
 
 import java.io.BufferedReader;
@@ -9,6 +8,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -60,13 +60,54 @@ final class DraftPickProtocol {
     }
 
     /**
+     * Where in which draft a pick is made: the routing fields a request
+     * carries and its response must echo. Strict synchrony means at most one
+     * request is outstanding, so a response naming any other position is a
+     * desynchronised supervisor, not a late answer.
+     *
+     * @param pack 1-based pack number
+     * @param pick 1-based pick number within the pack
+     */
+    record PickPosition(String draftId, int seat, int pack, int pick) {
+
+        /**
+         * The position a parsed response names, or empty when any of its four
+         * routing fields is missing or of the wrong type.
+         */
+        static Optional<PickPosition> of(Map<String, Object> fields) {
+            if (!(fields.get("draft_id") instanceof String draftId)) {
+                return Optional.empty();
+            }
+            Optional<Integer> seat = intField(fields, "seat");
+            Optional<Integer> pack = intField(fields, "pack_number");
+            Optional<Integer> pick = intField(fields, "pick_number");
+            if (seat.isEmpty() || pack.isEmpty() || pick.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(new PickPosition(draftId, seat.get(), pack.get(), pick.get()));
+        }
+
+        private static Optional<Integer> intField(Map<String, Object> fields, String key) {
+            if (fields.get(key) instanceof Long value
+                    && value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE) {
+                return Optional.of(value.intValue());
+            }
+            return Optional.empty();
+        }
+
+        @Override
+        public String toString() {
+            return "seat " + seat + " pack " + pack + " pick " + pick;
+        }
+    }
+
+    /**
      * One outstanding pick request: the seat asking, where it is in the draft,
-     * and the pack it holds. A response must name the same draft, seat, pack
-     * and pick, and choose a card from {@code pack}.
+     * and the pack it holds. A response must name the same position and
+     * choose a card from {@code pack}.
      */
     record PickRequest(
-            String draftId, int seat, String agent, int podSize, int packNumber,
-            int pickNumber, String setCode, List<String> pack) {
+            PickPosition position, String agent, int podSize, String setCode, List<String> pack) {
 
         PickRequest {
             pack = List.copyOf(pack);
@@ -75,15 +116,57 @@ final class DraftPickProtocol {
         /** The {@code <<DRAFT-PICK-REQUEST>>} line (contracts/pick-protocol.md). */
         String toWireLine() {
             return PICK_REQUEST_SENTINEL + Json.object()
-                    .value("draft_id", draftId)
-                    .value("seat", seat)
+                    .value("draft_id", position.draftId())
+                    .value("seat", position.seat())
                     .value("agent", agent)
                     .value("pod_size", podSize)
-                    .value("pack_number", packNumber)
-                    .value("pick_number", pickNumber)
+                    .value("pack_number", position.pack())
+                    .value("pick_number", position.pick())
                     .value("set_code", setCode == null ? "" : setCode)
                     .raw("pack", Json.stringArray(pack))
                     .render();
+        }
+    }
+
+    /**
+     * A {@code <<DRAFT-PICK-RESPONSE>>} line, parsed: the supervisor either
+     * aborts the draft or picks a card at a position.
+     */
+    sealed interface PickResponse {
+
+        /** {@code "abort":true}: the supervisor gives the draft up, whatever else the line says. */
+        record Abort() implements PickResponse {}
+
+        /** The supervisor's choice of {@code card} at {@code position}. */
+        record Pick(PickPosition position, String card) implements PickResponse {}
+
+        /**
+         * Parse a response line.
+         *
+         * @throws DraftAbandonedException on a line that is not a well-formed
+         *         response: no sentinel, unparseable JSON, no complete
+         *         position, or no pick
+         */
+        static PickResponse parse(String line) {
+            if (!line.startsWith(PICK_RESPONSE_SENTINEL)) {
+                throw new DraftAbandonedException("response missing sentinel: " + line);
+            }
+            String suffix = line.substring(PICK_RESPONSE_SENTINEL.length()).trim();
+            Map<String, Object> fields;
+            try {
+                fields = FlatJson.parse(suffix);
+            } catch (RuntimeException e) {
+                throw new DraftAbandonedException("unparseable pick response: " + e.getMessage());
+            }
+            if (Boolean.TRUE.equals(fields.get("abort"))) {
+                return new Abort();
+            }
+            PickPosition position = PickPosition.of(fields).orElseThrow(
+                    () -> new DraftAbandonedException("response carried no complete position: " + suffix));
+            if (!(fields.get("pick") instanceof String card)) {
+                throw new DraftAbandonedException("response carried no pick");
+            }
+            return new Pick(position, card);
         }
     }
 
@@ -93,7 +176,7 @@ final class DraftPickProtocol {
      * returns the chosen card from the held pack.
      */
     static PaperCard requestExternalPick(
-            PickChannel channel, PickRequest request, DraftPack pack) {
+            PickChannel channel, PickRequest request, HeldPack held) {
         channel.out().println(request.toWireLine());
         channel.out().flush();
 
@@ -106,14 +189,10 @@ final class DraftPickProtocol {
         if (line == null) {
             throw new WorkerInputClosed("stdin EOF awaiting pick response");
         }
-        String name = resolvePick(parseResponse(line), request);
-        for (int i = 0; i < pack.size(); i++) {
-            if (pack.get(i).getName().equals(name)) {
-                return pack.get(i);
-            }
-        }
-        // Unreachable: resolvePick already validated held-pack membership.
-        throw new DraftAbandonedException("resolved pick '" + name + "' not in held pack");
+        String name = resolvePick(PickResponse.parse(line), request);
+        // Unreachable miss: resolvePick already validated held-pack membership.
+        return held.card(name).orElseThrow(() -> new DraftAbandonedException(
+                "resolved pick '" + name + "' not in held pack"));
     }
 
     private static String readResponseLine(BufferedReader stdin) throws IOException {
@@ -126,47 +205,23 @@ final class DraftPickProtocol {
         return null;  // EOF
     }
 
-    static Map<String, Object> parseResponse(String line) {
-        if (!line.startsWith(PICK_RESPONSE_SENTINEL)) {
-            throw new DraftAbandonedException("response missing sentinel: " + line);
-        }
-        String suffix = line.substring(PICK_RESPONSE_SENTINEL.length()).trim();
-        try {
-            return FlatJson.parse(suffix);
-        } catch (RuntimeException e) {
-            throw new DraftAbandonedException("unparseable pick response: " + e.getMessage());
-        }
-    }
-
     /**
      * Validate a parsed response against the outstanding request and return the
-     * chosen card name. Throws {@link DraftAbortedException} on {@code abort},
+     * chosen card name. Throws {@link DraftAbortedException} on an abort,
      * {@link DraftAbandonedException} on a routing mismatch or an out-of-pack pick.
      */
-    static String resolvePick(Map<String, Object> response, PickRequest request) {
-        if (Boolean.TRUE.equals(response.get("abort"))) {
+    static String resolvePick(PickResponse response, PickRequest request) {
+        if (!(response instanceof PickResponse.Pick pick)) {
             throw new DraftAbortedException();
         }
-        if (!request.draftId().equals(response.get("draft_id"))
-                || !eqInt(response.get("seat"), request.seat())
-                || !eqInt(response.get("pack_number"), request.packNumber())
-                || !eqInt(response.get("pick_number"), request.pickNumber())) {
+        if (!request.position().equals(pick.position())) {
             throw new DraftAbandonedException(
-                    "response routing mismatch at seat " + request.seat() + " pack "
-                            + request.packNumber() + " pick " + request.pickNumber());
+                    "response routing mismatch at " + request.position());
         }
-        Object pick = response.get("pick");
-        if (!(pick instanceof String)) {
-            throw new DraftAbandonedException("response carried no pick");
+        if (!request.pack().contains(pick.card())) {
+            throw new DraftAbandonedException("pick '" + pick.card() + "' not in held pack");
         }
-        if (!request.pack().contains(pick)) {
-            throw new DraftAbandonedException("pick '" + pick + "' not in held pack");
-        }
-        return (String) pick;
-    }
-
-    private static boolean eqInt(Object value, int expected) {
-        return value instanceof Long && ((Long) value) == (long) expected;
+        return pick.card();
     }
 
     static String formatAbandoned(String draftId, String reason) {

@@ -3,6 +3,7 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.DraftPickProtocol.DraftAbandonedException;
 import com.pricepredictor.connector.DraftPickProtocol.DraftAbortedException;
 import com.pricepredictor.connector.DraftPickProtocol.PickChannel;
+import com.pricepredictor.connector.DraftPickProtocol.PickPosition;
 import com.pricepredictor.connector.DraftPickProtocol.PickRequest;
 import com.pricepredictor.connector.DraftPickProtocol.WorkerInputClosed;
 import com.pricepredictor.connector.effects.Json;
@@ -23,7 +24,6 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -80,8 +80,6 @@ public class DraftWorkerMain {
     static final String SET = "draft.set";
     static final String EXTERNAL_AGENTS = "draft.external.agents";
     static final String REQUIRED_AGENT = "draft.required.agent";
-    static final int POD_SIZE = 8;
-    static final int PACKS = 3;
 
     public static void main(String[] args) {
         // The sentinel channel is UTF-8 so Python can decode accented card
@@ -112,18 +110,16 @@ public class DraftWorkerMain {
             throw ToolMain.exit(1);
         }
 
-        // Shared context object for the AI seats (used only by conspiracy-card
-        // hooks, which standard sets do not trigger).
-        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
+        DraftSettings settings = new DraftSettings(
+                BoosterDraft.createDraft(LimitedPoolType.Full), mix, random, channel,
+                requiredAgent);
 
         WorkerLoop.runUntilBroken(
                 () -> {
                     String draftSet = sets.next();
                     DraftResult result;
                     try {
-                        result = generateDraft(
-                                context, draftSet, mix, random, channel,
-                                UUID.randomUUID().toString(), requiredAgent);
+                        result = generateDraft(settings, draftSet, UUID.randomUUID().toString());
                     } catch (WorkerInputClosed e) {
                         // The supervisor closed our stdin (it stopped or crashed); exit
                         // so it can restart a fresh worker if it still wants more drafts.
@@ -172,63 +168,74 @@ public class DraftWorkerMain {
     }
 
     /**
-     * Overwrite one uniformly-chosen seat with {@code requiredAgent} when the
-     * per-seat draw produced none (spec 021 FR-003).
+     * What every draft of one worker shares: the Forge context its AI seats
+     * hang off, the agent mix each seat is drawn from, the random stream the
+     * draws and random picks take, and the channel model-piloted seats ask
+     * through.
      *
-     * <p>A no-op — and, deliberately, no draw from {@code random} at all — when
-     * the label is absent, blank, or already present, so a run without the
-     * property samples byte-for-byte as it always did. Mutates {@code agents} in
-     * place before any pick is made, so the emitted transcript's
-     * {@code seats[].agent} array always reflects the realised pod.
+     * @param context       shared context object for the AI seats (used only
+     *                      by conspiracy-card hooks, which standard sets do
+     *                      not trigger)
+     * @param requiredAgent a label at least one seat of every pod must carry,
+     *                      or null (or blank) for none; see
+     *                      {@link #withRequiredAgent}
      */
-    static void forceRequiredAgent(String[] agents, String requiredAgent, Random random) {
-        if (requiredAgent == null || requiredAgent.isBlank()) {
-            return;
+    record DraftSettings(
+            BoosterDraft context, AgentMix mix, Random random, PickChannel channel,
+            String requiredAgent) {
+    }
+
+    /** One pod position: its index, its Forge AI seat, and the agent drafting it. */
+    record Seat(int index, LimitedPlayerAI player, String agent) {
+    }
+
+    /**
+     * {@code agents} with one uniformly-chosen seat overwritten by
+     * {@code requiredAgent} when the per-seat draw produced none (spec 021
+     * FR-003).
+     *
+     * <p>{@code agents} itself, unchanged — and, deliberately, with no draw
+     * from {@code random} at all — when the label is absent, blank, or
+     * already present, so a run without the property samples byte-for-byte as
+     * it always did. Applied before any pick is made, so the emitted
+     * transcript's {@code seats[].agent} array always reflects the realised
+     * pod.
+     */
+    static List<String> withRequiredAgent(
+            List<String> agents, String requiredAgent, Random random) {
+        if (requiredAgent == null || requiredAgent.isBlank() || agents.contains(requiredAgent)) {
+            return agents;
         }
-        for (String agent : agents) {
-            if (requiredAgent.equals(agent)) {
-                return;
-            }
-        }
-        agents[random.nextInt(agents.length)] = requiredAgent;
+        List<String> forced = new ArrayList<>(agents);
+        forced.set(random.nextInt(forced.size()), requiredAgent);
+        return forced;
     }
 
     /**
      * Run one full pod draft. On a worker-detected pick fault this emits a
      * {@code <<DRAFT-ABANDONED>>} line via the channel first.
      *
-     * @param requested     the set as the caller names it; an alias such as
-     *                      {@code CON} is drafted and recorded, in the
-     *                      transcript and in every pick request, under the
-     *                      code its edition goes by ({@code CFX}), because
-     *                      every downstream join compares set codes as strings
-     * @param requiredAgent a label at least one seat must carry, or null
+     * @param requested the set as the caller names it; an alias such as
+     *                  {@code CON} is drafted and recorded, in the
+     *                  transcript and in every pick request, under the
+     *                  code its edition goes by ({@code CFX}), because
+     *                  every downstream join compares set codes as strings
      */
-    static DraftResult generateDraft(
-            BoosterDraft context, String requested, AgentMix mix, Random random,
-            PickChannel channel, String draftId, String requiredAgent) {
+    static DraftResult generateDraft(DraftSettings settings, String requested, String draftId) {
         String setCode = BoosterTemplates.canonicalCode(requested);
         Optional<SealedTemplate> template = BoosterTemplates.forSet(setCode);
         if (template.isEmpty()) {
             return new DraftResult.Skipped("no booster template for set " + setCode);
         }
         DraftPack[] boosters = openBoosters(template.get());
-        int packSize = boosters[0].size();
-        for (DraftPack booster : boosters) {
-            if (booster.size() != packSize) {
-                // A non-uniform pack size breaks the reconstruction geometry.
-                return new DraftResult.Skipped("boosters of " + booster.size() + " and "
-                        + packSize + " cards; the transcript geometry needs one size");
-            }
-        }
-        if (packSize == 0) {
-            return new DraftResult.Skipped("empty boosters");
+        Optional<String> problem = boosterGeometryProblem(boosters);
+        if (problem.isPresent()) {
+            return new DraftResult.Skipped(problem.get());
         }
 
-        PodDraft pod = new PodDraft(context, setCode, draftId, mix, random, channel, packSize);
-        forceRequiredAgent(pod.agents, requiredAgent, random);
+        PodDraft pod = new PodDraft(settings, setCode, draftId, boosters[0].size());
         try {
-            for (int pack = 1; pack <= PACKS; pack++) {
+            for (int pack = 1; pack <= PodGeometry.PACKS; pack++) {
                 pod.runPack(pack, boosters);
             }
         } catch (DraftAbortedException e) {
@@ -236,16 +243,36 @@ public class DraftWorkerMain {
             return new DraftResult.Abandoned();
         } catch (DraftAbandonedException e) {
             // Worker-detected fault: tell the supervisor (it logs + counts it).
-            channel.out().println(formatAbandoned(draftId, e.getMessage()));
-            channel.out().flush();
+            settings.channel().out().println(formatAbandoned(draftId, e.getMessage()));
+            settings.channel().out().flush();
             return new DraftResult.Abandoned();
         }
         return new DraftResult.Completed(SENTINEL + pod.toJson());
     }
 
-    /** Every booster of the pod: index k = (pack - 1) * POD_SIZE + openingSeat. */
+    /**
+     * Why the opened boosters cannot be drafted into a transcript, or empty
+     * when they can. The reader recovers every pick's seat from a single
+     * pack size ({@link PodGeometry}), so the boosters must all hold the
+     * same number of cards, and at least one.
+     */
+    static Optional<String> boosterGeometryProblem(DraftPack[] boosters) {
+        int packSize = boosters[0].size();
+        for (DraftPack booster : boosters) {
+            if (booster.size() != packSize) {
+                return Optional.of("boosters of " + booster.size() + " and "
+                        + packSize + " cards; the transcript geometry needs one size");
+            }
+        }
+        if (packSize == 0) {
+            return Optional.of("empty boosters");
+        }
+        return Optional.empty();
+    }
+
+    /** Every booster of the pod, at {@link PodGeometry#boosterIndex}. */
     private static DraftPack[] openBoosters(SealedTemplate template) {
-        DraftPack[] boosters = new DraftPack[PACKS * POD_SIZE];
+        DraftPack[] boosters = new DraftPack[PodGeometry.BOOSTERS];
         for (int k = 0; k < boosters.length; k++) {
             boosters[k] = new DraftPack(new ArrayList<>(new UnOpenedProduct(template).get()), k);
         }
@@ -254,60 +281,64 @@ public class DraftWorkerMain {
 
     /** One draft in progress: the seats, their agents, and every pick so far. */
     private static final class PodDraft {
+        private final DraftSettings settings;
         private final String setCode;
         private final String draftId;
-        private final Random random;
-        private final PickChannel channel;
         private final int packSize;
-        private final List<LimitedPlayerAI> players = new ArrayList<>(POD_SIZE);
-        private final String[] agents = new String[POD_SIZE];
+        private final List<Seat> seats;
         /** The cards drafted from each booster, by booster index, in pick order. */
-        private final List<List<String>> picksByBooster = new ArrayList<>(PACKS * POD_SIZE);
+        private final List<List<String>> picksByBooster = new ArrayList<>(PodGeometry.BOOSTERS);
 
-        PodDraft(BoosterDraft context, String setCode, String draftId, AgentMix mix,
-                 Random random, PickChannel channel, int packSize) {
+        PodDraft(DraftSettings settings, String setCode, String draftId, int packSize) {
+            this.settings = settings;
             this.setCode = setCode;
             this.draftId = draftId;
-            this.random = random;
-            this.channel = channel;
             this.packSize = packSize;
             // One AI seat per pod position; agents sampled per draft (FR-006).
-            for (int s = 0; s < POD_SIZE; s++) {
-                players.add(new LimitedPlayerAI(s, context));
-                agents[s] = mix.sample(random);
+            List<LimitedPlayerAI> players = new ArrayList<>(PodGeometry.POD_SIZE);
+            List<String> agents = new ArrayList<>(PodGeometry.POD_SIZE);
+            for (int s = 0; s < PodGeometry.POD_SIZE; s++) {
+                players.add(new LimitedPlayerAI(s, settings.context()));
+                agents.add(settings.mix().sample(settings.random()));
             }
-            for (int k = 0; k < PACKS * POD_SIZE; k++) {
+            agents = withRequiredAgent(agents, settings.requiredAgent(), settings.random());
+            List<Seat> pod = new ArrayList<>(PodGeometry.POD_SIZE);
+            for (int s = 0; s < PodGeometry.POD_SIZE; s++) {
+                pod.add(new Seat(s, players.get(s), agents.get(s)));
+            }
+            this.seats = List.copyOf(pod);
+            for (int k = 0; k < PodGeometry.BOOSTERS; k++) {
                 picksByBooster.add(new ArrayList<>(packSize));
             }
         }
 
         /** Drain one pack round: every seat picks, then the packs pass. */
         void runPack(int pack, DraftPack[] boosters) {
-            int dir = (pack % 2 == 1) ? 1 : -1;  // pass left on odd packs, right on even
-            DraftPack[] held = new DraftPack[POD_SIZE];
-            for (int o = 0; o < POD_SIZE; o++) {
-                held[o] = boosters[(pack - 1) * POD_SIZE + o];
+            DraftPack[] held = new DraftPack[PodGeometry.POD_SIZE];
+            for (int o = 0; o < PodGeometry.POD_SIZE; o++) {
+                held[o] = boosters[PodGeometry.boosterIndex(pack, o)];
             }
             for (int pick = 1; pick <= packSize; pick++) {
-                DraftPack[] nextHeld = new DraftPack[POD_SIZE];
-                for (int s = 0; s < POD_SIZE; s++) {
-                    nextHeld[s] = pickFor(s, pack, pick, held[s]);
+                DraftPack[] nextHeld = new DraftPack[PodGeometry.POD_SIZE];
+                for (Seat seat : seats) {
+                    nextHeld[seat.index()] = pickFor(seat, pack, pick, held[seat.index()]);
                 }
-                for (int s = 0; s < POD_SIZE; s++) {
-                    held[(s + dir + POD_SIZE) % POD_SIZE] = nextHeld[s];
+                for (int s = 0; s < PodGeometry.POD_SIZE; s++) {
+                    held[PodGeometry.nextSeat(s, pack)] = nextHeld[s];
                 }
             }
         }
 
-        /** Seat {@code s} picks from {@code current}; returns the pack it passes on. */
-        private DraftPack pickFor(int s, int pack, int pick, DraftPack current) {
-            LimitedPlayerAI player = players.get(s);
+        /** {@code seat} picks from {@code current}; returns the pack it passes on. */
+        private DraftPack pickFor(Seat seat, int pack, int pick, DraftPack current) {
+            LimitedPlayerAI player = seat.player();
             player.receiveOpenedPack(current);  // make it the player's choice pack
-            PaperCard chosen = channel.routes(agents[s])
-                    ? requestExternalPick(channel, new PickRequest(
-                            draftId, s, agents[s], POD_SIZE, pack, pick, setCode,
-                            namesIn(current)), current)
-                    : decidePick(player, current, agents[s], random);
+            HeldPack held = new HeldPack(current);
+            PaperCard chosen = settings.channel().routes(seat.agent())
+                    ? requestExternalPick(settings.channel(), new PickRequest(
+                            new PickPosition(draftId, seat.index(), pack, pick),
+                            seat.agent(), PodGeometry.POD_SIZE, setCode, held.names()), held)
+                    : decidePick(player, current, seat.agent(), settings.random());
             picksByBooster.get(current.getId()).add(chosen.getName());
             player.draftCard(chosen);
             return player.passPack();  // pull the pack back out
@@ -321,19 +352,11 @@ public class DraftWorkerMain {
                             .value("set_code", setCode)
                             .raw("picks", Json.stringArray(picks))
                             .render()))
-                    .raw("seats", Json.array(Arrays.asList(agents), agent -> Json.object()
-                            .value("agent", agent)
+                    .raw("seats", Json.array(seats, seat -> Json.object()
+                            .value("agent", seat.agent())
                             .render()))
                     .render();
         }
-    }
-
-    private static List<String> namesIn(DraftPack pack) {
-        List<String> names = new ArrayList<>(pack.size());
-        for (int i = 0; i < pack.size(); i++) {
-            names.add(pack.get(i).getName());
-        }
-        return names;
     }
 
     /**
