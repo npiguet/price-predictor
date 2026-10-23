@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.google.common.collect.ImmutableMultiset;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -173,6 +174,28 @@ class GeneratedDecksIndexTest {
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
         // Different order, same multiset.
         assertTrue(index.randomDeckFromSet("MH3", List.of("C", "B", "A"), new Random(0)).isEmpty());
+    }
+
+    @Test
+    void aMirrorHasTheSameCopiesOfEachCardInAnyOrder() {
+        GeneratedDecksIndex.GeneratedDeck deck =
+                new GeneratedDecksIndex.GeneratedDeck("gen-2", "MH3", List.of("A", "B", "A"));
+
+        assertTrue(deck.isMirrorOf(ImmutableMultiset.of("B", "A", "A")));
+        assertFalse(deck.isMirrorOf(ImmutableMultiset.of("A", "B", "B")),
+                "the same names in other numbers of copies are another deck");
+        assertFalse(deck.isMirrorOf(ImmutableMultiset.of("A", "B")));
+    }
+
+    @Test
+    void aPaddedLineReadsAsTheSameDeck(@TempDir Path tmp) throws IOException {
+        Path file = writeDecks(tmp, List.of("  gen-2;MH3;A|B|C \r", "", "   "));
+
+        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
+
+        assertEquals(1, index.size());
+        assertEquals(new GeneratedDecksIndex.GeneratedDeck("gen-2", "MH3", List.of("A", "B", "C")),
+                index.randomDeck(new Random(0)));
     }
 
     @Test

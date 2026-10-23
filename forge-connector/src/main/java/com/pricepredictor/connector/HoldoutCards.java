@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashSet;
@@ -46,10 +45,7 @@ final class HoldoutCards {
 
     /** The names in {@code file}, one per line; blank lines are skipped. */
     static HoldoutCards load(Path file) throws IOException {
-        return of(Files.readAllLines(file).stream()
-                .map(String::trim)
-                .filter(line -> !line.isEmpty())
-                .toList());
+        return of(CorpusFiles.nonBlankLines(file));
     }
 
     /**

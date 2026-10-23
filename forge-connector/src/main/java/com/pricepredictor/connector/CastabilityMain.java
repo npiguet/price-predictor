@@ -63,8 +63,7 @@ public class CastabilityMain {
             Path cardsFile = Path.of(cardsArg);
             Path output = Path.of(outputArg);
             ForgeEnvironmentInitializer.initialize();
-            List<String> names = Files.readAllLines(cardsFile, StandardCharsets.UTF_8)
-                    .stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
+            List<String> names = CorpusFiles.nonBlankLines(cardsFile);
             Map<String, Verdict> verdicts = consult(names);
             if (output.getParent() != null) {
                 Files.createDirectories(output.getParent());
