@@ -2,7 +2,7 @@
 
 Implementation notes drawn from the catalogue, written for whoever implements gen-3's rule
 coverage. The conclusions and recommendations are in the gen-3 design record,
-`experiments/2026-XX-XX-effect-model-gen3-design.md`, in part 2, step 1. This
+`experiments/2026-XX-XX-effect-model-gen3-design.md`, in its Result. This
 file holds the detail behind them: which rules need which new record fields, why rules were skipped,
 what the scenario writers suspect about Forge, and what kinds of errors the verifier fixed.
 
@@ -125,7 +125,7 @@ when a draw step lies between the setup and the outcome, mana available for each
 
 `rules/heads/` maps each of the 1,647 mechanical and legality rules to the output trained on its
 outcome and the deciding facts the model does not read, against `MODEL-FIELDS.md`. The totals and
-the families are in the gen-3 design record, part 2, step 2. To list the rules behind any name:
+the families are in the gen-3 design record's Result. To list the rules behind any name:
 `grep -l 'new:chosen_values' rules/heads/*.jsonl`, or `grep '"output": "missing"' rules/heads/*.jsonl`.
 
 **Names the families group.** The design record's tables count each rule once per family:

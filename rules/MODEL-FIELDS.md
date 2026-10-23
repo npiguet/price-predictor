@@ -98,5 +98,5 @@ keywords; plus an overflow flag.
 - Input: which attacker each blocker blocks (block-pairing section).
 - Input: every line of a permanent, statics, triggers and replacements included (snapshot
   section).
-- Record: the global designation block and the per-card fields (rules catalogue, part 2). These
+- Record: the global designation block and the per-card fields (the gen-3 Description). These
   have **no** input slot or output planned yet; the heads pass decides which they need.
