@@ -121,6 +121,46 @@ random seat to stop looping on a free, repeatable ability.
 printed base and fold set-base effects into the boosts, so a creature that survives only because of
 a boost looks like an ordinary 2/2. This needs checking in general, not only on this card.
 
+### A random seat in more matches is an option, to be decided by what it adds per rule
+
+**Gen-3 could put a random seat in far more matches than gen-2's one in four.** One option is a
+random seat in every match, acting at random at half its decisions. Gen-2's second pilot found that
+a random seat does not lengthen a game: its games ended on a median turn of 18, against 19 for games
+between two Forge AIs. Its records hold the outcomes Forge's AI never chooses, such as Bolt aimed at
+an 8/8 or a block the AI would not make. Every `can_play = false` in the corpus comes from it,
+because the AI records only the candidates that already passed its own legality check.
+
+**Five things count against a random seat in every match.**
+
+- **Random choices vary the outcome, not the rule.** Most rules the corpus lacks need a card or a
+  board that self-play rarely deals: two legends, a Saga, a battle, an anthem beside a −1/−1
+  effect. A random seat changes what happens to the cards on the table and brings no new ones.
+  Coverage decks and directed forks are what bring them.
+- **Random-seat boards are thinner.** In the second pilot they held 4.40 creatures per record,
+  against 5.62 in games between two Forge AIs, because random attacks and blocks lose creatures.
+  The rules that need crowded boards, such as layers, the legend rule and combats with several
+  blockers, would grow rarer.
+- **The Forge AI plays differently against a weak opponent.** It races and wins early, and enters
+  fewer complex combats. In gen-2 that applied to a quarter of the corpus. In every match it applies
+  to all of it.
+- **The validation strata would have no games between two Forge AIs.** Nothing would then measure
+  the model on the boards Forge's own play produces, the comparison gen-2's random-seat slice is
+  scored against.
+- **Wasted records and the looping play grow with the share.** Random targets on a wide board
+  mostly produce a resolution that changes nothing, which gen-2 accepted as a limit. The free
+  activation repeated about 2,190 times in one turn, in the section above, has to be fixed first.
+
+**The per-rule detectors decide the share.** Gen-2's records carry the random-seat flag, so the
+detectors run over gen-2's corpus can count each rule per game in random-seat games and in games
+between two Forge AIs. A rule found mostly in random-seat games argues for a larger share, and one
+found only in rich boards argues against. Whatever share is chosen, the validation strata keep
+games between two Forge AIs.
+
+**A softer random seat is a second option.** Instead of drawing uniformly at half its decisions,
+the seat would choose among the Forge AI's better options with some temperature. Its play would
+stay plausible but differ from the AI's, without throwing creatures away. It depends on whether
+Forge's AI exposes a ranking of its options, which has not been checked.
+
 ### Two sampling rules over-represent some questions
 
 **What-if legality queries are sampled before they are de-duplicated.** A what-if query is the AI
