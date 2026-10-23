@@ -103,7 +103,7 @@ and are not deleted, but they stop describing their neighbours if the rendered t
 inside the file it describes, and a card whose converter deduplicated a trait lists that trait in
 `dropped_keys`. A sub-ability or mode rendered as its own line carries no key — it is reached through
 its parent's `sub_ability_links` — so a line with an empty `provenance` is expected rather than a
-fault. Two cards warn (`bind_liberate`, `start_fire`); more than a handful is not expected.
+fault. No card is expected to warn; a warning names the card and what was thrown.
 
 ## 2. Keyword definitions and vocabulary
 
