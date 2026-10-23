@@ -64,6 +64,26 @@ public record MatchResult(
     }
 
     /**
+     * The row for a match just played, timestamped now.
+     *
+     * <p>The deck names are passed in rather than read off the played decks,
+     * because callers spell them differently: the sealed generator has the
+     * names it sampled, the draft player the names of the decks it built.
+     */
+    public static MatchResult of(
+            String runId,
+            String setCode,
+            String methodA,
+            String methodB,
+            List<String> deckA,
+            List<String> deckB,
+            GamePlayer.PlayedMatch played) {
+        return new MatchResult(
+                Instant.now(), runId, setCode, methodA, methodB, deckA, deckB,
+                played.winnerSequence(), played.playSequence(), played.durationSeconds());
+    }
+
+    /**
      * Format this result as one line of {@code match-outcomes.txt}: ten
      * semicolon-separated fields,
      * {@code timestamp;run_id;set_code;method_A;method_B;deck_A;deck_B;games;play;duration_s},

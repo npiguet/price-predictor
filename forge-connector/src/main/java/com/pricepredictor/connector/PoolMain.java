@@ -6,7 +6,6 @@ import java.io.BufferedWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Random;
 
 /**
  * CLI entry point for sealed pool generation.
@@ -67,17 +66,11 @@ public class PoolMain {
         Files.createDirectories(outputDir);
         Path outputFile = outputDir.resolve("pools.txt");
 
-        List<String> eligibleSets = null;
-        Random random = null;
-        if (setCode == null) {
-            eligibleSets = MatchGenerator.computeEligibleSets();
-            if (eligibleSets.isEmpty()) {
-                throw new IllegalStateException("no eligible sealed-legal sets found");
-            }
-            random = MyRandom.getRandom();
+        SetChooser sets = SetChooser.of(setCode, MyRandom.getRandom());
+        if (sets.isRandom()) {
             System.out.println("Generating " + poolCount
                     + " sealed pools from random sets ("
-                    + eligibleSets.size() + " eligible)...");
+                    + sets.eligibleCount() + " eligible)...");
         } else {
             System.out.println("Generating " + poolCount + " " + setCode + " sealed pools...");
         }
@@ -85,16 +78,9 @@ public class PoolMain {
         try (BufferedWriter writer = Files.newBufferedWriter(outputFile)) {
             int written = 0;
             while (written < poolCount) {
-                int batch;
-                String poolSetCode;
-                if (setCode != null) {
-                    batch = Math.min(1000, poolCount - written);
-                    poolSetCode = setCode;
-                } else {
-                    // Random set per pool — generate one at a time.
-                    batch = 1;
-                    poolSetCode = eligibleSets.get(random.nextInt(eligibleSets.size()));
-                }
+                // A random set is drawn per pool, so those pools come one at a time.
+                int batch = sets.isRandom() ? 1 : Math.min(1000, poolCount - written);
+                String poolSetCode = sets.next();
 
                 List<List<String>> pools = generator.generate(poolSetCode, batch, excluded);
                 for (List<String> pool : pools) {

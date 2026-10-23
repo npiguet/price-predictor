@@ -103,25 +103,21 @@ public class DraftWorkerMain {
 
         Random random = MyRandom.getRandom();
 
-        List<String> eligibleSets = null;
-        if (setCode == null) {
-            eligibleSets = MatchGenerator.computeEligibleSets();
-            if (eligibleSets.isEmpty()) {
-                System.err.println("Error: no eligible sealed-legal sets found");
-                throw ToolMain.exit(1);
-            }
+        SetChooser sets;
+        try {
+            sets = SetChooser.of(setCode, random);
+        } catch (IllegalStateException e) {
+            System.err.println("Error: " + e.getMessage());
+            throw ToolMain.exit(1);
         }
 
         // Shared context object for the AI seats (used only by conspiracy-card
         // hooks, which standard sets do not trigger).
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
 
-        final List<String> sets = eligibleSets;
         WorkerLoop.runUntilBroken(
                 () -> {
-                    String draftSet = (setCode != null)
-                            ? setCode
-                            : sets.get(random.nextInt(sets.size()));
+                    String draftSet = sets.next();
                     DraftResult result;
                     try {
                         result = generateDraft(

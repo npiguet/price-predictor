@@ -19,7 +19,7 @@ class SeatTableIndexTest {
 
     private static SeatTableIndex.SeatEntry seat(String pod, String label) {
         return new SeatTableIndex.SeatEntry(
-                pod, "BLB", label, SeatTableIndex.KIND_DECK, List.of("Forest", "Island"));
+                pod, "BLB", label, SeatTableIndex.SeatKind.DECK, List.of("Forest", "Island"));
     }
 
     // ── Line parsing ────────────────────────────────────────────────
@@ -53,7 +53,7 @@ class SeatTableIndexTest {
         assertEquals("d1", e.draftId());
         assertEquals("BLB", e.setCode());
         assertEquals("gen4", e.label());
-        assertEquals(SeatTableIndex.KIND_DECK, e.kind());
+        assertEquals(SeatTableIndex.SeatKind.DECK, e.kind());
         assertEquals(List.of("A", "B", "C"), e.cardNames());
     }
 
