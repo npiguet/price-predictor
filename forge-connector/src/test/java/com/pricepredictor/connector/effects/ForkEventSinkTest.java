@@ -11,6 +11,7 @@ import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventLandPlayed;
+import forge.game.event.GameEventPlayerPriority;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
@@ -64,9 +65,11 @@ class ForkEventSinkTest {
      * Events that describe the shape of a game rather than an outcome.
      *
      * <p>A fork has no cast, no resolution it did not force, no phase, no
-     * combat end, no land played and no end of the game: it is created, one
-     * ability is made to resolve, and it is thrown away. The observed side
-     * hears a land played only as the boundary that writes a held resolution. {@link GameEventZone} is here for a
+     * combat end, no land played, no priority and no end of the game: it is
+     * created, one ability is made to resolve, and it is thrown away. The
+     * observed side hears a land played only as the boundary that writes a
+     * held resolution, and a priority only as the moment a cast made during a
+     * resolution takes the bracket. {@link GameEventZone} is here for a
      * different reason — it is the per-zone-list notification that neither side
      * reads any more.
      */
@@ -74,7 +77,7 @@ class ForkEventSinkTest {
             GameEventSpellAbilityCast.class, GameEventSpellResolved.class,
             GameEventTurnPhase.class, GameEventCombatEnded.class,
             GameEventGameFinished.class, GameEventLandPlayed.class,
-            GameEventZone.class);
+            GameEventPlayerPriority.class, GameEventZone.class);
 
     /**
      * A fork describes an outcome the way an observed record does.
