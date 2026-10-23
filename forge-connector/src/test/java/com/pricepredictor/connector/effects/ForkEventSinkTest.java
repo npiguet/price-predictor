@@ -308,17 +308,16 @@ class ForkEventSinkTest {
     }
 
     /**
-     * A state-based leave's position names the event that was filed.
+     * A probe's state-based leave's position names the event that was filed.
      *
      * <p>A repeat dropped before the leave shifts it down, and a repeat of the
      * leave itself is no position at all: marked anyway, it would point at
-     * whatever is filed next, here an ordinary tap, which a modal fork would
-     * then file by the death rule.
+     * whatever is filed next, here an ordinary tap.
      */
     @Test
     void aStateBasedLeaveIsPlacedAmongTheEventsFiled() {
         Game game = TestCards.game();
-        ForkEventSink sink = ForkEventSink.forIntervention(game, null);
+        ForkEventSink sink = ForkEventSink.forProbe(game);
         Card bears = TestCards.build("Grizzly Bears");
         Card elves = TestCards.build("Llanowar Elves");
         GameEventCardChangeZone dies = new GameEventCardChangeZone(
@@ -338,5 +337,132 @@ class ForkEventSinkTest {
         assertEquals(List.of(EffectEvent.TAPPED, EffectEvent.ZONE_CHANGE, EffectEvent.TAPPED),
                 types(sink));
         assertEquals(Set.of(1), sink.stateBasedLeaves());
+    }
+
+    // ── a forced death joins its half, and is checked there ─────────────
+
+    /**
+     * A forced death is refused by the half it joins when that half already
+     * carries its line, as live. Mode 0 publishes the bears' move and mode 1
+     * only taps the elves, so {@code halfForDeath} files the death into mode
+     * 0's half, where the live collector refuses the repeat. The open span
+     * when the death arrives is mode 1's, which has no such line.
+     */
+    @Test
+    void aForcedDeathRepeatingItsOwnHalfsLineIsDropped() {
+        Game game = TestCards.game();
+        ForkEventSink sink = ForkEventSink.forIntervention(game, null);
+        Card bears = TestCards.build("Grizzly Bears");
+        Card elves = TestCards.build("Llanowar Elves");
+        GameEventCardChangeZone dies = new GameEventCardChangeZone(
+                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
+
+        int first = sink.beginMode();
+        sink.onCardChangeZone(dies);
+        int second = sink.beginMode();
+        sink.onTapped(new GameEventCardTapped(elves, true));
+        duringStateBasedCheck(game, () -> sink.onCardChangeZone(dies));
+
+        List<List<EffectEvent>> halves = ForkCollector.splitByMode(
+                sink.events(), List.of(first, second), sink.stateBasedLeaves());
+        assertEquals(List.of(EffectEvent.ZONE_CHANGE), types(halves.get(0)));
+        assertEquals(List.of(EffectEvent.TAPPED), types(halves.get(1)));
+    }
+
+    /**
+     * A forced death repeating another half's line is kept, as live. Mode 0
+     * publishes the bears' move and mode 1 damages them, so the death joins
+     * mode 1's half, the last to name the bears, which has no such line.
+     */
+    @Test
+    void aForcedDeathRepeatingAnotherHalfsLineIsKept() {
+        Game game = TestCards.game();
+        ForkEventSink sink = ForkEventSink.forIntervention(game, null);
+        Card bears = TestCards.build("Grizzly Bears");
+        Card source = TestCards.build("Prodigal Pyromancer");
+        GameEventCardChangeZone dies = new GameEventCardChangeZone(
+                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
+
+        int first = sink.beginMode();
+        sink.onCardChangeZone(dies);
+        int second = sink.beginMode();
+        sink.onCardDamaged(new GameEventCardDamaged(bears.getView(), source.getView(), 1,
+                GameEventCardDamaged.DamageType.Normal));
+        duringStateBasedCheck(game, () -> sink.onCardChangeZone(dies));
+
+        List<List<EffectEvent>> halves = ForkCollector.splitByMode(
+                sink.events(), List.of(first, second), sink.stateBasedLeaves());
+        assertEquals(List.of(EffectEvent.ZONE_CHANGE), types(halves.get(0)));
+        assertEquals(List.of(EffectEvent.DAMAGE_DEALT, EffectEvent.ZONE_CHANGE),
+                types(halves.get(1)));
+    }
+
+    /**
+     * A permanent leaving the battlefield while the tracker is frozen in the
+     * middle of the forced resolution — an end-the-turn effect's own
+     * state-based check, a token or counter batch — is filed as an ordinary
+     * event of the resolution, as live files it into the open bracket: a
+     * repeat in its span is refused, and it is no death for {@code
+     * halfForDeath} to place.
+     */
+    @Test
+    void aLeaveWhileTheForcedAbilityResolvesIsAnOrdinaryEvent() {
+        Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player caster = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        SpellAbility forced = TestBoard.inHand(game, caster, "Pyroclasm").getFirstSpellAbility();
+        forced.setActivatingPlayer(caster);
+        game.getStack().add(forced);
+        ForkEventSink sink = ForkEventSink.forIntervention(game, forced);
+        GameEventCardChangeZone dies = new GameEventCardChangeZone(
+                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
+
+        game.getStack().setResolving(true);
+        duringStateBasedCheck(game, () -> {
+            sink.onCardChangeZone(dies);
+            sink.onCardChangeZone(dies);
+        });
+
+        assertEquals(List.of(EffectEvent.ZONE_CHANGE), types(sink));
+        assertEquals(Set.of(), sink.stateBasedLeaves());
+    }
+
+    /** A death published twice in one check is still filed once, in the half it joins. */
+    @Test
+    void aForcedDeathPublishedTwiceIsFiledOnce() {
+        Game game = TestCards.game();
+        ForkEventSink sink = ForkEventSink.forIntervention(game, null);
+        Card bears = TestCards.build("Grizzly Bears");
+        GameEventCardChangeZone dies = new GameEventCardChangeZone(
+                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
+
+        sink.onTapped(new GameEventCardTapped(bears, true));
+        duringStateBasedCheck(game, () -> {
+            sink.onCardChangeZone(dies);
+            sink.onCardChangeZone(dies);
+        });
+
+        List<List<EffectEvent>> halves = ForkCollector.splitByMode(
+                sink.events(), List.of(), sink.stateBasedLeaves());
+        assertEquals(1, halves.size());
+        assertEquals(List.of(EffectEvent.TAPPED, EffectEvent.ZONE_CHANGE), types(halves.get(0)));
+    }
+
+    /** Run {@code body} with the game's view tracker frozen, as a state-based check holds it. */
+    private static void duringStateBasedCheck(Game game, Runnable body) {
+        game.getTracker().freeze();
+        try {
+            body.run();
+        } finally {
+            game.getTracker().unfreeze();
+        }
+    }
+
+    private static List<String> types(List<EffectEvent> events) {
+        List<String> types = new ArrayList<>();
+        for (EffectEvent event : events) {
+            types.add(event.type());
+        }
+        return types;
     }
 }

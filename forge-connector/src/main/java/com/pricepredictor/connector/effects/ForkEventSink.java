@@ -1,7 +1,10 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.event.GameEventCardChangeZone;
+import forge.game.event.GameEventSpellAbilityCast;
+import forge.game.event.GameEventSpellResolved;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
@@ -13,10 +16,12 @@ import java.util.Set;
  * Everything a forked resolution did, in order.
  *
  * <p>The bracket collector sorts events into a resolution bracket or a combat
- * one, because a real game interleaves them. A fork has no such problem: it is
- * created, one ability is forced to resolve or one damage step is dealt, and it
- * is thrown away, so every event the bus publishes in that window belongs to
- * that one thing. Filing them flat is the whole job.
+ * one, because a real game interleaves them. A fork is simpler: it is created,
+ * one ability is forced to resolve or one damage step is dealt, and it is
+ * thrown away. A probe's damage step is the whole fork, so a probe files every
+ * event. A forced resolution shares its fork with whatever else resolves while
+ * {@code GameSimulator.resolveStack} drains the stack, so an intervention files
+ * only what the live bracket would give the forced ability ({@link Phase}).
  *
  * <p>The events are read by {@link BusEventReader}, the same reader the bracket
  * collector uses, and filed into an {@link EventBuffer}, the same buffer its
@@ -60,7 +65,56 @@ final class ForkEventSink extends BusEventReader {
      */
     private final EventBuffer open = new EventBuffer();
     private boolean modeOpen;
-    /** Positions in {@link #events()} of moves off the battlefield during a state-based check. */
+
+    /**
+     * Where the forced ability stands, which decides what an intervention
+     * files: what the live bracket would put in the forced ability's record,
+     * and nothing else the drained stack does.
+     *
+     * <ul>
+     *   <li>{@link #BEFORE}: between the cast and the resolution, what is
+     *   published while the forced ability is the top of the fork's stack is
+     *   filed, as live files the state-based check before priority into the
+     *   spell's bracket. While anything sits above it — a cast trigger:
+     *   prowess, a "whenever you cast" or becomes-target trigger, storm,
+     *   cascade — nothing is: that is the item's own record live. Nor is
+     *   anything in that item's aftermath ({@link #aboveHeld}), though the
+     *   forced ability is the top again: live keeps the deaths for the
+     *   item's held half and sends the rest to no record, since none of it
+     *   belongs to an ability that has not begun to resolve. What was filed
+     *   before an item was pushed above is kept.</li>
+     *   <li>{@link #RESOLVING}: from the first event published while the
+     *   forced ability is the one resolving, until its {@code
+     *   GameEventSpellResolved}: everything is filed, as live files the open
+     *   bracket's events. A permanent leaving the battlefield while the
+     *   tracker is frozen mid-resolution — an end-the-turn effect's own
+     *   state-based check, a token or counter batch — is filed as an
+     *   ordinary event, checked for a repeat in its span, as live files it
+     *   into the open bracket.</li>
+     *   <li>{@link #HELD}: only the permanents leaving the battlefield in a
+     *   state-based check, as live holds a resolved half for the deaths it
+     *   caused. A stat change a static makes once the ability is gone, or the
+     *   spell's own card going to the graveyard, is not the ability's.</li>
+     *   <li>{@link #CLOSED}: once the next ability reaches the stack or
+     *   resolves, as the next action closes live's held window. A trigger the
+     *   resolution caused is that next ability, and has a record of its own
+     *   live.</li>
+     * </ul>
+     */
+    private enum Phase { BEFORE, RESOLVING, HELD, CLOSED }
+
+    private Phase phase = Phase.BEFORE;
+    /**
+     * Whether an item that resolved above the forced ability is in its
+     * aftermath: from its resolved event until the next ability reaches the
+     * stack or resolves. Nothing published then is the forced ability's.
+     */
+    private boolean aboveHeld;
+    /**
+     * Positions in {@link #events()} of the deaths filed in {@link
+     * Phase#HELD}, or of any state-based leave a probe or an ungated sink
+     * filed: the moves a modal fork files by {@code halfForDeath}.
+     */
     private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
     private ForkEventSink(Game fork, SpellAbility acting, boolean combatDamage) {
@@ -105,9 +159,10 @@ final class ForkEventSink extends BusEventReader {
     }
 
     /**
-     * Where in {@link #events()} a permanent left the battlefield while a
-     * state-based check was running, by the reading the bracket collector
-     * takes too ({@link #isStateBasedLeave}).
+     * Where in {@link #events()} the deaths a modal fork files by {@code
+     * halfForDeath} sit: an intervention's in {@link Phase#HELD}, a probe's or
+     * an ungated sink's in any state-based check, each read as the bracket
+     * collector reads one ({@link #isStateBasedLeave}).
      */
     Set<Integer> stateBasedLeaves() {
         return Set.copyOf(stateBasedLeaves);
@@ -135,20 +190,126 @@ final class ForkEventSink extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
-        file(event, namedCause);
+        if (admits(null)) {
+            file(event, namedCause);
+        }
+    }
+
+    /**
+     * An ability has finished resolving: the forced one, which opens the held
+     * window, or the next one, which closes it.
+     */
+    @Subscribe
+    public void onResolved(GameEventSpellResolved event) {
+        if (!gated()) {
+            return;
+        }
+        boolean forced = event.spell() != null && event.spell().getId() == acting.getId();
+        aboveHeld = false;
+        if (forced && (phase == Phase.BEFORE || phase == Phase.RESOLVING)) {
+            phase = Phase.HELD;
+        } else if (phase == Phase.HELD) {
+            phase = Phase.CLOSED;
+        } else if (phase == Phase.BEFORE) {
+            aboveHeld = true;
+        }
+    }
+
+    /** The next ability has reached the stack, which closes a held window. */
+    @Subscribe
+    public void onCast(GameEventSpellAbilityCast event) {
+        if (!gated()) {
+            return;
+        }
+        aboveHeld = false;
+        if (phase == Phase.HELD) {
+            phase = Phase.CLOSED;
+        }
+    }
+
+    /**
+     * Whether an event published now is the forced ability's, by {@link Phase}.
+     *
+     * @param move the move the event is, or null for any other event
+     */
+    private boolean admits(GameEventCardChangeZone move) {
+        if (!gated()) {
+            return true;
+        }
+        if (phase == Phase.BEFORE && forcedOnTop()) {
+            if (game.getStack().isResolving()) {
+                phase = Phase.RESOLVING;
+            } else {
+                return !aboveHeld;
+            }
+        }
+        return switch (phase) {
+            case RESOLVING -> true;
+            case HELD -> move != null && isStateBasedLeave(move);
+            case BEFORE, CLOSED -> false;
+        };
+    }
+
+    /**
+     * Whether this sink files by {@link Phase}: an intervention over a game
+     * whose stack it can read. A probe's damage step is the whole fork, and a
+     * sink with no game or no forced line has nothing to gate on.
+     */
+    private boolean gated() {
+        return !combatDamage && acting != null && game != null;
+    }
+
+    /**
+     * Whether the forced ability is the top of the fork's stack. While the
+     * stack is resolving, that makes it the one resolving: {@code
+     * MagicStack.resolveStack} leaves it on top until it has finished. Read
+     * in {@link Phase#RESOLVING} no longer; anything pushed above it
+     * mid-resolution does not end its span, the resolved event does.
+     */
+    private boolean forcedOnTop() {
+        var top = game.getStack().peek();
+        return top != null && top.getSpellAbility() != null
+                && top.getSpellAbility().getId() == acting.getId();
     }
 
     /**
      * A death the forced resolution left behind is marked where it was filed,
-     * so a modal fork can file it by the live rule.
+     * so the fork can file it by the live rule.
      *
-     * <p>Marked only when it was filed: a repeat the buffer refused has no
-     * position, and the next free one belongs to whatever is filed next.
+     * <p>Filed unchecked, its repeat judged later by the half it joins
+     * ({@code ForkCollector.splitByMode}): the live collector checks a death
+     * against the half {@code halfForDeath} assigns it to, and filed here it
+     * would be checked against the open span, the last mode's, whichever
+     * half it joins. A probe's death is checked here: a damage step is one
+     * record, as the observed combat bracket is.
+     *
+     * <p>A probe's leave is marked only when it was filed: a repeat the
+     * buffer refused has no position, and the next free one belongs to
+     * whatever is filed next.
+     *
+     * <p>Only an intervention's death in {@link Phase#HELD} is marked. One in
+     * the check before the forced ability resolves, or one while the tracker
+     * is frozen mid-resolution, is filed as an ordinary event, checked for a
+     * repeat in its span: live files either into the open bracket like any
+     * other event, so on a modal resolution it rides with the mode in whose
+     * span it fell rather than joining a half by {@code halfForDeath}, which
+     * is a resolved half's rule.
      */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
+        if (!admits(event)) {
+            return;
+        }
         int at = size();
-        if (file(moved, null) && isStateBasedLeave(event)) {
+        boolean probe = combatDamage;
+        if (!isStateBasedLeave(event) || gated() && phase != Phase.HELD) {
+            file(moved, null);
+        } else if (probe) {
+            if (file(moved, null)) {
+                stateBasedLeaves.add(at);
+            }
+        } else {
+            open.fileUnchecked(EventAttribution.stamp(moved, acting, null));
             stateBasedLeaves.add(at);
         }
     }

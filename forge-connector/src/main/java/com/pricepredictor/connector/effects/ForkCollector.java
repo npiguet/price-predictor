@@ -1,10 +1,13 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.eventbus.Subscribe;
 import forge.ai.simulation.GameCopier;
 import forge.ai.simulation.GameSimulator;
 import forge.ai.simulation.GameStateEvaluator;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.event.GameEventSpellAbilityCast;
+import forge.game.event.GameEventSpellResolved;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
@@ -326,7 +329,9 @@ public final class ForkCollector {
             ProvenanceKey.Resolved keys = ProvenanceResolver.resolve(ability);
             String actorId = SnapshotBuilder.playerId(perspective);
             if (resolution.modes().isEmpty()) {
-                context.emit(forkedHalf(actorId, keys, resolution.state(), resolution.events()));
+                context.emit(forkedHalf(
+                        actorId, keys, resolution.render(resolution.state()),
+                        resolution.halves().get(0)));
             } else {
                 emitModeHalves(actorId, keys, resolution);
             }
@@ -344,13 +349,12 @@ public final class ForkCollector {
     private void emitModeHalves(
             String actorId, ProvenanceKey.Resolved keys, ForcedResolution resolution) {
         List<ModeBoundary> modes = resolution.modes();
-        List<List<EffectEvent>> halves = splitByMode(
-                resolution.events(), modes, resolution.stateBasedLeaves());
+        List<List<EffectEvent>> halves = resolution.halves();
         for (int i = 0; i < modes.size(); i++) {
             ModeBoundary boundary = modes.get(i);
             context.emit(forkedHalf(
-                    actorId, keys.withOption(boundary.option()), boundary.state(),
-                    halves.get(i)));
+                    actorId, keys.withOption(boundary.option()),
+                    resolution.render(boundary.state()), halves.get(i)));
         }
     }
 
@@ -376,45 +380,77 @@ public final class ForkCollector {
      * @param option     the mode's {@code Choices$} position, or null
      * @param firstEvent the index of the first event filed after its first
      *                   clause began resolving
-     * @param state      the fork's board at that clause (FR-029b)
+     * @param state      the fork's board at that clause (FR-029b), read
+     *                   against the forced ability on the fork's stack as
+     *                   the live bracket's {@code beginMode} reads it
      */
-    private record ModeBoundary(Integer option, int firstEvent, String state) {
+    private record ModeBoundary(Integer option, int firstEvent, Snapshot state) {
     }
 
     /**
      * What a forced resolution produced, where its modes began, and which of
      * its events are permanents leaving the battlefield in a state-based check.
      *
-     * @param state the fork's board as the ability began to resolve, its
-     *              targets and X already drawn: a non-modal record's state
+     * @param state the fork's board at the forced cast, the moment the live
+     *              bracket reads an observed cast's: a non-modal record's
+     *              state
+     * @param refs  the refs block read as the forced ability finished
+     *              resolving, where the live bracket re-reads it, or null
+     *              when the fork never saw it finish
      */
     private record ForcedResolution(
-            String state, List<EffectEvent> events, List<ModeBoundary> modes,
+            Snapshot state, String refs, List<EffectEvent> events, List<ModeBoundary> modes,
             Set<Integer> stateBasedLeaves) {
+
+        /** A board this resolution read, paired with its refs as the live bracket pairs them. */
+        String render(Snapshot board) {
+            return (refs == null ? board : board.withRefs(refs)).render();
+        }
+
+        /** The events, one list per chosen mode, or one list when no mode began. */
+        List<List<EffectEvent>> halves() {
+            List<Integer> starts = new ArrayList<>();
+            for (ModeBoundary mode : modes) {
+                starts.add(mode.firstEvent());
+            }
+            return splitByMode(events, starts, stateBasedLeaves);
+        }
     }
 
     /**
-     * A modal fork's events, one list per chosen mode.
+     * A forced resolution's events, one list per chosen mode, or one list
+     * when no mode began.
      *
      * <p>Every event belongs to the mode in whose span it was filed, except a
-     * state-based death. {@code GameSimulator.resolveStack} runs the check
-     * only after the whole charm has resolved, so by position every death
+     * death in the state-based check after the resolution. {@code
+     * GameSimulator.resolveStack} runs that check only after the whole charm
+     * has resolved, so by position every such death
      * would fall into the last mode's half, whichever mode killed. Those are
      * filed by the live collector's rule instead ({@link
      * BusBracketCollector#halfForDeath}): the last half whose own events named
      * the permanent, or the last half when none did. Order is kept within each
      * half, so a death still follows the events that caused it.
      *
-     * @param stateBasedLeaves positions in {@code events} of moves off the
-     *                         battlefield during a state-based check
+     * <p>A death is checked for a repeat against the half it joins, as the
+     * live collector checks it against the held half it files it into: the
+     * sink filed it unchecked ({@link ForkEventSink}), since until now no one
+     * knew which half that is.
+     *
+     * @param modeStarts       the position in {@code events} where each chosen
+     *                         mode's span begins, in order; the first span
+     *                         also takes what precedes it
+     * @param stateBasedLeaves positions in {@code events} of the deaths filed
+     *                         after the forced ability resolved, in the check
+     *                         that follows it ({@link ForkEventSink#stateBasedLeaves})
      */
-    private static List<List<EffectEvent>> splitByMode(
-            List<EffectEvent> events, List<ModeBoundary> modes, Set<Integer> stateBasedLeaves) {
+    static List<List<EffectEvent>> splitByMode(
+            List<EffectEvent> events, List<Integer> modeStarts, Set<Integer> stateBasedLeaves) {
+        int halfCount = Math.max(1, modeStarts.size());
         int[] spanOf = new int[events.size()];
-        List<List<EffectEvent>> own = new ArrayList<>();
-        for (int i = 0; i < modes.size(); i++) {
-            int from = i == 0 ? 0 : modes.get(i).firstEvent();
-            int to = i + 1 < modes.size() ? modes.get(i + 1).firstEvent() : events.size();
+        List<Set<String>> touched = new ArrayList<>();
+        for (int i = 0; i < halfCount; i++) {
+            int from = i == 0 ? 0 : modeStarts.get(i);
+            int to = i + 1 < modeStarts.size() ? modeStarts.get(i + 1) : events.size();
             List<EffectEvent> span = new ArrayList<>();
             for (int at = from; at < to; at++) {
                 spanOf[at] = i;
@@ -422,24 +458,24 @@ public final class ForkCollector {
                     span.add(events.get(at));
                 }
             }
-            own.add(span);
-        }
-        List<Set<String>> touched = new ArrayList<>();
-        for (List<EffectEvent> span : own) {
             touched.add(BusBracketCollector.touchedBy(span));
         }
-        List<List<EffectEvent>> halves = new ArrayList<>();
-        for (int i = 0; i < modes.size(); i++) {
-            halves.add(new ArrayList<>());
+        List<EventBuffer> halves = new ArrayList<>();
+        for (int i = 0; i < halfCount; i++) {
+            halves.add(new EventBuffer());
         }
         for (int at = 0; at < events.size(); at++) {
             EffectEvent event = events.get(at);
             int half = stateBasedLeaves.contains(at) && !event.subjects().isEmpty()
                     ? BusBracketCollector.halfForDeath(touched, event.subjects().get(0))
                     : spanOf[at];
-            halves.get(half).add(event);
+            halves.get(half).file(event);
         }
-        return halves;
+        List<List<EffectEvent>> lists = new ArrayList<>();
+        for (EventBuffer half : halves) {
+            lists.add(List.copyOf(half.events()));
+        }
+        return lists;
     }
 
     /**
@@ -453,8 +489,28 @@ public final class ForkCollector {
      * observation already covers. The corpus wants what the effect does, and
      * the cost half is recorded from real activations elsewhere.
      *
-     * <p>Resolution drains the whole stack, so a trigger the effect put there
-     * is part of what the effect did.
+     * <p>Placed through {@code MagicStack.addAndUnfreeze}, the call a real cast
+     * ends in, so a spell's card moves to the stack zone first, as casting
+     * moves it before any cost is paid. Its resolution then moves the card
+     * from the stack, as an observed one does, rather than from the hand.
+     *
+     * <p>The state is read where the live bracket reads an observed one's
+     * ({@link ForcedCast}): the board at the cast event, the forced ability
+     * on top of the fork's stack, and the refs block re-read as it finishes
+     * resolving. Two differences remain, both from the costs the fork does
+     * not pay. The board still holds what a cost would have used up: the
+     * mana sources a payment would have tapped, the mana it would have
+     * spent from the pool, and anything sacrificed, discarded, exiled or
+     * tapped as a cost. And nothing was paid into the ability, so a
+     * resolution that reads what was paid reads nothing.
+     *
+     * <p>Resolution drains the whole stack: the cast's own triggers above the
+     * forced ability, and the triggers its effect causes after it. Neither is
+     * the forced ability's record live, where each has a bracket of its own,
+     * so the sink files what live would put in the forced ability's own
+     * bracket ({@link ForkEventSink}): what happens while it is the top of
+     * the stack before it resolves, except an item above's aftermath; its
+     * resolution; and the deaths of the check that follows it.
      *
      * <p>The modes, targets and X are drawn at random from the legal options,
      * out of the fork's own seeded source, rather than through the AI. That
@@ -471,31 +527,7 @@ public final class ForkCollector {
      */
     private ForcedResolution forceResolution(
             Game fork, SpellAbility ability, Player actor, SnapshotBuilder snapshots) {
-        // The forked line is the sink's root: an event's attributed_to is read
-        // against the ability the bracket belongs to, and a fork's bracket is
-        // exactly this one forced resolution.
-        ForkEventSink sink = ForkEventSink.forIntervention(fork, ability);
-        fork.subscribeToEvents(sink);
-        List<ModeBoundary> modes = new ArrayList<>();
         java.util.function.Consumer<SpellAbility> previousListener = CLAUSE_LISTENER.get();
-        // A mode's first clause is the boundary between per-mode halves, and
-        // the moment its snapshot is taken (FR-029b, FR-029f). Only this
-        // ability's own modes count: the live clause handler forwards every
-        // clause it drops, and a trigger the forced resolution put on the
-        // fork's stack may be modal too. The host card cannot tell them
-        // apart: a creature spell's own modal enters trigger shares its host,
-        // and its modes filed under the spell's key would name spell[0] with
-        // an option, a line no sidecar has. The charm's own key can.
-        ProvenanceKey forcedKey = ProvenanceResolver.resolve(ability).key();
-        CLAUSE_LISTENER.set(clause -> {
-            CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
-            if (start != null && forcedKey != null
-                    && forcedKey.equals(ProvenanceResolver.resolve(start.charm()).key())) {
-                modes.add(new ModeBoundary(
-                        start.option(), sink.beginMode(),
-                        snapshots.ofResolving(ability).render()));
-            }
-        });
         try {
             ability.setActivatingPlayer(actor);
             if (!choices.chooseModes(ability) || !choices.chooseTargets(ability)) {
@@ -505,17 +537,51 @@ public final class ForkCollector {
             // missing target does, and the fork never pays, so the leftover mana of
             // the forked actor is what bounds the draw above it.
             choices.announceX(ability, actor, 1);
-            // Read after the draw and before the resolution: the board the
-            // ability acted on, with the targets and X it acted with, as an
-            // observed resolution's state is read once its targets are
-            // chosen. Read after the resolution it would hand the model the
-            // answer.
-            String state = snapshots.ofResolving(ability).render();
             fork.copyLastState();
-            fork.getStack().add(ability);
+            ForcedCast cast = new ForcedCast(fork, snapshots);
+            fork.subscribeToEvents(cast);
+            fork.getStack().addAndUnfreeze(ability);
+            SpellAbility onStack = cast.onStack();
+            if (onStack == null) {
+                // Nothing reached the stack. Mostly a special action:
+                // foretell, plot and suspend are AbilityStatic, which
+                // MagicStack.add resolves on the spot without a push, and
+                // live opens no bracket for one either, so there is no
+                // resolution record to write. Otherwise a frozen stack parked
+                // it or its targeting was refused, and nothing will resolve.
+                return null;
+            }
+            // Listening from here, once the cast is over: the card's move to
+            // the stack and the cast's own bookkeeping happen before the live
+            // bracket opens, so they are no resolution's events. The ability
+            // on the stack is the sink's root, as the live bracket's root is
+            // the stack's: an event's attributed_to is read against the
+            // ability the bracket belongs to, and a fork's bracket is exactly
+            // this one forced resolution.
+            ForkEventSink sink = ForkEventSink.forIntervention(fork, onStack);
+            fork.subscribeToEvents(sink);
+            List<ModeBoundary> modes = new ArrayList<>();
+            // A mode's first clause is the boundary between per-mode halves, and
+            // the moment its snapshot is taken (FR-029b, FR-029f). Only this
+            // ability's own modes count: the live clause handler forwards every
+            // clause it drops, and anything else resolving on the fork's stack
+            // may be modal too. Neither the host card nor the key can tell them
+            // apart: a creature spell's own modal enters trigger shares its
+            // host, and a copy of the forced charm a cast trigger made (Double
+            // Vision) shares its key too, so its modes would cut halves the
+            // forced charm's events never reach. The mode's charm must be the
+            // very ability on the stack, the one this record is about.
+            CLAUSE_LISTENER.set(clause -> {
+                CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
+                if (start != null && start.charm() == onStack) {
+                    modes.add(new ModeBoundary(
+                            start.option(), sink.beginMode(), snapshots.ofResolving(onStack)));
+                }
+            });
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
             return new ForcedResolution(
-                    state, sink.events(), List.copyOf(modes), sink.stateBasedLeaves());
+                    cast.state(), cast.refs(), sink.events(), List.copyOf(modes),
+                    sink.stateBasedLeaves());
         } catch (RuntimeException | StackOverflowError e) {
             // A forced resolution reaches states ordinary play does not — an
             // ability resolving with no legal target, a cost that was never
@@ -524,6 +590,74 @@ public final class ForkCollector {
             return null;
         } finally {
             CLAUSE_LISTENER.set(previousListener);
+        }
+    }
+
+    /**
+     * The forced ability's two moments on the fork's bus, each read where the
+     * live bracket reads an observed resolution's.
+     *
+     * <p>The live bracket takes its board at the cast event ({@code
+     * BusBracketCollector.beginBracket}): the ability on top of the stack, a
+     * spell's card in the stack zone, priority with the caster, and the cast
+     * not yet counted among the turn's spells. It re-reads the refs block when
+     * the ability finishes resolving, because modes, X and a named card are
+     * set during the resolution. A state read anywhere else differs from an
+     * observed one in exactly those fields, every time, and a difference that
+     * regular would let the model tell a forced record from an observed one
+     * although {@code interventional} never reaches it.
+     */
+    private static final class ForcedCast {
+        private final Game fork;
+        private final SnapshotBuilder snapshots;
+        private SpellAbility onStack;
+        private Snapshot state;
+        private String refs;
+
+        ForcedCast(Game fork, SnapshotBuilder snapshots) {
+            this.fork = fork;
+            this.snapshots = snapshots;
+        }
+
+        /**
+         * The first cast onto the fork's stack is the forced one: the copy is
+         * taken at a phase boundary with nothing in flight, and anything the
+         * cast triggers reaches the stack only once the fork resolves.
+         */
+        @Subscribe
+        public void onCast(GameEventSpellAbilityCast event) {
+            if (onStack != null) {
+                return;
+            }
+            // Read off the stack, as the live bracket reads it: an activated
+            // ability goes on as a copy of the line it was handed.
+            var top = fork.getStack().peek();
+            onStack = top == null ? null : top.getSpellAbility();
+            if (onStack != null) {
+                state = snapshots.ofResolving(onStack);
+            }
+        }
+
+        @Subscribe
+        public void onResolved(GameEventSpellResolved event) {
+            if (onStack != null && refs == null && event.spell() != null
+                    && event.spell().getId() == onStack.getId()) {
+                refs = snapshots.refsJson(onStack);
+            }
+        }
+
+        /** The forced ability as the fork's stack holds it, or null if it never got there. */
+        SpellAbility onStack() {
+            return onStack;
+        }
+
+        Snapshot state() {
+            return state;
+        }
+
+        /** The refs read as the forced ability finished resolving, or null. */
+        String refs() {
+            return refs;
         }
     }
 
