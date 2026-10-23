@@ -76,6 +76,12 @@ public final class BusBracketCollector extends BusEventReader {
      */
     private final EventBuffer orphans = new EventBuffer();
 
+    /**
+     * The ability whose resolution was the last published, while Forge may
+     * still be finishing it, or null; see {@link #followResolution}.
+     */
+    private Integer finishing;
+
     /** The resolution waiting for its consequences, or null when none is. */
     private HeldResolution held;
 
@@ -145,16 +151,6 @@ public final class BusBracketCollector extends BusEventReader {
         /** Whether this is the bracket of the ability the engine names by id. */
         boolean is(int abilityId) {
             return ability.getId() == abilityId;
-        }
-
-        /**
-         * Forget what was filed while this item waited on the stack: something
-         * was cast above it, and what happened in the meantime — that cast's
-         * payment, a refusal in it — is not this item's resolution.
-         */
-        void forgetWaiting() {
-            events.clear();
-            declined = false;
         }
 
         /**
@@ -526,6 +522,9 @@ public final class BusBracketCollector extends BusEventReader {
         // And whatever the combat damage killed: state-based actions run
         // before anything goes on the stack.
         closeCombatWindow();
+        if (ability != null) {
+            writeOffEarlierCast(ability.getId());
+        }
         OpenResolution cast = ability == null ? null : new OpenResolution(
                 ability, ProvenanceResolver.resolve(ability), actorOf(ability),
                 snapshots.ofResolving(ability));
@@ -550,6 +549,23 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
+     * A cast of an ability whose earlier cast is still held: the earlier one
+     * has left the stack without resolving and without a reconcile point
+     * seeing it go — a spell countered and cast again from the graveyard
+     * before anything else happened. One ability is on the stack at most
+     * once (an activation and a trigger are each a fresh object, a copy has
+     * an id of its own), so it is written off here as any removal is.
+     */
+    private void writeOffEarlierCast(int abilityId) {
+        pending.settle(abilityId).ifPresent(
+                earlier -> emitActivation(earlier, ActivationOutcome.COUNTERED, false));
+        OpenResolution gone = stack.remove(abilityId);
+        if (gone != null && open == gone) {
+            open = null;
+        }
+    }
+
+    /**
      * While the stack resolves, the bracket the bus files into is the
      * resolving item's: the top of {@link StackRecords}, since what is cast
      * during a resolution waits beside the stack rather than going on top.
@@ -558,11 +574,27 @@ public final class BusBracketCollector extends BusEventReader {
      * wherever one first shows — an event filed, a mode beginning, a refusal,
      * a cast made by it — and its resolution's end finds its bracket by id
      * however little it showed.
+     *
+     * <p>The stack still reads as resolving after a resolution has been
+     * published: {@code MagicStack.resolveStack} publishes
+     * {@code GameEventSpellResolved} first, then runs the static check and
+     * {@code finishResolving}, which moves the card off the stack — to the
+     * graveyard, to exile, out of existence for a copy — before it stops
+     * resolving. That window is the resolved item's, which has no bracket any
+     * more, and not the item below it: while the resolved item is still on
+     * the stack ({@link #finishing}), nothing is opened.
      */
     private void followResolution() {
-        if (game.getStack().isResolving() && stack.top() != null && open != stack.top()) {
-            open = stack.top();
+        if (!game.getStack().isResolving() || stack.top() == null || open == stack.top()) {
+            return;
         }
+        if (finishing != null) {
+            if (idsOnStack().contains(finishing)) {
+                return;
+            }
+            finishing = null;
+        }
+        open = stack.top();
     }
 
     /**
@@ -629,6 +661,7 @@ public final class BusBracketCollector extends BusEventReader {
         stack.releaseWaiting();
         open = null;
         orphans.clear();
+        finishing = abilityId;
     }
 
     /** What became of a cast that has left the stack through a resolution. */
@@ -783,7 +816,7 @@ public final class BusBracketCollector extends BusEventReader {
     void fileDamage(EffectEvent damage, String namedCause, boolean combat) {
         if (!combat) {
             followResolution();
-            if (payingForACast()) {
+            if (payingForSomethingElse()) {
                 return;
             }
         }
@@ -924,7 +957,7 @@ public final class BusBracketCollector extends BusEventReader {
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
         followResolution();
-        if (payingForACast()) {
+        if (payingForSomethingElse()) {
             return;
         }
         // Stamped here rather than where the event is built: which clause
@@ -953,26 +986,34 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * Whether what happens now is a player paying for a spell the resolving
-     * ability casts — the mana and tapped lands of a madness cast, the
-     * sacrifice, discard or life of a cascaded spell's additional cost.
+     * Whether what happens now is a player paying a cost that is not the open
+     * bracket's resolution: the cost of something being cast or activated.
      *
-     * <p>That payment is the cast spell's cost, which its own cost half
-     * already records, and not the resolving ability's effect, so it goes
-     * nowhere: neither its events nor a refusal made in it. Read off
-     * {@code game.costPaymentStack}, which {@code CostPayment} keeps for
-     * every part being paid, so a mana ability activated to pay is recognised
-     * by the spell beneath it. Only a spell cast from a {@code Play} effect
-     * reaches the stack in the middle of a resolution ({@link StackRecords});
-     * the resolving ability's own payments — an optional cost, an unless
-     * cost, which Forge pays through the resolving ability or an empty one —
-     * are its effect and stay.
+     * <p>Such a payment is that other ability's cost, which its own cost half
+     * records, so it goes nowhere: neither its events nor a refusal made in
+     * it. Read off {@code game.costPaymentStack}, which {@code CostPayment}
+     * keeps for every part being paid, so a mana ability activated to pay is
+     * recognised by the cost beneath it. Two cases:
+     * <ul>
+     *   <li>with nothing resolving, every payment is: a response paying above
+     *   a waiting spell, a mana ability tapped at priority. Nothing pays for
+     *   an item once it is on the stack until it resolves;</li>
+     *   <li>while something resolves, only the payment for a spell it casts
+     *   is — the mana and tapped lands of a madness cast, the sacrifice,
+     *   discard or life of a cascaded spell's additional cost. Only a spell
+     *   cast from a {@code Play} effect reaches the stack in the middle of a
+     *   resolution ({@link StackRecords}); the resolving ability's own
+     *   payments — an optional cost, an unless cost, which Forge pays
+     *   through the resolving ability or an empty one — are its effect and
+     *   stay.</li>
+     * </ul>
      */
-    private boolean payingForACast() {
-        if (!game.getStack().isResolving()) {
-            return false;
-        }
+    private boolean payingForSomethingElse() {
+        boolean resolvingNow = game.getStack().isResolving();
         for (CostPaymentStack.Entry entry : game.costPaymentStack) {
+            if (!resolvingNow) {
+                return true;
+            }
             SpellAbility paid = entry.payment() == null ? null : entry.payment().getAbility();
             if (paid != null && paid.isSpell() && paid.isCastFromPlayEffect()
                     && paid != resolving()) {
@@ -994,15 +1035,17 @@ public final class BusBracketCollector extends BusEventReader {
 
     /**
      * A cast has gone on top of the stack: its bracket opens. The item it
-     * went above keeps its own, without what was filed while it waited.
+     * went above keeps its own whole, with what it gathered since its cast —
+     * the state-based check its cast set off, a creature it left without
+     * toughness — which is that cast's consequence.
      *
      * @param cast the cast's bracket, or null for a cast whose stack top held
      *             no ability, after which no bracket is open
      */
     private void openBracket(OpenResolution cast) {
-        if (open != null) {
-            open.forgetWaiting();
-        }
+        // Nothing is cast before Forge has finished the last resolution, and
+        // the id it watched may be cast again from here on.
+        finishing = null;
         orphans.clear();
         if (cast != null) {
             stack.push(cast);
@@ -1074,9 +1117,10 @@ public final class BusBracketCollector extends BusEventReader {
      * <p>{@code linked} is separate from the outcome because they answer
      * different questions: the outcome says what became of the spell, and
      * {@code link_id} promises that an effect half carrying the same id exists.
-     * A resolution this collector could not describe -- a spell whose bracket
-     * a response took over -- is a {@code resolved} activation with no link,
-     * which is honest; issuing the link anyway would leave it dangling.
+     * A resolution this collector holds no bracket for -- an item whose
+     * bracket was written off before it resolved -- is a {@code resolved}
+     * activation with no link, which is honest; issuing the link anyway would
+     * leave it dangling.
      *
      * @return the link the effect half may claim, or null when there is to be
      *         no effect half or nothing was held for this ability
@@ -1306,12 +1350,12 @@ public final class BusBracketCollector extends BusEventReader {
 
     /**
      * Record a refusal against the open bracket, if there is one — unless it
-     * was made paying for a spell the resolving ability casts, which makes it
-     * the cast spell's ({@link #payingForACast}).
+     * was made paying for something else, which makes it that other
+     * ability's ({@link #payingForSomethingElse}).
      */
     void noteDeclined() {
         followResolution();
-        if (open != null && !payingForACast()) {
+        if (open != null && !payingForSomethingElse()) {
             open.declined = true;
         }
     }
