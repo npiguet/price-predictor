@@ -1,4 +1,4 @@
-package com.pricepredictor.connector.effects;
+package com.pricepredictor.connector;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -12,22 +12,22 @@ import java.util.function.Supplier;
  * <p>The real stream is put back however the body ends, so a failing
  * assertion inside it cannot leave every later test writing into a buffer.
  */
-final class StdStreams {
+public final class StdStreams {
 
     private StdStreams() {
     }
 
     /** What a test runs while the stream is captured. */
     @FunctionalInterface
-    interface Body {
+    public interface Body {
         void run() throws Throwable;
     }
 
-    static String captureStderr(Body body) throws Throwable {
+    public static String captureStderr(Body body) throws Throwable {
         return capture(() -> System.err, System::setErr, body);
     }
 
-    static String captureStdout(Body body) throws Throwable {
+    public static String captureStdout(Body body) throws Throwable {
         return capture(() -> System.out, System::setOut, body);
     }
 

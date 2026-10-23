@@ -69,12 +69,14 @@ class MatchResultWriterTest {
     }
 
     @Test
-    void invalidGamesStringRejected() {
-        // Non-A/B characters are rejected regardless of length.
-        assertThrows(IllegalArgumentException.class, () ->
+    void invalidGamesOrPlayCharacterRejected() {
+        // Non-A/B characters are rejected in either sequence, each by its own check.
+        IllegalArgumentException games = assertThrows(IllegalArgumentException.class, () ->
                 sampleResult(deck40("A"), deck40("B"), "ABCD", "ABAB"));
-        assertThrows(IllegalArgumentException.class, () ->
-                sampleResult(deck40("A"), deck40("B"), "AC", "BA"));
+        assertTrue(games.getMessage().startsWith("games must contain"), games.getMessage());
+        IllegalArgumentException play = assertThrows(IllegalArgumentException.class, () ->
+                sampleResult(deck40("A"), deck40("B"), "AB", "BC"));
+        assertTrue(play.getMessage().startsWith("play must contain"), play.getMessage());
     }
 
     @Test

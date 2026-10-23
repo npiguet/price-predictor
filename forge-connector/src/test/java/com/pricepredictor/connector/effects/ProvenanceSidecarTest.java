@@ -339,6 +339,9 @@ class ProvenanceSidecarTest {
     @Test
     void roleSpansCoverTheProseOfEveryIndexedLine() {
         Converted converted = convert("a/ajanis_pridemate.txt");
+        assertTrue(converted.sidecar().lines().stream()
+                        .anyMatch(line -> !line.roleSpans().isEmpty()),
+                "no spans at all would pass vacuously: " + converted.lines());
         for (ProvenanceSidecar.Line line : converted.sidecar().lines()) {
             String prose = ProvenanceSidecar.prose(
                     converted.lines().get(line.lineIndex()));

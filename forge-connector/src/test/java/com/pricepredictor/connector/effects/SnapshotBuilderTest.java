@@ -40,7 +40,7 @@ class SnapshotBuilderTest {
      */
     @Test
     void noConstructionChoosesATierDepth() {
-        Constructor<?>[] constructors = SnapshotBuilder.class.getConstructors();
+        Constructor<?>[] constructors = SnapshotBuilder.class.getDeclaredConstructors();
         assertEquals(1, constructors.length,
                 "a second constructor would let a call site pick its own depth");
         assertArrayEquals(

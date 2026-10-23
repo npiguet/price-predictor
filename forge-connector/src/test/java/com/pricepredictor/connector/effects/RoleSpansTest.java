@@ -110,7 +110,9 @@ class RoleSpansTest {
     @Test
     void everySpanStaysInsideTheProse() {
         String prose = "{2}{R}: deal 2 damage to target creature, then draw a card.";
-        for (RoleSpans.Span span : RoleSpans.of(prose, true)) {
+        List<RoleSpans.Span> spans = RoleSpans.of(prose, true);
+        assertFalse(spans.isEmpty(), "no spans at all would pass vacuously");
+        for (RoleSpans.Span span : spans) {
             assertTrue(span.start() >= 0);
             assertTrue(span.end() <= prose.length());
             assertFalse(span.start() > span.end());

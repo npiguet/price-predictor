@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.StdStreams;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

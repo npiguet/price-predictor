@@ -101,7 +101,7 @@ class RulesParserTest {
         var keywords = abilitiesOfType(face("s/serra_angel.txt"), AbilityType.STATIC);
         assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("flying")));
         assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("vigilance")));
-        assertFalse(keywords.get(0).formatLine(null).contains("["), "Static keywords should have no action number");
+        assertFalse(keywords.get(0).formatLine(1).contains("["), "Static keywords should have no action number");
     }
 
     @Test
@@ -286,7 +286,7 @@ class RulesParserTest {
         assertTrue(chapters.get(1).formatLine(null).contains("II \u2014"));
         assertTrue(chapters.get(2).formatLine(null).contains("III \u2014"));
         assertTrue(chapters.get(0).formatLine(null).contains("sacrifices"));
-        assertFalse(chapters.get(0).formatLine(null).contains("["), "Chapters should have no action number");
+        assertFalse(chapters.get(0).formatLine(1).contains("["), "Chapters should have no action number");
     }
 
     @Test
@@ -1782,10 +1782,11 @@ class RulesParserTest {
                 firstSpellIdx = i;
             }
         }
-        if (lastCostIdx >= 0 && firstSpellIdx >= 0) {
-            assertTrue(lastCostIdx < firstSpellIdx,
-                    "Costs should appear before spells: " + abilities);
-        }
+        // A card missing either has no order to check, and would pass silently.
+        assertTrue(lastCostIdx >= 0, "no cost line: " + abilities);
+        assertTrue(firstSpellIdx >= 0, "no spell line: " + abilities);
+        assertTrue(lastCostIdx < firstSpellIdx,
+                "Costs should appear before spells: " + abilities);
     }
 
     private void assertNoRawEtbReplacementKeyword(CardFace card) {

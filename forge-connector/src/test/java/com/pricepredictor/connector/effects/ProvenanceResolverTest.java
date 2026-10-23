@@ -26,6 +26,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -87,7 +88,7 @@ class ProvenanceResolverTest {
         SpellAbility printed = scriptedSpell(fountain.getCurrentState(), "GainLife");
         SpellAbility copy = asStackCopy(printed);
         // The copy is not the trait object, so an identity lookup cannot find it.
-        assertNotEquals(System.identityHashCode(printed), System.identityHashCode(copy));
+        assertNotSame(printed, copy);
         for (SpellAbility member : fountain.getCurrentState().getSpellAbilities()) {
             assertNotEquals(member, copy,
                     "the pushed copy must not be a member of the state's list");
