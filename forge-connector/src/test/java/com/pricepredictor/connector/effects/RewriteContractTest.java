@@ -472,7 +472,7 @@ class RewriteContractTest {
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) ->
                 collector.rewrites().handler().invoke(null, onReplacement(shape), args));
         assertEquals(1, lines.size(), "one replacement writes one record");
-        assertNotNull(lines.get(0));
+        assertEquals("rewrite", RecordLines.parse(lines.get(0)).get("kind"), lines.get(0));
         return lines.get(0);
     }
 }

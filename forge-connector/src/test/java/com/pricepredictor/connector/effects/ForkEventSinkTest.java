@@ -116,13 +116,11 @@ class ForkEventSinkTest {
         assertFalse(subscriptions(ForkEventSink.class).contains(GameEventZone.class));
     }
 
-    // ── one move, one event, both ends of it ────────────────────────────
+    // ── a fork event says where it came from ────────────────────────────
 
     private static Zone zone(ZoneType type) {
         return new Zone(type, TestCards.game());
     }
-
-    // ── a fork event says where it came from ────────────────────────────
 
     /** Push one completed move through a sink and read back what it filed. */
     private static EffectEvent filedMove(SpellAbility acting) {
