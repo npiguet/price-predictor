@@ -707,7 +707,7 @@ Both validation losses fall quickly for about ten epochs and slowly after that. 
 
 ![Card-disjoint, game-disjoint and training loss by epoch for every run, one column per width of e](2026-09-18-effect-model-gen2/charts/training-losses.png)
 
-*One column per width of `e`. Curve style gives the stage: dotted the arm with copies, long-dashed the A run at the full rate, solid with a dot per epoch the B run at a tenth of it; grey is the arm without copies. The large marker with a black edge is each run's lowest card-disjoint epoch, shaped by stage: triangle for the arm, square for the A run, circle for the B run. The bottom row is the training loss, averaged over each epoch's 5,000 steps; it runs about a tenth higher with lethality copies, which add records the corpus rarely shows. Data: `epochs.csv`.*
+*One column per width of `e`. Every curve is solid, and its colour gives the stage: pink the arm with copies, red-orange the A run at the full rate, black the B run at a tenth of it, grey the arm without copies. The large marker is each run's lowest card-disjoint epoch, shaped by stage: triangle for the arm, square for the A run, circle for the B run. The bottom row is the training loss, averaged over each epoch's 5,000 steps; it runs about a tenth higher with lethality copies, which add records the corpus rarely shows. Data: `epochs.csv`.*
 
 The card-disjoint loss swings more than the game-disjoint loss in almost every run. The card-disjoint stratum holds 500 held-out texts, and how well the model generalizes to each of them changes from epoch to epoch. The training loss moves by two to three hundredths in every run.
 
@@ -727,7 +727,7 @@ The fields with many records, such as the affected gate, the zone outcome and th
 
 ![Card-disjoint explained deviance by epoch for six output fields, for the runs with lethality copies of each width](2026-09-18-effect-model-gen2/charts/fields-explained.png)
 
-*Card-disjoint explained deviance per epoch for the runs with lethality copies. Colour gives the width of `e`, and the curve style the stage: dotted the arm, dashed the A run, solid the B run. The arms keep their width's full hue here, so the three dotted curves stay apart. Below 0 is worse than a constant prediction. The poison panel's scale reaches −105, against −40 on the others. Data: `fields_by_epoch.csv`.*
+*Card-disjoint explained deviance per epoch for the runs with lethality copies. Every curve is solid: its hue gives the width of `e` and its lightness the stage, from the lightest for the arm through the A run to the full hue for the B run. Below 0 is worse than a constant prediction. The poison panel's scale reaches −105, against −40 on the others. Data: `fields_by_epoch.csv`.*
 
 Poison is the clearest case. After the first twenty epochs its explained deviance moves between a fifth and seven tenths from epoch to epoch on the 64-wide runs, and the 256-wide runs stay in the same band. On the 128-wide runs it rarely rises above two fifths and often falls below zero, worse than a constant prediction. Since the widest and the narrowest `e` agree, the 128-wide runs' poison is more likely their seed's level than an effect of width. Types gained and blocking legality swing by about thirty points. A comparison of two checkpoints on any of these fields is mostly a comparison of two draws. Gen-3 addresses these fields directly with a field-normalized loss, which divides each field's loss by its constant-predictor loss, and with adaptive sampling, which draws more of the records a weak field needs.
 

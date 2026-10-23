@@ -49,6 +49,11 @@ STAGE_MARKER = {"arm": "^", "A": "s", "B": "o"}
 STAGE_LINE = {"arm": ":", "A": "--", "B": "-"}
 STAGE_NAME = {"arm": "arm", "A": "A run, full rate", "B": "B run, a tenth of the rate"}
 NO_COPIES_GRAY = "#9a9a9a"
+#: Stage colours for the noisy per-epoch curves, where line styles cannot be followed: one
+#: panel per width already gives the width, so every stage is a solid curve of its own colour.
+STAGE_CURVE = {"none": NO_COPIES_GRAY, "arm": "#cc79a7", "A": "#d55e00", "B": "#1f1f1f"}
+#: Per-epoch curves that must keep the width's hue mark the stage by lightness instead.
+STAGE_CURVE_SHADE = {"arm": 0.4, "A": 0.68, "B": 1.0}
 EARLIER_GRAY = "#c8c8c8"
 GEN1_GRAY = "#4d4d4d"
 LINES = {64: ("e64-lethality", "A64", "B64"), 128: ("e128-lethality", "A128", "B128"),
@@ -363,21 +368,16 @@ def training_losses() -> None:
             no_copies = NO_COPIES.get(width)
             if no_copies in set(ep.run):
                 d = ep[ep.run == no_copies]
-                ax.plot(d.epoch, d[metric], **run_line(no_copies), alpha=0.9)
+                ax.plot(d.epoch, d[metric], color=STAGE_CURVE["none"], lw=1.3)
             for run in LINES[width]:
                 d = ep[ep.run == run].sort_values("epoch")
                 if d.empty:
                     continue
                 stage = stage_of(run)
-                # Epoch dots would turn the arm's dots and the A run's dashes alike, so only
-                # the solid B run carries them, and the A run's dashes are drawn long.
-                style = run_line(run)
-                if stage == "A":
-                    style["ls"] = (0, (6, 2.5))
-                ax.plot(d.epoch, d[metric], marker="o" if stage == "B" else None, ms=2, **style)
+                ax.plot(d.epoch, d[metric], color=STAGE_CURVE[stage], lw=1.3)
                 best = d.loc[d.card_disjoint.idxmin()]
                 ax.plot(best.epoch, best[metric], STAGE_MARKER[stage], ms=9,
-                        color=WIDTH_COLOUR[width], mec="black", mew=0.8, zorder=5)
+                        color=STAGE_CURVE[stage], mec="white", mew=1.0, zorder=5)
             ax.set_ylim(*limits[metric])
             ax.set_xlim(5, last_epoch + 1)
             if row == 0:
@@ -389,12 +389,11 @@ def training_losses() -> None:
                     metric, metric.replace("_", "-") + " loss"))
             if row == len(metrics) - 1:
                 ax.set_xlabel("epoch")
-    handles = [Line2D([], [], color=NO_COPIES_GRAY, lw=1.2, label="arm without copies")]
-    handles += [Line2D([], [], color=INK_SOFT, lw=1.5, label=STAGE_NAME[s],
-                       ls=(0, (6, 2.5)) if s == "A" else STAGE_LINE[s])
-                for s in ("arm", "A", "B")]
-    handles += [Line2D([], [], marker="o", ls="none", ms=8, mfc=INK_SOFT, mec="black",
-                       label="large marker: the run's lowest card-disjoint epoch")]
+    handles = [Line2D([], [], color=STAGE_CURVE["none"], lw=1.3, label="arm without copies")]
+    handles += [Line2D([], [], color=STAGE_CURVE[s], lw=1.3, marker=STAGE_MARKER[s], ms=7,
+                       mec="white", label=STAGE_NAME[s]) for s in ("arm", "A", "B")]
+    handles += [Line2D([], [], ls="none", label="large marker: the run's lowest "
+                       "card-disjoint epoch")]
     fig.legend(handles=handles, loc="lower center", ncol=5, bbox_to_anchor=(0.5, -0.025),
                fontsize=8.5)
     fig.suptitle("Validation and training losses by epoch; the large marker is each run's lowest "
@@ -570,8 +569,8 @@ def probes_vs_loss() -> None:
 def field_explained() -> None:
     """Card-disjoint explained deviance per field and epoch, the runs with copies by width.
 
-    The arms' dotted curves overlap before epoch 30, so here they keep their width's full
-    hue rather than the arm's lighter shade; the line style alone marks the stage.
+    The curves are too noisy to follow as dots and dashes, so every curve is solid at one
+    thickness: the hue gives the width and the lightness the stage, light arm to dark B run.
     """
     fe = csv("fields_by_epoch.csv")
     fields = [("gate", "affected gate"), ("zone_outcome", "zone outcome"),
@@ -585,10 +584,8 @@ def field_explained() -> None:
             for run in LINES[width]:
                 d = fe[(fe.run == run) & (fe.field == field)].sort_values("epoch")
                 if not d.empty:
-                    style = run_line(run)
-                    if stage_of(run) == "arm":
-                        style.update(color=WIDTH_COLOUR[width], lw=1.2)
-                    ax.plot(d.epoch, d.explained_pct, **style)
+                    colour = shade(WIDTH_COLOUR[width], STAGE_CURVE_SHADE[stage_of(run)])
+                    ax.plot(d.epoch, d.explained_pct, color=colour, lw=1.3)
                     low = min(low, d.explained_pct.min())
                     widths.add(width)
         ax.set_title(label)
@@ -603,8 +600,11 @@ def field_explained() -> None:
         ax.set_ylabel("% of the constant\nprediction's loss removed")
     for ax in axes[1]:
         ax.set_xlabel("epoch")
-    fig.legend(handles=line_handles(sorted(widths), no_copies=False), loc="lower center", ncol=6,
-               bbox_to_anchor=(0.5, -0.05), fontsize=8.5)
+    handles = [Line2D([], [], color=shade(WIDTH_COLOUR[w], STAGE_CURVE_SHADE[s]), lw=1.3,
+                      label=f"{w}-wide e, {STAGE_NAME[s]}")
+               for w in sorted(widths) for s in ("arm", "A", "B")]
+    fig.legend(handles=handles, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.12),
+               fontsize=8.5)
     fig.suptitle("Card-disjoint explained deviance by field, the runs with lethality copies of "
                  "each width",
                  x=0.01, ha="left", y=0.96)
@@ -2888,9 +2888,10 @@ def share_vs_reliance() -> None:
              "firing, which have no ablation field;\nthe two legal-target questions, which read "
              "the affected gate, so their reliance is card affected's.", fontsize=7.8,
              color=INK_SOFT)
-    ax.set_title("Of the questions drawn, only pump duration has a share the probes record's rule "
-                 "can read: e carries\nthe answer and the trunk relies on it; deaths and affected cards "
-                 f"need a stronger probe first ({len(names)} gen-2 checkpoints)", pad=22)
+    ax.set_title("Of the questions drawn, only pump duration has a share the probes record's "
+                 "rule can read: e carries\nthe answer and the trunk relies on it; deaths and "
+                 "affected cards need a stronger probe first "
+                 f"({len(names)} gen-2 checkpoints)", pad=22)
     save(fig, "share-vs-reliance")
 
 
