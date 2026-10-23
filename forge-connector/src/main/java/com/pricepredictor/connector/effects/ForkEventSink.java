@@ -119,14 +119,62 @@ final class ForkEventSink extends BusEventReader {
      *   live.</li>
      * </ul>
      */
-    private enum Phase { PRE_CAST, BEFORE, ABOVE_AFTERMATH, RESOLVING, HELD, CLOSED }
+    private enum Phase {
+        PRE_CAST, BEFORE, ABOVE_AFTERMATH, RESOLVING, HELD, CLOSED;
 
-    private Phase phase = Phase.BEFORE;
+        /**
+         * An ability has reached the fork's stack: the forced cast's own, the
+         * first one the fork publishes, or an ability going above the forced
+         * one, which ends the aftermath of the item that resolved there; or
+         * the next ability after the forced one resolved, which closes the
+         * held window.
+         */
+        Phase onCast() {
+            return switch (this) {
+                case PRE_CAST, ABOVE_AFTERMATH -> BEFORE;
+                case HELD -> CLOSED;
+                case BEFORE, RESOLVING, CLOSED -> this;
+            };
+        }
 
-    private ForkEventSink(Game fork, SpellAbility acting, boolean combatDamage) {
+        /**
+         * An ability has finished resolving: the forced one, which opens the
+         * held window from wherever it stood since its cast, or one above it,
+         * after which its aftermath is no one's; or the next one after the
+         * forced one, which closes the held window. Another resolution inside
+         * the forced one's does not end its span.
+         *
+         * @param forced whether the resolved ability is the forced one
+         */
+        Phase onResolved(boolean forced) {
+            return switch (this) {
+                case BEFORE, ABOVE_AFTERMATH -> forced ? HELD : ABOVE_AFTERMATH;
+                case RESOLVING -> forced ? HELD : RESOLVING;
+                case HELD -> CLOSED;
+                case PRE_CAST, CLOSED -> this;
+            };
+        }
+
+        /**
+         * The forced ability is the top of a stack that is resolving, so it has
+         * begun to resolve, if it was waiting to.
+         */
+        Phase onForcedResolving() {
+            return this == BEFORE || this == ABOVE_AFTERMATH ? RESOLVING : this;
+        }
+    }
+
+    /**
+     * Where the forced ability stands. Moved only by its own transitions; a
+     * probe's never moves, since a probe is not {@link #gated}.
+     */
+    private Phase phase;
+
+    private ForkEventSink(Game fork, SpellAbility acting, boolean combatDamage, Phase phase) {
         super(fork);
         this.acting = acting;
         this.combatDamage = combatDamage;
+        this.phase = phase;
         primeBattlefield();
     }
 
@@ -136,9 +184,7 @@ final class ForkEventSink extends BusEventReader {
      * {@link #castAs} names the ability the cast put on the stack.
      */
     static ForkEventSink forCast(Game fork, SpellAbility ability) {
-        ForkEventSink sink = new ForkEventSink(fork, ability, false);
-        sink.phase = Phase.PRE_CAST;
-        return sink;
+        return new ForkEventSink(fork, ability, false, Phase.PRE_CAST);
     }
 
     /**
@@ -157,7 +203,7 @@ final class ForkEventSink extends BusEventReader {
 
     /** A sink for a damage step dealt in a fork, with no ability resolving. */
     static ForkEventSink forProbe(Game fork) {
-        return new ForkEventSink(fork, null, true);
+        return new ForkEventSink(fork, null, true, Phase.BEFORE);
     }
 
     /** Every event filed, in order: the halves', then the open span's. */
@@ -255,14 +301,10 @@ final class ForkEventSink extends BusEventReader {
             return;
         }
         boolean forced = event.spell() != null && event.spell().getId() == acting.getId();
-        if (forced && (phase == Phase.BEFORE || phase == Phase.ABOVE_AFTERMATH
-                || phase == Phase.RESOLVING)) {
-            phase = Phase.HELD;
+        phase = phase.onResolved(forced);
+        if (phase == Phase.HELD) {
+            // Entered just now: HELD is left by the next resolution, never kept.
             hold();
-        } else if (phase == Phase.HELD) {
-            phase = Phase.CLOSED;
-        } else if (phase == Phase.BEFORE || phase == Phase.ABOVE_AFTERMATH) {
-            phase = Phase.ABOVE_AFTERMATH;
         }
     }
 
@@ -272,14 +314,7 @@ final class ForkEventSink extends BusEventReader {
         if (!gated()) {
             return;
         }
-        if (phase == Phase.PRE_CAST || phase == Phase.ABOVE_AFTERMATH) {
-            // The forced cast's own, the first one the fork publishes; or an
-            // ability going above the forced one, which ends the aftermath
-            // of the item that resolved there.
-            phase = Phase.BEFORE;
-        } else if (phase == Phase.HELD) {
-            phase = Phase.CLOSED;
-        }
+        phase = phase.onCast();
     }
 
     /**
@@ -311,9 +346,8 @@ final class ForkEventSink extends BusEventReader {
      * publishes nothing when a resolution starts.
      */
     private void noticeResolutionStart() {
-        if ((phase == Phase.BEFORE || phase == Phase.ABOVE_AFTERMATH)
-                && game.getStack().isResolving() && forcedOnTop()) {
-            phase = Phase.RESOLVING;
+        if (game.getStack().isResolving() && forcedOnTop()) {
+            phase = phase.onForcedResolving();
         }
     }
 
