@@ -3,6 +3,7 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.card.CounterEnumType;
 import forge.game.event.GameEventPlayerPriority;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
@@ -21,6 +22,9 @@ import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,7 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code GameEventSpellAbilityCast} arrives in the middle of the resolution,
  * the resolution then finishes and publishes {@code GameEventSpellResolved},
  * and the cast spell resolves later, after a priority. The resolution keeps
- * its bracket until it ends; the cast's bracket opens at that priority.
+ * its bracket until it ends; the cast's bracket opens once the cast spell
+ * starts resolving, and the payment of its costs is in neither half.
  *
  * <p>Driven through the real engine — the stack, the resolution, the
  * {@code Play} effect and the AI's cast — with the collector on the game's
@@ -114,14 +119,33 @@ class MidResolutionCastTest {
 
     /** The one record of {@code moment} acting through {@code script}. */
     private static String only(List<String> all, String moment, String script) {
+        return only(all, moment, script, "");
+    }
+
+    /** The same, through the line of one trait kind of the script. */
+    private static String only(List<String> all, String moment, String script, String traitKind) {
         List<String> found = new ArrayList<>();
         for (String record : records(all, moment)) {
-            if (scriptOf(record).equals(script)) {
+            String ability = record.substring(
+                    record.indexOf("\"ability\":"), record.indexOf("\"ability_unresolved\":"));
+            if (scriptOf(record).equals(script)
+                    && ability.contains("\"trait_kind\":\"" + traitKind)) {
                 found.add(record);
             }
         }
         assertEquals(1, found.size(), moment + " through " + script + ": " + all);
         return found.get(0);
+    }
+
+    /** The types of a record's events, in order. */
+    private static List<String> eventTypes(String record) {
+        String payload = record.substring(record.indexOf("\"payload\":"));
+        List<String> types = new ArrayList<>();
+        Matcher type = Pattern.compile("\"type\":\"(\\w+)\"").matcher(payload);
+        while (type.find()) {
+            types.add(type.group(1));
+        }
+        return types;
     }
 
     private static String zoneChange(Card card, String from, String to) {
@@ -171,14 +195,15 @@ class MidResolutionCastTest {
         assertEquals(linkOf(charmCost), linkOf(charmHalf));
         assertTrue(charmHalf.contains("\"option\":" + TETSUO_CAST_MODE + "}"),
                 "the charm's half acts through its cast mode: " + charmHalf);
-        assertFalse(charmHalf.contains("damage_dealt"),
-                "the Bolt's damage is not the charm's: " + charmHalf);
+        // Casting the Bolt moved it to the stack, which no event records,
+        // and its free cost paid nothing: the mode did nothing observable.
+        assertEquals(List.of(), eventTypes(charmHalf), charmHalf);
 
         assertNotNull(linkOf(boltCost), boltCost);
         assertEquals(linkOf(boltCost), linkOf(boltHalf));
         assertFalse(boltHalf.contains("\"option\""),
                 "the Bolt inherits no option of the charm's: " + boltHalf);
-        assertTrue(boltHalf.contains("damage_dealt"), boltHalf);
+        assertEquals(List.of("damage_dealt", "life_change"), eventTypes(boltHalf), boltHalf);
     }
 
     /**
@@ -211,13 +236,16 @@ class MidResolutionCastTest {
             bracket.endBracket(trigger.getId(), false);
             game.getStack().setResolving(false);
             priority(game);
+            // The Bolt's own resolution, which refuses its only clause.
+            game.getStack().setResolving(true);
             bracket.noteDeclined();
             bracket.endBracket(bolt.getId(), false);
+            game.getStack().setResolving(false);
             bracket.onNextAction();
         });
 
         String charmHalf = only(all, "resolution", TETSUO);
-        assertTrue(charmHalf.contains("keyword_change") && charmHalf.contains("counter_change"),
+        assertEquals(List.of("keyword_change", "counter_change"), eventTypes(charmHalf),
                 "both of the charm's events, before and after the cast, are the charm's: "
                         + charmHalf);
         String boltCost = only(all, "activation", BOLT);
@@ -262,6 +290,7 @@ class MidResolutionCastTest {
         String charmHalf = only(all, "resolution", TETSUO);
         assertEquals(linkOf(charmCost), linkOf(charmHalf));
         assertTrue(charmHalf.contains("\"option\":" + TETSUO_CAST_MODE + "}"), charmHalf);
+        assertEquals(List.of(), eventTypes(charmHalf), charmHalf);
     }
 
     // ── cascade ─────────────────────────────────────────────────────────
@@ -303,10 +332,159 @@ class MidResolutionCastTest {
         assertTrue(cascadeHalf.contains(zoneChange(bolt, "library", "exile")), cascadeHalf);
         assertTrue(cascadeHalf.contains(zoneChange(mountain, "exile", "library")),
                 "the Mountain's return is the trigger's: " + cascadeHalf);
+        assertEquals(List.of("zone_change", "zone_change", "zone_change"),
+                eventTypes(cascadeHalf), "the three moves and nothing of the Bolt's: " + cascadeHalf);
 
         String boltHalf = only(all, "resolution", BOLT);
-        assertTrue(boltHalf.contains("damage_dealt"), boltHalf);
-        assertFalse(boltHalf.contains("\"subjects\":[\"E" + mountain.getId() + "\"]"),
+        assertEquals(List.of("damage_dealt", "life_change"), eventTypes(boltHalf),
                 "nothing of the Mountain's is the Bolt's: " + boltHalf);
+    }
+
+    /**
+     * Cascade's Bolt resolves after a state-based check that annihilates a
+     * +1/+1 and a -1/-1 counter on the Elf. That check is the aftermath of
+     * the cascade's resolution, not the Bolt's: the Bolt's bracket opens when
+     * the Bolt starts resolving, so the counters are not in the Bolt's half.
+     */
+    @Test
+    void aStateBasedCheckBeforeTheCastSpellResolvesIsNotTheCastSpells() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card elf = TestBoard.inPlay(game, caster, "Bloodbraid Elf");
+        Card bolt = game.getAction().moveToLibrary(
+                TestBoard.card(game, caster, "Lightning Bolt"), 0, null);
+        WrappedAbility cascade = triggerOf(elf, caster);
+
+        List<String> all = ShardRun.observed(tempDir, game, bracket -> {
+            game.getStack().add(cascade);
+            game.getStack().resolveStack();
+            assertEquals(ZoneType.Stack, game.getZoneOf(game.getCardState(bolt)).getZoneType(),
+                    "the cascade cast the Bolt");
+            elf.addCounterInternal(CounterEnumType.P1P1, 1, caster, false, null, null);
+            elf.addCounterInternal(CounterEnumType.M1M1, 1, caster, false, null, null);
+            priority(game);
+            assertEquals(0, elf.getCounters(CounterEnumType.P1P1),
+                    "the check annihilated the counters");
+            game.getStack().resolveStack();
+            priority(game);
+            nextStep(game);
+        });
+
+        String boltHalf = only(all, "resolution", BOLT);
+        assertEquals(List.of("damage_dealt", "life_change"), eventTypes(boltHalf), boltHalf);
+    }
+
+    /**
+     * A resolution that wins the game with a cast still waiting: the win
+     * arrives at the state-based check after the resolution, with nothing
+     * resolving, and is written as the orphaned event it is. Driven by hand,
+     * as the game ends before the waiting spell could ever resolve.
+     */
+    @Test
+    void aWinAfterAResolutionThatCastASpellIsStillWritten() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player victim = game.getPlayers().get(1);
+        Card elf = TestBoard.inPlay(game, caster, "Bloodbraid Elf");
+        WrappedAbility cascade = triggerOf(elf, caster);
+        SpellAbility bolt = TestBoard.inHand(game, caster, "Lightning Bolt").getFirstSpellAbility();
+        bolt.setActivatingPlayer(caster);
+
+        List<String> all = ShardRun.records(tempDir, game, (bracket, collectors) -> {
+            game.subscribeToEvents(bracket);
+            bracket.beginBracket(cascade);
+            game.getStack().setResolving(true);
+            bracket.beginBracket(bolt);
+            victim.setLife(0, null);
+            bracket.endBracket(cascade.getId(), false);
+            game.getStack().setResolving(false);
+            priority(game);
+            assertTrue(game.isGameOver(), "the state-based check ended the game");
+            bracket.finishGame(Set.of(bolt.getId()));
+        });
+
+        List<String> won = new ArrayList<>();
+        for (String record : all) {
+            if (record.contains("\"type\":\"player_won\"")) {
+                won.add(record);
+            }
+        }
+        assertEquals(1, won.size(), "the win is written: " + all);
+        assertTrue(won.get(0).contains("\"link_id\":null"),
+                "an orphan, nobody's half: " + won.get(0));
+    }
+
+    // ── the cast spell's own costs ──────────────────────────────────────
+
+    private static final String TEMPER = "cardsfolder/f/fiery_temper.txt";
+
+    /**
+     * Fiery Temper's madness trigger casts it for {R}, paid with a Mountain.
+     * The tap pays the Temper's cost and is in the Temper's cost half; it is
+     * not the trigger's effect, whose half is empty.
+     */
+    @Test
+    void aMadnessTriggerDoesNotCarryThePaymentOfTheSpellItCasts() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card mountain = TestBoard.inPlay(game, caster, "Mountain");
+        Card temper = game.getAction().exile(
+                TestBoard.inHand(game, caster, "Fiery Temper"), null, null);
+        WrappedAbility madness = triggerOf(temper, caster);
+
+        List<String> all = ShardRun.observed(tempDir, game, bracket -> {
+            game.getStack().add(madness);
+            game.getStack().resolveStack();
+            assertTrue(mountain.isTapped(), "the Mountain paid for the Temper");
+            assertEquals(ZoneType.Stack, game.getZoneOf(game.getCardState(temper)).getZoneType(),
+                    "the madness trigger cast the Temper");
+            priority(game);
+            game.getStack().resolveStack();
+            priority(game);
+            nextStep(game);
+        });
+
+        String madnessHalf = only(all, "resolution", TEMPER, "keyword");
+        assertEquals(List.of(), eventTypes(madnessHalf), madnessHalf);
+        String temperCost = only(all, "activation", TEMPER, "spell");
+        assertTrue(temperCost.contains("\"mana_by_color\":{\"R\":1}"), temperCost);
+        String temperHalf = only(all, "resolution", TEMPER, "spell");
+        assertEquals(List.of("damage_dealt", "life_change"), eventTypes(temperHalf), temperHalf);
+    }
+
+    /**
+     * Tetsuo's cast mode casts Bone Splinters, whose additional cost
+     * sacrifices a creature. The sacrifice pays the Splinters' cost; the
+     * charm's half is empty.
+     */
+    @Test
+    void aSpellsAdditionalCostIsNotTheEffectOfTheCharmThatCastIt() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card tetsuo = equippedTetsuo(game, caster);
+        Card elves = TestBoard.inPlay(game, caster, "Llanowar Elves");
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Serra Angel");
+        Card splinters = TestBoard.inHand(game, caster, "Bone Splinters");
+        WrappedAbility trigger = triggerOf(tetsuo, caster);
+        TestBoard.chain(trigger.getWrappedAbility(), TETSUO_CAST_MODE);
+
+        List<String> all = ShardRun.recordsWithClauseHook(
+                tempDir, game, "to split the charm's mode", () -> {
+                    game.getStack().add(trigger);
+                    game.getStack().resolveStack();
+                    assertEquals(ZoneType.Stack,
+                            game.getZoneOf(game.getCardState(splinters)).getZoneType(),
+                            "the cast mode put Bone Splinters on the stack");
+                    assertEquals(ZoneType.Graveyard,
+                            game.getZoneOf(game.getCardState(elves)).getZoneType(),
+                            "the Elves paid the additional cost");
+                    priority(game);
+                    game.getStack().resolveStack();
+                    priority(game);
+                    nextStep(game);
+                });
+
+        String charmHalf = only(all, "resolution", TETSUO);
+        assertEquals(List.of(), eventTypes(charmHalf), charmHalf);
     }
 }
