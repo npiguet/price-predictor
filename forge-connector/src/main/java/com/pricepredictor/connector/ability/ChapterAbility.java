@@ -34,7 +34,7 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
     public static List<Ability> fromKeyword(KeywordInterface ki) {
         List<Ability> abilities = new ArrayList<>();
         for (var trigger : ki.getTriggers()) {
-            if ("True".equals(trigger.getParam("Secondary"))) continue;
+            if (trigger.isSecondary()) continue;
             String trigDesc = trigger.getParam("TriggerDescription");
             if (trigDesc == null) continue;
 

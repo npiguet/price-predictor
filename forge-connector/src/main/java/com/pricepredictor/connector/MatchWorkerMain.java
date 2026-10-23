@@ -159,6 +159,10 @@ public class MatchWorkerMain {
         // Forge's booster/edition tables and throw. This forces the roll to
         // the decks file every time. See MatchGenerator.rollIsFileSample().
         boolean decksOnly = WorkerProperties.flag(DECKS_ONLY);
+        if (decksOnly && (sideADecks.isEmpty() || sideBDecks.isEmpty())) {
+            throw ToolMain.badConfig("-D" + DECKS_ONLY + " requires both -D"
+                    + SIDE_A_DECKS_FILE + " and -D" + SIDE_B_DECKS_FILE);
+        }
 
         int workerIndex = WorkerProperties.intProperty(
                 EFFECT_WORKER_INDEX, 0, WorkerProperties.OnMalformed.EXIT,

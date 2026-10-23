@@ -42,34 +42,40 @@ final class ModeSplit {
     record ModeHalf(Mode mode, List<EffectEvent> events) {
     }
 
+    /**
+     * The events filed since the last half completed: the open span, which
+     * is the unit a repeat is recognised within — the chosen mode resolving
+     * now, or the whole resolution where no mode has begun.
+     */
+    private final EventBuffer open = new EventBuffer();
     /** The modes whose halves are complete, in order. */
     private final List<ModeHalf> complete = new ArrayList<>();
     /** The mode whose clauses are resolving now, or null outside one. */
     private Mode current;
 
+    /** Where the resolution's events are filed as they arrive. */
+    EventBuffer buffer() {
+        return open;
+    }
+
     /** Complete the current mode's half and open one for the next mode. */
-    void begin(Integer option, Snapshot state, EventBuffer resolutionEvents) {
-        close(resolutionEvents);
+    void begin(Integer option, Snapshot state) {
+        close();
         current = new Mode(option, state);
     }
 
-    /** Move the resolution's events into the current mode's half and complete it. */
-    void close(EventBuffer resolutionEvents) {
+    /** Move the open span's events into the current mode's half and complete it. */
+    void close() {
         if (current == null) {
             return;
         }
-        complete.add(new ModeHalf(current, resolutionEvents.drain()));
+        complete.add(new ModeHalf(current, open.drain()));
         current = null;
     }
 
-    /** Whether any complete half holds an event. */
-    boolean anyEvents() {
-        for (ModeHalf half : complete) {
-            if (!half.events().isEmpty()) {
-                return true;
-            }
-        }
-        return false;
+    /** Whether nothing was filed: none waits in the open span, and no complete half holds one. */
+    boolean isEmpty() {
+        return open.isEmpty() && complete.stream().allMatch(half -> half.events().isEmpty());
     }
 
     /** The complete halves, in order. */
@@ -81,12 +87,14 @@ final class ModeSplit {
      * The halves the resolution writes once it is over: one per chosen mode,
      * or, when no mode's half is complete, one root half.
      *
-     * @param rootState  the board a root half is read against
-     * @param rootEvents what the resolution filed, which a root half holds
+     * <p>A root half holds what the open span filed: with no mode begun,
+     * that is everything the resolution filed.
+     *
+     * @param rootState the board a root half is read against
      */
-    List<ModeHalf> halves(Snapshot rootState, List<EffectEvent> rootEvents) {
+    List<ModeHalf> halves(Snapshot rootState) {
         return complete.isEmpty()
-                ? List.of(new ModeHalf(new Mode(null, rootState), List.copyOf(rootEvents)))
+                ? List.of(new ModeHalf(new Mode(null, rootState), List.copyOf(open.events())))
                 : List.copyOf(complete);
     }
 }

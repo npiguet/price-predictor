@@ -101,27 +101,10 @@ final class ActivationLedger {
     }
 
     /**
-     * What became of a cast that has left the stack through a resolution.
+     * Write a held cost half now that its cast has left the stack through a
+     * resolution, stamped with what became of it.
      *
-     * @param resolved the resolved ability, or null when no bracket was held
-     *                 for it
-     */
-    ActivationOutcome settledOutcome(
-            int abilityId, boolean fizzled, boolean declined, SpellAbility resolved) {
-        if (fizzled) {
-            return ActivationOutcome.FIZZLED;
-        }
-        if (declined) {
-            return ActivationOutcome.DECLINED;
-        }
-        return outcomeOf(
-                find(abilityId).map(PendingActivation::targetsAtCast).orElse(0), resolved);
-    }
-
-    /**
-     * Write a held cost half now that its outcome is known.
-     *
-     * <p>{@code linked} is separate from the outcome because they answer
+     * <p>Whether it is linked is separate from the outcome because they answer
      * different questions: the outcome says what became of the spell, and
      * {@code link_id} promises that an effect half carrying the same id exists.
      * A resolution this collector holds no bracket for -- an item whose
@@ -129,17 +112,34 @@ final class ActivationLedger {
      * activation with no link, which is honest; issuing the link anyway would
      * leave it dangling.
      *
+     * @param fizzled  whether it was removed for having no legal target left
+     * @param declined whether its resolution was a refusal
+     * @param resolved the resolved ability, or null when no bracket was held
+     *                 for it
      * @return the link the effect half may claim, or null when there is to be
      *         no effect half or nothing was held for this ability
      */
-    String settle(int abilityId, ActivationOutcome outcome, boolean linked) {
+    String settle(int abilityId, boolean fizzled, boolean declined, SpellAbility resolved) {
         Optional<PendingActivation> found = take(abilityId);
         if (found.isEmpty()) {
             return null;
         }
         PendingActivation activation = found.get();
-        emit(activation, outcome, linked);
+        boolean linked = resolved != null && !fizzled && !declined;
+        emit(activation, resolutionOutcome(activation, fizzled, declined, resolved), linked);
         return linked ? activation.linkId() : null;
+    }
+
+    private static ActivationOutcome resolutionOutcome(
+            PendingActivation activation, boolean fizzled, boolean declined,
+            SpellAbility resolved) {
+        if (fizzled) {
+            return ActivationOutcome.FIZZLED;
+        }
+        if (declined) {
+            return ActivationOutcome.DECLINED;
+        }
+        return outcomeOf(activation.targetsAtCast(), resolved);
     }
 
     /**

@@ -70,11 +70,11 @@ public final class HauntKeyword {
                     // that shares it (Orzhov Pontiff).
                     CharmAbility.Expanded expanded =
                             CharmAbility.expandPlaceholder(tDesc, overrideSa, null);
-                    String normalized2 = expanded.description();
-                    if (normalized2 == null) continue;
-                    if (!emitted.add(normalized2)) continue;
+                    String charmDesc = expanded.description();
+                    if (charmDesc == null) continue;
+                    if (!emitted.add(charmDesc)) continue;
                     result.add(new TextAbility(AbilityType.forTrigger(t),
-                            normalized2, 0, expanded.options()));
+                            charmDesc, 0, expanded.options()));
                     continue;
                 } else if (effectDesc != null) {
                     tDesc = tDesc.replace("ABILITY", effectDesc);

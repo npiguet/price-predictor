@@ -221,10 +221,10 @@ public class GamePlayer {
         // controller rather than by lobby name, because the lobby player is
         // what a fork clones and the controller is what a fork does not
         // attach.
-        RandomSeatController seat = randomSeatOf(game);
+        Optional<RandomSeatController> seat = randomSeatOf(game);
         GameRecording recording = effectRecords == null ? null : new GameRecording(
                 game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
-                seat == null ? null : Refs.of(seat.getPlayer()));
+                seat.map(s -> Refs.of(s.getPlayer())).orElse(null));
         try {
             // Inside the try: open() installs JVM-static hooks one by one, and
             // a hook left behind by an open() that threw part way would hand
@@ -232,13 +232,12 @@ public class GamePlayer {
             if (recording != null) {
                 recording.open();
             }
-            if (seat != null) {
-                // Live from here: a fork's clone of this seat is never attached
-                // and plays as the ordinary AI. Without a recording the seat plays
-                // at random and reports nothing -- FR-026 keeps that combination
-                // out of a run.
-                seat.attach(game, recording == null ? null : recording.playability());
-            }
+            // Live from here: a fork's clone of this seat is never attached
+            // and plays as the ordinary AI. Without a recording the seat plays
+            // at random and reports nothing -- FR-026 keeps that combination
+            // out of a run.
+            seat.ifPresent(s -> s.attach(
+                    game, recording == null ? null : recording.playability()));
             match.startGame(game); // blocks until game is finished
         } finally {
             if (recording != null) {
@@ -260,13 +259,13 @@ public class GamePlayer {
                 collector.getCards(Side.A), collector.getCards(Side.B)));
     }
 
-    /** The game's random seat, by its controller, or null when it has none. */
-    static RandomSeatController randomSeatOf(forge.game.Game game) {
+    /** The game's random seat, by its controller, or empty when it has none. */
+    static Optional<RandomSeatController> randomSeatOf(forge.game.Game game) {
         for (Player player : game.getPlayers()) {
             if (player.getController() instanceof RandomSeatController seat) {
-                return seat;
+                return Optional.of(seat);
             }
         }
-        return null;
+        return Optional.empty();
     }
 }

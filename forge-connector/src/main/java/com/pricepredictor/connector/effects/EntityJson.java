@@ -114,7 +114,7 @@ final class EntityJson {
 
     private static String combatJson(Game game, Card card) {
         var combat = game.getCombat();
-        if (combat == null || !combat.isAttacking(card) && !combat.isBlocking(card)) {
+        if (!CombatShape.isCombatant(combat, card)) {
             return "null";
         }
         List<String> blockedBy = new ArrayList<>();

@@ -57,9 +57,8 @@ class RandomSeatControllerTest {
     }
 
     private static RandomSeatController seatOf(Game game) {
-        RandomSeatController seat = GamePlayer.randomSeatOf(game);
-        assertNotNull(seat, "the lobby player installs the controller");
-        return seat;
+        return GamePlayer.randomSeatOf(game).orElseThrow(
+                () -> new AssertionError("the lobby player installs the controller"));
     }
 
     /**
@@ -288,8 +287,8 @@ class RandomSeatControllerTest {
         seatOf(game).attach(game, null);
 
         Game fork = new GameCopier(game).makeCopy();
-        RandomSeatController forked = GamePlayer.randomSeatOf(fork);
-        assertNotNull(forked, "the fork keeps the lobby-player subclass");
+        RandomSeatController forked = GamePlayer.randomSeatOf(fork).orElseThrow(
+                () -> new AssertionError("the fork keeps the lobby-player subclass"));
         assertFalse(forked.isLive());
 
         List<SpellAbility> chosen = forked.chooseSpellAbilityToPlay();

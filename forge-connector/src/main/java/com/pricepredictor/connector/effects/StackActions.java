@@ -43,6 +43,16 @@ final class StackActions {
     private StackActions() {
     }
 
+    /**
+     * The ability of the item on top of {@code stack}, or null on an empty
+     * stack — read through {@code peek()}, because {@code peekAbility()}
+     * throws on an empty one.
+     */
+    static SpellAbility topAbility(MagicStack stack) {
+        var top = stack.peek();
+        return top == null ? null : top.getSpellAbility();
+    }
+
     private static Field lookup() {
         try {
             Field field = MagicStack.class.getDeclaredField("primaryAbility");

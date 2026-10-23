@@ -140,8 +140,7 @@ final class CastsUnderWay {
      * in progress — {@code MagicStack.push}'s own static check — or null.
      */
     private Card pushedUnannounced(SpellAbility acting) {
-        var top = game.getStack().peek();
-        SpellAbility pushed = top == null ? null : top.getSpellAbility();
+        SpellAbility pushed = StackActions.topAbility(game.getStack());
         if (acting != null && pushed != null && pushed.getHostCard() != null
                 && !announced.test(pushed.getId())
                 && (pushed == acting || pushed.getOriginalAbility() == acting)) {
