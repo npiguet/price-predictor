@@ -163,10 +163,18 @@ final class ForkEventSink extends BusEventReader {
 
     /**
      * A death the forced resolution left behind is marked where it was filed,
-     * so a modal fork can file it by the live rule.
+     * so the fork can file it by the live rule.
      *
-     * <p>Marked only when it was filed: a repeat the buffer refused has no
-     * position, and the next free one belongs to whatever is filed next.
+     * <p>Filed unchecked, its repeat judged later by the half it joins
+     * ({@code ForkCollector.splitByMode}): the live collector checks a death
+     * against the half {@code halfForDeath} assigns it to, and filed here it
+     * would be checked against the open span, the last mode's, whichever
+     * half it joins. A probe's death is checked here: a damage step is one
+     * record, as the observed combat bracket is.
+     *
+     * <p>A probe's leave is marked only when it was filed: a repeat the
+     * buffer refused has no position, and the next free one belongs to
+     * whatever is filed next.
      */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
@@ -174,7 +182,15 @@ final class ForkEventSink extends BusEventReader {
             return;
         }
         int at = size();
-        if (file(moved, null) && isStateBasedLeave(event)) {
+        boolean probe = combatDamage;
+        if (!isStateBasedLeave(event)) {
+            file(moved, null);
+        } else if (probe) {
+            if (file(moved, null)) {
+                stateBasedLeaves.add(at);
+            }
+        } else {
+            open.fileUnchecked(EventAttribution.stamp(moved, acting, null));
             stateBasedLeaves.add(at);
         }
     }

@@ -331,7 +331,7 @@ public final class ForkCollector {
             if (resolution.modes().isEmpty()) {
                 context.emit(forkedHalf(
                         actorId, keys, resolution.render(resolution.state()),
-                        resolution.events()));
+                        resolution.halves().get(0)));
             } else {
                 emitModeHalves(actorId, keys, resolution);
             }
@@ -349,8 +349,7 @@ public final class ForkCollector {
     private void emitModeHalves(
             String actorId, ProvenanceKey.Resolved keys, ForcedResolution resolution) {
         List<ModeBoundary> modes = resolution.modes();
-        List<List<EffectEvent>> halves = splitByMode(
-                resolution.events(), modes, resolution.stateBasedLeaves());
+        List<List<EffectEvent>> halves = resolution.halves();
         for (int i = 0; i < modes.size(); i++) {
             ModeBoundary boundary = modes.get(i);
             context.emit(forkedHalf(
@@ -407,10 +406,20 @@ public final class ForkCollector {
         String render(Snapshot board) {
             return (refs == null ? board : board.withRefs(refs)).render();
         }
+
+        /** The events, one list per chosen mode, or one list when no mode began. */
+        List<List<EffectEvent>> halves() {
+            List<Integer> starts = new ArrayList<>();
+            for (ModeBoundary mode : modes) {
+                starts.add(mode.firstEvent());
+            }
+            return splitByMode(events, starts, stateBasedLeaves);
+        }
     }
 
     /**
-     * A modal fork's events, one list per chosen mode.
+     * A forced resolution's events, one list per chosen mode, or one list
+     * when no mode began.
      *
      * <p>Every event belongs to the mode in whose span it was filed, except a
      * state-based death. {@code GameSimulator.resolveStack} runs the check
@@ -421,16 +430,25 @@ public final class ForkCollector {
      * the permanent, or the last half when none did. Order is kept within each
      * half, so a death still follows the events that caused it.
      *
+     * <p>A death is checked for a repeat against the half it joins, as the
+     * live collector checks it against the held half it files it into: the
+     * sink filed it unchecked ({@link ForkEventSink}), since until now no one
+     * knew which half that is.
+     *
+     * @param modeStarts       the position in {@code events} where each chosen
+     *                         mode's span begins, in order; the first span
+     *                         also takes what precedes it
      * @param stateBasedLeaves positions in {@code events} of moves off the
      *                         battlefield during a state-based check
      */
-    private static List<List<EffectEvent>> splitByMode(
-            List<EffectEvent> events, List<ModeBoundary> modes, Set<Integer> stateBasedLeaves) {
+    static List<List<EffectEvent>> splitByMode(
+            List<EffectEvent> events, List<Integer> modeStarts, Set<Integer> stateBasedLeaves) {
+        int halfCount = Math.max(1, modeStarts.size());
         int[] spanOf = new int[events.size()];
-        List<List<EffectEvent>> own = new ArrayList<>();
-        for (int i = 0; i < modes.size(); i++) {
-            int from = i == 0 ? 0 : modes.get(i).firstEvent();
-            int to = i + 1 < modes.size() ? modes.get(i + 1).firstEvent() : events.size();
+        List<Set<String>> touched = new ArrayList<>();
+        for (int i = 0; i < halfCount; i++) {
+            int from = i == 0 ? 0 : modeStarts.get(i);
+            int to = i + 1 < modeStarts.size() ? modeStarts.get(i + 1) : events.size();
             List<EffectEvent> span = new ArrayList<>();
             for (int at = from; at < to; at++) {
                 spanOf[at] = i;
@@ -438,24 +456,24 @@ public final class ForkCollector {
                     span.add(events.get(at));
                 }
             }
-            own.add(span);
-        }
-        List<Set<String>> touched = new ArrayList<>();
-        for (List<EffectEvent> span : own) {
             touched.add(BusBracketCollector.touchedBy(span));
         }
-        List<List<EffectEvent>> halves = new ArrayList<>();
-        for (int i = 0; i < modes.size(); i++) {
-            halves.add(new ArrayList<>());
+        List<EventBuffer> halves = new ArrayList<>();
+        for (int i = 0; i < halfCount; i++) {
+            halves.add(new EventBuffer());
         }
         for (int at = 0; at < events.size(); at++) {
             EffectEvent event = events.get(at);
             int half = stateBasedLeaves.contains(at) && !event.subjects().isEmpty()
                     ? BusBracketCollector.halfForDeath(touched, event.subjects().get(0))
                     : spanOf[at];
-            halves.get(half).add(event);
+            halves.get(half).file(event);
         }
-        return halves;
+        List<List<EffectEvent>> lists = new ArrayList<>();
+        for (EventBuffer half : halves) {
+            lists.add(List.copyOf(half.events()));
+        }
+        return lists;
     }
 
     /**
