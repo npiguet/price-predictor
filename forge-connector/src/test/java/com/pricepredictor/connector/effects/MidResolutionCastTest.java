@@ -436,6 +436,36 @@ class MidResolutionCastTest {
     private static final String TEMPER = "cardsfolder/f/fiery_temper.txt";
 
     /**
+     * A forced Kari Zev's Expertise casts the Bone Splinters in its caster's
+     * hand, whose additional cost sacrifices a creature. The sacrifice pays
+     * the Splinters' cost, and the fork leaves it out of the Expertise's
+     * record as the live bracket does.
+     */
+    @Test
+    void aForcedResolutionLeavesOutThePaymentOfASpellItCasts() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        TestBoard.inPlay(game, caster, "Llanowar Elves");
+        TestBoard.inPlay(game, opponent, "Serra Angel");
+        TestBoard.inHand(game, caster, "Bone Splinters");
+        SpellAbility expertise = TestBoard.inHand(game, caster, "Kari Zev's Expertise")
+                .getFirstSpellAbility();
+        expertise.setActivatingPlayer(caster);
+        CollectionCaps caps = new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+
+        ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps, 5L, expertise);
+
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        String record = records.get(0);
+        assertTrue(record.contains("\"interventional\":true"), record);
+        assertFalse(record.contains("\"to_zone\":\"graveyard\""),
+                "the sacrifice that paid for the Splinters is not the Expertise's: " + record);
+    }
+
+    /**
      * Fiery Temper's madness trigger casts it for {R}, paid with a Mountain.
      * The tap pays the Temper's cost and is in the Temper's cost half; it is
      * not the trigger's effect, whose half is empty.

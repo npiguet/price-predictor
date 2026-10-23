@@ -334,12 +334,12 @@ class StackItemBracketTest {
     }
 
     /**
-     * A Lightning Bolt cast, taken off the stack without anything noticing,
-     * and cast again — its card's spell keeps its id across casts. The first
-     * cast is written off as {@code countered} when the second arrives; the
-     * second resolves with its own link. Driven by hand, because in a game a
-     * reconcile point at the second cast would see the first gone only if the
-     * second were not already on the stack under the same id.
+     * The same ability cast twice while its first cast is still held: the
+     * first is written off as {@code countered} when the second arrives, and
+     * the second resolves with its own link. A defensive guard, driven by
+     * hand because no real game reaches it: a card that leaves the stack is
+     * rebuilt by {@code CardCopyService.copyCard} with fresh spell ability
+     * ids, so a card cast again always casts a new id.
      */
     @Test
     void aSpellCastAgainWritesOffItsEarlierCast() throws Throwable {
@@ -398,6 +398,140 @@ class StackItemBracketTest {
         assertEquals("resolved", outcomeOf(shockCost), shockCost);
         assertEquals(List.of("keyword_change"), eventTypes(linkedHalf(all, SHOCK)),
                 "what the Shock gathered, without the Bolt's payment: " + all);
+    }
+
+    // ── what a cast sets off before it is announced ─────────────────────
+
+    /**
+     * Maro's power and toughness are the cards in its controller's hand, and
+     * that controller answers a Shock with the Lightning Bolt that is the
+     * last of them. Moving the Bolt to the stack zone shrinks Maro before the
+     * Bolt is cast — {@code GameAction.changeZone} runs the static check
+     * then — and the 0/0 dies in the check after the cast. Both are the
+     * Bolt's consequences, in the Bolt's half; the Shock's is its damage.
+     */
+    @Test
+    void whatAResponsesMoveOntoTheStackSetsOffIsTheResponses() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card shock = inHand(game, caster, "Shock");
+        Card bolt = inHand(game, opponent, "Lightning Bolt");
+        Card[] maro = new Card[1];
+
+        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+            // Entered under the collector's eye, so its shrink has a reading
+            // to differ from (FirstStatChangeTest).
+            maro[0] = TestBoard.inPlay(game, opponent, "Maro");
+            game.getAction().checkStateEffects(false);
+            cast(game, shock, caster, opponent);
+            cast(game, bolt, opponent, caster);
+            priority(game);
+            assertEquals(ZoneType.Graveyard,
+                    game.getZoneOf(game.getCardState(maro[0])).getZoneType(),
+                    "Maro died with no card left in hand");
+            resolve(game);
+            resolve(game);
+            nextStep(game);
+        });
+
+        assertEquals(DAMAGE, eventTypes(linkedHalf(all, SHOCK)), all.toString());
+        String boltHalf = linkedHalf(all, BOLT);
+        String maroRef = "\"subjects\":[\"E" + maro[0].getId() + "\"]";
+        assertTrue(boltHalf.contains("{\"type\":\"pt_change\"," + maroRef),
+                "the shrink as the Bolt left the hand: " + boltHalf);
+        assertTrue(boltHalf.contains("{\"type\":\"zone_change\"," + maroRef
+                + ",\"params\":{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""),
+                "the death in the check after the cast: " + boltHalf);
+        assertEquals(List.of("pt_change", "zone_change", "damage_dealt", "life_change"),
+                eventTypes(boltHalf), boltHalf);
+    }
+
+    // ── a player's action at priority ───────────────────────────────────
+
+    /**
+     * Battering Craghorn, face down, is turned face up in answer to a Shock
+     * — a special action, which {@code MagicStack.add} resolves in place with
+     * no cast event, paid and taken through the AI's own play path. What it
+     * does is nobody's record: the Shock's half is its damage.
+     */
+    @Test
+    void unmorphingInResponseIsNotTheWaitingSpells() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card shock = inHand(game, caster, "Shock");
+        Card[] craghorn = new Card[1];
+
+        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+            for (int i = 0; i < 3; i++) {
+                TestBoard.inPlay(game, caster, "Mountain");
+            }
+            craghorn[0] = TestBoard.inPlay(game, caster, "Battering Craghorn");
+            craghorn[0].turnFaceDown(true);
+            game.getAction().checkStateEffects(false);
+            SpellAbility unmorph = turnFaceUpOf(craghorn[0], caster);
+            cast(game, shock, caster, opponent);
+            assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(caster, unmorph, null),
+                    "the AI turned the Craghorn face up");
+            assertFalse(craghorn[0].isFaceDown(), "the Craghorn is face up");
+            priority(game);
+            resolve(game);
+            nextStep(game);
+        });
+
+        assertEquals(DAMAGE, eventTypes(linkedHalf(all, SHOCK)), all.toString());
+    }
+
+    /**
+     * A Shivan Reef tapped for red at priority, with a Shock waiting: the
+     * damage the Reef deals its controller is the mana ability's, which no
+     * record holds, and not the Shock's.
+     */
+    @Test
+    void aManaAbilityAtPriorityIsNotTheWaitingSpells() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card shock = inHand(game, caster, "Shock");
+        Card reef = TestBoard.inPlay(game, caster, "Shivan Reef");
+        SpellAbility painful = null;
+        for (SpellAbility mana : reef.getManaAbilities()) {
+            if (mana.getSubAbility() != null) {
+                painful = mana;
+            }
+        }
+        assertNotNull(painful, "the Reef's coloured ability, which deals damage");
+        painful.setActivatingPlayer(caster);
+        SpellAbility tap = painful;
+
+        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+            cast(game, shock, caster, opponent);
+            assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(caster, tap, null),
+                    "the AI activated the Reef");
+            assertEquals(19, caster.getLife(), "the Reef dealt 1 damage to its controller");
+            priority(game);
+            resolve(game);
+            nextStep(game);
+        });
+
+        String shockHalf = linkedHalf(all, SHOCK);
+        assertEquals(DAMAGE, eventTypes(shockHalf), shockHalf);
+        assertFalse(shockHalf.contains("\"subjects\":[\"P0\"]"),
+                "nothing dealt to the Reef's controller: " + shockHalf);
+    }
+
+    /** The special action that turns a face-down card face up. */
+    private static SpellAbility turnFaceUpOf(Card card, Player activator) {
+        // Offered while face down, so it is the face-up state's, among the
+        // abilities a player could play now.
+        for (SpellAbility sa : card.getAllPossibleAbilities(activator, false)) {
+            if (sa.isTurnFaceUp()) {
+                sa.setActivatingPlayer(activator);
+                return sa;
+            }
+        }
+        throw new AssertionError("no turn-face-up ability on " + card);
     }
 
     // ── a spell that casts another ──────────────────────────────────────

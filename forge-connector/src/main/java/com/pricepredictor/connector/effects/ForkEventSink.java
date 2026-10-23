@@ -86,8 +86,11 @@ final class ForkEventSink extends BusEventReader {
      *   <li>{@link #RESOLVING}: from the first event published while the
      *   forced ability is the one resolving, until its {@code
      *   GameEventSpellResolved}: everything is filed, as live files the open
-     *   bracket's events. A permanent leaving the battlefield while the
-     *   tracker is frozen mid-resolution — an end-the-turn effect's own
+     *   bracket's events, except the payment for a spell the forced ability
+     *   casts — a cascaded spell's additional cost, a madness cast's mana —
+     *   which is that spell's cost, as live reads it ({@link
+     *   BusEventReader#payingForACast}). A permanent leaving the battlefield
+     *   while the tracker is frozen mid-resolution — an end-the-turn effect's own
      *   state-based check, a token or counter batch — is filed as an
      *   ordinary event, checked for a repeat in its span, as live files it
      *   into the open bracket.</li>
@@ -244,7 +247,9 @@ final class ForkEventSink extends BusEventReader {
             }
         }
         return switch (phase) {
-            case RESOLVING -> true;
+            // Everything but the payment for a spell the forced ability
+            // casts, which is that spell's cost and which live leaves out too.
+            case RESOLVING -> !payingForACast(acting);
             case HELD -> move != null && isStateBasedLeave(move);
             case BEFORE, CLOSED -> false;
         };
