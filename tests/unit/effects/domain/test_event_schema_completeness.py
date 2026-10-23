@@ -545,11 +545,12 @@ _CONNECTOR_EFFECTS = (
 #: effort exists to end: a corpus gap with the code that explains it removed from
 #: the ledger, at the moment the code was verified correct rather than at the
 #: moment it was written. Together all eight account for ~84% of the 15's
-#: combined card count -- leaving the 9 below: 7 genuinely unreferenced, 2 wired
-#: but AI-unreachable today, live the moment the AI gains these APIs or a
-#: human-play corpus is collected.
+#: combined card count. ``combat_ended`` is wired too, through an
+#: ``ApiEvents.RULES`` entry for ``EndCombatPhase`` -- leaving the 8 below: 6
+#: genuinely unreferenced, 2 wired but AI-unreachable today, live the moment the
+#: AI gains these APIs or a human-play corpus is collected.
 #:
-#: Values are the reason: for the 7 unreferenced entries, the producing Forge
+#: Values are the reason: for the 6 unreferenced entries, the producing Forge
 #: effect API(s), that no emission path exists (``ApiEvents.RULES`` in the
 #: connector, or an explicit ``EffectRecordOutcomes.note`` call), and how many
 #: cards in the sealed/draft pool script that API, read directly from
@@ -561,9 +562,6 @@ KNOWN_UNEMITTED: dict[str, str] = {
     "ability_activated":
         "ActivateAbility: no ApiEvents.RULES entry, no outcome-note call; "
         "2 cards script it",
-    "combat_ended":
-        "EndCombatPhase: no ApiEvents.RULES entry, no outcome-note call; "
-        "1 card scripts it",
     "game_drawn":
         "GameDrawn: no ApiEvents.RULES entry, no outcome-note call; "
         "2 cards script it",
