@@ -61,21 +61,21 @@ final class StatDiffer {
         List<EffectEvent> events = new ArrayList<>();
 
         if (before.power() != now.power() || before.toughness() != now.toughness()) {
-            events.add(new EffectEvent(EffectEvent.PT_CHANGE)
+            events.add(new EffectEvent(EventType.PT_CHANGE)
                     .subject(subject)
                     .param("power_delta", now.power() - before.power())
                     .param("toughness_delta", now.toughness() - before.toughness()));
         }
         addKeywordEvents(events, subject, before.keywords(), now.keywords());
-        addSetChangeEvent(events, subject, EffectEvent.TYPE_CHANGE,
+        addSetChangeEvent(events, subject, EventType.TYPE_CHANGE,
                 "types_added", "types_removed", before.types(), now.types());
         // colors_removed is this side's addition to the type's normalization:
         // the head has a colors_lost field and the event carried no way to say
         // a colour went away.
-        addSetChangeEvent(events, subject, EffectEvent.COLOR_CHANGE,
+        addSetChangeEvent(events, subject, EventType.COLOR_CHANGE,
                 "colors", "colors_removed", before.colors(), now.colors());
         if (!java.util.Objects.equals(before.controller(), now.controller())) {
-            events.add(new EffectEvent(EffectEvent.CONTROL_CHANGE)
+            events.add(new EffectEvent(EventType.CONTROL_CHANGE)
                     .subject(subject)
                     .param("controller", now.controller()));
         }
@@ -106,13 +106,13 @@ final class StatDiffer {
         Set<String> gained = difference(now, before);
         Set<String> lost = difference(before, now);
         if (!gained.isEmpty()) {
-            events.add(new EffectEvent(EffectEvent.KEYWORD_CHANGE)
+            events.add(new EffectEvent(EventType.KEYWORD_CHANGE)
                     .subject(subject)
                     .param("keywords", List.copyOf(gained))
                     .param("removed", false));
         }
         if (!lost.isEmpty()) {
-            events.add(new EffectEvent(EffectEvent.KEYWORD_CHANGE)
+            events.add(new EffectEvent(EventType.KEYWORD_CHANGE)
                     .subject(subject)
                     .param("keywords", List.copyOf(lost))
                     .param("removed", true));
@@ -121,7 +121,7 @@ final class StatDiffer {
 
     /** One event naming what joined and what left a set, or none when neither did. */
     private static void addSetChangeEvent(
-            List<EffectEvent> events, String subject, String type,
+            List<EffectEvent> events, String subject, EventType type,
             String addedParam, String removedParam,
             Set<String> before, Set<String> now) {
         Set<String> added = difference(now, before);

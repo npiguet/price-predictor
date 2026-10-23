@@ -51,7 +51,7 @@ class BusEventsTest {
                         player, CounterEnumType.ENERGY, 0, 2));
 
         assertNotNull(event);
-        assertEquals(EffectEvent.ENERGY_CHANGE, event.type());
+        assertEquals(EventType.ENERGY_CHANGE, event.type());
         assertEquals(2, event.params().get("delta"));
         assertEquals(List.of("P" + player.getId()), event.subjects());
     }
@@ -103,7 +103,7 @@ class BusEventsTest {
     void daytimeBecomesADayNightEvent() {
         EffectEvent event = BusEvents.dayTime(new GameEventDayTimeChanged(false));
 
-        assertEquals(EffectEvent.DAY_NIGHT_CHANGED, event.type());
+        assertEquals(EventType.DAY_NIGHT_CHANGED, event.type());
         assertEquals("night", event.params().get("to"));
     }
 
@@ -127,7 +127,7 @@ class BusEventsTest {
 
         EffectEvent event = BusEvents.regenerated(new GameEventCardRegenerated(card));
 
-        assertEquals(EffectEvent.REGENERATED, event.type());
+        assertEquals(EventType.REGENERATED, event.type());
         assertEquals(List.of("E" + card.getId()), event.subjects());
     }
 
@@ -135,7 +135,7 @@ class BusEventsTest {
     void aShuffleNamesThePlayer() {
         EffectEvent event = BusEvents.libraryShuffled(new GameEventShuffle(player));
 
-        assertEquals(EffectEvent.LIBRARY_SHUFFLED, event.type());
+        assertEquals(EventType.LIBRARY_SHUFFLED, event.type());
         assertEquals(List.of("P" + player.getId()), event.subjects());
     }
 
@@ -171,7 +171,7 @@ class BusEventsTest {
 
         EffectEvent built = BusEvents.gameOutcome(event, game);
 
-        assertEquals(EffectEvent.PLAYER_WON, built.type());
+        assertEquals(EventType.PLAYER_WON, built.type());
         assertEquals(List.of(SnapshotBuilder.playerId(p1)), built.subjects());
     }
 
@@ -237,7 +237,7 @@ class BusEventsTest {
         EffectEvent moved = BusEvents.cardMoved(new GameEventCardChangeZone(
                 card, zone(ZoneType.Hand), zone(ZoneType.Battlefield)));
 
-        assertEquals(EffectEvent.ZONE_CHANGE, moved.type());
+        assertEquals(EventType.ZONE_CHANGE, moved.type());
         String json = moved.toJson();
         assertTrue(json.contains("\"from_zone\":\"hand\""), json);
         assertTrue(json.contains("\"to_zone\":\"battlefield\""), json);

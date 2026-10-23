@@ -4,6 +4,7 @@ import forge.game.card.Card;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
+import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Set;
 
@@ -46,9 +47,9 @@ final class EventAttribution {
      * type or colour persists, so an undeclared duration on one of these says
      * how long it does rather than that it does not.
      */
-    private static final Set<String> LASTING_STATE = Set.of(
-            EffectEvent.PT_CHANGE, EffectEvent.KEYWORD_CHANGE,
-            EffectEvent.TYPE_CHANGE, EffectEvent.COLOR_CHANGE);
+    private static final Set<EventType> LASTING_STATE = EnumSet.of(
+            EventType.PT_CHANGE, EventType.KEYWORD_CHANGE,
+            EventType.TYPE_CHANGE, EventType.COLOR_CHANGE);
 
     /**
      * APIs whose effect Forge ends at end of turn unless the script says
@@ -144,7 +145,7 @@ final class EventAttribution {
      * Forge applies to the resolving clause's API: end of turn for a pump,
      * permanent for a counter.
      */
-    static EventDuration duration(SpellAbility root, Object pointer, String eventType) {
+    static EventDuration duration(SpellAbility root, Object pointer, EventType eventType) {
         String declared = declaredDuration(root, pointer);
         if (declared == null) {
             if (eventType == null || !LASTING_STATE.contains(eventType)) {

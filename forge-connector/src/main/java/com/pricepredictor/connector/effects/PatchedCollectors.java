@@ -61,8 +61,8 @@ final class PatchedCollectors implements AutoCloseable {
                 channels.playability().decisionHandler(),
                 channels.mana().handler(),
                 channels.playability().legalityHandler(),
-                PatchHooks.Listener.of(channels.clauses().clauseHandler()),
-                PatchHooks.Listener.of(channels.clauses().outcomeHandler()));
+                channels.clauses().clauseHandler(),
+                channels.clauses().outcomeHandler());
     }
 
     /** The decision and legality channel, which the random seat also writes through. */

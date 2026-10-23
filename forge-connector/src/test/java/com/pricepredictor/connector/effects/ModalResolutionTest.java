@@ -124,12 +124,12 @@ class ModalResolutionTest {
 
             collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{charm});
             collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(0)});
-            bracket.recordClauseEvent(new EffectEvent(EffectEvent.DAMAGE_DEALT).param("amount", 4));
+            bracket.recordClauseEvent(new EffectEvent(EventType.DAMAGE_DEALT).param("amount", 4));
             // The first mode's effect: a life total that moved, which the
             // second mode's snapshot must show.
             caster.getOpponents().get(0).setLife(16, null);
             collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(1)});
-            bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
+            bracket.recordClauseEvent(new EffectEvent(EventType.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
             bracket.onNextAction();
         });
@@ -194,7 +194,7 @@ class ModalResolutionTest {
             bracket.beginBracket(charm);
             collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(0)});
             collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(1)});
-            bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
+            bracket.recordClauseEvent(new EffectEvent(EventType.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
             bracket.onNextAction();
         });
@@ -222,8 +222,8 @@ class ModalResolutionTest {
         // is driven, as on a checkout without the hook.
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
-            bracket.recordClauseEvent(new EffectEvent(EffectEvent.DAMAGE_DEALT).param("amount", 4));
-            bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
+            bracket.recordClauseEvent(new EffectEvent(EventType.DAMAGE_DEALT).param("amount", 4));
+            bracket.recordClauseEvent(new EffectEvent(EventType.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
             bracket.onNextAction();
         });

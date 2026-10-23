@@ -282,9 +282,9 @@ class TriggerRecordTest {
      */
     @Test
     void theCauseChannelHasOneSpellingAndAnHonestAbsence() {
-        assertTrue(new EffectEvent(EffectEvent.TAPPED).cause("E7").toJson()
+        assertTrue(new EffectEvent(EventType.TAPPED).cause("E7").toJson()
                 .contains("\"cause\":\"E7\""));
-        assertFalse(new EffectEvent(EffectEvent.TAPPED).cause(null).toJson()
+        assertFalse(new EffectEvent(EventType.TAPPED).cause(null).toJson()
                 .contains("cause"));
     }
 

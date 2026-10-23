@@ -44,7 +44,7 @@ class OutcomeHandlerTest {
      */
     @BeforeEach
     void resetUnknownOutcomeTypeLatch() {
-        TestLatches.reset(ClauseOutcomeRouter.class, "UNKNOWN_OUTCOME_TYPE_REPORTED");
+        TestLatches.reset(ClauseOutcomeRouter.class, "UNKNOWN_OUTCOME_TYPE");
     }
 
     private static final Method ON_OUTCOME =

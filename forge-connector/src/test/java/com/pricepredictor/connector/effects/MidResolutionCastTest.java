@@ -158,9 +158,9 @@ class MidResolutionCastTest {
             game.getStack().setResolving(true);
             collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{trigger});
             collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(0)});
-            bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
+            bracket.recordClauseEvent(new EffectEvent(EventType.KEYWORD_CHANGE));
             bracket.beginBracket(bolt);
-            bracket.recordClauseEvent(new EffectEvent(EffectEvent.COUNTER_CHANGE));
+            bracket.recordClauseEvent(new EffectEvent(EventType.COUNTER_CHANGE));
             bracket.endBracket(trigger.getId(), false);
             game.getStack().setResolving(false);
             priority(game);

@@ -212,8 +212,8 @@ class ForkEventSinkTest {
 
     // ── a repeat is read as the observed side reads it ──────────────────
 
-    private static List<String> types(ForkEventSink sink) {
-        List<String> types = new ArrayList<>();
+    private static List<EventType> types(ForkEventSink sink) {
+        List<EventType> types = new ArrayList<>();
         for (EffectEvent event : sink.events()) {
             types.add(event.type());
         }
@@ -233,7 +233,7 @@ class ForkEventSinkTest {
         sink.onTapped(new GameEventCardTapped(bears, true));
         sink.onTapped(new GameEventCardTapped(bears, true));
 
-        assertEquals(List.of(EffectEvent.TAPPED), types(sink));
+        assertEquals(List.of(EventType.TAPPED), types(sink));
     }
 
     /**
@@ -255,7 +255,7 @@ class ForkEventSinkTest {
         sink.onTapped(tap);
         sink.onTapped(tap);
 
-        assertEquals(List.of(EffectEvent.TAPPED, EffectEvent.TAPPED), types(sink));
+        assertEquals(List.of(EventType.TAPPED, EventType.TAPPED), types(sink));
     }
 
     /** A quantitative repeat is two occurrences, and both are kept. */
@@ -270,7 +270,7 @@ class ForkEventSinkTest {
                     GameEventCardDamaged.DamageType.Normal));
         }
 
-        assertEquals(List.of(EffectEvent.DAMAGE_DEALT, EffectEvent.DAMAGE_DEALT), types(sink));
+        assertEquals(List.of(EventType.DAMAGE_DEALT, EventType.DAMAGE_DEALT), types(sink));
     }
 
     /**
@@ -298,7 +298,7 @@ class ForkEventSinkTest {
         }
         sink.onTapped(new GameEventCardTapped(elves, true));
 
-        assertEquals(List.of(EffectEvent.TAPPED, EffectEvent.ZONE_CHANGE, EffectEvent.TAPPED),
+        assertEquals(List.of(EventType.TAPPED, EventType.ZONE_CHANGE, EventType.TAPPED),
                 types(sink));
     }
 
@@ -327,8 +327,8 @@ class ForkEventSinkTest {
     }
 
     /** Each held half's event types, in order. */
-    private static List<List<String>> halfTypes(ForkEventSink sink) {
-        List<List<String>> halves = new ArrayList<>();
+    private static List<List<EventType>> halfTypes(ForkEventSink sink) {
+        List<List<EventType>> halves = new ArrayList<>();
         for (HeldHalves.Half<ModeSplit.Mode> half : sink.halves()) {
             halves.add(types(half.events()));
         }
@@ -359,7 +359,7 @@ class ForkEventSinkTest {
         sink.onResolved(new GameEventSpellResolved(forced, false));
         duringStateBasedCheck(game, () -> sink.onCardChangeZone(dies));
 
-        assertEquals(List.of(List.of(EffectEvent.ZONE_CHANGE), List.of(EffectEvent.TAPPED)),
+        assertEquals(List.of(List.of(EventType.ZONE_CHANGE), List.of(EventType.TAPPED)),
                 halfTypes(sink));
     }
 
@@ -387,8 +387,8 @@ class ForkEventSinkTest {
         duringStateBasedCheck(game, () -> sink.onCardChangeZone(dies));
 
         assertEquals(List.of(
-                        List.of(EffectEvent.ZONE_CHANGE),
-                        List.of(EffectEvent.DAMAGE_DEALT, EffectEvent.ZONE_CHANGE)),
+                        List.of(EventType.ZONE_CHANGE),
+                        List.of(EventType.DAMAGE_DEALT, EventType.ZONE_CHANGE)),
                 halfTypes(sink));
     }
 
@@ -413,7 +413,7 @@ class ForkEventSinkTest {
             sink.onCardChangeZone(dies);
         });
 
-        assertEquals(List.of(EffectEvent.ZONE_CHANGE), types(sink));
+        assertEquals(List.of(EventType.ZONE_CHANGE), types(sink));
     }
 
     /** A death published twice in one check is still filed once, in the half it joins. */
@@ -433,7 +433,7 @@ class ForkEventSinkTest {
             sink.onCardChangeZone(dies);
         });
 
-        assertEquals(List.of(List.of(EffectEvent.TAPPED, EffectEvent.ZONE_CHANGE)),
+        assertEquals(List.of(List.of(EventType.TAPPED, EventType.ZONE_CHANGE)),
                 halfTypes(sink));
     }
 
@@ -447,8 +447,8 @@ class ForkEventSinkTest {
         }
     }
 
-    private static List<String> types(List<EffectEvent> events) {
-        List<String> types = new ArrayList<>();
+    private static List<EventType> types(List<EffectEvent> events) {
+        List<EventType> types = new ArrayList<>();
         for (EffectEvent event : events) {
             types.add(event.type());
         }

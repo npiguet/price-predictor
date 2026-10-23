@@ -189,20 +189,6 @@ public final class PatchHooks {
         void uninstall() {
             hook.uninstall();
         }
-
-        /**
-         * A handler declared as a plain {@link InvocationHandler}, as the
-         * {@link Listener} every hook's {@link Hook#listener} builds.
-         *
-         * @throws IllegalArgumentException for a handler no hook built, which
-         *                                  has no hook to be installed on
-         */
-        static Listener of(InvocationHandler handler) {
-            if (handler instanceof Listener listener) {
-                return listener;
-            }
-            throw new IllegalArgumentException("not a hook's listener: " + handler);
-        }
     }
 
     /** What a listener does with one callback, once its arguments are there. */
