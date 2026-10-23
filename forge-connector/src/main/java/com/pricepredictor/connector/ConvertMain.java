@@ -37,7 +37,7 @@ public class ConvertMain {
                     Path.of(cardsPath), Path.of(outputPath), SourceTree.CARDSFOLDER);
 
             System.out.println("Conversion complete:");
-            cards.report(System.out, "cardsfolder");
+            cards.report(System.out, SourceTree.CARDSFOLDER);
             List<MissingSVarReport.Entry> missingSVars =
                     new ArrayList<>(cards.missingSVars());
 
@@ -46,7 +46,7 @@ public class ConvertMain {
                 BatchConverter.BatchResult tokens = batchConverter.convert(
                         tokensSource, Path.of(tokensOutputPath),
                         SourceTree.TOKENSCRIPTS);
-                tokens.report(System.out, "tokenscripts");
+                tokens.report(System.out, SourceTree.TOKENSCRIPTS);
                 System.out.println("  Token output: " + tokensOutputPath);
                 missingSVars.addAll(tokens.missingSVars());
             } else {

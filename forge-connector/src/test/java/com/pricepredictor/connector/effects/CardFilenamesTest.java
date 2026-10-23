@@ -3,12 +3,14 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeEnvironmentInitializer;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -121,7 +123,7 @@ class CardFilenamesTest {
         assertEquals("cardsfolder/a/ajanis_pridemate.txt",
                 CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Ajani's Pridemate").key());
         assertEquals(Optional.empty(),
-                SourceTree.directoryOf(SourceTree.CARDSFOLDER, "ajanis_pridemate"),
+                SourceTree.CARDSFOLDER.directoryOf("ajanis_pridemate"),
                 "the tree only answers where it disagrees with the convention");
     }
 
@@ -138,13 +140,25 @@ class CardFilenamesTest {
     }
 
     /**
-     * A tree with nowhere to look must not take the collector down with it:
-     * only {@code cardsfolder} has a root to index, so any other name answers
-     * nothing and the caller keeps the convention.
+     * A flat tree has no directories to look up: only {@code cardsfolder} has
+     * a root to index, so the other trees answer nothing even for a stem the
+     * card tree files elsewhere.
      */
     @Test
-    void aTreeWithNoRootAnswersNothing() {
-        assertEquals(Optional.empty(), SourceTree.directoryOf("cardsfolder-512", "+2_mace"));
+    void aFlatTreeAnswersNothing() {
+        assertEquals(Optional.empty(), SourceTree.TOKENSCRIPTS.directoryOf("+2_mace"));
+        assertEquals(Optional.empty(), SourceTree.VARIANT_SCRIPTS.directoryOf("+2_mace"));
+    }
+
+    /**
+     * A tree with nowhere to look must not take the collector down with it: a
+     * root that cannot be found indexes no exceptions, and the caller keeps
+     * the convention.
+     */
+    @Test
+    void aTreeWhoseRootIsMissingIndexesNothing(@TempDir Path tempDir) {
+        assertEquals(Map.of(), SourceTree.buildExceptions(
+                SourceTree.CARDSFOLDER, tempDir.resolve("no-such-cardsfolder")));
     }
 
     // -- the path the card reader recorded ------------------------------
@@ -165,7 +179,7 @@ class CardFilenamesTest {
     })
     void aLoaderPathBecomesTheTreeRelativePath(String loaderPath, String expected) {
         assertEquals(Optional.of(expected),
-                SourceTree.relativePathIn(SourceTree.CARDSFOLDER, loaderPath));
+                SourceTree.CARDSFOLDER.relativePathIn(loaderPath));
     }
 
     /**
@@ -182,12 +196,12 @@ class CardFilenamesTest {
     })
     void aPathOutsideTheTreeAnswersNothing(String loaderPath) {
         assertEquals(Optional.empty(),
-                SourceTree.relativePathIn(SourceTree.CARDSFOLDER, loaderPath));
+                SourceTree.CARDSFOLDER.relativePathIn(loaderPath));
     }
 
     @Test
     void anAbsentLoaderPathAnswersNothing() {
-        assertEquals(Optional.empty(), SourceTree.relativePathIn(SourceTree.CARDSFOLDER, null));
-        assertEquals(Optional.empty(), SourceTree.relativePathIn(SourceTree.CARDSFOLDER, ""));
+        assertEquals(Optional.empty(), SourceTree.CARDSFOLDER.relativePathIn(null));
+        assertEquals(Optional.empty(), SourceTree.CARDSFOLDER.relativePathIn(""));
     }
 }

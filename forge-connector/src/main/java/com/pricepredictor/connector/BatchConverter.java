@@ -3,6 +3,8 @@ package com.pricepredictor.connector;
 import com.esotericsoftware.minlog.Log;
 import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.ProvenanceSidecar;
+import com.pricepredictor.connector.effects.ScriptFile;
+import com.pricepredictor.connector.effects.SourceTree;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -32,7 +34,7 @@ public class BatchConverter {
      *             provenance key's script path, because one filename occurs in
      *             more than one tree and must resolve differently in each
      */
-    public BatchResult convert(Path cardsPath, Path outputPath, String tree)
+    public BatchResult convert(Path cardsPath, Path outputPath, SourceTree tree)
             throws IOException {
         return convert(cardsPath, outputPath, tree, true);
     }
@@ -53,7 +55,7 @@ public class BatchConverter {
      *                           is the source directory
      */
     public BatchResult convert(
-            Path cardsPath, Path outputPath, String tree, boolean writeConvertedText)
+            Path cardsPath, Path outputPath, SourceTree tree, boolean writeConvertedText)
             throws IOException {
         int totalFiles = 0;
         int succeeded = 0;
@@ -86,14 +88,15 @@ public class BatchConverter {
      * from the same render so the sidecar's line indices describe the file.
      */
     private void convertOne(
-            Path cardsPath, Path scriptFile, Path outputPath, String tree,
+            Path cardsPath, Path scriptFile, Path outputPath, SourceTree tree,
             boolean writeConvertedText) throws IOException {
         List<String> lines = Files.readAllLines(scriptFile);
         Path relativePath = cardsPath.relativize(scriptFile);
         // The key's script path is the source path as written, tree
-        // included — produced identically here and by the Python reader.
-        String scriptKeyPath = tree + "/"
-                + relativePath.toString().replace('\\', '/');
+        // included — assembled by the same ScriptFile the collectors name
+        // scripts with, so the converter and a collector cannot spell one
+        // script two ways.
+        String scriptKeyPath = new ScriptFile(tree, relativePath.toString()).key();
 
         RulesParser.ParsedCard parsed =
                 converter.parseScript(lines, scriptKeyPath);
@@ -138,8 +141,8 @@ public class BatchConverter {
         }
 
         /** Print the counts for {@code tree}, then each warning under a header. */
-        public void report(PrintStream out, String tree) {
-            out.println("  [" + tree + "]");
+        public void report(PrintStream out, SourceTree tree) {
+            out.println("  [" + tree.wireName() + "]");
             out.println("  Total files:  " + totalFiles);
             out.println("  Succeeded:    " + succeeded);
             out.println("  Warnings:     " + warningCount());

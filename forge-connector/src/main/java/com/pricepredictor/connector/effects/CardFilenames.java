@@ -89,12 +89,12 @@ public final class CardFilenames {
      * convention it keeps for nearly every card. Derivation answers for the rest —
      * a stem the tree does not hold at all still has to name something.
      */
-    public static ScriptFile scriptFileForStem(String tree, String stem) {
+    public static ScriptFile scriptFileForStem(SourceTree tree, String stem) {
         String filename = stem + ".txt";
-        if (SourceTree.isFlat(tree)) {
+        if (tree.isFlat()) {
             return new ScriptFile(tree, filename);
         }
-        String directory = SourceTree.directoryOf(tree, stem)
+        String directory = tree.directoryOf(stem)
                 .orElseGet(() -> derivedDirectory(stem));
         return new ScriptFile(tree, directory + "/" + filename);
     }
@@ -130,7 +130,7 @@ public final class CardFilenames {
     }
 
     /** The script a card name is filed under, by way of {@link #stemOf}. */
-    public static ScriptFile scriptFile(String tree, String cardName) {
+    public static ScriptFile scriptFile(SourceTree tree, String cardName) {
         return scriptFileForStem(tree, stemOf(cardName));
     }
 }

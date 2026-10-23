@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeEnvironmentInitializer;
+import com.pricepredictor.connector.WireNamed;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -8,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -38,17 +40,32 @@ import java.util.Optional;
  * says so. This class is therefore where a caller asks the tree where a card
  * lives; {@link CardFilenames} derives only what the tree does not answer.
  */
-public final class SourceTree {
+public enum SourceTree implements WireNamed {
 
-    private SourceTree() {
+    CARDSFOLDER("cardsfolder", false),
+    TOKENSCRIPTS("tokenscripts", true),
+    VARIANT_SCRIPTS("variant-scripts", true);
+
+    private final String wireName;
+    private final boolean flat;
+
+    SourceTree(String wireName, boolean flat) {
+        this.wireName = wireName;
+        this.flat = flat;
     }
 
-    public static final String CARDSFOLDER = "cardsfolder";
-    public static final String TOKENSCRIPTS = "tokenscripts";
-    public static final String VARIANT_SCRIPTS = "variant-scripts";
+    /**
+     * The tree's directory name, which is also the first segment of every
+     * provenance key's {@code script_file} the Python side splits on.
+     */
+    @Override
+    public String wireName() {
+        return wireName;
+    }
 
-    public static boolean isFlat(String tree) {
-        return TOKENSCRIPTS.equals(tree) || VARIANT_SCRIPTS.equals(tree);
+    /** Whether the tree files every script at its root rather than under a directory. */
+    public boolean isFlat() {
+        return flat;
     }
 
     // -- where a loader says it read a file ------------------------------
@@ -69,16 +86,16 @@ public final class SourceTree {
      * path looks like when Forge reads {@code cardsfolder.zip} rather than the
      * loose files, where the entry names carry no tree segment at all.
      */
-    public static Optional<String> relativePathIn(String tree, String loaderPath) {
-        if (tree == null || loaderPath == null || loaderPath.isEmpty()) return Optional.empty();
+    public Optional<String> relativePathIn(String loaderPath) {
+        if (loaderPath == null || loaderPath.isEmpty()) return Optional.empty();
         String path = loaderPath.replace('\\', '/');
-        String anchor = "/" + tree + "/";
+        String anchor = "/" + wireName + "/";
         int at = path.lastIndexOf(anchor);
         String relative;
         if (at >= 0) {
             relative = path.substring(at + anchor.length());
-        } else if (path.startsWith(tree + "/")) {
-            relative = path.substring(tree.length() + 1);
+        } else if (path.startsWith(wireName + "/")) {
+            relative = path.substring(wireName.length() + 1);
         } else if (isZipEntryShaped(path)) {
             relative = path;
         } else {
@@ -111,21 +128,22 @@ public final class SourceTree {
      * {@link #relativePathIn}, which costs nothing, so a run in which every
      * card came from the tree never builds this at all.
      */
-    public static Optional<String> directoryOf(String tree, String stem) {
-        if (isFlat(tree) || stem == null || stem.isEmpty()) return Optional.empty();
-        return Optional.ofNullable(exceptions(tree).get(stem));
+    public Optional<String> directoryOf(String stem) {
+        if (flat || stem == null || stem.isEmpty()) return Optional.empty();
+        return Optional.ofNullable(exceptions(this).get(stem));
     }
 
     /** Guarded by the class lock, which also keeps a tree from being walked twice. */
-    private static final Map<String, Map<String, String>> INDEXES = new HashMap<>();
+    private static final Map<SourceTree, Map<String, String>> INDEXES =
+            new EnumMap<>(SourceTree.class);
 
-    private static synchronized Map<String, String> exceptions(String tree) {
-        return INDEXES.computeIfAbsent(tree, t -> buildExceptions(t, rootOf(t)));
+    private static synchronized Map<String, String> exceptions(SourceTree tree) {
+        return INDEXES.computeIfAbsent(tree, t -> buildExceptions(t, t.root()));
     }
 
     /** Forge's own {@code cardsfolder}; no other tree is letter-keyed. */
-    private static Path rootOf(String tree) {
-        if (!CARDSFOLDER.equals(tree)) return null;
+    private Path root() {
+        if (this != CARDSFOLDER) return null;
         try {
             return ForgeEnvironmentInitializer.findCardsFolder();
         } catch (RuntimeException e) {
@@ -135,7 +153,13 @@ public final class SourceTree {
         }
     }
 
-    private static Map<String, String> buildExceptions(String tree, Path root) {
+    /**
+     * The stems {@code root} files somewhere other than the convention says.
+     *
+     * <p>Package-private so a test can hand it a root that does not exist: a
+     * tree that cannot be found yields no exceptions, never an error.
+     */
+    static Map<String, String> buildExceptions(SourceTree tree, Path root) {
         Map<String, String> found = new HashMap<>();
         if (root == null || !Files.isDirectory(root)) return found;
         try {

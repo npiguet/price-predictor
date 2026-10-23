@@ -81,7 +81,7 @@ final class ScriptLocator {
     /** The card-tree file the card reader actually opened, when it says so. */
     private static Optional<ScriptFile> readScriptOf(CardRules rules) {
         return Optional.ofNullable(rules)
-                .flatMap(r -> SourceTree.relativePathIn(SourceTree.CARDSFOLDER, r.getPath()))
+                .flatMap(r -> SourceTree.CARDSFOLDER.relativePathIn(r.getPath()))
                 .map(relative -> new ScriptFile(SourceTree.CARDSFOLDER, relative));
     }
 

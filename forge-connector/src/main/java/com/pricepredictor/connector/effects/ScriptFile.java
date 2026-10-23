@@ -10,11 +10,11 @@ package com.pricepredictor.connector.effects;
  * writes a key and the collector that names one have to assemble it the same
  * way. This record is that one way.
  *
- * @param tree         the tree's wire name, as {@link SourceTree} spells it
+ * @param tree         the tree the script lies in
  * @param relativePath the path within the tree, held with forward slashes
  *                     whatever the platform's separator
  */
-public record ScriptFile(String tree, String relativePath) {
+public record ScriptFile(SourceTree tree, String relativePath) {
 
     private static final String EXTENSION = ".txt";
 
@@ -29,7 +29,7 @@ public record ScriptFile(String tree, String relativePath) {
      * itself is the key both sides compare.
      */
     public String key() {
-        return tree + "/" + relativePath;
+        return tree.wireName() + "/" + relativePath;
     }
 
     /** The file's name without its directory or {@code .txt} extension. */

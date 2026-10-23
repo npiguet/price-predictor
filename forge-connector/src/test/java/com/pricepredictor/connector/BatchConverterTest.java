@@ -57,13 +57,13 @@ class BatchConverterTest {
     void convertingTheGoldenScriptsReproducesEveryGoldenTextByteForByte() throws IOException {
         BatchConverter converter = new BatchConverter();
         int compared = 0;
-        for (String tree : List.of(SourceTree.CARDSFOLDER, SourceTree.TOKENSCRIPTS)) {
-            Path output = tempDir.resolve(tree);
+        for (SourceTree tree : List.of(SourceTree.CARDSFOLDER, SourceTree.TOKENSCRIPTS)) {
+            Path output = tempDir.resolve(tree.wireName());
             BatchConverter.BatchResult result =
-                    converter.convert(GOLDEN.resolve(tree), output, tree);
-            assertEquals(List.of(), result.warnings(), tree);
+                    converter.convert(GOLDEN.resolve(tree.wireName()), output, tree);
+            assertEquals(List.of(), result.warnings(), tree.wireName());
 
-            Path expected = GOLDEN.resolve("expected").resolve(tree);
+            Path expected = GOLDEN.resolve("expected").resolve(tree.wireName());
             try (Stream<Path> files = Files.walk(expected)) {
                 for (Path golden : files.filter(p -> p.toString().endsWith(".txt")).toList()) {
                     Path written = output.resolve(expected.relativize(golden));
@@ -81,7 +81,7 @@ class BatchConverterTest {
     @Test
     void anUndefinedSVarInTheTreeIsReportedOnTheResult() throws IOException {
         BatchConverter.BatchResult result = new BatchConverter().convert(
-                GOLDEN.resolve(SourceTree.CARDSFOLDER), tempDir, SourceTree.CARDSFOLDER);
+                GOLDEN.resolve(SourceTree.CARDSFOLDER.wireName()), tempDir, SourceTree.CARDSFOLDER);
 
         assertEquals(1, result.missingSVars().size(), result.missingSVars().toString());
         assertEquals("Undefined SVar", result.missingSVars().get(0).card());
@@ -92,10 +92,10 @@ class BatchConverterTest {
     @Test
     void theReportIsDrainedBetweenTrees() throws IOException {
         BatchConverter converter = new BatchConverter();
-        converter.convert(GOLDEN.resolve(SourceTree.CARDSFOLDER),
+        converter.convert(GOLDEN.resolve(SourceTree.CARDSFOLDER.wireName()),
                 tempDir.resolve("cards"), SourceTree.CARDSFOLDER);
         BatchConverter.BatchResult tokens = converter.convert(
-                GOLDEN.resolve(SourceTree.TOKENSCRIPTS),
+                GOLDEN.resolve(SourceTree.TOKENSCRIPTS.wireName()),
                 tempDir.resolve("tokens"), SourceTree.TOKENSCRIPTS);
 
         assertTrue(tokens.missingSVars().isEmpty(), tokens.missingSVars().toString());
