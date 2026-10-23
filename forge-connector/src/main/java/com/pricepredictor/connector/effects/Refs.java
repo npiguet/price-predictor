@@ -15,26 +15,54 @@ import java.util.Optional;
  * the one {@code state.entities} and {@code state.players} are keyed by, so a
  * reader can join any ref to the board beside it. The bus hands out views
  * rather than cards and players; both forms name the same object.
+ *
+ * <p>Public because the root-package workers name players the same way when
+ * they stamp a record's actor, and a second spelling there would break the
+ * join.
  */
-final class Refs {
+public final class Refs {
 
     private Refs() {
     }
 
-    static String of(Card card) {
+    public static String of(Card card) {
         return "E" + card.getId();
     }
 
-    static String of(Player player) {
+    public static String of(Player player) {
         return "P" + player.getId();
     }
 
-    static String of(CardView card) {
+    public static String of(CardView card) {
         return "E" + card.getId();
     }
 
-    static String of(PlayerView player) {
+    public static String of(PlayerView player) {
         return "P" + player.getId();
+    }
+
+    /**
+     * The ref, or null for no object: for a slot the engine may leave empty,
+     * such as a controller, a cause or an attachment, which the record then
+     * writes as an honest JSON {@code null}.
+     */
+    public static String ofNullable(Card card) {
+        return card == null ? null : of(card);
+    }
+
+    /** {@link #ofNullable(Card)}, for a player slot. */
+    public static String ofNullable(Player player) {
+        return player == null ? null : of(player);
+    }
+
+    /** {@link #ofNullable(Card)}, for a card the bus hands out as a view. */
+    public static String ofNullable(CardView card) {
+        return card == null ? null : of(card);
+    }
+
+    /** {@link #ofNullable(Card)}, for a player the bus hands out as a view. */
+    public static String ofNullable(PlayerView player) {
+        return player == null ? null : of(player);
     }
 
     /**

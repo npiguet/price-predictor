@@ -106,7 +106,7 @@ record PaidCosts(
         if (cards != null) {
             for (Card card : cards) {
                 if (card != null) {
-                    ids.add(SnapshotBuilder.entityId(card));
+                    ids.add(Refs.of(card));
                 }
             }
         }
@@ -128,7 +128,7 @@ record PaidCosts(
         if (ability.getPayCosts() != null
                 && ability.getPayCosts().hasSpecificCostType(CostTap.class)
                 && ability.getHostCard() != null) {
-            ids.add(SnapshotBuilder.entityId(ability.getHostCard()));
+            ids.add(Refs.of(ability.getHostCard()));
         }
         return new ArrayList<>(ids);
     }

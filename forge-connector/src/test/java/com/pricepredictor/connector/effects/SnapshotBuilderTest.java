@@ -61,7 +61,7 @@ class SnapshotBuilderTest {
         assertEquals(
                 "{\"targets\":[],\"source\":null,\"modes\":[],\"x\":null,"
                         + "\"choices\":{}}",
-                new SnapshotBuilder(null).refsJson(null));
+                RefsJson.render(null));
     }
 
     // ── the state's blocks ──────────────────────────────────────────────
@@ -124,7 +124,7 @@ class SnapshotBuilderTest {
 
             String state = new SnapshotBuilder(board.game).ofResolving(pull).render();
 
-            assertTrue(state.contains("{\"id\":\"" + SnapshotBuilder.entityId(exiled)
+            assertTrue(state.contains("{\"id\":\"" + Refs.of(exiled)
                     + "\",\"name\":\"Grizzly Bears\",\"zone\":\"exile\""), state);
         }
 

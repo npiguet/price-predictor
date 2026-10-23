@@ -293,7 +293,7 @@ class RecordCharacterizationTest {
         SpellAbility bolt = board.spell(board.hand("Lightning Bolt", you), you);
 
         List<String> records = ShardRun.records(
-                tempDir, board.game, CAPS, SnapshotBuilder.playerId(opponent),
+                tempDir, board.game, CAPS, Refs.of(opponent),
                 (bracket, collectors) -> {
             HookShapes.proxy(HookShapes.Playability.class, collectors.playability().decisionHandler())
                     .onCandidate(bolt);
@@ -329,7 +329,7 @@ class RecordCharacterizationTest {
         String record = EffectRecord.playability(
                 "run.0-l1.0", "run", RecordShardWriter.timestamp(), GAME_ID,
                 PlayabilitySubkind.BLOCKERS, AttributionMode.detect())
-                .actor(SnapshotBuilder.playerId(board.opponent))
+                .actor(Refs.of(board.opponent))
                 .whatIf(true)
                 .state(new SnapshotBuilder(board.game).ofBoard().render())
                 .toJson();

@@ -174,7 +174,7 @@ class BusEventsTest {
         EffectEvent built = BusEvents.gameOutcome(event, game);
 
         assertEquals(EventType.PLAYER_WON, built.type());
-        assertEquals(List.of(SnapshotBuilder.playerId(p1)), built.subjects());
+        assertEquals(List.of(Refs.of(p1)), built.subjects());
     }
 
     /** A winning name this game cannot resolve to any seat produces nothing. */
@@ -201,7 +201,7 @@ class BusEventsTest {
 
         EffectEvent built = BusEvents.gameOutcome(event, game);
 
-        assertEquals(List.of(SnapshotBuilder.playerId(first)), built.subjects());
+        assertEquals(List.of(Refs.of(first)), built.subjects());
     }
 
     /**

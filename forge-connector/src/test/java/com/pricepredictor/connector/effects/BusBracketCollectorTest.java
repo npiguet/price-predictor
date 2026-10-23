@@ -575,7 +575,7 @@ class BusBracketCollectorTest {
         String outcomeRecord = records.stream()
                 .filter(r -> r.contains("\"type\":\"player_won\""))
                 .findFirst().orElseThrow();
-        assertTrue(outcomeRecord.contains(SnapshotBuilder.playerId(p1)), outcomeRecord);
+        assertTrue(outcomeRecord.contains(Refs.of(p1)), outcomeRecord);
     }
 
     /**

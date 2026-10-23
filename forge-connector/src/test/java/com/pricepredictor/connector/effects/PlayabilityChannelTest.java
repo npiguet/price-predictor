@@ -142,13 +142,13 @@ class PlayabilityChannelTest {
         String real = records.get(0);
         assertTrue(real.contains("\"subkind\":\"attackers\""), real);
         assertTrue(real.contains("\"what_if\":false"), real);
-        assertTrue(real.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(active) + "\""),
+        assertTrue(real.contains("\"actor_player\":\"" + Refs.of(active) + "\""),
                 "the deciding player is the one the engine names: " + real);
         assertTrue(real.contains("\"random_seat\":false"), real);
-        assertTrue(real.contains("\"legal_attackers\":[\"" + SnapshotBuilder.entityId(ready) + "\"]"),
+        assertTrue(real.contains("\"legal_attackers\":[\"" + Refs.of(ready) + "\"]"),
                 real);
         assertTrue(real.contains("\"forbidden\":[{\"entity\":\""
-                + SnapshotBuilder.entityId(tapped) + "\""), real);
+                + Refs.of(tapped) + "\""), real);
     }
 
     /**
@@ -172,7 +172,7 @@ class PlayabilityChannelTest {
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"what_if\":false"), records.get(0));
         assertTrue(records.get(0).contains(
-                "\"actor_player\":\"" + SnapshotBuilder.playerId(other) + "\""), records.get(0));
+                "\"actor_player\":\"" + Refs.of(other) + "\""), records.get(0));
     }
 
     /**
@@ -201,9 +201,9 @@ class PlayabilityChannelTest {
         String real = records.get(0);
         assertTrue(real.contains("\"subkind\":\"blockers\""), real);
         assertTrue(real.contains("\"what_if\":false"), real);
-        assertTrue(real.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(blocking) + "\""),
+        assertTrue(real.contains("\"actor_player\":\"" + Refs.of(blocking) + "\""),
                 "the deciding player is the blocking player: " + real);
-        assertTrue(real.contains("\"anchor_attacker\":\"" + SnapshotBuilder.entityId(attacker) + "\""),
+        assertTrue(real.contains("\"anchor_attacker\":\"" + Refs.of(attacker) + "\""),
                 real);
         assertTrue(real.contains("\"min_blockers\":1"), real);
     }
@@ -245,7 +245,7 @@ class PlayabilityChannelTest {
         Card mine = TestBoard.inPlay(game, active, "Grizzly Bears");
 
         List<String> lines = ShardRun.recordsWithRandomSeat(tempDir, game,
-                SnapshotBuilder.playerId(active), (bracket, collectors) -> {
+                Refs.of(active), (bracket, collectors) -> {
             collectors.playability().legalityHandler().invoke(null, ON_ATTACKERS_DECLARABLE,
                     new Object[]{active, other, List.of(mine), List.of(mine)});
         });
@@ -276,7 +276,7 @@ class PlayabilityChannelTest {
         List<String> records = recordsOf(lines);
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains(
-                "\"actor_player\":\"" + SnapshotBuilder.playerId(other) + "\""), records.get(0));
+                "\"actor_player\":\"" + Refs.of(other) + "\""), records.get(0));
         assertFalse(records.get(0).contains("what_if"),
                 "a decision record carries no what_if: " + records.get(0));
     }

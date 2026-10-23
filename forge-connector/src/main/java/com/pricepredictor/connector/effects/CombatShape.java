@@ -43,11 +43,11 @@ final class CombatShape {
             return shape;
         }
         for (Card attacker : combat.getAttackers()) {
-            String id = SnapshotBuilder.entityId(attacker);
+            String id = Refs.of(attacker);
             shape.attackers.add(id);
             List<String> blockers = new ArrayList<>();
             for (Card blocker : combat.getBlockers(attacker)) {
-                blockers.add(SnapshotBuilder.entityId(blocker));
+                blockers.add(Refs.of(blocker));
             }
             shape.blocks.put(id, blockers);
         }
@@ -77,7 +77,7 @@ final class CombatShape {
                 continue;
             }
             Refs.ofAny(cell.getColumnKey()).ifPresent(target -> assignment
-                    .computeIfAbsent(SnapshotBuilder.entityId(source), key -> new LinkedHashMap<>())
+                    .computeIfAbsent(Refs.of(source), key -> new LinkedHashMap<>())
                     .put(target, amount));
         }
     }

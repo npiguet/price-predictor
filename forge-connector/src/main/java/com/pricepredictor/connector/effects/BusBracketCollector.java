@@ -93,7 +93,7 @@ public final class BusBracketCollector extends BusEventReader {
         this.context = context;
         this.snapshots = new SnapshotBuilder(game);
         this.ledger = new ActivationLedger(context);
-        this.heldResolution = new HeldResolutionWindow(context, snapshots);
+        this.heldResolution = new HeldResolutionWindow(context);
         this.castsUnderWay = new CastsUnderWay(game, ledger::holds);
         this.combatStep = new CombatStepBracket(
                 game, context, snapshots, heldResolution, onCombatRecord);
@@ -613,9 +613,7 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     private static String actorOf(SpellAbility ability) {
-        return ability == null || ability.getActivatingPlayer() == null
-                ? null
-                : SnapshotBuilder.playerId(ability.getActivatingPlayer());
+        return ability == null ? null : Refs.ofNullable(ability.getActivatingPlayer());
     }
 
     /** As {@link ActivationLedger#outcomeOf}; kept here for the tests that pin it. */

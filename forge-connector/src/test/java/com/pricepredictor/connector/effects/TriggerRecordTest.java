@@ -79,7 +79,7 @@ class TriggerRecordTest {
     @Test
     void aTriggerRecordNamesItsHostEntity() {
         Card paralyze = TestCards.build("Paralyze");
-        String entity = SnapshotBuilder.entityId(paralyze);
+        String entity = Refs.of(paralyze);
 
         String json = recording(tempDir)
                 .triggers().record(triggersOf(paralyze).get(0), Map.of(), false).toJson();
@@ -219,7 +219,7 @@ class TriggerRecordTest {
         Map<String, Object> event = eventOf(replacementOfMode("Moved"), Map.of(
                 "Card", card, "CardLKI", card, "Affected", card));
 
-        assertEquals(List.of(SnapshotBuilder.entityId(card)), event.get("subjects"),
+        assertEquals(List.of(Refs.of(card)), event.get("subjects"),
                 event.toString());
     }
 
@@ -238,7 +238,7 @@ class TriggerRecordTest {
                 "Destination", ZoneType.Graveyard,
                 "Cause", cause));
 
-        assertEquals(SnapshotBuilder.entityId(cause), params(event).get("cause"),
+        assertEquals(Refs.of(cause), params(event).get("cause"),
                 event.toString());
         assertFalse(event.toString().contains("Destination,"), event.toString());
     }
@@ -263,7 +263,7 @@ class TriggerRecordTest {
 
         assertEquals(3L, params(event).get("amount"), event.toString());
         assertEquals(false, params(event).get("combat"), event.toString());
-        assertEquals(SnapshotBuilder.entityId(source), params(event).get("source"),
+        assertEquals(Refs.of(source), params(event).get("source"),
                 event.toString());
     }
 
@@ -348,7 +348,7 @@ class TriggerRecordTest {
                 Map.of("Card", host, "Source", source,
                         "CounterType", "P1P1", "CounterNum", 1));
 
-        assertEquals(SnapshotBuilder.entityId(source), params(event).get("cause"),
+        assertEquals(Refs.of(source), params(event).get("cause"),
                 event.toString());
     }
 
@@ -364,7 +364,7 @@ class TriggerRecordTest {
                 Map.of("Card", host, "Cause", cause,
                         "Origin", "Battlefield", "Destination", "Graveyard"));
 
-        assertEquals(SnapshotBuilder.entityId(caster), params(event).get("cause"),
+        assertEquals(Refs.of(caster), params(event).get("cause"),
                 event.toString());
     }
 
@@ -385,7 +385,7 @@ class TriggerRecordTest {
                 Map.of("Card", host, "Cause", named, "Source", softer,
                         "Origin", "Battlefield", "Destination", "Graveyard"));
 
-        assertEquals(SnapshotBuilder.entityId(named), params(event).get("cause"),
+        assertEquals(Refs.of(named), params(event).get("cause"),
                 event.toString());
     }
 
@@ -426,7 +426,7 @@ class TriggerRecordTest {
         Map<String, Object> event = eventOf(triggerOfMode("SpellCast"),
                 Map.of("CardLKI", cast, "SpellAbility", spell));
 
-        assertEquals(List.of(SnapshotBuilder.entityId(cast)), event.get("subjects"),
+        assertEquals(List.of(Refs.of(cast)), event.get("subjects"),
                 event.toString());
     }
 
@@ -449,7 +449,7 @@ class TriggerRecordTest {
                 Map.of("Attacker", attacker, "Attacked", defender));
 
         assertEquals("attackers_declared", event.get("type"), event.toString());
-        assertEquals(SnapshotBuilder.entityId(defender), params(event).get("defender"),
+        assertEquals(Refs.of(defender), params(event).get("defender"),
                 event.toString());
     }
 
@@ -509,8 +509,8 @@ class TriggerRecordTest {
     void eachCombatShapeIsAboutTheCreatureItIsAbout() {
         Card attacker = TestCards.build("Sol Ring");
         Card blocker = TestCards.build("Mox Pearl");
-        String attackerId = SnapshotBuilder.entityId(attacker);
-        String blockerId = SnapshotBuilder.entityId(blocker);
+        String attackerId = Refs.of(attacker);
+        String blockerId = Refs.of(blocker);
 
         Map<String, Object> blocks = eventOf(triggerOfMode("Blocks"),
                 Map.of("Blocker", blocker, "Attackers", attacker));

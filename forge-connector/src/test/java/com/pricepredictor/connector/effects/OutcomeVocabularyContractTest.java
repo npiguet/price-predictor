@@ -106,7 +106,7 @@ class OutcomeVocabularyContractTest {
         });
 
         String shard = String.join("\n", records);
-        assertTrue(shard.contains(SnapshotBuilder.entityId(card)), shard);
-        assertTrue(shard.contains(SnapshotBuilder.playerId(player)), shard);
+        assertTrue(shard.contains(Refs.of(card)), shard);
+        assertTrue(shard.contains(Refs.of(player)), shard);
     }
 }

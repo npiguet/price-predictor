@@ -26,14 +26,12 @@ import forge.game.spellability.SpellAbility;
 final class HeldResolutionWindow {
 
     private final CollectorContext context;
-    private final SnapshotBuilder snapshots;
 
     /** The resolution waiting for its consequences, or null when none is. */
     private HeldResolution held;
 
-    HeldResolutionWindow(CollectorContext context, SnapshotBuilder snapshots) {
+    HeldResolutionWindow(CollectorContext context) {
         this.context = context;
-        this.snapshots = snapshots;
     }
 
     /**
@@ -66,7 +64,7 @@ final class HeldResolutionWindow {
         // the block that carries them is re-read here and paired with the
         // board each half was captured with: the cast's for a root half, the
         // mode's first clause's for a mode's.
-        String refs = snapshots.refsJson(resolved.ability);
+        String refs = RefsJson.render(resolved.ability);
         // A modal resolution on a patched worker writes one effect half per
         // chosen mode, each through the mode's own option line, every one of
         // them under the cost half's link (FR-029a, FR-029d). A mode that

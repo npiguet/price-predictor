@@ -195,7 +195,7 @@ final class LiveGame {
 
     /** The deciding player's id, or the active player's where none is known. */
     String playerIdOrActive(Player decider) {
-        return decider == null ? activePlayerId() : SnapshotBuilder.playerId(decider);
+        return decider == null ? activePlayerId() : Refs.of(decider);
     }
 
     String activePlayerId() {
@@ -203,6 +203,6 @@ final class LiveGame {
         if (phase == null || phase.getPlayerTurn() == null) {
             return null;
         }
-        return SnapshotBuilder.playerId(phase.getPlayerTurn());
+        return Refs.of(phase.getPlayerTurn());
     }
 }

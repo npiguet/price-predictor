@@ -265,7 +265,7 @@ final class ClauseOutcomeRouter {
                 case "source" -> event.param("source", outcomeRefOf(value));
                 case "sample" -> {
                     if (value instanceof Card token) {
-                        event.param("token_script_id", SnapshotBuilder.tokenScriptIdOf(token));
+                        event.param("token_script_id", CardSpelling.tokenScriptIdOf(token));
                         event.param("characteristics", tokenCharacteristics(token));
                     }
                 }
@@ -299,7 +299,7 @@ final class ClauseOutcomeRouter {
         traits.put("power", token.getBasePower());
         traits.put("toughness", token.getBaseToughness());
         traits.put("types", token.getType().toString());
-        traits.put("keywords", SnapshotBuilder.keywordNames(token.getKeywords()));
+        traits.put("keywords", CardSpelling.keywordNames(token.getKeywords()));
         return traits;
     }
 

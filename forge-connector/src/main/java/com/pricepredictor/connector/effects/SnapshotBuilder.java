@@ -1,25 +1,10 @@
 package com.pricepredictor.connector.effects;
 
-import com.google.common.collect.Table;
-import forge.card.CardStateName;
-import forge.card.CardTypeView;
-import forge.card.ColorSet;
-import forge.card.MagicColor;
 import forge.game.Game;
-import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
-import forge.game.GameEntity;
-import forge.game.card.CardCollectionView;
-import forge.game.card.CardTraitChanges;
-import forge.game.card.ICardTraitChanges;
-
-import forge.game.card.CounterEnumType;
-import forge.game.card.CounterType;
-import forge.game.keyword.KeywordInterface;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
-import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -54,10 +39,12 @@ import java.util.Set;
  * interventional forks rendered would identify {@code interventional} exactly,
  * and a flag the schema bars from ever being a model input would have a
  * perfect proxy sitting in the state.
+ *
+ * <p>The tiers and the global block are decided here; each entity, each
+ * player and the refs block are rendered by {@link EntityJson},
+ * {@link PlayerJson} and {@link RefsJson}.
  */
 public final class SnapshotBuilder {
-
-    private static final char[] COLORS = {'W', 'U', 'B', 'R', 'G'};
 
     private final Game game;
 
@@ -65,11 +52,10 @@ public final class SnapshotBuilder {
         this.game = game;
     }
 
-    /** The entity id an event's subject and the snapshot both use. */
-    public static String entityId(Card card) {
-        return Refs.of(card);
-    }
-
+    /**
+     * {@link Refs#of(Player)}, kept for {@code GamePlayer} until it names the
+     * random seat through {@link Refs} directly.
+     */
     public static String playerId(Player player) {
         return Refs.of(player);
     }
@@ -179,11 +165,11 @@ public final class SnapshotBuilder {
             Iterable<Card> referenced, Long withoutStatic, SpellAbility acting, Card source,
             EffectEvent pending) {
         String entities = Json.array(collectEntities(referenced),
-                card -> entityToJson(card, Suppressed.of(card, withoutStatic)));
-        String players = Json.array(game.getPlayers(), this::playerToJson);
+                card -> EntityJson.render(game, card, withoutStatic));
+        String players = Json.array(game.getPlayers(), player -> PlayerJson.render(game, player));
         return new Snapshot(
                 globalToJson(), players, entities,
-                refsJson(acting, source), pending == null ? "null" : pending.toJson());
+                RefsJson.render(acting, source), pending == null ? "null" : pending.toJson());
     }
 
     /**
@@ -207,13 +193,11 @@ public final class SnapshotBuilder {
 
     private String globalToJson() {
         var phase = game.getPhaseHandler();
-        Player active = phase.getPlayerTurn();
-        Player priority = phase.getPriorityPlayer();
         return Json.object()
                 .value("turn", phase.getTurn())
                 .value("phase", phaseName(phase.getPhase()))
-                .value("active", active == null ? null : playerId(active))
-                .value("priority", priority == null ? null : playerId(priority))
+                .value("active", Refs.ofNullable(phase.getPlayerTurn()))
+                .value("priority", Refs.ofNullable(phase.getPriorityPlayer()))
                 .value("stack_size", game.getStack().size())
                 // Null outside combat damage. A first-strike combat produces
                 // two damage steps and so two combat records, which only the
@@ -234,571 +218,15 @@ public final class SnapshotBuilder {
         Set<ProvenanceKey> keys = new LinkedHashSet<>();
         for (Card card : game.getCardsIn(ZoneType.Command)) {
             if (card.isEmblem()) {
-                addKeys(keys, card.getSpellAbilities());
+                EntityJson.addKeys(keys, card.getSpellAbilities());
             }
         }
         return List.copyOf(keys);
-    }
-
-    /**
-     * How much of each colour this player could still make, per colour.
-     *
-     * <p>Counted over untapped permanents' mana abilities, one per ability that
-     * can produce the colour. It is what separates a board that can answer a
-     * threat from one that only looks like it can.
-     *
-     * <p>An ability that makes one mana of any colour counts once for each, so
-     * the numbers are an upper bound rather than a sum that can be spent.
-     */
-    private ManaCounts untappedProduction(Player player) {
-        List<Byte> producible = new ArrayList<>();
-        for (Card card : player.getCardsIn(ZoneType.Battlefield)) {
-            if (card.isTapped()) {
-                continue;
-            }
-            for (SpellAbility ability : card.getManaAbilities()) {
-                var part = ability.getManaPart();
-                if (part == null) {
-                    continue;
-                }
-                for (byte symbol : MagicColor.WUBRGC) {
-                    if (part.canProduce(ManaCounts.letter(symbol), ability)) {
-                        producible.add(symbol);
-                    }
-                }
-            }
-        }
-        return ManaCounts.tally(producible);
-    }
-
-    /**
-     * Creatures this player lost from the battlefield this turn.
-     *
-     * <p>The engine keeps what left the battlefield, not what died, so a
-     * bounced or exiled creature counts here too. It is a close reading of a
-     * condition many triggers ask about; an exact count would need a hook where
-     * the death is decided.
-     */
-    private int creaturesLost(Player player) {
-        int count = 0;
-        for (Card card : game.getLeftBattlefieldThisTurn()) {
-            if (card.isCreature() && card.getController() == player) {
-                count++;
-            }
-        }
-        return count;
     }
 
     private static String phaseName(Object phase) {
         return phase == null
                 ? null
                 : phase.toString().toLowerCase(java.util.Locale.ROOT);
-    }
-
-    private String playerToJson(Player player) {
-        return Json.object()
-                .value("id", playerId(player))
-                .value("life", player.getLife())
-                .value("hand", player.getCardsIn(ZoneType.Hand).size())
-                .value("library", player.getCardsIn(ZoneType.Library).size())
-                .value("graveyard", player.getCardsIn(ZoneType.Graveyard).size())
-                .value("poison", player.getPoisonCounters())
-                .value("energy", player.getCounters(CounterEnumType.ENERGY))
-                .raw("this_turn", Json.object()
-                        .value("creatures_died", creaturesLost(player))
-                        .value("spells_cast", player.getSpellsCastThisTurn())
-                        .value("lands_played", player.getLandsPlayedThisTurn())
-                        .render())
-                // Every symbol, zeros included, in ManaCounts' fixed order.
-                .raw("floating_mana",
-                        ManaCounts.of(player.getManaPool()::getAmountOfColor).toJson())
-                .raw("untapped_production", untappedProduction(player).toJson())
-                .render();
-    }
-
-    /**
-     * One entity's characteristics with an acting static's changes removed.
-     *
-     * <p>A {@code continuous} record's label is what its static does to the
-     * board, so a snapshot that still contains the static's own work hands the
-     * model the answer with the question. Every channel that static wrote has
-     * to come back out.
-     *
-     * <p>Recombined by the engine rather than subtracted here, because
-     * subtraction gets two cases wrong: another static granting the same
-     * keyword or type would go with it, and a static that overwrites a type
-     * line or strips a whole class of type cannot be inverted from what it
-     * contributed. Power and toughness are the exception — boosts are summed
-     * per static, so dropping one term is already exact.
-     */
-    private record Suppressed(
-            CardTypeView type, ColorSet colors,
-            Iterable<KeywordInterface> keywords, int power, int toughness) {
-
-        /**
-         * What the card would be without this static, or null for no change.
-         *
-         * <p>Null when the patch is absent, which is also when a continuous
-         * record is never written — {@link ContinuousChannel#collect}
-         * checks for these three before it collects, so a leaking snapshot is
-         * not reachable by falling back to here.
-         */
-        static Suppressed of(Card card, Long staticId) {
-            if (staticId == null) {
-                return null;
-            }
-            if (!(PatchHooks.TYPE_WITHOUT.read(card, staticId) instanceof CardTypeView type)
-                    || !(PatchHooks.COLOR_WITHOUT.read(card, staticId) instanceof ColorSet colors)
-                    || !(PatchHooks.KEYWORDS_WITHOUT.read(card, staticId)
-                            instanceof Iterable<?> keywords)) {
-                return null;
-            }
-            int power = 0;
-            int toughness = 0;
-            for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell
-                    : card.getPTBoostTable().cellSet()) {
-                if (staticId.equals(cell.getColumnKey())) {
-                    power += cell.getValue().getLeft();
-                    toughness += cell.getValue().getRight();
-                }
-            }
-            @SuppressWarnings("unchecked")
-            Iterable<KeywordInterface> typed = (Iterable<KeywordInterface>) keywords;
-            return new Suppressed(type, colors, typed, power, toughness);
-        }
-    }
-
-    private String entityToJson(Card card, Suppressed without) {
-        Card attached = card.getAttachedTo();
-        CardTypeView type = without == null ? card.getType() : without.type();
-        return Json.object()
-                .value("id", entityId(card))
-                .value("name", card.getName())
-                .value("zone", zoneName(card))
-                .value("controller",
-                        card.getController() == null ? null : playerId(card.getController()))
-                .value("face", faceOf(card))
-                .value("copy_source", copySourceOf(card))
-                .value("token_script_id", tokenScriptIdOf(card))
-                .raw("types", typeNamesJson(type.getCoreTypes()))
-                .raw("subtypes", typeNamesJson(type.getSubtypes()))
-                .raw("supertypes", typeNamesJson(type.getSupertypes()))
-                .raw("colors", Json.stringArray(
-                        colorLetters(without == null ? card.getColor() : without.colors())))
-                .value("mana_value", card.getCMC())
-                .raw("pt", ptJson(card, without))
-                .value("tapped", card.isTapped())
-                .value("sick", card.isSick())
-                .value("damage", card.getDamage())
-                .raw("counters", counterJson(card))
-                .raw("combat", combatJson(card))
-                .value("attached_to", attached == null ? null : entityId(attached))
-                .value("face_down", card.isFaceDown())
-                .raw("granted_attached", ProvenanceKey.toJsonArray(grantedAttached(card)))
-                .raw("granted_temporary", grantedTemporaryJson(card, without))
-                .raw("printed", ProvenanceKey.toJsonArray(printedKeys(card)))
-                .raw("stack_extras", stackExtrasJson(card))
-                .render();
-    }
-
-    /**
-     * The token's script stem — what FR-078 means by a token-script id — or
-     * the printed name when no script can be named (an engine-built token with
-     * no image key), so a token is never reported as a non-token.
-     */
-    static String tokenScriptIdOf(Card card) {
-        if (!card.isToken()) {
-            return null;
-        }
-        String stem = ScriptLocator.tokenScriptStemOf(card);
-        return stem != null ? stem : card.getName();
-    }
-
-    private String zoneName(Card card) {
-        var zone = card.getZone();
-        return zone == null
-                ? null
-                : zone.getZoneType().name().toLowerCase(java.util.Locale.ROOT);
-    }
-
-    /**
-     * Computed power and toughness, decomposed into the three sources.
-     *
-     * <p>Base plus boosts plus counters, kept apart because an ability that
-     * adds a boost and one that adds a counter are different effects with the
-     * same total, and the head has to predict which happened.
-     */
-    private String ptJson(Card card, Suppressed without) {
-        if (!card.isCreature()) {
-            return "null";
-        }
-        int counterPower = card.getCounters(CounterEnumType.P1P1)
-                - card.getCounters(CounterEnumType.M1M1);
-        int basePower = card.getBasePower();
-        int baseToughness = card.getBaseToughness();
-        int boostPower = card.getNetPower() - basePower - counterPower;
-        int boostToughness = card.getNetToughness() - baseToughness - counterPower;
-        if (without != null) {
-            boostPower -= without.power();
-            boostToughness -= without.toughness();
-        }
-        return Json.object()
-                .value("base", List.of(basePower, baseToughness))
-                .value("boosts", List.of(boostPower, boostToughness))
-                .value("counters", List.of(counterPower, counterPower))
-                .render();
-    }
-
-    private String counterJson(Card card) {
-        Json.ObjectWriter counters = Json.object();
-        for (com.google.common.collect.Multiset.Entry<CounterType> entry
-                : card.getCounters().entrySet()) {
-            counters.value(
-                    entry.getElement().getName().toUpperCase(java.util.Locale.ROOT),
-                    entry.getCount());
-        }
-        return counters.render();
-    }
-
-    private String combatJson(Card card) {
-        var combat = game.getCombat();
-        if (combat == null || !combat.isAttacking(card) && !combat.isBlocking(card)) {
-            return "null";
-        }
-        List<String> blockedBy = new ArrayList<>();
-        if (combat.isAttacking(card)) {
-            CardCollectionView blockers = combat.getBlockers(card);
-            if (blockers != null) {
-                for (Card blocker : blockers) {
-                    blockedBy.add(entityId(blocker));
-                }
-            }
-        }
-        List<String> blocking = new ArrayList<>();
-        if (combat.isBlocking(card)) {
-            // The other half of blocked_by. Without it a blocker's own entry
-            // says only that it is somewhere in a combat, so the flag the head
-            // reads for "is this creature blocking" would always be false — and the
-            // blocking relationship is what trample and deathtouch act through.
-            for (Card attacker : combat.getAttackersBlockedBy(card)) {
-                blocking.add(entityId(attacker));
-            }
-        }
-        Object defender = combat.isAttacking(card)
-                ? combat.getDefenderByAttacker(card) : null;
-        return Json.object()
-                .value("attacking", defender == null ? null : String.valueOf(defender))
-                .raw("blocking", Json.stringArray(blocking))
-                .raw("blocked_by", Json.stringArray(blockedBy))
-                .value("became_blocked", combat.isBlocked(card))
-                .render();
-    }
-
-    private String grantedTemporaryJson(Card card, Suppressed without) {
-        return Json.object()
-                .raw("keywords", Json.stringArray(keywordNames(
-                        without == null ? card.getKeywords() : without.keywords())))
-                .raw("abilities", ProvenanceKey.toJsonArray(grantedTemporaryAbilities(card)))
-                .render();
-    }
-
-    /**
-     * An entity's keywords as the snapshot spells them: each keyword's
-     * original text, lower-cased, skipping the ones with none.
-     *
-     * <p>Shared with the {@code token_created} outcome, whose description of
-     * a token has to read the same as that token's entry on the board.
-     */
-    static List<String> keywordNames(Iterable<KeywordInterface> keywords) {
-        List<String> names = new ArrayList<>();
-        for (KeywordInterface keyword : keywords) {
-            if (!keyword.getOriginal().isEmpty()) {
-                names.add(keyword.getOriginal().toLowerCase(java.util.Locale.ROOT));
-            }
-        }
-        return names;
-    }
-
-    /**
-     * Lines granted by a timestamped change rather than printed or attached.
-     *
-     * <p>"Gains flying and 'T: draw a card' until end of turn" puts the second
-     * half here. Attachment grants ride {@code granted_attached} instead, and
-     * the two stay apart because the model reads them differently: an entity's
-     * ability tokens are its printed and attached lines, while a temporary
-     * grant is part of what happened to it.
-     */
-    private List<ProvenanceKey> grantedTemporaryAbilities(Card card) {
-        Set<ProvenanceKey> keys = new LinkedHashSet<>();
-        for (ICardTraitChanges change : card.getChangedCardTraits().values()) {
-            // Only the record carries granted lines; a keyword change sharing
-            // the table has none to name.
-            if (change instanceof CardTraitChanges granted) {
-                addKeys(keys, granted.getAbilities());
-            }
-        }
-        return List.copyOf(keys);
-    }
-
-    /** Which face is up, as an index; 0 is the printed front. */
-    private static int faceOf(Card card) {
-        var state = card.getCurrentStateName();
-        return state == null || state == CardStateName.Original ? 0 : 1;
-    }
-
-    /** What this permanent is copying, or null when it is itself. */
-    private static String copySourceOf(Card card) {
-        Card copied = card.getCopiedPermanent();
-        if (copied != null) {
-            return entityId(copied);
-        }
-        Card cloner = card.getCloner();
-        return cloner == null ? null : entityId(cloner);
-    }
-
-    /**
-     * What a stack object announced, or null when the entity is not on the stack.
-     *
-     * <p>Divided damage and "up to N" counts are choices the caster made that no
-     * other field records: a Fireball for 3 split two ways and one aimed at a
-     * single creature have the same cost and the same text.
-     */
-    private String stackExtrasJson(Card card) {
-        SpellAbility onStack = null;
-        for (var instance : game.getStack()) {
-            SpellAbility candidate = instance.getSpellAbility();
-            if (candidate != null && candidate.getHostCard() == card) {
-                onStack = candidate;
-                break;
-            }
-        }
-        if (onStack == null || onStack.getTargets() == null) {
-            return "null";
-        }
-        List<String> targets = new ArrayList<>();
-        Json.ObjectWriter amounts = Json.object();
-        int chosen = 0;
-        for (GameEntity target : onStack.getTargets().getTargetEntities()) {
-            chosen++;
-            String id = Refs.ofAny(target).orElse(null);
-            if (id == null) {
-                continue;
-            }
-            targets.add(id);
-            Integer divided = onStack.getDividedValue(target);
-            if (divided != null) {
-                amounts.value(id, divided);
-            }
-        }
-        Json.ObjectWriter upTo = Json.object();
-        if (onStack.getTargetRestrictions() != null) {
-            upTo.value("chosen", chosen);
-        }
-        return Json.object()
-                .raw("targets", Json.stringArray(targets))
-                .raw("per_target_amounts", amounts.render())
-                .raw("up_to_counts", upTo.render())
-                .render();
-    }
-
-    /** Printed lines, as provenance keys into the card's own script. */
-    private List<ProvenanceKey> printedKeys(Card card) {
-        Set<ProvenanceKey> keys = new LinkedHashSet<>();
-        addKeys(keys, card.getSpellAbilities());
-        return List.copyOf(keys);
-    }
-
-    /**
-     * Attachment-granted lines only.
-     *
-     * <p>Temporary grants ride the overlay instead, and the two channels stay
-     * separate because the model reads them differently: an entity's ability
-     * tokens are its printed and attachment-granted lines, while a grant until
-     * end of turn is part of what happened to it rather than what it is.
-     */
-    private List<ProvenanceKey> grantedAttached(Card card) {
-        Set<ProvenanceKey> keys = new LinkedHashSet<>();
-        for (Card attachment : card.getAttachedCards()) {
-            addKeys(keys, attachment.getSpellAbilities());
-        }
-        return List.copyOf(keys);
-    }
-
-    /** Add every line's key that has one and is not already listed. */
-    private static void addKeys(Set<ProvenanceKey> into, Iterable<?> lines) {
-        for (Object line : lines) {
-            if (line instanceof SpellAbility sa) {
-                ProvenanceKey key = ProvenanceResolver.of(sa);
-                if (key != null) {
-                    into.add(key);
-                }
-            }
-        }
-    }
-
-    /** One part of a type line, as the snapshot's names. */
-    private static String typeNamesJson(Iterable<?> types) {
-        List<String> names = new ArrayList<>();
-        for (Object type : types) {
-            names.add(typeName(type));
-        }
-        return Json.stringArray(names);
-    }
-
-    /**
-     * One type-line name as the snapshot spells it.
-     *
-     * <p>Core types and supertypes arrive as enums and subtypes as strings, and
-     * a continuous record's contributions mix all three into one list. Shared so
-     * that a static's share of an entity's types is spelled the way the entity's
-     * own types are — a model that saw {@code Creature} in one and
-     * {@code creature} in the other would learn them as different types.
-     */
-    static String typeName(Object type) {
-        String name = type instanceof Enum<?> value ? value.name() : String.valueOf(type);
-        return name.toLowerCase(java.util.Locale.ROOT);
-    }
-
-    /**
-     * A colour set as the snapshot's letters, in WUBRG order.
-     *
-     * <p>Shared with the continuous record's contributions for the same reason
-     * {@link #typeName} is.
-     */
-    static List<String> colorLetters(ColorSet colors) {
-        List<String> letters = new ArrayList<>();
-        if (colors == null) {
-            return letters;
-        }
-        for (char color : COLORS) {
-            if (colors.hasAnyColor(MagicColor.fromName(String.valueOf(color)))) {
-                letters.add(String.valueOf(color));
-            }
-        }
-        return letters;
-    }
-
-    /**
-     * Targets, source and announced values for the acting ability.
-     *
-     * <p>Readable on its own because the refs block is the one part of a
-     * snapshot that is not read at the same moment as the rest: a collector
-     * re-reads it at resolution and hands it to {@link Snapshot#withRefs}.
-     */
-    String refsJson(SpellAbility acting) {
-        return refsJson(acting, null);
-    }
-
-    /**
-     * @param sourceOverride the host card of an acting line that is not a spell
-     *                       ability; used only when {@code acting} is null, so
-     *                       an acting ability still names its own host
-     */
-    private String refsJson(SpellAbility acting, Card sourceOverride) {
-        List<String> targets = new ArrayList<>();
-        String source = sourceOverride == null ? null : entityId(sourceOverride);
-        Integer x = null;
-        if (acting != null) {
-            if (acting.getHostCard() != null) {
-                source = entityId(acting.getHostCard());
-            }
-            if (acting.getTargets() != null) {
-                for (var target : acting.getTargets()) {
-                    Refs.ofAny(target).ifPresent(targets::add);
-                }
-            }
-            x = acting.getXManaCostPaid();
-            if (x == null) {
-                x = announcedX(acting);
-            }
-        }
-        return Json.object()
-                .raw("targets", Json.stringArray(targets))
-                .value("source", source)
-                .raw("modes", modesJson(acting))
-                .value("x", x)
-                .raw("choices", choicesJson(acting))
-                .render();
-    }
-
-    /**
-     * X when it was not paid into the mana cost.
-     *
-     * <p>{@code getXManaCostPaid()} answers only for an X the caster paid as
-     * mana, and that is the minority form. The common one is
-     * {@code SVar:X:Count$...} with the parameter key {@code NumDmg} or
-     * {@code Amount} holding the literal {@code X}: the ability has no {@code X}
-     * parameter at all and the announced value lives only in the SVar. So an X
-     * read from the mana payment alone is absent on exactly the cards whose X is
-     * the interesting part of the effect.
-     *
-     * <p>Computed rather than read, because a {@code Count$} SVar is an
-     * expression over the board and only the engine knows what it comes to. One
-     * that cannot be answered from this record's moment is recorded as absent
-     * rather than as zero -- a zero would say the caster announced nothing,
-     * which is a different claim.
-     */
-    private static Integer announcedX(SpellAbility acting) {
-        Card host = acting.getHostCard();
-        if (host == null) {
-            return null;
-        }
-        String amount = acting.getSVar("X");
-        if (amount == null || amount.isEmpty()) {
-            return null;
-        }
-        try {
-            return AbilityUtils.calculateAmount(host, amount, acting);
-        } catch (RuntimeException e) {
-            return null;
-        }
-    }
-
-    /**
-     * The modes chosen on a modal spell.
-     *
-     * <p>A charm's three modes are one card and three effects, and which was
-     * chosen is nowhere else in the record: the ability key is the same line
-     * either way.
-     */
-    private String modesJson(SpellAbility acting) {
-        List<String> modes = new ArrayList<>();
-        if (acting != null && acting.getChosenList() != null) {
-            // Forge keeps the chosen modes as the sub-abilities they select,
-            // so the mode is named by the clause it turns on.
-            for (var mode : acting.getChosenList()) {
-                modes.add(mode.getApi() == null ? "?" : mode.getApi().name());
-            }
-        }
-        return Json.stringArray(modes);
-    }
-
-    /**
-     * Resolution-time choices the engine asked the controller to make.
-     *
-     * <p>A named card, a chosen colour, a chosen type or number — each turns
-     * one line into a different effect, and the head reads them from
-     * {@code [ACT]} alongside the announced values.
-     */
-    private String choicesJson(SpellAbility acting) {
-        Json.ObjectWriter choices = Json.object();
-        if (acting == null || acting.getHostCard() == null) {
-            return choices.render();
-        }
-        Card host = acting.getHostCard();
-        addChoice(choices, "named_card", host.getNamedCard());
-        addChoice(choices, "chosen_color", host.getChosenColors() == null
-                ? null : String.join("|", host.getChosenColors()));
-        addChoice(choices, "chosen_type", host.getChosenType());
-        if (host.hasChosenNumber()) {
-            choices.value("chosen_number", host.getChosenNumber());
-        }
-        return choices.render();
-    }
-
-    private static void addChoice(Json.ObjectWriter into, String name, String value) {
-        if (value != null && !value.isEmpty()) {
-            into.value(name, value);
-        }
     }
 }

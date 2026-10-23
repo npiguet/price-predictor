@@ -101,7 +101,7 @@ final class InterventionFork {
             // the copy would make the record's identity depend on a game
             // that no longer exists.
             ProvenanceKey.Resolved keys = ProvenanceResolver.resolve(ability);
-            String actorId = SnapshotBuilder.playerId(perspective);
+            String actorId = Refs.of(perspective);
             // A modal resolution writes one half per chosen mode, by the same
             // rule the live bracket applies (FR-029f), each through the mode's
             // option line and with the board as it stood when that mode's
@@ -349,7 +349,7 @@ final class InterventionFork {
         public void onResolved(GameEventSpellResolved event) {
             if (onStack != null && refs == null && event.spell() != null
                     && event.spell().getId() == onStack.getId()) {
-                refs = snapshots.refsJson(onStack);
+                refs = RefsJson.render(onStack);
             }
         }
 

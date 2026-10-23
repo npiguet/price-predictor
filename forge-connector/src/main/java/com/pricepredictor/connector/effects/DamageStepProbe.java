@@ -97,8 +97,8 @@ final class DamageStepProbe {
             }
             return new HeldProbe(
                     ProbeScheduler.normalizeKeyword(keyword),
-                    SnapshotBuilder.entityId(carrier), state, dealt.events(),
-                    SnapshotBuilder.playerId(perspective), dealt.combat(),
+                    Refs.of(carrier), state, dealt.events(),
+                    Refs.of(perspective), dealt.combat(),
                     step,
                     // The *live* game's turn, which is also the fork's: the copier
                     // carries the counter across (GameCopier hands it to
