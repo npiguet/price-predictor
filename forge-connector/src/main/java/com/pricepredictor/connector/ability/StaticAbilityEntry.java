@@ -7,8 +7,10 @@ import forge.game.staticability.StaticAbility;
 import forge.game.staticability.StaticAbilityMode;
 
 /**
- * Ability wrapping a Forge StaticAbility. Dynamically returns STATIC or ADDITIONAL_COST
- * for self-targeting RaiseCost/OptionalCost statics.
+ * The line of a Forge StaticAbility: its normalized {@code Description$}. The
+ * type is fixed when the line is built — ADDITIONAL_COST for a RaiseCost or
+ * OptionalCost static that applies to the card itself, STATIC otherwise. A
+ * keyword's static renders as the keyword line instead, so it has none.
  */
 public record StaticAbilityEntry(AbilityType type, String descriptionText) implements Ability {
 
