@@ -634,10 +634,10 @@ class RulesParserTest {
 
     @Test
     void joinWithOrUsesTheSerialCommaFromThreeItems() {
-        assertEquals("a", RulesParser.joinWithOr(List.of("a")));
-        assertEquals("a or b", RulesParser.joinWithOr(List.of("a", "b")));
-        assertEquals("a, b, or c", RulesParser.joinWithOr(List.of("a", "b", "c")));
-        assertEquals("a, b, c, or d", RulesParser.joinWithOr(List.of("a", "b", "c", "d")));
+        assertEquals("a", FaceParser.joinWithOr(List.of("a")));
+        assertEquals("a or b", FaceParser.joinWithOr(List.of("a", "b")));
+        assertEquals("a, b, or c", FaceParser.joinWithOr(List.of("a", "b", "c")));
+        assertEquals("a, b, c, or d", FaceParser.joinWithOr(List.of("a", "b", "c", "d")));
     }
 
     // --- Smoke tests: cards whose shapes are error-prone to parse ---

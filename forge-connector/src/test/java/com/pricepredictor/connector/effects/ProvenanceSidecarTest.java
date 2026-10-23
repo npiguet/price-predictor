@@ -449,7 +449,7 @@ class ProvenanceSidecarTest {
                         "the sidecar numbered \"" + line.script().scriptText()
                                 + "\" as keyword@" + key.indexWithinKind()
                                 + " but FaceOrder.keywordIndex says keyword@"
-                                + expected + ". RulesParser.parseFace must compute"
+                                + expected + ". FaceParser.parseKeywords must compute"
                                 + " the ordinal with FaceOrder.keywordIndex("
                                 + "card.getCurrentState(), ki) rather than with a"
                                 + " running counter over card.getKeywords(), or"
