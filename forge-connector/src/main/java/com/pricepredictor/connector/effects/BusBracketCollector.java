@@ -14,7 +14,6 @@ import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.ZoneType;
 
 import java.lang.reflect.InvocationHandler;
 import java.util.ArrayList;
@@ -85,20 +84,8 @@ public final class BusBracketCollector extends BusEventReader {
      */
     private Integer finishing;
 
-    /**
-     * What a card on its way onto the stack set off before its cast was
-     * announced, or null when no cast is under way ({@link Cause#CAST}).
-     */
-    private PreCast preCast;
-
-    /** Cards whose arrival in the stack zone has been published, while they are there. */
-    private final Set<Integer> arrived = new LinkedHashSet<>();
-
-    /**
-     * Cards in the stack zone whose cast was given up, while they are there;
-     * see {@link #castUnderWay}.
-     */
-    private final Set<Integer> abandoned = new LinkedHashSet<>();
+    /** The cast on its way onto the stack, if one is, and what it set off ({@link Cause#CAST}). */
+    private final CastsUnderWay castsUnderWay;
 
     /** The resolution waiting for its consequences, or null when none is. */
     private HeldResolution held;
@@ -183,83 +170,6 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * One chosen mode of the open modal resolution, once its first clause has
-     * resolved (FR-029a).
-     *
-     * <p>The snapshot is taken at that clause, so a later mode's board shows
-     * the earlier modes' effects (FR-029b); the events are what landed in the
-     * bracket between this mode's first clause and the next mode's, or the
-     * end of the resolution. {@code option} is the mode's {@code Choices$}
-     * position, or null for a mode nothing could place, whose half keeps the
-     * root key.
-     */
-    private static final class ModeHalf {
-        private final Integer option;
-        private final Snapshot state;
-        private final List<EffectEvent> events = new ArrayList<>();
-
-        private ModeHalf(Integer option, Snapshot state) {
-            this.option = option;
-            this.state = state;
-        }
-    }
-
-    /**
-     * A modal resolution's chosen modes, split at each mode's first clause.
-     *
-     * <p>Owned by the {@link OpenResolution} it splits, so it goes wherever
-     * that resolution goes and no other resolution ever sees it. That matters
-     * for a mode that casts a spell (Tetsuo, Imperial Champion's second mode):
-     * Forge resolves nothing inside a resolution, so the cast spell's
-     * {@code GameEventSpellAbilityCast} arrives in the middle of the mode, the
-     * charm then finishes and publishes its {@code GameEventSpellResolved},
-     * and the spell resolves afterwards, on its own. The charm keeps its
-     * bracket, and so its split, until its own resolution closes them; the
-     * spell's bracket opens later with a split of its own, empty.
-     */
-    private static final class ModeSplit {
-        /** The modes whose halves are complete, in order. */
-        private final List<ModeHalf> complete = new ArrayList<>();
-        /** The mode whose clauses are resolving now, or null outside one. */
-        private ModeHalf current;
-
-        /** Complete the current mode's half and open one for the next mode. */
-        void begin(Integer option, Snapshot state, EventBuffer bracketEvents) {
-            close(bracketEvents);
-            current = new ModeHalf(option, state);
-        }
-
-        /** Move the bracket's events into the current mode's half and complete it. */
-        void close(EventBuffer bracketEvents) {
-            if (current == null) {
-                return;
-            }
-            current.events.addAll(bracketEvents.drain());
-            complete.add(current);
-            current = null;
-        }
-
-        /** Whether no mode's half is complete: the resolution writes one root half. */
-        boolean isEmpty() {
-            return complete.isEmpty();
-        }
-
-        /** Whether any complete half holds an event. */
-        boolean anyEvents() {
-            for (ModeHalf half : complete) {
-                if (!half.events.isEmpty()) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        List<ModeHalf> complete() {
-            return complete;
-        }
-    }
-
-    /**
      * The brackets of the stack items this collector saw cast, mirroring
      * Forge's stack: one per item, keyed by its ability's id, which is the key
      * {@code MagicStack} itself finds an item by
@@ -340,30 +250,17 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * One effect half that has finished resolving and is not written yet.
-     *
-     * <p>Everything but the events is fixed at the resolution — the id, the
-     * timestamp, the key and the board, which is the one taken before the
-     * resolution. The events can still grow, by the deaths
-     * the resolution's own effects cause; see {@link HeldResolution}.
-     *
-     * @param touched the entity refs this half's own events name as subjects,
-     *                which choose the half a death joins on a modal resolution
+     * What one held effect half's record says besides its events, all of it
+     * fixed at the resolution — the id, the timestamp, the key and the board,
+     * which is the one taken before the resolution. The events can still
+     * grow, by the deaths the resolution's own effects cause; see {@link
+     * HeldResolution}.
      */
-    private record HeldHalf(
-            String recordId,
-            String timestamp,
-            ProvenanceKey.Resolved keys,
-            String state,
-            EventBuffer events,
-            Set<String> touched) {
+    private record HalfRecord(
+            String recordId, String timestamp, ProvenanceKey.Resolved keys, String state) {
 
-        static HeldHalf of(
-                String recordId, ProvenanceKey.Resolved keys, String state,
-                List<EffectEvent> events) {
-            return new HeldHalf(
-                    recordId, RecordShardWriter.timestamp(), keys, state,
-                    EventBuffer.copyOf(events), touchedBy(events));
+        static HalfRecord of(String recordId, ProvenanceKey.Resolved keys, String state) {
+            return new HalfRecord(recordId, RecordShardWriter.timestamp(), keys, state);
         }
     }
 
@@ -388,7 +285,7 @@ public final class BusBracketCollector extends BusEventReader {
      * @param root the resolved ability, which the deaths are stamped against
      */
     private record HeldResolution(
-            SpellAbility root, String actor, String linkId, List<HeldHalf> halves) {
+            SpellAbility root, String actor, String linkId, HeldHalves<HalfRecord> halves) {
     }
 
     /**
@@ -499,10 +396,10 @@ public final class BusBracketCollector extends BusEventReader {
         super(game);
         this.context = context;
         this.snapshots = new SnapshotBuilder(game);
+        this.castsUnderWay = new CastsUnderWay(
+                game, abilityId -> pending.find(abilityId).isPresent());
         this.onCombatRecord = onCombatRecord;
     }
-
-    // ── brackets ────────────────────────────────────────────────────────
 
     /**
      * A cast opens a bracket and holds the cost half until its outcome is known.
@@ -558,13 +455,13 @@ public final class BusBracketCollector extends BusEventReader {
         } else {
             openBracket(cast);
             // What the card's move onto the stack set off is this cast's.
-            if (cast != null && preCast != null && preCast.isFor(ability.getHostCard())) {
-                preCast.fileInto(cast);
+            if (cast != null) {
+                castsUnderWay.fileHeldInto(cast.ability, cast.events);
             }
             // Any other card still on its way was given up: one cast at a time.
-            abandonCastsUnderWay();
+            castsUnderWay.abandonAll();
         }
-        preCast = null;
+        castsUnderWay.dropHeld();
         if (cast == null) {
             return;
         }
@@ -693,7 +590,7 @@ public final class BusBracketCollector extends BusEventReader {
         open = null;
         orphans.clear();
         finishing = abilityId;
-        preCast = null;
+        castsUnderWay.dropHeld();
     }
 
     /** What became of a cast that has left the stack through a resolution. */
@@ -717,30 +614,24 @@ public final class BusBracketCollector extends BusEventReader {
      * happened yet. See {@link HeldResolution}.
      */
     private void holdEffectHalves(OpenResolution resolved, String link) {
-        if (resolved.modes.isEmpty()) {
-            held = new HeldResolution(resolved.ability, resolved.actor, link, List.of(HeldHalf.of(
-                    context.nextRecordId(), resolved.keys,
-                    // Modes, X and the named card are set while the ability
-                    // resolves, so the block that carries them is re-read here
-                    // and paired with the board captured at the cast.
-                    resolved.state.withRefs(snapshots.refsJson(resolved.ability)).render(),
-                    resolved.events.events())));
-            return;
-        }
-        // A modal resolution on a patched worker: one effect half per chosen
-        // mode, each through the mode's own option line, every one of them
-        // under the cost half's link (FR-029a, FR-029d). The events a mode
-        // produced are its own and nothing else's; a mode that fizzled on its
-        // own carries an empty list under its key, which is what the schema
-        // says of any resolution that did nothing observable.
+        // Modes, X and the named card are set while the ability resolves, so
+        // the block that carries them is re-read here and paired with the
+        // board each half was captured with: the cast's for a root half, the
+        // mode's first clause's for a mode's.
         String refs = snapshots.refsJson(resolved.ability);
-        List<HeldHalf> halves = new ArrayList<>();
-        for (ModeHalf half : resolved.modes.complete()) {
-            halves.add(HeldHalf.of(
-                    context.nextRecordId(), resolved.keys.withOption(half.option),
-                    half.state.withRefs(refs).render(), half.events));
+        // A modal resolution on a patched worker writes one effect half per
+        // chosen mode, each through the mode's own option line, every one of
+        // them under the cost half's link (FR-029a, FR-029d). A mode that
+        // fizzled on its own carries an empty list under its key, which is
+        // what the schema says of any resolution that did nothing observable.
+        HeldHalves<HalfRecord> halves = new HeldHalves<>();
+        for (ModeSplit.ModeHalf half
+                : resolved.modes.halves(resolved.state, resolved.events.events())) {
+            halves.add(HalfRecord.of(
+                    context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
+                    half.mode().state().withRefs(refs).render()), half.events());
         }
-        held = new HeldResolution(resolved.ability, resolved.actor, link, List.copyOf(halves));
+        held = new HeldResolution(resolved.ability, resolved.actor, link, halves);
     }
 
     /**
@@ -778,15 +669,13 @@ public final class BusBracketCollector extends BusEventReader {
      * (a static it brought), not the held resolution's.
      *
      * <p>No cast is under way across it either: a card a failed play left in
-     * the stack zone is a cast given up from here ({@link #castUnderWay}).
+     * the stack zone is a cast given up from here ({@link CastsUnderWay}).
      */
     @Subscribe
     public void onLandPlayed(GameEventLandPlayed event) {
         onNextAction();
-        abandonCastsUnderWay();
+        castsUnderWay.abandonAll();
     }
-
-    // ── the two boundaries ──────────────────────────────────────────────
 
     /**
      * A new action has begun, so the held resolution's state-based
@@ -801,14 +690,15 @@ public final class BusBracketCollector extends BusEventReader {
         }
         HeldResolution writing = held;
         held = null;
-        for (HeldHalf half : writing.halves()) {
+        for (HeldHalves.Half<HalfRecord> half : writing.halves().halves()) {
+            HalfRecord record = half.about();
             context.emit(context.newResolution(
-                    Moment.RESOLUTION, half.recordId(), half.timestamp())
+                    Moment.RESOLUTION, record.recordId(), record.timestamp())
                     .actor(writing.actor())
-                    .ability(half.keys())
+                    .ability(record.keys())
                     .linkId(writing.linkId())
-                    .state(half.state())
-                    .payload(EffectRecord.eventsPayload(half.events().events())));
+                    .state(record.state())
+                    .payload(EffectRecord.eventsPayload(half.events())));
         }
     }
 
@@ -821,7 +711,7 @@ public final class BusBracketCollector extends BusEventReader {
         flushCombat();
         combatWindowClosed = false;
         // No cast is under way across a step boundary either.
-        abandonCastsUnderWay();
+        castsUnderWay.abandonAll();
     }
 
     /**
@@ -835,8 +725,6 @@ public final class BusBracketCollector extends BusEventReader {
             combatWindowClosed = true;
         }
     }
-
-    // ── outcome events ──────────────────────────────────────────────────
 
     @Override
     boolean cardDamageIsCombat() {
@@ -856,7 +744,7 @@ public final class BusBracketCollector extends BusEventReader {
             EventAttribution.stamp(damage, resolving(), namedCause);
             fileCombat(damage);
         } else {
-            route(damage, namedCause, causeNow(), false);
+            route(damage, namedCause, now(), false);
         }
     }
 
@@ -899,8 +787,9 @@ public final class BusBracketCollector extends BusEventReader {
      *
      * <p>A modal resolution files the move into the half whose events named
      * the permanent, the last of them when several did — the mode that was
-     * the last to change it — and into the last half when none did. The cost
-     * half and the link are the resolution's and do not move.
+     * the last to change it — and into the last half when none did ({@link
+     * HeldHalves#fileDeath}). The cost half and the link are the resolution's
+     * and do not move.
      *
      * <p><b>Stamped against the resolved ability, with no clause.</b> The
      * death is a state-based action rather than anything a clause did, so
@@ -919,53 +808,10 @@ public final class BusBracketCollector extends BusEventReader {
         if (held == null || !isStateBasedLeave(event)) {
             return false;
         }
-        List<Set<String>> touched = new ArrayList<>();
-        for (HeldHalf half : held.halves()) {
-            touched.add(half.touched());
-        }
-        HeldHalf into = held.halves().get(
-                halfForDeath(touched, Refs.of(event.card())));
-        into.events().file(EventAttribution.stampAt(moved, held.root(), null, null));
+        held.halves().fileDeath(
+                EventAttribution.stampAt(moved, held.root(), null, null), Refs.of(event.card()));
         return true;
     }
-
-    /**
-     * The entity refs a half's own events name as subjects: what it damaged,
-     * pumped, shrank, countered, animated or moved.
-     */
-    static Set<String> touchedBy(List<EffectEvent> events) {
-        Set<String> touched = new LinkedHashSet<>();
-        for (EffectEvent event : events) {
-            for (String subject : event.subjects()) {
-                if (Refs.isEntity(subject)) {
-                    touched.add(subject);
-                }
-            }
-        }
-        return touched;
-    }
-
-    /**
-     * Which of a resolution's halves a state-based death belongs to: the last
-     * whose events named the permanent, or the last half when none did.
-     *
-     * <p>One rule for the live collector and for a modal fork, so an observed
-     * and a forced resolution of the same charm file the same death the same
-     * way.
-     *
-     * @param touchedPerHalf each half's {@link #touchedBy} set, in order;
-     *                       never empty
-     */
-    static int halfForDeath(List<Set<String>> touchedPerHalf, String subject) {
-        for (int i = touchedPerHalf.size() - 1; i >= 0; i--) {
-            if (touchedPerHalf.get(i).contains(subject)) {
-                return i;
-            }
-        }
-        return touchedPerHalf.size() - 1;
-    }
-
-    // ── plumbing ────────────────────────────────────────────────────────
 
     /**
      * Route an event into whichever bracket it is a consequence of.
@@ -973,7 +819,7 @@ public final class BusBracketCollector extends BusEventReader {
      * <p>State-based-action deaths arrive with no ability resolving, after the
      * bracket that caused them has closed. The ones it caused never reach
      * here: {@link #holdAsConsequence} files them into its held effect half.
-     * The rest are routed by {@link #causeNow} like any other event.
+     * The rest are routed by {@link #now} like any other event.
      */
     private void record(EffectEvent event) {
         fileOutcome(event, null);
@@ -987,7 +833,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
-        route(event, namedCause, causeNow(), true);
+        route(event, namedCause, now(), true);
     }
 
     /**
@@ -1022,12 +868,12 @@ public final class BusBracketCollector extends BusEventReader {
          */
         PAYMENT,
         /**
-         * A cast is under way and not yet announced ({@link #castUnderWay}):
+         * A cast is under way and not yet announced ({@link CastsUnderWay}):
          * the static check its card's move onto the stack set off ({@code
          * GameAction.changeZone} runs one before the cast is pushed), and the
          * one {@code MagicStack.push} runs after the push and before the cast
          * event. The cast's own consequence, held for its bracket until its
-         * cast event opens it ({@link PreCast}).
+         * cast event opens it.
          */
         CAST,
         /**
@@ -1054,7 +900,17 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * The {@link Cause} of an event published now.
+     * The {@link Cause} of an event published now, with the card being cast
+     * when the cause is {@link Cause#CAST}, or null.
+     */
+    private record Now(Cause cause, Card casting) {
+        Now(Cause cause) {
+            this(cause, null);
+        }
+    }
+
+    /**
+     * What an event published now is a consequence of.
      *
      * <p>Read off the engine's own state, in this order: the stack resolving;
      * {@code game.costPaymentStack}, which {@code CostPayment} keeps for every
@@ -1063,23 +919,33 @@ public final class BusBracketCollector extends BusEventReader {
      * StackActions}). What is left — a state-based check, which freezes the
      * stack naming no action, or nothing at all — is a consequence of what
      * came before.
+     *
+     * <p>Not a pure read: it follows a resolution that has begun ({@link
+     * #followResolution}), and keeps the marks {@link CastsUnderWay#cardBeingCast}
+     * keeps.
      */
-    private Cause causeNow() {
+    private Now now() {
         if (game.getStack().isResolving()) {
             followResolution();
-            return payingForACast(resolving()) ? Cause.PAYMENT : Cause.RESOLUTION;
+            return new Now(payingForACast(resolving()) ? Cause.PAYMENT : Cause.RESOLUTION);
         }
         if (game.costPaymentStack.peek() != null) {
-            return Cause.PAYMENT;
+            return new Now(Cause.PAYMENT);
         }
         SpellAbility acting = StackActions.inProgress(game.getStack());
-        if (castUnderWay(acting) != null) {
-            return Cause.CAST;
+        Card casting = castsUnderWay.cardBeingCast(acting);
+        if (casting != null) {
+            return new Now(Cause.CAST, casting);
         }
         if (acting != null) {
-            return isOpenCast(acting) ? Cause.CONSEQUENCE : Cause.ACTION;
+            return new Now(isOpenCast(acting) ? Cause.CONSEQUENCE : Cause.ACTION);
         }
-        return Cause.CONSEQUENCE;
+        return new Now(Cause.CONSEQUENCE);
+    }
+
+    /** {@link #now}'s cause alone, for a caller with no event to file. */
+    private Cause causeNow() {
+        return now().cause();
     }
 
     /** Whether what has this cause belongs with the open bracket, if one is open. */
@@ -1100,25 +966,19 @@ public final class BusBracketCollector extends BusEventReader {
      *                    the bus says is not combat damage goes to the open
      *                    bracket ({@link #fileDamage})
      */
-    private void route(EffectEvent event, String namedCause, Cause cause, boolean mayBeCombat) {
-        if (cause != Cause.CAST && cause != Cause.PAYMENT) {
+    private void route(EffectEvent event, String namedCause, Now now, boolean mayBeCombat) {
+        if (now.cause() != Cause.CAST && now.cause() != Cause.PAYMENT) {
             // The cast under way has been announced or abandoned: what its
             // window held is taken or dropped.
-            preCast = null;
+            castsUnderWay.dropHeld();
         }
-        switch (cause) {
+        switch (now.cause()) {
             case PAYMENT -> {
                 if (!game.getStack().isResolving()) {
                     open = null;
                 }
             }
-            case CAST -> {
-                Card card = castUnderWay(StackActions.inProgress(game.getStack()));
-                if (preCast == null || !preCast.isFor(card)) {
-                    preCast = new PreCast(card.getId());
-                }
-                preCast.hold(event, namedCause);
-            }
+            case CAST -> castsUnderWay.hold(now.casting(), event, namedCause);
             case ACTION -> open = null;
             case CONSEQUENCE -> {
                 EventAttribution.stamp(event, resolving(), namedCause);
@@ -1152,116 +1012,12 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Subscribe
     public void onPriority(GameEventPlayerPriority event) {
-        abandonCastsUnderWay();
+        castsUnderWay.abandonAll();
     }
 
     @Override
     void onStackArrival(int cardId) {
-        // One cast is under way at a time: a new card on its way means any
-        // other still in the zone with no stack item was given up.
-        abandonCastsUnderWayBut(cardId);
-        // A card keeps its id across zones: a mark from an earlier attempt
-        // is not this one's.
-        abandoned.remove(cardId);
-        arrived.add(cardId);
-    }
-
-    /**
-     * The card of the cast under way, or null when none is.
-     *
-     * <p>A cast is under way from the moment its card is in the stack zone to
-     * its cast event: before the card's arrival is published; after it, while
-     * no action names anything else — the play path chooses targets before
-     * {@code freezeStack} names the cast — and while the action in progress
-     * is that card's cast; and from the push to the cast event, while the
-     * stack's top is the action in progress and not yet announced.
-     *
-     * <p>A card in the stack zone that no stack item holds is otherwise a cast
-     * given up — {@code ComputerUtil.handlePlayingSpellAbility} returns on a
-     * failed charm choice, target check or payment without moving it back —
-     * and it stops counting until it leaves the zone, so that what follows
-     * routes as if it were not there. Given up is read at the first sign the
-     * attempt is over: another action in progress, another card's arrival,
-     * a cast event, a priority, a land played, a step boundary
-     * ({@link #abandoned}).
-     *
-     * @param acting the action in progress, or null
-     */
-    private Card castUnderWay(SpellAbility acting) {
-        Set<Integer> held = new LinkedHashSet<>();
-        for (var instance : game.getStack()) {
-            SpellAbility sa = instance == null ? null : instance.getSpellAbility();
-            if (sa != null && sa.getHostCard() != null) {
-                held.add(sa.getHostCard().getId());
-            }
-        }
-        List<Card> zone = new ArrayList<>(game.getCardsIn(ZoneType.Stack));
-        Set<Integer> inZone = new LinkedHashSet<>();
-        zone.forEach(card -> inZone.add(card.getId()));
-        arrived.retainAll(inZone);
-        abandoned.retainAll(inZone);
-        // Pushed and not yet announced: MagicStack.push's own static check.
-        var top = game.getStack().peek();
-        SpellAbility pushed = top == null ? null : top.getSpellAbility();
-        if (acting != null && pushed != null && pushed.getHostCard() != null
-                && pending.find(pushed.getId()).isEmpty()
-                && (pushed == acting || pushed.getOriginalAbility() == acting)) {
-            return pushed.getHostCard();
-        }
-        // On its way, its arrival not yet published: the newest move.
-        for (Card card : zone) {
-            int id = card.getId();
-            if (!held.contains(id) && !abandoned.contains(id) && !arrived.contains(id)) {
-                return card;
-            }
-        }
-        // Arrived: under way until its targets are chosen and the action
-        // names it, and for as long as it does. Any other action means it
-        // was given up.
-        for (Card card : zone) {
-            int id = card.getId();
-            if (held.contains(id) || abandoned.contains(id)) {
-                continue;
-            }
-            if (acting == null || isCastOf(acting, card)) {
-                return card;
-            }
-            abandoned.add(id);
-        }
-        return null;
-    }
-
-    /** Whether the action in progress is casting {@code card}. */
-    private static boolean isCastOf(SpellAbility acting, Card card) {
-        return acting != null && acting.getHostCard() != null
-                && acting.getHostCard().getId() == card.getId();
-    }
-
-    /** Every card in the stack zone that no stack item holds is a cast given up. */
-    private void abandonCastsUnderWay() {
-        abandonCastsUnderWayBut(-1);
-    }
-
-    /**
-     * The same, but for the card {@code keep}, whose cast is the one now
-     * under way, and what its window has held so far.
-     */
-    private void abandonCastsUnderWayBut(int keep) {
-        Set<Integer> held = new LinkedHashSet<>();
-        for (var instance : game.getStack()) {
-            SpellAbility sa = instance == null ? null : instance.getSpellAbility();
-            if (sa != null && sa.getHostCard() != null) {
-                held.add(sa.getHostCard().getId());
-            }
-        }
-        for (Card card : game.getCardsIn(ZoneType.Stack)) {
-            if (!held.contains(card.getId()) && card.getId() != keep) {
-                abandoned.add(card.getId());
-            }
-        }
-        if (preCast != null && !preCast.isFor(keep)) {
-            preCast = null;
-        }
+        castsUnderWay.onStackArrival(cardId);
     }
 
     /**
@@ -1272,46 +1028,6 @@ public final class BusBracketCollector extends BusEventReader {
     private boolean isOpenCast(SpellAbility acting) {
         return open != null
                 && (open.ability == acting || open.ability.getOriginalAbility() == acting);
-    }
-
-    /**
-     * What a card on its way onto the stack set off before its cast was
-     * announced, held for that cast's bracket.
-     *
-     * <p>Held raw and stamped when the cast opens, against the cast's own
-     * ability: when they were published there was no bracket to stamp them
-     * against. Dropped if the cast is abandoned and no cast event follows.
-     */
-    private static final class PreCast {
-        private record Held(EffectEvent event, String namedCause) {
-        }
-
-        private final int cardId;
-        private final List<Held> events = new ArrayList<>();
-
-        private PreCast(int cardId) {
-            this.cardId = cardId;
-        }
-
-        boolean isFor(Card card) {
-            return card != null && isFor(card.getId());
-        }
-
-        boolean isFor(int id) {
-            return id == cardId;
-        }
-
-        void hold(EffectEvent event, String namedCause) {
-            events.add(new Held(event, namedCause));
-        }
-
-        /** File what was held into the cast's bracket, stamped against its ability. */
-        void fileInto(OpenResolution cast) {
-            for (Held held : events) {
-                cast.events.file(EventAttribution.stampAt(
-                        held.event(), cast.ability, null, held.namedCause()));
-            }
-        }
     }
 
     /** The ability the open bracket attributes to, or null when none is open. */
@@ -1343,8 +1059,6 @@ public final class BusBracketCollector extends BusEventReader {
         }
         open = cast;
     }
-
-    // ── the modes of a modal resolution ─────────────────────────────────
 
     /**
      * A chosen mode's first clause is resolving: close the previous mode's
@@ -1379,8 +1093,6 @@ public final class BusBracketCollector extends BusEventReader {
                 ? null
                 : SnapshotBuilder.playerId(ability.getActivatingPlayer());
     }
-
-    // ── the outcome of a cast ───────────────────────────────────────────
 
     /**
      * A cast that has been observed but whose outcome is not settled.
@@ -1497,7 +1209,7 @@ public final class BusBracketCollector extends BusEventReader {
     private Set<Integer> idsOnStack() {
         Set<Integer> onStack = new LinkedHashSet<>();
         for (var instance : game.getStack()) {
-            SpellAbility sa = instance == null ? null : instance.getSpellAbility();
+            SpellAbility sa = instance.getSpellAbility();
             if (sa != null) {
                 onStack.add(sa.getId());
             }
@@ -1523,8 +1235,6 @@ public final class BusBracketCollector extends BusEventReader {
         }
         return removed.size();
     }
-
-    // ── the end of the game ─────────────────────────────────────────────
 
     /**
      * The last thing that happens to a game, and the last chance to write.
@@ -1591,8 +1301,6 @@ public final class BusBracketCollector extends BusEventReader {
         }
         return abandoned.size();
     }
-
-    // ── an offer the controller turned down ─────────────────────────────
 
     /**
      * Notice that the controller said no to something.
@@ -1669,8 +1377,6 @@ public final class BusBracketCollector extends BusEventReader {
         // The events of an earlier mode have already moved into its half.
         return resolved.declined && resolved.events.isEmpty() && !resolved.modes.anyEvents();
     }
-
-    // ── combat ──────────────────────────────────────────────────────────
 
     /**
      * Whether the game is in either combat damage step.

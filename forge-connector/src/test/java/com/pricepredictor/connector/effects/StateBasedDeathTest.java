@@ -567,9 +567,9 @@ class StateBasedDeathTest {
     @Test
     void aDeathNoModeNamedJoinsTheLastHalf() {
         List<Set<String>> touched = List.of(Set.of("E1", "E2"), Set.of("E2"), Set.of("P0"));
-        assertEquals(0, BusBracketCollector.halfForDeath(touched, "E1"));
-        assertEquals(1, BusBracketCollector.halfForDeath(touched, "E2"));
-        assertEquals(2, BusBracketCollector.halfForDeath(touched, "E9"));
+        assertEquals(0, HeldHalves.halfForDeath(touched, "E1"));
+        assertEquals(1, HeldHalves.halfForDeath(touched, "E2"));
+        assertEquals(2, HeldHalves.halfForDeath(touched, "E9"));
     }
 
     // ── forks ───────────────────────────────────────────────────────────
