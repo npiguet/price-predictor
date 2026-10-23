@@ -240,7 +240,7 @@ class EffectRecordTest {
 
     @Test
     void anEventCarriesItsTypeSubjectsAndParams() {
-        String json = new EffectEvent(EffectEvent.DAMAGE_DEALT)
+        String json = new EffectEvent(EventType.DAMAGE_DEALT)
                 .subject("E12").param("amount", 3).param("combat", true)
                 .toJson();
         assertTrue(json.contains("\"type\":\"damage_dealt\""), json);
@@ -251,29 +251,29 @@ class EffectRecordTest {
 
     @Test
     void aNullParamIsOmittedRatherThanWrittenAsNull() {
-        String json = new EffectEvent(EffectEvent.ZONE_CHANGE)
+        String json = new EffectEvent(EventType.ZONE_CHANGE)
                 .subject("E1").param("to_zone", null).toJson();
         assertTrue(json.contains("\"params\":{}"), json);
     }
 
     @Test
     void aContinuousOutcomeCarriesItsDuration() {
-        String json = new EffectEvent(EffectEvent.PT_CHANGE)
+        String json = new EffectEvent(EventType.PT_CHANGE)
                 .subject("E1").duration(EventDuration.END_OF_TURN).toJson();
         assertTrue(json.contains("\"duration\":\"end_of_turn\""), json);
     }
 
     @Test
     void anEventAttributesToItsSubAbilityLinkOrToTheRootLine() {
-        assertTrue(new EffectEvent(EffectEvent.DAMAGE_DEALT).toJson()
+        assertTrue(new EffectEvent(EventType.DAMAGE_DEALT).toJson()
                 .contains("\"attributed_to\":null"));
-        assertTrue(new EffectEvent(EffectEvent.DAMAGE_DEALT).attributedTo("0")
+        assertTrue(new EffectEvent(EventType.DAMAGE_DEALT).attributedTo("0")
                 .toJson().contains("\"attributed_to\":\"0\""));
     }
 
     @Test
     void aMapParamRendersAsAnObject() {
-        String json = new EffectEvent(EffectEvent.MANA_PRODUCED)
+        String json = new EffectEvent(EventType.MANA_PRODUCED)
                 .subject("P0")
                 .param("mana_by_color", java.util.Map.of("R", 2))
                 .toJson();

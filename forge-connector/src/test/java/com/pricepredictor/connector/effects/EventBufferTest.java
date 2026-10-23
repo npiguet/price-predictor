@@ -42,13 +42,13 @@ class EventBufferTest {
     }
 
     private static EffectEvent zoneChange() {
-        return new EffectEvent(EffectEvent.ZONE_CHANGE)
+        return new EffectEvent(EventType.ZONE_CHANGE)
                 .subject("E7").param("from_zone", "hand")
                 .param("to_zone", "battlefield");
     }
 
     private static EffectEvent oneDamage() {
-        return new EffectEvent(EffectEvent.DAMAGE_DEALT)
+        return new EffectEvent(EventType.DAMAGE_DEALT)
                 .subject("E7").param("amount", 1).param("combat", true);
     }
 }

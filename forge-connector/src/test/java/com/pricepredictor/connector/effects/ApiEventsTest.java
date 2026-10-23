@@ -69,7 +69,7 @@ class ApiEventsTest {
         EffectEvent event = after(sa, before(sa));
 
         assertNotNull(event);
-        assertEquals(EffectEvent.TURN_ADDED, event.type());
+        assertEquals(EventType.TURN_ADDED, event.type());
         assertEquals(1, event.params().get("count"));
     }
 
@@ -87,7 +87,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.PHASE_SKIPPED, event.type());
+        assertEquals(EventType.PHASE_SKIPPED, event.type());
         assertEquals("BeginCombat", event.params().get("phase"));
     }
 
@@ -106,7 +106,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.TURN_SKIPPED, event.type());
+        assertEquals(EventType.TURN_SKIPPED, event.type());
         assertEquals(1, event.params().get("count"));
     }
 
@@ -117,7 +117,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.PHASE_ADDED, event.type());
+        assertEquals(EventType.PHASE_ADDED, event.type());
         assertEquals("Combat", event.params().get("phase"));
         assertEquals(2, event.params().get("count"));
     }
@@ -139,7 +139,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.OWNERSHIP_CHANGE, event.type());
+        assertEquals(EventType.OWNERSHIP_CHANGE, event.type());
     }
 
     /**
@@ -286,7 +286,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sub, before(sub));
 
-        assertEquals(EffectEvent.TURN_SKIPPED, event.type());
+        assertEquals(EventType.TURN_SKIPPED, event.type());
         assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
     }
 
@@ -300,7 +300,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, memo);
 
-        assertEquals(EffectEvent.CHOICE_MADE, event.type());
+        assertEquals(EventType.CHOICE_MADE, event.type());
         assertEquals("color", event.params().get("choice_kind"));
         assertEquals("red", event.params().get("value"));
     }
@@ -378,7 +378,7 @@ class ApiEventsTest {
         Set<String> choiceMadeApis = new TreeSet<>();
         for (ApiType api : ApiType.values()) {
             ApiEvents.Rule rule = ApiEvents.ruleFor(api);
-            if (rule != null && EffectEvent.CHOICE_MADE.equals(rule.eventType())) {
+            if (rule != null && EventType.CHOICE_MADE.equals(rule.eventType())) {
                 choiceMadeApis.add(api.name());
             }
         }
@@ -395,7 +395,7 @@ class ApiEventsTest {
             EffectEvent event = after(sa, before(sa));
 
             assertNotNull(event, fixture.getKey() + " -- choice() reported nothing");
-            assertEquals(EffectEvent.CHOICE_MADE, event.type(), fixture.getKey());
+            assertEquals(EventType.CHOICE_MADE, event.type(), fixture.getKey());
             assertEquals(
                     fixture.getValue().expectedKind(), event.params().get("choice_kind"),
                     fixture.getKey());
@@ -451,7 +451,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sub, memo);
 
-        assertEquals(EffectEvent.DAMAGE_HEALED, event.type());
+        assertEquals(EventType.DAMAGE_HEALED, event.type());
         assertEquals(3, event.params().get("amount"));
     }
 
@@ -470,7 +470,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.ABILITY_CHANGE, event.type());
+        assertEquals(EventType.ABILITY_CHANGE, event.type());
         assertEquals(true, event.params().get("removed"));
     }
 
@@ -481,7 +481,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.CONTINUOUS_EFFECT_CREATED, event.type());
+        assertEquals(EventType.CONTINUOUS_EFFECT_CREATED, event.type());
         assertEquals("STCantPrevent", event.params().get("layers"));
     }
 
@@ -510,7 +510,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.TARGETS_CHANGED, event.type());
+        assertEquals(EventType.TARGETS_CHANGED, event.type());
         assertEquals(List.of(SnapshotBuilder.entityId(newTarget)), event.params().get("targets"));
     }
 
@@ -542,7 +542,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.TARGETS_CHANGED, event.type());
+        assertEquals(EventType.TARGETS_CHANGED, event.type());
         assertEquals(List.of(SnapshotBuilder.playerId(newTarget)), event.params().get("targets"));
     }
 
@@ -564,7 +564,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.CHOICE_MADE, event.type());
+        assertEquals(EventType.CHOICE_MADE, event.type());
         assertEquals("number", event.params().get("choice_kind"));
         assertEquals("7", event.params().get("value"));
     }
@@ -578,9 +578,9 @@ class ApiEventsTest {
 
         /** How the report names the half that failed. */
         final String names;
-        final BiConsumer<String, RuntimeException> report;
+        final BiConsumer<EventType, RuntimeException> report;
 
-        Report(String names, BiConsumer<String, RuntimeException> report) {
+        Report(String names, BiConsumer<EventType, RuntimeException> report) {
             this.names = names;
             this.report = report;
         }
@@ -603,9 +603,9 @@ class ApiEventsTest {
     @EnumSource(Report.class)
     void aFailureIsReportedExactlyOnceOnStderr(Report half) throws Throwable {
         String output = StdStreams.captureStderr(() -> {
-            half.report.accept("turn_added", new RuntimeException("boom"));
-            half.report.accept("turn_added", new RuntimeException("boom"));
-            half.report.accept("x_changed", new RuntimeException("boom again"));
+            half.report.accept(EventType.TURN_ADDED, new RuntimeException("boom"));
+            half.report.accept(EventType.TURN_ADDED, new RuntimeException("boom"));
+            half.report.accept(EventType.X_CHANGED, new RuntimeException("boom again"));
         });
 
         long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
@@ -635,8 +635,8 @@ class ApiEventsTest {
     @EnumSource(Report.class)
     void oneHalfsFailureDoesNotSilenceALaterFailureOfTheOther(Report first) throws Throwable {
         String output = StdStreams.captureStderr(() -> {
-            first.report.accept("turn_added", new RuntimeException("first boom"));
-            first.other().report.accept("x_changed", new RuntimeException("second boom"));
+            first.report.accept(EventType.TURN_ADDED, new RuntimeException("first boom"));
+            first.other().report.accept(EventType.X_CHANGED, new RuntimeException("second boom"));
         });
 
         long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
@@ -661,11 +661,11 @@ class ApiEventsTest {
                 "SP$ SkipTurn | ValidTgts$ Player | NumTurns$ 1",
                 TestCards.build("Runeclaw Bear"));
         ApiEvents.Rule throwingMemo = new ApiEvents.Rule(
-                EffectEvent.TURN_SKIPPED,
+                EventType.TURN_SKIPPED,
                 (s, host) -> {
                     throw new IllegalStateException("boom (memo)");
                 },
-                (s, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED));
+                (s, host, memo) -> new EffectEvent(EventType.TURN_SKIPPED));
 
         String output = StdStreams.captureStderr(() -> assertNull(
                 ApiEvents.before(sa, api -> throwingMemo),
@@ -693,7 +693,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.DELAYED_TRIGGER_CREATED, event.type());
+        assertEquals(EventType.DELAYED_TRIGGER_CREATED, event.type());
         assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
     }
 
@@ -705,7 +705,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.DELAYED_TRIGGER_CREATED, event.type());
+        assertEquals(EventType.DELAYED_TRIGGER_CREATED, event.type());
         assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
     }
 
@@ -753,7 +753,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.REPLACEMENT_APPLIED, event.type());
+        assertEquals(EventType.REPLACEMENT_APPLIED, event.type());
         assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
     }
 
@@ -778,7 +778,7 @@ class ApiEventsTest {
         target.getGame().getAction().becomeMonarch(target, "M12");
         EffectEvent event = after(sa, memo);
 
-        assertEquals(EffectEvent.MONARCH_CHANGED, event.type());
+        assertEquals(EventType.MONARCH_CHANGED, event.type());
         assertEquals(List.of(SnapshotBuilder.playerId(target)), event.subjects());
     }
 
@@ -825,7 +825,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.RING_TEMPTS, event.type());
+        assertEquals(EventType.RING_TEMPTS, event.type());
         assertEquals(
                 List.of(SnapshotBuilder.playerId(activator), SnapshotBuilder.entityId(bearer)),
                 event.subjects());
@@ -853,7 +853,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.RING_TEMPTS, event.type());
+        assertEquals(EventType.RING_TEMPTS, event.type());
         assertEquals(List.of(SnapshotBuilder.playerId(activator)), event.subjects());
     }
 
@@ -891,7 +891,7 @@ class ApiEventsTest {
         game.getPhaseHandler().setCombat(null);
         EffectEvent event = after(sa, memo);
 
-        assertEquals(EffectEvent.COMBAT_ENDED, event.type());
+        assertEquals(EventType.COMBAT_ENDED, event.type());
         assertEquals(List.of(SnapshotBuilder.playerId(attacking)), event.subjects());
     }
 
@@ -922,7 +922,7 @@ class ApiEventsTest {
         combat.removeFromCombat(c2);
         EffectEvent event = after(sa, memo);
 
-        assertEquals(EffectEvent.REMOVED_FROM_COMBAT, event.type());
+        assertEquals(EventType.REMOVED_FROM_COMBAT, event.type());
         assertEquals(
                 List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
                 event.subjects());
@@ -997,7 +997,7 @@ class ApiEventsTest {
         combat.addAttacker(c2, newDefender);
         EffectEvent event = after(sa, memo);
 
-        assertEquals(EffectEvent.REMOVED_FROM_COMBAT, event.type());
+        assertEquals(EventType.REMOVED_FROM_COMBAT, event.type());
         assertEquals(
                 List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
                 event.subjects());
@@ -1043,7 +1043,7 @@ class ApiEventsTest {
         target.getGame().getAction().takeInitiative(target, "BRO");
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.INITIATIVE_TAKEN, event.type());
+        assertEquals(EventType.INITIATIVE_TAKEN, event.type());
         assertEquals(List.of(SnapshotBuilder.playerId(target)), event.subjects());
     }
 
@@ -1068,7 +1068,7 @@ class ApiEventsTest {
         target.getGame().getAction().takeInitiative(target, "BRO");
         EffectEvent event = after(sa, memo);
 
-        assertEquals(EffectEvent.INITIATIVE_TAKEN, event.type());
+        assertEquals(EventType.INITIATIVE_TAKEN, event.type());
         assertEquals(List.of(SnapshotBuilder.playerId(target)), event.subjects());
     }
 
@@ -1101,7 +1101,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.TEXT_CHANGE, event.type());
+        assertEquals(EventType.TEXT_CHANGE, event.type());
         assertEquals(
                 List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
                 event.subjects());
@@ -1138,7 +1138,7 @@ class ApiEventsTest {
 
         EffectEvent event = after(sa, before(sa));
 
-        assertEquals(EffectEvent.TEXT_CHANGE, event.type());
+        assertEquals(EventType.TEXT_CHANGE, event.type());
         assertEquals(
                 List.of(SnapshotBuilder.entityId(spellOnStack.getHostCard())),
                 event.subjects());

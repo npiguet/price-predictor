@@ -256,7 +256,7 @@ class ForkCollectorTest {
                 "the branch renders " + onTheDreadmaw + " and the observed record " + record);
         // The stripped keyword is the branch's input, not something its step did.
         assertTrue(held.events().stream()
-                        .noneMatch(e -> EffectEvent.KEYWORD_CHANGE.equals(e.type())),
+                        .noneMatch(e -> EventType.KEYWORD_CHANGE.equals(e.type())),
                 held.events().stream().map(EffectEvent::toJson).toList().toString());
     }
 
@@ -372,7 +372,7 @@ class ForkCollectorTest {
         String forced = forcedRecord(game, spell, 1L);
         String payload = payloadOf(forced);
 
-        assertEquals(List.of(EffectEvent.ZONE_CHANGE), eventTypes(forced), payload);
+        assertEquals(List.of(EventType.ZONE_CHANGE.wireName()), eventTypes(forced), payload);
         assertTrue(payload.contains("\"subjects\":[\"E" + knight.getId() + "\"],"
                 + "\"params\":{\"from_zone\":\"stack\",\"to_zone\":\"battlefield\""), payload);
     }
@@ -394,8 +394,8 @@ class ForkCollectorTest {
 
         assertTrue(payload.contains("\"type\":\"damage_dealt\",\"subjects\":[\"E"
                 + swiftspear.getId() + "\"]"), payload);
-        assertFalse(payload.contains(EffectEvent.PT_CHANGE), payload);
-        assertFalse(payload.contains(EffectEvent.KEYWORD_CHANGE), payload);
+        assertFalse(payload.contains(EventType.PT_CHANGE.wireName()), payload);
+        assertFalse(payload.contains(EventType.KEYWORD_CHANGE.wireName()), payload);
     }
 
     /**
@@ -417,7 +417,7 @@ class ForkCollectorTest {
 
         String payload = payloadOf(forcedRecord(game, spell, 1L));
 
-        assertFalse(payload.contains(EffectEvent.PT_CHANGE), payload);
+        assertFalse(payload.contains(EventType.PT_CHANGE.wireName()), payload);
         for (Card died : List.of(goyf, bears)) {
             assertTrue(payload.contains("\"subjects\":[\"E" + died.getId() + "\"],\"params\":"
                     + "{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""), payload);
@@ -506,7 +506,7 @@ class ForkCollectorTest {
         Game forkedGame = kavuBoard();
         String forced = forcedRecord(forkedGame, firstSpellInHand(forkedGame), 1L);
 
-        assertEquals(List.of(EffectEvent.ZONE_CHANGE), eventTypes(forced), forced);
+        assertEquals(List.of(EventType.ZONE_CHANGE.wireName()), eventTypes(forced), forced);
         assertEquals(observed, payloadOf(forced));
     }
 
@@ -581,7 +581,7 @@ class ForkCollectorTest {
 
     private static EffectEvent damageTo(List<EffectEvent> events, Card card) {
         return events.stream()
-                .filter(e -> EffectEvent.DAMAGE_DEALT.equals(e.type())
+                .filter(e -> EventType.DAMAGE_DEALT.equals(e.type())
                         && e.subjects().contains("E" + card.getId()))
                 .findFirst().orElseThrow(() -> new AssertionError(
                         "no damage to " + card + " in "

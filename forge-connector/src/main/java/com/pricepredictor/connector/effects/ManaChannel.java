@@ -56,7 +56,7 @@ final class ManaChannel {
             Player producer = args.get(1, Player.class);
             String player = producer != null
                     ? SnapshotBuilder.playerId(producer) : live.activePlayerId();
-            EffectEvent event = new EffectEvent(EffectEvent.MANA_PRODUCED)
+            EffectEvent event = new EffectEvent(EventType.MANA_PRODUCED)
                     .subject(player)
                     .param("mana_by_color", RunParamNormalizer.manaByColor(produced));
             // Held rather than written: which activation survives is not known

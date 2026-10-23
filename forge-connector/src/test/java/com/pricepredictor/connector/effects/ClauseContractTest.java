@@ -262,11 +262,11 @@ class ClauseContractTest {
         inner.getTargets().add(innerTarget);
 
         ApiEvents.Rule throwingMemo = new ApiEvents.Rule(
-                EffectEvent.TURN_SKIPPED,
+                EventType.TURN_SKIPPED,
                 (sa, host) -> {
                     throw new IllegalStateException("boom (memo)");
                 },
-                (sa, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED));
+                (sa, host, memo) -> new EffectEvent(EventType.TURN_SKIPPED));
 
         StringBuilder stderr = new StringBuilder();
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {

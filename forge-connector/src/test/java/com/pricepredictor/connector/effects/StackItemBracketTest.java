@@ -344,11 +344,11 @@ class StackItemBracketTest {
 
         List<String> all = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(shock);
-            bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
+            bracket.recordClauseEvent(new EffectEvent(EventType.KEYWORD_CHANGE));
             game.costPaymentStack.push(
                     bolt.getPayCosts().getCostParts().get(0),
                     new forge.game.cost.CostPayment(bolt.getPayCosts(), bolt));
-            bracket.recordClauseEvent(new EffectEvent(EffectEvent.TAPPED));
+            bracket.recordClauseEvent(new EffectEvent(EventType.TAPPED));
             bracket.noteDeclined();
             game.costPaymentStack.pop();
             bracket.beginBracket(bolt);

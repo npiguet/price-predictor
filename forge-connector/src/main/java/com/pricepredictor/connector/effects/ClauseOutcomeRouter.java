@@ -7,6 +7,7 @@ import forge.game.spellability.SpellAbility;
 import java.lang.reflect.InvocationHandler;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -121,11 +122,11 @@ final class ClauseOutcomeRouter {
 
     /**
      * The outcome types an effect is allowed to name, built from the
-     * {@code EffectEvent} constants themselves rather than listed in prose.
+     * {@link EventType} members themselves rather than listed in prose.
      *
      * <p>{@code test_event_schema_completeness.py}'s
      * {@code _emitted_event_types()} is a <em>textual</em> scan for
-     * {@code EffectEvent.<NAME>} in this package's source, and a javadoc
+     * {@code EventType.<NAME>} in this package's source, and a javadoc
      * listing satisfies that scan exactly as well as this set does. Were the
      * types referenced only inside a comment, deleting an effect's {@code
      * note(...)} call, or misspelling the event name, would go unnoticed by
@@ -149,13 +150,13 @@ final class ClauseOutcomeRouter {
      * are noted by their effects too; the types an {@code ApiEvents.RULES}
      * entry emits never reach this set at all.
      */
-    private static final Set<String> KNOWN_OUTCOME_TYPES = Set.of(
-            EffectEvent.COIN_FLIPPED, EffectEvent.CLASH_RESOLVED, EffectEvent.VOTE_TAKEN,
-            EffectEvent.PILES_MADE, EffectEvent.DUNGEON_VENTURED, EffectEvent.SPELL_COPIED,
-            EffectEvent.PERMANENT_COPIED, EffectEvent.CARD_MADE, EffectEvent.RESTRICTION_CHANGE,
-            EffectEvent.CARD_REVEALED, EffectEvent.DAMAGE_PREVENTED, EffectEvent.SPELL_COUNTERED,
-            EffectEvent.TOKEN_CREATED, EffectEvent.DICE_ROLLED, EffectEvent.TURN_ENDED,
-            EffectEvent.TEXT_CHANGE);
+    private static final Set<EventType> KNOWN_OUTCOME_TYPES = EnumSet.of(
+            EventType.COIN_FLIPPED, EventType.CLASH_RESOLVED, EventType.VOTE_TAKEN,
+            EventType.PILES_MADE, EventType.DUNGEON_VENTURED, EventType.SPELL_COPIED,
+            EventType.PERMANENT_COPIED, EventType.CARD_MADE, EventType.RESTRICTION_CHANGE,
+            EventType.CARD_REVEALED, EventType.DAMAGE_PREVENTED, EventType.SPELL_COUNTERED,
+            EventType.TOKEN_CREATED, EventType.DICE_ROLLED, EventType.TURN_ENDED,
+            EventType.TEXT_CHANGE);
 
     /** Set the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
     private static final AtomicBoolean UNKNOWN_OUTCOME_TYPE_REPORTED = new AtomicBoolean();
@@ -185,11 +186,12 @@ final class ClauseOutcomeRouter {
      * <p>Bound by argument position, because {@code PatchHooks} installs a
      * proxy rather than compiling against the interface: 0 is the ability, 1
      * the event type, 2 the parameters. The event type is a plain string the
-     * effect names for itself rather than an enum this side switches on --
-     * {@code EffectRecordOutcomes}'s own javadoc explains why: "the caller
-     * names the event type, which keeps the vocabulary in the collector that
-     * consumes it" -- checked against {@link #KNOWN_OUTCOME_TYPES}, the real
-     * vocabulary.
+     * effect names for itself rather than an enum the engine shares with this
+     * side -- {@code EffectRecordOutcomes}'s own javadoc explains why: "the
+     * caller names the event type, which keeps the vocabulary in the
+     * collector that consumes it" -- read here through
+     * {@link EventType#fromWire} and checked against
+     * {@link #KNOWN_OUTCOME_TYPES}, the real vocabulary.
      *
      * <p>The event's subjects are exactly what the effect names under
      * {@code "subjects"}, and an outcome that names none has none. The acting
@@ -228,15 +230,17 @@ final class ClauseOutcomeRouter {
      */
     InvocationHandler outcomeHandler() {
         return PatchHooks.OUTCOME_LISTENER.listener((callback, args) -> {
-            String type = args.get(1, String.class);
-            if (type == null) {
+            String wireName = args.get(1, String.class);
+            if (wireName == null) {
                 return;
             }
-            if (!KNOWN_OUTCOME_TYPES.contains(type)) {
-                reportUnknownOutcomeType(type);
+            Optional<EventType> type = EventType.fromWire(wireName)
+                    .filter(KNOWN_OUTCOME_TYPES::contains);
+            if (type.isEmpty()) {
+                reportUnknownOutcomeType(wireName);
                 return;
             }
-            EffectEvent event = new EffectEvent(type);
+            EffectEvent event = new EffectEvent(type.get());
             if (args.get(2) instanceof Map<?, ?> params) {
                 for (Map.Entry<?, ?> entry : params.entrySet()) {
                     if ("subjects".equals(entry.getKey())) {

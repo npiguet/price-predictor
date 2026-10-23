@@ -511,8 +511,8 @@ _CONNECTOR_EFFECTS = (
 #: already used for ``energy_change``/``radiation_change``/``speed_changed``/
 #: ``day_night_changed``), which needed no schema change: neither type has an
 #: ``EVENT_PARAMS`` row, so a bus subscription satisfies the schema on its own.
-#: ``EffectEvent.REGENERATED`` also has a second, non-emitting reference this scan
-#: finds -- ``BusBracketCollector.IDEMPOTENT_EVENTS`` -- which was inert while the
+#: ``EventType.REGENERATED`` also has a second, non-emitting reference this scan
+#: finds -- ``EventBuffer.IDEMPOTENT_EVENTS`` -- which was inert while the
 #: type had no emitter and is load-bearing now: kept deliberately, not a side
 #: effect nobody chose, but not because a second regeneration is impossible --
 #: it is not. See the docstring above ``IDEMPOTENT_EVENTS`` itself for why it
@@ -616,7 +616,7 @@ AI_CAPABILITY_GAP: frozenset[str] = frozenset({"turn_ended", "text_change"})
 def _emitted_event_types() -> set[str]:
     """Event types whose constants are referenced in the connector's Java source.
 
-    This is a textual static scan—it finds ``EffectEvent.CONSTANT_NAME`` in
+    This is a textual static scan—it finds ``EventType.CONSTANT_NAME`` in
     code without distinguishing whether that code is on a live path or dead code,
     and without distinguishing an emitter that builds the type from one that only
     *translates a trigger or replacement mode name* into it for a different
@@ -653,17 +653,17 @@ def _emitted_event_types() -> set[str]:
     collection, exists as this scan's permanent counterpart rather than a
     one-off check.
     """
-    header = (_CONNECTOR_EFFECTS / "EffectEvent.java").read_text(encoding="utf-8")
+    header = (_CONNECTOR_EFFECTS / "EventType.java").read_text(encoding="utf-8")
     constants = dict(re.findall(
-        r'public static final String ([A-Z_]+)\s*=\s*"([a-z_]+)"', header,
+        r'^\s*([A-Z_]+)\("([a-z_]+)"\)[,;]', header, re.MULTILINE,
     ))
     emitted: set[str] = set()
     for path in _CONNECTOR_EFFECTS.glob("*.java"):
-        if path.name == "EffectEvent.java":
+        if path.name == "EventType.java":
             continue
         text = path.read_text(encoding="utf-8")
         for name, value in constants.items():
-            if re.search(rf"EffectEvent\.{name}\b", text):
+            if re.search(rf"EventType\.{name}\b", text):
                 emitted.add(value)
     return emitted
 

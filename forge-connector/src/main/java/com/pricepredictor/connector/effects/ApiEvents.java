@@ -55,10 +55,10 @@ final class ApiEvents {
     /**
      * @param eventType named in the once-only failure line an emitter's throw prints
      */
-    record Rule(String eventType, Memo memo, Emitter emitter) {
+    record Rule(EventType eventType, Memo memo, Emitter emitter) {
 
         /** A rule whose emitter fills in a fresh event of {@code eventType}. */
-        static Rule shaped(String eventType, Memo memo, Shaper shaper) {
+        static Rule shaped(EventType eventType, Memo memo, Shaper shaper) {
             return new Rule(eventType, memo, (sa, host, taken) ->
                     shaper.shape(new EffectEvent(eventType), sa, host, taken));
         }
@@ -137,23 +137,23 @@ final class ApiEvents {
         Map<String, Rule> rules = new java.util.HashMap<>();
         Shaper turns = (event, sa, host, memo) -> withSubjects(
                 event.param("count", amount(sa, host, "NumTurns", "1")), memo);
-        put(rules, Rule.shaped(EffectEvent.TURN_ADDED, (sa, host) -> affectedPlayers(sa), turns),
+        put(rules, Rule.shaped(EventType.TURN_ADDED, (sa, host) -> affectedPlayers(sa), turns),
                 "AddTurn");
-        put(rules, Rule.shaped(EffectEvent.TURN_SKIPPED, (sa, host) -> affectedPlayers(sa), turns),
+        put(rules, Rule.shaped(EventType.TURN_SKIPPED, (sa, host) -> affectedPlayers(sa), turns),
                 "SkipTurn");
-        put(rules, Rule.shaped(EffectEvent.PHASE_ADDED, null, (event, sa, host, memo) -> event
+        put(rules, Rule.shaped(EventType.PHASE_ADDED, null, (event, sa, host, memo) -> event
                         .subject(playerOf(sa))
                         .param("phase", sa.getParamOrDefault("ExtraPhase", "?"))
                         .param("count", amount(sa, host, "NumPhases", "1"))),
                 "AddPhase");
-        put(rules, Rule.shaped(EffectEvent.PHASE_SKIPPED, (sa, host) -> affectedPlayers(sa),
+        put(rules, Rule.shaped(EventType.PHASE_SKIPPED, (sa, host) -> affectedPlayers(sa),
                         (event, sa, host, memo) -> withSubjects(
                                 event.param("phase", sa.getParamOrDefault("Phase", "?")), memo)),
                 "SkipPhase");
-        put(rules, Rule.shaped(EffectEvent.X_CHANGED, null, (event, sa, host, memo) ->
+        put(rules, Rule.shaped(EventType.X_CHANGED, null, (event, sa, host, memo) ->
                         event.param("value", amount(sa, host, "Value", "0"))),
                 "ChangeX");
-        put(rules, Rule.shaped(EffectEvent.OWNERSHIP_CHANGE, null, (event, sa, host, memo) ->
+        put(rules, Rule.shaped(EventType.OWNERSHIP_CHANGE, null, (event, sa, host, memo) ->
                         event.param("owner", ownerOf(sa))),
                 "GainOwnership");
 
@@ -171,7 +171,7 @@ final class ApiEvents {
         // produce choice_made. A rule that matches here and reads nothing back
         // would be worse than one left out of this table entirely -- it looks
         // wired. Their choice() read branches, below, are required, not optional.
-        put(rules, new Rule(EffectEvent.CHOICE_MADE, null, (sa, host, memo) -> choice(host)),
+        put(rules, new Rule(EventType.CHOICE_MADE, null, (sa, host, memo) -> choice(host)),
                 "ChooseColor", "ChooseType", "ChooseCard", "NameCard", "ChooseNumber",
                 "ChoosePlayer", "ChooseDirection", "ChooseEvenOdd", "ChooseSource",
                 "GenericChoice");
@@ -186,18 +186,18 @@ final class ApiEvents {
         // would read can never actually run here. Wiring it needs the schema
         // changed first -- everyChoiceMadeApiHasAReadableChoice in ApiEventsTest
         // fails the moment the two disagree, which is the point.
-        put(rules, Rule.shaped(EffectEvent.DAMAGE_HEALED, DAMAGE_BEFORE, (event, sa, host, memo) ->
+        put(rules, Rule.shaped(EventType.DAMAGE_HEALED, DAMAGE_BEFORE, (event, sa, host, memo) ->
                         event.param("amount", memo instanceof Integer n ? n : 0)),
                 "HealDamage");
-        put(rules, Rule.shaped(EffectEvent.ABILITY_CHANGE, null, (event, sa, host, memo) -> event
+        put(rules, Rule.shaped(EventType.ABILITY_CHANGE, null, (event, sa, host, memo) -> event
                         .param("abilities", sa.getParamOrDefault("Abilities", ""))
                         .param("removed", sa.hasParam("RemoveAllAbilities"))),
                 "Animate", "AnimateAll");
-        put(rules, Rule.shaped(EffectEvent.CONTINUOUS_EFFECT_CREATED, null,
+        put(rules, Rule.shaped(EventType.CONTINUOUS_EFFECT_CREATED, null,
                         (event, sa, host, memo) ->
                                 event.param("layers", sa.getParamOrDefault("StaticAbilities", ""))),
                 "Effect");
-        put(rules, new Rule(EffectEvent.TARGETS_CHANGED, null, (sa, host, memo) -> retargeted(sa)),
+        put(rules, new Rule(EventType.TARGETS_CHANGED, null, (sa, host, memo) -> retargeted(sa)),
                 "ChangeTargets");
 
         // ── schedules, replacements, titles and combat removals ──────────
@@ -205,7 +205,7 @@ final class ApiEvents {
         // delayed_trigger_created: the card that scheduled it. Always the
         // host -- neither effect reads Defined$/ValidTgts$ for the trigger
         // itself, only for what the delayed trigger later acts on.
-        put(rules, Rule.shaped(EffectEvent.DELAYED_TRIGGER_CREATED, null, (event, sa, host, memo) ->
+        put(rules, Rule.shaped(EventType.DELAYED_TRIGGER_CREATED, null, (event, sa, host, memo) ->
                         event.subject(SnapshotBuilder.entityId(host))),
                 "DelayedTrigger");
         // ImmediateTriggerEffect.resolve() returns before registering
@@ -216,7 +216,7 @@ final class ApiEvents {
         // matching this file's own convention: nothing in the effect
         // mutates whatever TriggerAmount$'s expression depends on before
         // this is the first thing resolve() computes.
-        put(rules, Rule.shaped(EffectEvent.DELAYED_TRIGGER_CREATED,
+        put(rules, Rule.shaped(EventType.DELAYED_TRIGGER_CREATED,
                         (sa, host) -> amount(sa, host, "TriggerAmount", "1"),
                         (event, sa, host, memo) -> memo instanceof Integer n && n <= 0 ? null
                                 : event.subject(SnapshotBuilder.entityId(host))),
@@ -225,7 +225,7 @@ final class ApiEvents {
         // replacement_applied: the card whose replacement applied. See
         // REPLACEMENT_APPLIED_EMITTER's own javadoc above for why all six
         // share one emitter and why this is a strict subset of `rewrite`.
-        put(rules, Rule.shaped(EffectEvent.REPLACEMENT_APPLIED, null, REPLACEMENT_APPLIED_EMITTER),
+        put(rules, Rule.shaped(EventType.REPLACEMENT_APPLIED, null, REPLACEMENT_APPLIED_EMITTER),
                 "ReplaceEffect", "ReplaceCounter", "ReplaceDamage", "ReplaceMana",
                 "ReplaceSplitDamage", "ReplaceToken");
 
@@ -240,7 +240,7 @@ final class ApiEvents {
         // the actual before/after monarch
         // instead needs no such duplication and is correct regardless of
         // how many players BecomeMonarchEffect's loop iterates.
-        put(rules, Rule.shaped(EffectEvent.MONARCH_CHANGED,
+        put(rules, Rule.shaped(EventType.MONARCH_CHANGED,
                         (sa, host) -> host.getGame().getMonarch(),
                         (event, sa, host, memo) -> {
                             Player after = host.getGame().getMonarch();
@@ -260,7 +260,7 @@ final class ApiEvents {
         // subject when one was actually chosen -- null when the player
         // controls no creatures, per chooseSingleEntityForEffect's own
         // contract on an empty candidate list.
-        put(rules, Rule.shaped(EffectEvent.RING_TEMPTS, null, (event, sa, host, memo) -> {
+        put(rules, Rule.shaped(EventType.RING_TEMPTS, null, (event, sa, host, memo) -> {
                     Player p = sa.getActivatingPlayer();
                     if (p == null) {
                         return null;
@@ -281,7 +281,7 @@ final class ApiEvents {
         // memoized combatant is still attacking or blocking afterward
         // sidesteps replicating them, the same before/after-diff shape as
         // BecomeMonarch above.
-        put(rules, new Rule(EffectEvent.REMOVED_FROM_COMBAT,
+        put(rules, new Rule(EventType.REMOVED_FROM_COMBAT,
                         (sa, host) -> combatantsBefore(sa, host),
                         (sa, host, memo) -> noLongerInCombat(host, memo)),
                 "RemoveFromCombat");
@@ -294,7 +294,7 @@ final class ApiEvents {
         // its own originalDefender/defender pair for retargeting
         // triggers, not replicated from the Optional-decline or
         // already-attacking-that-defender guards.
-        put(rules, new Rule(EffectEvent.REMOVED_FROM_COMBAT,
+        put(rules, new Rule(EventType.REMOVED_FROM_COMBAT,
                         (sa, host) -> attackerDefendersBefore(sa, host),
                         (sa, host, memo) -> reselectedAttackers(host, memo)),
                 "ChangeCombatants");
@@ -302,7 +302,7 @@ final class ApiEvents {
         // ended. EndCombatPhaseEffect does nothing outside a combat phase
         // (CR 723.2g), so the memo is that combat's attacker, read before the
         // clause clears it, and no combat emits nothing.
-        put(rules, Rule.shaped(EffectEvent.COMBAT_ENDED,
+        put(rules, Rule.shaped(EventType.COMBAT_ENDED,
                         (sa, host) -> {
                             Combat combat = host.getGame().getCombat();
                             return combat == null ? null : combat.getAttackingPlayer();
@@ -333,7 +333,7 @@ final class ApiEvents {
         // actually landed on. Not replicated here: doing so would mean
         // re-deriving GameAction's own fall-through as a second copy of it,
         // which drifts the way any duplicated classification does.
-        put(rules, Rule.shaped(EffectEvent.INITIATIVE_TAKEN, null, (event, sa, host, memo) -> {
+        put(rules, Rule.shaped(EventType.INITIATIVE_TAKEN, null, (event, sa, host, memo) -> {
                     Player holder = host.getGame().getHasInitiative();
                     if (holder == null || !affectedPlayers(sa).contains(holder)) {
                         return null;
@@ -352,7 +352,7 @@ final class ApiEvents {
         // itself (see that class), not a rule here: its two early returns
         // (checkValidDuration, tgtCards.size() < 2) are not cheaply
         // replicable from outside without duplicating engine logic.
-        put(rules, new Rule(EffectEvent.TEXT_CHANGE, null, (sa, host, memo) -> changeTextEvent(sa)),
+        put(rules, new Rule(EventType.TEXT_CHANGE, null, (sa, host, memo) -> changeTextEvent(sa)),
                 "ChangeText");
         return Map.copyOf(rules);
     }
@@ -442,9 +442,9 @@ final class ApiEvents {
      * {@code EffectRecordClauseHookTest} calls {@code
      * reportClauseListenerFailure} through a seam, not through a real throw.
      */
-    static void reportEmitterFailure(String eventType, RuntimeException e) {
+    static void reportEmitterFailure(EventType eventType, RuntimeException e) {
         if (EMITTER_FAILURE_REPORTED.compareAndSet(false, true)) {
-            System.err.println("ApiEvents: the emitter for \"" + eventType
+            System.err.println("ApiEvents: the emitter for \"" + eventType.wireName()
                     + "\" threw and was ignored; further emitter failures will "
                     + "not be logged: " + e);
         }
@@ -464,9 +464,9 @@ final class ApiEvents {
      * {@link #EMITTER_FAILURE_REPORTED} would silence a later, unrelated
      * emitter failure for the rest of the JVM.
      */
-    static void reportMemoFailure(String eventType, RuntimeException e) {
+    static void reportMemoFailure(EventType eventType, RuntimeException e) {
         if (MEMO_FAILURE_REPORTED.compareAndSet(false, true)) {
-            System.err.println("ApiEvents: the memo for \"" + eventType
+            System.err.println("ApiEvents: the memo for \"" + eventType.wireName()
                     + "\" threw and was ignored; further memo failures will "
                     + "not be logged: " + e);
         }
@@ -665,7 +665,7 @@ final class ApiEvents {
         for (ChoiceReading reading : CHOICES) {
             String value = reading.read().apply(host);
             if (value != null) {
-                return new EffectEvent(EffectEvent.CHOICE_MADE)
+                return new EffectEvent(EventType.CHOICE_MADE)
                         .param("choice_kind", reading.kind())
                         .param("value", value);
             }
@@ -738,7 +738,7 @@ final class ApiEvents {
                 }
             }
         }
-        return new EffectEvent(EffectEvent.TARGETS_CHANGED).param("targets", targets);
+        return new EffectEvent(EventType.TARGETS_CHANGED).param("targets", targets);
     }
 
     // ── text changes and combat removals ────────────────────────────────
@@ -781,7 +781,7 @@ final class ApiEvents {
         if (!sa.hasParam("ChangeColorWord") && !sa.hasParam("ChangeTypeWord")) {
             return null;
         }
-        EffectEvent event = new EffectEvent(EffectEvent.TEXT_CHANGE);
+        EffectEvent event = new EffectEvent(EventType.TEXT_CHANGE);
         for (Card c : cardsFromTargets(sa)) {
             event.subject(SnapshotBuilder.entityId(c));
         }
@@ -814,7 +814,7 @@ final class ApiEvents {
             return null;
         }
         Combat combat = host.getGame().getCombat();
-        EffectEvent event = new EffectEvent(EffectEvent.REMOVED_FROM_COMBAT);
+        EffectEvent event = new EffectEvent(EventType.REMOVED_FROM_COMBAT);
         for (Object o : before) {
             if (o instanceof Card c
                     && (combat == null || !(combat.isAttacking(c) || combat.isBlocking(c)))) {
@@ -858,7 +858,7 @@ final class ApiEvents {
             return null;
         }
         Combat combat = host.getGame().getCombat();
-        EffectEvent event = new EffectEvent(EffectEvent.REMOVED_FROM_COMBAT);
+        EffectEvent event = new EffectEvent(EventType.REMOVED_FROM_COMBAT);
         for (Map.Entry<?, ?> entry : before.entrySet()) {
             if (!(entry.getKey() instanceof Card c) || entry.getValue() == null) {
                 continue;
