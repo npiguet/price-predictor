@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 /**
  * The role a prose span plays in its line, as a sidecar's {@code role_spans}
  * spell it.
@@ -8,7 +10,7 @@ package com.pricepredictor.connector.effects;
  * {@code provenance.py} and {@code ROLE_ORDER} in {@code ability_encoder.py}
  * are the other half of this vocabulary.
  */
-public enum SpanRole {
+public enum SpanRole implements WireNamed {
     COST("cost"),
     EFFECT("effect"),
     TRIGGER_CONDITION("trigger-condition"),
@@ -21,6 +23,7 @@ public enum SpanRole {
     }
 
     /** The {@code role} a span carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

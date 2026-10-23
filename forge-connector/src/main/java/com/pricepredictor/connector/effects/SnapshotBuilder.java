@@ -215,7 +215,10 @@ public final class SnapshotBuilder {
                 .value("active", active == null ? null : playerId(active))
                 .value("priority", priority == null ? null : playerId(priority))
                 .value("stack_size", game.getStack().size())
-                .value("combat_substep", combatSubstep())
+                // Null outside combat damage. A first-strike combat produces
+                // two damage steps and so two combat records, which only the
+                // substep tells apart.
+                .value("combat_substep", DamageStep.of(phase))
                 .raw("emblems", ProvenanceKey.toJsonArray(emblems()))
                 .render();
     }
@@ -290,18 +293,6 @@ public final class SnapshotBuilder {
         return phase == null
                 ? null
                 : phase.toString().toLowerCase(java.util.Locale.ROOT);
-    }
-
-    /**
-     * Which damage step is running, or null outside combat damage.
-     *
-     * <p>Named because a first-strike combat produces two damage steps and
-     * therefore two combat records; without the substep they would be
-     * indistinguishable.
-     */
-    private String combatSubstep() {
-        DamageStep step = DamageStep.of(game.getPhaseHandler());
-        return step == null ? null : step.wireName();
     }
 
     private String playerToJson(Player player) {

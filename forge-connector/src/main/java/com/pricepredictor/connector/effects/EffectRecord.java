@@ -24,7 +24,7 @@ public final class EffectRecord {
     private final RecordKind kind;
     private final Moment moment;
     private final PlayabilitySubkind subkind;
-    private final String mode;
+    private final AttributionMode mode;
     private String linkId;
     private String mirrorOf;
     private boolean interventional;
@@ -84,7 +84,7 @@ public final class EffectRecord {
         this.kind = Objects.requireNonNull(kind, "kind");
         this.moment = moment;
         this.subkind = subkind;
-        this.mode = mode.wireName();
+        this.mode = Objects.requireNonNull(mode, "mode");
     }
 
     /** A {@code resolution} record: one half of a resolution pair. */
@@ -240,9 +240,9 @@ public final class EffectRecord {
                 .value("run_id", runId)
                 .value("timestamp", timestamp)
                 .value("game_id", gameId)
-                .value("kind", kind.wireName())
-                .value("moment", moment == null ? null : moment.wireName())
-                .value("subkind", subkind == null ? null : subkind.wireName())
+                .value("kind", kind)
+                .value("moment", moment)
+                .value("subkind", subkind)
                 .value("link_id", linkId)
                 .value("mirror_of", mirrorOf)
                 // Frozen schema fields no collector sets: a reader still
@@ -263,7 +263,7 @@ public final class EffectRecord {
         return json
                 .value("actor_player", actorPlayer)
                 .raw("ability", abilityJson())
-                .value("ability_unresolved", abilityUnresolvedWire())
+                .value("ability_unresolved", abilityUnresolved)
                 .raw("state", stateJson)
                 .raw("payload", payloadJson)
                 .render();

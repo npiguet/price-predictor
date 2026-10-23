@@ -56,6 +56,21 @@ class JsonTest {
         assertEquals("null", Json.value(null));
     }
 
+    /**
+     * A vocabulary member is spelled by its wire name wherever it sits, never
+     * by its Java constant name, which every reader refuses.
+     */
+    @Test
+    void aWireNamedMemberIsItsWireName() {
+        Map<Object, Object> map = new LinkedHashMap<>();
+        map.put(DamageStep.FIRST_STRIKE, List.of(EventType.ZONE_CHANGE));
+
+        assertEquals("\"end_of_turn\"", Json.value(EventDuration.END_OF_TURN));
+        assertEquals("{\"first_strike\":[\"zone_change\"]}", Json.value(map));
+        assertEquals("{\"kind\":\"rewrite\"}",
+                Json.object().value("kind", RecordKind.REWRITE).render());
+    }
+
     /** The string "null" is still a string. */
     @Test
     void theStringNullIsAString() {

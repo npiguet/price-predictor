@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 import forge.game.CardTraitBase;
 import forge.game.card.CardState;
 import forge.game.replacement.ReplacementEffect;
@@ -17,7 +19,7 @@ import java.util.List;
  * the join between the two is by these spellings, so the converter and the
  * collectors take them from here rather than each writing its own.
  */
-public enum TraitKind {
+public enum TraitKind implements WireNamed {
     KEYWORD("keyword"),
     SPELL("spell"),
     TRIGGER("trigger"),
@@ -31,6 +33,7 @@ public enum TraitKind {
     }
 
     /** The {@code trait_kind} a key carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

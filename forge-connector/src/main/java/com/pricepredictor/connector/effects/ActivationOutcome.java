@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 /**
  * What became of a cast, as a cost half's {@code outcome} spells it.
  *
@@ -7,7 +9,7 @@ package com.pricepredictor.connector.effects;
  * half of this vocabulary. Only {@link #RESOLVED} and {@link #PARTIALLY_FIZZLED}
  * reach a resolution, so only they can carry a {@code link_id}.
  */
-public enum ActivationOutcome {
+public enum ActivationOutcome implements WireNamed {
     RESOLVED("resolved"),
     FIZZLED("fizzled"),
     PARTIALLY_FIZZLED("partially_fizzled"),
@@ -21,6 +23,7 @@ public enum ActivationOutcome {
     }
 
     /** The {@code outcome} a cost payload carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

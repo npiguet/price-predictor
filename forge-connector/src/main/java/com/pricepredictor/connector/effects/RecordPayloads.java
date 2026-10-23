@@ -142,7 +142,7 @@ final class RecordPayloads {
     static String costPayload(PaidCosts costs, ActivationOutcome outcome) {
         return Json.object()
                 .raw("costs", costs.toJson())
-                .value("outcome", outcome.wireName())
+                .value("outcome", outcome)
                 .render();
     }
 }

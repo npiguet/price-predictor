@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 /**
  * The six record kinds, as a record's {@code kind} spells them.
  *
@@ -7,7 +9,7 @@ package com.pricepredictor.connector.effects;
  * of this vocabulary and refuses a kind it does not have, so a spelling is
  * changed on both sides or neither.
  */
-public enum RecordKind {
+public enum RecordKind implements WireNamed {
     /** A cost half or an effect half; which one is its {@link Moment}. */
     RESOLUTION("resolution"),
     REWRITE("rewrite"),
@@ -24,6 +26,7 @@ public enum RecordKind {
     }
 
     /** The {@code kind} a record carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

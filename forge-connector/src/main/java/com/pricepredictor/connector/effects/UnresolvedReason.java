@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 /**
  * Why a record that names an acting line carries no key for it, as its
  * {@code ability_unresolved} spells it.
@@ -9,7 +11,7 @@ package com.pricepredictor.connector.effects;
  * {@code UNRESOLVED_REASONS} in {@code records.py} rejects any record whose
  * reason is not in its set, and the corpus it guards cannot be rebuilt.
  */
-public enum UnresolvedReason {
+public enum UnresolvedReason implements WireNamed {
 
     /** The trait names no state, so there is nothing to index it against. */
     NO_CARD_STATE("no_card_state"),
@@ -63,6 +65,7 @@ public enum UnresolvedReason {
     }
 
     /** The {@code ability_unresolved} a record carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

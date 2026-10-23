@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 /**
  * Which question a {@code playability} record answers.
  *
@@ -8,7 +10,7 @@ package com.pricepredictor.connector.effects;
  * {@link EffectRecord#playability}. {@code PlayabilitySubkind} in
  * {@code records.py} is the other half of this vocabulary.
  */
-public enum PlayabilitySubkind {
+public enum PlayabilitySubkind implements WireNamed {
     /** A candidate the AI weighed at priority, with the verdict on it. */
     DECISION("decision"),
     /** Who may attack, declared at the attackers step. */
@@ -23,6 +25,7 @@ public enum PlayabilitySubkind {
     }
 
     /** The {@code subkind} a record carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

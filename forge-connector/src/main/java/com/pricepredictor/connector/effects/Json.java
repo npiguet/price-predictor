@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 import java.util.Map;
 import java.util.StringJoiner;
 import java.util.function.Function;
@@ -63,11 +65,15 @@ public final class Json {
 
     /**
      * Any value as JSON: null as JSON {@code null}, a boolean or number bare,
-     * a map as an object in its own iteration order, an iterable as an array,
-     * and anything else as the string literal of its {@code String.valueOf}.
+     * a {@link WireNamed} member as the string literal of its wire name, a map
+     * as an object in its own iteration order, an iterable as an array, and
+     * anything else as the string literal of its {@code String.valueOf}.
      *
      * <p>Dedup hashes the rendered bytes, so this one spelling is what makes
-     * two reports of the same value the same event.
+     * two reports of the same value the same event. A vocabulary member is
+     * spelled by its wire name here rather than at each call site because the
+     * fallback would otherwise write its Java constant name, a spelling every
+     * reader refuses, wherever a caller forgot to convert it.
      */
     public static String value(Object value) {
         if (value == null) {
@@ -79,14 +85,19 @@ public final class Json {
         if (value instanceof Map<?, ?> map) {
             StringJoiner joiner = new StringJoiner(",", "{", "}");
             for (Map.Entry<?, ?> entry : map.entrySet()) {
-                joiner.add(string(String.valueOf(entry.getKey())) + ":" + value(entry.getValue()));
+                joiner.add(string(text(entry.getKey())) + ":" + value(entry.getValue()));
             }
             return joiner.toString();
         }
         if (value instanceof Iterable<?> items) {
             return array(items, Json::value);
         }
-        return string(String.valueOf(value));
+        return string(text(value));
+    }
+
+    /** A non-null scalar's spelling: its wire name if it has one. */
+    private static String text(Object value) {
+        return value instanceof WireNamed named ? named.wireName() : String.valueOf(value);
     }
 
     /** An empty object, for fields added one at a time. */
