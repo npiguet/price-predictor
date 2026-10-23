@@ -418,7 +418,7 @@ class ApiEventsTest {
      * the {@code HealDamage} clause -- {@code pyramids.txt}'s is {@code
      * Defined$ ReplacedCard}, {@code wolverine_fierce_fighter.txt}'s is
      * {@code Defined$ ReplacedTarget}. Targets added straight onto the clause
-     * would let a {@code DAMAGE_BEFORE} that reads {@code sa.getTargets()}
+     * would let a {@code damageBefore} memo that reads {@code sa.getTargets()}
      * unconditionally pass.
      *
      * <p>Builds the shape production actually uses instead: no {@code
