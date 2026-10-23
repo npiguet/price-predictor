@@ -287,10 +287,10 @@ record](2026-09-18-effect-model-gen2-improvements-design.md#where-the-model-doub
 `protection_from_red`, `protection_from_blue` and every other protection onto a single `protection`
 slot. Protection's text never reaches a card slot, printed or granted, because its fragment is a
 static the snapshot leaves out. Gods Willing's "gains protection from the color of your choice"
-therefore reaches the model only as the flag, and the flag cannot say which colour. Gen-2's evasion grid shows the cost: its two
-protection rows, protection from the blocker's colour and from another colour, give the model
-identical inputs and so identical predictions, where the rule forbids the first block and allows
-the second.
+therefore reaches the model only as the flag, and the flag cannot say which colour. Gen-2's evasion
+grid shows the cost: its two protection rows, protection from the blocker's colour and from another
+colour, give the model identical inputs and so identical predictions, where the rule forbids the
+first block and allows the second.
 
 **Protection is not always from a colour.** Forge's card scripts print protection on 196 cards.
 Colours are most of it, and the rest is a long tail, several of its qualities on a single card.
