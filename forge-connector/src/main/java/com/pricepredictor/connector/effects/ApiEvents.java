@@ -671,8 +671,8 @@ final class ApiEvents {
      * one emitter.
      *
      * <p>This is a strict subset of the {@code rewrite} record this connector
-     * already writes for every replacement, from {@code
-     * ReplacementObserver.observe} -- see the comment on {@code
+     * already writes for every replacement, from {@link
+     * RewriteChannel#record} -- see the comment on {@code
      * EventType.REPLACEMENT_APPLIED} in {@code event_schema.py} for why the two
      * must not be read as independent evidence of the same replacement.
      */

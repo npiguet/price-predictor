@@ -110,7 +110,6 @@ public final class ProvenanceRecorder {
         declare(key);
         TraitScript script = TraitScript.of(trait, key, missingSVars);
         for (Ability ability : abilities) {
-            if (ability == null) continue;
             if (ability instanceof OptionAbility option) {
                 attributeMode(option, key, trait);
                 continue;
@@ -152,12 +151,10 @@ public final class ProvenanceRecorder {
         if (key == null) return;
         declare(key);
         for (Ability ability : abilities) {
-            if (ability == null) continue;
             byKeyword.computeIfAbsent(original, k -> new ArrayList<>()).add(ability);
         }
         TraitScript script = TraitScript.ofKeyword(original);
         for (Ability ability : abilities) {
-            if (ability == null) continue;
             claim(ability, key, script);
         }
     }

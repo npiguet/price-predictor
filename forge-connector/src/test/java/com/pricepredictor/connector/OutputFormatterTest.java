@@ -13,7 +13,7 @@ class OutputFormatterTest {
     void vanillaCreatureFormatsCorrectly() {
         CardFace card = new CardFace(
                 "grizzly bears", "{1}{G}", "creature bear",
-                "2/2", null, null, null, null, List.of());
+                "2/2", null, null, null, List.of());
         String output = RenderedLine.join(card.renderLines(0));
         assertEquals("""
                 name: grizzly bears
@@ -26,14 +26,13 @@ class OutputFormatterTest {
     void nullOptionalFieldsOmitted() {
         CardFace card = new CardFace(
                 "lightning bolt", "{R}", "instant",
-                null, null, null, null, null,
+                null, null, null, null,
                 List.of(new TextAbility(AbilityType.SPELL,
                         "CARDNAME deals 3 damage to any target.")));
         String output = RenderedLine.join(card.renderLines(0));
         assertFalse(output.contains("power toughness:"));
         assertFalse(output.contains("loyalty:"));
         assertFalse(output.contains("defense:"));
-        assertFalse(output.contains("colors:"));
         assertFalse(output.contains("text:"));
         assertTrue(output.contains("spell[1]: CARDNAME deals 3 damage to any target."));
     }
@@ -42,7 +41,7 @@ class OutputFormatterTest {
     void abilitiesFormattedInOrder() {
         CardFace card = new CardFace(
                 "test card", "{W}", "creature human",
-                "1/1", null, null, null, null,
+                "1/1", null, null, null,
                 List.of(
                         new TextAbility(AbilityType.STATIC, "flying"),
                         new TextAbility(AbilityType.ACTIVATED, "{T}: add {W}."),
@@ -82,10 +81,10 @@ class OutputFormatterTest {
     void multiFaceCardWithLayout() {
         CardFace front = new CardFace(
                 "daring sleuth", "{1}{U}", "creature human rogue",
-                "2/1", null, null, null, null, List.of());
+                "2/1", null, null, null, List.of());
         CardFace back = new CardFace(
                 "bearer of overwhelming truths", null, "creature human wizard",
-                "3/2", null, null, null, null, List.of());
+                "3/2", null, null, null, List.of());
         MultiCard multi = MultiCard.multiFace("transform", List.of(front, back));
         String output = RenderedLine.join(multi.renderLines());
 
@@ -99,7 +98,7 @@ class OutputFormatterTest {
     void singleFaceCardNoLayoutLine() {
         CardFace card = new CardFace(
                 "grizzly bears", "{1}{G}", "creature bear",
-                "2/2", null, null, null, null, List.of());
+                "2/2", null, null, null, List.of());
         MultiCard single = MultiCard.singleFace(card);
         String output = RenderedLine.join(single.renderLines());
         assertFalse(output.contains("layout:"));
@@ -109,7 +108,7 @@ class OutputFormatterTest {
     void loyaltyFieldIncluded() {
         CardFace card = new CardFace(
                 "jace beleren", "{1}{U}{U}", "legendary planeswalker jace",
-                null, "3", null, null, null,
+                null, "3", null, null,
                 List.of(new TextAbility(AbilityType.PLANESWALKER, "+2: each player draws a card.")));
         String output = RenderedLine.join(card.renderLines(0));
         assertTrue(output.contains("loyalty: 3"));

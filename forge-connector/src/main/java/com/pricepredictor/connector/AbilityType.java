@@ -89,10 +89,6 @@ public enum AbilityType {
 
     private static final Map<Keyword, AbilityType> KEYWORD_COST_TYPES = buildKeywordCostTypes();
 
-    private static final Set<Keyword> INTERNAL_KEYWORDS = EnumSet.of(
-            Keyword.MAYFLASHCOST, Keyword.MAYFLASHSAC
-    );
-
     private static Map<Keyword, AbilityType> buildKeywordCostTypes() {
         Map<Keyword, AbilityType> map = new EnumMap<>(Keyword.class);
         for (Keyword kw : EnumSet.of(
@@ -140,9 +136,5 @@ public enum AbilityType {
         if (hasAbilities) return ACTIVATED;
         if (hasTriggers) return TRIGGERED;
         return STATIC;
-    }
-
-    public static boolean isInternalKeyword(Keyword kw) {
-        return INTERNAL_KEYWORDS.contains(kw);
     }
 }

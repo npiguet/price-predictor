@@ -588,7 +588,7 @@ final class FaceParser {
         }
         if (text != null) text = AbilityDescription.applyCasing(text);
 
-        return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, null, text, abilities);
+        return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, text, abilities);
     }
 
     private static String formatTypeLine(ICardFace face) {

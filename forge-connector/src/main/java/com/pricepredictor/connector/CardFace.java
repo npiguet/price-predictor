@@ -14,7 +14,6 @@ public record CardFace(
         String powerToughness,
         String loyalty,
         String defense,
-        String colors,
         String text,
         List<Ability> abilities
 ) {
@@ -33,7 +32,7 @@ public record CardFace(
     /** This face with its abilities replaced. */
     public CardFace withAbilities(List<Ability> replacement) {
         return new CardFace(name, manaCost, types, powerToughness, loyalty, defense,
-                colors, text, replacement);
+                text, replacement);
     }
 
     /**
@@ -55,7 +54,6 @@ public record CardFace(
         }
         if (loyalty != null) addHeader(lines, face, "loyalty", loyalty);
         if (defense != null) addHeader(lines, face, "defense", defense);
-        if (colors != null) addHeader(lines, face, "colors", colors);
         if (text != null) addHeader(lines, face, "text", text);
 
         ActionCounter counter = new ActionCounter(0);
