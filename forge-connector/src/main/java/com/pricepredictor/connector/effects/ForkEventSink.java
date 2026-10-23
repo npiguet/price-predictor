@@ -72,10 +72,16 @@ final class ForkEventSink extends BusEventReader {
      * and nothing else the drained stack does.
      *
      * <ul>
-     *   <li>{@link #BEFORE}: nothing is filed. A cast trigger — prowess, a
-     *   "whenever you cast" or becomes-target trigger, storm, cascade —
-     *   resolves above the forced ability, before it, and live gives it a
-     *   bracket of its own.</li>
+     *   <li>{@link #BEFORE}: between the cast and the resolution, what is
+     *   published while the forced ability is the top of the fork's stack is
+     *   filed, as live files the state-based check before priority into the
+     *   spell's bracket. While anything sits above it — a cast trigger:
+     *   prowess, a "whenever you cast" or becomes-target trigger, storm,
+     *   cascade — nothing is, and once that item has resolved its held
+     *   window keeps the deaths of the check that follows it ({@link
+     *   #aboveHeld}). That is the item's own record live, whether the live
+     *   bracket is one slot the trigger takes over or one per stack
+     *   item.</li>
      *   <li>{@link #RESOLVING}: from the first event published while the
      *   forced ability is the one resolving, until its {@code
      *   GameEventSpellResolved}: everything is filed, as live files the open
@@ -93,6 +99,13 @@ final class ForkEventSink extends BusEventReader {
     private enum Phase { BEFORE, RESOLVING, HELD, CLOSED }
 
     private Phase phase = Phase.BEFORE;
+    /**
+     * Whether an item that resolved above the forced ability is in its held
+     * window: from its resolved event until the next ability reaches the
+     * stack or resolves. A permanent leaving the battlefield in a state-based
+     * check then is that item's death, as live holds it.
+     */
+    private boolean aboveHeld;
     /** Positions in {@link #events()} of moves off the battlefield during a state-based check. */
     private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
@@ -183,17 +196,24 @@ final class ForkEventSink extends BusEventReader {
             return;
         }
         boolean forced = event.spell() != null && event.spell().getId() == acting.getId();
+        aboveHeld = false;
         if (forced && (phase == Phase.BEFORE || phase == Phase.RESOLVING)) {
             phase = Phase.HELD;
         } else if (phase == Phase.HELD) {
             phase = Phase.CLOSED;
+        } else if (phase == Phase.BEFORE) {
+            aboveHeld = true;
         }
     }
 
-    /** The next ability has reached the stack, which closes the held window. */
+    /** The next ability has reached the stack, which closes a held window. */
     @Subscribe
     public void onCast(GameEventSpellAbilityCast event) {
-        if (gated() && phase == Phase.HELD) {
+        if (!gated()) {
+            return;
+        }
+        aboveHeld = false;
+        if (phase == Phase.HELD) {
             phase = Phase.CLOSED;
         }
     }
@@ -207,12 +227,17 @@ final class ForkEventSink extends BusEventReader {
         if (!gated()) {
             return true;
         }
-        if (phase == Phase.BEFORE && forcedIsResolving()) {
-            phase = Phase.RESOLVING;
+        boolean leave = move != null && isStateBasedLeave(move);
+        if (phase == Phase.BEFORE && forcedOnTop()) {
+            if (game.getStack().isResolving()) {
+                phase = Phase.RESOLVING;
+            } else {
+                return !(aboveHeld && leave);
+            }
         }
         return switch (phase) {
             case RESOLVING -> true;
-            case HELD -> move != null && isStateBasedLeave(move);
+            case HELD -> leave;
             case BEFORE, CLOSED -> false;
         };
     }
@@ -227,15 +252,13 @@ final class ForkEventSink extends BusEventReader {
     }
 
     /**
-     * Whether the forced ability is the one resolving: the stack is resolving
-     * with it on top, where {@code MagicStack.resolveStack} leaves it until it
-     * has finished. Read once, at its first event; anything pushed above it
+     * Whether the forced ability is the top of the fork's stack. While the
+     * stack is resolving, that makes it the one resolving: {@code
+     * MagicStack.resolveStack} leaves it on top until it has finished. Read
+     * in {@link Phase#RESOLVING} no longer; anything pushed above it
      * mid-resolution does not end its span, the resolved event does.
      */
-    private boolean forcedIsResolving() {
-        if (!game.getStack().isResolving()) {
-            return false;
-        }
+    private boolean forcedOnTop() {
         var top = game.getStack().peek();
         return top != null && top.getSpellAbility() != null
                 && top.getSpellAbility().getId() == acting.getId();
@@ -255,6 +278,11 @@ final class ForkEventSink extends BusEventReader {
      * <p>A probe's leave is marked only when it was filed: a repeat the
      * buffer refused has no position, and the next free one belongs to
      * whatever is filed next.
+     *
+     * <p>A death in the check before the forced ability resolves is not
+     * marked. Live files it into the open bracket like any other event, so on
+     * a modal resolution it rides with the first mode rather than joining a
+     * half by {@code halfForDeath}, which is a resolved half's rule.
      */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
@@ -263,7 +291,7 @@ final class ForkEventSink extends BusEventReader {
         }
         int at = size();
         boolean probe = combatDamage;
-        if (!isStateBasedLeave(event)) {
+        if (!isStateBasedLeave(event) || gated() && phase != Phase.HELD) {
             file(moved, null);
         } else if (probe) {
             if (file(moved, null)) {

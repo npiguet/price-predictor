@@ -443,6 +443,110 @@ class ForkCollectorTest {
         }
     }
 
+    /**
+     * A death in the state-based check between the cast and the resolution
+     * is the forced spell's, as live files it into the spell's bracket. Maro
+     * counts its caster's hand, and casting Pyroclasm, the hand's one card,
+     * leaves it 0/0 before Pyroclasm resolves.
+     */
+    @Test
+    void aDeathInTheCheckBeforeTheResolutionIsTheForcedSpells() throws Throwable {
+        Game observedGame = maroBoard();
+        String observed = observedEffectPayload(observedGame, firstSpellInHand(observedGame));
+
+        Game forkedGame = maroBoard();
+        String forced = forcedPayload(forkedGame, firstSpellInHand(forkedGame), 1L);
+
+        assertTrue(forced.contains("\"subjects\":[\"E1\"],\"params\":"
+                + "{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""), forced);
+        assertEquals(observed, forced);
+    }
+
+    /**
+     * A cast trigger above the forced spell owns what it does, and the
+     * deaths of the check after it: Earthshaker deals 2 to each creature
+     * without flying when an Arcane spell is cast, and the opposing bears it
+     * kills are nowhere in the forced Lava Spike's record.
+     */
+    @Test
+    void aCastTriggersDamageAndDeathsAreNotTheForcedSpells() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        TestBoard.inPlay(game, caster, "Earthshaker");
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, caster, "Lava Spike");
+
+        String payload = forcedPayload(game, firstSpellInHand(game), 1L);
+
+        assertTrue(payload.contains("\"type\":\"damage_dealt\",\"subjects\":[\"P"), payload);
+        assertFalse(payload.contains("\"E" + bears.getId() + "\""), payload);
+    }
+
+    /**
+     * The held window closes when the next ability reaches the stack, as the
+     * live one does: Flametongue Kavu's enters trigger kills a creature after
+     * the Kavu has resolved, and that death is the trigger's. The forced
+     * Kavu's record equals the observed Kavu's.
+     */
+    @Test
+    void theHeldWindowClosesWhenTheTriggerReachesTheStack() throws Throwable {
+        Game observedGame = kavuBoard();
+        String observed = observedEffectPayload(observedGame, firstSpellInHand(observedGame));
+
+        Game forkedGame = kavuBoard();
+        String forced = forcedPayload(forkedGame, firstSpellInHand(forkedGame), 1L);
+
+        assertEquals(List.of(EffectEvent.ZONE_CHANGE), eventTypes(forced), forced);
+        assertEquals(observed, forced);
+    }
+
+    /** Maro for the caster, whose hand is Pyroclasm alone, and the other seat's bears. */
+    private static Game maroBoard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.inPlay(game, game.getPlayers().get(0), "Maro");
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, game.getPlayers().get(0), "Pyroclasm");
+        return game;
+    }
+
+    /** Two creatures for the other seat and Flametongue Kavu in the caster's hand. */
+    private static Game kavuBoard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Llanowar Elves");
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, game.getPlayers().get(0), "Flametongue Kavu");
+        return game;
+    }
+
+    private static SpellAbility firstSpellInHand(Game game) {
+        Player caster = game.getPlayers().get(0);
+        SpellAbility spell = caster.getCardsIn(ZoneType.Hand).get(0).getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+        return spell;
+    }
+
+    /**
+     * The first effect half an observed cast of {@code spell} writes, played
+     * the way a game plays it: the check before priority, the resolution,
+     * the check after it, and the triggers until the stack is empty.
+     */
+    private String observedEffectPayload(Game game, SpellAbility spell) throws Throwable {
+        List<String> records = ShardRun.observed(tempDir.resolve("observed"), game, bracket -> {
+            game.getStack().addAndUnfreeze(spell);
+            game.getAction().checkStateEffects(false);
+            while (!game.getStack().isEmpty()) {
+                game.getStack().resolveStack();
+                game.getAction().checkStateEffects(false);
+                game.getStack().addAllTriggeredAbilitiesToStack();
+            }
+            game.fireEvent(new GameEventTurnPhase(game.getPlayers().get(0), PhaseType.MAIN2, ""));
+        });
+        String half = records.stream()
+                .filter(r -> r.contains("\"moment\":\"resolution\""))
+                .findFirst().orElseThrow(() -> new AssertionError(records.toString()));
+        return half.substring(half.indexOf(",\"payload\":"));
+    }
+
     /** The one forced record's payload. */
     private String forcedPayload(Game game, SpellAbility spell, long seed) throws IOException {
         ShardRun.Fork fork = ShardRun.forked(
