@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
 import static com.pricepredictor.connector.MatchFixtures.TS;
@@ -51,17 +52,36 @@ class MatchWorkerMainTest {
 
         MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
 
-        assertEquals(Path.of("dummy-progress.txt"), config.progressFile());
+        assertEquals(Optional.of(Path.of("dummy-progress.txt")), config.progressFile());
     }
 
     @Test
-    void progressFilePropertyDefaultsToNullWhenAbsent() {
+    void progressFilePropertyIsEmptyWhenAbsent() {
         System.setProperty("output.file", "dummy-output.txt");
         System.setProperty("match.run.id", RUN_ID);
 
         MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
 
-        assertNull(config.progressFile());
+        assertTrue(config.progressFile().isEmpty());
+    }
+
+    /**
+     * A blank optional path is no path: read as given, a blank
+     * {@code -Doutput.file=} would name the empty path and take the worker
+     * out of records-only mode.
+     */
+    @Test
+    void blankOptionalPathsReadAsAbsent() {
+        System.setProperty("output.file", " ");
+        System.setProperty("effect.records.dir", "dummy-records");
+        System.setProperty("match.run.id", RUN_ID);
+        System.setProperty("sealed.progress.file", "");
+
+        MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
+
+        assertTrue(config.recordsOnly());
+        assertTrue(config.progressFile().isEmpty());
+        assertEquals(Optional.of(Path.of("dummy-records")), config.effectRecordsDir());
     }
 
     @Test
@@ -78,7 +98,7 @@ class MatchWorkerMainTest {
         MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
 
         assertTrue(config.recordsOnly());
-        assertEquals(Path.of("dummy-progress.txt"), config.progressFile());
+        assertEquals(Optional.of(Path.of("dummy-progress.txt")), config.progressFile());
     }
 
     // ── recordMatch(): the progress line rides no writer's gate ────────────

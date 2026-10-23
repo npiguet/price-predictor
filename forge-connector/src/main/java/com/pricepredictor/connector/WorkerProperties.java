@@ -1,7 +1,9 @@
 package com.pricepredictor.connector;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
@@ -36,11 +38,26 @@ public final class WorkerProperties {
 
     /** The property's value, or exit naming it when it is unset or blank. */
     static String require(String name) {
+        return optional(name).orElseThrow(
+                () -> badConfig("-D" + name + " system property is required"));
+    }
+
+    /**
+     * The property's value trimmed, or empty when it is unset or blank.
+     *
+     * <p>For an optional property with no default to fall back on — a file,
+     * a set code, a label — whose absence means "not asked for". A blank value
+     * is a launcher passing {@code -Dname=} for an option it was not given,
+     * and read as given it would name the empty path or the set called "".
+     */
+    static Optional<String> optional(String name) {
         String value = System.getProperty(name);
-        if (value == null || value.isBlank()) {
-            throw badConfig("-D" + name + " system property is required");
-        }
-        return value;
+        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.trim());
+    }
+
+    /** {@link #optional} as a path. */
+    static Optional<Path> optionalPath(String name) {
+        return optional(name).map(Path::of);
     }
 
     /**

@@ -89,10 +89,10 @@ public class DraftWorkerMain {
         PrintStream out = ToolMain.claimStdout();
 
         String agentMixSpec = WorkerProperties.require(AGENT_MIX);
-        String setCode = System.getProperty(SET);  // null => random per draft
+        String setCode = WorkerProperties.optional(SET).orElse(null);  // null => random per draft
         Set<String> externalAgents = Set.copyOf(
                 WorkerProperties.listProperty(EXTERNAL_AGENTS));
-        String requiredAgent = System.getProperty(REQUIRED_AGENT);
+        String requiredAgent = WorkerProperties.optional(REQUIRED_AGENT).orElse(null);
         PickChannel channel = new PickChannel(out, new BufferedReader(
                 new InputStreamReader(System.in, StandardCharsets.UTF_8)), externalAgents);
 
