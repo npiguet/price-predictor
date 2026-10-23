@@ -92,7 +92,11 @@ public final class EffectEvent {
         return subjects;
     }
 
-    /** The normalized params a reader can check a specific key of, rather than {@link #toJson()}. */
+    /**
+     * The normalized params, as a read accessor for tests and other readers
+     * that check one key rather than parse {@link #toJson()}. The collectors
+     * never read an event's params back; they only write them.
+     */
     public Map<String, Object> params() {
         return params;
     }

@@ -63,7 +63,6 @@ public class BatchConverter {
             totalFiles++;
             try {
                 List<String> lines = Files.readAllLines(scriptFile);
-                String filename = scriptFile.getFileName().toString();
                 Path relativePath = cardsPath.relativize(scriptFile);
                 // The key's script path is the source path as written, tree
                 // included — produced identically here and by the Python reader.
@@ -71,7 +70,7 @@ public class BatchConverter {
                         + relativePath.toString().replace('\\', '/');
 
                 RulesParser.ParsedCard parsed =
-                        converter.parseScript(lines, filename, scriptKeyPath);
+                        converter.parseScript(lines, scriptKeyPath);
                 MultiCard result = parsed.card();
 
                 List<RenderedLine> renderedLines = result.renderLines();

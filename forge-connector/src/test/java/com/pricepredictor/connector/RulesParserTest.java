@@ -23,14 +23,14 @@ class RulesParserTest {
     private final RulesParser converter = new RulesParser();
 
     private MultiCard convert(String... lines) {
-        return converter.parseScript(Arrays.asList(lines), "test.txt", null).card();
+        return converter.parseScript(Arrays.asList(lines), null).card();
     }
 
     private MultiCard convertFromFile(String relativePath) {
         try {
             Path file = CARDS_FOLDER.resolve(relativePath);
             List<String> lines = Files.readAllLines(file);
-            return converter.parseScript(lines, file.getFileName().toString(), null).card();
+            return converter.parseScript(lines, null).card();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

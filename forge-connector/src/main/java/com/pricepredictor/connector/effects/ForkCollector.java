@@ -310,7 +310,7 @@ public final class ForkCollector {
             }
             Game fork = verified.get().fork();
             Player perspective = verified.get().perspective();
-            SpellAbility forked = findInFork(verified.get().copier(), fork, ability);
+            SpellAbility forked = findInFork(verified.get().copier(), ability);
             Player actor = forked == null
                     ? null : mappedPlayer(verified.get().copier(), perspective);
             if (forked == null || actor == null) {
@@ -608,8 +608,7 @@ public final class ForkCollector {
      * does not, so it is matched by description among the copy's — the same
      * approach Forge's own simulator takes.
      */
-    private static SpellAbility findInFork(
-            GameCopier copier, Game fork, SpellAbility ability) {
+    private static SpellAbility findInFork(GameCopier copier, SpellAbility ability) {
         Card host;
         try {
             host = copier.find(ability.getHostCard());

@@ -55,8 +55,7 @@ class ProvenanceSidecarTest {
         try {
             Path file = CARDS_FOLDER.resolve(relativePath);
             return convertSource(Files.readAllLines(file),
-                    SourceTree.CARDSFOLDER + "/" + relativePath,
-                    file.getFileName().toString());
+                    SourceTree.CARDSFOLDER + "/" + relativePath);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -69,10 +68,9 @@ class ProvenanceSidecarTest {
      * level whose text is also registered as a trait of its own is one, and the
      * removal path it takes is only reachable from a script written for it.
      */
-    private Converted convertSource(List<String> source, String scriptFile,
-                                    String fileName) {
+    private Converted convertSource(List<String> source, String scriptFile) {
         ConvertedScript converted =
-                ConvertedScript.of(parser.parseScript(source, fileName, scriptFile), scriptFile);
+                ConvertedScript.of(parser.parseScript(source, scriptFile), scriptFile);
         return new Converted(converted.parsed().card(), converted.texts(),
                 converted.rendered().stream().map(RenderedLine::owner).toList(),
                 converted.sidecar());
@@ -104,7 +102,7 @@ class ProvenanceSidecarTest {
                 throw new UncheckedIOException(e);
             }
             String withoutRecording = RenderedLine.join(parser
-                    .parseScript(source, file.getFileName().toString(), null)
+                    .parseScript(source, null)
                     .card().renderLines());
             String withRecording = String.join("\n", convert(relativePath).lines());
             assertEquals(withoutRecording, withRecording,
@@ -316,8 +314,7 @@ class ProvenanceSidecarTest {
                         + " | TriggerZones$ Battlefield | Execute$ TrigDraw"
                         + " | TriggerDescription$ Whenever a creature you control attacks,"
                         + " draw a card."),
-                SourceTree.CARDSFOLDER + "/t/test_class_duplicate.txt",
-                "test_class_duplicate.txt");
+                SourceTree.CARDSFOLDER + "/t/test_class_duplicate.txt");
         List<ProvenanceKey> keys = claimedBy(card, "level", "draw a card");
         assertTrue(keys.stream().anyMatch(
                         k -> k.traitKind().equals(TraitKind.TRIGGER)),
