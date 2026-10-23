@@ -3037,21 +3037,25 @@ def lethal_hits() -> None:
         share = r.lethal / n
         ax.barh(y, share, height=0.6, color=lethal, edgecolor="white", lw=1)
         ax.barh(y, 1 - share, left=share, height=0.6, color=short_c, edgecolor="white", lw=1)
-        ax.text(share / 2, y, f"{share:.0%}  ({r.lethal:,})", ha="center", va="center",
+        ax.text(share / 2, y, f"{share:.0%}  ({r.lethal:,} hits)", ha="center", va="center",
                 fontsize=8.4, color="white")
-        ax.text(share + (1 - share) / 2, y, f"{1 - share:.0%}  ({r.not_lethal:,})",
+        ax.text(share + (1 - share) / 2, y, f"{1 - share:.0%}  ({r.not_lethal:,} hits)",
                 ha="center", va="center", fontsize=8.4, color=INK)
+        ax.text(1.015, y, f"{n:,} hits", ha="left", va="center", fontsize=8.4, color=INK)
+    ax.text(1.015, len(t) - 0.45, "total", ha="left", va="bottom", fontsize=8.4,
+            color=INK_SOFT)
     ax.set_yticks(range(len(t)), [labels.get(w, w) for w in t.what][::-1], fontsize=8.6)
     ax.set_xlim(0, 1)
     ax.xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
+    ax.set_xlabel("share of the row's hits")
     ax.grid(axis="y", visible=False)
-    ax.legend(handles=[Patch(color=lethal, label="lethal: the creature dies"),
-                       Patch(color=short_c, label="not lethal")], loc="upper center",
-              bbox_to_anchor=(0.4, -0.13), ncol=2, fontsize=8.4)
+    ax.legend(handles=[Patch(color=lethal, label="lethal: the creature died"),
+                       Patch(color=short_c, label="not lethal: the creature survived")],
+              loc="upper center", bbox_to_anchor=(0.4, -0.2), ncol=2, fontsize=8.4)
     ax.set_axisbelow(True)
-    ax.set_title("In 40 training shards, a targeted damage spell or ability falls short of the "
-                 "toughness in 36 hits,\none in six; combat damage falls short in 1,314, more "
-                 "than one in four", fontsize=10.5)
+    ax.set_title("Hits on a creature in 40 training shards (2,000 records each), by kind of "
+                 "hit, split by whether\nthe creature died. A hit is one creature taking damage "
+                 "or −X/−X from one event", fontsize=10.5)
     save(fig, "lethal-hits")
 
 
