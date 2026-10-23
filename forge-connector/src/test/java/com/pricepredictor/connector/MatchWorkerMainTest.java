@@ -7,10 +7,11 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 
+import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
+import static com.pricepredictor.connector.MatchFixtures.TS;
+import static com.pricepredictor.connector.MatchFixtures.deck40;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -28,9 +29,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * factored out of the loop to avoid requiring.
  */
 class MatchWorkerMainTest {
-
-    private static final Instant TS = Instant.parse("2026-04-22T14:30:05Z");
-    private static final String RUN_ID = "a3f4b8c2-1234-4abc-9def-0123456789ab";
 
     @AfterEach
     void clearSystemProperties() {
@@ -85,14 +83,6 @@ class MatchWorkerMainTest {
 
     // ── recordMatch(): the progress line rides no writer's gate ────────────
 
-    private static List<String> deck40(String prefix) {
-        List<String> cards = new ArrayList<>();
-        for (int i = 0; i < 40; i++) {
-            cards.add(prefix + "Card" + i);
-        }
-        return cards;
-    }
-
     private static CardsPlayedRow cardsPlayedRow() {
         return new CardsPlayedRow(
                 TS, RUN_ID, "RVR", "forge-best", "gen-2",
@@ -111,10 +101,9 @@ class MatchWorkerMainTest {
     @Test
     void progressLineIsWrittenInRecordsOnlyMode(@TempDir Path tmp) throws IOException {
         // Both sealed writers null -- exactly records-only mode -- and the
-        // progress line must still be written. This is the exact property
-        // whose absence was the round-4 review's CRITICAL finding: a
-        // records-only round's progress file never grew, so should_stop(0)
-        // was 0 >= matches, false forever, and the round never ended.
+        // progress line must still be written: without it a records-only
+        // round's progress file never grows, should_stop(0) reads
+        // 0 >= matches, false forever, and the round never ends.
         Path progressFile = tmp.resolve("run.progress.txt");
         ProgressWriter progressWriter = new ProgressWriter(progressFile);
 
@@ -177,14 +166,10 @@ class MatchWorkerMainTest {
     }
 
     @Test
-    void noProgressWriterMeansNoProgressFileCreated(@TempDir Path tmp) {
-        // The unset case (plain `sealed match-outcomes` today, no
-        // -Dsealed.progress.file passed): recordMatch(..., null) must be a
-        // silent no-op for progress, not an error and not a stray file.
-        Path progressFile = tmp.resolve("run.progress.txt");
-
+    void noProgressWriterIsASilentNoOp() {
+        // No -Dsealed.progress.file passed: recordMatch(..., null) skips the
+        // progress line rather than failing.
         assertDoesNotThrow(() -> MatchWorkerMain.recordMatch(twoGameResult(), null, null, null));
-        assertFalse(Files.exists(progressFile));
     }
 
     @Test

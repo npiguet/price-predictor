@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
@@ -14,10 +13,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.List;
 
+import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordLines.linkOf;
+import static com.pricepredictor.connector.effects.RecordLines.optionOf;
+import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordLines.stateOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -47,24 +50,12 @@ class ModalResolutionTest {
     private static final String STOCK_FORK =
             "to split a fork's modes; a stock fork writes one root half";
 
-    private static Method resolving() {
-        return HookShapes.method(HookShapes.Clause.class, "onClauseResolving");
-    }
-
     /**
      * The charm spell of a real card, activated by {@code owner}, in a game
      * with two players so a snapshot has a life total to move.
      */
     private static SpellAbility charmOf(Game game, Player owner, String cardName) {
         return TestBoard.charmOf(TestBoard.card(game, owner, cardName), owner);
-    }
-
-    private static String field(String json, String key) {
-        int at = json.indexOf("\"" + key + "\":");
-        assertTrue(at >= 0, key + " missing from " + json);
-        int from = at + key.length() + 3;
-        int to = json.indexOf(",\"", from);
-        return json.substring(from, to < 0 ? json.length() - 1 : to);
     }
 
     // ── the keys ────────────────────────────────────────────────────────
@@ -131,13 +122,13 @@ class ModalResolutionTest {
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
 
-            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{charm});
-            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
+            collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{charm});
+            collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(0)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.DAMAGE_DEALT).param("amount", 4));
             // The first mode's effect: a life total that moved, which the
             // second mode's snapshot must show.
             caster.getOpponents().get(0).setLife(16, null);
-            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
+            collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
             bracket.onNextAction();
@@ -150,12 +141,13 @@ class ModalResolutionTest {
         assertTrue(cost.contains("\"moment\":\"activation\""), cost);
         assertFalse(cost.contains("\"option\""), "the cost half acts through the root: " + cost);
 
-        String link = field(cost, "link_id");
-        assertEquals(link, field(first, "link_id"));
-        assertEquals(link, field(second, "link_id"));
+        String link = linkOf(cost);
+        assertNotNull(link, cost);
+        assertEquals(link, linkOf(first));
+        assertEquals(link, linkOf(second));
 
-        assertTrue(first.contains("\"option\":0}"), first);
-        assertTrue(second.contains("\"option\":2}"), second);
+        assertEquals(0L, optionOf(first), first);
+        assertEquals(2L, optionOf(second), second);
         assertTrue(first.contains("damage_dealt") && !first.contains("keyword_change"),
                 "the first half carries its own mode's events only: " + first);
         assertTrue(second.contains("keyword_change") && !second.contains("damage_dealt"),
@@ -175,16 +167,16 @@ class ModalResolutionTest {
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
             for (AbilitySub clone : clones) {
-                collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clone});
+                collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clone});
             }
             bracket.endBracket(charm.getId(), false);
             bracket.onNextAction();
         });
 
         assertEquals(4, records.size(), records.toString());
-        assertTrue(records.get(1).contains("\"option\":0}"), records.get(1));
-        assertTrue(records.get(2).contains("\"option\":0}"), records.get(2));
-        assertTrue(records.get(3).contains("\"option\":2}"), records.get(3));
+        assertEquals(0L, optionOf(records.get(1)), records.get(1));
+        assertEquals(0L, optionOf(records.get(2)), records.get(2));
+        assertEquals(2L, optionOf(records.get(3)), records.get(3));
     }
 
     /**
@@ -200,18 +192,18 @@ class ModalResolutionTest {
 
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
-            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
-            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
+            collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(0)});
+            collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
             bracket.onNextAction();
         });
 
         assertEquals(3, records.size(), records.toString());
-        assertTrue(records.get(1).contains("\"option\":0}"), records.get(1));
-        assertTrue(records.get(1).contains("\"events\":[]"), records.get(1));
-        assertTrue(records.get(2).contains("\"option\":2}"), records.get(2));
-        assertTrue(records.get(2).contains("keyword_change"), records.get(2));
+        assertEquals(0L, optionOf(records.get(1)), records.get(1));
+        assertEquals(List.of(), eventTypes(records.get(1)), records.get(1));
+        assertEquals(2L, optionOf(records.get(2)), records.get(2));
+        assertEquals(List.of("keyword_change"), eventTypes(records.get(2)), records.get(2));
     }
 
     /**
@@ -240,7 +232,8 @@ class ModalResolutionTest {
         String effect = records.get(1);
         assertFalse(effect.contains("\"option\""), "the root line acts: " + effect);
         assertTrue(effect.contains("damage_dealt") && effect.contains("keyword_change"), effect);
-        assertEquals(field(records.get(0), "link_id"), field(effect, "link_id"));
+        assertNotNull(linkOf(effect), effect);
+        assertEquals(linkOf(records.get(0)), linkOf(effect));
     }
 
     /**
@@ -255,7 +248,10 @@ class ModalResolutionTest {
      */
     @Test
     void aForkedCharmWritesOneEffectHalfPerChosenMode() throws IOException {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        // Started: GameAction.checkStateEffects freezes the stack and returns
+        // early on a game that has not, which leaves the fork's stack frozen
+        // and the forced ability parked off it.
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
         TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
@@ -263,10 +259,6 @@ class ModalResolutionTest {
         // no counterpart in the copy.
         SpellAbility charm = TestBoard.charmOf(
                 TestBoard.inHand(game, caster, "Fiery Confluence"), caster);
-        // A game in play: GameAction.checkStateEffects freezes the stack and
-        // returns early on a game that has not started, which leaves the
-        // fork's stack frozen and the forced ability parked off it.
-        game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
                 2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
@@ -280,7 +272,7 @@ class ModalResolutionTest {
         for (String record : records) {
             assertTrue(record.contains("\"interventional\":true"), record);
             assertFalse(record.contains("\"link_id\":\""), "a forced half has no partner: " + record);
-            assertTrue(record.contains("\"option\":0}") || record.contains("\"option\":1}"),
+            assertTrue(List.of(0L, 1L).contains(optionOf(record)),
                     "each half acts through a mode the board offered: " + record);
             assertTrue(record.contains("\"index_within_kind\":" + root.indexWithinKind()), record);
         }
@@ -303,9 +295,7 @@ class ModalResolutionTest {
                 confluenceIn(forkedGame), STOCK_FORK);
         assertTrue(fork.wrote(), "the forced resolution observed something");
         List<String> forced = fork.records();
-        int[] options = forced.stream()
-                .mapToInt(r -> Integer.parseInt(field(r, "option").replace("}]", "")))
-                .toArray();
+        int[] options = forced.stream().mapToInt(r -> optionOf(r).intValue()).toArray();
 
         Game observedGame = confluenceBoard();
         SpellAbility charm = confluenceIn(observedGame);
@@ -315,11 +305,9 @@ class ModalResolutionTest {
                     observedGame.getStack().addAndUnfreeze(charm);
                     observedGame.getStack().resolveStack();
                     observedGame.getAction().checkStateEffects(false);
-                    observedGame.fireEvent(new GameEventTurnPhase(
-                            observedGame.getPlayers().get(0), PhaseType.MAIN2, ""));
+                    TestBoard.nextStep(observedGame);
                 });
-        List<String> halves = observed.stream()
-                .filter(r -> r.contains("\"moment\":\"resolution\"")).toList();
+        List<String> halves = records(observed, "resolution");
 
         assertEquals(options.length, halves.size(), observed.toString());
         for (int i = 0; i < halves.size(); i++) {
@@ -365,14 +353,6 @@ class ModalResolutionTest {
         return TestBoard.charmOf(caster.getCardsIn(ZoneType.Hand).get(0), caster);
     }
 
-    /** A record's {@code state} object, as written. */
-    private static String stateOf(String record) {
-        int from = record.indexOf("\"state\":");
-        int to = record.indexOf(",\"payload\":");
-        assertTrue(from >= 0 && to > from, record);
-        return record.substring(from, to);
-    }
-
     /**
      * A fork forcing a creature spell resolves the creature's own modal
      * enters trigger too, on the same host card. Those modes belong to the
@@ -383,13 +363,12 @@ class ModalResolutionTest {
      */
     @Test
     void aForkedSpellIsNotSplitByItsOwnTriggersModes() throws IOException {
-        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Card barbarian = TestBoard.inHand(game, caster, "Plundering Barbarian");
         SpellAbility creatureSpell = barbarian.getFirstSpellAbility();
         assertNotNull(creatureSpell);
         creatureSpell.setActivatingPlayer(caster);
-        game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
                 2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
@@ -402,7 +381,7 @@ class ModalResolutionTest {
         String record = records.get(0);
         assertTrue(record.contains("\"trait_kind\":\"spell\""), record);
         assertFalse(record.contains("\"option\""), record);
-        assertEquals(1, record.split("\"zone_change\"", -1).length - 1,
+        assertEquals(1, java.util.Collections.frequency(eventTypes(record), "zone_change"),
                 "the spell's own arrival, and not the trigger's Treasure: " + record);
         assertTrue(record.contains("{\"type\":\"zone_change\",\"subjects\":[\"E"
                 + barbarian.getId() + "\"]"), "the one move is the Barbarian's: " + record);
@@ -418,7 +397,7 @@ class ModalResolutionTest {
 
         List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
-            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{otherClones.get(0)});
+            collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{otherClones.get(0)});
             bracket.endBracket(charm.getId(), false);
             bracket.onNextAction();
         });

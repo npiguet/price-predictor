@@ -88,7 +88,7 @@ class ApiEventsTest {
         EffectEvent event = after(sa, before(sa));
 
         assertEquals(EffectEvent.PHASE_SKIPPED, event.type());
-        assertNotNull(event.params().get("phase"));
+        assertEquals("BeginCombat", event.params().get("phase"));
     }
 
     @Test
@@ -127,14 +127,14 @@ class ApiEventsTest {
      * falls back to the activator -- {@code null} here, since
      * {@link TestCards#game()} is shared and nothing in this suite ever
      * activates an ability as a player. What this pins is that the fallback
-     * path runs end to end rather than that it names anyone in particular;
+     * path still yields the event rather than that it names anyone in particular;
      * {@link ApiEvents} names the {@code DefinedPlayer}-driven branch's real
      * printed counter-examples (Tempest Efreet, Bronze Tablet) in its own
      * javadoc, since neither is reachable without a live target or a prior
      * {@code Remembered} player, which this harness cannot cheaply build.
      */
     @Test
-    void anOwnershipChangeWithNoNamedOwnerFallsBackToTheActivator() {
+    void anOwnershipChangeWithNoNamedOwnerIsStillAnOwnershipChange() {
         SpellAbility sa = TestCards.scriptedAbility("Darkpact", "GainOwnership");
 
         EffectEvent event = after(sa, before(sa));
@@ -143,12 +143,12 @@ class ApiEventsTest {
     }
 
     /**
-     * {@code SpellAbilityEffect.getPlayers} ({@code SpellAbilityEffect.java:314})
-     * splits a {@code " & "}-joined {@code Defined}/{@code DefinedPlayer} and
+     * {@code SpellAbilityEffect.getPlayers} splits a {@code " & "}-joined
+     * {@code Defined}/{@code DefinedPlayer} and
      * unions each token; a rule that read the raw string as one token would
      * hand it to {@code AbilityUtils.getDefinedPlayers} unrecognized, which
-     * falls through to its catch-all ({@code AbilityUtils.java:1187-1190}:
-     * {@code players.addAll(game.getPlayersInTurnOrder())}) -- empty on
+     * falls through to its catch-all ({@code
+     * players.addAll(game.getPlayersInTurnOrder())}) -- empty on
      * {@link TestCards#game()}'s zero-player game, so {@code ownerOf} would
      * fall back to the activator instead.
      *
@@ -252,12 +252,10 @@ class ApiEventsTest {
 
     /**
      * {@code affectedPlayers} has two branches; the five subject tests above
-     * all exercise {@code usesTargeting()}. The {@code Defined$}-only branch
-     * -- the one Ral Zarek, Guest Lecturer actually uses
-     * ({@code ral_zarek_guest_lecturer.txt:9}, {@code SVar:DBSkipTurn:DB$
-     * SkipTurn | NumTurns$ X | Defined$ Targeted}, no {@code ValidTgts$} on
-     * the clause itself) -- had no test asserting <em>who</em>, only the two
-     * pre-existing {@code SkipTurn} tests' counts.
+     * all exercise {@code usesTargeting()}. This one asserts <em>who</em> on
+     * the {@code Defined$}-only branch -- the one Ral Zarek, Guest Lecturer
+     * uses ({@code SVar:DBSkipTurn:DB$ SkipTurn | NumTurns$ X | Defined$
+     * Targeted}, no {@code ValidTgts$} on the clause itself).
      *
      * <p>{@code Defined$ Targeted} on a non-targeting clause has to reach
      * through {@code getAllTargetChoices()} to a <em>different</em> link in
@@ -308,38 +306,7 @@ class ApiEventsTest {
     }
 
     /**
-     * {@code choice()}'s first branch checks {@code host.hasChosenColor()},
-     * not {@code host.getChosenColor() != null}: {@code
-     * Card.getChosenColor()} never returns {@code null} for an unset colour --
-     * it returns {@code ""} -- so that check is always true and would report
-     * <em>every</em> clause routed through {@code choice()} as a colour
-     * choice, this one included, regardless of which of the {@code
-     * choice_made} APIs actually ran.
-     *
-     * <p>This is also the only single-API test in the suite that exercises a
-     * {@code choice_kind} other than {@code "color"}, so it catches that on
-     * its own (the broader {@code everyChoiceMadeApiHasAReadableChoice} guard
-     * below would too, across every branch at once).
-     *
-     * <p>{@code ChooseDirection} rather than {@code ChooseSector}, which has
-     * no rule (see the comment in {@code ApiEvents.RULES} above {@code
-     * HealDamage}). {@code ChooseDirectionEffect.resolve()} always calls
-     * {@code setChosenDirection}.
-     */
-    @Test
-    void aChosenDirectionIsAChoiceNotAMiscolouredOne() {
-        SpellAbility sa = AbilityFactory.getAbility("SP$ ChooseDirection", TestCards.build("Grizzly Bears"));
-        sa.getHostCard().setChosenDirection(Direction.Left);
-
-        EffectEvent event = after(sa, before(sa));
-
-        assertEquals(EffectEvent.CHOICE_MADE, event.type());
-        assertEquals("direction", event.params().get("choice_kind"));
-        assertEquals("Left", event.params().get("value"));
-    }
-
-    /**
-     * The general form of the test above: for every {@code RULES} entry the schema
+     * For every {@code RULES} entry the schema
      * declares as {@code choice_made} (fixture keys asserted equal to every
      * {@code ApiType} whose rule emits {@code choice_made}, read live off the
      * table rather than hand-counted), simulate that API's own effect class writing its
@@ -349,6 +316,15 @@ class ApiEventsTest {
      * new {@code choice_made} API has no fixture yet, or on the per-API
      * assertions, if a fixture exists but the matching {@code choice()}
      * branch does not -- the moment either half drifts from the other.
+     *
+     * <p>{@code choice()}'s first branch checks {@code host.hasChosenColor()},
+     * not {@code host.getChosenColor() != null}: {@code
+     * Card.getChosenColor()} never returns {@code null} for an unset colour --
+     * it returns {@code ""} -- so that check would report <em>every</em>
+     * clause routed through {@code choice()} as a colour choice. Every fixture
+     * but {@code ChooseColor} catches that on its kind, and {@code
+     * ChooseDirection} on its value as well. {@code ChooseDirectionEffect.resolve()}
+     * always calls {@code setChosenDirection}.
      *
      * <p>{@code ChooseSector} is deliberately not a key here: it has no rule
      * in {@code RULES} (see the comment there), so no rule emits {@code
@@ -370,7 +346,11 @@ class ApiEventsTest {
      */
     @Test
     void everyChoiceMadeApiHasAReadableChoice() {
-        record ChoiceFixture(String expectedKind, Consumer<Card> mutate) {
+        record ChoiceFixture(String expectedKind, Consumer<Card> mutate, Object expectedValue) {
+            /** A fixture whose value is only required to be there. */
+            ChoiceFixture(String expectedKind, Consumer<Card> mutate) {
+                this(expectedKind, mutate, null);
+            }
         }
 
         Map<String, ChoiceFixture> fixtures = new TreeMap<>();
@@ -389,7 +369,7 @@ class ApiEventsTest {
         fixtures.put("ChoosePlayer", new ChoiceFixture("player",
                 host -> host.setChosenPlayer(new Player("chooser", TestCards.game(), 93001))));
         fixtures.put("ChooseDirection", new ChoiceFixture("direction",
-                host -> host.setChosenDirection(Direction.Left)));
+                host -> host.setChosenDirection(Direction.Left), "Left"));
         fixtures.put("ChooseEvenOdd", new ChoiceFixture("even_odd",
                 host -> host.setChosenEvenOdd(EvenOdd.Odd)));
         fixtures.put("GenericChoice", new ChoiceFixture("mode",
@@ -420,6 +400,10 @@ class ApiEventsTest {
                     fixture.getValue().expectedKind(), event.params().get("choice_kind"),
                     fixture.getKey());
             assertNotNull(event.params().get("value"), fixture.getKey() + " -- empty value");
+            if (fixture.getValue().expectedValue() != null) {
+                assertEquals(fixture.getValue().expectedValue(), event.params().get("value"),
+                        fixture.getKey());
+            }
         }
     }
 
@@ -563,7 +547,7 @@ class ApiEventsTest {
     }
 
     /**
-     * {@code ChooseNumberEffect.java:90}
+     * {@code ChooseNumberEffect.resolve}
      * calls {@code setChosenNumber(chosen, true)} -- the secret variant that
      * skips the trackable view update -- when {@code Secretly$} is set and
      * {@code KeepSecret$} is not. The general guard's {@code ChooseNumber}
@@ -980,7 +964,7 @@ class ApiEventsTest {
      *
      * <p>{@code addToCombat}'s reselection branch calls {@code
      * combat.removeFromCombat(c)} immediately before re-adding the same
-     * creature against the new defender (SpellAbilityEffect.java:762) --
+     * creature against the new defender --
      * simulated here with the same two public {@code Combat} calls, not a
      * hand-rolled approximation.
      *

@@ -129,6 +129,11 @@ final class HookShapes {
         throw new AssertionError(shape + " declares no " + name);
     }
 
+    /** {@link Clause#onClauseResolving}, to invoke a clause handler with. */
+    static Method clauseResolving() {
+        return method(Clause.class, "onClauseResolving");
+    }
+
     /** {@code handler} behind {@code shape}, as the engine would call it. */
     @SuppressWarnings("unchecked")
     static <T> T proxy(Class<T> shape, InvocationHandler handler) {

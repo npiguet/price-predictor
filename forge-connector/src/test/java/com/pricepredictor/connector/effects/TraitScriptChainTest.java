@@ -65,12 +65,8 @@ class TraitScriptChainTest {
 
     private static Converted converted(RulesParser.ParsedCard parsed, String scriptFile,
                                        RulesParser parser) {
-        List<RenderedLine> rendered = parsed.card().renderLines();
-        ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                parsed.card().faces().get(0).name(), scriptFile,
-                rendered, parsed.recorders());
-        return new Converted(rendered.stream().map(RenderedLine::text).toList(),
-                sidecar, parser.missingSVars());
+        ConvertedScript converted = ConvertedScript.of(parsed, scriptFile);
+        return new Converted(converted.texts(), converted.sidecar(), parser.missingSVars());
     }
 
     private static List<ProvenanceSidecar.Line> linesOfKind(Converted converted, String kind) {
@@ -84,14 +80,6 @@ class TraitScriptChainTest {
         return lines.get(0);
     }
 
-    private static int count(String haystack, String needle) {
-        int count = 0;
-        for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + 1)) {
-            count++;
-        }
-        return count;
-    }
-
     // ── Story 1, scenario 1: a trigger's Execute and its SubAbility chain ──
 
     @Test
@@ -102,7 +90,7 @@ class TraitScriptChainTest {
         assertTrue(text.startsWith("Execute$ SV1 | Mode$ ChangesZone | "), text);
         assertTrue(text.contains(" [SEG] SV1: DB$ Draw | SubAbility$ SV2 [SEG] SV2: "), text);
         assertTrue(text.contains("SV2: ") && text.contains("DB$ ChangeZone"), text);
-        assertEquals(2, count(text, "[SEG]"), text);
+        assertEquals(2, RecordLines.count(text, "[SEG]"), text);
         assertFalse(text.contains("TrigDraw") || text.contains("DBChangeZone"),
                 "no author label survives: " + text);
     }
@@ -186,7 +174,7 @@ class TraitScriptChainTest {
         assertTrue(text.contains("ReplaceWith$ SV1"), text);
         assertTrue(text.contains(" [SEG] SV1: DB$ Draw | SubAbility$ SV2 [SEG] SV2: DB$ Connive"),
                 text);
-        assertEquals(2, count(text, "[SEG]"), text);
+        assertEquals(2, RecordLines.count(text, "[SEG]"), text);
         assertEquals("Draw", script.apiType(),
                 "a replacement's API type is its replacing ability's, no longer null");
     }
@@ -198,7 +186,7 @@ class TraitScriptChainTest {
 
         assertTrue(text.contains("ReplaceWith$ SV1"), text);
         assertTrue(text.contains(" [SEG] SV1: DB$ Draw"), text);
-        assertEquals(1, count(text, "[SEG]"), text);
+        assertEquals(1, RecordLines.count(text, "[SEG]"), text);
     }
 
     // ── Story 1, scenario 12: label names never reach the text ───────────
@@ -234,9 +222,9 @@ class TraitScriptChainTest {
         // chain reaches DBCount (SV3), whose chain reaches DBCleanup again.
         assertTrue(text.contains("RepeatSubAbility$ SV1"), text);
         assertTrue(text.contains("| SubAbility$ SV2 [SEG] SV1: DB$ DealDamage"), text);
-        assertEquals(3, count(text, "[SEG]"), "three defined SVars, three segments: " + text);
-        assertEquals(1, count(text, "SV2: "), "DBCleanup rendered once: " + text);
-        assertEquals(2, count(text, "SubAbility$ SV2"), "but referenced twice: " + text);
+        assertEquals(3, RecordLines.count(text, "[SEG]"), "three defined SVars, three segments: " + text);
+        assertEquals(1, RecordLines.count(text, "SV2: "), "DBCleanup rendered once: " + text);
+        assertEquals(2, RecordLines.count(text, "SubAbility$ SV2"), "but referenced twice: " + text);
         assertTrue(text.indexOf("SV2: ") < text.indexOf("SV3: "),
                 "segments follow their reference order: " + text);
     }
@@ -250,7 +238,7 @@ class TraitScriptChainTest {
         assertTrue(text.contains(" [SEG] SV1: DB$ Draw | Defined$ You | NumCards$ 1 | SubAbility$ SV2"),
                 text);
         assertFalse(text.contains("SV2: "), "the undefined segment is left out: " + text);
-        assertEquals(1, count(text, "[SEG]"), text);
+        assertEquals(1, RecordLines.count(text, "[SEG]"), text);
 
         List<MissingSVarReport.Entry> entries = undefined.report().drain();
         assertEquals(1, entries.size(), entries.toString());
@@ -282,7 +270,7 @@ class TraitScriptChainTest {
             assertTrue(text.contains("| SubAbility$ SV2"), text);
             assertTrue(text.contains(" [SEG] SV2: "), text);
             assertTrue(text.contains("DB$ GainLife"), text);
-            assertEquals(1, count(text, "[SEG]"), text);
+            assertEquals(1, RecordLines.count(text, "[SEG]"), text);
         }
     }
 
@@ -403,7 +391,7 @@ class TraitScriptChainTest {
         assertTrue(mode.contains("Choices$ SV2,SV3 | DB$ GenericChoice"), mode);
         assertTrue(mode.contains(" [SEG] SV2: DB$ DestroyAll"), mode);
         assertTrue(mode.contains(" [SEG] SV3: DB$ DestroyAll"), mode);
-        assertEquals(2, count(mode, "[SEG]"), mode);
+        assertEquals(2, RecordLines.count(mode, "[SEG]"), mode);
     }
 
     @Test
@@ -415,7 +403,7 @@ class TraitScriptChainTest {
 
         assertTrue(root.startsWith("Choices$ SV1,SV2 | SP$ Charm | SubAbility$ SV3 [SEG] SV3: "),
                 root);
-        assertEquals(1, count(root, "[SEG]"), "the modes are not inlined: " + root);
+        assertEquals(1, RecordLines.count(root, "[SEG]"), "the modes are not inlined: " + root);
         for (ProvenanceSidecar.Line option : linesOfKind(blood, "option")) {
             assertTrue(option.script().scriptText().contains(" [SEG] SV2: "),
                     option.script().scriptText());

@@ -75,6 +75,12 @@ class SeatTableIndexTest {
     }
 
     @Test
+    void anUnknownKindIsRejectedRatherThanPlayedAsADeck() throws IOException {
+        Path table = table("d1;BLB;gen4;dek;A|B", "d1;BLB;other;deck;Forest");
+        assertThrows(IllegalArgumentException.class, () -> SeatTableIndex.load(table, false));
+    }
+
+    @Test
     void aShortLineIsRejected() throws IOException {
         Path table = table("d1;BLB;gen4;deck");
         assertThrows(IllegalArgumentException.class, () -> SeatTableIndex.load(table, false));

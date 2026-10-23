@@ -12,7 +12,6 @@ import forge.game.combat.Combat;
 import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventPlayerDamaged;
 import forge.game.event.GameEventPlayerLivesChanged;
-import forge.game.event.GameEventTurnPhase;
 import forge.game.mana.Mana;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
@@ -85,7 +84,7 @@ class RecordCharacterizationTest {
         Card bears = board.battlefield("Grizzly Bears", opponent);
         Card giant = board.battlefield("Hill Giant", opponent);
 
-        List<String> records = records(board, CAPS, (bracket, collectors) -> {
+        List<String> records = ShardRun.records(tempDir, board.game, CAPS, (bracket, collectors) -> {
             board.game.subscribeToEvents(bracket);
 
             SpellAbility helix = board.spell(
@@ -95,7 +94,7 @@ class RecordCharacterizationTest {
             helix.getTargets().add(bears);
             helix.getPayingMana().add(new Mana(MagicColor.RED, mountain, null, you));
             helix.getPayingMana().add(new Mana(MagicColor.WHITE, plains, null, you));
-            resolveAll(board, helix);
+            board.castAndResolve(helix);
 
             board.cast(board.card("Shock", you), you, giant);
             board.game.getAction().exile(giant, null, null);
@@ -106,7 +105,7 @@ class RecordCharacterizationTest {
             ping.setActivatingPlayer(you);
             ping.resetTargets();
             ping.getTargets().add(opponent);
-            resolveAll(board, ping);
+            board.castAndResolve(ping);
 
             Card effect = SpellAbilityEffect.createEffect(
                     ping, you, "Characterization Effect", null);
@@ -114,9 +113,9 @@ class RecordCharacterizationTest {
             SpellAbility gain = AbilityFactory.getAbility(
                     "AB$ GainLife | Cost$ 0 | Defined$ You | LifeAmount$ 2", effect);
             gain.setActivatingPlayer(you);
-            resolveAll(board, gain);
+            board.castAndResolve(gain);
 
-            nextStep(board);
+            board.nextStep();
         });
 
         Characterization.assertMatches(
@@ -146,12 +145,12 @@ class RecordCharacterizationTest {
 
         Assumptions.assumeTrue(PatchHooks.CLAUSE_LISTENER.present(),
                 "../forge has no clause hook to split the modes");
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try (GameRecording recording =
                 new GameRecording(board.game, writer, GAME_ID, CAPS, 1L, null)) {
             recording.open();
-            resolveAll(board, charm);
-            nextStep(board);
+            board.castAndResolve(charm);
+            board.nextStep();
         } finally {
             writer.close();
         }
@@ -176,7 +175,7 @@ class RecordCharacterizationTest {
         Card bears = board.battlefield("Grizzly Bears", board.opponent);
         Card angel = board.battlefield("Serra Angel", board.opponent);
 
-        List<String> records = records(board, CAPS, (bracket, collectors) -> {
+        List<String> records = ShardRun.records(tempDir, board.game, CAPS, (bracket, collectors) -> {
             HookShapes.Replacement listener =
                     HookShapes.proxy(HookShapes.Replacement.class, collectors.rewrites().handler());
 
@@ -221,7 +220,7 @@ class RecordCharacterizationTest {
         Trigger monarch = board.game.getCardsIn(ZoneType.Command).get(0)
                 .getTriggers().iterator().next();
 
-        List<String> records = records(board, CAPS, (bracket, collectors) -> {
+        List<String> records = ShardRun.records(tempDir, board.game, CAPS, (bracket, collectors) -> {
             HookShapes.TriggerFire listener =
                     HookShapes.proxy(HookShapes.TriggerFire.class, collectors.triggers().handler());
             Trigger entered = warden.getTriggers().iterator().next();
@@ -261,7 +260,7 @@ class RecordCharacterizationTest {
         board.battlefield("Serra Angel", board.opponent);
         board.game.getAction().checkStaticAbilities();
 
-        List<String> records = records(board, CAPS,
+        List<String> records = ShardRun.records(tempDir, board.game, CAPS,
                 (bracket, collectors) -> collectors.continuous().collect());
 
         Characterization.assertMatches(
@@ -293,7 +292,8 @@ class RecordCharacterizationTest {
         board.game.getAction().checkStaticAbilities();
         SpellAbility bolt = board.spell(board.hand("Lightning Bolt", you), you);
 
-        List<String> records = records(board, CAPS, SnapshotBuilder.playerId(opponent),
+        List<String> records = ShardRun.records(
+                tempDir, board.game, CAPS, SnapshotBuilder.playerId(opponent),
                 (bracket, collectors) -> {
             HookShapes.proxy(HookShapes.Playability.class, collectors.playability().decisionHandler())
                     .onCandidate(bolt);
@@ -364,7 +364,7 @@ class RecordCharacterizationTest {
         charm.setChosenList(chosen);
         CharmEffect.chainAbilities(charm, chosen);
 
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {
             BusBracketCollector bracket = new BusBracketCollector(board.game,
                     new CollectorContext(writer, GAME_ID, AttributionMode.DEGRADED, null),
@@ -412,18 +412,11 @@ class RecordCharacterizationTest {
         Card dreadmaw = board.battlefield("Colossal Dreadmaw", you);
         Card soldier = board.token("w_1_1_soldier", you);
         Card bears = board.battlefield("Grizzly Bears", opponent);
-        Combat combat = new Combat(you);
-        combat.addAttacker(dreadmaw, opponent);
-        combat.addAttacker(soldier, opponent);
-        combat.addBlocker(dreadmaw, bears);
-        combat.setBlocked(dreadmaw, true);
-        combat.setBlocked(soldier, false);
-        combat.orderBlockersForDamageAssignment();
-        combat.orderAttackersForDamageAssignment();
-        board.game.getPhaseHandler().setCombat(combat);
+        Combat combat = TestBoard.blockedCombat(
+                board.game, you, opponent, dreadmaw, bears, soldier);
         CollectionCaps caps = new CollectionCaps(1, 1.0, 0, 1, List.of("trample"), 0.0, 0.0);
 
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {
             ProbeScheduler probing = new ProbeScheduler(board.game, GAME_ID, caps,
                     new ForkCollector(board.game, TestCollectors.context(writer, GAME_ID), caps, 1L));
@@ -434,7 +427,7 @@ class RecordCharacterizationTest {
             assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
             combat.dealAssignedDamage();
             board.game.getAction().checkStateEffects(false);
-            board.game.fireEvent(new GameEventTurnPhase(you, PhaseType.COMBAT_END, ""));
+            TestBoard.enterStep(board.game, PhaseType.COMBAT_END);
         } finally {
             writer.close();
         }
@@ -464,66 +457,10 @@ class RecordCharacterizationTest {
         SpellAbility pyroclasm = board.spell(board.hand("Pyroclasm", you), you);
         CollectionCaps caps = new CollectionCaps(1, 1.0, 1, 0, List.of(), 0.0, 0.0);
 
-        List<String> records = records(board, caps, (bracket, collectors) -> {
-            ForkCollector forks = new ForkCollector(
-                    board.game, TestCollectors.context(writer, GAME_ID), caps, 1L);
-            assertTrue(forks.intervene(pyroclasm, 1), "the fork observed nothing");
-        });
+        ShardRun.Fork fork = ShardRun.forked(tempDir, board.game, caps, 1L, pyroclasm);
+        assertTrue(fork.wrote(), "the fork observed nothing");
 
         Characterization.assertMatches(
-                "record-intervention.jsonl", Characterization.recordLines(records));
+                "record-intervention.jsonl", Characterization.recordLines(fork.records()));
     }
-
-    // ── plumbing ────────────────────────────────────────────────────────
-
-    /** What a test does with a game's two collectors. */
-    @FunctionalInterface
-    private interface Body {
-        void run(BusBracketCollector bracket, Channels collectors) throws Throwable;
-    }
-
-    private RecordShardWriter writer;
-
-    /**
-     * Run {@code body} with a game's bracket and patched collectors writing
-     * one shard, wired to each other as a worker wires them, and return the
-     * shard's lines once both are closed.
-     */
-    private List<String> records(CharacterizationBoard board, CollectionCaps caps, Body body)
-            throws Throwable {
-        return records(board, caps, null, body);
-    }
-
-    /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
-    private List<String> records(
-            CharacterizationBoard board, CollectionCaps caps, String randomSeatPlayerId,
-            Body body) throws Throwable {
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
-                    recordId -> { });
-            try (Channels collectors = Channels.of(
-                    board.game, TestCollectors.context(writer, GAME_ID, randomSeatPlayerId),
-                    caps, 1L, bracket)) {
-                body.run(bracket, collectors);
-            }
-        } finally {
-            writer.close();
-        }
-        return ShardRun.readShard(writer.path());
-    }
-
-    /** Cast or activate onto the stack, resolve it, and run the check after. */
-    private static void resolveAll(CharacterizationBoard board, SpellAbility ability) {
-        board.game.getStack().add(ability);
-        board.game.getStack().resolveStack();
-        board.game.getAction().checkStateEffects(false);
-    }
-
-    /** The next action, which closes the held resolution's window. */
-    private static void nextStep(CharacterizationBoard board) {
-        board.game.fireEvent(new GameEventTurnPhase(board.you, PhaseType.MAIN2, ""));
-    }
-
 }

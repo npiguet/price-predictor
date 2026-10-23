@@ -5,11 +5,8 @@ import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
 import forge.game.cost.CostPayment;
-import forge.game.event.GameEventPlayerPriority;
-import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.PlayerView;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
@@ -19,9 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.lang.reflect.Method;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -29,9 +24,13 @@ import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
 import static com.pricepredictor.connector.effects.RecordLines.linkOf;
 import static com.pricepredictor.connector.effects.RecordLines.only;
 import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordLines.withEventOfType;
+import static com.pricepredictor.connector.effects.TestBoard.nextStep;
+import static com.pricepredictor.connector.effects.TestBoard.priority;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -59,10 +58,6 @@ class MidResolutionCastTest {
     /** Tetsuo's {@code Choices$} position of "you may cast an instant or sorcery". */
     private static final int TETSUO_CAST_MODE = 1;
 
-    private static Method resolving() {
-        return HookShapes.method(HookShapes.Clause.class, "onClauseResolving");
-    }
-
     /** The card's first trigger, wrapped as the trigger handler puts it on the stack. */
     private static WrappedAbility triggerOf(Card card, Player controller) {
         Trigger trigger = card.getTriggers().iterator().next();
@@ -71,19 +66,6 @@ class MidResolutionCastTest {
         WrappedAbility wrapped = new WrappedAbility(trigger, execute, controller);
         wrapped.setActivatingPlayer(controller);
         return wrapped;
-    }
-
-    /** What {@code PhaseHandler.mainLoopStep} does before the next player acts. */
-    private static void priority(Game game) {
-        PlayerView turn = PlayerView.get(game.getPhaseHandler().getPlayerTurn());
-        game.fireEvent(new GameEventPlayerPriority(turn, PhaseType.MAIN1, turn));
-        game.getAction().checkStateEffects(false);
-    }
-
-    /** The next real action: a step boundary, which writes the held halves. */
-    private static void nextStep(Game game) {
-        game.fireEvent(new GameEventTurnPhase(
-                game.getPhaseHandler().getPlayerTurn(), PhaseType.MAIN2, ""));
     }
 
     /** Tetsuo on the battlefield, equipped with a mana value 1 Equipment. */
@@ -174,8 +156,8 @@ class MidResolutionCastTest {
             bracket.beginBracket(trigger);
             // MagicStack.resolveStack: resolving from here until finishResolving.
             game.getStack().setResolving(true);
-            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{trigger});
-            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
+            collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{trigger});
+            collectors.clauses().clauseHandler().invoke(null, HookShapes.clauseResolving(), new Object[]{clones.get(0)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.beginBracket(bolt);
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.COUNTER_CHANGE));
@@ -349,15 +331,9 @@ class MidResolutionCastTest {
             bracket.finishGame(Set.of(bolt.getId()));
         });
 
-        List<String> won = new ArrayList<>();
-        for (String record : all) {
-            if (record.contains("\"type\":\"player_won\"")) {
-                won.add(record);
-            }
-        }
+        List<String> won = withEventOfType(all, "player_won");
         assertEquals(1, won.size(), "the win is written: " + all);
-        assertTrue(won.get(0).contains("\"link_id\":null"),
-                "an orphan, nobody's half: " + won.get(0));
+        assertNull(linkOf(won.get(0)), "an orphan, nobody's half: " + won.get(0));
     }
 
     /**

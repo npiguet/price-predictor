@@ -4,7 +4,6 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.event.GameEventGameOutcome;
-import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -14,10 +13,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import static com.pricepredictor.connector.effects.RecordLines.count;
+import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordLines.linkOf;
+import static com.pricepredictor.connector.effects.RecordLines.optionOf;
+import static com.pricepredictor.connector.effects.RecordLines.parse;
+import static com.pricepredictor.connector.effects.RecordLines.records;
+import static com.pricepredictor.connector.effects.RecordLines.withEventOfType;
+import static com.pricepredictor.connector.effects.TestBoard.castAndResolve;
+import static com.pricepredictor.connector.effects.TestBoard.nextStep;
+import static com.pricepredictor.connector.effects.TestBoard.spellOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -42,59 +50,22 @@ class StateBasedDeathTest {
     @TempDir
     Path tempDir;
 
-    /** The card's own spell, activated by its owner. */
-    private static SpellAbility spellOf(Card card, Player owner) {
-        SpellAbility spell = card.getFirstSpellAbility();
-        assertNotNull(spell, "no spell on " + card);
-        spell.setActivatingPlayer(owner);
-        return spell;
-    }
-
     private static SpellAbility targeting(SpellAbility spell, Card target) {
         spell.resetTargets();
         spell.getTargets().add(target);
         return spell;
     }
 
-    /**
-     * Cast, resolve, and run the state-based check the next priority runs —
-     * in the order {@code PhaseHandler.mainLoopStep} runs them.
-     */
-    private static void castAndResolve(Game game, SpellAbility spell) {
-        game.getStack().add(spell);
-        game.getStack().resolveStack();
-        game.getAction().checkStateEffects(false);
-    }
-
-    /** The next real action: a step boundary. */
-    private static void nextStep(Game game) {
-        game.fireEvent(new GameEventTurnPhase(
-                game.getPhaseHandler().getPlayerTurn(), PhaseType.MAIN2, ""));
-    }
-
+    /** The effect halves: the resolution records a cost half links to. */
     private static List<String> effectHalves(List<String> records) {
-        List<String> halves = new ArrayList<>();
-        for (String record : records) {
-            if (record.contains("\"moment\":\"resolution\"")
-                    && record.contains("\"link_id\":\"")) {
-                halves.add(record);
-            }
-        }
-        return halves;
+        return records(records, "resolution").stream()
+                .filter(record -> linkOf(record) != null).toList();
     }
 
     /** The rendered event that says a card left the battlefield for the graveyard. */
     private static String deathOf(Card card) {
         return "{\"type\":\"zone_change\",\"subjects\":[\"E" + card.getId()
                 + "\"],\"params\":{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\"";
-    }
-
-    private static int count(String haystack, String needle) {
-        int found = 0;
-        for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + 1)) {
-            found++;
-        }
-        return found;
     }
 
     // ── a lethal resolution ─────────────────────────────────────────────
@@ -150,9 +121,7 @@ class StateBasedDeathTest {
 
         List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, bolt);
-            game.getStack().add(shock);
-            game.getStack().resolveStack();
-            game.getAction().checkStateEffects(false);
+            castAndResolve(game, shock);
             nextStep(game);
             nextStep(game);
         });
@@ -425,42 +394,32 @@ class StateBasedDeathTest {
      */
     @Test
     void aModalForkFilesTheDeathInTheModeThatTouchedTheCreature() throws Throwable {
-        int checked = 0;
-        for (long seed = 0; seed < 40 && checked == 0; seed++) {
-            Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
-            Player caster = game.getPlayers().get(0);
-            Card elves = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Llanowar Elves");
-            SpellAbility charm = TestBoard.charmOf(
-                    TestBoard.inHand(game, caster, "Fiery Confluence"), caster);
-            CollectionCaps caps = new CollectionCaps(
-                    2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card elves = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Llanowar Elves");
+        SpellAbility charm = TestBoard.charmOf(
+                TestBoard.inHand(game, caster, "Fiery Confluence"), caster);
+        CollectionCaps caps = new CollectionCaps(
+                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
-            ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
-                    tempDir.resolve("fork-" + seed), game, caps, seed, charm,
-                    "to split a fork's modes");
-            if (!fork.wrote()) {
-                continue;
-            }
-            List<String> halves = fork.records();
-            if (halves.size() < 2 || !halves.get(halves.size() - 1).contains("\"option\":1}")) {
-                continue;
-            }
-            int lastTouching = -1;
-            for (int i = 0; i < halves.size(); i++) {
-                if (halves.get(i).contains("\"option\":0}")) {
-                    lastTouching = i;
-                }
-            }
-            if (lastTouching < 0) {
-                continue;
-            }
-            checked++;
-            for (int i = 0; i < halves.size(); i++) {
-                assertEquals(i == lastTouching ? 1 : 0, count(halves.get(i), deathOf(elves)),
-                        "half " + i + " of " + halves);
+        // A seed whose draw chooses the creature mode and ends on the opponent mode.
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, caps, 1L, charm, "to split a fork's modes");
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
+        List<String> halves = fork.records();
+        assertTrue(halves.size() >= 2, halves.toString());
+        assertEquals(1L, optionOf(halves.get(halves.size() - 1)), "the last mode: " + halves);
+        int lastTouching = -1;
+        for (int i = 0; i < halves.size(); i++) {
+            if (Long.valueOf(0).equals(optionOf(halves.get(i)))) {
+                lastTouching = i;
             }
         }
-        assertTrue(checked > 0, "no seed drew a creature mode followed by a last opponent mode");
+        assertTrue(lastTouching >= 0, "the seed chose no creature mode: " + halves);
+        for (int i = 0; i < halves.size(); i++) {
+            assertEquals(i == lastTouching ? 1 : 0, count(halves.get(i), deathOf(elves)),
+                    "half " + i + " of " + halves);
+        }
     }
 
     // ── the end of the game ─────────────────────────────────────────────
@@ -488,15 +447,11 @@ class StateBasedDeathTest {
         List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), records.toString());
         assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
-        assertFalse(halves.get(0).contains("player_won"), halves.get(0));
-        int effectAt = records.indexOf(halves.get(0));
-        int outcomeAt = -1;
-        for (int i = 0; i < records.size(); i++) {
-            if (records.get(i).contains("\"type\":\"player_won\"")) {
-                outcomeAt = i;
-            }
-        }
-        assertTrue(outcomeAt > effectAt, "the outcome follows the held half: " + records);
+        assertFalse(eventTypes(halves.get(0)).contains("player_won"), halves.get(0));
+        List<String> won = withEventOfType(records, "player_won");
+        assertEquals(1, won.size(), records.toString());
+        assertTrue(records.indexOf(won.get(0)) > records.indexOf(halves.get(0)),
+                "the outcome follows the held half: " + records);
     }
 
     // ── a modal resolution ──────────────────────────────────────────────
@@ -529,16 +484,16 @@ class StateBasedDeathTest {
 
         List<String> halves = effectHalves(records);
         assertEquals(2, halves.size(), records.toString());
-        assertTrue(halves.get(0).contains("\"option\":0}"), halves.get(0));
+        assertEquals(0L, optionOf(halves.get(0)), halves.get(0));
         assertTrue(halves.get(0).contains(deathOf(elves)), halves.get(0));
-        assertTrue(halves.get(1).contains("\"option\":1}"), halves.get(1));
+        assertEquals(1L, optionOf(halves.get(1)), halves.get(1));
         assertFalse(halves.get(1).contains(deathOf(elves)), halves.get(1));
         // The cost half and the link are what they were.
         String cost = records.get(0);
-        assertTrue(cost.contains("\"moment\":\"activation\""), cost);
-        String link = cost.substring(cost.indexOf("\"link_id\":"), cost.indexOf(",\"mirror_of\""));
+        assertEquals("activation", parse(cost).get("moment"), cost);
+        assertNotNull(linkOf(cost), cost);
         for (String half : halves) {
-            assertTrue(half.contains(link), half);
+            assertEquals(linkOf(cost), linkOf(half), half);
         }
     }
 
@@ -578,38 +533,28 @@ class StateBasedDeathTest {
      * A forced resolution already carries its deaths: {@code
      * GameSimulator.resolveStack} runs the state-based check while the fork's
      * sink is still listening, so the interventional record needs no hold.
+     * Flame Slash can only target a creature, so the fork's random target
+     * draw has the bears alone to choose.
      */
     @Test
-    void anInterventionalBoltAlreadyCarriesItsDeath() throws Throwable {
+    void anInterventionalBurnSpellAlreadyCarriesItsDeath() throws Throwable {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
-        Card boltCard = TestBoard.inHand(game, caster, "Lightning Bolt");
-        SpellAbility bolt = spellOf(boltCard, caster);
-        // A one-creature board: the fork's random target draw has bears or a
-        // player to choose from, so try seeds until one picks the bears.
+        Card slashCard = TestBoard.inHand(game, caster, "Flame Slash");
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 50, 0, List.of(), 0.0, 0.0);
+                2000, 0.1, 1, 0, List.of(), 0.0, 0.0);
 
-        List<String> records = new ArrayList<>();
-        for (long seed = 0; seed < 50; seed++) {
-            ShardRun.Fork fork = ShardRun.forked(
-                    tempDir.resolve("fork-" + seed), game, caps, seed, bolt);
-            if (fork.wrote()) {
-                records.addAll(fork.records());
-            }
-        }
-
-        String hitTheBears = null;
-        for (String record : records) {
-            if (record.contains("\"type\":\"damage_dealt\",\"subjects\":[\"E" + bears.getId() + "\"]")) {
-                hitTheBears = record;
-            }
-        }
-        assertNotNull(hitTheBears, "no fork targeted the bears: " + records);
+        ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps, 1L, spellOf(slashCard, caster));
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        String record = records.get(0);
+        assertTrue(record.contains("\"type\":\"damage_dealt\",\"subjects\":[\"E"
+                + bears.getId() + "\"]"), record);
         // Rendered exactly as the observed record renders it.
-        assertTrue(hitTheBears.contains(deathOf(bears) + ",\"cause\":\"E"
-                + boltCard.getId() + "\"},\"duration\":\"instant\","
-                + "\"attributed_to\":\"unresolved\"}"), hitTheBears);
+        assertTrue(record.contains(deathOf(bears) + ",\"cause\":\"E"
+                + slashCard.getId() + "\"},\"duration\":\"instant\","
+                + "\"attributed_to\":\"unresolved\"}"), record);
     }
 }

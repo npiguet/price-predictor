@@ -39,6 +39,9 @@ class ProvenanceSidecarTest {
 
     private static final Path CARDS_FOLDER = ForgeEnvironmentInitializer.findCardsFolder();
 
+    /** The converter tests' small card tree: two valid cards and one malformed. */
+    private static final Path FIXTURE_CARDS = Path.of("src/test/resources/cardsfolder");
+
     private final RulesParser parser = new RulesParser();
 
     @TempDir
@@ -68,15 +71,11 @@ class ProvenanceSidecarTest {
      */
     private Converted convertSource(List<String> source, String scriptFile,
                                     String fileName) {
-        RulesParser.ParsedCard parsed =
-                parser.parseScript(source, fileName, scriptFile);
-        List<RenderedLine> rendered = parsed.card().renderLines();
-        ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                parsed.card().faces().get(0).name(), scriptFile,
-                rendered, parsed.recorders());
-        return new Converted(parsed.card(),
-                rendered.stream().map(RenderedLine::text).toList(),
-                rendered.stream().map(RenderedLine::owner).toList(), sidecar);
+        ConvertedScript converted =
+                ConvertedScript.of(parser.parseScript(source, fileName, scriptFile), scriptFile);
+        return new Converted(converted.parsed().card(), converted.texts(),
+                converted.rendered().stream().map(RenderedLine::owner).toList(),
+                converted.sidecar());
     }
 
     // ── the text must not change ────────────────────────────────────────
@@ -359,7 +358,7 @@ class ProvenanceSidecarTest {
     @Test
     void aSidecarIsWrittenBesideEveryConvertedCard() throws IOException {
         new BatchConverter().convert(
-                Path.of("src/test/resources/cardsfolder"), tempDir,
+                FIXTURE_CARDS, tempDir,
                 SourceTree.CARDSFOLDER);
         assertTrue(Files.exists(tempDir.resolve("t/test_bear.provenance.json")));
         assertTrue(Files.exists(tempDir.resolve("t/test_flyer.provenance.json")));
@@ -368,7 +367,7 @@ class ProvenanceSidecarTest {
     @Test
     void aWrittenSidecarIsWellFormedJsonNamingItsCard() throws IOException {
         new BatchConverter().convert(
-                Path.of("src/test/resources/cardsfolder"), tempDir,
+                FIXTURE_CARDS, tempDir,
                 SourceTree.CARDSFOLDER);
         String json = Files.readString(tempDir.resolve("t/test_bear.provenance.json"));
         assertTrue(json.startsWith("{\"card\":"), json);
@@ -443,7 +442,7 @@ class ProvenanceSidecarTest {
     @Test
     void theTokenTreePrefixesItsKeysDifferently() throws IOException {
         new BatchConverter().convert(
-                Path.of("src/test/resources/cardsfolder"), tempDir,
+                FIXTURE_CARDS, tempDir,
                 SourceTree.TOKENSCRIPTS);
         String json = Files.readString(tempDir.resolve("t/test_bear.provenance.json"));
         assertTrue(json.contains("\"script_file\":\"tokenscripts/t/test_bear.txt\""),

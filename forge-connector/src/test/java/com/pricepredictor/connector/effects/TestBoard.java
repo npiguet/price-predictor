@@ -1,10 +1,10 @@
 package com.pricepredictor.connector.effects;
 
 import forge.LobbyPlayer;
-import forge.StaticData;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
 import forge.game.Game;
+import forge.game.GameObject;
 import forge.game.GameRules;
 import forge.game.GameStage;
 import forge.game.GameType;
@@ -13,8 +13,12 @@ import forge.game.ability.ApiType;
 import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
+import forge.game.combat.Combat;
+import forge.game.event.GameEventPlayerPriority;
+import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.player.PlayerView;
 import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
@@ -140,24 +144,119 @@ public final class TestBoard {
     }
 
     private static IPaperCard paper(String name) {
-        IPaperCard paper = StaticData.instance().getCommonCards().getCard(name);
-        if (paper == null) {
-            throw new AssertionError("card not in the database: " + name);
+        return TestCards.paper(name);
+    }
+
+    // ── abilities ───────────────────────────────────────────────────────
+
+    /** The card's own spell, activated by {@code activator}. */
+    static SpellAbility spellOf(Card card, Player activator) {
+        SpellAbility spell = card.getFirstSpellAbility();
+        if (spell == null) {
+            throw new AssertionError("no spell on " + card);
         }
-        return paper;
+        spell.setActivatingPlayer(activator);
+        return spell;
+    }
+
+    /** The card's first ability whose API is {@code api}. */
+    static SpellAbility ability(Card card, ApiType api) {
+        for (SpellAbility sa : card.getSpellAbilities()) {
+            if (sa.getApi() == api) {
+                return sa;
+            }
+        }
+        throw new AssertionError("no " + api + " ability on " + card);
+    }
+
+    // ── driving the engine ──────────────────────────────────────────────
+
+    /**
+     * Cast a card's spell at a target: onto the stack zone first, then onto
+     * the stack, the order the engine's own play path takes.
+     */
+    static SpellAbility cast(Game game, Card card, Player caster, GameObject target) {
+        Card onStack = game.getAction().moveToStack(card, null);
+        SpellAbility spell = spellOf(onStack, caster);
+        spell.resetTargets();
+        spell.getTargets().add(target);
+        game.getStack().add(spell);
+        return spell;
+    }
+
+    /**
+     * Put a spell or ability on the stack, resolve it, and run the
+     * state-based check the next priority runs, in the order {@code
+     * PhaseHandler.mainLoopStep} runs them.
+     */
+    static void castAndResolve(Game game, SpellAbility spell) {
+        game.getStack().add(spell);
+        game.getStack().resolveStack();
+        game.getAction().checkStateEffects(false);
+    }
+
+    /**
+     * The priority event and the state-based check that {@code
+     * PhaseHandler.mainLoopStep} runs before a player acts, without putting
+     * the waiting triggers on the stack: a test calling this puts each
+     * trigger on itself, or has none waiting.
+     */
+    static void priority(Game game) {
+        PlayerView turn = PlayerView.get(game.getPhaseHandler().getPlayerTurn());
+        game.fireEvent(new GameEventPlayerPriority(turn, PhaseType.MAIN1, turn));
+        game.getAction().checkStateEffects(false);
+    }
+
+    /**
+     * What {@code PhaseHandler.mainLoopStep} does before a player acts: the
+     * priority, the state-based check, and the waiting triggers going on the
+     * stack.
+     */
+    static void priorityWithTriggers(Game game) {
+        priority(game);
+        game.getStack().addAllTriggeredAbilitiesToStack();
+    }
+
+    /** The next real action: the step boundary into the second main phase. */
+    static void nextStep(Game game) {
+        enterStep(game, PhaseType.MAIN2);
+    }
+
+    /** The step boundary into {@code step} of the current turn. */
+    static void enterStep(Game game, PhaseType step) {
+        game.fireEvent(new GameEventTurnPhase(game.getPhaseHandler().getPlayerTurn(), step, ""));
+    }
+
+    /**
+     * Combat as the declare-blockers step leaves it, set on the game:
+     * {@code blocked} attacks {@code defending} and {@code blocker} blocks
+     * it, and each of {@code unblocked} attacks unblocked.
+     */
+    static Combat blockedCombat(Game game, Player attacking, Player defending,
+                                Card blocked, Card blocker, Card... unblocked) {
+        Combat combat = new Combat(attacking);
+        combat.addAttacker(blocked, defending);
+        for (Card attacker : unblocked) {
+            combat.addAttacker(attacker, defending);
+        }
+        combat.addBlocker(blocked, blocker);
+        combat.setBlocked(blocked, true);
+        for (Card attacker : unblocked) {
+            combat.setBlocked(attacker, false);
+        }
+        combat.orderBlockersForDamageAssignment();
+        combat.orderAttackersForDamageAssignment();
+        game.getPhaseHandler().setCombat(combat);
+        return combat;
     }
 
     // ── charms ──────────────────────────────────────────────────────────
 
     /** The card's charm spell, activated by {@code activator}. */
     static SpellAbility charmOf(Card card, Player activator) {
-        for (SpellAbility sa : card.getSpellAbilities()) {
-            if (sa.getApi() == ApiType.Charm) {
-                sa.setActivatingPlayer(activator);
-                return sa;
-            }
-        }
-        throw new AssertionError("no charm on " + card);
+        SpellAbility charm = ability(card, ApiType.Charm);
+        charm.setActivatingPlayer(activator);
+        return charm;
     }
 
     /**

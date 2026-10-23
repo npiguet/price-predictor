@@ -2,10 +2,11 @@ package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
+import static com.pricepredictor.connector.MatchFixtures.TS;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -15,9 +16,6 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@code timestamp;run_id;set_code;method_A;method_B;cards_played_A;cards_played_B;cards_not_played_A;cards_not_played_B;winner;starter}
  */
 class CardsPlayedRowTest {
-
-    private static final Instant TS = Instant.parse("2026-04-22T14:30:05Z");
-    private static final String RUN_ID = "a3f4b8c2-1234-4abc-9def-0123456789ab";
 
     private static CardsPlayedRow sample(
             List<String> cardsPlayedA, List<String> cardsPlayedB,

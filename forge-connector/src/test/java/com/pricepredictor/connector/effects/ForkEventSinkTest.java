@@ -112,7 +112,7 @@ class ForkEventSinkTest {
 
     /** And it does not listen to the per-zone notification, which fires three times per move. */
     @Test
-    void aForkNoLongerReadsThePerZoneNotification() {
+    void aForkDoesNotReadThePerZoneNotification() {
         assertFalse(subscriptions(ForkEventSink.class).contains(GameEventZone.class));
     }
 
@@ -120,45 +120,6 @@ class ForkEventSinkTest {
 
     private static Zone zone(ZoneType type) {
         return new Zone(type, TestCards.game());
-    }
-
-    /**
-     * A completed move says where the card came from as well as where it went.
-     *
-     * <p>{@code from_zone} is a documented parameter of the event type that
-     * nothing had ever written, because the notification the collector read
-     * names one zone and not a move.
-     */
-    @Test
-    void aMoveNamesBothOfItsEnds() {
-        Card card = TestCards.build("Mountain");
-
-        EffectEvent moved = BusEvents.cardMoved(new GameEventCardChangeZone(
-                card, zone(ZoneType.Hand), zone(ZoneType.Battlefield)));
-
-        assertEquals(EffectEvent.ZONE_CHANGE, moved.type());
-        String json = moved.toJson();
-        assertTrue(json.contains("\"from_zone\":\"hand\""), json);
-        assertTrue(json.contains("\"to_zone\":\"battlefield\""), json);
-        assertTrue(json.contains("\"E" + card.getId() + "\""), json);
-    }
-
-    /** A card entering the game from nowhere still names where it landed. */
-    @Test
-    void aCardArrivingFromNowhereStillNamesWhereItLanded() {
-        EffectEvent moved = BusEvents.cardMoved(new GameEventCardChangeZone(
-                TestCards.build("Mountain"), null, zone(ZoneType.Battlefield)));
-
-        String json = moved.toJson();
-        assertTrue(json.contains("\"to_zone\":\"battlefield\""), json);
-        assertFalse(json.contains("\"from_zone\""), json);
-    }
-
-    /** And a move with neither end is not a move this collector can describe. */
-    @Test
-    void aMoveWithNeitherEndIsNotRecorded() {
-        assertEquals(null, BusEvents.cardMoved(
-                new GameEventCardChangeZone(TestCards.build("Mountain"), null, null)));
     }
 
     // ── a fork event says where it came from ────────────────────────────

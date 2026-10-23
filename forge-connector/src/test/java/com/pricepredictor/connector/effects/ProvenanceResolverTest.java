@@ -73,16 +73,6 @@ class ProvenanceResolverTest {
         return copy;
     }
 
-    /** The flashback keyword Blast from the Past prints. */
-    private static KeywordInterface flashbackOf(CardState state) {
-        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
-            if (keyword.getOriginal().startsWith("Flashback")) {
-                return keyword;
-            }
-        }
-        throw new AssertionError("no flashback on " + state.getCard().getName());
-    }
-
     // ── activated abilities the stack replaced with a copy ───────────────
 
     /**
@@ -95,29 +85,19 @@ class ProvenanceResolverTest {
     void aStackCopyOfAnActivatedAbilityKeysToTheLineItCameFrom() {
         Card fountain = card("Fountain of Youth");
         SpellAbility printed = scriptedSpell(fountain.getCurrentState(), "GainLife");
-        ProvenanceKey expected = ProvenanceResolver.of(printed);
-
-        assertNotNull(expected, "the pristine ability must key");
-        assertEquals("cardsfolder/f/fountain_of_youth.txt", expected.scriptFile());
-        assertEquals(TraitKind.SPELL, expected.traitKind());
-        assertEquals(expected, ProvenanceResolver.of(asStackCopy(printed)));
-    }
-
-    /**
-     * The copy the stack pushes is not the trait object, which is the whole
-     * reason identity lookup returned -1 on it.
-     */
-    @Test
-    void aStackCopyIsNotTheTraitObjectItKeysTo() {
-        Card fountain = card("Fountain of Youth");
-        SpellAbility printed = scriptedSpell(fountain.getCurrentState(), "GainLife");
         SpellAbility copy = asStackCopy(printed);
-
+        // The copy is not the trait object, so an identity lookup cannot find it.
         assertNotEquals(System.identityHashCode(printed), System.identityHashCode(copy));
         for (SpellAbility member : fountain.getCurrentState().getSpellAbilities()) {
             assertNotEquals(member, copy,
                     "the pushed copy must not be a member of the state's list");
         }
+        ProvenanceKey expected = ProvenanceResolver.of(printed);
+
+        assertNotNull(expected, "the pristine ability must key");
+        assertEquals("cardsfolder/f/fountain_of_youth.txt", expected.scriptFile());
+        assertEquals(TraitKind.SPELL, expected.traitKind());
+        assertEquals(expected, ProvenanceResolver.of(copy));
     }
 
     /**
@@ -353,7 +333,7 @@ class ProvenanceResolverTest {
     void aKeywordDerivedAbilityKeysToTheKeywordSlot() {
         Card blast = card("Blast from the Past");
         CardState state = blast.getCurrentState();
-        KeywordInterface flashback = flashbackOf(state);
+        KeywordInterface flashback = TestCards.flashbackOf(state);
 
         // The shape GameActionUtil produces: a copy of the spell carrying the
         // keyword instance and no back-reference to a printed spell line.
@@ -606,8 +586,6 @@ class ProvenanceResolverTest {
         delayed.setSpawningAbility(spawner.copy(spawner.getHostCard(), true));
         return delayed;
     }
-
-    // -- reasons for the traits that genuinely have no printed line ------
 
     // -- traits granted out of a donor's SVar ---------------------------
 

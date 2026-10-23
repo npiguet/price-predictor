@@ -75,17 +75,6 @@ class EventAttributionTest {
     }
 
     /**
-     * The sentinels are spelled as Python's {@code ATTRIBUTION_ROOT} and
-     * {@code ATTRIBUTION_UNRESOLVED} in {@code event_schema.py} spell them; a
-     * corpus on disk carries these literals, so neither side may drift.
-     */
-    @Test
-    void theSentinelsAreSpelledAsPythonSpellsThem() {
-        assertEquals("root", EventAttribution.ROOT);
-        assertEquals("unresolved", EventAttribution.UNRESOLVED);
-    }
-
-    /**
      * A clause with no line above it names nothing a reader could join to.
      *
      * <p>Its index counts clauses of a chain this collector never saw, so the

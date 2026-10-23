@@ -151,8 +151,8 @@ class BusBracketCollectorTest {
      *
      * <p>{@code MagicStack.resolveStack} does not resolve a spell whose targets
      * are all gone, so there is no effect half to link to — and a {@code link_id}
-     * on a fizzled activation is precisely the 306 dangling halves. The costs
-     * were still paid, so the record itself must still be written.
+     * on a fizzled activation would dangle, naming a half no reader can find.
+     * The costs were still paid, so the record itself must still be written.
      */
     @Test
     void aFizzleWritesThePartnerlessCostHalfAndNoEffectHalf() throws IOException {
@@ -829,8 +829,9 @@ class BusBracketCollectorTest {
         collector.endBracket(bolt.getId(), false);
         collector.onNextAction();
 
-        assertTrue(written().get(0).contains("\"outcome\":\"resolved\""),
+        List<String> written = written();
+        assertTrue(written.get(0).contains("\"outcome\":\"resolved\""),
                 "a fork's own declined confirmation must not mark the live "
-                        + "bracket's ability declined: " + written());
+                        + "bracket's ability declined: " + written);
     }
 }
