@@ -64,7 +64,7 @@ final class ManaChannel {
                     .actor(player)
                     .ability(ProvenanceResolver.resolve(ability))
                     .state(live.snapshots().ofBoard().render())
-                    .payload(EffectRecord.eventsPayload(List.of(event)));
+                    .payload(RecordPayloads.eventsPayload(List.of(event)));
             reservoir.hold(key, slot, record);
         });
     }

@@ -81,7 +81,7 @@ class RewriteContractTest {
                 Map.of("Card", card), Map.of("Card", card), result, null).toJson();
 
         // The spellings themselves are WireVocabularyTest's pin.
-        assertTrue(json.contains("\"result\":\"" + EffectRecord.rewriteResult(result) + "\""),
+        assertTrue(json.contains("\"result\":\"" + RecordPayloads.rewriteResult(result) + "\""),
                 "the lower snake case of " + result + ": " + json);
     }
 

@@ -129,7 +129,7 @@ final class InterventionFork {
                 .actor(actorId)
                 .ability(keys)
                 .state(state)
-                .payload(EffectRecord.eventsPayload(events));
+                .payload(RecordPayloads.eventsPayload(events));
     }
 
     /**

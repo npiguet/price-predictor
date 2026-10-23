@@ -828,6 +828,6 @@ public final class BusBracketCollector extends BusEventReader {
         context.emit(context.newResolution(Moment.RESOLUTION)
                 .ability(ProvenanceKey.Resolved.UNKNOWN)
                 .state(snapshots.ofBoard().render())
-                .payload(EffectRecord.eventsPayload(brackets.drainOrphans())));
+                .payload(RecordPayloads.eventsPayload(brackets.drainOrphans())));
     }
 }

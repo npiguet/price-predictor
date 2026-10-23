@@ -196,7 +196,7 @@ class CostPayloadTest {
     void everyOutcomeRoundTripsThroughTheDeferredForm() {
         PaidCosts costs = PaidCosts.of(null);
         for (ActivationOutcome outcome : ActivationOutcome.values()) {
-            String payload = EffectRecord.costPayload(costs, outcome);
+            String payload = RecordPayloads.costPayload(costs, outcome);
             assertTrue(payload.contains("\"outcome\":\"" + outcome.wireName() + "\""), payload);
             assertTrue(payload.startsWith("{\"costs\":{"), payload);
         }
