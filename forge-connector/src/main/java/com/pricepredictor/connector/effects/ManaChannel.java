@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
-import java.lang.reflect.InvocationHandler;
 import java.util.List;
 
 /**
@@ -37,7 +36,7 @@ final class ManaChannel {
      * this hook's own game-identity test calls it with a synthesized argument
      * array.
      */
-    InvocationHandler handler() {
+    PatchHooks.Listener handler() {
         return PatchHooks.MANA_LISTENER.listener((callback, args) -> {
             SpellAbility ability = args.get(0, SpellAbility.class);
             String produced = String.valueOf(args.get(2));

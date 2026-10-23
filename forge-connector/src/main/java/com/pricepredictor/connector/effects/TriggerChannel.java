@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.CardTraitBase;
 
-import java.lang.reflect.InvocationHandler;
 
 /**
  * One {@code trigger} record per evaluated trigger condition, fired or not.
@@ -34,7 +33,7 @@ final class TriggerChannel {
      * this hook's own game-identity test calls it with a synthesized argument
      * array.
      */
-    InvocationHandler handler() {
+    PatchHooks.Listener handler() {
         return PatchHooks.TRIGGER_LISTENER.listener((callback, args) -> {
             // Checked first, before this evaluation can spend any of the
             // mode's negative-sampling budget (offer/keep below) -- a fork's

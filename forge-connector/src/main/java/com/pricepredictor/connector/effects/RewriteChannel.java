@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.CardTraitBase;
 
-import java.lang.reflect.InvocationHandler;
 import java.util.List;
 
 /**
@@ -45,7 +44,7 @@ final class RewriteChannel {
      * compiler behind it, so {@code RewriteContractTest} calls this with a
      * synthesized argument array in the compiler's place.
      */
-    InvocationHandler handler() {
+    PatchHooks.Listener handler() {
         return PatchHooks.REPLACEMENT_LISTENER.listener((callback, args) -> {
             // A fork's own replacements resolve through this same JVM-static
             // hook (ForkCollector.forceResolution

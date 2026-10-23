@@ -6,7 +6,6 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 
-import java.lang.reflect.InvocationHandler;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -59,7 +58,7 @@ public final class PlayabilityChannel {
      * this hook's own game-identity test calls it with a synthesized argument
      * array.
      */
-    InvocationHandler decisionHandler() {
+    PatchHooks.Listener decisionHandler() {
         return PatchHooks.PLAYABILITY_LISTENER.listener((callback, args) -> {
             // Checked before the sampler draw below, not after -- a fork's own candidates are
             // evaluated for playability too (ForkCollector.forceResolution's
@@ -165,7 +164,7 @@ public final class PlayabilityChannel {
      *
      * <p>Package-private for the reason {@link #decisionHandler()} is.
      */
-    InvocationHandler legalityHandler() {
+    PatchHooks.Listener legalityHandler() {
         return PatchHooks.COMBAT_LISTENER.listener((callback, args) -> {
             // No CardTraitBase here: the defender or attacker is the
             // GameEntity itself, so identity comes straight off it rather
