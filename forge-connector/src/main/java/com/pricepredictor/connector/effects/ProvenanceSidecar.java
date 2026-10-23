@@ -4,6 +4,7 @@ import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityType;
 import com.pricepredictor.connector.MultiCard;
 import com.pricepredictor.connector.RenderedLine;
+import com.pricepredictor.connector.json.Json;
 
 import java.util.ArrayList;
 import java.util.Collections;

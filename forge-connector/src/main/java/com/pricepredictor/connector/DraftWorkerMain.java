@@ -6,7 +6,7 @@ import com.pricepredictor.connector.DraftPickProtocol.PickChannel;
 import com.pricepredictor.connector.DraftPickProtocol.PickPosition;
 import com.pricepredictor.connector.DraftPickProtocol.PickRequest;
 import com.pricepredictor.connector.DraftPickProtocol.WorkerInputClosed;
-import com.pricepredictor.connector.effects.Json;
+import com.pricepredictor.connector.json.Json;
 import forge.gamemodes.limited.BoosterDraft;
 import forge.gamemodes.limited.DraftPack;
 import forge.gamemodes.limited.LimitedPlayerAI;

@@ -31,7 +31,7 @@ Four Python packages live under `src/`, each laid out in hexagonal (ports-and-ad
 
 ### `forge-connector` — Java Maven module
 
-Java 17+ module at `forge-connector/` holding the CLI workers the Python side runs against Forge. Its own code is stdlib-only apart from `minlog`, which the `jar-with-dependencies` assembly bundles (`lombok` is `provided`); everything else it compiles against comes from the sibling Forge checkout. Note the worker classpath is only the five JARs `build_forge_classpath` assembles — Forge's own transitive dependencies are **not** on it unless `include_dependency_glob` is set, so a new third-party dependency has to be declared here and bundled.
+Java 17+ module at `forge-connector/` holding the CLI workers the Python side runs against Forge. Besides the JDK and the sibling Forge checkout, its own code imports only `minlog` and the Guava, commons-lang3 and jupnp types Forge's API hands it; the `jar-with-dependencies` assembly bundles those with the rest of the Forge runtime dependencies the pom declares (`lombok` is `provided`). No JSON library is among them: the `json` package hand-writes every JSON document the workers emit and reads the one flat object they receive. Note the worker classpath is only the five JARs `build_forge_classpath` assembles — Forge's own transitive dependencies are **not** on it unless `include_dependency_glob` is set, so a new third-party dependency has to be declared here and bundled.
 
 The fat JAR is built with `mvn install -DskipTests` → `target/forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar`. Main classes invoked by Python subprocess:
 - `ConvertMain` — `python -m price_predictor convert`

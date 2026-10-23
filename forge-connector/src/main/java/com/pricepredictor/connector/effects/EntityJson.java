@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import com.google.common.collect.Table;
 import forge.card.CardStateName;
 import forge.card.CardTypeView;

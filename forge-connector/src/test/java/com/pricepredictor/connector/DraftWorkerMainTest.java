@@ -1,6 +1,6 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.Json;
+import com.pricepredictor.connector.json.Json;
 import forge.StaticData;
 import forge.card.CardEdition;
 import forge.gamemodes.limited.BoosterDraft;

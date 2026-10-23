@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import com.google.common.collect.Table;
 import forge.game.card.Card;
 import forge.game.combat.Combat;

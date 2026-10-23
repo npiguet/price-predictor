@@ -1,5 +1,9 @@
-package com.pricepredictor.connector.effects;
+package com.pricepredictor.connector.json;
 
+import com.pricepredictor.connector.effects.DamageStep;
+import com.pricepredictor.connector.effects.EventDuration;
+import com.pricepredictor.connector.effects.EventType;
+import com.pricepredictor.connector.effects.RecordKind;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

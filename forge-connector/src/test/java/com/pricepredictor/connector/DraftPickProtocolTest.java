@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.DraftPickProtocol.PickPosition;
 import com.pricepredictor.connector.DraftPickProtocol.PickResponse;
+import com.pricepredictor.connector.json.FlatJson;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

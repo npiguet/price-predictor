@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
+
 /**
  * One {@code trigger} record per evaluated trigger condition, fired or not.
  *

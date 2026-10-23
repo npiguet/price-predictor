@@ -1,4 +1,4 @@
-package com.pricepredictor.connector.effects;
+package com.pricepredictor.connector.json;
 
 import com.pricepredictor.connector.WireNamed;
 
@@ -7,12 +7,22 @@ import java.util.StringJoiner;
 import java.util.function.Function;
 
 /**
- * Minimal JSON writing for the sidecar and the record shards.
+ * Minimal JSON writing for every JSON document the workers emit: the provenance
+ * sidecars, the effect-record shards, the draft transcripts and pick requests,
+ * the castability verdicts and the keyword definitions.
  *
- * <p>The connector's own code is stdlib-only apart from minlog, and the two
- * formats it emits are small and fully under our control, so a JSON library
- * would be a new bundled dependency for no benefit. Reading is the Python
- * side's job.
+ * <p>Hand-written because no JSON library is a dependency of this module. The
+ * fat JAR bundles minlog and the third-party jars Forge's own classes need at
+ * runtime (Guava, commons-lang3, Sentry, JGraphT and the rest the pom lists),
+ * and the connector touches those only where Forge's API hands it their types;
+ * a JSON codec buried inside one of them is that dependency's internal, not an
+ * API to bind an append-only corpus's spelling to. The formats are small and
+ * fully under our control, so a library would be a new bundled dependency for
+ * no benefit.
+ *
+ * <p>Reading is the Python side's job for everything written here. The one
+ * document a worker reads, the supervisor's flat pick response, goes through
+ * {@link FlatJson}.
  */
 public final class Json {
 

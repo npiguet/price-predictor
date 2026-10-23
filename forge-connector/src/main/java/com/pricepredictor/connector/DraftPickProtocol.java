@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.Json;
+import com.pricepredictor.connector.json.FlatJson;
+import com.pricepredictor.connector.json.Json;
 import forge.item.PaperCard;
 
 import java.io.BufferedReader;

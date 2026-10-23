@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
+
 /**
  * One record's state snapshot, held as its rendered blocks until it is written.
  *

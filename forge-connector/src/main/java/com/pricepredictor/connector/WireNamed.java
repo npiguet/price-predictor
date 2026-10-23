@@ -6,7 +6,7 @@ package com.pricepredictor.connector;
  * <p>Every file the workers write for the Python side spells its enumerated
  * values in that side's lower-case vocabulary, never as the Java constant
  * name, and the readers refuse a spelling they do not have. Implementing this
- * is what lets a writer hand the member itself to {@code effects.Json} and get
+ * is what lets a writer hand the member itself to {@code json.Json} and get
  * its wire name back, so forgetting a {@code .wireName()} at one call site
  * cannot leak {@code ZONE_CHANGE} into an append-only corpus.
  *

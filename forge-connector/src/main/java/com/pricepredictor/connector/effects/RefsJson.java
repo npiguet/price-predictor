@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
 import forge.game.spellability.SpellAbility;
