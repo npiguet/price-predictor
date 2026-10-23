@@ -148,7 +148,8 @@ class EffectRecordTest {
     }
 
     /**
-     * A trigger record names its acting line, and says so in the envelope.
+     * A trigger record names its acting line, and says so in the envelope,
+     * with no reason beside it.
      *
      * <p>Guards the wire shape the collector fills: the field rule exempts
      * only {@code combat} and {@code playability} from naming a line, and a
@@ -165,6 +166,7 @@ class EffectRecordTest {
         assertFalse(json.contains("\"ability\":null"), json);
         assertTrue(json.contains("\"trait_kind\":\"trigger\""), json);
         assertTrue(json.contains("cardsfolder/g/grave_titan.txt"), json);
+        assertTrue(json.contains("\"ability_unresolved\":null"), json);
     }
 
     /** And a rewrite record names the replacement effect that rewrote. */
@@ -180,32 +182,19 @@ class EffectRecordTest {
     }
 
     /**
-     * A line that could not be attributed renders empty rather than absent.
+     * A line that could not be attributed renders empty rather than absent,
+     * and says why it is empty.
      *
-     * <p>The two are different answers -- "no line acts here" against "a line
-     * acted and we could not name it" -- and a reader that folds them together
-     * cannot measure the second.
+     * <p>Empty and absent are different answers -- "a line acted and we could
+     * not name it" against "no line acts here", as in a combat record -- and
+     * a reader that folds them together cannot measure the first. Nor could
+     * it tell "no printed line exists, correctly" from "the resolver
+     * regressed" without the reason. The two fields are set from one answer
+     * so they cannot be written out of step: a reason beside a named line is
+     * a contradiction the reader refuses outright.
      */
     @Test
-    void anUnattributableLineIsEmptyRatherThanNull() {
-        assertTrue(record(RecordKind.TRIGGER)
-                .ability(new ProvenanceKey.Resolved(
-                        null, UnresolvedReason.ENGINE_EFFECT))
-                .toJson().contains("\"ability\":[]"));
-        assertTrue(record(RecordKind.COMBAT).toJson()
-                .contains("\"ability\":null"));
-    }
-
-    /**
-     * And an empty line says why it is empty.
-     *
-     * <p>"No printed line exists, correctly" and "the resolver regressed" were
-     * the same row for a whole collection run. The two fields are set from one
-     * answer so they cannot be written out of step: a reason beside a named
-     * line is a contradiction the reader refuses outright.
-     */
-    @Test
-    void anEmptyLineSaysWhyItIsEmpty() {
+    void anUnattributableLineIsEmptyRatherThanNullAndSaysWhy() {
         String json = record(RecordKind.TRIGGER)
                 .ability(new ProvenanceKey.Resolved(
                         null, UnresolvedReason.ENGINE_EFFECT))
@@ -213,18 +202,8 @@ class EffectRecordTest {
 
         assertTrue(json.contains("\"ability\":[]"), json);
         assertTrue(json.contains("\"ability_unresolved\":\"engine_effect\""), json);
-    }
-
-    @Test
-    void aNamedLineCarriesNoReason() {
-        String json = record(RecordKind.TRIGGER)
-                .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
-                        "cardsfolder/g/grave_titan.txt", 0,
-                        TraitKind.TRIGGER, 0), null))
-                .toJson();
-
-        assertTrue(json.contains("cardsfolder/g/grave_titan.txt"), json);
-        assertTrue(json.contains("\"ability_unresolved\":null"), json);
+        String combat = record(RecordKind.COMBAT).toJson();
+        assertTrue(combat.contains("\"ability\":null"), combat);
     }
 
     /** A caller that looked and got nothing back still owes a reason. */

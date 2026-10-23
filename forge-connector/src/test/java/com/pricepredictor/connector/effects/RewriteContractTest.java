@@ -57,6 +57,11 @@ class RewriteContractTest {
         return HookShapes.method(shape, "onReplacement");
     }
 
+    /** The card's one printed replacement effect: Rest in Peace's, or Paralyze's. */
+    private static ReplacementEffect replacementOf(Card card) {
+        return card.getCurrentState().getReplacementEffects().iterator().next();
+    }
+
     // ── one record per replacement, whatever the result ─────────────────
 
     /**
@@ -136,8 +141,7 @@ class RewriteContractTest {
     @Test
     void aSubstitutionRewritesNothingAndNamesWhatRanInstead() {
         Card rest = TestCards.build("Rest in Peace");
-        ReplacementEffect replacement =
-                rest.getCurrentState().getReplacementEffects().iterator().next();
+        ReplacementEffect replacement = replacementOf(rest);
         SpellAbility ran = replacement.ensureAbility();
         ran.setReplacementEffect(replacement);
         Map<String, Object> params = Map.of(
@@ -201,8 +205,7 @@ class RewriteContractTest {
     @Test
     void theHandlerReadsEachArgumentOffItsOwnPosition() throws Throwable {
         Card rest = TestCards.build("Rest in Peace");
-        ReplacementEffect replacement =
-                rest.getCurrentState().getReplacementEffects().iterator().next();
+        ReplacementEffect replacement = replacementOf(rest);
         SpellAbility ran = replacement.ensureAbility();
         ran.setReplacementEffect(replacement);
         Map<AbilityKey, Object> before = new LinkedHashMap<>();
@@ -283,8 +286,7 @@ class RewriteContractTest {
     @Test
     void aReplacementFromAnotherGameDoesNotReachTheShard() throws Throwable {
         Card forkHost = TestBoard.cardInAnotherGame("Rest in Peace");
-        ReplacementEffect forkReplacement =
-                forkHost.getCurrentState().getReplacementEffects().iterator().next();
+        ReplacementEffect forkReplacement = replacementOf(forkHost);
         Map<String, Object> params = Map.of(
                 "Card", forkHost, "Destination", ZoneType.Graveyard);
 
@@ -314,8 +316,7 @@ class RewriteContractTest {
         // so this is the in-place rewrite the pair was always able to express,
         // and every other field on the record can be read beside it.
         Card rest = TestCards.build("Rest in Peace");
-        ReplacementEffect replacement =
-                rest.getCurrentState().getReplacementEffects().iterator().next();
+        ReplacementEffect replacement = replacementOf(rest);
 
         String json = recording(tempDir).rewrites().record(
                 replacement,
@@ -352,8 +353,7 @@ class RewriteContractTest {
     @Test
     void aPreventionThatRewritesNothingIsStillARecord() {
         Card paralyze = TestCards.build("Paralyze");
-        ReplacementEffect prevention =
-                paralyze.getCurrentState().getReplacementEffects().iterator().next();
+        ReplacementEffect prevention = replacementOf(paralyze);
         assertEquals("Untap", String.valueOf(prevention.getMode()));
 
         EffectRecord record = recording(tempDir).rewrites().record(
@@ -373,15 +373,14 @@ class RewriteContractTest {
     /**
      * A replacement that halved a draw is a rewrite, not an identity pair.
      *
-     * <p>The mode table was written from the trigger vocabulary, so 31 of
-     * Forge's 42 {@code ReplacementType}s rendered as the generic outcome
-     * carrying only their mode -- and an event with no value in it cannot
-     * differ from itself. Every rewrite of a draw, a mill, a token count or a
-     * life total was therefore dropped as an identity pair by construction,
-     * whatever the replacement actually did.
+     * <p>The replacement side has quantity keys of its own, beyond the trigger
+     * vocabulary. Read as the generic outcome, carrying only its mode, such an
+     * event has no value in it and cannot differ from itself: every rewrite of
+     * a draw, a mill, a token count or a life total would be dropped as an
+     * identity pair, whatever the replacement actually did.
      */
     @Test
-    void aRewrittenQuantityOnTheReplacementSideIsNoLongerAnIdentityPair() {
+    void aRewrittenQuantityOnTheReplacementSideIsNotAnIdentityPair() {
         Card card = TestCards.build("Mountain");
         Map<String, Object> before = new LinkedHashMap<>(Map.of(
                 "Affected", card, "Number", 3));

@@ -12,7 +12,9 @@ import java.nio.file.Path;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Java/Python agreement on card filenames.
@@ -74,9 +76,9 @@ class CardFilenamesTest {
 
     @Test
     void twoOfTheThreeTreesAreFlat() {
-        assertEquals(false, SourceTree.isFlat(SourceTree.CARDSFOLDER));
-        assertEquals(true, SourceTree.isFlat(SourceTree.TOKENSCRIPTS));
-        assertEquals(true, SourceTree.isFlat(SourceTree.VARIANT_SCRIPTS));
+        assertFalse(SourceTree.isFlat(SourceTree.CARDSFOLDER));
+        assertTrue(SourceTree.isFlat(SourceTree.TOKENSCRIPTS));
+        assertTrue(SourceTree.isFlat(SourceTree.VARIANT_SCRIPTS));
     }
 
     // -- the tree decides where a card lives ----------------------------
