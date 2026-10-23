@@ -170,9 +170,9 @@ class ClauseContractTest {
 
         String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
-                + SnapshotBuilder.playerId(outerTarget) + "\"]"), effectHalf);
+                + Refs.of(outerTarget) + "\"]"), effectHalf);
         assertTrue(effectHalf.contains("\"type\":\"turn_skipped\",\"subjects\":[\""
-                + SnapshotBuilder.playerId(innerTarget) + "\"]"), effectHalf);
+                + Refs.of(innerTarget) + "\"]"), effectHalf);
     }
 
     // ── another game's clause must not reach this game's bracket ────────
@@ -288,7 +288,7 @@ class ClauseContractTest {
 
         String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
-                + SnapshotBuilder.playerId(outerTarget) + "\"]"),
+                + Refs.of(outerTarget) + "\"]"),
                 "the outer clause's own event must be unaffected by the inner "
                         + "clause's memo failure: " + effectHalf);
         assertEquals(1, effectHalf.split("\"type\":\"turn_added\"", -1).length - 1,

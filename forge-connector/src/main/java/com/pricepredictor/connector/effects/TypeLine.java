@@ -11,7 +11,7 @@ import java.util.List;
  * <p>Core types first, then supertypes, then subtypes: the order a card's
  * computed type changes and a static's type contributions are both listed in,
  * so the same type line reads the same in both. Each name is spelled by
- * {@link SnapshotBuilder#typeName}, as the snapshot spells it.
+ * {@link CardSpelling#typeName}, as the snapshot spells it.
  */
 final class TypeLine {
 
@@ -22,13 +22,13 @@ final class TypeLine {
     static List<String> names(CardTypeView types) {
         List<String> names = new ArrayList<>();
         for (var type : types.getCoreTypes()) {
-            names.add(SnapshotBuilder.typeName(type));
+            names.add(CardSpelling.typeName(type));
         }
         for (var supertype : types.getSupertypes()) {
-            names.add(SnapshotBuilder.typeName(supertype));
+            names.add(CardSpelling.typeName(supertype));
         }
         for (String subtype : types.getSubtypes()) {
-            names.add(SnapshotBuilder.typeName(subtype));
+            names.add(CardSpelling.typeName(subtype));
         }
         return names;
     }

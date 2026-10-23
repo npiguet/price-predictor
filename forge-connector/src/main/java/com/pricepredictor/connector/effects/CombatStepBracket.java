@@ -82,7 +82,7 @@ final class CombatStepBracket {
         }
 
         String payload() {
-            return RecordPayloads.combatPayload(shape.fields(), events.events());
+            return RecordPayloads.combatPayload(shape, events.events());
         }
     }
 
@@ -132,8 +132,7 @@ final class CombatStepBracket {
             return;
         }
         var phase = game.getPhaseHandler();
-        String actor = phase == null || phase.getPlayerTurn() == null
-                ? null : SnapshotBuilder.playerId(phase.getPlayerTurn());
+        String actor = phase == null ? null : Refs.ofNullable(phase.getPlayerTurn());
         EffectRecord record = context.newRecord(RecordKind.COMBAT)
                 .actor(actor)
                 .state(combat.state)

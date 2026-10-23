@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 import forge.game.phase.PhaseHandler;
 import forge.game.phase.PhaseType;
 
@@ -11,7 +13,7 @@ import forge.game.phase.PhaseType;
  * the observed record it mirrors are written by different classes and have to
  * agree on that name, which is why it is spelled once, here.
  */
-public enum DamageStep {
+public enum DamageStep implements WireNamed {
     FIRST_STRIKE("first_strike"),
     REGULAR("regular");
 
@@ -22,6 +24,7 @@ public enum DamageStep {
     }
 
     /** The {@code combat_substep} a record carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

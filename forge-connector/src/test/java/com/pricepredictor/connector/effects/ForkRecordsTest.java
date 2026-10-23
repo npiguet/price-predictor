@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * forks of one board.
  */
 @ExtendWith(ForgeExtension.class)
-class ForkCollectorTest {
+class ForkRecordsTest {
 
     @TempDir
     Path tempDir;
@@ -449,7 +449,7 @@ class ForkCollectorTest {
                 .filter(card -> card.getName().equals("Maro")).findFirst().orElseThrow();
         String forced = payloadOf(forcedRecord(forkedGame, firstSpellInHand(forkedGame), 1L));
 
-        assertTrue(forced.contains("\"subjects\":[\"" + SnapshotBuilder.entityId(maro)
+        assertTrue(forced.contains("\"subjects\":[\"" + Refs.of(maro)
                 + "\"],\"params\":{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""),
                 forced);
         assertEquals(observed, forced);

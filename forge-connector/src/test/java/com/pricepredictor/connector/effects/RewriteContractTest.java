@@ -368,7 +368,7 @@ class RewriteContractTest {
         assertTrue(json.contains("cardsfolder/r/rest_in_peace.txt"), json);
         assertTrue(json.contains("\"ability_unresolved\":null"), json);
         assertTrue(json.contains(
-                "\"source\":\"" + SnapshotBuilder.entityId(rest) + "\""), json);
+                "\"source\":\"" + Refs.of(rest) + "\""), json);
         assertTrue(json.contains("\"incoming\":{\"type\":\"zone_change\""), json);
     }
 

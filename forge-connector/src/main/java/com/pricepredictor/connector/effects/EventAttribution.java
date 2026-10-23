@@ -189,7 +189,7 @@ final class EventAttribution {
         if (host == null) {
             host = hostOf(root);
         }
-        return host == null ? null : SnapshotBuilder.entityId(host);
+        return Refs.ofNullable(host);
     }
 
     private static Card hostOf(SpellAbility ability) {

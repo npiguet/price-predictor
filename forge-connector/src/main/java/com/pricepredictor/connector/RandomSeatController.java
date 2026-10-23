@@ -46,7 +46,7 @@ import java.util.function.BooleanSupplier;
  * {@link #declareBlockers}, plus {@link #chooseTargetsFor} for the clauses
  * whose targeting the engine asks for on its own. Everything else — land drops, mana payment, mulligans, what a
  * resolving effect asks its controller — is the AI's (FR-023). The nearest
- * relative is {@code ForkCollector}, which draws the same choices for an
+ * relative is {@code InterventionFork}, which draws the same choices for an
  * ability it forces on a fork; it acts only <em>inside</em> a fork and this
  * acts only outside one, through the same test inverted: a controller is
  * live only once {@link GamePlayer} has attached it to the game it created,

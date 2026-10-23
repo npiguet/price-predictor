@@ -103,7 +103,7 @@ final class ContinuousChannel {
         // on one card whose contributions and suppressed boards happen to
         // agree are still two records.
         context.emitDistinct(context.newRecord(RecordKind.CONTINUOUS)
-                .actor(SnapshotBuilder.playerId(source.getHostCard().getController()))
+                .actor(Refs.of(source.getHostCard().getController()))
                 .ability(acting)
                 .state(state)
                 .payload(payload), dedup);

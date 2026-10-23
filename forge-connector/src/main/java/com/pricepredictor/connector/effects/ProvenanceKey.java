@@ -138,7 +138,7 @@ public record ProvenanceKey(
      */
     private Json.ObjectWriter withFields(Json.ObjectWriter json) {
         json.value("face", face)
-                .value("trait_kind", traitKind.wireName())
+                .value("trait_kind", traitKind)
                 .value("index_within_kind", indexWithinKind);
         if (option != null) {
             json.value("option", option);

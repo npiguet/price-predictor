@@ -61,7 +61,7 @@ public final class PlayabilityChannel {
     PatchHooks.Listener decisionHandler() {
         return PatchHooks.PLAYABILITY_LISTENER.listener((callback, args) -> {
             // Checked before the sampler draw below, not after -- a fork's own candidates are
-            // evaluated for playability too (ForkCollector.forceResolution's
+            // evaluated for playability too (InterventionFork.forceResolution's
             // chooseTargets, and GameSimulator's own AI decisions, both ask the
             // same AiController this hook is installed on), and letting one
             // consume from the shared `sampler` before being dropped would
@@ -227,7 +227,7 @@ public final class PlayabilityChannel {
         LegalSet blockers = LegalSet.of(candidates, legal,
                 card -> cantBlockByStatic(attacker, card));
         String payload = Json.object()
-                .value("anchor_attacker", SnapshotBuilder.entityId(attacker))
+                .value("anchor_attacker", Refs.of(attacker))
                 .raw("legal_blockers", blockers.legal())
                 .raw("forbidden", blockers.forbidden())
                 .value("min_blockers", minBlockers)
@@ -256,7 +256,7 @@ public final class PlayabilityChannel {
                 forbidden.add(forbiddenJson(card, responsible.apply(card)));
             }
             return new LegalSet(
-                    Json.array(legal, card -> Json.string(SnapshotBuilder.entityId(card))),
+                    Json.array(legal, card -> Json.string(Refs.of(card))),
                     Json.array(forbidden, Function.identity()));
         }
     }
@@ -284,7 +284,7 @@ public final class PlayabilityChannel {
     private static String forbiddenJson(Card card, StaticAbility responsible) {
         ProvenanceKey key = responsible == null ? null : ProvenanceResolver.of(responsible);
         return Json.object()
-                .value("entity", SnapshotBuilder.entityId(card))
+                .value("entity", Refs.of(card))
                 .raw("responsible_static",
                         ProvenanceKey.toJsonArray(key == null ? List.of() : List.of(key)))
                 .render();

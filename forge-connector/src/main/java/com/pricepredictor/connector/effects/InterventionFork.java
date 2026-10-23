@@ -61,13 +61,13 @@ final class InterventionFork {
             return false;
         }
         // The whole method is the fork, not just the forced resolution: see
-        // ForkCollector.FORK_RUNNING for what the narrower scope left uncovered.
-        return ForkCollector.asFork(() -> {
+        // Forks.FORK_RUNNING for what the narrower scope left uncovered.
+        return Forks.asFork(() -> {
             // Counted before the score check, so a discarded fork still spends its
             // budget.
             budget.spendIntervention(realResolutionId);
 
-            Optional<ForkCollector.VerifiedFork> verified = ForkCollector.copyAndVerify(
+            Optional<Forks.VerifiedFork> verified = Forks.copyAndVerify(
                     game,
                     () -> ability.getActivatingPlayer() != null
                             ? ability.getActivatingPlayer()
@@ -77,9 +77,9 @@ final class InterventionFork {
             }
             Game fork = verified.get().fork();
             Player perspective = verified.get().perspective();
-            SpellAbility forked = ForkCollector.findInFork(verified.get().copier(), ability);
+            SpellAbility forked = Forks.findInFork(verified.get().copier(), ability);
             Player actor = forked == null
-                    ? null : ForkCollector.mappedPlayer(verified.get().copier(), perspective);
+                    ? null : Forks.mappedPlayer(verified.get().copier(), perspective);
             if (forked == null || actor == null) {
                 return false;
             }
@@ -101,7 +101,7 @@ final class InterventionFork {
             // the copy would make the record's identity depend on a game
             // that no longer exists.
             ProvenanceKey.Resolved keys = ProvenanceResolver.resolve(ability);
-            String actorId = SnapshotBuilder.playerId(perspective);
+            String actorId = Refs.of(perspective);
             // A modal resolution writes one half per chosen mode, by the same
             // rule the live bracket applies (FR-029f), each through the mode's
             // option line and with the board as it stood when that mode's
@@ -246,7 +246,7 @@ final class InterventionFork {
                     sink.beginMode(start.option(), snapshots.ofResolving(onStack));
                 }
             };
-            ForkCollector.listeningForClauses(modeStarts, () -> {
+            Forks.listeningForClauses(modeStarts, () -> {
                 GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
                 return null;
             });
@@ -349,7 +349,7 @@ final class InterventionFork {
         public void onResolved(GameEventSpellResolved event) {
             if (onStack != null && refs == null && event.spell() != null
                     && event.spell().getId() == onStack.getId()) {
-                refs = snapshots.refsJson(onStack);
+                refs = RefsJson.render(onStack);
             }
         }
 

@@ -30,7 +30,7 @@ public final class RoleSpans {
             return Json.object()
                     .value("start", start)
                     .value("end", end)
-                    .value("role", role.wireName())
+                    .value("role", role)
                     .render();
         }
     }

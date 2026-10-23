@@ -500,7 +500,7 @@ final class RunParamNormalizer {
      */
     private static String subjectOf(Object value) {
         if (value instanceof SpellAbility ability && ability.getHostCard() != null) {
-            return SnapshotBuilder.entityId(ability.getHostCard());
+            return Refs.of(ability.getHostCard());
         }
         return Refs.ofAny(value).orElse(null);
     }

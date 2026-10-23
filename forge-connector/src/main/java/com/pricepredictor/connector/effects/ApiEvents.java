@@ -353,7 +353,7 @@ final class ApiEvents {
     private static EffectEvent withSubjects(EffectEvent event, List<Player> players) {
         if (players != null) {
             for (Player player : players) {
-                event.subject(SnapshotBuilder.playerId(player));
+                event.subject(Refs.of(player));
             }
         }
         return event;
@@ -388,7 +388,7 @@ final class ApiEvents {
         if (sa.hasParam("DefinedPlayer")) {
             List<Player> named = definedPlayers(sa, sa.getParam("DefinedPlayer"));
             if (!named.isEmpty()) {
-                return SnapshotBuilder.playerId(named.get(0));
+                return Refs.of(named.get(0));
             }
         }
         return playerOf(sa);
@@ -516,8 +516,7 @@ final class ApiEvents {
             new ChoiceReading("number", host -> host.getChosenNumber() == null
                     ? null : String.valueOf(host.getChosenNumber())),
             new ChoiceReading("card_name", host -> nonEmpty(host.getNamedCard())),
-            new ChoiceReading("player", host -> host.getChosenPlayer() == null
-                    ? null : SnapshotBuilder.playerId(host.getChosenPlayer())),
+            new ChoiceReading("player", host -> Refs.ofNullable(host.getChosenPlayer())),
             new ChoiceReading("cards",
                     host -> host.getChosenCards() == null || host.getChosenCards().isEmpty()
                             ? null : String.valueOf(host.getChosenCards().size())),
@@ -601,7 +600,7 @@ final class ApiEvents {
      * event would still fire with an empty {@code targets} list -- a channel
      * that looks wired while reporting nothing distinguishable from
      * "retargeted at nothing." Mixed-entity targets are read as {@code
-     * SnapshotBuilder.stackExtrasJson} reads them, through {@link Refs#ofAny}.
+     * EntityJson.stackExtrasJson} reads them, through {@link Refs#ofAny}.
      */
     private static EffectEvent retargeted(SpellAbility sa) {
         List<String> targets = new ArrayList<>();
@@ -638,7 +637,7 @@ final class ApiEvents {
      */
     private static EffectEvent scheduler(
             EffectEvent event, SpellAbility sa, Card host, Object memo) {
-        return event.subject(SnapshotBuilder.entityId(host));
+        return event.subject(Refs.of(host));
     }
 
     /**
@@ -679,7 +678,7 @@ final class ApiEvents {
      */
     private static EffectEvent replacedBy(
             EffectEvent event, SpellAbility sa, Card host, Object memo) {
-        return event.subject(SnapshotBuilder.entityId(host));
+        return event.subject(Refs.of(host));
     }
 
     // ── titles ──────────────────────────────────────────────────────────
@@ -716,7 +715,7 @@ final class ApiEvents {
         if (after == null || after.equals(before)) {
             return null;
         }
-        return event.subject(SnapshotBuilder.playerId(after));
+        return event.subject(Refs.of(after));
     }
 
     /**
@@ -738,10 +737,10 @@ final class ApiEvents {
         if (p == null) {
             return null;
         }
-        event.subject(SnapshotBuilder.playerId(p));
+        event.subject(Refs.of(p));
         Card ringBearer = p.getRingBearer();
         if (ringBearer != null) {
-            event.subject(SnapshotBuilder.entityId(ringBearer));
+            event.subject(Refs.of(ringBearer));
         }
         return event;
     }
@@ -775,7 +774,7 @@ final class ApiEvents {
         if (holder == null || !affectedPlayers(sa).contains(holder)) {
             return null;
         }
-        return event.subject(SnapshotBuilder.playerId(holder));
+        return event.subject(Refs.of(holder));
     }
 
     // ── combat removals ─────────────────────────────────────────────────
@@ -828,7 +827,7 @@ final class ApiEvents {
         EffectEvent event = new EffectEvent(EventType.REMOVED_FROM_COMBAT);
         for (Card c : before) {
             if (combat == null || !(combat.isAttacking(c) || combat.isBlocking(c))) {
-                event.subject(SnapshotBuilder.entityId(c));
+                event.subject(Refs.of(c));
             }
         }
         return event.subjects().isEmpty() ? null : event;
@@ -858,9 +857,9 @@ final class ApiEvents {
     /**
      * Every memoized attacker whose defender assignment actually changed --
      * exactly the creatures {@code SpellAbilityEffect.addToCombat}'s
-     * {@code combat.removeFromCombat(c)} call (SpellAbilityEffect.java:762)
-     * ran for, since that call fires only immediately before re-adding the
-     * same creature against a new defender. A card that was never attacking
+     * {@code combat.removeFromCombat(c)} call ran for, since that call fires
+     * only immediately before re-adding the same creature against a new
+     * defender. A card that was never attacking
      * ({@code null} before) is skipped: nothing could have removed it.
      *
      * <p>So "removed from combat" for {@code ChangeCombatants} means a
@@ -883,7 +882,7 @@ final class ApiEvents {
             }
             GameEntity now = combat == null ? null : combat.getDefenderByAttacker(c);
             if (!entry.getValue().equals(now)) {
-                event.subject(SnapshotBuilder.entityId(c));
+                event.subject(Refs.of(c));
             }
         }
         return event.subjects().isEmpty() ? null : event;
@@ -903,7 +902,7 @@ final class ApiEvents {
     /** combat_ended: the attacking player whose combat phase ended, if one did. */
     private static EffectEvent endedCombatOf(
             EffectEvent event, SpellAbility sa, Card host, Player attacker) {
-        return attacker == null ? null : event.subject(SnapshotBuilder.playerId(attacker));
+        return attacker == null ? null : event.subject(Refs.of(attacker));
     }
 
     // ── text changes ────────────────────────────────────────────────────
@@ -934,13 +933,13 @@ final class ApiEvents {
         }
         EffectEvent event = new EffectEvent(EventType.TEXT_CHANGE);
         for (Card c : cardsFromTargets(sa)) {
-            event.subject(SnapshotBuilder.entityId(c));
+            event.subject(Refs.of(c));
         }
         return event.subjects().isEmpty() ? null : event;
     }
 
     /**
-     * {@code getCardsfromTargets(sa)} (SpellAbilityEffect.java:370), mirrored
+     * {@code SpellAbilityEffect.getCardsfromTargets(sa)}, mirrored
      * the way {@link #affectedCards} already mirrors {@code getTargetCards}.
      *
      * <p>The {@code getTargetSpells()} union below is NOT dead for today's
@@ -973,15 +972,14 @@ final class ApiEvents {
     }
 
     private static String playerOf(SpellAbility sa) {
-        return sa.getActivatingPlayer() == null
-                ? null : SnapshotBuilder.playerId(sa.getActivatingPlayer());
+        return Refs.ofNullable(sa.getActivatingPlayer());
     }
 
     /**
      * {@code AbilityUtils.getDefinedPlayers} for one {@code Defined$}/
      * {@code DefinedPlayer$} value, extended to the {@code " & "}-joined
-     * multi-value form {@code SpellAbilityEffect.getPlayers} also accepts
-     * ({@code SpellAbilityEffect.java:314}): {@code String[] def =
+     * multi-value form {@code SpellAbilityEffect.getPlayers} also accepts:
+     * {@code String[] def =
      * sa.getParamOrDefault(definedParam, "You").split(" & ")}, one lookup per
      * token, unioned. No card in the cardsfolder uses this today for either
      * {@code Defined$} on these three rules or {@code DefinedPlayer$} on
@@ -1004,8 +1002,7 @@ final class ApiEvents {
      * HealDamageEffect.resolve()} calls through {@code getTargetCards(sa)})
      * reads {@code sa.getTargets()} only when {@code sa.usesTargeting()}
      * is true, and otherwise falls back to a {@code " & "}-split {@code
-     * Defined$}, defaulted to {@code "Self"} ({@code
-     * SpellAbilityEffect.java:257,265}) -- the same default used here, not
+     * Defined$}, defaulted to {@code "Self"} -- the same default used here, not
      * a different one invented for this file.
      */
     private static List<Card> affectedCards(SpellAbility sa) {

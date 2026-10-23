@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import forge.game.spellability.SpellAbility;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * What goes under a record's {@code payload}, one factory per shape.
@@ -29,11 +28,10 @@ final class RecordPayloads {
 
     /**
      * ``{<combat fields>, "events": [...]}`` — an observed damage step, its
-     * combat as {@link CombatShape#fields} hands it over.
+     * combat as {@link CombatShape#writeTo} writes it.
      */
-    static String combatPayload(Map<String, Object> combatFields, List<EffectEvent> events) {
-        return Json.object()
-                .values(combatFields)
+    static String combatPayload(CombatShape combat, List<EffectEvent> events) {
+        return combat.writeTo(Json.object())
                 .raw("events", eventArray(events))
                 .render();
     }
@@ -43,10 +41,9 @@ final class RecordPayloads {
      * perturbed: the keyword it stripped and the creature it stripped it from.
      */
     static String probePayload(
-            Map<String, Object> combatFields, List<EffectEvent> events,
+            CombatShape combat, List<EffectEvent> events,
             String keyword, String carrier) {
-        return Json.object()
-                .values(combatFields)
+        return combat.writeTo(Json.object())
                 .raw("events", eventArray(events))
                 .raw("probed_keyword", Json.string(keyword))
                 .raw("probed_entity", Json.string(carrier))
@@ -142,7 +139,7 @@ final class RecordPayloads {
     static String costPayload(PaidCosts costs, ActivationOutcome outcome) {
         return Json.object()
                 .raw("costs", costs.toJson())
-                .value("outcome", outcome.wireName())
+                .value("outcome", outcome)
                 .render();
     }
 }

@@ -12,8 +12,8 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * Stage three: records for what observation cannot reach, and the machinery
- * its two kinds of fork share.
+ * The machinery shared by stage three's two kinds of fork, which record what
+ * observation cannot reach.
  *
  * <p>Two kinds of fork, and the flags tell them apart on their own: an
  * {@link InterventionFork interventional resolution} forces an ability Forge's
@@ -29,9 +29,9 @@ import java.util.function.Supplier;
  * counts against its budget — otherwise a systematically-failing copy would
  * retry forever.
  */
-final class ForkCollector {
+final class Forks {
 
-    private ForkCollector() {
+    private Forks() {
     }
 
     /**

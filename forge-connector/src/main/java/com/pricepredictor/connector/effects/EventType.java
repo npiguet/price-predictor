@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -18,7 +20,7 @@ import java.util.stream.Stream;
  * them: two effects that both move a card to the graveyard emit
  * {@code zone_change}, and the model learns one field group for it.
  */
-public enum EventType {
+public enum EventType implements WireNamed {
     ZONE_CHANGE("zone_change"),
     DESTROYED("destroyed"),
     SACRIFICED("sacrificed"),
@@ -127,6 +129,7 @@ public enum EventType {
     }
 
     /** The {@code type} an event carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

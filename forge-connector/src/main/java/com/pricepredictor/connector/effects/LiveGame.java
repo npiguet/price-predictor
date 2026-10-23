@@ -112,7 +112,7 @@ final class LiveGame {
      * keeps out. Two signals instead, in this order:
      *
      * <ol>
-     *   <li>{@link ForkCollector#isForkRunningOnThisThread()}, set around the
+     *   <li>{@link Forks#isForkRunningOnThisThread()}, set around the
      *   whole of both fork mechanisms, so it is true for every null-ability
      *   outcome a fork produces, whichever segment of it fires. First because
      *   it does not depend on the call being nested inside a resolution.
@@ -131,7 +131,7 @@ final class LiveGame {
      * card to key on.
      */
     boolean ownsNullAbilityOutcome() {
-        if (ForkCollector.isForkRunningOnThisThread()) {
+        if (Forks.isForkRunningOnThisThread()) {
             return false;
         }
         if (PatchHooks.currentSubAbility() instanceof SpellAbility resolving) {
@@ -195,7 +195,7 @@ final class LiveGame {
 
     /** The deciding player's id, or the active player's where none is known. */
     String playerIdOrActive(Player decider) {
-        return decider == null ? activePlayerId() : SnapshotBuilder.playerId(decider);
+        return decider == null ? activePlayerId() : Refs.of(decider);
     }
 
     String activePlayerId() {
@@ -203,6 +203,6 @@ final class LiveGame {
         if (phase == null || phase.getPlayerTurn() == null) {
             return null;
         }
-        return SnapshotBuilder.playerId(phase.getPlayerTurn());
+        return Refs.of(phase.getPlayerTurn());
     }
 }
