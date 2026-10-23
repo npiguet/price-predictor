@@ -102,7 +102,6 @@ public final class GameRecording implements AutoCloseable {
      */
     public void open() {
         game.subscribeToEvents(bracket);
-        PatchHooks.CONFIRM_LISTENER.install(bracket.confirmHandler());
         patched.install();
         // Continuous effects are read off the layer tables at a phase
         // boundary, which is the cheapest moment the board is stable.
@@ -119,11 +118,7 @@ public final class GameRecording implements AutoCloseable {
      */
     @Override
     public void close() {
-        try {
-            patched.close();
-        } finally {
-            PatchHooks.CONFIRM_LISTENER.uninstall();
-        }
+        patched.close();
     }
 
     /** Where the random seat writes the decisions its own draws made (FR-022d). */
