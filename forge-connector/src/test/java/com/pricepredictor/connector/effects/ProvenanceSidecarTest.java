@@ -59,7 +59,7 @@ class ProvenanceSidecarTest {
         try {
             Path file = CARDS_FOLDER.resolve(relativePath);
             return convertSource(Files.readAllLines(file),
-                    SourceTree.CARDSFOLDER + "/" + relativePath);
+                    new ScriptFile(SourceTree.CARDSFOLDER, relativePath).key());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -311,7 +311,7 @@ class ProvenanceSidecarTest {
                         + " | TriggerZones$ Battlefield | Execute$ TrigDraw"
                         + " | TriggerDescription$ Whenever a creature you control attacks,"
                         + " draw a card."),
-                SourceTree.CARDSFOLDER + "/t/test_class_duplicate.txt");
+                new ScriptFile(SourceTree.CARDSFOLDER, "t/test_class_duplicate.txt").key());
         List<ProvenanceKey> keys = claimedBy(card, "level", "draw a card");
         assertTrue(keys.stream().anyMatch(
                         k -> k.traitKind().equals(TraitKind.TRIGGER)),

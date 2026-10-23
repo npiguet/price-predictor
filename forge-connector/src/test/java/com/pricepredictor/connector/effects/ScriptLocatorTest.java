@@ -58,7 +58,7 @@ class ScriptLocatorTest {
 
     /**
      * A null or empty image key must not throw. {@code ImageKeys.getTokenImageName}
-     * rejects a null key with an NPE that {@code tokenScriptStemOf} catches
+     * rejects a null key with an NPE that {@code tokenScriptStem} catches
      * internally, and an empty key never matches the token prefix either way —
      * both fall through to the same name-derived cardsfolder path as an
      * unknown token key.
@@ -80,7 +80,7 @@ class ScriptLocatorTest {
      * or not) but the image key is the printed card's, not a {@code t:} key.
      * {@code ImageKeys.getTokenImageName} rejects a non-token key outright, so
      * this must still reach the cardsfolder path — the case the class doc for
-     * {@code tokenScriptStemOf} names explicitly.
+     * {@code tokenScriptStem} names explicitly.
      */
     @Test
     void aTokenCopyOfAPrintedCardStillKeysIntoTheCardTree() {

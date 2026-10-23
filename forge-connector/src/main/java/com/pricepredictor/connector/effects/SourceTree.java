@@ -10,6 +10,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * The three converted source trees, which do not share a directory layout, and
@@ -53,7 +54,7 @@ public final class SourceTree {
     // -- where a loader says it read a file ------------------------------
 
     /**
-     * The tree-relative path a loader-reported file path names, or null when
+     * The tree-relative path a loader-reported file path names, or empty when
      * the path does not lie in that tree.
      *
      * <p>This is the authoritative route, because it is the tree's own record:
@@ -68,8 +69,8 @@ public final class SourceTree {
      * path looks like when Forge reads {@code cardsfolder.zip} rather than the
      * loose files, where the entry names carry no tree segment at all.
      */
-    public static String relativePathIn(String tree, String loaderPath) {
-        if (tree == null || loaderPath == null || loaderPath.isEmpty()) return null;
+    public static Optional<String> relativePathIn(String tree, String loaderPath) {
+        if (tree == null || loaderPath == null || loaderPath.isEmpty()) return Optional.empty();
         String path = loaderPath.replace('\\', '/');
         String anchor = "/" + tree + "/";
         int at = path.lastIndexOf(anchor);
@@ -81,9 +82,9 @@ public final class SourceTree {
         } else if (isZipEntryShaped(path)) {
             relative = path;
         } else {
-            return null;
+            return Optional.empty();
         }
-        return relative.endsWith(".txt") ? relative : null;
+        return Optional.of(relative).filter(r -> r.endsWith(".txt"));
     }
 
     /** Whether a path could only be a {@code <directory>/<file>.txt} zip entry. */
@@ -95,7 +96,7 @@ public final class SourceTree {
     // -- where the tree files a stem -------------------------------------
 
     /**
-     * The directory the tree files a stem under, or null when the tree has
+     * The directory the tree files a stem under, or empty when the tree has
      * nothing to say — either it files the stem exactly where
      * {@link CardFilenames#derivedDirectory} would, or it does not hold that
      * stem at all and the caller has nothing better than the derived answer.
@@ -110,20 +111,16 @@ public final class SourceTree {
      * {@link #relativePathIn}, which costs nothing, so a run in which every
      * card came from the tree never builds this at all.
      */
-    public static String directoryOf(String tree, String stem) {
-        if (isFlat(tree) || stem == null || stem.isEmpty()) return null;
-        return exceptions(tree).get(stem);
+    public static Optional<String> directoryOf(String tree, String stem) {
+        if (isFlat(tree) || stem == null || stem.isEmpty()) return Optional.empty();
+        return Optional.ofNullable(exceptions(tree).get(stem));
     }
 
+    /** Guarded by the class lock, which also keeps a tree from being walked twice. */
     private static final Map<String, Map<String, String>> INDEXES = new HashMap<>();
 
     private static synchronized Map<String, String> exceptions(String tree) {
-        Map<String, String> index = INDEXES.get(tree);
-        if (index == null) {
-            index = buildExceptions(rootOf(tree));
-            INDEXES.put(tree, index);
-        }
-        return index;
+        return INDEXES.computeIfAbsent(tree, t -> buildExceptions(t, rootOf(t)));
     }
 
     /** Forge's own {@code cardsfolder}; no other tree is letter-keyed. */
@@ -138,21 +135,21 @@ public final class SourceTree {
         }
     }
 
-    private static Map<String, String> buildExceptions(Path root) {
+    private static Map<String, String> buildExceptions(String tree, Path root) {
         Map<String, String> found = new HashMap<>();
         if (root == null || !Files.isDirectory(root)) return found;
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    String name = file.getFileName().toString();
-                    if (!name.endsWith(".txt")) return FileVisitResult.CONTINUE;
-                    String stem = name.substring(0, name.length() - ".txt".length());
-                    Path parent = root.relativize(file).getParent();
-                    String directory =
-                            parent == null ? "" : parent.toString().replace('\\', '/');
-                    if (!directory.equals(CardFilenames.derivedDirectory(stem))) {
-                        found.put(stem, directory);
+                    if (!file.getFileName().toString().endsWith(".txt")) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    ScriptFile script =
+                            new ScriptFile(tree, root.relativize(file).toString());
+                    if (!script.directory().equals(
+                            CardFilenames.derivedDirectory(script.stem()))) {
+                        found.put(script.stem(), script.directory());
                     }
                     return FileVisitResult.CONTINUE;
                 }

@@ -47,14 +47,14 @@ class TraitScriptChainTest {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        String scriptFile = SourceTree.CARDSFOLDER + "/" + relativePath;
+        String scriptFile = new ScriptFile(SourceTree.CARDSFOLDER, relativePath).key();
         RulesParser.ParsedCard parsed = parser.parseScript(source, scriptFile);
         return converted(parsed, scriptFile, parser);
     }
 
     private static Converted convertInline(String relativePath, String script) {
         RulesParser parser = new RulesParser();
-        String scriptFile = SourceTree.CARDSFOLDER + "/" + relativePath;
+        String scriptFile = new ScriptFile(SourceTree.CARDSFOLDER, relativePath).key();
         RulesParser.ParsedCard parsed =
                 parser.parseScript(List.of(script.split("\n")), scriptFile);
         return converted(parsed, scriptFile, parser);
