@@ -419,7 +419,7 @@ class RecordCharacterizationTest {
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         try {
             ProbeScheduler probing = new ProbeScheduler(board.game, GAME_ID, caps,
-                    new ForkCollector(board.game, TestCollectors.context(writer, GAME_ID), caps, 1L));
+                    new DamageStepProbe(board.game, TestCollectors.context(writer, GAME_ID), new ForkBudget(caps)));
             BusBracketCollector bracket = new BusBracketCollector(
                     board.game, TestCollectors.context(writer, GAME_ID), probing::writeHeldProbes);
             board.game.subscribeToEvents(bracket);

@@ -14,7 +14,6 @@ import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.spellability.SpellAbility;
 
-import java.lang.reflect.InvocationHandler;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -728,13 +727,13 @@ public final class BusBracketCollector extends BusEventReader {
      * way the trigger-condition hook is, but an accepted offer is already
      * described by the events it produced.
      *
-     * <p>Package-visible because {@link GameRecording} installs it, and so a
+     * <p>Package-visible because {@link PatchedCollectors} installs it, and so a
      * test can drive it through a proxy of its own. The method name and the
      * argument positions are the whole contract with the patch —
      * {@link PatchHooks} looks both up by string — and a typo in either
      * degrades this channel silently.
      */
-    InvocationHandler confirmHandler() {
+    PatchHooks.Listener confirmHandler() {
         return PatchHooks.CONFIRM_LISTENER.listener((callback, args) -> {
             // This hook is a JVM static, and PlayerControllerAi.confirmAction
             // is exactly what a fork's own forced resolution asks when it
@@ -829,6 +828,6 @@ public final class BusBracketCollector extends BusEventReader {
         context.emit(context.newResolution(Moment.RESOLUTION)
                 .ability(ProvenanceKey.Resolved.UNKNOWN)
                 .state(snapshots.ofBoard().render())
-                .payload(EffectRecord.eventsPayload(brackets.drainOrphans())));
+                .payload(RecordPayloads.eventsPayload(brackets.drainOrphans())));
     }
 }

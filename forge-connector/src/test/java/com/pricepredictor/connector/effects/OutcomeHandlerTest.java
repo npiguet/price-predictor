@@ -261,7 +261,7 @@ class OutcomeHandlerTest {
 
     /**
      * An outcome reported for an ability that belongs to a DIFFERENT
-     * {@code Game} -- exactly the shape {@code ForkCollector.forceResolution}
+     * {@code Game} -- exactly the shape {@code InterventionFork.forceResolution}
      * produces, since {@code GameSimulator.resolveStack} runs the real
      * resolution pipeline against a {@code GameCopier} clone under
      * {@code AIOption.USE_FULL_SIMULATION} regardless of how this game's own
@@ -393,7 +393,7 @@ class OutcomeHandlerTest {
      * LiveGame#owns(CardTraitBase)} delegate and returning {@code true}
      * whenever the pointer is merely non-null. This resolves a real ability -- through {@code
      * AbilityUtils.resolve}, not a synthesized call -- so the pointer is
-     * genuinely set the way {@code ForkCollector.forceResolution}'s own
+     * genuinely set the way {@code InterventionFork.forceResolution}'s own
      * forced ability sets it, and installs a real {@code
      * EffectRecordClauseListener} (the same reflective seam {@link
      * PatchedCollectors#install()} itself uses) to fire the null-ability
@@ -504,7 +504,7 @@ class OutcomeHandlerTest {
     /**
      * The gate does not fail open on {@code null}: that would readmit
      * exactly what it exists to exclude, because {@code
-     * ForkCollector.probe}'s own combat-damage counterfactual fires this same
+     * DamageStepProbe.probe}'s own combat-damage counterfactual fires this same
      * {@code null}-ability {@code damage_prevented} report -- {@code
      * Combat.dealAssignedDamage} always passes a null cause, live or forked.
      * A probe's damage step is a turn-based action with no ability resolving

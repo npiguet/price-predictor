@@ -144,7 +144,7 @@ final class HeldResolutionWindow {
                     .ability(record.keys())
                     .linkId(writing.linkId())
                     .state(record.state())
-                    .payload(EffectRecord.eventsPayload(half.events())));
+                    .payload(RecordPayloads.eventsPayload(half.events())));
         }
     }
 }

@@ -81,7 +81,7 @@ class RewriteContractTest {
                 Map.of("Card", card), Map.of("Card", card), result, null).toJson();
 
         // The spellings themselves are WireVocabularyTest's pin.
-        assertTrue(json.contains("\"result\":\"" + EffectRecord.rewriteResult(result) + "\""),
+        assertTrue(json.contains("\"result\":\"" + RecordPayloads.rewriteResult(result) + "\""),
                 "the lower snake case of " + result + ": " + json);
     }
 
@@ -312,7 +312,7 @@ class RewriteContractTest {
     /**
      * A replacement reported for an effect belonging
      * to a DIFFERENT {@code Game} -- exactly {@code
-     * ForkCollector.forceResolution}'s shape, since a forced ability's own
+     * InterventionFork.forceResolution}'s shape, since a forced ability's own
      * replacements run through {@code GameSimulator.resolveStack}'s real
      * resolution pipeline -- must not reach the live shard.
      * {@code RewriteChannel.handler} is a plain JVM static exactly like the

@@ -257,6 +257,6 @@ final class ActivationLedger {
                 .ability(activation.ability())
                 .linkId(linked ? activation.linkId() : null)
                 .state(activation.state())
-                .payload(EffectRecord.costPayload(activation.costs(), outcome)));
+                .payload(RecordPayloads.costPayload(activation.costs(), outcome)));
     }
 }

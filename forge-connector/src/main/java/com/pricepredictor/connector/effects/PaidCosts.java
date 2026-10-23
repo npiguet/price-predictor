@@ -19,7 +19,7 @@ import java.util.Set;
  * ({@code PlaySpellAbility} resets the paid hash, {@code CostPartMana} clears
  * the paying mana), so a deferred record holds this value rather than the
  * ability. The cast's outcome is only readable later, which is why the two
- * meet in {@link EffectRecord#costPayload} rather than here.
+ * meet in {@link RecordPayloads#costPayload} rather than here.
  *
  * <p>Deliberately not read off {@code getPayCosts()}, where {@code tapped},
  * {@code sacrificed}, {@code discarded} and {@code exiled} always read empty,
