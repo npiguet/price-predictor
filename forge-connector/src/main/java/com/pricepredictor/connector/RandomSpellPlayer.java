@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.RandomChoices;
 import forge.ai.AiCostDecision;
 import forge.ai.AiPlayDecision;
 import forge.ai.PlayerControllerAi;
@@ -26,9 +27,6 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Random;
 import java.util.function.Consumer;
 
@@ -230,9 +228,8 @@ final class RandomSpellPlayer {
             if (count < 0 || valid.size() < count) {
                 return null;
             }
-            List<Card> shuffled = new ArrayList<>(valid);
-            Collections.shuffle(shuffled, random);
-            return PaymentDecision.card(new CardCollection(shuffled.subList(0, count)));
+            return PaymentDecision.card(new CardCollection(
+                    RandomChoices.drawDistinct(valid, count, random)));
         }
     }
 }

@@ -12,6 +12,7 @@ import forge.game.spellability.SpellAbility;
 import org.apache.commons.lang3.Range;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -93,16 +94,13 @@ public final class RandomChoices {
         if (max < 0) {
             return null;
         }
-        int count = min + random.nextInt(max - min + 1);
+        int count = between(min, max);
+        if (!repeat) {
+            return drawDistinct(options, count, random);
+        }
         List<AbilitySub> chosen = new ArrayList<>(count);
-        if (repeat) {
-            for (int i = 0; i < count; i++) {
-                chosen.add(options.get(random.nextInt(options.size())));
-            }
-        } else {
-            List<AbilitySub> shuffled = new ArrayList<>(options);
-            Collections.shuffle(shuffled, random);
-            chosen.addAll(shuffled.subList(0, count));
+        for (int i = 0; i < count; i++) {
+            chosen.add(options.get(random.nextInt(options.size())));
         }
         return chosen;
     }
@@ -196,20 +194,18 @@ public final class RandomChoices {
      */
     public boolean chooseTargetsFor(SpellAbility clause) {
         clause.resetTargets();
-        List<GameEntity> candidates =
-                new ArrayList<>(clause.getTargetRestrictions().getAllCandidates(clause));
+        List<GameEntity> candidates = clause.getTargetRestrictions().getAllCandidates(clause);
         int min = Math.max(0, clause.getMinTargets());
         int max = Math.min(clause.getMaxTargets(), candidates.size());
         if (max < min) {
             return false;
         }
-        int count = min + random.nextInt(max - min + 1);
-        Collections.shuffle(candidates, random);
-        for (int i = 0; i < count; i++) {
+        int count = between(min, max);
+        for (GameEntity target : drawDistinct(candidates, count, random)) {
             if (!clause.canAddMoreTarget()) {
                 break;
             }
-            clause.getTargets().add(candidates.get(i));
+            clause.getTargets().add(target);
         }
         return clause.isTargetNumberValid();
     }
@@ -251,6 +247,28 @@ public final class RandomChoices {
             // yet; the floor is the one value that is always legal to announce.
             max = min;
         }
-        ability.setXManaCostPaid(max < min ? min : min + random.nextInt(max - min + 1));
+        ability.setXManaCostPaid(max < min ? min : between(min, max));
+    }
+
+    // ── draws ───────────────────────────────────────────────────────────
+
+    /** An integer uniform in [{@code min}, {@code max}]; one draw from the source. */
+    private int between(int min, int max) {
+        return min + random.nextInt(max - min + 1);
+    }
+
+    /**
+     * {@code count} distinct elements of {@code items}, uniformly, as the
+     * first {@code count} of a shuffled copy; {@code items} itself is left in
+     * its order.
+     *
+     * <p>Shared with the random seat's cost payment so that every uniform
+     * subset either caller draws consumes the source the same way.
+     */
+    public static <T> List<T> drawDistinct(Collection<? extends T> items, int count,
+                                           Random random) {
+        List<T> shuffled = new ArrayList<>(items);
+        Collections.shuffle(shuffled, random);
+        return new ArrayList<>(shuffled.subList(0, count));
     }
 }
