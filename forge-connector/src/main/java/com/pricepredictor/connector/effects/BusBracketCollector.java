@@ -404,7 +404,7 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * A cast opens a bracket and holds the cost half until its outcome is known.
      *
-     * <p>The costs are read <b>now</b> — {@link EffectRecord#costsJson} says why
+     * <p>The costs are read <b>now</b> — {@link PaidCosts} says why
      * they are unreadable a moment later — but the record cannot be written yet,
      * because {@code outcome} is a field of the cost half and the answer to it
      * does not exist until the spell resolves or leaves the stack without
@@ -467,7 +467,7 @@ public final class BusBracketCollector extends BusEventReader {
         }
         pending.add(new PendingActivation(
                 ability.getId(), context.nextRecordId(),
-                RecordShardWriter.timestamp(), EffectRecord.costsJson(ability),
+                RecordShardWriter.timestamp(), PaidCosts.of(ability),
                 cast.actor, cast.keys, cast.state.render(),
                 context.gameId() + ".link." + ability.getId(), targetCount(ability)));
     }
@@ -1097,10 +1097,10 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * A cast that has been observed but whose outcome is not settled.
      *
-     * <p>Holds the rendered strings rather than the {@link SpellAbility},
-     * because what was paid lives on the ability object and its next activation
-     * clears it — the reason {@link EffectRecord#costsJson} must be called at
-     * the cast and nowhere later. The record id and the timestamp are taken at
+     * <p>Holds what was read rather than the {@link SpellAbility}, because
+     * what was paid lives on the ability object and its next activation clears
+     * it — the reason {@link PaidCosts#of} must be called at the cast and
+     * nowhere later. The record id and the timestamp are taken at
      * the cast too, so a held record still says when the spell was cast rather
      * than when it stopped being on the stack.
      */
@@ -1108,7 +1108,7 @@ public final class BusBracketCollector extends BusEventReader {
             int abilityId,
             String recordId,
             String timestamp,
-            String costsJson,
+            PaidCosts costs,
             String actor,
             ProvenanceKey.Resolved ability,
             String state,
@@ -1148,7 +1148,7 @@ public final class BusBracketCollector extends BusEventReader {
                 .ability(activation.ability())
                 .linkId(linked ? activation.linkId() : null)
                 .state(activation.state())
-                .payload(EffectRecord.costPayload(activation.costsJson(), outcome)));
+                .payload(EffectRecord.costPayload(activation.costs(), outcome)));
     }
 
     /**

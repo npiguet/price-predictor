@@ -1,19 +1,10 @@
 package com.pricepredictor.connector.effects;
 
-import forge.card.MagicColor;
-import forge.game.card.Card;
-import forge.game.cost.CostTap;
-import forge.game.mana.Mana;
 import forge.game.spellability.SpellAbility;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.StringJoiner;
 
 
 /**
@@ -231,34 +222,39 @@ public final class EffectRecord {
     }
 
     public String toJson() {
-        return "{\"record_id\":" + Json.string(recordId)
-                + ",\"run_id\":" + Json.string(runId)
-                + ",\"timestamp\":" + Json.string(timestamp)
-                + ",\"game_id\":" + Json.string(gameId)
-                + ",\"kind\":" + Json.string(kind.wireName())
-                + ",\"moment\":" + Json.string(moment == null ? null : moment.wireName())
-                + ",\"subkind\":" + Json.string(subkind == null ? null : subkind.wireName())
-                + ",\"link_id\":" + Json.string(linkId)
-                + ",\"mirror_of\":" + Json.string(mirrorOf)
+        Json.ObjectWriter json = Json.object()
+                .value("record_id", recordId)
+                .value("run_id", runId)
+                .value("timestamp", timestamp)
+                .value("game_id", gameId)
+                .value("kind", kind.wireName())
+                .value("moment", moment == null ? null : moment.wireName())
+                .value("subkind", subkind == null ? null : subkind.wireName())
+                .value("link_id", linkId)
+                .value("mirror_of", mirrorOf)
                 // Frozen schema fields no collector sets: a reader still
                 // expects them on every record.
-                + ",\"variant_of\":null"
-                + ",\"mode\":" + Json.string(mode)
-                + ",\"interventional\":" + interventional
-                + ",\"fork\":" + fork
-                + ",\"synthetic\":false"
+                .value("variant_of", null)
+                .value("mode", mode)
+                .value("interventional", interventional)
+                .value("fork", fork)
+                .value("synthetic", false)
                 // Right after synthetic on every record, and what_if right
                 // after it on the two subkinds alone: the order is part of the
                 // contract (record-schema-delta.md), and the reader names a
                 // shard's generation by the first field's presence.
-                + ",\"random_seat\":" + randomSeat
-                + (whatIf == null ? "" : ",\"what_if\":" + whatIf)
-                + ",\"actor_player\":" + Json.string(actorPlayer)
-                + ",\"ability\":" + abilityJson()
-                + ",\"ability_unresolved\":"
-                + Json.string(abilityUnresolved == null ? null : abilityUnresolved.wireName())
-                + ",\"state\":" + stateJson
-                + ",\"payload\":" + payloadJson + "}";
+                .value("random_seat", randomSeat);
+        if (whatIf != null) {
+            json.value("what_if", whatIf);
+        }
+        return json
+                .value("actor_player", actorPlayer)
+                .raw("ability", abilityJson())
+                .value("ability_unresolved",
+                        abilityUnresolved == null ? null : abilityUnresolved.wireName())
+                .raw("state", stateJson)
+                .raw("payload", payloadJson)
+                .render();
     }
 
     String abilityJson() {
@@ -267,7 +263,7 @@ public final class EffectRecord {
 
     /** ``{"events": [...]}`` — a resolution effect half. */
     public static String eventsPayload(List<EffectEvent> events) {
-        return "{\"events\":" + eventArray(events) + "}";
+        return Json.object().raw("events", eventArray(events)).render();
     }
 
     /**
@@ -297,11 +293,7 @@ public final class EffectRecord {
     }
 
     private static String eventArray(List<EffectEvent> events) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (EffectEvent event : events) {
-            joiner.add(event.toJson());
-        }
-        return joiner.toString();
+        return Json.array(events, EffectEvent::toJson);
     }
 
     /**
@@ -331,11 +323,13 @@ public final class EffectRecord {
     public static String rewritePayload(
             EffectEvent incoming, EffectEvent outgoing, String result,
             List<ProvenanceKey> replacedBy) {
-        String keys = ProvenanceKey.toJsonArray(replacedBy == null ? List.of() : replacedBy);
-        return "{\"incoming\":" + incoming.toJson()
-                + ",\"outgoing\":" + (outgoing == null ? "null" : outgoing.toJson())
-                + ",\"result\":" + Json.string(result)
-                + ",\"replaced_by\":" + keys + "}";
+        return Json.object()
+                .raw("incoming", incoming.toJson())
+                .raw("outgoing", outgoing == null ? "null" : outgoing.toJson())
+                .value("result", result)
+                .raw("replaced_by",
+                        ProvenanceKey.toJsonArray(replacedBy == null ? List.of() : replacedBy))
+                .render();
     }
 
     /**
@@ -380,116 +374,15 @@ public final class EffectRecord {
      * <p>The two halves become knowable at different moments: what was paid is
      * only readable while the cast event is being published, and whether the
      * spell resolved, fizzled or was countered is only readable later. Holding
-     * the rendered costs string is what lets one record carry both without
-     * keeping a reference to a {@link SpellAbility} whose paid lists the next
-     * activation will overwrite.
+     * the {@link PaidCosts} read at the cast is what lets one record carry both
+     * without keeping a reference to a {@link SpellAbility} whose paid lists
+     * the next activation will overwrite.
      */
-    public static String costPayload(String costsJson, ActivationOutcome outcome) {
-        return "{\"costs\":" + costsJson
-                + ",\"outcome\":" + Json.string(outcome.wireName()) + "}";
-    }
-
-    /** What a cost payload says when there is no ability to read. */
-    private static final String NO_COSTS =
-            "{\"mana_by_color\":{},\"tapped\":[],\"life\":0,"
-                    + "\"sacrificed\":[],\"discarded\":[],\"exiled\":[]}";
-
-    /**
-     * What was actually paid, as the costs object alone.
-     *
-     * <p><b>Read at the cast event and nowhere later.</b> Everything here lives
-     * on the {@link SpellAbility} object and is cleared by its next activation
-     * ({@code PlaySpellAbility} resets the paid hash, {@code CostPartMana}
-     * clears the paying mana), so a deferred record must hold this string
-     * rather than the ability.
-     *
-     * <p>Deliberately not read off {@code getPayCosts()}, where {@code tapped},
-     * {@code sacrificed}, {@code discarded} and {@code exiled} always read
-     * empty, for two independent reasons, both in the engine:
-     * {@code CostAdjustment.adjust} pays a {@code cost.copy()}, so the parts
-     * hanging off the ability are never the ones that were paid; and
-     * {@code CostPayment} calls {@code resetLists()} on every list part the
-     * moment payment completes, which is before the cast event fires. The paid
-     * hash and the paying-mana list are where the payment survives, and are
-     * what the rest of Forge reads.
-     *
-     * <p>Mana is counted one entry per {@link Mana} actually spent, so a hybrid
-     * paid as blue counts under {@code U} and under nothing else — where the
-     * printed cost would count it under both halves, and ignore reductions and
-     * X entirely.
-     */
-    public static String costsJson(SpellAbility ability) {
-        if (ability == null) {
-            return NO_COSTS;
-        }
-        Map<Byte, Integer> mana = new LinkedHashMap<>();
-        if (ability.getPayingMana() != null) {
-            for (Mana spent : ability.getPayingMana()) {
-                if (spent != null) {
-                    mana.merge(spent.getColor(), 1, Integer::sum);
-                }
-            }
-        }
-        StringJoiner manaJson = new StringJoiner(",", "{", "}");
-        // WUBRGC rather than the order the mana happened to be spent in: two
-        // payments of the same cost must render the same bytes, because a
-        // record that differs only in key order defeats every duplicate check
-        // downstream.
-        for (byte color : MagicColor.WUBRGC) {
-            Integer count = mana.get(color);
-            if (count != null && count > 0) {
-                manaJson.add(Json.string(MagicColor.toShortString(color))
-                        + ":" + count);
-            }
-        }
-        return "{\"mana_by_color\":" + manaJson
-                + ",\"tapped\":" + Json.stringArray(tappedFor(ability))
-                + ",\"life\":" + ability.getAmountLifePaid()
-                + ",\"sacrificed\":" + Json.stringArray(paid(ability, "Sacrificed"))
-                + ",\"discarded\":" + Json.stringArray(paid(ability, "Discarded"))
-                + ",\"exiled\":" + Json.stringArray(paid(ability, "Exiled")) + "}";
-    }
-
-    /**
-     * The cards one cost channel took, by the engine's own hash key.
-     *
-     * <p>{@code CostSacrifice}, {@code CostDiscard}, {@code CostExile} and
-     * {@code CostTapType} each report what they took under the name this looks
-     * up ({@code getHashForLKIList}), and the entries are last-known-information
-     * copies whose id is preserved — so the entity id still names the object the
-     * snapshot describes.
-     */
-    private static List<String> paid(SpellAbility ability, String hashKey) {
-        Set<String> ids = new LinkedHashSet<>();
-        Iterable<Card> cards = ability.getPaidList(hashKey);
-        if (cards != null) {
-            for (Card card : cards) {
-                if (card != null) {
-                    ids.add(SnapshotBuilder.entityId(card));
-                }
-            }
-        }
-        return new ArrayList<>(ids);
-    }
-
-    /**
-     * Everything this activation tapped, the host included.
-     *
-     * <p>{@code CostTap} — the bare {@code T} symbol, and much the commonest tap
-     * cost there is — taps the host directly and is a plain {@code CostPart}
-     * with no card list, so it could never have reached this field however the
-     * paid lists were read. It is asked for by type rather than through
-     * {@code hasTapCost()}, whose flag is only refreshed when a {@code Cost} is
-     * copied.
-     */
-    private static List<String> tappedFor(SpellAbility ability) {
-        Set<String> ids = new LinkedHashSet<>(paid(ability, "Tapped"));
-        if (ability.getPayCosts() != null
-                && ability.getPayCosts().hasSpecificCostType(CostTap.class)
-                && ability.getHostCard() != null) {
-            ids.add(SnapshotBuilder.entityId(ability.getHostCard()));
-        }
-        return new ArrayList<>(ids);
+    static String costPayload(PaidCosts costs, ActivationOutcome outcome) {
+        return Json.object()
+                .raw("costs", costs.toJson())
+                .value("outcome", outcome.wireName())
+                .render();
     }
 
 }

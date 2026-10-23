@@ -1,8 +1,8 @@
 package com.pricepredictor.connector.effects;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.StringJoiner;
+import java.util.function.Function;
 
 /**
  * Minimal JSON writing for the sidecar and the record shards.
@@ -45,10 +45,18 @@ public final class Json {
     }
 
     /** A JSON array of strings. */
-    public static String stringArray(Collection<String> values) {
+    public static String stringArray(Iterable<String> values) {
+        return array(values, Json::string);
+    }
+
+    /**
+     * A JSON array of {@code items}, in iteration order, each rendered to
+     * JSON by {@code render}.
+     */
+    public static <T> String array(Iterable<T> items, Function<? super T, String> render) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (String value : values) {
-            joiner.add(string(value));
+        for (T item : items) {
+            joiner.add(render.apply(item));
         }
         return joiner.toString();
     }
@@ -76,11 +84,7 @@ public final class Json {
             return joiner.toString();
         }
         if (value instanceof Iterable<?> items) {
-            StringJoiner joiner = new StringJoiner(",", "[", "]");
-            for (Object item : items) {
-                joiner.add(value(item));
-            }
-            return joiner.toString();
+            return array(items, Json::value);
         }
         return string(String.valueOf(value));
     }
