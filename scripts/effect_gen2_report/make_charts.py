@@ -3053,9 +3053,10 @@ def lethal_hits() -> None:
                        Patch(color=short_c, label="not lethal: the creature survived")],
               loc="upper center", bbox_to_anchor=(0.4, -0.2), ncol=2, fontsize=8.4)
     ax.set_axisbelow(True)
-    ax.set_title("Hits on a creature in 40 training shards (2,000 records each), by kind of "
-                 "hit, split by whether\nthe creature died. A hit is one creature taking damage "
-                 "or −X/−X from one event", fontsize=10.5)
+    ax.set_title("Training data, not model predictions: hits on a creature recorded in 40 "
+                 "training shards (2,000 records\neach), by kind of hit, split by whether the "
+                 "creature died in Forge's game. A hit is one creature taking\ndamage or −X/−X "
+                 "from one event", fontsize=10.5)
     save(fig, "lethal-hits")
 
 

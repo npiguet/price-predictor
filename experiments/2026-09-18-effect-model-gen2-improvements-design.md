@@ -573,7 +573,7 @@ The corpus holds few targeted damage hits that fall short of the creature's toug
 
 ![Stacked bars of lethal and not-lethal hits for four kinds of damage to a creature in 40 training shards](2026-09-18-effect-model-gen2/charts/lethal-hits.png)
 
-*A hit is one creature taking damage or −X/−X from one event in a training record. Each bar splits one kind of hit into the hits that killed the creature and the hits that fell short of its toughness, as shares of the bar, with the number of hits in brackets and each row's total at its right. Data: `lethal_hits_in_corpus.csv`.*
+*The chart counts training labels, what happened in Forge's games, not the model's predictions. A hit is one creature taking damage or −X/−X from one event in a training record. Each bar splits one kind of hit into the hits that killed the creature and the hits that fell short of its toughness, as shares of the bar, with the number of hits in brackets and each row's total at its right. Data: `lethal_hits_in_corpus.csv`.*
 
 The fix is training copies labelled by the rule. A record qualifies when its acting ability deals one stated amount of damage, or -X/-X, and nothing in its chain can change whether the creature dies. Each copy redraws the amount and the hit creature's toughness from 1 to 8 and labels the death by rule 704.5f-g, so about half the copies are lethal. About one training record in four hundred qualifies, and `--lethality-copies 8` makes the copies about 2% of the records an epoch trains on.
 
