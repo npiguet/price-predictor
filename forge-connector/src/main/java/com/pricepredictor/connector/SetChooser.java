@@ -33,7 +33,7 @@ final class SetChooser {
         if (namedSet != null) {
             return new SetChooser(namedSet, List.of(), random);
         }
-        List<String> eligible = MatchGenerator.computeEligibleSets();
+        List<String> eligible = BoosterTemplates.eligibleSealedSets();
         if (eligible.isEmpty()) {
             throw new IllegalStateException("no eligible sealed-legal sets found");
         }

@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import forge.game.CardTraitBase;
 import forge.game.ability.ApiType;
 import forge.game.replacement.ReplacementEffect;

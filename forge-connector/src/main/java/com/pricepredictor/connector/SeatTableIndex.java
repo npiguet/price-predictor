@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -38,7 +37,7 @@ public class SeatTableIndex {
      * misspelt {@code pool} played as given would put an unbuilt pool in the
      * tally under the seat's label.
      */
-    public enum SeatKind {
+    public enum SeatKind implements WireNamed {
         /** A finished deck, played as given. */
         DECK("deck"),
         /** A drafted pool in pick order, built into a deck before play. */
@@ -51,19 +50,9 @@ public class SeatTableIndex {
         }
 
         /** The {@code kind} field a seat line carries. */
+        @Override
         public String wireName() {
             return wireName;
-        }
-
-        /** The kind {@code wireName} spells; throws on any other spelling. */
-        static SeatKind fromWireName(String wireName) {
-            for (SeatKind kind : values()) {
-                if (kind.wireName.equals(wireName)) {
-                    return kind;
-                }
-            }
-            throw new IllegalArgumentException(
-                    "seat kind must be 'deck' or 'pool', got '" + wireName + "'");
         }
     }
 
@@ -125,10 +114,8 @@ public class SeatTableIndex {
     /** Load a seat table from disk. */
     public static SeatTableIndex load(Path seatsFile, boolean includeMirrors) throws IOException {
         List<SeatEntry> seats = new ArrayList<>();
-        for (String line : Files.readAllLines(seatsFile)) {
-            String trimmed = line.trim();
-            if (trimmed.isEmpty()) continue;
-            seats.add(parseLine(trimmed));
+        for (String line : CorpusFiles.nonBlankLines(seatsFile)) {
+            seats.add(parseLine(line));
         }
         return new SeatTableIndex(seats, includeMirrors);
     }
@@ -194,9 +181,12 @@ public class SeatTableIndex {
         }
         SeatKind kind;
         try {
-            kind = SeatKind.fromWireName(parts[3]);
+            kind = WireNamed.fromWireName(SeatKind.class, parts[3]);
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException(e.getMessage() + ": " + line, e);
+            // Worded for whoever wrote the table, not in the generic lookup's
+            // terms: the operator fixes a seat line, not an enum.
+            throw new IllegalArgumentException(
+                    "seat kind must be 'deck' or 'pool', got '" + parts[3] + "': " + line, e);
         }
         return new SeatEntry(
                 parts[0], parts[1], parts[2], kind, CardNameList.parse(parts[4]));

@@ -70,7 +70,7 @@ same worker or by different ones; draws are independent.
 ### MatchResult (existing, output)
 
 One completed match. Modelled by `forge-connector/.../MatchResult.java` and serialised by
-`MatchResultWriter` in the sealed match-outcome format, specified in
+a `CorpusWriter<MatchResult>` in the sealed match-outcome format, specified in
 [`2026-03-28-sealed-deck-picker.md`](../2026-03-28-sealed-deck-picker.md) § Phase 0 Step 4.
 
 Bindings this feature chooses:

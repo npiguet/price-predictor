@@ -40,21 +40,11 @@ class SnapshotBuilderTest {
      */
     @Test
     void noConstructionChoosesATierDepth() {
-        Constructor<?>[] constructors = SnapshotBuilder.class.getConstructors();
+        Constructor<?>[] constructors = SnapshotBuilder.class.getDeclaredConstructors();
         assertEquals(1, constructors.length,
                 "a second constructor would let a call site pick its own depth");
         assertArrayEquals(
                 new Class<?>[]{Game.class}, constructors[0].getParameterTypes());
-    }
-
-    /**
-     * Every snapshot declares all four tiers, so an empty hand or stack reads as
-     * empty rather than as uncollected. The literal is the contract:
-     * Python's {@code InclusionTier} and {@code record_io} mirror it.
-     */
-    @Test
-    void everySnapshotDeclaresAllFourTiers() {
-        assertEquals("[1,2,3,4]", Snapshot.TIERS_JSON);
     }
 
     // ── refs ────────────────────────────────────────────────────────────
@@ -71,11 +61,17 @@ class SnapshotBuilderTest {
         assertEquals(
                 "{\"targets\":[],\"source\":null,\"modes\":[],\"x\":null,"
                         + "\"choices\":{}}",
-                new SnapshotBuilder(null).refsJson(null));
+                RefsJson.render(null));
     }
 
     // ── the state's blocks ──────────────────────────────────────────────
 
+    /**
+     * The blocks in schema order, ending in all four tiers: every snapshot
+     * declares them, so an empty hand or stack reads as empty rather than as
+     * uncollected. The literal is the contract: Python's {@code InclusionTier}
+     * and {@code record_io} mirror it.
+     */
     @Test
     void theStateBlocksKeepTheOrderTheSchemaFixes() {
         assertEquals(
@@ -128,7 +124,7 @@ class SnapshotBuilderTest {
 
             String state = new SnapshotBuilder(board.game).ofResolving(pull).render();
 
-            assertTrue(state.contains("{\"id\":\"" + SnapshotBuilder.entityId(exiled)
+            assertTrue(state.contains("{\"id\":\"" + Refs.of(exiled)
                     + "\",\"name\":\"Grizzly Bears\",\"zone\":\"exile\""), state);
         }
 

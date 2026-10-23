@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,10 +36,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Built straight off the record builder the trigger hook calls, because
  * what is under test is what the collector reads off the trait and the run
  * parameters it is handed; the handler around it is
- * {@link PatchedCollectorTest}'s.
+ * {@link PatchedCollectorTest}'s, except for which of one card's evaluations
+ * are written, which only the handler decides.
  */
 @ExtendWith(ForgeExtension.class)
 class TriggerRecordTest {
+
+    private static final Method ON_CONDITION_EVALUATED =
+            HookShapes.method(HookShapes.TriggerFire.class, "onConditionEvaluated");
 
     @TempDir
     Path tempDir;
@@ -74,7 +79,7 @@ class TriggerRecordTest {
     @Test
     void aTriggerRecordNamesItsHostEntity() {
         Card paralyze = TestCards.build("Paralyze");
-        String entity = SnapshotBuilder.entityId(paralyze);
+        String entity = Refs.of(paralyze);
 
         String json = recording(tempDir)
                 .triggers().record(triggersOf(paralyze).get(0), Map.of(), false).toJson();
@@ -85,6 +90,44 @@ class TriggerRecordTest {
         // reader cannot follow a source it cannot find.
         assertTrue(json.contains("\"id\":\"" + entity + "\""),
                 "the host must be in state.entities: " + json);
+    }
+
+    // ── which evaluations are written ───────────────────────────────────
+
+    /**
+     * Two same-mode triggers on one card each get their verdict written.
+     *
+     * <p>Garruk's Uprising prints two {@code ChangesZone} triggers -- "when
+     * this enters" and "whenever a creature with power 4 or greater enters" --
+     * so one entry is evaluated by both. A trigger snapshot names the host and
+     * the event, not which of the host's triggers is evaluating, so the two
+     * evaluations render the same state and payload; only the acting line
+     * tells them apart. Without it the second line's records would be
+     * coalesced away as repeats of the first's, and the negatives that teach
+     * the second condition would be lost.
+     *
+     * <p>Both fire first so the mode owes two negatives: a non-fired
+     * evaluation is offered only against a deficit.
+     */
+    @Test
+    void twoSameModeTriggersOnOneCardEachWriteTheirVerdicts() throws Throwable {
+        List<Trigger> triggers = triggersOf(TestCards.build("Garruk's Uprising"));
+        assertEquals(2, triggers.size(), "Garruk's Uprising declares two T: lines");
+
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
+            for (boolean fired : new boolean[]{true, false}) {
+                for (Trigger trigger : triggers) {
+                    collectors.triggers().handler().invoke(null, ON_CONDITION_EVALUATED,
+                            new Object[]{trigger, Map.of(), fired});
+                }
+            }
+        });
+
+        List<String> written = lines.stream()
+                .map(line -> RecordLines.abilityKeys(line).get(0).get("index_within_kind")
+                        + "/" + RecordLines.payload(line).get("fired"))
+                .toList();
+        assertEquals(List.of("0/true", "1/true", "0/false", "1/false"), written, lines.toString());
     }
 
     /**
@@ -176,7 +219,7 @@ class TriggerRecordTest {
         Map<String, Object> event = eventOf(replacementOfMode("Moved"), Map.of(
                 "Card", card, "CardLKI", card, "Affected", card));
 
-        assertEquals(List.of(SnapshotBuilder.entityId(card)), event.get("subjects"),
+        assertEquals(List.of(Refs.of(card)), event.get("subjects"),
                 event.toString());
     }
 
@@ -195,7 +238,7 @@ class TriggerRecordTest {
                 "Destination", ZoneType.Graveyard,
                 "Cause", cause));
 
-        assertEquals(SnapshotBuilder.entityId(cause), params(event).get("cause"),
+        assertEquals(Refs.of(cause), params(event).get("cause"),
                 event.toString());
         assertFalse(event.toString().contains("Destination,"), event.toString());
     }
@@ -220,7 +263,7 @@ class TriggerRecordTest {
 
         assertEquals(3L, params(event).get("amount"), event.toString());
         assertEquals(false, params(event).get("combat"), event.toString());
-        assertEquals(SnapshotBuilder.entityId(source), params(event).get("source"),
+        assertEquals(Refs.of(source), params(event).get("source"),
                 event.toString());
     }
 
@@ -305,7 +348,7 @@ class TriggerRecordTest {
                 Map.of("Card", host, "Source", source,
                         "CounterType", "P1P1", "CounterNum", 1));
 
-        assertEquals(SnapshotBuilder.entityId(source), params(event).get("cause"),
+        assertEquals(Refs.of(source), params(event).get("cause"),
                 event.toString());
     }
 
@@ -321,7 +364,7 @@ class TriggerRecordTest {
                 Map.of("Card", host, "Cause", cause,
                         "Origin", "Battlefield", "Destination", "Graveyard"));
 
-        assertEquals(SnapshotBuilder.entityId(caster), params(event).get("cause"),
+        assertEquals(Refs.of(caster), params(event).get("cause"),
                 event.toString());
     }
 
@@ -342,7 +385,7 @@ class TriggerRecordTest {
                 Map.of("Card", host, "Cause", named, "Source", softer,
                         "Origin", "Battlefield", "Destination", "Graveyard"));
 
-        assertEquals(SnapshotBuilder.entityId(named), params(event).get("cause"),
+        assertEquals(Refs.of(named), params(event).get("cause"),
                 event.toString());
     }
 
@@ -383,7 +426,7 @@ class TriggerRecordTest {
         Map<String, Object> event = eventOf(triggerOfMode("SpellCast"),
                 Map.of("CardLKI", cast, "SpellAbility", spell));
 
-        assertEquals(List.of(SnapshotBuilder.entityId(cast)), event.get("subjects"),
+        assertEquals(List.of(Refs.of(cast)), event.get("subjects"),
                 event.toString());
     }
 
@@ -406,7 +449,7 @@ class TriggerRecordTest {
                 Map.of("Attacker", attacker, "Attacked", defender));
 
         assertEquals("attackers_declared", event.get("type"), event.toString());
-        assertEquals(SnapshotBuilder.entityId(defender), params(event).get("defender"),
+        assertEquals(Refs.of(defender), params(event).get("defender"),
                 event.toString());
     }
 
@@ -466,8 +509,8 @@ class TriggerRecordTest {
     void eachCombatShapeIsAboutTheCreatureItIsAbout() {
         Card attacker = TestCards.build("Sol Ring");
         Card blocker = TestCards.build("Mox Pearl");
-        String attackerId = SnapshotBuilder.entityId(attacker);
-        String blockerId = SnapshotBuilder.entityId(blocker);
+        String attackerId = Refs.of(attacker);
+        String blockerId = Refs.of(blocker);
 
         Map<String, Object> blocks = eventOf(triggerOfMode("Blocks"),
                 Map.of("Blocker", blocker, "Attackers", attacker));

@@ -65,16 +65,17 @@ class OutputFormatterTest {
         assertEquals("activated[2]: kicker {2}", keywordActive.formatLine(2));
     }
 
+    /** Handed an action number all the same, a non-actionable type still prints none. */
     @Test
     void nonActionableTypesHaveNoBrackets() {
         Ability staticAbility = new TextAbility(AbilityType.STATIC, "flying");
-        assertEquals("static: flying", staticAbility.formatLine(null));
+        assertEquals("static: flying", staticAbility.formatLine(1));
 
         Ability triggered = new TextAbility(AbilityType.TRIGGERED, "when this enters, gain 3 life.");
-        assertEquals("triggered: when this enters, gain 3 life.", triggered.formatLine(null));
+        assertEquals("triggered: when this enters, gain 3 life.", triggered.formatLine(1));
 
         Ability staticLine = new TextAbility(AbilityType.STATIC, "creatures you control get +1/+1.");
-        assertEquals("static: creatures you control get +1/+1.", staticLine.formatLine(null));
+        assertEquals("static: creatures you control get +1/+1.", staticLine.formatLine(2));
     }
 
     @Test

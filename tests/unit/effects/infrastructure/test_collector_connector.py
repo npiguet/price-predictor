@@ -161,9 +161,10 @@ class TestPlayRound:
         (``progress_file``), never by smuggling it in as ``output_file``.
 
         Passing it as ``output_file`` would flip ``recordsOnly()`` to false
-        and construct a real ``CardsPlayedWriter`` at
-        ``<effect_records>/cards-played.txt`` every match
-        (``MatchWorkerMain.java`` ~237-238) -- not a breach of FR-052/FR-059's
+        and construct a real ``SealedCorpus`` -- a ``CorpusWriter`` per file --
+        appending to ``<effect_records>/cards-played.txt`` every match
+        (``MatchWorkerMain.runForever``'s
+        ``config.outputFile().map(SealedCorpus::beside)``) -- not a breach of FR-052/FR-059's
         letter (it is not ``output/sealed/cards-played.txt``), but it
         contradicts the records-only invariant the surrounding Java comment
         states, and it is not what fixes the round-never-ends bug. Both

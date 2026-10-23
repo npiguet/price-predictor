@@ -27,6 +27,9 @@
              Maven command line instead. -->
         <forge.dir>${project.basedir}/../../forge</forge.dir>
         <forge.version>2.0.15-SNAPSHOT</forge.version>
+        <!-- Extra test-JVM options; the jdk24-unsafe-memory-access profile
+             fills it in. Empty by default, which surefire ignores. -->
+        <surefire.jdkArgLine></surefire.jdkArgLine>
     </properties>
 
     <dependencies>
@@ -203,6 +206,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
+                    <argLine>${surefire.jdkArgLine}</argLine>
                     <excludedGroups>integration</excludedGroups>
                 </configuration>
             </plugin>
@@ -219,9 +223,44 @@
                         <configuration>
                             <shadedArtifactAttached>true</shadedArtifactAttached>
                             <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
+                            <!--
+                                Without these, every build warns about files
+                                that several bundled jars each carry. Module
+                                descriptors and Maven's pom metadata mean
+                                nothing on a classpath, so they are dropped;
+                                the license, notice and version files are
+                                concatenated, so each jar's own text survives;
+                                and the manifest is the one written below.
+                            -->
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
+                                        <exclude>META-INF/maven/**</exclude>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.pricepredictor.connector.ConvertMain</mainClass>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/LICENSE</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/LICENSE.txt</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/NOTICE.txt</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>about.html</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/io.netty.versions.properties</resource>
                                 </transformer>
                             </transformers>
                             <artifactSet>
@@ -237,6 +276,45 @@
     </build>
 
     <profiles>
+        <!--
+            JDK 24 and later warn on stderr the first time anything calls one of
+            sun.misc.Unsafe's memory-access methods (JEP 498). Two dependencies
+            do on every build: lombok's annotation processor inside javac, and
+            Guava's AbstractFuture inside the test JVM. Neither is our code,
+            the latest lombok still calls it, Guava is pinned to the version
+            Forge ships with, and the calls are still supported, so the warning
+            says nothing actionable here. The JVM option
+            sun-misc-unsafe-memory-access=allow keeps today's behaviour without
+            it. JDK 17 does not know the option and would refuse to
+            start, hence a profile that only a JDK 24+ build activates.
+            javac runs inside Maven's own JVM unless forked, and Maven's JVM
+            takes no per-plugin options, so the compiler is forked to hand
+            the option to the JVM that runs lombok.
+        -->
+        <profile>
+            <id>jdk24-unsafe-memory-access</id>
+            <activation>
+                <jdk>[24,)</jdk>
+            </activation>
+            <properties>
+                <surefire.jdkArgLine>--sun-misc-unsafe-memory-access=allow</surefire.jdkArgLine>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <version>3.13.0</version>
+                        <configuration>
+                            <fork>true</fork>
+                            <compilerArgs>
+                                <arg>-J--sun-misc-unsafe-memory-access=allow</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>integration</id>
             <build>

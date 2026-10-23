@@ -181,11 +181,12 @@ final class RunParamNormalizer {
      * {@code ChangesZone}, {@code Sacrificed} and {@code Exiled};
      * {@code SpellAbility} answers for {@code SpellCast} and {@code LifeLost};
      * the other four are where the rest keep it — {@code Source} on
-     * {@code CounterAdded} ({@code Card.java:1790}) and on {@code LifeGained}
-     * ({@code Player.java:487}), {@code SourceSA} on {@code BecomesTarget}
-     * ({@code SpellAbilityStackInstance.java:170}), {@code Causer} on
-     * {@code Destroyed} ({@code GameAction.java:2161}), {@code Activator} on
-     * {@code TapsForMana} ({@code AbilityManaPart.java:251}).
+     * {@code CounterAdded} ({@code Card.addCounterInternal}) and on
+     * {@code LifeGained} ({@code Player.gainLife}), {@code SourceSA} on
+     * {@code BecomesTarget} ({@code SpellAbilityStackInstance.updateTarget}),
+     * {@code Causer} on {@code Destroyed} ({@code GameAction.destroy}),
+     * {@code Activator} on {@code TapsForMana}
+     * ({@code AbilityManaPart.tapsForMana}).
      *
      * <p>Ordered rather than merged because a map often holds several: an
      * explicit {@code Cause} is the engine's own answer and outranks a source
@@ -208,9 +209,9 @@ final class RunParamNormalizer {
      * is the identity the snapshot carries.
      *
      * <p>Null is a real answer and stays one. {@code Phase} carries only the
-     * turn's player ({@code PhaseHandler.java:438}, with the {@code Phase} key
-     * commented out), {@code Untaps} carries only the card
-     * ({@code Card.java:4864}), and {@code Attacks} and {@code Blocks} carry
+     * turn's player ({@code PhaseHandler.onPhaseBegin}, with the {@code Phase}
+     * key commented out), {@code Untaps} carries only the card
+     * ({@code Card.untap}), and {@code Attacks} and {@code Blocks} carry
      * combat's shape and no actor: nothing in the game caused them in the sense
      * this field means, and inventing one would be worse than the gap.
      */
@@ -336,20 +337,7 @@ final class RunParamNormalizer {
             event.param("delta", delta);
             return;
         }
-        if (!(byName.get("CounterMap") instanceof Map<?, ?> counters)) {
-            return;
-        }
-        Map<String, Integer> total = new LinkedHashMap<>();
-        for (Object value : counters.values()) {
-            if (!(value instanceof com.google.common.collect.Multiset<?> multiset)) {
-                continue;
-            }
-            for (com.google.common.collect.Multiset.Entry<?> entry
-                    : multiset.entrySet()) {
-                total.merge(
-                        counterName(entry.getElement()), entry.getCount(), Integer::sum);
-            }
-        }
+        Map<String, Integer> total = counterMapTotals(byName.get("CounterMap"));
         if (total.isEmpty()) {
             return;
         }
@@ -361,6 +349,28 @@ final class RunParamNormalizer {
             sum += count;
         }
         event.param("delta", sum);
+    }
+
+    /**
+     * A {@code CounterMap}'s counts per counter type, summed over its players,
+     * in the order the map yields them; empty for anything that is not one.
+     */
+    private static Map<String, Integer> counterMapTotals(Object counterMap) {
+        Map<String, Integer> total = new LinkedHashMap<>();
+        if (!(counterMap instanceof Map<?, ?> counters)) {
+            return total;
+        }
+        for (Object value : counters.values()) {
+            if (!(value instanceof com.google.common.collect.Multiset<?> multiset)) {
+                continue;
+            }
+            for (com.google.common.collect.Multiset.Entry<?> entry
+                    : multiset.entrySet()) {
+                total.merge(
+                        counterName(entry.getElement()), entry.getCount(), Integer::sum);
+            }
+        }
+        return total;
     }
 
     /**
@@ -393,7 +403,7 @@ final class RunParamNormalizer {
      * that reach this type each mean exactly one direction and neither map
      * carries a usable state name: {@code AbilityKey.CardState} exists but is a
      * {@code CardState} object put there by door unlocking alone
-     * ({@code Card.java:8146}), and rendering it would fill the slot with an
+     * ({@code Card.unlockRoom}), and rendering it would fill the slot with an
      * object's {@code toString} instead of a face.
      */
     private static String faceState(String mode) {
@@ -490,7 +500,7 @@ final class RunParamNormalizer {
      */
     private static String subjectOf(Object value) {
         if (value instanceof SpellAbility ability && ability.getHostCard() != null) {
-            return SnapshotBuilder.entityId(ability.getHostCard());
+            return Refs.of(ability.getHostCard());
         }
         return Refs.ofAny(value).orElse(null);
     }
@@ -518,39 +528,22 @@ final class RunParamNormalizer {
      */
     private static final Map<String, EventType> EVENT_BY_MODE = Map.ofEntries(
             Map.entry("ChangesZone", EventType.ZONE_CHANGE),
-            Map.entry("Moved", EventType.ZONE_CHANGE),
-            Map.entry("Destroy", EventType.DESTROYED),
             Map.entry("Destroyed", EventType.DESTROYED),
             Map.entry("Sacrificed", EventType.SACRIFICED),
             Map.entry("DamageDone", EventType.DAMAGE_DEALT),
             Map.entry("DamageDealtOnce", EventType.DAMAGE_DEALT),
             Map.entry("DamageAll", EventType.DAMAGE_DEALT),
             Map.entry("Drawn", EventType.CARD_DRAWN),
-            Map.entry("Draw", EventType.CARD_DRAWN),
-            // The replacement side's spelling of the same event. This table was
-            // written from the trigger vocabulary, so 31 of Forge's 42
-            // ReplacementTypes fell through to the generic outcome carrying
-            // nothing but their mode -- and an event with no value in it cannot
-            // differ from itself, which is how a rewrite that halved a draw got
-            // dropped as an identity pair. Only the five whose quantity a
-            // reading above already picks up are added here; the rest are what
-            // the identity tally is instrumented to answer.
-            Map.entry("DrawCards", EventType.CARD_DRAWN),
             Map.entry("Discarded", EventType.CARD_DISCARDED),
             Map.entry("Milled", EventType.CARD_MILLED),
-            Map.entry("Mill", EventType.CARD_MILLED),
             Map.entry("LifeGained", EventType.LIFE_CHANGE),
             Map.entry("LifeLost", EventType.LIFE_CHANGE),
-            Map.entry("GainLife", EventType.LIFE_CHANGE),
             Map.entry("LoseLife", EventType.LIFE_CHANGE),
-            Map.entry("LifeReduced", EventType.LIFE_CHANGE),
             Map.entry("PayLife", EventType.LIFE_CHANGE),
             Map.entry("Poisoned", EventType.POISON_CHANGE),
             Map.entry("CounterAdded", EventType.COUNTER_CHANGE),
             Map.entry("CounterAddedOnce", EventType.COUNTER_CHANGE),
             Map.entry("CounterRemoved", EventType.COUNTER_CHANGE),
-            Map.entry("AddCounter", EventType.COUNTER_CHANGE),
-            Map.entry("RemoveCounter", EventType.COUNTER_CHANGE),
             Map.entry("Taps", EventType.TAPPED),
             Map.entry("TapsForMana", EventType.MANA_PRODUCED),
             Map.entry("Untaps", EventType.UNTAPPED),
@@ -560,7 +553,6 @@ final class RunParamNormalizer {
             Map.entry("SpellAbilityCast", EventType.SPELL_CAST),
             Map.entry("Countered", EventType.SPELL_COUNTERED),
             Map.entry("TokenCreated", EventType.TOKEN_CREATED),
-            Map.entry("CreateToken", EventType.TOKEN_CREATED),
             Map.entry("TokenCreatedOnce", EventType.TOKEN_CREATED),
             Map.entry("Attackers", EventType.ATTACKERS_DECLARED),
             Map.entry("AttackersDeclared", EventType.ATTACKERS_DECLARED),
@@ -585,11 +577,23 @@ final class RunParamNormalizer {
             Map.entry("PhaseIn", EventType.PHASED),
             // ── the replacement side's own spellings ────────────────────
             // ReplacementType names its modes differently from TriggerType,
-            // and the entries above follow the trigger vocabulary. A
-            // replacement mode with no entry here takes the generic type and
-            // carries nothing but its mode -- and an event with no value in it
-            // cannot differ from itself, so the record reads as a rewrite of
-            // nothing however much the replacement changed.
+            // and the entries above follow the trigger vocabulary; a mode both
+            // enums share is listed there once. A replacement mode with no
+            // entry here takes the generic type and carries nothing but its
+            // mode -- and an event with no value in it cannot differ from
+            // itself, so the record reads as a rewrite of nothing however much
+            // the replacement changed: a rewrite that halved a draw would be
+            // dropped as an identity pair.
+            Map.entry("Moved", EventType.ZONE_CHANGE),
+            Map.entry("Destroy", EventType.DESTROYED),
+            Map.entry("Draw", EventType.CARD_DRAWN),
+            Map.entry("DrawCards", EventType.CARD_DRAWN),
+            Map.entry("Mill", EventType.CARD_MILLED),
+            Map.entry("GainLife", EventType.LIFE_CHANGE),
+            Map.entry("LifeReduced", EventType.LIFE_CHANGE),
+            Map.entry("AddCounter", EventType.COUNTER_CHANGE),
+            Map.entry("RemoveCounter", EventType.COUNTER_CHANGE),
+            Map.entry("CreateToken", EventType.TOKEN_CREATED),
             Map.entry("Untap", EventType.UNTAPPED),
             Map.entry("Tap", EventType.TAPPED),
             Map.entry("DealtDamage", EventType.DAMAGE_DEALT),

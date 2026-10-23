@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -90,12 +91,6 @@ class EffectRecordTest {
     }
 
     @Test
-    void theActorIsReadableForTheStampAtTheWrite() {
-        EffectRecord record = record(RecordKind.COMBAT).actor("P0");
-        assertEquals("P0", record.actorPlayer());
-    }
-
-    @Test
     void aCombatRecordNamesNoActingLine() {
         String json = record(RecordKind.COMBAT).actor("P0").toJson();
         assertTrue(json.contains("\"ability\":null"), json);
@@ -131,7 +126,7 @@ class EffectRecordTest {
         String json = resolution(Moment.ACTIVATION)
                 // No ability: a countered spell's costs are still readable in
                 // a real game, but the record's shape does not depend on them.
-                .payload(EffectRecord.costPayload(
+                .payload(RecordPayloads.costPayload(
                         PaidCosts.EMPTY, ActivationOutcome.COUNTERED))
                 .toJson();
         assertTrue(json.contains("\"link_id\":null"), json);
@@ -202,8 +197,6 @@ class EffectRecordTest {
 
         assertTrue(json.contains("\"ability\":[]"), json);
         assertTrue(json.contains("\"ability_unresolved\":\"engine_effect\""), json);
-        String combat = record(RecordKind.COMBAT).toJson();
-        assertTrue(combat.contains("\"ability\":null"), combat);
     }
 
     /** A caller that looked and got nothing back still owes a reason. */
@@ -223,7 +216,7 @@ class EffectRecordTest {
     void anEmptyCombatRendersEveryField() {
         assertEquals(
                 "{\"attackers\":[],\"blocks\":{},\"assignment_choices\":{},\"events\":[]}",
-                EffectRecord.combatPayload(CombatShape.of(null).fields(), List.of()));
+                RecordPayloads.combatPayload(CombatShape.of(null), List.of()));
     }
 
     /** A probe branch's perturbation follows the fields it shares with the record. */
@@ -232,8 +225,8 @@ class EffectRecordTest {
         assertEquals(
                 "{\"attackers\":[],\"blocks\":{},\"assignment_choices\":{},\"events\":[],"
                         + "\"probed_keyword\":\"trample\",\"probed_entity\":null}",
-                EffectRecord.probePayload(
-                        CombatShape.of(null).fields(), List.of(), "trample", null));
+                RecordPayloads.probePayload(
+                        CombatShape.of(null), List.of(), "trample", null));
     }
 
     // ── events ──────────────────────────────────────────────────────────

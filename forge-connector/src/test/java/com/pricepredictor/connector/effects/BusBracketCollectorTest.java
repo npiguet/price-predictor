@@ -213,15 +213,15 @@ class BusBracketCollectorTest {
         bolt.getTargets().add(TestCards.build("Grizzly Bears"));
 
         assertEquals(ActivationOutcome.RESOLVED,
-                BusBracketCollector.outcomeOf(2, bolt));
+                ActivationLedger.outcomeOf(2, bolt));
 
         bolt.getTargets().remove(bolt.getTargets().get(0));
         assertEquals(ActivationOutcome.PARTIALLY_FIZZLED,
-                BusBracketCollector.outcomeOf(2, bolt));
+                ActivationLedger.outcomeOf(2, bolt));
 
         bolt.resetTargets();
         assertEquals(ActivationOutcome.RESOLVED,
-                BusBracketCollector.outcomeOf(2, bolt));
+                ActivationLedger.outcomeOf(2, bolt));
     }
 
     /** An untargeted spell never reads as partially fizzled. */
@@ -232,7 +232,7 @@ class BusBracketCollectorTest {
                 TestCards.build("Healing Salve"));
 
         assertEquals(ActivationOutcome.RESOLVED,
-                BusBracketCollector.outcomeOf(0, gain));
+                ActivationLedger.outcomeOf(0, gain));
     }
 
     private static Zone zone(ZoneType type) {
@@ -400,10 +400,14 @@ class BusBracketCollectorTest {
                 "the bus named a source, and it outranks the bracket");
     }
 
-    /** A draw reaches the collector and writes nothing -- no bracket, no shard growth. */
+    /**
+     * A draw reaches the collector and writes nothing -- no bracket, no shard
+     * growth. Bound to a game with real seats, as the winner's test is, so the
+     * draw is what names no winner rather than an empty table.
+     */
     @Test
     void aDrawnGameOutcomeWritesNothing() throws IOException {
-        BusBracketCollector collector = collector();
+        BusBracketCollector collector = collector(TestBoard.twoPlayerGame("p1", "p2"));
         SpellAbility bolt = damageAbility();
 
         collector.beginBracket(bolt);
@@ -571,7 +575,7 @@ class BusBracketCollectorTest {
         String outcomeRecord = records.stream()
                 .filter(r -> r.contains("\"type\":\"player_won\""))
                 .findFirst().orElseThrow();
-        assertTrue(outcomeRecord.contains(SnapshotBuilder.playerId(p1)), outcomeRecord);
+        assertTrue(outcomeRecord.contains(Refs.of(p1)), outcomeRecord);
     }
 
     /**
@@ -796,7 +800,7 @@ class BusBracketCollectorTest {
 
     /**
      * A refusal reported for an ability belonging to a
-     * DIFFERENT {@code Game} -- exactly {@code ForkCollector.forceResolution}'s
+     * DIFFERENT {@code Game} -- exactly {@code InterventionFork.forceResolution}'s
      * shape, since {@code GameSimulator.resolveStack} runs the forced ability
      * through the same {@code PlayerControllerAi.confirmAction}/{@code
      * confirmBidAction} this hook is installed on, regardless of how this

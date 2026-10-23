@@ -10,10 +10,18 @@ import pytest
 
 from price_predictor.infrastructure import forge_jvm
 from price_predictor.infrastructure.forge_jvm import (
+    UNSAFE_MEMORY_ACCESS_OPTION,
     WorkerLogFiles,
     build_forge_classpath,
     build_jvm_command,
+    parse_java_feature_version,
     resolve_connector_jar,
+)
+
+# Bound at import, before the unit-test conftest swaps the module attribute
+# for a stub, so the probe itself can still be exercised here.
+from price_predictor.infrastructure.forge_jvm import (
+    java_feature_version as real_java_feature_version,
 )
 
 
@@ -102,6 +110,46 @@ class TestBuildJvmCommand:
         )
         main_index = cmd.index("com.example.Main")
         assert cmd[main_index + 1 :] == ["--set", "RVR", "--size", "10"]
+
+
+class TestUnsafeMemoryAccessOption:
+    """JDK 24+ warns on every worker's stderr about Guava's Unsafe calls; the
+    option silences it, and JDK 17 would refuse to start with it."""
+
+    @pytest.mark.parametrize("version", [24, 25])
+    def test_a_jdk_that_warns_gets_the_option_first(self, monkeypatch, version):
+        monkeypatch.setattr(forge_jvm, "java_feature_version", lambda: version)
+        cmd = build_jvm_command(main_class="com.example.Main", classpath="cp")
+        assert cmd[:2] == ["java", UNSAFE_MEMORY_ACCESS_OPTION]
+
+    @pytest.mark.parametrize("version", [17, 21, 23, None])
+    def test_an_older_or_unidentified_jdk_gets_no_option(self, monkeypatch, version):
+        monkeypatch.setattr(forge_jvm, "java_feature_version", lambda: version)
+        cmd = build_jvm_command(main_class="com.example.Main", classpath="cp")
+        assert UNSAFE_MEMORY_ACCESS_OPTION not in cmd
+
+    @pytest.mark.parametrize(
+        ("output", "expected"),
+        [
+            ('java version "25.0.1" 2025-10-21 LTS', 25),
+            ('openjdk version "17.0.12" 2024-07-16', 17),
+            ('openjdk version "24" 2025-03-18', 24),
+            ('java version "1.8.0_421"', 8),
+            ("no version here", None),
+        ],
+    )
+    def test_the_feature_release_is_read_off_java_version(self, output, expected):
+        assert parse_java_feature_version(output) == expected
+
+    def test_a_missing_java_answers_none(self):
+        with patch("subprocess.run", side_effect=FileNotFoundError("java")):
+            assert real_java_feature_version.__wrapped__() is None
+
+    def test_the_probe_reads_what_java_prints_on_stderr(self):
+        with patch("subprocess.run") as run:
+            run.return_value.stderr = 'openjdk version "21.0.4" 2024-07-16'
+            assert real_java_feature_version.__wrapped__() == 21
+        assert run.call_args[0][0] == ["java", "-version"]
 
 
 class TestWorkerLogFiles:

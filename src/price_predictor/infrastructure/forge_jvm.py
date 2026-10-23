@@ -7,8 +7,10 @@ Windows-vs-POSIX process-tree termination helper.
 
 from __future__ import annotations
 
+import functools
 import os
 import platform
+import re
 import signal
 import subprocess
 import threading
@@ -24,6 +26,20 @@ CONNECTOR_JAR_NAME = "forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar"
 #: in its `forge.version` property — Maven's `systemPath` cannot glob, so that
 #: pin has to be updated by hand on a Forge upgrade.
 FORGE_VERSION = "2.0.15-SNAPSHOT"
+
+#: The opt-in that keeps JDK 24 and later (JEP 498) from printing a
+#: deprecation warning to every worker's stderr the first time Guava's
+#: ``AbstractFuture`` calls ``sun.misc.Unsafe``. Guava is the version Forge
+#: ships with and the calls are still supported, so the warning says nothing an
+#: operator can act on. JDK 17 refuses the option outright, so it is passed only
+#: to a JVM new enough to warn; ``forge-connector/pom.xml`` does the same for
+#: the build.
+UNSAFE_MEMORY_ACCESS_OPTION = "--sun-misc-unsafe-memory-access=allow"
+
+#: The first JDK that warns; the option itself exists from JDK 23.
+_FIRST_WARNING_JDK = 24
+
+_JAVA_VERSION = re.compile(r'version "(\d+)(?:\.(\d+))?')
 
 #: Classifier suffixes Maven also emits into `target/`; never the module JAR.
 _NON_MODULE_JAR_SUFFIXES = ("-sources", "-javadoc", "-tests", "-jar-with-dependencies")
@@ -98,6 +114,42 @@ def build_forge_classpath(
     return os.pathsep.join(parts)
 
 
+def parse_java_feature_version(version_output: str) -> int | None:
+    """The feature release ``java -version`` reports, or None if it names none.
+
+    ``1.8.0_x`` is Java 8; from Java 9 on the first number is the release.
+    """
+    match = _JAVA_VERSION.search(version_output)
+    if match is None:
+        return None
+    major = int(match.group(1))
+    if major == 1 and match.group(2) is not None:
+        return int(match.group(2))
+    return major
+
+
+@functools.cache
+def java_feature_version() -> int | None:
+    """The feature release of the ``java`` on PATH, asked once per process.
+
+    None when it cannot be asked or does not answer, which leaves the worker
+    command as it is on a JDK that predates the option: a JVM that cannot be
+    identified is never handed an option it might refuse.
+    """
+    try:
+        result = subprocess.run(
+            ["java", "-version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    output = result.stderr
+    return parse_java_feature_version(output) if isinstance(output, str) else None
+
+
 def build_jvm_command(
     *,
     main_class: str,
@@ -108,6 +160,9 @@ def build_jvm_command(
 ) -> list[str]:
     """Construct a ``java`` subprocess command list."""
     cmd: list[str] = ["java"]
+    version = java_feature_version()
+    if version is not None and version >= _FIRST_WARNING_JDK:
+        cmd.append(UNSAFE_MEMORY_ACCESS_OPTION)
     if system_properties:
         for key, value in system_properties.items():
             cmd.append(f"-D{key}={value}")

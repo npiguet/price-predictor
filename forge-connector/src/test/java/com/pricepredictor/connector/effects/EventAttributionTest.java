@@ -50,8 +50,8 @@ class EventAttributionTest {
         AbilitySub first = (AbilitySub) root.getSubAbility();
         AbilitySub second = (AbilitySub) first.getSubAbility();
 
-        assertEquals("0", EventAttribution.attributedTo(root, first));
-        assertEquals("1", EventAttribution.attributedTo(root, second));
+        assertEquals("0", EventAttribution.attributedTo(first));
+        assertEquals("1", EventAttribution.attributedTo(second));
     }
 
     /**
@@ -68,9 +68,9 @@ class EventAttributionTest {
         SpellAbility root = threeClauseAbility();
 
         assertEquals(EventAttribution.ROOT,
-                EventAttribution.attributedTo(root, root));
+                EventAttribution.attributedTo(root));
         assertEquals(EventAttribution.UNRESOLVED,
-                EventAttribution.attributedTo(root, null));
+                EventAttribution.attributedTo(null));
         assertNotEquals(EventAttribution.ROOT, EventAttribution.UNRESOLVED);
     }
 
@@ -88,18 +88,24 @@ class EventAttributionTest {
         orphan.setParent(null);
 
         assertEquals(EventAttribution.UNRESOLVED,
-                EventAttribution.attributedTo(root, orphan));
+                EventAttribution.attributedTo(orphan));
     }
 
-    /** And attribution never returns null, whatever it is handed. */
+    /**
+     * And attribution never returns null, whatever it is handed: each kind of
+     * pointer lands on the one of the three states it means.
+     */
     @Test
     void attributionAlwaysNamesOneOfTheThreeStates() {
         SpellAbility root = threeClauseAbility();
+        Object[] pointers = {null, "not an ability", root, root.getSubAbility()};
+        String[] expected = {
+                EventAttribution.UNRESOLVED, EventAttribution.UNRESOLVED,
+                EventAttribution.ROOT, "0"};
 
-        for (Object pointer
-                : new Object[]{null, "not an ability", root, root.getSubAbility()}) {
-            assertNotNull(EventAttribution.attributedTo(root, pointer),
-                    String.valueOf(pointer));
+        for (int i = 0; i < pointers.length; i++) {
+            assertEquals(expected[i], EventAttribution.attributedTo(pointers[i]),
+                    String.valueOf(pointers[i]));
         }
     }
 

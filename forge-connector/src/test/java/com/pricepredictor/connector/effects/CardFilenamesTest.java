@@ -3,18 +3,18 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeEnvironmentInitializer;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Java/Python agreement on card filenames.
@@ -46,39 +46,26 @@ class CardFilenamesTest {
     @Test
     void aCardsfolderPathIsLetterKeyed() {
         assertEquals("cardsfolder/a/ajanis_pridemate.txt",
-                CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Ajani's Pridemate"));
+                CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Ajani's Pridemate").key());
     }
 
     @Test
     void aTokenPathIsFlat() {
         assertEquals("tokenscripts/ajanis_pridemate.txt",
-                CardFilenames.scriptFile(SourceTree.TOKENSCRIPTS, "Ajani's Pridemate"));
+                CardFilenames.scriptFile(SourceTree.TOKENSCRIPTS, "Ajani's Pridemate").key());
     }
 
     @Test
     void aVariantPathIsFlatToo() {
         assertEquals("variant-scripts/serra_angel.txt",
-                CardFilenames.scriptFile(SourceTree.VARIANT_SCRIPTS, "Serra Angel"));
+                CardFilenames.scriptFile(SourceTree.VARIANT_SCRIPTS, "Serra Angel").key());
     }
 
     @Test
     void rebalancedCardsKeepTheirLiteralPrefixAndOwnDirectory() {
         // The general sanitizer would turn the hyphen into an underscore.
         assertEquals("cardsfolder/rebalanced/a-akki_ronin.txt",
-                CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "A-Akki Ronin"));
-    }
-
-    @Test
-    void aPathAlwaysUsesForwardSlashes() {
-        String path = CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Serra Angel");
-        assertEquals(-1, path.indexOf('\\'), path);
-    }
-
-    @Test
-    void twoOfTheThreeTreesAreFlat() {
-        assertFalse(SourceTree.isFlat(SourceTree.CARDSFOLDER));
-        assertTrue(SourceTree.isFlat(SourceTree.TOKENSCRIPTS));
-        assertTrue(SourceTree.isFlat(SourceTree.VARIANT_SCRIPTS));
+                CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "A-Akki Ronin").key());
     }
 
     // -- the tree decides where a card lives ----------------------------
@@ -95,7 +82,7 @@ class CardFilenamesTest {
     @Test
     void aCardTheTreeFilesElsewhereGetsThePathTheTreeUses() {
         assertEquals("cardsfolder/p/+2_mace.txt",
-                CardFilenames.scriptFileForStem(SourceTree.CARDSFOLDER, "+2_mace"));
+                CardFilenames.scriptFileForStem(SourceTree.CARDSFOLDER, "+2_mace").key());
     }
 
     /** A digit initial is a directory that exists but holds a different card. */
@@ -103,7 +90,7 @@ class CardFilenamesTest {
     void aCardFiledUnderALetterItDoesNotStartWithFollowsTheTree() {
         assertEquals("cardsfolder/n/1996_world_champion.txt",
                 CardFilenames.scriptFileForStem(
-                        SourceTree.CARDSFOLDER, "1996_world_champion"));
+                        SourceTree.CARDSFOLDER, "1996_world_champion").key());
     }
 
     /**
@@ -127,15 +114,16 @@ class CardFilenamesTest {
         Assumptions.assumeTrue(stem != null, "this Forge has no upcoming cards");
 
         assertEquals("cardsfolder/upcoming/" + stem + ".txt",
-                CardFilenames.scriptFileForStem(SourceTree.CARDSFOLDER, stem));
+                CardFilenames.scriptFileForStem(SourceTree.CARDSFOLDER, stem).key());
     }
 
     /** The cards the convention does describe are untouched by the lookup. */
     @Test
     void aCardFiledUnderItsInitialIsUnchanged() {
         assertEquals("cardsfolder/a/ajanis_pridemate.txt",
-                CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Ajani's Pridemate"));
-        assertNull(SourceTree.directoryOf(SourceTree.CARDSFOLDER, "ajanis_pridemate"),
+                CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Ajani's Pridemate").key());
+        assertEquals(Optional.empty(),
+                SourceTree.CARDSFOLDER.directoryOf("ajanis_pridemate"),
                 "the tree only answers where it disagrees with the convention");
     }
 
@@ -148,17 +136,29 @@ class CardFilenamesTest {
     void aStemTheTreeDoesNotHoldFallsBackToTheConvention() {
         assertEquals("cardsfolder/n/no_such_card_was_ever_printed.txt",
                 CardFilenames.scriptFile(
-                        SourceTree.CARDSFOLDER, "No Such Card Was Ever Printed"));
+                        SourceTree.CARDSFOLDER, "No Such Card Was Ever Printed").key());
     }
 
     /**
-     * A tree with nowhere to look must not take the collector down with it:
-     * only {@code cardsfolder} has a root to index, so any other name answers
-     * nothing and the caller keeps the convention.
+     * A flat tree has no directories to look up: only {@code cardsfolder} has
+     * a root to index, so the other trees answer nothing even for a stem the
+     * card tree files elsewhere.
      */
     @Test
-    void aTreeWithNoRootAnswersNothing() {
-        assertNull(SourceTree.directoryOf("cardsfolder-512", "+2_mace"));
+    void aFlatTreeAnswersNothing() {
+        assertEquals(Optional.empty(), SourceTree.TOKENSCRIPTS.directoryOf("+2_mace"));
+        assertEquals(Optional.empty(), SourceTree.VARIANT_SCRIPTS.directoryOf("+2_mace"));
+    }
+
+    /**
+     * A tree with nowhere to look must not take the collector down with it: a
+     * root that cannot be found indexes no exceptions, and the caller keeps
+     * the convention.
+     */
+    @Test
+    void aTreeWhoseRootIsMissingIndexesNothing(@TempDir Path tempDir) {
+        assertEquals(Map.of(), SourceTree.buildExceptions(
+                SourceTree.CARDSFOLDER, tempDir.resolve("no-such-cardsfolder")));
     }
 
     // -- the path the card reader recorded ------------------------------
@@ -178,8 +178,8 @@ class CardFilenamesTest {
             "p/+2_mace.txt,                                                   p/+2_mace.txt",
     })
     void aLoaderPathBecomesTheTreeRelativePath(String loaderPath, String expected) {
-        assertEquals(expected,
-                SourceTree.relativePathIn(SourceTree.CARDSFOLDER, loaderPath));
+        assertEquals(Optional.of(expected),
+                SourceTree.CARDSFOLDER.relativePathIn(loaderPath));
     }
 
     /**
@@ -195,12 +195,13 @@ class CardFilenamesTest {
             "cardsfolder/a/ajanis_pridemate.json",
     })
     void aPathOutsideTheTreeAnswersNothing(String loaderPath) {
-        assertNull(SourceTree.relativePathIn(SourceTree.CARDSFOLDER, loaderPath));
+        assertEquals(Optional.empty(),
+                SourceTree.CARDSFOLDER.relativePathIn(loaderPath));
     }
 
     @Test
     void anAbsentLoaderPathAnswersNothing() {
-        assertNull(SourceTree.relativePathIn(SourceTree.CARDSFOLDER, null));
-        assertNull(SourceTree.relativePathIn(SourceTree.CARDSFOLDER, ""));
+        assertEquals(Optional.empty(), SourceTree.CARDSFOLDER.relativePathIn(null));
+        assertEquals(Optional.empty(), SourceTree.CARDSFOLDER.relativePathIn(""));
     }
 }

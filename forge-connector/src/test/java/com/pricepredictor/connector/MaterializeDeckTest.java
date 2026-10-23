@@ -13,7 +13,8 @@ import static com.pricepredictor.connector.DeckMaterializer.UnresolvedPolicy.WAR
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * {@link DeckMaterializer#materialize} against Forge's real card database.
+ * {@link DeckMaterializer#lookUp} and {@link DeckMaterializer#materialize}
+ * against Forge's real card database.
  *
  * <p>Tagged {@code integration} because resolving a card name needs
  * {@code FModel}; the policy half — what a miss does once counted — is a pure
@@ -29,6 +30,13 @@ class MaterializeDeckTest {
     private static final String CONVERTED_SPELLING = "llanowar elves";
     private static final String NOT_A_CARD = "Definitely Not A Real Card 0";
     private static final String WHY = MatchGenerator.DECKS_ONLY_UNRESOLVED;
+
+    @Test
+    void lookUpFindsAKnownNameAndNothingForAnUnknownOne() {
+        assertEquals("Llanowar Elves",
+                DeckMaterializer.lookUp(CONVERTED_SPELLING).orElseThrow().getName());
+        assertTrue(DeckMaterializer.lookUp(NOT_A_CARD).isEmpty());
+    }
 
     @Test
     void aConvertedLowercaseNameResolves() {

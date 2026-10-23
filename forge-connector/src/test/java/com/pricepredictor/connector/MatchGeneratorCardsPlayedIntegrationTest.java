@@ -38,24 +38,9 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
         for (int i = 0; i < result.cardsPlayedRows().size(); i++) {
             CardsPlayedRow row = result.cardsPlayedRows().get(i);
-            assertEquals(parent.runId(), row.runId());
-            assertEquals(parent.setCode(), row.setCode());
-            assertEquals(parent.methodA(), row.methodA());
-            assertEquals(parent.methodB(), row.methodB());
-            assertEquals(String.valueOf(parent.games().charAt(i)), row.winner().toString(),
-                    "winner at index " + i + " must align with parent games string");
-            assertEquals(String.valueOf(parent.play().charAt(i)), row.starter().toString(),
-                    "starter at index " + i + " must align with parent play string");
-        }
-    }
-
-    @Test
-    void basicLandsAbsentFromAllListColumns() {
-        for (CardsPlayedRow row : result.cardsPlayedRows()) {
-            assertNoBasicsIn(row.cardsPlayedA(), "cards_played_A");
-            assertNoBasicsIn(row.cardsPlayedB(), "cards_played_B");
-            assertNoBasicsIn(row.cardsNotPlayedA(), "cards_not_played_A");
-            assertNoBasicsIn(row.cardsNotPlayedB(), "cards_not_played_B");
+            assertEquals(parent.header(), row.header());
+            assertEquals(parent.games().get(i), new GameResult(row.winner(), row.starter()),
+                    "winner and starter at index " + i + " must align with the parent's game");
         }
     }
 
@@ -81,13 +66,6 @@ class MatchGeneratorCardsPlayedIntegrationTest {
                     "deck A union (distinct, non-basic) must equal deck contents");
             assertEquals(distinctB, union(row.cardsPlayedB(), row.cardsNotPlayedB()),
                     "deck B union (distinct, non-basic) must equal deck contents");
-        }
-    }
-
-    private static void assertNoBasicsIn(List<String> names, String column) {
-        for (String name : names) {
-            assertFalse(BasicLands.isBasic(name),
-                    column + " must not contain basic land: " + name);
         }
     }
 

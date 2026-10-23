@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import java.util.List;
 import java.util.Objects;
 
@@ -138,7 +139,7 @@ public record ProvenanceKey(
      */
     private Json.ObjectWriter withFields(Json.ObjectWriter json) {
         json.value("face", face)
-                .value("trait_kind", traitKind.wireName())
+                .value("trait_kind", traitKind)
                 .value("index_within_kind", indexWithinKind);
         if (option != null) {
             json.value("option", option);

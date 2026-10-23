@@ -1,7 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.google.common.base.Strings;
-import com.pricepredictor.connector.effects.Json;
+import com.pricepredictor.connector.json.Json;
 import forge.game.card.Card;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;

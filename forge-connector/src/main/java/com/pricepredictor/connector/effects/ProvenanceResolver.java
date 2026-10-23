@@ -17,6 +17,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
@@ -72,34 +73,8 @@ public final class ProvenanceResolver {
     }
 
     /**
-     * The key for a live trait, or the reason it has none.
-     *
-     * <p>The donor chain, in order; each step is the method named:
-     * <ol>
-     *   <li>{@link #unwrapped}: a {@code WrappedAbility}, or a sub-ability, to
-     *       something that could be a slice member;</li>
-     *   <li>{@link #ownerKey}: the trigger or replacement that owns the
-     *       ability, or {@link #runtimeOwner} when that trigger is one the
-     *       engine assembled;</li>
-     *   <li>{@link #grantorOf}: a granted ability's grantor static;</li>
-     *   <li>{@link #keyFor}: the trait as it stands;</li>
-     *   <li>{@link #keywordGrantorOf}: a granted keyword's grantor static;</li>
-     *   <li>{@link #spawnerOf}: what spawned an engine-built trigger;</li>
-     *   <li>{@link #originalOf}: a copy's original;</li>
-     *   <li>{@link #effectSourceOf}: the ability that made an effect card;</li>
-     *   <li>{@link #keyForGrantingLine}: the line that granted the trait out of
-     *       one of its own SVars.</li>
-     * </ol>
-     * A step either keys the trait, which ends the chain, or hops to another
-     * trait, which starts the chain again from the first step; a trait no step
-     * applies to ends it with {@link #reasonFor}.
-     *
-     * <p>{@code getOriginalHost()} is deliberately not used to key a granted
-     * trait: {@code CardTraitBase.getOriginalHost()} returns
-     * {@code getCardState().getCard()}, which for a granted trait is the
-     * <em>recipient</em>, not the donor, so keying by it would attribute an
-     * anthem's effect to the creature that received it. That is the reason the
-     * grantor step reads {@code getGrantorStatic()} instead.
+     * The key for a live trait, or the reason it has none, found by walking
+     * the {@link #DONOR_CHAIN}.
      *
      * <p>A clause resolving inside a chosen mode of a charm keys to the
      * charm's line <em>plus</em> that mode's {@code Choices$} position
@@ -123,120 +98,148 @@ public final class ProvenanceResolver {
         Set<CardTraitBase> seen =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         CardTraitBase t = trait;
-        UnresolvedReason reason = UnresolvedReason.UNINDEXABLE;
         for (int hop = 0; t != null && hop < MAX_HOPS && seen.add(t); hop++) {
-            CardTraitBase unwrapped = unwrapped(t);
-            if (unwrapped != t) {
-                t = unwrapped;
-                continue;
-            }
-            ProvenanceKey borne = ownerKey(t);
-            if (borne != null) return new Resolved(borne, null);
-            CardTraitBase next = runtimeOwner(t);
-            if (next != null) {
-                t = next;
-                continue;
-            }
-            next = grantorOf(t);
-            if (next != null) {
-                t = next;
-                continue;
-            }
-            ProvenanceKey here = keyFor(t);
-            if (here != null) return new Resolved(here, null);
-            next = keywordGrantorOf(t);
-            if (next != null) {
-                t = next;
-                continue;
-            }
-            next = spawnerOf(t);
-            if (next != null) {
-                t = next;
-                continue;
-            }
-            next = originalOf(t);
-            if (next != null) {
-                t = next;
-                continue;
-            }
-            next = effectSourceOf(t);
-            if (next != null) {
-                t = next;
-                continue;
-            }
-            ProvenanceKey granting = keyForGrantingLine(t);
-            if (granting != null) return new Resolved(granting, null);
-            reason = reasonFor(t);
-            break;
+            StepResult result = firstApplying(t);
+            if (result instanceof Keyed keyed) return new Resolved(keyed.key(), null);
+            if (!(result instanceof Hop next)) return new Resolved(null, reasonFor(t));
+            t = next.trait();
         }
-        return new Resolved(null, reason);
+        return new Resolved(null, UnresolvedReason.UNINDEXABLE);
     }
 
     /**
-     * Step 1: the trait a wrapper or a sub-ability stands for, or the trait
-     * itself when it is neither; neither is ever a member of a slice.
-     *
-     * <p>Unlike the other hops this answers the trait itself rather than null
-     * when nothing applies, because a wrapper around nothing unwraps to null,
-     * and that ends the chain.
+     * What one step of the {@link #DONOR_CHAIN} makes of a trait: the key it
+     * names, another trait to start the chain again from, or nothing, which
+     * hands the trait to the next step.
      */
-    private static CardTraitBase unwrapped(CardTraitBase trait) {
+    private sealed interface StepResult permits Keyed, Hop, Pass {
+    }
+
+    /** The trait keys to this printed line, which ends the chain. */
+    private record Keyed(ProvenanceKey key) implements StepResult {
+    }
+
+    /**
+     * The trait stands for this one, which starts the chain again from its
+     * first step; a hop to null ends the chain unresolved.
+     */
+    private record Hop(CardTraitBase trait) implements StepResult {
+    }
+
+    /** The step does not apply to the trait. */
+    private enum Pass implements StepResult {
+        PASS
+    }
+
+    /**
+     * The donor chain, in the order its steps are tried; each step's Javadoc
+     * says what it follows and why it sits where it does.
+     *
+     * <p>A step either keys the trait, which ends the chain, or hops to
+     * another trait, which starts the chain again from the first step; a trait
+     * no step applies to ends it with {@link #reasonFor}.
+     */
+    private static final List<Function<CardTraitBase, StepResult>> DONOR_CHAIN = List.of(
+            ProvenanceResolver::unwrapped,
+            ProvenanceResolver::owner,
+            ProvenanceResolver::grantor,
+            ProvenanceResolver::whereItStands,
+            ProvenanceResolver::keywordGrantor,
+            ProvenanceResolver::spawner,
+            ProvenanceResolver::original,
+            ProvenanceResolver::effectSource,
+            ProvenanceResolver::grantingLine);
+
+    /** The first step of the {@link #DONOR_CHAIN} that applies to {@code trait}. */
+    private static StepResult firstApplying(CardTraitBase trait) {
+        for (Function<CardTraitBase, StepResult> step : DONOR_CHAIN) {
+            StepResult result = step.apply(trait);
+            if (result != Pass.PASS) return result;
+        }
+        return Pass.PASS;
+    }
+
+    /** A step that keys the trait to {@code key}, or passes when it is null. */
+    private static StepResult keyed(ProvenanceKey key) {
+        return key == null ? Pass.PASS : new Keyed(key);
+    }
+
+    /** A step that hops to {@code next}, or passes when it is null. */
+    private static StepResult hop(CardTraitBase next) {
+        return next == null ? Pass.PASS : new Hop(next);
+    }
+
+    /**
+     * The trait a wrapper or a sub-ability stands for, neither of which is
+     * ever a member of a slice: a {@code WrappedAbility} to the ability it
+     * wraps, a sub-ability to its root.
+     *
+     * <p>Unlike the other hops this hops even to null, because a wrapper
+     * around nothing unwraps to nothing, and that ends the chain.
+     */
+    private static StepResult unwrapped(CardTraitBase trait) {
         if (trait instanceof WrappedAbility wrapped) {
-            return wrapped.getWrappedAbility();
+            return new Hop(wrapped.getWrappedAbility());
         }
         if (trait instanceof SpellAbility sub && sub.getParent() != null) {
-            return sub.getRootAbility();
+            return new Hop(sub.getRootAbility());
         }
-        return trait;
+        return Pass.PASS;
     }
 
     /**
-     * Step 2: the key of the trigger or replacement that owns an ability, or
-     * null.
+     * The trigger or replacement that owns an ability: its key, or, when it
+     * keys to nothing, a hop to the owning trigger if the engine assembled it
+     * at runtime.
      *
      * <p>The {@code Execute$} SVar ability lives in
      * {@code Trigger.overridingAbility}, not in the state's spell list, so the
      * {@code Trigger} is the printed line, not the SVar.
-     */
-    private static ProvenanceKey ownerKey(CardTraitBase trait) {
-        if (!(trait instanceof SpellAbility sa)) return null;
-        ProvenanceKey borne = keyFor(sa.getTrigger());
-        return borne != null ? borne : keyFor(sa.getReplacementEffect());
-    }
-
-    /**
-     * Step 2, when the owner keys to nothing: the owning trigger, if the engine
-     * assembled it at runtime, or null.
      *
-     * <p>Such a trigger keys to nothing itself, but it knows what spawned it,
-     * so the chain hops to the trigger rather than past it and lets
-     * {@link #spawnerOf} follow that. This is the reflexive "you may pay {X}.
-     * When you do..." shape: {@code ImmediateTriggerEffect} deliberately nulls
-     * the execute ability's parent, so there is no root to climb instead, and
-     * the only way back to the printed line is through the trigger that owns
-     * it.
+     * <p>A trigger the engine assembled keys to nothing itself, but it knows
+     * what spawned it, so the chain hops to the trigger rather than past it
+     * and lets {@link #spawner} follow that. This is the reflexive "you may
+     * pay {X}. When you do..." shape: {@code ImmediateTriggerEffect}
+     * deliberately nulls the execute ability's parent, so there is no root to
+     * climb instead, and the only way back to the printed line is through the
+     * trigger that owns it.
      */
-    private static CardTraitBase runtimeOwner(CardTraitBase trait) {
-        if (!(trait instanceof SpellAbility sa)) return null;
+    private static StepResult owner(CardTraitBase trait) {
+        if (!(trait instanceof SpellAbility sa)) return Pass.PASS;
+        ProvenanceKey borne = keyFor(sa.getTrigger());
+        if (borne == null) borne = keyFor(sa.getReplacementEffect());
+        if (borne != null) return new Keyed(borne);
         Trigger owner = sa.getTrigger();
-        return owner != null && owner.getSpawningAbility() != null ? owner : null;
+        return owner != null && owner.getSpawningAbility() != null ? new Hop(owner) : Pass.PASS;
     }
 
     /**
-     * Step 3: the static that granted an ability, or null.
+     * The static that granted an ability.
      *
      * <p>Tried <em>before</em> keying the trait where it stands, because a
      * granted ability is appended to the recipient's own trait list and would
      * otherwise be found there by identity — a confidently wrong key naming
      * the recipient's script.
+     *
+     * <p>{@code getOriginalHost()} is deliberately not used to key a granted
+     * trait: {@code CardTraitBase.getOriginalHost()} returns
+     * {@code getCardState().getCard()}, which for a granted trait is the
+     * <em>recipient</em>, not the donor, so keying by it would attribute an
+     * anthem's effect to the creature that received it. That is the reason
+     * this step reads {@code getGrantorStatic()} instead.
      */
-    private static CardTraitBase grantorOf(CardTraitBase trait) {
-        return trait instanceof SpellAbility sa ? sa.getGrantorStatic() : null;
+    private static StepResult grantor(CardTraitBase trait) {
+        return trait instanceof SpellAbility sa ? hop(sa.getGrantorStatic()) : Pass.PASS;
+    }
+
+    /** The trait keyed where it stands; see {@link #keyFor}. */
+    private static StepResult whereItStands(CardTraitBase trait) {
+        return keyed(keyFor(trait));
     }
 
     /**
-     * Step 4: one trait, keyed where it stands; null when it is not a member
-     * of its own state's slice for its kind.
+     * One trait, keyed where it stands; null when it is not a member of its
+     * own state's slice for its kind.
      *
      * <p>A keyword-derived trait keys to the keyword rather than to the spell
      * slice it was appended to: {@code Card.updateSpellAbilities} appends those
@@ -252,18 +255,24 @@ public final class ProvenanceResolver {
         if (host == null) return null;
         if (isScriptless(host)) return null;
         if (trait.getKeyword() != null) {
-            int index = FaceOrder.keywordIndex(state, trait.getKeyword());
-            return index < 0 ? null : new ProvenanceKey(
-                    ScriptLocator.scriptFileOf(host),
-                    FaceOrder.faceIndex(host, state.getStateName()),
-                    TraitKind.KEYWORD,
-                    index);
+            return keyAt(state, TraitKind.KEYWORD,
+                    FaceOrder.keywordIndex(state, trait.getKeyword()));
         }
         TraitKind kind = TraitKind.of(trait);
         if (kind == null) return null;
         int index = indexWithin(state, trait, kind);
-        if (index < 0) index = indexLike(state, trait, kind);
-        return index < 0 ? null : new ProvenanceKey(
+        return keyAt(state, kind, index < 0 ? indexLike(state, trait, kind) : index);
+    }
+
+    /**
+     * The key of the {@code index}-th {@code kind} trait of {@code state}, or
+     * null for a negative index, which is how every index search here says it
+     * found nothing.
+     */
+    private static ProvenanceKey keyAt(CardState state, TraitKind kind, int index) {
+        if (index < 0) return null;
+        Card host = state.getCard();
+        return new ProvenanceKey(
                 ScriptLocator.scriptFileOf(host),
                 FaceOrder.faceIndex(host, state.getStateName()),
                 kind,
@@ -271,7 +280,7 @@ public final class ProvenanceResolver {
     }
 
     /**
-     * Step 5: the static that handed out a granted keyword, or null.
+     * The static that handed out a granted keyword.
      *
      * <p>A keyword granted by another permanent — Virulent Sliver's poisonous,
      * Eldrazi Conscription's annihilator — builds its trigger on the
@@ -281,17 +290,17 @@ public final class ProvenanceResolver {
      * one the state prints, so an intrinsic keyword still keys to its own
      * ordinal.
      */
-    private static CardTraitBase keywordGrantorOf(CardTraitBase trait) {
+    private static StepResult keywordGrantor(CardTraitBase trait) {
         KeywordInterface keyword = trait.getKeyword();
         if (keyword != null && keyword.getStatic() != null
                 && FaceOrder.keywordIndex(trait.getCardState(), keyword) < 0) {
-            return keyword.getStatic();
+            return new Hop(keyword.getStatic());
         }
-        return null;
+        return Pass.PASS;
     }
 
     /**
-     * Step 6: the ability that spawned an engine-built trigger, or null.
+     * The ability that spawned an engine-built trigger.
      *
      * <p>A delayed trigger — the "sacrifice it at the beginning of the next end
      * step" that {@code AtEOT$} builds, and the Immediate and Delayed trigger
@@ -299,29 +308,29 @@ public final class ProvenanceResolver {
      * member of no slice at all, but it carries a copy of the ability that
      * spawned it, and that copy fingerprints back to the line.
      */
-    private static CardTraitBase spawnerOf(CardTraitBase trait) {
-        return trait instanceof Trigger trigger ? trigger.getSpawningAbility() : null;
+    private static StepResult spawner(CardTraitBase trait) {
+        return trait instanceof Trigger trigger ? hop(trigger.getSpawningAbility()) : Pass.PASS;
     }
 
     /**
-     * Step 7: the ability a copy was made from, or null.
+     * The ability a copy was made from.
      *
      * <p>The stack sets this back-reference, but the cost-variant helpers do
      * not.
      */
-    private static CardTraitBase originalOf(CardTraitBase trait) {
-        if (!(trait instanceof SpellAbility sa)) return null;
+    private static StepResult original(CardTraitBase trait) {
+        if (!(trait instanceof SpellAbility sa)) return Pass.PASS;
         SpellAbility original = sa.getOriginalAbility();
-        return original != null && original != sa ? original : null;
+        return original != sa ? hop(original) : Pass.PASS;
     }
 
     /**
-     * Step 8: the ability that created the effect card ({@code Foo's Effect})
-     * a trait sits on, or null; that ability is where the printed line lives.
+     * The ability that created the effect card ({@code Foo's Effect}) a trait
+     * sits on; that ability is where the printed line lives.
      */
-    private static CardTraitBase effectSourceOf(CardTraitBase trait) {
+    private static StepResult effectSource(CardTraitBase trait) {
         Card host = hostOf(trait);
-        return host == null ? null : host.getEffectSourceAbility();
+        return host == null ? Pass.PASS : hop(host.getEffectSourceAbility());
     }
 
     /** The card a trait sits on: its state's card, or its host when it has no state. */
@@ -331,8 +340,7 @@ public final class ProvenanceResolver {
     }
 
     /**
-     * Step 9: the printed line that granted a trait out of one of its own
-     * SVars, or null.
+     * The printed line that granted a trait out of one of its own SVars.
      *
      * <p>An aura's or an equipment's {@code AddTrigger$}, an {@code Animate}'s
      * {@code Triggers$} and an {@code Effect}'s traits are all parsed from an
@@ -356,15 +364,15 @@ public final class ProvenanceResolver {
      * which is also why walking four trait lists here is cheap: few records
      * ever reach this point.
      */
-    private static ProvenanceKey keyForGrantingLine(CardTraitBase trait) {
+    private static StepResult grantingLine(CardTraitBase trait) {
         CardState state = trait.getCardState();
-        if (state == null) return null;
+        if (state == null) return Pass.PASS;
         Map<String, String> want = trait.getOriginalMapParams();
-        if (want == null || want.isEmpty()) return null;
+        if (want == null || want.isEmpty()) return Pass.PASS;
         String svar = soleSVarParsingTo(state, want);
-        if (svar == null) return null;
+        if (svar == null) return Pass.PASS;
         CardTraitBase line = soleLineNaming(state, svar);
-        return line == null ? null : keyFor(line);
+        return line == null ? Pass.PASS : keyed(keyFor(line));
     }
 
     /** The one SVar of {@code state} whose text parses to {@code want}, or null. */

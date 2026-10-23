@@ -314,9 +314,10 @@ public record CardsPlayedRow(
 ) { ... }
 ```
 
-### `CardsPlayedWriter`
+### `CorpusWriter<CardsPlayedRow>`
 
-Sibling of `MatchResultWriter`. Same opens-writes-closes pattern, distinct
+The same `CorpusWriter` that writes match outcomes, over `CardsPlayedRow`;
+`SealedCorpus` pairs the two. Same opens-writes-closes pattern (`LineAppender`), distinct
 path (`output/sealed/cards-played.txt`) and distinct line formatter that
 emits the eleven fields above.
 
@@ -346,7 +347,7 @@ worth noting:
 Concurrency:
 
 - Multiple `match-outcomes` workers can write concurrently to
-  `cards-played.txt` because `CardsPlayedWriter` opens-writes-closes per
+  `cards-played.txt` because `CorpusWriter` opens-writes-closes per
   line.
 - `train-encoder` is single-process and reads `cards-played.txt` while it
   might still be growing — that is fine, because each pass is one read to

@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.StdStreams;
 import forge.game.Direction;
 import forge.game.EvenOdd;
 import forge.game.Game;
@@ -171,7 +172,7 @@ class ApiEventsTest {
 
         EffectEvent event = observe(sa).finish();
 
-        assertEquals(SnapshotBuilder.playerId(targeted), event.params().get("owner"));
+        assertEquals(Refs.of(targeted), event.params().get("owner"));
     }
 
     // ── subject is who the effect affects, not who cast it ──────────────
@@ -204,7 +205,7 @@ class ApiEventsTest {
 
         EffectEvent event = observe(sa).finish();
 
-        assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
+        assertEquals(List.of(Refs.of(targeted)), event.subjects());
     }
 
     /**
@@ -226,7 +227,7 @@ class ApiEventsTest {
         EffectEvent event = observe(sa).finish();
 
         assertEquals(
-                List.of(SnapshotBuilder.playerId(first), SnapshotBuilder.playerId(second)),
+                List.of(Refs.of(first), Refs.of(second)),
                 event.subjects());
     }
 
@@ -245,7 +246,7 @@ class ApiEventsTest {
 
         EffectEvent event = observe(sa).finish();
 
-        assertEquals(List.of(SnapshotBuilder.playerId(activator)), event.subjects());
+        assertEquals(List.of(Refs.of(activator)), event.subjects());
     }
 
     /**
@@ -285,7 +286,7 @@ class ApiEventsTest {
         EffectEvent event = observe(sub).finish();
 
         assertEquals(EventType.TURN_SKIPPED, event.type());
-        assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
+        assertEquals(List.of(Refs.of(targeted)), event.subjects());
     }
 
     // ── choices, healed damage, granted abilities, retargets ────────────
@@ -418,7 +419,7 @@ class ApiEventsTest {
      * the {@code HealDamage} clause -- {@code pyramids.txt}'s is {@code
      * Defined$ ReplacedCard}, {@code wolverine_fierce_fighter.txt}'s is
      * {@code Defined$ ReplacedTarget}. Targets added straight onto the clause
-     * would let a {@code DAMAGE_BEFORE} that reads {@code sa.getTargets()}
+     * would let a {@code damageBefore} memo that reads {@code sa.getTargets()}
      * unconditionally pass.
      *
      * <p>Builds the shape production actually uses instead: no {@code
@@ -509,7 +510,7 @@ class ApiEventsTest {
         EffectEvent event = observe(sa).finish();
 
         assertEquals(EventType.TARGETS_CHANGED, event.type());
-        assertEquals(List.of(SnapshotBuilder.entityId(newTarget)), event.params().get("targets"));
+        assertEquals(List.of(Refs.of(newTarget)), event.params().get("targets"));
     }
 
     /**
@@ -541,7 +542,7 @@ class ApiEventsTest {
         EffectEvent event = observe(sa).finish();
 
         assertEquals(EventType.TARGETS_CHANGED, event.type());
-        assertEquals(List.of(SnapshotBuilder.playerId(newTarget)), event.params().get("targets"));
+        assertEquals(List.of(Refs.of(newTarget)), event.params().get("targets"));
     }
 
     /**
@@ -692,7 +693,7 @@ class ApiEventsTest {
         EffectEvent event = observe(sa).finish();
 
         assertEquals(EventType.DELAYED_TRIGGER_CREATED, event.type());
-        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
+        assertEquals(List.of(Refs.of(sa.getHostCard())), event.subjects());
     }
 
     @Test
@@ -704,7 +705,7 @@ class ApiEventsTest {
         EffectEvent event = observe(sa).finish();
 
         assertEquals(EventType.DELAYED_TRIGGER_CREATED, event.type());
-        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
+        assertEquals(List.of(Refs.of(sa.getHostCard())), event.subjects());
     }
 
     /**
@@ -752,7 +753,7 @@ class ApiEventsTest {
         EffectEvent event = observe(sa).finish();
 
         assertEquals(EventType.REPLACEMENT_APPLIED, event.type());
-        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
+        assertEquals(List.of(Refs.of(sa.getHostCard())), event.subjects());
     }
 
     // ── monarch_changed ────────────────────────────────────────────────────
@@ -777,7 +778,7 @@ class ApiEventsTest {
         EffectEvent event = observed.finish();
 
         assertEquals(EventType.MONARCH_CHANGED, event.type());
-        assertEquals(List.of(SnapshotBuilder.playerId(target)), event.subjects());
+        assertEquals(List.of(Refs.of(target)), event.subjects());
     }
 
     /**
@@ -825,7 +826,7 @@ class ApiEventsTest {
 
         assertEquals(EventType.RING_TEMPTS, event.type());
         assertEquals(
-                List.of(SnapshotBuilder.playerId(activator), SnapshotBuilder.entityId(bearer)),
+                List.of(Refs.of(activator), Refs.of(bearer)),
                 event.subjects());
     }
 
@@ -852,7 +853,7 @@ class ApiEventsTest {
         EffectEvent event = observe(sa).finish();
 
         assertEquals(EventType.RING_TEMPTS, event.type());
-        assertEquals(List.of(SnapshotBuilder.playerId(activator)), event.subjects());
+        assertEquals(List.of(Refs.of(activator)), event.subjects());
     }
 
     // ── removed_from_combat: RemoveFromCombat ───────────────────────────────
@@ -890,7 +891,7 @@ class ApiEventsTest {
         EffectEvent event = observed.finish();
 
         assertEquals(EventType.COMBAT_ENDED, event.type());
-        assertEquals(List.of(SnapshotBuilder.playerId(attacking)), event.subjects());
+        assertEquals(List.of(Refs.of(attacking)), event.subjects());
     }
 
     @Test
@@ -922,7 +923,7 @@ class ApiEventsTest {
 
         assertEquals(EventType.REMOVED_FROM_COMBAT, event.type());
         assertEquals(
-                List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
+                List.of(Refs.of(c1), Refs.of(c2)),
                 event.subjects());
     }
 
@@ -946,7 +947,7 @@ class ApiEventsTest {
         // rule does not replicate.
         EffectEvent event = observed.finish();
 
-        assertEquals(List.of(SnapshotBuilder.entityId(c1)), event.subjects());
+        assertEquals(List.of(Refs.of(c1)), event.subjects());
     }
 
     // ── removed_from_combat: ChangeCombatants ───────────────────────────────
@@ -997,7 +998,7 @@ class ApiEventsTest {
 
         assertEquals(EventType.REMOVED_FROM_COMBAT, event.type());
         assertEquals(
-                List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
+                List.of(Refs.of(c1), Refs.of(c2)),
                 event.subjects());
     }
 
@@ -1042,7 +1043,7 @@ class ApiEventsTest {
         EffectEvent event = observe(sa).finish();
 
         assertEquals(EventType.INITIATIVE_TAKEN, event.type());
-        assertEquals(List.of(SnapshotBuilder.playerId(target)), event.subjects());
+        assertEquals(List.of(Refs.of(target)), event.subjects());
     }
 
     /**
@@ -1067,7 +1068,7 @@ class ApiEventsTest {
         EffectEvent event = observed.finish();
 
         assertEquals(EventType.INITIATIVE_TAKEN, event.type());
-        assertEquals(List.of(SnapshotBuilder.playerId(target)), event.subjects());
+        assertEquals(List.of(Refs.of(target)), event.subjects());
     }
 
     /** No one processed by this clause ever took the initiative here. */
@@ -1101,7 +1102,7 @@ class ApiEventsTest {
 
         assertEquals(EventType.TEXT_CHANGE, event.type());
         assertEquals(
-                List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
+                List.of(Refs.of(c1), Refs.of(c2)),
                 event.subjects());
     }
 
@@ -1138,7 +1139,7 @@ class ApiEventsTest {
 
         assertEquals(EventType.TEXT_CHANGE, event.type());
         assertEquals(
-                List.of(SnapshotBuilder.entityId(spellOnStack.getHostCard())),
+                List.of(Refs.of(spellOnStack.getHostCard())),
                 event.subjects());
     }
 

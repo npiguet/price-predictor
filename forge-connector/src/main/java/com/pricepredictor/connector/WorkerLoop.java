@@ -110,7 +110,8 @@ final class WorkerLoop {
     }
 
     /**
-     * Run attempts until the cap, then say why and exit 1, so the supervisor
+     * Run attempts until the cap, then say why and exit
+     * {@link ExitCode#FAILURE}, so the supervisor
      * restarts the slot and the operator sees a failing worker rather than a
      * run that never finishes.
      */
@@ -122,6 +123,6 @@ final class WorkerLoop {
                 + "non-zero so the supervisor restarts the slot and the operator sees "
                 + "a failing worker rather than a run that never finishes.");
         System.err.flush();
-        throw ToolMain.exit(1);
+        throw ToolMain.exit(ExitCode.FAILURE);
     }
 }

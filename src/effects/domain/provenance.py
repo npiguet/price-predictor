@@ -160,6 +160,12 @@ class SidecarLine:
     ``line_index`` points into the converted ``.txt``'s rendered lines. It is not
     the ability-cache row: that is this entry's position in the sidecar's
     ``lines`` array, which is what the cache layout aligns to.
+
+    ``prose_offset`` is where the rendered line's prose starts, after its
+    ``kind[n]: `` prefix — zero on a continuation line of a multi-line
+    description, which has none. ``None`` on a sidecar written before the
+    converter recorded it, whose readers fall back to cutting at the first
+    ``": "``.
     """
 
     line_index: int
@@ -170,6 +176,7 @@ class SidecarLine:
     script_param_keys: tuple[str, ...] = ()
     script_text: str | None = None
     role_spans: tuple[RoleSpan, ...] = ()
+    prose_offset: int | None = None
 
 
 def _note_declared(

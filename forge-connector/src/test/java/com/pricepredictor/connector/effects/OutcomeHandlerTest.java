@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.StdStreams;
 import forge.game.Game;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.AbilityUtils;
@@ -107,10 +108,10 @@ class OutcomeHandlerTest {
         Map<String, Object> params = params(written);
         assertEquals(Set.of("token_script_id", "characteristics", "count"),
                 params.keySet(), written.toString());
-        assertEquals("b_1_1_bat_flying", SnapshotBuilder.tokenScriptIdOf(bat));
+        assertEquals("b_1_1_bat_flying", CardSpelling.tokenScriptIdOf(bat));
         assertEquals("b_1_1_bat_flying", params.get("token_script_id"), written.toString());
         assertEquals(2L, params.get("count"), written.toString());
-        assertEquals(List.of("flying"), SnapshotBuilder.keywordNames(bat.getKeywords()));
+        assertEquals(List.of("flying"), CardSpelling.keywordNames(bat.getKeywords()));
         assertEquals(Map.of("power", 1L, "toughness", 1L,
                         "types", bat.getType().toString(), "keywords", List.of("flying")),
                 params.get("characteristics"), written.toString());
@@ -136,10 +137,10 @@ class OutcomeHandlerTest {
                         Map.of("amount", 2, "subjects", List.of())});
 
         assertEquals(3, events.size(), events.toString());
-        assertEquals(List.of(SnapshotBuilder.entityId(creature)), events.get(0).get("subjects"),
+        assertEquals(List.of(Refs.of(creature)), events.get(0).get("subjects"),
                 events.get(0).toString());
         assertEquals(Set.of("amount"), params(events.get(0)).keySet(), events.get(0).toString());
-        assertEquals(List.of(SnapshotBuilder.playerId(player)), events.get(1).get("subjects"),
+        assertEquals(List.of(Refs.of(player)), events.get(1).get("subjects"),
                 events.get(1).toString());
         assertEquals(List.of(), events.get(2).get("subjects"), events.get(2).toString());
     }
@@ -162,7 +163,7 @@ class OutcomeHandlerTest {
 
         assertEquals(2, events.size(), events.toString());
         Map<String, Object> fromLibraries = events.get(0);
-        assertEquals(List.of(SnapshotBuilder.playerId(first), SnapshotBuilder.playerId(second)),
+        assertEquals(List.of(Refs.of(first), Refs.of(second)),
                 fromLibraries.get("subjects"), fromLibraries.toString());
         assertEquals(Set.of("count", "from_zone"), params(fromLibraries).keySet(),
                 fromLibraries.toString());
@@ -199,7 +200,7 @@ class OutcomeHandlerTest {
         assertEquals("restriction_change", written.get("type"), written.toString());
         assertEquals(Map.of("restriction", "goad", "value", true), params(written),
                 "subjects must not leak into params: " + written);
-        assertEquals(List.of(SnapshotBuilder.entityId(goaded1), SnapshotBuilder.entityId(goaded2)),
+        assertEquals(List.of(Refs.of(goaded1), Refs.of(goaded2)),
                 written.get("subjects"),
                 "exactly the two goaded cards -- not the acting host as well: " + written);
     }
@@ -252,7 +253,7 @@ class OutcomeHandlerTest {
 
         assertEquals("damage_prevented", written.get("type"), written.toString());
         assertEquals(3L, params(written).get("amount"), written.toString());
-        assertEquals(SnapshotBuilder.entityId(source), params(written).get("source"),
+        assertEquals(Refs.of(source), params(written).get("source"),
                 "a ref like damage_dealt's, not a display name: " + written);
     }
 
@@ -260,7 +261,7 @@ class OutcomeHandlerTest {
 
     /**
      * An outcome reported for an ability that belongs to a DIFFERENT
-     * {@code Game} -- exactly the shape {@code ForkCollector.forceResolution}
+     * {@code Game} -- exactly the shape {@code InterventionFork.forceResolution}
      * produces, since {@code GameSimulator.resolveStack} runs the real
      * resolution pipeline against a {@code GameCopier} clone under
      * {@code AIOption.USE_FULL_SIMULATION} regardless of how this game's own
@@ -387,12 +388,12 @@ class OutcomeHandlerTest {
      * Pins the resolving-clause pointer branch directly. The combat-damage
      * test above leaves the pointer null by construction, and the probe test
      * below only exercises the flag, so without this one a single-signal
-     * {@code return !ForkCollector.isForkRunningOnThisThread();} would pass
+     * {@code return !Forks.isForkRunningOnThisThread();} would pass
      * every test in this class, as would dropping the {@link
      * LiveGame#owns(CardTraitBase)} delegate and returning {@code true}
      * whenever the pointer is merely non-null. This resolves a real ability -- through {@code
      * AbilityUtils.resolve}, not a synthesized call -- so the pointer is
-     * genuinely set the way {@code ForkCollector.forceResolution}'s own
+     * genuinely set the way {@code InterventionFork.forceResolution}'s own
      * forced ability sets it, and installs a real {@code
      * EffectRecordClauseListener} (the same reflective seam {@link
      * PatchedCollectors#install()} itself uses) to fire the null-ability
@@ -503,12 +504,12 @@ class OutcomeHandlerTest {
     /**
      * The gate does not fail open on {@code null}: that would readmit
      * exactly what it exists to exclude, because {@code
-     * ForkCollector.probe}'s own combat-damage counterfactual fires this same
+     * DamageStepProbe.probe}'s own combat-damage counterfactual fires this same
      * {@code null}-ability {@code damage_prevented} report -- {@code
      * Combat.dealAssignedDamage} always passes a null cause, live or forked.
      * A probe's damage step is a turn-based action with no ability resolving
      * and nothing on the resolving-clause pointer, which is why {@link
-     * ForkCollector#isForkRunningOnThisThread()} exists. FORK_RUNNING
+     * Forks#isForkRunningOnThisThread()} exists. FORK_RUNNING
      * is set directly here, without needing a real combat to
      * fork. No live bracket is open, matching a probe's own
      * timing: like {@code intervene}, it does not run nested inside a live
@@ -517,7 +518,7 @@ class OutcomeHandlerTest {
     @Test
     void aNullAbilityOutcomeFromAProbesOwnCombatDoesNotReachTheLiveShard() throws Throwable {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            var forkRunning = ForkCollector.class.getDeclaredField("FORK_RUNNING");
+            var forkRunning = Forks.class.getDeclaredField("FORK_RUNNING");
             forkRunning.setAccessible(true);
             @SuppressWarnings("unchecked")
             ThreadLocal<Boolean> flag = (ThreadLocal<Boolean>) forkRunning.get(null);

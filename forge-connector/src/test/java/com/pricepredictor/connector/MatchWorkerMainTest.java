@@ -8,10 +8,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
-import static com.pricepredictor.connector.MatchFixtures.TS;
-import static com.pricepredictor.connector.MatchFixtures.deck40;
+import static com.pricepredictor.connector.MatchFixtures.cardsPlayedRow;
+import static com.pricepredictor.connector.MatchFixtures.matchResult;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -51,17 +52,36 @@ class MatchWorkerMainTest {
 
         MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
 
-        assertEquals(Path.of("dummy-progress.txt"), config.progressFile());
+        assertEquals(Optional.of(Path.of("dummy-progress.txt")), config.progressFile());
     }
 
     @Test
-    void progressFilePropertyDefaultsToNullWhenAbsent() {
+    void progressFilePropertyIsEmptyWhenAbsent() {
         System.setProperty("output.file", "dummy-output.txt");
         System.setProperty("match.run.id", RUN_ID);
 
         MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
 
-        assertNull(config.progressFile());
+        assertTrue(config.progressFile().isEmpty());
+    }
+
+    /**
+     * A blank optional path is no path: read as given, a blank
+     * {@code -Doutput.file=} would name the empty path and take the worker
+     * out of records-only mode.
+     */
+    @Test
+    void blankOptionalPathsReadAsAbsent() {
+        System.setProperty("output.file", " ");
+        System.setProperty("effect.records.dir", "dummy-records");
+        System.setProperty("match.run.id", RUN_ID);
+        System.setProperty("sealed.progress.file", "");
+
+        MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
+
+        assertTrue(config.recordsOnly());
+        assertTrue(config.progressFile().isEmpty());
+        assertEquals(Optional.of(Path.of("dummy-records")), config.effectRecordsDir());
     }
 
     @Test
@@ -78,53 +98,43 @@ class MatchWorkerMainTest {
         MatchWorkerMain.WorkerConfig config = MatchWorkerMain.parseConfig();
 
         assertTrue(config.recordsOnly());
-        assertEquals(Path.of("dummy-progress.txt"), config.progressFile());
+        assertEquals(Optional.of(Path.of("dummy-progress.txt")), config.progressFile());
     }
 
-    // ── recordMatch(): the progress line rides no writer's gate ────────────
-
-    private static CardsPlayedRow cardsPlayedRow() {
-        return new CardsPlayedRow(
-                TS, RUN_ID, "RVR", "forge-best", "gen-2",
-                List.of("X"), List.of("Y"), List.of(), List.of(), Side.A, Side.B);
-    }
+    // ── recordMatch(): the progress line rides no corpus's gate ────────────
 
     /** A two-game match result, built without Forge or a live game. */
     private static MatchGenerationResult twoGameResult() {
-        MatchResult matchResult = new MatchResult(
-                TS, RUN_ID, "RVR", "forge-best", "gen-2",
-                deck40("A"), deck40("B"), "AA", "BA", 47);
-        List<CardsPlayedRow> rows = List.of(cardsPlayedRow(), cardsPlayedRow());
-        return new MatchGenerationResult(matchResult, rows, false);
+        return new MatchGenerationResult(
+                matchResult(), List.of(cardsPlayedRow(), cardsPlayedRow()), false);
     }
 
     @Test
     void progressLineIsWrittenInRecordsOnlyMode(@TempDir Path tmp) throws IOException {
-        // Both sealed writers null -- exactly records-only mode -- and the
-        // progress line must still be written: without it a records-only
-        // round's progress file never grows, should_stop(0) reads
-        // 0 >= matches, false forever, and the round never ends.
+        // No sealed corpus -- exactly records-only mode -- and the progress
+        // line must still be written: without it a records-only round's
+        // progress file never grows, should_stop(0) reads 0 >= matches,
+        // false forever, and the round never ends.
         Path progressFile = tmp.resolve("run.progress.txt");
-        ProgressWriter progressWriter = new ProgressWriter(progressFile);
 
-        MatchWorkerMain.recordMatch(twoGameResult(), null, null, progressWriter);
+        MatchWorkerMain.recordMatch(twoGameResult(), Optional.empty(),
+                Optional.of(new ProgressWriter(progressFile)));
 
         assertEquals(1, Files.readAllLines(progressFile).size());
     }
 
     @Test
-    void progressLineIsWrittenAlongsideBothSealedWriters(@TempDir Path tmp) throws IOException {
+    void progressLineIsWrittenAlongsideTheSealedCorpus(@TempDir Path tmp) throws IOException {
         // The non-records-only path (plain `sealed match-outcomes`) must keep
         // writing both sealed outputs exactly as before, with the progress
         // line as a genuine addition rather than a replacement.
         Path outcomesFile = tmp.resolve("match-outcomes.txt");
         Path cardsPlayedFile = tmp.resolve("cards-played.txt");
         Path progressFile = tmp.resolve("run.progress.txt");
-        MatchResultWriter writer = new MatchResultWriter(outcomesFile);
-        CardsPlayedWriter cardsPlayedWriter = new CardsPlayedWriter(cardsPlayedFile);
-        ProgressWriter progressWriter = new ProgressWriter(progressFile);
 
-        MatchWorkerMain.recordMatch(twoGameResult(), writer, cardsPlayedWriter, progressWriter);
+        MatchWorkerMain.recordMatch(twoGameResult(),
+                Optional.of(SealedCorpus.beside(outcomesFile)),
+                Optional.of(new ProgressWriter(progressFile)));
 
         assertEquals(1, Files.readAllLines(outcomesFile).size());
         assertEquals(2, Files.readAllLines(cardsPlayedFile).size());
@@ -133,7 +143,7 @@ class MatchWorkerMainTest {
 
     /**
      * FR-025: a match with a random seat writes its progress line and nothing
-     * to either sealed corpus, even with both writers wired (spec Story 3
+     * to either sealed file, even with the sealed corpus wired (spec Story 3
      * scenario 5). Its effect records were written as the games ran; the
      * outcome of a game one seat played at random says nothing about a deck.
      */
@@ -142,14 +152,13 @@ class MatchWorkerMainTest {
         Path outcomesFile = tmp.resolve("match-outcomes.txt");
         Path cardsPlayedFile = tmp.resolve("cards-played.txt");
         Path progressFile = tmp.resolve("run.progress.txt");
-        MatchResultWriter writer = new MatchResultWriter(outcomesFile);
-        CardsPlayedWriter cardsPlayedWriter = new CardsPlayedWriter(cardsPlayedFile);
-        ProgressWriter progressWriter = new ProgressWriter(progressFile);
         MatchGenerationResult ordinary = twoGameResult();
         MatchGenerationResult randomSeat = new MatchGenerationResult(
                 ordinary.matchResult(), ordinary.cardsPlayedRows(), true);
 
-        MatchWorkerMain.recordMatch(randomSeat, writer, cardsPlayedWriter, progressWriter);
+        MatchWorkerMain.recordMatch(randomSeat,
+                Optional.of(SealedCorpus.beside(outcomesFile)),
+                Optional.of(new ProgressWriter(progressFile)));
 
         assertFalse(Files.exists(outcomesFile), "no match-outcomes row for a random-seat match");
         assertFalse(Files.exists(cardsPlayedFile), "no cards-played row either");
@@ -166,21 +175,16 @@ class MatchWorkerMainTest {
     }
 
     @Test
-    void noProgressWriterIsASilentNoOp() {
-        // No -Dsealed.progress.file passed: recordMatch(..., null) skips the
-        // progress line rather than failing.
-        assertDoesNotThrow(() -> MatchWorkerMain.recordMatch(twoGameResult(), null, null, null));
+    void noProgressFileIsASilentNoOp() {
+        // No -Dsealed.progress.file passed: recordMatch skips the progress
+        // line rather than failing.
+        assertDoesNotThrow(() -> MatchWorkerMain.recordMatch(
+                twoGameResult(), Optional.empty(), Optional.empty()));
     }
 
     @Test
-    void repeatedCallsAccumulateOneLineEach(@TempDir Path tmp) throws IOException {
-        Path progressFile = tmp.resolve("run.progress.txt");
-        ProgressWriter progressWriter = new ProgressWriter(progressFile);
-
-        for (int i = 0; i < 5; i++) {
-            MatchWorkerMain.recordMatch(twoGameResult(), null, null, progressWriter);
-        }
-
-        assertEquals(5, Files.readAllLines(progressFile).size());
+    void cardsPlayedLiveBesideTheMatchOutcomes() {
+        assertEquals(Path.of("out", "sealed", "cards-played.txt"),
+                SealedCorpus.cardsPlayedPath(Path.of("out", "sealed", "match-outcomes.txt")));
     }
 }

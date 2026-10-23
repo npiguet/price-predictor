@@ -45,7 +45,7 @@ public final class VariantRegistry {
             System.err.println(
                     "Could not read variant names from " + source + ": "
                             + e.getMessage() + "; variant records will be keyed "
-                            + "under " + SourceTree.CARDSFOLDER);
+                            + "under " + SourceTree.CARDSFOLDER.wireName());
         }
     }
 

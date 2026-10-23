@@ -1,12 +1,15 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.Ability;
+import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.ActionCounter;
 import com.pricepredictor.connector.BatchConverter;
 import com.pricepredictor.connector.ForgeEnvironmentInitializer;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.MultiCard;
 import com.pricepredictor.connector.RenderedLine;
 import com.pricepredictor.connector.RulesParser;
+import com.pricepredictor.connector.ability.TextAbility;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
 import org.junit.jupiter.api.Test;
@@ -17,6 +20,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,8 +59,7 @@ class ProvenanceSidecarTest {
         try {
             Path file = CARDS_FOLDER.resolve(relativePath);
             return convertSource(Files.readAllLines(file),
-                    SourceTree.CARDSFOLDER + "/" + relativePath,
-                    file.getFileName().toString());
+                    new ScriptFile(SourceTree.CARDSFOLDER, relativePath).key());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -69,10 +72,9 @@ class ProvenanceSidecarTest {
      * level whose text is also registered as a trait of its own is one, and the
      * removal path it takes is only reachable from a script written for it.
      */
-    private Converted convertSource(List<String> source, String scriptFile,
-                                    String fileName) {
+    private Converted convertSource(List<String> source, String scriptFile) {
         ConvertedScript converted =
-                ConvertedScript.of(parser.parseScript(source, fileName, scriptFile), scriptFile);
+                ConvertedScript.of(parser.parseScript(source, scriptFile), scriptFile);
         return new Converted(converted.parsed().card(), converted.texts(),
                 converted.rendered().stream().map(RenderedLine::owner).toList(),
                 converted.sidecar());
@@ -104,20 +106,13 @@ class ProvenanceSidecarTest {
                 throw new UncheckedIOException(e);
             }
             String withoutRecording = RenderedLine.join(parser
-                    .parseScript(source, file.getFileName().toString(), null)
+                    .parseScript(source, null)
                     .card().renderLines());
             String withRecording = String.join("\n", convert(relativePath).lines());
             assertEquals(withoutRecording, withRecording,
                     "recording provenance changed the converted text of "
                             + relativePath);
         }
-    }
-
-    @Test
-    void renderedLinesJoinBackToTheFormattedText() {
-        Converted converted = convert("s/serra_angel.txt");
-        assertEquals(RenderedLine.join(converted.card().renderLines()),
-                String.join("\n", converted.lines()));
     }
 
     // ── the join ────────────────────────────────────────────────────────
@@ -316,8 +311,7 @@ class ProvenanceSidecarTest {
                         + " | TriggerZones$ Battlefield | Execute$ TrigDraw"
                         + " | TriggerDescription$ Whenever a creature you control attacks,"
                         + " draw a card."),
-                SourceTree.CARDSFOLDER + "/t/test_class_duplicate.txt",
-                "test_class_duplicate.txt");
+                new ScriptFile(SourceTree.CARDSFOLDER, "t/test_class_duplicate.txt").key());
         List<ProvenanceKey> keys = claimedBy(card, "level", "draw a card");
         assertTrue(keys.stream().anyMatch(
                         k -> k.traitKind().equals(TraitKind.TRIGGER)),
@@ -342,15 +336,42 @@ class ProvenanceSidecarTest {
     @Test
     void roleSpansCoverTheProseOfEveryIndexedLine() {
         Converted converted = convert("a/ajanis_pridemate.txt");
+        assertTrue(converted.sidecar().lines().stream()
+                        .anyMatch(line -> !line.roleSpans().isEmpty()),
+                "no spans at all would pass vacuously: " + converted.lines());
         for (ProvenanceSidecar.Line line : converted.sidecar().lines()) {
-            String prose = ProvenanceSidecar.prose(
-                    converted.lines().get(line.lineIndex()));
+            String prose = converted.lines().get(line.lineIndex()).substring(line.proseOffset());
             for (RoleSpans.Span span : line.roleSpans()) {
                 assertTrue(span.start() >= 0 && span.end() <= prose.length(),
                         "span " + span + " outside the prose of: " + prose);
                 assertTrue(span.start() <= span.end());
             }
         }
+    }
+
+    /**
+     * A line's prose starts where its prefix ends, and a continuation line has
+     * none, even when its own text holds a {@code ": "}.
+     *
+     * <p>Cutting each line at its first {@code ": "} would take
+     * {@code {T}: } off the continuation as though it were a prefix, and
+     * shift every role span on it by four characters.
+     */
+    @Test
+    void aContinuationLineHoldingAColonHasNoPrefix() {
+        Ability ability = new TextAbility(
+                AbilityType.STATIC, "creatures you control have:\n{T}: add {G}.");
+        List<RenderedLine> rendered = new ArrayList<>();
+        ability.appendBlock(new ActionCounter(0), 0, rendered);
+
+        ProvenanceSidecar sidecar =
+                ProvenanceSidecar.build("Test", "cardsfolder/t/test.txt", rendered, List.of());
+
+        assertEquals(List.of("static: creatures you control have:", "{T}: add {G}."),
+                rendered.stream().map(RenderedLine::text).toList());
+        assertEquals(List.of(8, 0),
+                sidecar.lines().stream().map(ProvenanceSidecar.Line::proseOffset).toList());
+        assertTrue(sidecar.toJson().contains("\"prose_offset\":0"), sidecar.toJson());
     }
 
     // ── the file on disk ────────────────────────────────────────────────
@@ -428,7 +449,7 @@ class ProvenanceSidecarTest {
                         "the sidecar numbered \"" + line.script().scriptText()
                                 + "\" as keyword@" + key.indexWithinKind()
                                 + " but FaceOrder.keywordIndex says keyword@"
-                                + expected + ". RulesParser.parseFace must compute"
+                                + expected + ". FaceParser.parseKeywords must compute"
                                 + " the ordinal with FaceOrder.keywordIndex("
                                 + "card.getCurrentState(), ki) rather than with a"
                                 + " running counter over card.getKeywords(), or"

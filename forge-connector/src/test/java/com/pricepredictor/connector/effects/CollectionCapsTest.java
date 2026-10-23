@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.StdStreams;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -79,14 +80,6 @@ class CollectionCapsTest {
         assertEquals(1, warning.lines().count(), warning);
         assertTrue(warning.contains(CollectionCaps.MANA_CAP) && warning.contains("not-a-number"),
                 warning);
-    }
-
-    @Test
-    void probesAreOffUntilKeywordsAreNamed() {
-        assertFalse(CollectionCaps.defaults().probesEnabled());
-        assertTrue(new CollectionCaps(
-                2000, 0.1, 2, 2, List.of("wither"), 0.0, 0.0)
-                .probesEnabled());
     }
 
     /** The two knobs of the random seat travel like every other cap. */

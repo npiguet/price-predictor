@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.StdStreams;
 import forge.game.card.Card;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

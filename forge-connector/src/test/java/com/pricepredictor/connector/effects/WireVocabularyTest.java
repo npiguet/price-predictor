@@ -1,13 +1,14 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
 import forge.game.replacement.ReplacementResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * The closed vocabularies a record is written in, spelled out literally.
@@ -19,9 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class WireVocabularyTest {
 
-    private static <E extends Enum<E>> List<String> wireNames(
-            E[] values, Function<E, String> wireName) {
-        return Arrays.stream(values).map(wireName).toList();
+    private static <E extends Enum<E> & WireNamed> List<String> wireNames(Class<E> vocabulary) {
+        return Arrays.stream(vocabulary.getEnumConstants()).map(WireNamed::wireName).toList();
     }
 
     /** {@code RecordKind} in {@code records.py}. */
@@ -29,21 +29,21 @@ class WireVocabularyTest {
     void recordKinds() {
         assertEquals(
                 List.of("resolution", "rewrite", "continuous", "combat", "trigger", "playability"),
-                wireNames(RecordKind.values(), RecordKind::wireName));
+                wireNames(RecordKind.class));
     }
 
     /** {@code Moment} in {@code records.py}. */
     @Test
     void moments() {
         assertEquals(List.of("activation", "resolution"),
-                wireNames(Moment.values(), Moment::wireName));
+                wireNames(Moment.class));
     }
 
     /** {@code PlayabilitySubkind} in {@code records.py}. */
     @Test
     void playabilitySubkinds() {
         assertEquals(List.of("decision", "attackers", "blockers"),
-                wireNames(PlayabilitySubkind.values(), PlayabilitySubkind::wireName));
+                wireNames(PlayabilitySubkind.class));
     }
 
     /** {@code ResolutionOutcome} in {@code records.py}. */
@@ -51,7 +51,7 @@ class WireVocabularyTest {
     void activationOutcomes() {
         assertEquals(
                 List.of("resolved", "fizzled", "partially_fizzled", "declined", "countered"),
-                wireNames(ActivationOutcome.values(), ActivationOutcome::wireName));
+                wireNames(ActivationOutcome.class));
     }
 
     /**
@@ -61,28 +61,28 @@ class WireVocabularyTest {
     @Test
     void traitKinds() {
         assertEquals(List.of("keyword", "spell", "trigger", "static", "replacement"),
-                wireNames(TraitKind.values(), TraitKind::wireName));
+                wireNames(TraitKind.class));
     }
 
     /** {@code ROLES} in {@code provenance.py}, in its order. */
     @Test
     void spanRoles() {
         assertEquals(List.of("cost", "effect", "trigger-condition", "target-spec"),
-                wireNames(SpanRole.values(), SpanRole::wireName));
+                wireNames(SpanRole.class));
     }
 
     /** {@code DURATIONS} in {@code effect_head_layout.py}, in its order. */
     @Test
     void eventDurations() {
         assertEquals(List.of("instant", "end_of_turn", "permanent"),
-                wireNames(EventDuration.values(), EventDuration::wireName));
+                wireNames(EventDuration.class));
     }
 
     /** {@code COMBAT_SUBSTEPS} in {@code effect_head_input.py}. */
     @Test
     void damageSteps() {
         assertEquals(List.of("first_strike", "regular"),
-                wireNames(DamageStep.values(), DamageStep::wireName));
+                wireNames(DamageStep.class));
     }
 
     /**
@@ -93,7 +93,20 @@ class WireVocabularyTest {
     void replacementResults() {
         assertEquals(
                 List.of("replaced", "not_replaced", "prevented", "updated", "skipped"),
-                wireNames(ReplacementResult.values(), EffectRecord::rewriteResult));
+                Arrays.stream(ReplacementResult.values()).map(RecordPayloads::rewriteResult).toList());
+    }
+
+    /**
+     * A wire name reads back as the member that wrote it, and a spelling no
+     * member has is refused rather than mapped to a default.
+     */
+    @Test
+    void wireNamesReadBack() {
+        for (EventType type : EventType.values()) {
+            assertEquals(type, WireNamed.fromWireName(EventType.class, type.wireName()));
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> WireNamed.fromWireName(EventType.class, "ZONE_CHANGE"));
     }
 
     /**

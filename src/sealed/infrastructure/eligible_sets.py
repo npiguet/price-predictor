@@ -10,7 +10,7 @@ MIN_BOOSTER_CARDS = 12
 
 Matches the rule Forge itself uses in
 ``AdventureEventData.isValidDraftBlock()`` and the mirrored Java filter in
-``MatchGenerator.computeEligibleSets()``. Excludes historical sets (DRK, FEM, …)
+``BoosterTemplates.eligibleSealedSets()``. Excludes historical sets (DRK, FEM, …)
 whose 8-card boosters are too small to yield a real sealed pool.
 """
 
@@ -20,8 +20,8 @@ def eligible_sealed_sets(
 ) -> list[str]:
     """Return set codes eligible for sealed-format play.
 
-    Mirrors the criteria used by MTG Forge's
-    ``MatchGenerator.computeEligibleSets()``: a set is eligible iff it has a
+    Mirrors the criteria of forge-connector's
+    ``BoosterTemplates.eligibleSealedSets()``: a set is eligible iff it has a
     draft booster template, is not an un-set (``type == "funny"``), and the
     draft booster contains at least ``MIN_BOOSTER_CARDS`` (=12) cards.
 

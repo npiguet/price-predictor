@@ -708,7 +708,7 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   widened meaning, and readers that pair halves MUST accept several effect halves per cost record.
 - **FR-029e**: A degraded worker, whose brackets cannot split modes, MUST write one effect half
   acting through the root line and carrying every chosen mode's events.
-- **FR-029f**: Interventional forks that choose modes (`ForkCollector`) MUST write their effect
+- **FR-029f**: Interventional forks that choose modes (`InterventionFork`) MUST write their effect
   halves per mode by the same rule.
 
 #### Envelope fields (root spec § 6.3)

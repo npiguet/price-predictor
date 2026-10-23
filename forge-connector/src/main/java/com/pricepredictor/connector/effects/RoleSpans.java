@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -30,7 +31,7 @@ public final class RoleSpans {
             return Json.object()
                     .value("start", start)
                     .value("end", end)
-                    .value("role", role.wireName())
+                    .value("role", role)
                     .render();
         }
     }

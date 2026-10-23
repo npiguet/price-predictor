@@ -1,10 +1,10 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.StringJoiner;
 
 /**
  * One attributed outcome, in the schema's event shape.
@@ -92,20 +92,23 @@ public final class EffectEvent {
         return subjects;
     }
 
-    /** The normalized params a reader can check a specific key of, rather than {@link #toJson()}. */
+    /**
+     * The normalized params, as a read accessor for tests and other readers
+     * that check one key rather than parse {@link #toJson()}. The collectors
+     * never read an event's params back; they only write them.
+     */
     public Map<String, Object> params() {
         return params;
     }
 
+    /** Every field on every event, a null one as JSON {@code null}. */
     public String toJson() {
-        StringJoiner subjectJson = new StringJoiner(",", "[", "]");
-        for (String subject : subjects) {
-            subjectJson.add(Json.string(subject));
-        }
-        return "{\"type\":" + Json.string(type.wireName())
-                + ",\"subjects\":" + subjectJson
-                + ",\"params\":" + Json.value(params)
-                + ",\"duration\":" + Json.string(duration == null ? null : duration.wireName())
-                + ",\"attributed_to\":" + Json.string(attributedTo) + "}";
+        return Json.object()
+                .value("type", type)
+                .raw("subjects", Json.stringArray(subjects))
+                .value("params", params)
+                .value("duration", duration)
+                .value("attributed_to", attributedTo)
+                .render();
     }
 }

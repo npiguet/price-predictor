@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import com.google.common.collect.Table;
 import forge.card.CardChangedType;
 import forge.card.CardTypeView;
@@ -39,7 +40,7 @@ final class LayerContributions {
 
     /** File every layer change {@code card} receives under the static that made it. */
     void addCard(Card card) {
-        String entity = SnapshotBuilder.entityId(card);
+        String entity = Refs.of(card);
         for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell
                 : card.getPTBoostTable().cellSet()) {
             contribution(cell.getColumnKey(), entity)
@@ -147,8 +148,8 @@ final class LayerContributions {
         } else if (change instanceof WordChangedType word) {
             // A text change swaps one subtype word for another, which is a
             // removal and an addition in the same entry.
-            into.type("-" + SnapshotBuilder.typeName(word.oldWord()));
-            into.type(SnapshotBuilder.typeName(word.newWord()));
+            into.type("-" + CardSpelling.typeName(word.oldWord()));
+            into.type(CardSpelling.typeName(word.newWord()));
         }
     }
 
@@ -188,7 +189,7 @@ final class LayerContributions {
                 || !(PatchHooks.COLOR_CHANGE_COLORS.read(change) instanceof ColorSet colors)) {
             return;
         }
-        List<String> letters = SnapshotBuilder.colorLetters(colors);
+        List<String> letters = CardSpelling.colorLetters(colors);
         if (!additional) {
             into.color("=");
             if (letters.isEmpty()) {

@@ -44,12 +44,12 @@ public record MultiCard(String layout, List<CardFace> faces) {
             return faces.get(0).renderLines(0);
         }
         List<RenderedLine> lines = new ArrayList<>();
-        lines.add(new RenderedLine("layout: " + layout, null, -1));
+        lines.add(new RenderedLine("layout: ", layout, null, -1));
         for (int i = 0; i < faces.size(); i++) {
             if (i > 0) {
                 // The blank/ALTERNATE/blank separator between faces.
                 for (String separator : List.of("", "ALTERNATE", "")) {
-                    lines.add(new RenderedLine(separator, null, -1));
+                    lines.add(new RenderedLine("", separator, null, -1));
                 }
             }
             lines.addAll(faces.get(i).renderLines(i));

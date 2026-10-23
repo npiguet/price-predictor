@@ -76,20 +76,70 @@ final class CastsUnderWay {
     }
 
     /**
+     * Bring the marks up to date with the stack zone and the action in
+     * progress, before {@link #cardBeingCast} is asked.
+     *
+     * <p>A card that has left the stack zone loses its marks ({@link
+     * #forgetCardsGoneFrom}), and an arrived card the action in progress
+     * passes over is given up, since the action names one cast at a time and
+     * the one it names is not that card's. Brought up to date again with
+     * nothing changed, the marks stay as they are.
+     *
+     * @param acting the action in progress, or null
+     */
+    void keepMarksCurrent(SpellAbility acting) {
+        List<Card> zone = stackZone();
+        forgetCardsGoneFrom(zone);
+        if (pushedUnannounced(acting) != null || onItsWay(zone) != null) {
+            return;
+        }
+        // Arrived cards the action passes over, before the one it names.
+        for (Card card : arrivedUnheld(zone)) {
+            if (acting == null || isCastOf(acting, card)) {
+                return;
+            }
+            abandoned.add(card.getId());
+        }
+    }
+
+    /**
      * The card of the cast under way, or null when none is.
      *
-     * <p>Reading it keeps the marks current, and is meant to: a card that has
-     * left the stack zone loses its marks ({@link #forgetCardsGoneFrom}), and
-     * an arrived card the action in progress passes over is given up, since
-     * the action names one cast at a time and the one it names is not that
-     * card's. Asked again with nothing changed, it answers the same.
+     * <p>A pure read of marks {@link #keepMarksCurrent} has brought up to date
+     * for the same action.
      *
      * @param acting the action in progress, or null
      */
     Card cardBeingCast(SpellAbility acting) {
-        List<Card> zone = new ArrayList<>(game.getCardsIn(ZoneType.Stack));
-        forgetCardsGoneFrom(zone);
-        // Pushed and not yet announced: MagicStack.push's own static check.
+        Card pushed = pushedUnannounced(acting);
+        if (pushed != null) {
+            return pushed;
+        }
+        List<Card> zone = stackZone();
+        Card onItsWay = onItsWay(zone);
+        if (onItsWay != null) {
+            return onItsWay;
+        }
+        // Arrived: under way until its targets are chosen and the action
+        // names it, and for as long as it does. Any other action means it
+        // was given up.
+        for (Card card : arrivedUnheld(zone)) {
+            if (acting == null || isCastOf(acting, card)) {
+                return card;
+            }
+        }
+        return null;
+    }
+
+    private List<Card> stackZone() {
+        return new ArrayList<>(game.getCardsIn(ZoneType.Stack));
+    }
+
+    /**
+     * The card of a cast pushed and not yet announced, while it is the action
+     * in progress — {@code MagicStack.push}'s own static check — or null.
+     */
+    private Card pushedUnannounced(SpellAbility acting) {
         var top = game.getStack().peek();
         SpellAbility pushed = top == null ? null : top.getSpellAbility();
         if (acting != null && pushed != null && pushed.getHostCard() != null
@@ -97,28 +147,32 @@ final class CastsUnderWay {
                 && (pushed == acting || pushed.getOriginalAbility() == acting)) {
             return pushed.getHostCard();
         }
+        return null;
+    }
+
+    /** The card on its way, its arrival not yet published — the newest move — or null. */
+    private Card onItsWay(List<Card> zone) {
         Set<Integer> held = heldHostIds();
-        // On its way, its arrival not yet published: the newest move.
         for (Card card : zone) {
             int id = card.getId();
             if (!held.contains(id) && !abandoned.contains(id) && !arrived.contains(id)) {
                 return card;
             }
         }
-        // Arrived: under way until its targets are chosen and the action
-        // names it, and for as long as it does. Any other action means it
-        // was given up.
+        return null;
+    }
+
+    /** The cards in the zone no stack item holds and no mark gives up, in zone order. */
+    private List<Card> arrivedUnheld(List<Card> zone) {
+        Set<Integer> held = heldHostIds();
+        List<Card> cards = new ArrayList<>();
         for (Card card : zone) {
             int id = card.getId();
-            if (held.contains(id) || abandoned.contains(id)) {
-                continue;
+            if (!held.contains(id) && !abandoned.contains(id)) {
+                cards.add(card);
             }
-            if (acting == null || isCastOf(acting, card)) {
-                return card;
-            }
-            abandoned.add(id);
         }
-        return null;
+        return cards;
     }
 
     /** A card that has left the stack zone keeps no mark: back in it, it is a new attempt. */

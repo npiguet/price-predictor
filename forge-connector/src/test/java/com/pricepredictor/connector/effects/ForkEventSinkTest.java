@@ -116,13 +116,11 @@ class ForkEventSinkTest {
         assertFalse(subscriptions(ForkEventSink.class).contains(GameEventZone.class));
     }
 
-    // ── one move, one event, both ends of it ────────────────────────────
+    // ── a fork event says where it came from ────────────────────────────
 
     private static Zone zone(ZoneType type) {
         return new Zone(type, TestCards.game());
     }
-
-    // ── a fork event says where it came from ────────────────────────────
 
     /** Push one completed move through a sink and read back what it filed. */
     private static EffectEvent filedMove(SpellAbility acting) {
@@ -313,7 +311,7 @@ class ForkEventSinkTest {
     }
 
     /**
-     * A sink for {@code forced}, set up as ForkCollector forces it: listening
+     * A sink for {@code forced}, set up as InterventionFork forces it: listening
      * before the cast, whose cast event ends the pre-push window, and with
      * the stack resolving, so what it hears next is the forced resolution's.
      */

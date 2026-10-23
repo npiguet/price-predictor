@@ -4,6 +4,8 @@ import forge.StaticData;
 import forge.card.CardEdition;
 import forge.item.SealedTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /** Which booster a set's packs are opened from, for the pool, match and draft workers. */
@@ -11,6 +13,21 @@ final class BoosterTemplates {
 
     private BoosterTemplates() {
     }
+
+    /**
+     * The booster type every worker opens: Forge keys an edition's templates
+     * by type, and the draft booster is what a sealed pool or a draft pod is
+     * opened from in paper.
+     */
+    static final String DRAFT_BOOSTER = "Draft";
+
+    /**
+     * Minimum booster size for a set to be considered sealed-viable. Matches the
+     * rule Forge itself uses in {@code AdventureEventData.isValidDraftBlock()};
+     * excludes historical sets (DRK, FEM, …) whose 8-card boosters are too small
+     * to yield a real sealed pool.
+     */
+    static final int MIN_BOOSTER_CARDS = 12;
 
     /**
      * The set's draft booster template, or empty.
@@ -26,7 +43,35 @@ final class BoosterTemplates {
      * {@code NullPointerException} from inside the lookup.
      */
     static Optional<SealedTemplate> forSet(String setCode) {
-        return edition(setCode).map(edition -> edition.getBoosterTemplate("Draft"));
+        return edition(setCode).map(edition -> edition.getBoosterTemplate(DRAFT_BOOSTER));
+    }
+
+    /**
+     * The codes of every set a sealed pool can be opened from, in Forge's
+     * edition order.
+     *
+     * <p>Eligible sets have a draft booster template, are not un-sets
+     * ({@code Type.FUNNY}), and have at least {@link #MIN_BOOSTER_CARDS} cards
+     * per booster. Kept beside {@link #forSet} because both answer which
+     * booster a worker opens: every set listed here is one {@code forSet}
+     * finds a template for.
+     */
+    static List<String> eligibleSealedSets() {
+        List<String> eligible = new ArrayList<>();
+        for (CardEdition edition : StaticData.instance().getEditions().getOrderedEditions()) {
+            if (edition.getType() == CardEdition.Type.FUNNY) {
+                continue;
+            }
+            SealedTemplate template = edition.getBoosterTemplate(DRAFT_BOOSTER);
+            if (template == null) {
+                continue;
+            }
+            if (template.getNumberOfCardsExpected() < MIN_BOOSTER_CARDS) {
+                continue;
+            }
+            eligible.add(edition.getCode());
+        }
+        return eligible;
     }
 
     /**

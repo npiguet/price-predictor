@@ -57,7 +57,7 @@ final class StatDiffer {
         if (before == null || before.equals(now)) {
             return List.of();
         }
-        String subject = SnapshotBuilder.entityId(card);
+        String subject = Refs.of(card);
         List<EffectEvent> events = new ArrayList<>();
 
         if (before.power() != now.power() || before.toughness() != now.toughness()) {
@@ -152,8 +152,7 @@ final class StatDiffer {
         Set<String> types = new LinkedHashSet<>(TypeLine.names(card.getType()));
         return new Stats(
                 card.getNetPower(), card.getNetToughness(), keywords, types,
-                new LinkedHashSet<>(SnapshotBuilder.colorLetters(card.getColor())),
-                card.getController() == null
-                        ? null : SnapshotBuilder.playerId(card.getController()));
+                new LinkedHashSet<>(CardSpelling.colorLetters(card.getColor())),
+                Refs.ofNullable(card.getController()));
     }
 }

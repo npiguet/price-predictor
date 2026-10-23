@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.StdStreams;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
@@ -169,16 +170,16 @@ class ClauseContractTest {
 
         String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
-                + SnapshotBuilder.playerId(outerTarget) + "\"]"), effectHalf);
+                + Refs.of(outerTarget) + "\"]"), effectHalf);
         assertTrue(effectHalf.contains("\"type\":\"turn_skipped\",\"subjects\":[\""
-                + SnapshotBuilder.playerId(innerTarget) + "\"]"), effectHalf);
+                + Refs.of(innerTarget) + "\"]"), effectHalf);
     }
 
     // ── another game's clause must not reach this game's bracket ────────
 
     /**
      * A clause resolving on a DIFFERENT {@code Game} -- exactly the shape
-     * {@code ForkCollector.forceResolution} produces, since {@code
+     * {@code InterventionFork.forceResolution} produces, since {@code
      * GameSimulator.resolveStack} runs the real resolution pipeline against a
      * {@code GameCopier} clone under {@code AIOption.USE_FULL_SIMULATION}
      * regardless of how this game's own lobby seats were registered -- must
@@ -287,7 +288,7 @@ class ClauseContractTest {
 
         String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
-                + SnapshotBuilder.playerId(outerTarget) + "\"]"),
+                + Refs.of(outerTarget) + "\"]"),
                 "the outer clause's own event must be unaffected by the inner "
                         + "clause's memo failure: " + effectHalf);
         assertEquals(1, effectHalf.split("\"type\":\"turn_added\"", -1).length - 1,

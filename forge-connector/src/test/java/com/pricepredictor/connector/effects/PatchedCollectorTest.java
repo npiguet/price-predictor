@@ -62,26 +62,26 @@ class PatchedCollectorTest {
 
     /**
      * Exactly the listener hooks the checkout offers get installed, and no
-     * others -- and none at all in degraded mode, where install() declines
-     * before it looks.
+     * others -- and in degraded mode only the confirm listener, the one whose
+     * channel needs nothing the mode is decided by.
      *
      * <p>Asserted against the checkout rather than against a fixed count: the
      * sibling Forge is patched or not independently of this repository. The
      * expected set is derived from {@link PatchHooks#REQUIRED}, so a listener
      * hook added there is expected here without editing the test. The confirm
-     * listener is excluded because the recording installs it with the
-     * bracket's handler, not this class.
+     * listener is counted apart because it is installed in either mode.
      */
     @Test
     void everyHookTheCheckoutOffersIsInstalledAndNoOthers() {
-        long expected = AttributionMode.detect() == AttributionMode.DEGRADED
+        long confirm = PatchHooks.CONFIRM_LISTENER.present() ? 1 : 0;
+        long expected = confirm + (AttributionMode.detect() == AttributionMode.DEGRADED
                 ? 0
                 : PatchHooks.REQUIRED.stream()
                         .filter(hook -> hook.method().startsWith("setEffectRecord")
                                 && hook.method().endsWith("Listener")
-                                && !PatchHooks.PLAYER_CONTROLLER_AI.equals(hook.owner()))
+                                && hook != PatchHooks.CONFIRM_LISTENER)
                         .filter(PatchHooks.Hook::present)
-                        .count();
+                        .count());
         // A patched checkout whose hooks all went unfound would agree with a
         // collector that installs nothing.
         if (AttributionMode.detect() == AttributionMode.PATCHED) {

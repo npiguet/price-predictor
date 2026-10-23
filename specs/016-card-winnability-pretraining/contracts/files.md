@@ -6,7 +6,7 @@ readers may rely on these guarantees.
 ## `output/sealed/cards-played.txt` (already in place)
 
 Append-only, line-buffered. Written by the Java match worker
-(`CardsPlayedWriter`).
+(a `CorpusWriter<CardsPlayedRow>`, paired with the match-outcomes writer in `SealedCorpus`).
 
 ### Line schema (eleven semicolon-separated fields, no trailing `;`)
 

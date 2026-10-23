@@ -47,23 +47,18 @@ final class RewriteChannel {
     PatchHooks.Listener handler() {
         return PatchHooks.REPLACEMENT_LISTENER.listener((callback, args) -> {
             // A fork's own replacements resolve through this same JVM-static
-            // hook (ForkCollector.forceResolution
+            // hook (InterventionFork.forceResolution
             // runs the fork's forced ability through the real resolution
             // pipeline, which is where replacements apply). args[0] is
             // declared ReplacementEffect on Forge's side -- always a
             // CardTraitBase with a real host -- so a positively-identified
-            // other game is dropped; anything this cannot identify is kept.
-            CardTraitBase trait = args.get(0, CardTraitBase.class);
-            if (trait != null && !live.owns(trait)) {
+            // other game is dropped.
+            if (live.foreign(args.get(0))) {
                 return;
             }
-            EffectRecord record = record(
-                    args.get(0), args.get(1), args.get(2), args.optional(3), args.optional(4));
-            if (!dedup.allowDistinct(
-                    RecordKind.REWRITE.wireName(), record.payloadJson(), record.stateJson())) {
-                return;
-            }
-            context.emit(record);
+            context.emitDistinct(record(
+                    args.get(0), args.get(1), args.get(2), args.optional(3), args.optional(4)),
+                    dedup);
         });
     }
 
@@ -115,12 +110,12 @@ final class RewriteChannel {
         // does not is that an ability ran at all, and the rarer case where the
         // overriding ability was granted from somewhere else.
         List<ProvenanceKey> ranKeys = ran == null ? List.of() : ProvenanceResolver.keysOf(ran);
-        String wireResult = EffectRecord.rewriteResult(result);
+        String wireResult = RecordPayloads.rewriteResult(result);
         JVM_REWRITES.record(
                 RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
                 !ranKeys.isEmpty(), before, after);
         return live.traitRecord(context, RecordKind.REWRITE, trait, incoming)
-                .payload(EffectRecord.rewritePayload(
+                .payload(RecordPayloads.rewritePayload(
                         incoming, outgoing, wireResult, ranKeys));
     }
 }

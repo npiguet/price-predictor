@@ -25,17 +25,17 @@ import java.util.List;
 public class DraftGamePlayer {
 
     private final GamePlayer gamePlayer;
-    private final MatchResultWriter writer;
+    private final CorpusWriter<MatchResult> writer;
     private final DeckBuilder deckBuilder;
     private final String runId;
 
-    public DraftGamePlayer(GamePlayer gamePlayer, MatchResultWriter writer, String runId) {
+    public DraftGamePlayer(GamePlayer gamePlayer, CorpusWriter<MatchResult> writer, String runId) {
         this(gamePlayer, writer, new DeckBuilder(), runId);
     }
 
     DraftGamePlayer(
             GamePlayer gamePlayer,
-            MatchResultWriter writer,
+            CorpusWriter<MatchResult> writer,
             DeckBuilder deckBuilder,
             String runId) {
         this.gamePlayer = gamePlayer;

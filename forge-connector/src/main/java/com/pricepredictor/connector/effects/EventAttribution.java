@@ -89,9 +89,9 @@ final class EventAttribution {
      * Which sub-ability produced this event, as its index down the chain.
      *
      * <p>The sidecar addresses a sub-ability by a flat chain index, so this
-     * walks the acting ability's chain looking for the one the engine says is
-     * resolving. {@link #ROOT} and {@link #UNRESOLVED} are the other two
-     * answers; attribution never drops an event and never returns null.
+     * counts how far down its chain the clause the engine says is resolving
+     * sits. {@link #ROOT} and {@link #UNRESOLVED} are the other two answers;
+     * attribution never drops an event and never returns null.
      *
      * <p>{@code pointer} is the sub-ability hook's answer, read by the caller.
      * The hook is read once where an event is stamped and the arithmetic
@@ -103,11 +103,12 @@ final class EventAttribution {
      * as precise as the pointer allows and no more: {@code resolveApiAbility}
      * sets it for every clause of every line, so a top-level clause of some
      * <em>other</em> line resolving inside this bracket also reads as the root.
-     * Identity against {@code root} cannot narrow it — Forge resolves a copy of
-     * the ability it was handed, so the bracket's root and the pointer are
-     * routinely different objects for the same line.
+     * Identity against the bracket's root cannot narrow it, which is why the
+     * root is not a parameter — Forge resolves a copy of the ability it was
+     * handed, so the bracket's root and the pointer are routinely different
+     * objects for the same line.
      */
-    static String attributedTo(SpellAbility root, Object pointer) {
+    static String attributedTo(Object pointer) {
         if (!(pointer instanceof SpellAbility resolvingLine)) {
             // Null, or something that is not an ability at all: the hook is
             // absent, or nothing was resolving when the event was published.
@@ -188,7 +189,7 @@ final class EventAttribution {
         if (host == null) {
             host = hostOf(root);
         }
-        return host == null ? null : SnapshotBuilder.entityId(host);
+        return Refs.ofNullable(host);
     }
 
     private static Card hostOf(SpellAbility ability) {
@@ -247,7 +248,7 @@ final class EventAttribution {
         }
         return event
                 .duration(duration(root, pointer, event.type()))
-                .attributedTo(attributedTo(root, pointer))
+                .attributedTo(attributedTo(pointer))
                 .cause(namedCause != null ? namedCause : cause(root, pointer));
     }
 }

@@ -172,7 +172,7 @@ final class ShardRun {
         RecordShardWriter writer = new RecordShardWriter(dir, RUN, 0, LIFETIME);
         boolean wrote;
         try {
-            wrote = new ForkCollector(game, TestCollectors.context(writer, GAME_ID), caps, seed)
+            wrote = new InterventionFork(game, TestCollectors.context(writer, GAME_ID), new ForkBudget(caps), seed)
                     .intervene(ability, 1);
         } finally {
             writer.close();
@@ -197,7 +197,7 @@ final class ShardRun {
                 game, TestCollectors.context(writer, GAME_ID), caps, SEED,
                 TestCollectors.bracket(game, writer, GAME_ID))) {
             collectors.install();
-            wrote = new ForkCollector(game, TestCollectors.context(writer, GAME_ID), caps, seed)
+            wrote = new InterventionFork(game, TestCollectors.context(writer, GAME_ID), new ForkBudget(caps), seed)
                     .intervene(ability, 1);
         } finally {
             writer.close();

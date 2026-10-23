@@ -8,6 +8,9 @@ import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.keyword.KeywordWithTypeInterface;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Standard keyword ability — handles defined keywords and the undefined keyword fallback.
  * Covers KICKER dual cost, AFFINITY type description, and internal keyword reminder text.
@@ -16,38 +19,22 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
 
     public static StandardKeyword of(KeywordInterface ki, Keyword kw) {
         boolean activatable = !ki.getAbilities().isEmpty();
-        String title = ki.getTitle();
-
-        if (kw == Keyword.UNDEFINED) {
-            if (title == null || title.isEmpty()) {
-                title = ki.getOriginal();
-            }
-        } else {
-            if (title == null || title.isEmpty() || !title.trim().equals(title)) {
-                title = ki.getOriginal();
-            }
-            if (AbilityType.isInternalKeyword(kw)) {
-                String reminder = ki.getReminderText();
-                if (reminder != null && !reminder.isEmpty()) {
-                    title = reminder;
+        String title = baseTitle(ki, kw);
+        switch (kw) {
+            case KICKER -> {
+                String secondCost = new KeywordSpec(ki.getOriginal()).rest(2);
+                if (secondCost != null) {
+                    title = title + " and/or " + new Cost(secondCost, false).toSimpleString();
                 }
             }
-            switch (kw) {
-                case KICKER -> {
-                    String secondCost = new KeywordSpec(ki.getOriginal()).rest(2);
-                    if (secondCost != null) {
-                        title = title + " and/or " + new Cost(secondCost, false).toSimpleString();
-                    }
+            case AFFINITY -> {
+                if (ki instanceof KeywordWithTypeInterface kti) {
+                    title = "Affinity for " + kti.getTypeDescription();
                 }
-                case AFFINITY -> {
-                    if (ki instanceof KeywordWithTypeInterface kti) {
-                        title = "Affinity for " + kti.getTypeDescription();
-                    }
-                }
-                case CRAFT -> title = buildCraftTitle(ki.getOriginal());
-                case PROTECTION -> title = protectionTitle(ki.getOriginal());
-                default -> { }
             }
+            case CRAFT -> title = buildCraftTitle(ki.getOriginal());
+            case PROTECTION -> title = protectionTitle(ki.getOriginal());
+            default -> { }
         }
 
         String reduceCost = extractReduceCostDescription(kw, ki.getOriginal());
@@ -57,6 +44,31 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
 
         AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
         return new StandardKeyword(kwType, AbilityDescription.applyCasing(title));
+    }
+
+    /**
+     * The title a keyword starts from, before {@link #of}'s per-keyword
+     * overrides: Forge's own title, or the script's original text where that
+     * title is empty.
+     *
+     * <p>A defined keyword also falls back to the original when its title
+     * carries surrounding whitespace, and an internal keyword reads as its
+     * reminder text whenever it has one. An undefined keyword has neither
+     * rule, and keeps any non-empty title.
+     */
+    private static String baseTitle(KeywordInterface ki, Keyword kw) {
+        String title = ki.getTitle();
+        if (kw == Keyword.UNDEFINED) {
+            return title == null || title.isEmpty() ? ki.getOriginal() : title;
+        }
+        if (AbilityType.isInternalKeyword(kw)) {
+            String reminder = ki.getReminderText();
+            if (reminder != null && !reminder.isEmpty()) {
+                return reminder;
+            }
+        }
+        return title == null || title.isEmpty() || !title.trim().equals(title)
+                ? ki.getOriginal() : title;
     }
 
     /**
@@ -111,24 +123,21 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
             // Variable-count exile (Sunbird Standard): "one or more"
             typeDesc = "one or more";
         } else {
-            // Simple type: extract first word before '.' or '+' from ExileCtrlOrGrave<N/TYPE…>
-            int ecoIdx = costPart.indexOf("ExileCtrlOrGrave<");
-            int slashIdx = ecoIdx >= 0 ? costPart.indexOf('/', ecoIdx) : -1;
-            if (slashIdx >= 0) {
-                int typeStart = slashIdx + 1;
-                int typeEnd = typeStart;
-                while (typeEnd < costPart.length()
-                        && ".+>/<".indexOf(costPart.charAt(typeEnd)) < 0) {
-                    typeEnd++;
-                }
-                typeDesc = costPart.substring(typeStart, typeEnd);
-            } else {
-                typeDesc = "artifact"; // fallback
-            }
+            // Simple type: the first word of TYPE in ExileCtrlOrGrave<N/TYPE…>
+            Matcher exiled = CRAFT_EXILED_TYPE.matcher(costPart);
+            typeDesc = exiled.find() ? exiled.group(1) : "artifact"; // fallback
         }
 
         return "Craft with " + typeDesc + " " + manaCostStr;
     }
+
+    /**
+     * The type a Craft cost exiles: after the first {@code ExileCtrlOrGrave<}
+     * and the first {@code /} that follows it, everything up to a {@code .},
+     * {@code +}, {@code >}, {@code /} or {@code <}.
+     */
+    private static final Pattern CRAFT_EXILED_TYPE =
+            Pattern.compile("ExileCtrlOrGrave<[^/]*/([^.+>/<]*)");
 
     /**
      * Extract cost-reduction description from a keyword's original string, or null if absent.

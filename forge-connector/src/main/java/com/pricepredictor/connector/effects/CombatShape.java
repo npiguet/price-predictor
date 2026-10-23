@@ -1,11 +1,11 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import com.google.common.collect.Table;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,11 +44,11 @@ final class CombatShape {
             return shape;
         }
         for (Card attacker : combat.getAttackers()) {
-            String id = SnapshotBuilder.entityId(attacker);
+            String id = Refs.of(attacker);
             shape.attackers.add(id);
             List<String> blockers = new ArrayList<>();
             for (Card blocker : combat.getBlockers(attacker)) {
-                blockers.add(SnapshotBuilder.entityId(blocker));
+                blockers.add(Refs.of(blocker));
             }
             shape.blocks.put(id, blockers);
         }
@@ -77,33 +77,25 @@ final class CombatShape {
                     || !(cell.getValue() instanceof Integer amount)) {
                 continue;
             }
-            String target = Refs.ofAny(cell.getColumnKey()).orElse(null);
-            if (target == null) {
-                continue;
-            }
-            String from = SnapshotBuilder.entityId(source);
-            assignment
-                    .computeIfAbsent(from, key -> new LinkedHashMap<>())
-                    .put(target, amount);
+            Refs.ofAny(cell.getColumnKey()).ifPresent(target -> assignment
+                    .computeIfAbsent(Refs.of(source), key -> new LinkedHashMap<>())
+                    .put(target, amount));
         }
     }
 
     /**
-     * The three combat fields, in the order the payload writes them.
+     * Write the three combat fields into {@code json}, in the order the
+     * payload carries them, as they stand now.
      *
-     * <p>Handed over as fields rather than as a whole object so a caller can
-     * add the fields only its own kind of record carries — the probe branch
-     * adds what it perturbed.
-     *
-     * <p>A view, not a copy: the map is unmodifiable, but its values are this
-     * shape's own collections, so whoever renders it later sees them as they
-     * stand then, including an assignment added after this call.
+     * <p>Written into the caller's object rather than as a whole object of
+     * their own so a caller can add the fields only its own kind of record
+     * carries — the probe branch adds what it perturbed. Called when the
+     * payload is rendered, which is after {@link #addAssignment}.
      */
-    Map<String, Object> fields() {
-        Map<String, Object> fields = new LinkedHashMap<>();
-        fields.put("attackers", attackers);
-        fields.put("blocks", blocks);
-        fields.put("assignment_choices", assignment);
-        return Collections.unmodifiableMap(fields);
+    Json.ObjectWriter writeTo(Json.ObjectWriter json) {
+        return json
+                .value("attackers", attackers)
+                .value("blocks", blocks)
+                .value("assignment_choices", assignment);
     }
 }

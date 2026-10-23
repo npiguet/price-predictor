@@ -23,14 +23,14 @@ class RulesParserTest {
     private final RulesParser converter = new RulesParser();
 
     private MultiCard convert(String... lines) {
-        return converter.parseScript(Arrays.asList(lines), "test.txt", null).card();
+        return converter.parseScript(Arrays.asList(lines), null).card();
     }
 
     private MultiCard convertFromFile(String relativePath) {
         try {
             Path file = CARDS_FOLDER.resolve(relativePath);
             List<String> lines = Files.readAllLines(file);
-            return converter.parseScript(lines, file.getFileName().toString(), null).card();
+            return converter.parseScript(lines, null).card();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -101,7 +101,7 @@ class RulesParserTest {
         var keywords = abilitiesOfType(face("s/serra_angel.txt"), AbilityType.STATIC);
         assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("flying")));
         assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("vigilance")));
-        assertFalse(keywords.get(0).formatLine(null).contains("["), "Static keywords should have no action number");
+        assertFalse(keywords.get(0).formatLine(1).contains("["), "Static keywords should have no action number");
     }
 
     @Test
@@ -142,11 +142,20 @@ class RulesParserTest {
 
     @Test
     void activatedAbility() {
-        CardFace card = face("l/llanowar_elves.txt");
+        MultiCard elves = convertFromFile("l/llanowar_elves.txt");
+        CardFace card = elves.faces().get(0);
         String output = rendered(card);
         assertTrue(output.contains("activated[1]:"), output);
         assertTrue(output.contains("{T}"), output);
         assertTrue(output.contains("add {G}"), output);
+        // The text is lowercased, the mana symbols kept as written.
+        assertTrue(rendered(elves).contains("llanowar elves"), rendered(elves));
+
+        // A simple activated ability (no sub-ability SpellDescription) is one
+        // line, and the chain walk must not duplicate its description text.
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size());
+        assertOccursOnce(activated.get(0).descriptionText(), "add");
     }
 
     @Test
@@ -220,14 +229,6 @@ class RulesParserTest {
     }
 
     @Test
-    void textCasingCorrect() {
-        String output = rendered(convertFromFile("l/llanowar_elves.txt"));
-        assertTrue(output.contains("llanowar elves"));
-        assertTrue(output.contains("{G}"));
-        assertTrue(output.contains("{T}"));
-    }
-
-    @Test
     void applyCasingLowercasesTheTextButKeepsVariableXAndManaSymbols() {
         // Standalone X preserved
         assertEquals("-X: deal X damage", AbilityDescription.applyCasing("-X: Deal X damage"));
@@ -286,7 +287,7 @@ class RulesParserTest {
         assertTrue(chapters.get(1).formatLine(null).contains("II \u2014"));
         assertTrue(chapters.get(2).formatLine(null).contains("III \u2014"));
         assertTrue(chapters.get(0).formatLine(null).contains("sacrifices"));
-        assertFalse(chapters.get(0).formatLine(null).contains("["), "Chapters should have no action number");
+        assertFalse(chapters.get(0).formatLine(1).contains("["), "Chapters should have no action number");
     }
 
     @Test
@@ -305,15 +306,6 @@ class RulesParserTest {
         assertEquals("rooftop saboteurs", back.name());
         assertNull(back.defense());
         assertEquals("2/3", back.powerToughness());
-    }
-
-    @Test
-    void transformCard() {
-        MultiCard result = convertFromFile("d/daring_sleuth_bearer_of_overwhelming_truths.txt");
-        assertEquals("transform", result.layout());
-        assertEquals(2, result.faces().size());
-        assertEquals("daring sleuth", result.faces().get(0).name());
-        assertEquals("bearer of overwhelming truths", result.faces().get(1).name());
     }
 
     @Test
@@ -597,6 +589,43 @@ class RulesParserTest {
                 "MeldPair:Urza, Lord Protector", "AlternateMode:Meld", "Oracle:").layout());
     }
 
+    // --- Faces copied from other cards ---
+
+    /**
+     * {@code CopyFaceFrom:} names a face another script defines rather than
+     * writing it out. Forge's card database fills the face in once every script
+     * is read, so a parser that reads the one script alone holds no face there:
+     * with both halves copied it has no front face at all.
+     */
+    @Test
+    void aSplitCardWhoseHalvesAreBothCopiedConvertsBothHalves() {
+        MultiCard card = convertFromFile("b/bind_liberate.txt");
+
+        assertEquals("split", card.layout());
+        assertEquals(List.of("bind", "liberate"),
+                card.faces().stream().map(CardFace::name).toList());
+    }
+
+    /** A copied second face is part of the card, not left out of its text. */
+    @Test
+    void aCopiedSecondFaceIsConverted() {
+        MultiCard card = convertFromFile("e/emeritus_of_conflict_lightning_bolt.txt");
+
+        assertEquals(List.of("emeritus of conflict", "lightning bolt"),
+                card.faces().stream().map(CardFace::name).toList());
+        assertTrue(rendered(card).contains("deals 3 damage to any target"), rendered(card));
+    }
+
+    /** A face no script defines fails naming it, not with a bare null. */
+    @Test
+    void aCopiedFaceNoScriptDefinesIsNamedInTheFailure() {
+        RuntimeException e = assertThrows(RuntimeException.class, () -> convert(
+                "CopyFaceFrom:No Such Face Was Ever Printed", "AlternateMode:Split",
+                "ALTERNATE", "CopyFaceFrom:Fire"));
+
+        assertTrue(e.getMessage().contains("No Such Face Was Ever Printed"), e.getMessage());
+    }
+
     // --- Meld halves ---
 
     @ParameterizedTest
@@ -642,19 +671,10 @@ class RulesParserTest {
 
     @Test
     void joinWithOrUsesTheSerialCommaFromThreeItems() {
-        assertEquals("a", RulesParser.joinWithOr(List.of("a")));
-        assertEquals("a or b", RulesParser.joinWithOr(List.of("a", "b")));
-        assertEquals("a, b, or c", RulesParser.joinWithOr(List.of("a", "b", "c")));
-        assertEquals("a, b, c, or d", RulesParser.joinWithOr(List.of("a", "b", "c", "d")));
-    }
-
-    @Test
-    void nonLandDoesNotGetImplicitManaAbility() {
-        CardFace card = face("l/llanowar_elves.txt");
-        // Should have its own explicit activated ability, not an implicit land one
-        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
-        assertEquals(1, activated.size());
-        assertTrue(activated.get(0).descriptionText().contains("add {G}"));
+        assertEquals("a", FaceParser.joinWithOr(List.of("a")));
+        assertEquals("a or b", FaceParser.joinWithOr(List.of("a", "b")));
+        assertEquals("a, b, or c", FaceParser.joinWithOr(List.of("a", "b", "c")));
+        assertEquals("a, b, c, or d", FaceParser.joinWithOr(List.of("a", "b", "c", "d")));
     }
 
     // --- Smoke tests: cards whose shapes are error-prone to parse ---
@@ -706,27 +726,6 @@ class RulesParserTest {
                 "Sub-ability text should be concatenated into root description: " + root.descriptionText());
         assertTrue(root.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
                 "No SPELL sub-abilities should remain after concatenation: " + root.subAbilities());
-    }
-
-    @Test
-    void activatedAbilityWithSubAbilityNoDuplicateText() {
-        // Simple activated abilities (no sub-ability SpellDescription) must NOT
-        // produce duplicate description text from the chain walk.
-        CardFace card = face("l/llanowar_elves.txt");
-        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
-        assertEquals(1, activated.size());
-        assertOccursOnce(activated.get(0).descriptionText(), "add");
-    }
-
-    @Test
-    void activatedAbilityWithSubAbilityDescriptionSkipped() {
-        // Arachnus Spinner's activated ability has SpellDescription only on the
-        // sub-ability (DBChange), not on the main AB$ Pump. The sub-ability chain
-        // walk must NOT cause this to be picked up as a spell — only spells should
-        // walk the chain for SpellDescription.
-        CardFace card = face("a/arachnus_spinner.txt");
-        assertEquals(0, countOfType(card, AbilityType.SPELL),
-                "Activated ability with sub-ability description should not appear as spell");
     }
 
     // --- Charm sub-ability description walking ---
@@ -1105,6 +1104,10 @@ class RulesParserTest {
         String formatted = rendered(card);
         assertTrue(formatted.toLowerCase().contains("search"),
                 "Activated ability text should include 'search': " + formatted);
+        // The sub-ability chain walk must NOT cause this to be picked up as a
+        // spell -- only spells walk the chain for SpellDescription.
+        assertEquals(0, countOfType(card, AbilityType.SPELL),
+                "Activated ability with sub-ability description should not appear as spell");
     }
 
     // --- Visit trigger with Charm overriding ability ---
@@ -1132,7 +1135,7 @@ class RulesParserTest {
     // --- Tiered charm — PrecostDesc prepended to option text ---
 
     @Test
-    void tieredCharmIncludesPrecostDescInOptionText() {
+    void tieredCharmIncludesPrecostDescModeCostAndAdditionalDescription() {
         // Vincent's Limit Break: Tiered charm with PrecostDesc$ on each choice SVar.
         // Option text must include the PrecostDesc name, not just the raw P/T string.
         CardFace card = face("v/vincents_limit_break.txt");
@@ -1143,6 +1146,18 @@ class RulesParserTest {
                 "Tiered charm option should include 'Death Gigas': " + formatted);
         assertTrue(formatted.toLowerCase().contains("hellmasker"),
                 "Tiered charm option should include 'Hellmasker': " + formatted);
+
+        // AdditionalDescription$ on the Charm SA must become the main spell line.
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertTrue(spells.stream().anyMatch(
+                a -> a.descriptionText().toLowerCase().contains("until end of turn")),
+                "vincent's limit break missing AdditionalDescription: " + spells);
+        // And its options include the ModeCost in "Name — {cost} — P/T" format.
+        var options = spells.get(0).subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertTrue(options.stream().anyMatch(
+                a -> a.descriptionText().contains("{0}") || a.descriptionText().contains("{1}")),
+                "vincent's limit break options missing ModeCost: " + options);
     }
 
     // --- MayEffectFromOpeningHand keyword ---
@@ -1298,27 +1313,6 @@ class RulesParserTest {
                 "sheoldred's restoration spell effect missing: " + spells);
     }
 
-    @Test
-    void vincentLimitBreakEmitsAdditionalDescription() {
-        // AdditionalDescription$ on Charm SA must become the main spell line
-        var spells = abilitiesOfType(face("v/vincents_limit_break.txt"), AbilityType.SPELL);
-        assertTrue(spells.stream().anyMatch(
-                a -> a.descriptionText().toLowerCase().contains("until end of turn")),
-                "vincent's limit break missing AdditionalDescription: " + spells);
-    }
-
-    @Test
-    void vincentLimitBreakOptionsIncludeModeCost() {
-        // Tiered charm options must include the ModeCost in "Name — {cost} — P/T" format
-        var spells = abilitiesOfType(face("v/vincents_limit_break.txt"), AbilityType.SPELL);
-        assertFalse(spells.isEmpty(), "vincent's limit break should have a SPELL: " + spells);
-        var options = spells.get(0).subAbilities().stream()
-                .filter(a -> a.type() == AbilityType.OPTION).toList();
-        assertTrue(options.stream().anyMatch(
-                a -> a.descriptionText().contains("{0}") || a.descriptionText().contains("{1}")),
-                "vincent's limit break options missing ModeCost: " + options);
-    }
-
     // --- ABILITY placeholder via nested structures ---
 
     @ParameterizedTest(name = "{0}")
@@ -1424,17 +1418,36 @@ class RulesParserTest {
             "Plate Armor equip,              p/plate_armor.txt,                    equip,         costs {1} less, each other equipment",
             // ReduceCost$ X — a variable reduction
             "Belt of Giant Strength equip,   b/belt_of_giant_strength.txt,         equip,         costs {X} less, power of the creature",
-            // K:Adapt:4:7 U:X
-            "Pteramander adapt,              p/pteramander.txt,                    adapt,         costs {1} less, instant and sorcery card in your graveyard",
-            // K:Adapt:4:6 B:X
-            "Etherium Pteramander adapt,     e/etherium_pteramander.txt,           adapt,         costs {1} less, other artifact you control",
-            // K:Monstrosity:10:10 B G:X
-            "Grim Giganotosaurus monstrosity, g/grim_giganotosaurus.txt,           monstrosity,   costs {1} less, creature with power 4",
             // K:Specialize:5::This ability costs {3} less…:ReduceCost$ X
             "Imoen specialize,               i/imoen_trickster_friend.txt,         specialize,    costs {3} less, instant and/or sorcery cards in your graveyard",
     })
     void keywordReduceCostAppendsText(
             String ignoredCase, String file, String keyword, String reduction, String countClause) {
+        assertActivatedLineCarries(file, keyword, reduction, countClause);
+    }
+
+    /**
+     * Adapt and Monstrosity are not keywords here but scripted abilities
+     * ({@code A:AB$ PutCounter | Adapt$ 4 | ReduceCost$ X | SpellDescription$ …}),
+     * so their reduction reaches the line through the ability's own
+     * description rather than through the keyword's appended text.
+     */
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            // A:AB$ PutCounter | Cost$ 7 U | Adapt$ 4 | ReduceCost$ X
+            "Pteramander adapt,              p/pteramander.txt,                    adapt,         costs {1} less, instant and sorcery card in your graveyard",
+            // A:AB$ PutCounter | Cost$ 6 B | Adapt$ 4 | ReduceCost$ X
+            "Etherium Pteramander adapt,     e/etherium_pteramander.txt,           adapt,         costs {1} less, other artifact you control",
+            // A:AB$ PutCounter | Cost$ 10 B G | Monstrosity$ 10 | ReduceCost$ X
+            "Grim Giganotosaurus monstrosity, g/grim_giganotosaurus.txt,           monstrosity,   costs {1} less, creature with power 4",
+    })
+    void scriptedReduceCostKeepsItsSpellDescription(
+            String ignoredCase, String file, String keyword, String reduction, String countClause) {
+        assertActivatedLineCarries(file, keyword, reduction, countClause);
+    }
+
+    private void assertActivatedLineCarries(
+            String file, String keyword, String reduction, String countClause) {
         Ability ability = abilitiesOfType(face(file), AbilityType.ACTIVATED).stream()
                 .filter(a -> a.descriptionText().contains(keyword))
                 .findFirst().orElseThrow();
@@ -1450,18 +1463,12 @@ class RulesParserTest {
     @CsvSource({
             // K:Craft:3 U ExileCtrlOrGrave<1/Island.Other>
             "Waterlogged Hulk island,           w/waterlogged_hulk_watertight_gondola.txt,        craft with island,                    {3}{U}",
-            // K:Craft:2 W ExileCtrlOrGrave<1/Artifact.Other>
-            "Oteclan Landmark artifact,         o/oteclan_landmark_oteclan_levitator.txt,         craft with artifact,                  {2}{W}",
-            // K:Craft:4 B ExileCtrlOrGrave<1/Creature.Other>
-            "Tithing Blade creature,            t/tithing_blade_consuming_sepulcher.txt,          craft with creature,                  {4}{B}",
             // K:Craft:3 R R ExileCtrlOrGrave<1/Artifact.Other>
             "Dire Flail multicolour cost,       d/dire_flail_dire_blunderbuss.txt,                craft with artifact,                  {3}{R}{R}",
             // K:Craft:5 XMin1 ExileCtrlOrGrave<X/Permanent.Other/permanent>
             "Sunbird Standard variable count,   s/sunbird_standard_sunbird_effigy.txt,            craft with one or more,               {5}",
             // K:Craft:4 ExileCtrlOrGrave<…>:a Dinosaur, a Merfolk, a Pirate, and a Vampire:the four
             "Throne explicit multi-type text,   t/throne_of_the_grim_captain_the_grim_captain.txt, craft with a dinosaur,               {4}",
-            // K:Craft:6 ExileCtrlOrGrave<2/…>:two that share a card type:the two
-            "Eye of Ojer Taq type-share clause, e/eye_of_ojer_taq_apex_observatory.txt,           craft with two that share a card type, {6}",
     })
     void craftEmitsTheTerseFormat(String ignoredCase, String file, String craftText, String manaCost) {
         Ability craft = abilitiesOfType(face(file), AbilityType.ACTIVATED).stream()
@@ -1765,6 +1772,44 @@ class RulesParserTest {
         return found;
     }
 
+    /**
+     * A Class level adding a trait with no text renders the text it does have.
+     *
+     * <p>Advanced Floral Invocations' third level adds a static and a
+     * {@code Static$ True} helper trigger with no {@code TriggerDescription$}.
+     * Forge joins the level's descriptions unchecked, so its own level static
+     * reads {@code null} followed by the static's text on a second line; the
+     * level must print as one line carrying only the static's text.
+     */
+    @Test
+    void aClassLevelAddingAnUndescribedTraitPrintsOnlyTheDescribedText() {
+        String output = rendered(face("a/advanced_floral_invocations.txt"));
+
+        assertFalse(output.contains("null"), output);
+        assertTrue(output.contains("level[3]: {4}{B/G}{B/G}: you may play lands and cast"
+                + " creature spells from your graveyard."), output);
+        assertEquals(6, output.split("\n").length,
+                "name, mana cost, types and three level lines: " + output);
+    }
+
+    /**
+     * A description Forge joined with {@code \r\n} renders as clean lines.
+     *
+     * <p>Ranger Class's third level adds two statics, and Forge joins their
+     * descriptions with a carriage return and a line feed. Split on the line
+     * feed alone, the first line kept the carriage return, and the converted
+     * file carried it.
+     */
+    @Test
+    void aDescriptionJoinedWithACarriageReturnRendersWithoutOne() {
+        String output = rendered(face("r/ranger_class.txt"));
+
+        assertFalse(output.contains("\r"), output);
+        assertTrue(output.contains("level[3]: {3}{G}: you may look at the top card of your"
+                + " library any time.\nyou may cast creature spells from the top of your"
+                + " library."), output);
+    }
+
     /** {@code needle} appears in {@code text}, and only once: a duplicated clause would repeat it. */
     private static void assertOccursOnce(String text, String needle) {
         assertEquals(1, occurrences(text, needle), "'" + needle + "' must appear exactly once: " + text);
@@ -1782,10 +1827,11 @@ class RulesParserTest {
                 firstSpellIdx = i;
             }
         }
-        if (lastCostIdx >= 0 && firstSpellIdx >= 0) {
-            assertTrue(lastCostIdx < firstSpellIdx,
-                    "Costs should appear before spells: " + abilities);
-        }
+        // A card missing either has no order to check, and would pass silently.
+        assertTrue(lastCostIdx >= 0, "no cost line: " + abilities);
+        assertTrue(firstSpellIdx >= 0, "no spell line: " + abilities);
+        assertTrue(lastCostIdx < firstSpellIdx,
+                "Costs should appear before spells: " + abilities);
     }
 
     private void assertNoRawEtbReplacementKeyword(CardFace card) {

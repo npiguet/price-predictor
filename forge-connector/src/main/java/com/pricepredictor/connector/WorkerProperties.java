@@ -1,7 +1,9 @@
 package com.pricepredictor.connector;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
@@ -20,12 +22,9 @@ import java.util.function.Predicate;
  */
 public final class WorkerProperties {
 
-    /** Exit code for a missing or malformed property. */
-    static final int BAD_CONFIG_EXIT = 2;
-
     /** What a value that does not parse, or fails its constraint, does. */
     public enum OnMalformed {
-        /** Name the property on stderr and exit with {@link #BAD_CONFIG_EXIT}. */
+        /** Name the property on stderr and exit with {@link ExitCode#BAD_CONFIG}. */
         EXIT,
         /** Name the property and the bad value on one stderr line; use the default. */
         WARN_AND_DEFAULT
@@ -36,11 +35,26 @@ public final class WorkerProperties {
 
     /** The property's value, or exit naming it when it is unset or blank. */
     static String require(String name) {
+        return optional(name).orElseThrow(
+                () -> ToolMain.badConfig("-D" + name + " system property is required"));
+    }
+
+    /**
+     * The property's value trimmed, or empty when it is unset or blank.
+     *
+     * <p>For an optional property with no default to fall back on — a file,
+     * a set code, a label — whose absence means "not asked for". A blank value
+     * is a launcher passing {@code -Dname=} for an option it was not given,
+     * and read as given it would name the empty path or the set called "".
+     */
+    static Optional<String> optional(String name) {
         String value = System.getProperty(name);
-        if (value == null || value.isBlank()) {
-            throw badConfig("-D" + name + " system property is required");
-        }
-        return value;
+        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.trim());
+    }
+
+    /** {@link #optional} as a path. */
+    static Optional<Path> optionalPath(String name) {
+        return optional(name).map(Path::of);
     }
 
     /**
@@ -128,18 +142,9 @@ public final class WorkerProperties {
 
     private static <T> T malformed(String name, String problem, T defaultValue, OnMalformed policy) {
         if (policy == OnMalformed.EXIT) {
-            throw badConfig("-D" + name + " " + problem);
+            throw ToolMain.badConfig("-D" + name + " " + problem);
         }
         System.err.println("Warning: -D" + name + " " + problem + "; using default " + defaultValue);
         return defaultValue;
-    }
-
-    /**
-     * Exit with {@link #BAD_CONFIG_EXIT} after naming the problem; the result
-     * is for the caller to {@code throw}, as in {@link ToolMain#exit}.
-     */
-    static IllegalStateException badConfig(String problem) {
-        System.err.println("Error: " + problem);
-        return ToolMain.exit(BAD_CONFIG_EXIT);
     }
 }

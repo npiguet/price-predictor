@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.StdStreams;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
 import forge.game.replacement.ReplacementEffect;
@@ -80,7 +81,7 @@ class RewriteContractTest {
                 Map.of("Card", card), Map.of("Card", card), result, null).toJson();
 
         // The spellings themselves are WireVocabularyTest's pin.
-        assertTrue(json.contains("\"result\":\"" + EffectRecord.rewriteResult(result) + "\""),
+        assertTrue(json.contains("\"result\":\"" + RecordPayloads.rewriteResult(result) + "\""),
                 "the lower snake case of " + result + ": " + json);
     }
 
@@ -268,12 +269,50 @@ class RewriteContractTest {
         assertTrue(line.contains("\"result\":\"not_replaced\""), line);
     }
 
+    /**
+     * Two replacements on one card that both decline one event are two records.
+     *
+     * <p>Archelos, Lagoon Mystic prints two {@code Moved} replacements, one
+     * applying while it is tapped and one while it is untapped, so on any
+     * entry at least one of them declines. A rewrite snapshot names the host
+     * and the event, not which of the host's replacements is answering, so the
+     * two declines render the same state and payload; only the acting line
+     * tells them apart, and without it the second line's negative would be
+     * coalesced away as a repeat of the first's.
+     */
+    @Test
+    void twoLinesDecliningOneEventEachReachTheShard() throws Throwable {
+        Card archelos = TestCards.build("Archelos, Lagoon Mystic");
+        List<ReplacementEffect> replacements =
+                List.copyOf(archelos.getCurrentState().getReplacementEffects());
+        assertEquals(2, replacements.size(), "Archelos prints two R: lines");
+        Map<AbilityKey, Object> params = new LinkedHashMap<>();
+        params.put(AbilityKey.Card, TestCards.build("Mountain"));
+        params.put(AbilityKey.Destination, ZoneType.Battlefield);
+
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            for (ReplacementEffect replacement : replacements) {
+                collector.rewrites().handler().invoke(
+                        null, onReplacement(HookShapes.Replacement.class),
+                        new Object[]{
+                                replacement, params, params, ReplacementResult.NotReplaced, null});
+            }
+        });
+
+        assertEquals(2, lines.size(), "one record per declining line: " + lines);
+        assertEquals(List.of(0L, 1L),
+                lines.stream()
+                        .map(l -> RecordLines.abilityKeys(l).get(0).get("index_within_kind"))
+                        .toList(),
+                lines.toString());
+    }
+
     // ── another game's replacement ──────────────────────────────────────
 
     /**
      * A replacement reported for an effect belonging
      * to a DIFFERENT {@code Game} -- exactly {@code
-     * ForkCollector.forceResolution}'s shape, since a forced ability's own
+     * InterventionFork.forceResolution}'s shape, since a forced ability's own
      * replacements run through {@code GameSimulator.resolveStack}'s real
      * resolution pipeline -- must not reach the live shard.
      * {@code RewriteChannel.handler} is a plain JVM static exactly like the
@@ -329,7 +368,7 @@ class RewriteContractTest {
         assertTrue(json.contains("cardsfolder/r/rest_in_peace.txt"), json);
         assertTrue(json.contains("\"ability_unresolved\":null"), json);
         assertTrue(json.contains(
-                "\"source\":\"" + SnapshotBuilder.entityId(rest) + "\""), json);
+                "\"source\":\"" + Refs.of(rest) + "\""), json);
         assertTrue(json.contains("\"incoming\":{\"type\":\"zone_change\""), json);
     }
 
@@ -472,7 +511,7 @@ class RewriteContractTest {
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) ->
                 collector.rewrites().handler().invoke(null, onReplacement(shape), args));
         assertEquals(1, lines.size(), "one replacement writes one record");
-        assertNotNull(lines.get(0));
+        assertEquals("rewrite", RecordLines.parse(lines.get(0)).get("kind"), lines.get(0));
         return lines.get(0);
     }
 }

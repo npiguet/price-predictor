@@ -76,7 +76,7 @@ Load the table once, group seats by `draft_id`, then loop until killed:
 6. Build a `MatchResult` — `timestamp` now, `runId` from `run.id`, `setCode` and the two
    labels from the seat lines, `games`/`play`/duration from the played match, and the two
    decks **as played**, so a diverted seat records Forge's built deck rather than its pool.
-7. Append it to `output.file` with `MatchResultWriter`.
+7. Append it to `output.file` with a `CorpusWriter<MatchResult>`.
 
 On an exception for one pairing: log to stderr and return to step 1. No row is written, and
 nothing is lost — an autonomous worker simply draws another pairing.
@@ -85,7 +85,7 @@ The worker keeps no state across restarts and never terminates on its own.
 
 ## Concurrency
 
-Every worker appends to the same `output.file` through `MatchResultWriter`, which opens,
+Every worker appends to the same `output.file` through a `CorpusWriter<MatchResult>`, which opens,
 writes one line and closes per row for exactly this reason. This is how `MatchWorkerMain`
 already feeds `match-outcomes.txt` from 12 concurrent JVMs.
 

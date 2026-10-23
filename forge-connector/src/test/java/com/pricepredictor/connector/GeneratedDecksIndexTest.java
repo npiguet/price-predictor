@@ -1,7 +1,10 @@
 package com.pricepredictor.connector;
 
+import com.google.common.collect.ImmutableMultiset;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -79,16 +82,10 @@ class GeneratedDecksIndexTest {
         assertThrows(IOException.class, () -> GeneratedDecksIndex.load(file));
     }
 
-    @Test
-    void loadMissingSecondSeparatorThrows(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of("gen-2;onlyOneSemicolon"));
-
-        assertThrows(IOException.class, () -> GeneratedDecksIndex.load(file));
-    }
-
-    @Test
-    void loadMissingAnySeparatorThrows(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of("no-semicolon-here"));
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"gen-2;onlyOneSemicolon", "no-semicolon-here"})
+    void loadMissingASeparatorThrows(String line, @TempDir Path tmp) throws IOException {
+        Path file = writeDecks(tmp, List.of(line));
 
         assertThrows(IOException.class, () -> GeneratedDecksIndex.load(file));
     }
@@ -180,22 +177,34 @@ class GeneratedDecksIndexTest {
     }
 
     @Test
+    void aMirrorHasTheSameCopiesOfEachCardInAnyOrder() {
+        GeneratedDecksIndex.GeneratedDeck deck =
+                new GeneratedDecksIndex.GeneratedDeck("gen-2", "MH3", List.of("A", "B", "A"));
+
+        assertTrue(deck.isMirrorOf(ImmutableMultiset.of("B", "A", "A")));
+        assertFalse(deck.isMirrorOf(ImmutableMultiset.of("A", "B", "B")),
+                "the same names in other numbers of copies are another deck");
+        assertFalse(deck.isMirrorOf(ImmutableMultiset.of("A", "B")));
+    }
+
+    @Test
+    void aPaddedLineReadsAsTheSameDeck(@TempDir Path tmp) throws IOException {
+        Path file = writeDecks(tmp, List.of("  gen-2;MH3;A|B|C \r", "", "   "));
+
+        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
+
+        assertEquals(1, index.size());
+        assertEquals(new GeneratedDecksIndex.GeneratedDeck("gen-2", "MH3", List.of("A", "B", "C")),
+                index.randomDeck(new Random(0)));
+    }
+
+    @Test
     void randomDeckFromSetIsEmptyWhenSetAbsent(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "mh3", 40)));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
 
         assertTrue(index.randomDeckFromSet("XYZ", List.of(), new Random(0)).isEmpty());
-    }
-
-    @Test
-    void randomDeckFromSetIsEmptyWhenOnlyExcludeMatches(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "only", 40)));
-
-        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
-        GeneratedDecksIndex.GeneratedDeck only = index.randomDeck(new Random(0));
-
-        assertTrue(index.randomDeckFromSet("MH3", only.cardNames(), new Random(0)).isEmpty());
     }
 
     // ── randomAnyDeckFromSet ─────────────────────────────────────────────────

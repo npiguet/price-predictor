@@ -108,7 +108,7 @@ what-ifs only, and every real decision is written.
 |---|---|
 | patched | one cost half (root key) + one effect half per chosen mode resolution (root key + `option`), sharing one `link_id`; each effect half carries only its mode's clauses' events and a snapshot taken just before that mode's first clause resolves; a Pawprint or repeated mode gives one half per resolution |
 | degraded | one cost half + one effect half (root key) carrying every chosen mode's events |
-| fork (`ForkCollector`) | one effect half per chosen mode, by the patched rule |
+| fork (`InterventionFork`) | one effect half per chosen mode, by the patched rule |
 
 ## State snapshot
 
@@ -585,15 +585,16 @@ starts passing an `AIOption` here fails a test rather than silently poisoning ev
 once.
 
 What is not true: that no simulated resolution ever happens during collection. Stage three's
-`ForkCollector` copies the live game (`GameCopier`) two ways, both taken by default:
+two forks, `InterventionFork` and `DamageStepProbe`, copy the live game (`GameCopier`, through the
+plumbing they share in `Forks`), both taken by default:
 
-- **An interventional resolution** (`--interventions-per-game` defaults to 2): `ForkCollector
+- **An interventional resolution** (`--interventions-per-game` defaults to 2): `InterventionFork
   .forceResolution` forces a candidate ability onto the copy's stack and hands the copy to
   `GameSimulator.resolveStack`, which builds its own `PlayerControllerAi` and unconditionally calls
   `setUseSimulation(AIOption.USE_FULL_SIMULATION)`, regardless of how the two lobby seats were
   registered. So a forced ability resolves through the exact same `AbilityUtils`/`EffectRecordOutcomes`
   machinery a real resolution does, under full simulation, every time collection takes an intervention.
-- **A damage-step probe** (`--probe-keywords`, all eight damage-step keywords by default): `ForkCollector.probe` strips one
+- **A damage-step probe** (`--probe-keywords`, all eight damage-step keywords by default): `DamageStepProbe.probe` strips one
   keyword from a copy and calls `Combat.assignCombatDamage`/`dealAssignedDamage` on it directly — a
   turn-based action, not a resolution, so it never touches `GameSimulator` or an `AIOption` at all, but it
   is exactly as much a fork as the first kind.
@@ -634,11 +635,11 @@ above are covered by one of them:
   .runSingleReplaceDamageEffect`'s two `damage_prevented` sites, rulings R11/R12) report with no
   `SpellAbility` at all, on the live game exactly as on a fork, so the argument-identity check above has
   nothing to compare. Simply admitting every null-ability outcome would readmit exactly what the checks
-  above exist to keep out: `ForkCollector.intervene`'s forced ability can itself reveal or prevent damage
-  with a null ability, and `ForkCollector.probe`'s damage step always does (`Combat`'s own cause is null
+  above exist to keep out: `InterventionFork.intervene`'s forced ability can itself reveal or prevent damage
+  with a null ability, and `DamageStepProbe.probe`'s damage step always does (`Combat`'s own cause is null
   for combat damage, live or forked). Two signals, tried in this order (reversed from final-fix-3.md's
   first pass — final-fix-4.md item 2):
-  1. `ForkCollector.isForkRunningOnThisThread()` — a thread flag set around the *entirety* of both
+  1. `Forks.isForkRunningOnThisThread()` — a thread flag set around the *entirety* of both
      `intervene` and `probe`, not only `probe`'s own damage-dealing call as first shipped. The narrower
      scope left every segment of a fork outside `AbilityUtils.resolve` uncovered — `intervene`'s own
      `GameCopier`/score-check setup, `forceResolution`'s pre-push `chooseModes`/`chooseTargets`/

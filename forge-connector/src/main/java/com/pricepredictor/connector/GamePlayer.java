@@ -3,7 +3,7 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.RecordShardWriter;
-import com.pricepredictor.connector.effects.SnapshotBuilder;
+import com.pricepredictor.connector.effects.Refs;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
 import forge.game.GameRules;
@@ -59,6 +59,11 @@ public class GamePlayer {
             cardsPlayedA = List.copyOf(cardsPlayedA);
             cardsPlayedB = List.copyOf(cardsPlayedB);
         }
+
+        /** The game's winner and starter, without the cards it played. */
+        public GameResult result() {
+            return new GameResult(winner, playFirst);
+        }
     }
 
     /**
@@ -70,22 +75,9 @@ public class GamePlayer {
      */
     public record PlayedMatch(List<GameOutcome> games, int durationSeconds, boolean randomSeat) {
 
-        /** Per-game winner sequence, e.g. {@code "ABA"}: the {@code games} field of a match row. */
-        public String winnerSequence() {
-            return sequence(GameOutcome::winner);
-        }
-
-        /** Per-game play-first sequence, same length as {@link #winnerSequence()}. */
-        public String playSequence() {
-            return sequence(GameOutcome::playFirst);
-        }
-
-        private String sequence(java.util.function.Function<GameOutcome, Side> sideOf) {
-            StringBuilder sb = new StringBuilder(games.size());
-            for (GameOutcome game : games) {
-                sb.append(sideOf.apply(game));
-            }
-            return sb.toString();
+        /** Each game's winner and starter, in game order: what a match row records of it. */
+        public List<GameResult> results() {
+            return games.stream().map(GameOutcome::result).toList();
         }
 
         /** Games deck A won. */
@@ -206,7 +198,7 @@ public class GamePlayer {
         long gameSeed = startMillis;
 
         while (!match.isMatchOver()) {
-            playGame(match, caps, gameSeed++).ifPresent(outcomes::add);
+            playGame(match, gameSeed++).ifPresent(outcomes::add);
         }
 
         int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
@@ -220,7 +212,7 @@ public class GamePlayer {
      * @param gameSeed seeds the game's recording
      * @return the game's outcome, or empty for a draw or an aborted game
      */
-    private Optional<GameOutcome> playGame(Match match, CollectionCaps caps, long gameSeed) {
+    private Optional<GameOutcome> playGame(Match match, long gameSeed) {
         var game = match.createGame();
         var collector = new PlayedCardCollector(game);
         game.subscribeToEvents(collector);
@@ -232,7 +224,7 @@ public class GamePlayer {
         RandomSeatController seat = randomSeatOf(game);
         GameRecording recording = effectRecords == null ? null : new GameRecording(
                 game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
-                seat == null ? null : SnapshotBuilder.playerId(seat.getPlayer()));
+                seat == null ? null : Refs.of(seat.getPlayer()));
         try {
             // Inside the try: open() installs JVM-static hooks one by one, and
             // a hook left behind by an open() that threw part way would hand

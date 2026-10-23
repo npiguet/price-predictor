@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
 
 /**
  * Whether this JVM's Forge carries the attribution patch.
@@ -15,7 +16,7 @@ package com.pricepredictor.connector.effects;
  * metadata: it says how we came to observe the record, not anything about the
  * game, so it never reaches the model.
  */
-public enum AttributionMode {
+public enum AttributionMode implements WireNamed {
 
     /** The attribution hook is present: events name the clause that produced them. */
     PATCHED("patched"),
@@ -33,6 +34,7 @@ public enum AttributionMode {
         this.wireName = wireName;
     }
 
+    @Override
     public String wireName() {
         return wireName;
     }

@@ -51,7 +51,7 @@ class CostPayloadTest {
     @Test
     void aTapCostNamesTheHostItTapped() {
         SpellAbility tapper = ability("AB$ GainLife | Cost$ T | Defined$ You | LifeAmount$ 1");
-        String entity = SnapshotBuilder.entityId(tapper.getHostCard());
+        String entity = Refs.of(tapper.getHostCard());
 
         assertTrue(costs(tapper).contains("\"tapped\":[\"" + entity + "\"]"),
                 costs(tapper));
@@ -83,14 +83,14 @@ class CostPayloadTest {
         String json = costs(sa);
 
         assertTrue(json.contains(
-                "\"sacrificed\":[\"" + SnapshotBuilder.entityId(sacrificed) + "\"]"), json);
+                "\"sacrificed\":[\"" + Refs.of(sacrificed) + "\"]"), json);
         assertTrue(json.contains(
-                "\"discarded\":[\"" + SnapshotBuilder.entityId(discarded) + "\"]"), json);
+                "\"discarded\":[\"" + Refs.of(discarded) + "\"]"), json);
         assertTrue(json.contains(
-                "\"exiled\":[\"" + SnapshotBuilder.entityId(exiled) + "\"]"), json);
+                "\"exiled\":[\"" + Refs.of(exiled) + "\"]"), json);
         // And no channel borrowed another's card.
         assertFalse(json.contains(
-                "\"tapped\":[\"" + SnapshotBuilder.entityId(sacrificed) + "\""), json);
+                "\"tapped\":[\"" + Refs.of(sacrificed) + "\""), json);
     }
 
     /** A card the engine reported twice is named once. */
@@ -102,7 +102,7 @@ class CostPayloadTest {
         sa.addCostToHashList(card, "Sacrificed", false);
 
         assertTrue(costs(sa).contains(
-                "\"sacrificed\":[\"" + SnapshotBuilder.entityId(card) + "\"]"), costs(sa));
+                "\"sacrificed\":[\"" + Refs.of(card) + "\"]"), costs(sa));
     }
 
     // ── life ────────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ class CostPayloadTest {
     void everyOutcomeRoundTripsThroughTheDeferredForm() {
         PaidCosts costs = PaidCosts.of(null);
         for (ActivationOutcome outcome : ActivationOutcome.values()) {
-            String payload = EffectRecord.costPayload(costs, outcome);
+            String payload = RecordPayloads.costPayload(costs, outcome);
             assertTrue(payload.contains("\"outcome\":\"" + outcome.wireName() + "\""), payload);
             assertTrue(payload.startsWith("{\"costs\":{"), payload);
         }

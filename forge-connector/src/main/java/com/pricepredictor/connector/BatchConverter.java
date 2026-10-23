@@ -3,6 +3,8 @@ package com.pricepredictor.connector;
 import com.esotericsoftware.minlog.Log;
 import com.pricepredictor.connector.effects.MissingSVarReport;
 import com.pricepredictor.connector.effects.ProvenanceSidecar;
+import com.pricepredictor.connector.effects.ScriptFile;
+import com.pricepredictor.connector.effects.SourceTree;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -32,7 +34,7 @@ public class BatchConverter {
      *             provenance key's script path, because one filename occurs in
      *             more than one tree and must resolve differently in each
      */
-    public BatchResult convert(Path cardsPath, Path outputPath, String tree)
+    public BatchResult convert(Path cardsPath, Path outputPath, SourceTree tree)
             throws IOException {
         return convert(cardsPath, outputPath, tree, true);
     }
@@ -53,7 +55,7 @@ public class BatchConverter {
      *                           is the source directory
      */
     public BatchResult convert(
-            Path cardsPath, Path outputPath, String tree, boolean writeConvertedText)
+            Path cardsPath, Path outputPath, SourceTree tree, boolean writeConvertedText)
             throws IOException {
         int totalFiles = 0;
         int succeeded = 0;
@@ -62,38 +64,14 @@ public class BatchConverter {
         for (Path scriptFile : ScriptFiles.under(cardsPath)) {
             totalFiles++;
             try {
-                List<String> lines = Files.readAllLines(scriptFile);
-                String filename = scriptFile.getFileName().toString();
-                Path relativePath = cardsPath.relativize(scriptFile);
-                // The key's script path is the source path as written, tree
-                // included — produced identically here and by the Python reader.
-                String scriptKeyPath = tree + "/"
-                        + relativePath.toString().replace('\\', '/');
-
-                RulesParser.ParsedCard parsed =
-                        converter.parseScript(lines, filename, scriptKeyPath);
-                MultiCard result = parsed.card();
-
-                List<RenderedLine> renderedLines = result.renderLines();
-                String output = RenderedLine.join(renderedLines);
-
-                Path outputFile = outputPath.resolve(relativePath);
-                Files.createDirectories(outputFile.getParent());
-                if (writeConvertedText) {
-                    Files.writeString(outputFile, output);
-                }
-
-                ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                        result.faces().get(0).name(), scriptKeyPath,
-                        renderedLines, parsed.recorders());
-                Files.writeString(sidecarPathFor(outputFile), sidecar.toJson());
+                convertOne(cardsPath, scriptFile, outputPath, tree, writeConvertedText);
                 succeeded++;
             } catch (Throwable t) {
                 // Forge's card-rules parser raises AssertionError on
                 // malformed scripts as well as IOException/RuntimeException;
                 // catch Throwable so one bad fixture can't abort the batch.
                 String cardName = scriptFile.getFileName().toString().replace(".txt", "");
-                String warning = "[" + cardName + "] " + t.getMessage();
+                String warning = "[" + cardName + "] " + describe(t);
                 warnings.add(warning);
                 Log.warn("BatchConverter", warning);
             }
@@ -103,6 +81,53 @@ public class BatchConverter {
         // card tree's entries.
         return new BatchResult(totalFiles, succeeded, warnings,
                 converter.missingSVars().drain());
+    }
+
+    /**
+     * Convert one script: its text, when asked for, and its sidecar, both
+     * from the same render so the sidecar's line indices describe the file.
+     */
+    private void convertOne(
+            Path cardsPath, Path scriptFile, Path outputPath, SourceTree tree,
+            boolean writeConvertedText) throws IOException {
+        List<String> lines = Files.readAllLines(scriptFile);
+        Path relativePath = cardsPath.relativize(scriptFile);
+        // The key's script path is the source path as written, tree
+        // included — assembled by the same ScriptFile the collectors name
+        // scripts with, so the converter and a collector cannot spell one
+        // script two ways.
+        String scriptKeyPath = new ScriptFile(tree, relativePath.toString()).key();
+
+        RulesParser.ParsedCard parsed =
+                converter.parseScript(lines, scriptKeyPath);
+        MultiCard result = parsed.card();
+
+        List<RenderedLine> renderedLines = result.renderLines();
+        String output = RenderedLine.join(renderedLines);
+
+        Path outputFile = outputPath.resolve(relativePath);
+        Files.createDirectories(outputFile.getParent());
+        if (writeConvertedText) {
+            Files.writeString(outputFile, output);
+        }
+
+        ProvenanceSidecar sidecar = ProvenanceSidecar.build(
+                result.faces().get(0).name(), scriptKeyPath,
+                renderedLines, parsed.recorders());
+        Files.writeString(sidecarPathFor(outputFile), sidecar.toJson());
+    }
+
+    /**
+     * What went wrong, for the operator: the exception's message, with its type
+     * in front, because a bare message does not say whether a script is
+     * malformed or the converter is broken, and Forge's parser throws an
+     * {@code AssertionError} or a {@code NullPointerException} with no message
+     * at all for a script it cannot make a card of.
+     */
+    static String describe(Throwable t) {
+        String message = t.getMessage();
+        String type = t.getClass().getSimpleName();
+        return message == null || message.isEmpty() ? type : type + ": " + message;
     }
 
     /** The sidecar beside a converted {@code .txt}, the pairing {@code .npz} uses. */
@@ -129,8 +154,8 @@ public class BatchConverter {
         }
 
         /** Print the counts for {@code tree}, then each warning under a header. */
-        public void report(PrintStream out, String tree) {
-            out.println("  [" + tree + "]");
+        public void report(PrintStream out, SourceTree tree) {
+            out.println("  [" + tree.wireName() + "]");
             out.println("  Total files:  " + totalFiles);
             out.println("  Succeeded:    " + succeeded);
             out.println("  Warnings:     " + warningCount());

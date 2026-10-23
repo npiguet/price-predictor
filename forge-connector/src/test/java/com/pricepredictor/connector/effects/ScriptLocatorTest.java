@@ -51,14 +51,15 @@ class ScriptLocatorTest {
         Card copy = TestCards.copiedToken("c_a_food_sac");
         copy.setImageKey(forge.ImageKeys.getTokenKey("no_such_token_xyz"));
 
-        // Falls through to the name-derived cardsfolder path, exactly as before
-        // this change; what must not happen is a fabricated tokenscripts path.
+        // Falls through to the name-derived cardsfolder path, the answer for any
+        // card no script is known for; what must not happen is a fabricated
+        // tokenscripts path.
         assertEquals("cardsfolder/f/food_token.txt", ScriptLocator.scriptFileOf(copy));
     }
 
     /**
      * A null or empty image key must not throw. {@code ImageKeys.getTokenImageName}
-     * rejects a null key with an NPE that {@code tokenScriptStemOf} catches
+     * rejects a null key with an NPE that {@code tokenScriptStem} catches
      * internally, and an empty key never matches the token prefix either way —
      * both fall through to the same name-derived cardsfolder path as an
      * unknown token key.
@@ -80,7 +81,7 @@ class ScriptLocatorTest {
      * or not) but the image key is the printed card's, not a {@code t:} key.
      * {@code ImageKeys.getTokenImageName} rejects a non-token key outright, so
      * this must still reach the cardsfolder path — the case the class doc for
-     * {@code tokenScriptStemOf} names explicitly.
+     * {@code tokenScriptStem} names explicitly.
      */
     @Test
     void aTokenCopyOfAPrintedCardStillKeysIntoTheCardTree() {
@@ -95,16 +96,12 @@ class ScriptLocatorTest {
      * The join is a string comparison, so what the collector writes has to be
      * what the converter wrote: the source path relativised against the tree,
      * with forward slashes, on a platform whose own separator is neither.
+     * Spelled out rather than recomputed, so a change to the shared derivation
+     * cannot move both sides at once; {@code +2 Mace} is a card the tree files
+     * under {@code p/} rather than where its name derives.
      */
     @Test
     void theKeyedPathIsTheOneTheConverterWouldHaveWritten() {
-        Card mace = card("+2 Mace");
-        String path = ScriptLocator.scriptFileOf(mace);
-
-        assertEquals(SourceTree.CARDSFOLDER + "/"
-                        + SourceTree.relativePathIn(
-                                SourceTree.CARDSFOLDER, mace.getRules().getPath()),
-                path);
-        assertEquals(-1, path.indexOf('\\'), path);
+        assertEquals("cardsfolder/p/+2_mace.txt", ScriptLocator.scriptFileOf(card("+2 Mace")));
     }
 }

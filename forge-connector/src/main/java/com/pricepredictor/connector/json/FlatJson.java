@@ -1,4 +1,4 @@
-package com.pricepredictor.connector;
+package com.pricepredictor.connector.json;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -7,14 +7,17 @@ import java.util.Map;
  * Minimal reader for a flat JSON object whose values are strings, integers,
  * booleans or null — all the supervisor's pick response ever carries. Integers
  * come back as {@link Long}.
+ *
+ * <p>The reading half of {@link Json}, and as narrow as the one document it
+ * reads: anything richer than a flat object is refused rather than half-read.
  */
-final class FlatJson {
+public final class FlatJson {
 
     private FlatJson() {
     }
 
     /** @throws IllegalArgumentException on anything that is not such an object */
-    static Map<String, Object> parse(String json) {
+    public static Map<String, Object> parse(String json) {
         Map<String, Object> map = new HashMap<>();
         int n = json.length();
         int i = skipWs(json, 0);

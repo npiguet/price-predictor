@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 /**
  * How long an event's outcome lasts, as its {@code duration} spells it.
  *
@@ -8,7 +10,7 @@ package com.pricepredictor.connector.effects;
  * spells a script's duration a dozen ways, and {@link EventAttribution} is
  * what folds them into these.
  */
-public enum EventDuration {
+public enum EventDuration implements WireNamed {
     INSTANT("instant"),
     END_OF_TURN("end_of_turn"),
     PERMANENT("permanent");
@@ -20,6 +22,7 @@ public enum EventDuration {
     }
 
     /** The {@code duration} an event carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

@@ -1,6 +1,6 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.Json;
+import com.pricepredictor.connector.json.Json;
 import forge.StaticData;
 import forge.card.CardEdition;
 import forge.gamemodes.limited.BoosterDraft;
@@ -60,12 +60,12 @@ class DraftWorkerMainTest {
         if (uniformBoosterSet != null) {
             return uniformBoosterSet;
         }
-        List<String> eligible = MatchGenerator.computeEligibleSets();
+        List<String> eligible = BoosterTemplates.eligibleSealedSets();
         assertFalse(eligible.isEmpty(), "expected at least one eligible sealed-legal set");
         for (String code : eligible) {
             CardEdition edition = StaticData.instance().getEditions().get(code);
             SealedTemplate template =
-                    edition == null ? null : edition.getBoosterTemplate("Draft");
+                    edition == null ? null : edition.getBoosterTemplate(BoosterTemplates.DRAFT_BOOSTER);
             if (template == null) {
                 continue;
             }
@@ -99,18 +99,27 @@ class DraftWorkerMainTest {
                 new BufferedReader(new StringReader("")), Set.of());
     }
 
+    /** A fresh pod context drawing {@code mixSpec} from a seeded stream, no seat forced. */
+    private static DraftWorkerMain.DraftSettings settings(
+            String mixSpec, DraftPickProtocol.PickChannel channel) {
+        return new DraftWorkerMain.DraftSettings(
+                BoosterDraft.createDraft(LimitedPoolType.Full), AgentMix.parse(mixSpec),
+                new Random(0), channel, null);
+    }
+
+    /** A Forge-only draft of {@code setCode}, every seat {@code forge-full}. */
+    private static DraftWorkerMain.DraftResult forgeDraft(String setCode) {
+        return DraftWorkerMain.generateDraft(
+                settings("forge-full:1", forgeOnlyChannel()), setCode, "test-draft");
+    }
+
     // ── Forge-driven full draft ───────────────────────────────────────────────
 
     @Test
     void generatesFullyDrainedEightSeatThreePackTranscript() {
         String setCode = uniformBoosterSet();
 
-        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
-        AgentMix mix = AgentMix.parse("forge-full:1");
-
-        String line = completedLine(
-                DraftWorkerMain.generateDraft(context, setCode, mix, new Random(0),
-                        forgeOnlyChannel(), "test-draft", null));
+        String line = completedLine(forgeDraft(setCode));
         assertTrue(line.startsWith(DraftWorkerMain.SENTINEL), "line must start with sentinel");
         assertFalse(line.substring(DraftWorkerMain.SENTINEL.length()).contains("\n"),
                 "transcript must be a single newline-free line");
@@ -120,8 +129,9 @@ class DraftWorkerMainTest {
         assertEquals(24, countOccurrences(json, "\"set_code\""), "expected 24 boosters");
         assertEquals(8, countOccurrences(json, "\"agent\""), "expected 8 seat agents");
         assertTrue(json.contains("\"draft_id\""));
-        // Each booster has a non-empty drained picks array.
-        assertEquals(24, countOccurrences(json, "\"picks\":["), "every booster lists picks");
+        // Each booster has a non-empty drained picks array: an empty one would
+        // read "picks":[] and not match.
+        assertEquals(24, countOccurrences(json, "\"picks\":[\""), "every booster lists picks");
     }
 
     /**
@@ -132,11 +142,7 @@ class DraftWorkerMainTest {
      */
     @Test
     void anAliasedSetIsRecordedUnderItsCanonicalCode() {
-        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
-
-        String json = completedLine(DraftWorkerMain.generateDraft(
-                context, "CON", AgentMix.parse("forge-full:1"), new Random(0),
-                forgeOnlyChannel(), "test-draft", null));
+        String json = completedLine(forgeDraft("CON"));
 
         assertEquals(24, countOccurrences(json, "\"set_code\":\"CFX\""), json);
         assertEquals(0, countOccurrences(json, "\"CON\""), json);
@@ -146,11 +152,7 @@ class DraftWorkerMainTest {
     @Test
     void aPlainSetCodeIsRecordedUnchanged() {
         String setCode = uniformBoosterSet();
-        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
-
-        String json = completedLine(DraftWorkerMain.generateDraft(
-                context, setCode, AgentMix.parse("forge-full:1"), new Random(0),
-                forgeOnlyChannel(), "test-draft", null));
+        String json = completedLine(forgeDraft(setCode));
 
         assertEquals(24, countOccurrences(json, "\"set_code\":" + Json.string(setCode)), json);
     }
@@ -166,12 +168,7 @@ class DraftWorkerMainTest {
     void aSetWithNoBoosterTemplateIsSkippedNamingTheSet() {
         // Returned rather than thrown, so the worker loop must count it: a bad
         // -Ddraft.set once skipped every draft in silence, forever.
-        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
-        AgentMix mix = AgentMix.parse("forge-full:1");
-
-        DraftWorkerMain.DraftResult result =
-                DraftWorkerMain.generateDraft(context, "NOT-A-SET", mix, new Random(0),
-                        forgeOnlyChannel(), "test-draft", null);
+        DraftWorkerMain.DraftResult result = forgeDraft("NOT-A-SET");
 
         DraftWorkerMain.DraftResult.Skipped skipped =
                 assertInstanceOf(DraftWorkerMain.DraftResult.Skipped.class, result);
@@ -232,12 +229,10 @@ class DraftWorkerMainTest {
         responder.setDaemon(true);
         responder.start();
 
-        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
-        AgentMix mix = AgentMix.parse("draft-agent:1");
         DraftWorkerMain.DraftResult result = DraftWorkerMain.generateDraft(
-                context, setCode, mix, new Random(0),
-                new DraftPickProtocol.PickChannel(out, stdin, Set.of("draft-agent")),
-                "test-draft", null);
+                settings("draft-agent:1",
+                        new DraftPickProtocol.PickChannel(out, stdin, Set.of("draft-agent"))),
+                setCode, "test-draft");
         out.close();  // signal the responder EOF
 
         String line = completedLine(result);
@@ -246,7 +241,7 @@ class DraftWorkerMainTest {
         assertTrue(json.contains("\"draft_id\":\"test-draft\""));
         assertEquals(8, countOccurrences(json, "\"agent\":\"draft-agent\""),
                 "every seat should carry the model label");
-        assertEquals(24, countOccurrences(json, "\"picks\":["), "every booster drained");
+        assertEquals(24, countOccurrences(json, "\"picks\":[\""), "every booster drained");
     }
 
     private static String jsonStringField(String json, String key) {

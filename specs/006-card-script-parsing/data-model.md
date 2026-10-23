@@ -161,11 +161,14 @@ Ability 0──* Ability (subAbilities, e.g., CharmAbility → OPTION sub-abilit
 ```
 CardRules (from CardRules.Reader)
     │
+    ├─ Supply CopyFaceFrom faces from the loaded card database (CopiedFaces),
+    │   as CardDb does once every script is read
+    │
     ├─ Build full Card object via CardFactory.getCard()
     │   (instantiates all keywords, spell abilities, triggers, statics, replacements)
     │
     ├─ Determine CardSplitType:
-    │   ├─ None → singleFace(parseFace(card, mainPart))
+    │   ├─ None → singleFace(FaceParser(card, mainPart).parse())
     │   ├─ Split → faces: [LeftSplit, RightSplit]
     │   ├─ Specialize → faces: [Original, ...specializeParts]
     │   └─ Others → faces: [Original, changedStateName]
@@ -173,9 +176,10 @@ CardRules (from CardRules.Reader)
     └─ MultiCard.multiFace(layout, faces) or MultiCard.singleFace(face)
 ```
 
-### Face-level: `RulesParser.parseFace(Card, ICardFace)`
+### Face-level: `FaceParser.parse()`
 
-RulesParser acts as a router, delegating to variant Ability implementations.
+RulesParser acts as a router: each face goes to a `FaceParser` built from the `Card` and the
+`ICardFace`, which delegates to variant Ability implementations.
 
 ```
 Card (in correct state) + ICardFace

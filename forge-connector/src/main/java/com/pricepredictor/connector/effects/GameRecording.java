@@ -54,13 +54,20 @@ public final class GameRecording implements AutoCloseable {
                 () -> new CollectorContext(writer, gameId, mode, randomSeatPlayerId);
         // Stage three. Nothing is copied unless a budget says so, because a
         // fork costs a game copy and a stack resolution, and nothing on a
-        // stock checkout, where no fork could be attributed.
-        Optional<ForkCollector> forks = mode == AttributionMode.PATCHED
-                && (caps.interventionsPerGame() > 0 || caps.probesEnabled())
-                ? Optional.of(new ForkCollector(game, context.get(), caps, seed))
+        // stock checkout, where no fork could be attributed. Both kinds share
+        // one game's budget and one context.
+        boolean forking = mode == AttributionMode.PATCHED
+                && (caps.interventionsPerGame() > 0 || caps.probesEnabled());
+        CollectorContext forkContext = forking ? context.get() : null;
+        ForkBudget budget = new ForkBudget(caps);
+        this.interventions = forking
+                ? Optional.of(new InterventionScheduler(
+                        game, new InterventionFork(game, forkContext, budget, seed)))
                 : Optional.empty();
-        this.interventions = forks.map(fork -> new InterventionScheduler(game, fork));
-        this.probes = forks.map(fork -> new ProbeScheduler(game, gameId, caps, fork));
+        this.probes = forking
+                ? Optional.of(new ProbeScheduler(
+                        game, gameId, caps, new DamageStepProbe(game, forkContext, budget)))
+                : Optional.empty();
         // A probe forks before the damage step and cannot know which combat
         // record it mirrors until that record is written.
         this.bracket = new BusBracketCollector(game, context.get(),
@@ -95,7 +102,6 @@ public final class GameRecording implements AutoCloseable {
      */
     public void open() {
         game.subscribeToEvents(bracket);
-        PatchHooks.CONFIRM_LISTENER.install(bracket.confirmHandler());
         patched.install();
         // Continuous effects are read off the layer tables at a phase
         // boundary, which is the cheapest moment the board is stable.
@@ -112,11 +118,7 @@ public final class GameRecording implements AutoCloseable {
      */
     @Override
     public void close() {
-        try {
-            patched.close();
-        } finally {
-            PatchHooks.CONFIRM_LISTENER.uninstall();
-        }
+        patched.close();
     }
 
     /** Where the random seat writes the decisions its own draws made (FR-022d). */

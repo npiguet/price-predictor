@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * forks of one board.
  */
 @ExtendWith(ForgeExtension.class)
-class ForkCollectorTest {
+class ForkRecordsTest {
 
     @TempDir
     Path tempDir;
@@ -50,16 +50,27 @@ class ForkCollectorTest {
     }
 
     private RecordShardWriter writer;
+    /** The budget the last fork built here spends. */
+    private ForkBudget budget;
 
-    private ForkCollector collector(CollectionCaps caps) {
+    private CollectorContext context(CollectionCaps caps) {
         writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        return new ForkCollector(null, TestCollectors.context(writer, "run.0-l1.0"), caps, 42L);
+        budget = new ForkBudget(caps);
+        return TestCollectors.context(writer, "run.0-l1.0");
+    }
+
+    private InterventionFork interventions(CollectionCaps caps) {
+        return new InterventionFork(null, context(caps), budget, 42L);
+    }
+
+    private DamageStepProbe probes(CollectionCaps caps) {
+        return new DamageStepProbe(null, context(caps), budget);
     }
 
     /**
-     * The collector's shard, closed so every record it wrote is on disk. The
-     * writer creates the file with its first record, so a collector that
-     * wrote nothing leaves none.
+     * The fork's shard, closed so every record it wrote is on disk. The
+     * writer creates the file with its first record, so a fork that wrote
+     * nothing leaves none.
      */
     private Path closedShard() {
         writer.close();
@@ -73,22 +84,20 @@ class ForkCollectorTest {
      * reads turn 0 — which is all the pairing guard needs: a branch that says
      * it came from any other turn disagrees with it.
      */
-    private ForkCollector collectorOverAGame(CollectionCaps caps) {
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        return new ForkCollector(TestCards.game(), TestCollectors.context(writer, "run.0-l1.0"), caps, 42L);
+    private DamageStepProbe probesOverAGame(CollectionCaps caps) {
+        return new DamageStepProbe(TestCards.game(), context(caps), budget);
     }
 
     // ── the per-game budget ─────────────────────────────────────────────
 
     @Test
     void aFreshGameMayIntervene() {
-        assertTrue(collector(caps(2, 2, List.of())).mayIntervene(1));
+        assertTrue(new ForkBudget(caps(2, 2, List.of())).mayIntervene(1));
     }
 
     @Test
     void anExhaustedInterventionBudgetStopsFurtherForks() {
-        ForkCollector collector = collector(caps(0, 2, List.of()));
-        assertFalse(collector.mayIntervene(1));
+        assertFalse(new ForkBudget(caps(0, 2, List.of())).mayIntervene(1));
     }
 
     // ── the fixed per-resolution cap ────────────────────────────────────
@@ -98,7 +107,7 @@ class ForkCollectorTest {
         // A generous --interventions-per-game must not let one board absorb
         // the whole budget: two counterfactuals for it are already both worth
         // having, and a third costs a game's simulation for a third variation.
-        ForkCollector collector = collector(caps(100, 2, List.of()));
+        InterventionFork collector = interventions(caps(100, 2, List.of()));
         collector.intervene(null, 7);
         collector.intervene(null, 7);
         assertFalse(collector.mayIntervene(7));
@@ -109,14 +118,14 @@ class ForkCollectorTest {
     void aDiscardedForkStillCountsAgainstItsBudget() {
         // Otherwise a systematically failing copy would retry until the game
         // ended. A null game makes every copy fail.
-        ForkCollector collector = collector(caps(1, 2, List.of()));
+        InterventionFork collector = interventions(caps(1, 2, List.of()));
         assertFalse(collector.intervene(null, 1));
         assertFalse(collector.mayIntervene(1));
     }
 
     @Test
     void aFailedForkWritesNoRecord() {
-        ForkCollector collector = collector(caps(2, 2, List.of()));
+        InterventionFork collector = interventions(caps(2, 2, List.of()));
         collector.intervene(null, 1);
         assertFalse(Files.exists(closedShard()));
     }
@@ -127,30 +136,29 @@ class ForkCollectorTest {
     void noProbeIsTakenWithTheFlagUnset() {
         // Whatever the build state: the flag is the runtime switch, and it is
         // deliberately separate from the build decision gate 2 drives.
-        ForkCollector collector = collector(caps(2, 2, List.of()));
-        assertFalse(collector.mayProbe("wither"));
+        assertFalse(new ForkBudget(caps(2, 2, List.of())).mayProbe("wither"));
     }
 
     @Test
     void onlyTheNamedKeywordsAreProbed() {
-        ForkCollector collector = collector(caps(2, 2, List.of("wither")));
-        assertTrue(collector.mayProbe("wither"));
-        assertFalse(collector.mayProbe("lifelink"));
+        ForkBudget budget = new ForkBudget(caps(2, 2, List.of("wither")));
+        assertTrue(budget.mayProbe("wither"));
+        assertFalse(budget.mayProbe("lifelink"));
     }
 
     @Test
     void theProbeBudgetIsSpentByTakingProbes() {
         // Spent even by a fork that fails: a null game makes every copy fail.
-        ForkCollector collector = collector(caps(2, 1, List.of("wither")));
+        DamageStepProbe collector = probes(caps(2, 1, List.of("wither")));
         assertNull(collector.probe("wither", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
-        assertFalse(collector.mayProbe("wither"));
+        assertFalse(budget.mayProbe("wither"));
     }
 
     @Test
     void aProbeForAnUnnamedKeywordSpendsNothing() {
-        ForkCollector collector = collector(caps(2, 1, List.of("wither")));
+        DamageStepProbe collector = probes(caps(2, 1, List.of("wither")));
         assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
-        assertTrue(collector.mayProbe("wither"));
+        assertTrue(budget.mayProbe("wither"));
         assertFalse(Files.exists(closedShard()));
     }
 
@@ -171,7 +179,7 @@ class ForkCollectorTest {
      */
     @Test
     void aBranchFromAnEarlierTurnIsNotWrittenAgainstThisOnesRecord() {
-        ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
+        DamageStepProbe collector = probesOverAGame(caps(2, 2, List.of("trample")));
 
         assertFalse(collector.writeHeldProbe(branch(7), "run.0-l1.9"),
                 "a branch seven turns older than its mirror is not a pair");
@@ -181,7 +189,7 @@ class ForkCollectorTest {
     /** A branch from the turn the record was written on is written. */
     @Test
     void aBranchFromThisTurnIsWritten() throws IOException {
-        ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
+        DamageStepProbe collector = probesOverAGame(caps(2, 2, List.of("trample")));
 
         assertTrue(collector.writeHeldProbe(branch(0), "run.0-l1.9"));
         assertEquals(1, ShardRun.readShard(closedShard()).size());
@@ -190,20 +198,20 @@ class ForkCollectorTest {
     /**
      * A branch with no turn to check is written.
      *
-     * <p>{@link ForkCollector#TURN_UNKNOWN} is what a hand-built branch carries
+     * <p>{@link DamageStepProbe#TURN_UNKNOWN} is what a hand-built branch carries
      * and what a collector with no live game reads, and the guard fires on
      * neither: there is no turn to disagree with.
      */
     @Test
     void aBranchWithNoTurnIsWritten() {
-        ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
+        DamageStepProbe collector = probesOverAGame(caps(2, 2, List.of("trample")));
 
-        assertTrue(collector.writeHeldProbe(branch(ForkCollector.TURN_UNKNOWN), "run.0-l1.9"));
+        assertTrue(collector.writeHeldProbe(branch(DamageStepProbe.TURN_UNKNOWN), "run.0-l1.9"));
     }
 
     /** A branch from a named turn, otherwise like every other hand-built one. */
-    private static ForkCollector.HeldProbe branch(int turn) {
-        return new ForkCollector.HeldProbe(
+    private static DamageStepProbe.HeldProbe branch(int turn) {
+        return new DamageStepProbe.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null),
                 DamageStep.REGULAR, turn);
     }
@@ -229,11 +237,11 @@ class ForkCollectorTest {
         Combat combat = TestBoard.blockedCombat(game, attacking, defending, dreadmaw, bears);
 
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        ForkCollector.HeldProbe held;
+        DamageStepProbe.HeldProbe held;
         try {
-            ForkCollector forks = new ForkCollector(
+            DamageStepProbe forks = new DamageStepProbe(
                     game, TestCollectors.context(writer, "run.0-l1.0"),
-                    caps(0, 1, List.of("trample")), 1L);
+                    new ForkBudget(caps(0, 1, List.of("trample"))));
             held = forks.probe("Trample", dreadmaw, DamageStep.REGULAR);
             assertNotNull(held, "the probe fork was discarded");
 
@@ -441,7 +449,7 @@ class ForkCollectorTest {
                 .filter(card -> card.getName().equals("Maro")).findFirst().orElseThrow();
         String forced = payloadOf(forcedRecord(forkedGame, firstSpellInHand(forkedGame), 1L));
 
-        assertTrue(forced.contains("\"subjects\":[\"" + SnapshotBuilder.entityId(maro)
+        assertTrue(forced.contains("\"subjects\":[\"" + Refs.of(maro)
                 + "\"],\"params\":{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""),
                 forced);
         assertEquals(observed, forced);

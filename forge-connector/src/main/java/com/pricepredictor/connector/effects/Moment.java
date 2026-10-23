@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.WireNamed;
+
 /**
  * Which half of a resolution pair a {@code resolution} record is.
  *
@@ -7,7 +9,7 @@ package com.pricepredictor.connector.effects;
  * record is given its moment when it is made, by {@link EffectRecord#resolution}.
  * {@code Moment} in {@code records.py} is the other half of this vocabulary.
  */
-public enum Moment {
+public enum Moment implements WireNamed {
     /** The cost half: what was paid, and what became of the spell. */
     ACTIVATION("activation"),
     /** The effect half: what the resolution did. */
@@ -20,6 +22,7 @@ public enum Moment {
     }
 
     /** The {@code moment} a record carries. */
+    @Override
     public String wireName() {
         return wireName;
     }

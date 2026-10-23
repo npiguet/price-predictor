@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.json.Json;
 import forge.game.card.Card;
 import forge.game.cost.CostTap;
 import forge.game.mana.Mana;
@@ -19,7 +20,7 @@ import java.util.Set;
  * ({@code PlaySpellAbility} resets the paid hash, {@code CostPartMana} clears
  * the paying mana), so a deferred record holds this value rather than the
  * ability. The cast's outcome is only readable later, which is why the two
- * meet in {@link EffectRecord#costPayload} rather than here.
+ * meet in {@link RecordPayloads#costPayload} rather than here.
  *
  * <p>Deliberately not read off {@code getPayCosts()}, where {@code tapped},
  * {@code sacrificed}, {@code discarded} and {@code exiled} always read empty,
@@ -106,7 +107,7 @@ record PaidCosts(
         if (cards != null) {
             for (Card card : cards) {
                 if (card != null) {
-                    ids.add(SnapshotBuilder.entityId(card));
+                    ids.add(Refs.of(card));
                 }
             }
         }
@@ -128,7 +129,7 @@ record PaidCosts(
         if (ability.getPayCosts() != null
                 && ability.getPayCosts().hasSpecificCostType(CostTap.class)
                 && ability.getHostCard() != null) {
-            ids.add(SnapshotBuilder.entityId(ability.getHostCard()));
+            ids.add(Refs.of(ability.getHostCard()));
         }
         return new ArrayList<>(ids);
     }

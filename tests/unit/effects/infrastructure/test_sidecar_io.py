@@ -23,6 +23,7 @@ from effects.domain.provenance import (
 from effects.infrastructure import sidecar_io as _sidecar_io
 from effects.infrastructure.sidecar_io import (
     SidecarCache,
+    prose_for,
     read_sidecar,
     sidecar_from_dict,
     sidecar_path_for,
@@ -358,6 +359,46 @@ class TestTheVariantTreeHasNoProse:
         cache, key = self._cache(tmp_path)
         assert cache.row_for(key) == 0
         assert cache.line_for(key).script_text == "SP$ DealDamage | NumDmg$ 7"
+
+
+class TestTheProseSplit:
+    """Where a line's prose starts is the converter's answer, not a re-parse.
+
+    A continuation line of a multi-line description has no ``kind[n]: ``
+    prefix, so cutting it at its first ``": "`` would take ``{T}: `` off it as
+    though it were one and shift every role span on it.
+    """
+
+    _RENDERED = ["static: creatures you control have:", "{T}: add {G}."]
+
+    def _line(self, index, prose_offset):
+        return SidecarLine(
+            line_index=index, line_kind="static", provenance=(),
+            prose_offset=prose_offset,
+        )
+
+    def test_a_continuation_line_keeps_its_colon(self):
+        assert prose_for(self._line(1, 0), self._RENDERED) == "{T}: add {G}."
+
+    def test_a_prefixed_line_starts_after_its_prefix(self):
+        line = self._line(0, len("static: "))
+        assert prose_for(line, self._RENDERED) == "creatures you control have:"
+
+    def test_a_sidecar_without_the_offset_falls_back_to_the_first_colon(self):
+        """Sidecars on disk predate the field and must still read."""
+        assert prose_for(self._line(0, None), self._RENDERED) == (
+            "creatures you control have:"
+        )
+
+    def test_the_offset_round_trips_and_is_absent_when_unknown(self):
+        sidecar = ProvenanceSidecar(
+            card="Test", script_file=_SCRIPT,
+            lines=(self._line(0, 8), self._line(1, None)),
+        )
+        data = sidecar_to_dict(sidecar)
+        assert data["lines"][0]["prose_offset"] == 8
+        assert "prose_offset" not in data["lines"][1]
+        assert sidecar_from_dict(data) == sidecar
 
 
 class TestATransientOpenFailureIsRetried:

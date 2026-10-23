@@ -98,7 +98,7 @@ final class ClauseOutcomeRouter {
                 bracket.beginMode(clause, start.option());
             }
         } else {
-            ForkCollector.noteClauseResolving(clause);
+            Forks.noteClauseResolving(clause);
         }
     }
 
@@ -196,8 +196,42 @@ final class ClauseOutcomeRouter {
      * ability's host is never a default: a coin flip or a token made is not
      * something done to the card whose ability did it, and Detain's host is
      * the spell that cast the restriction, not one of the cards it landed on.
+     * Which params entries are not generic parameters is
+     * {@link #outcomeEvent}'s to say.
      *
-     * <p>Three params entries are not generic parameters:
+     * <p>Package-private rather than private, the same reason
+     * {@code clauseHandler} is: that argument order has no compiler behind it
+     * either, so this hook's own test calls it directly, the way
+     * {@code ClauseContractTest} calls {@code clauseHandler}.
+     */
+    PatchHooks.Listener outcomeHandler() {
+        return PatchHooks.OUTCOME_LISTENER.listener((callback, args) -> {
+            String wireName = args.get(1, String.class);
+            if (wireName == null) {
+                return;
+            }
+            Optional<EventType> type = EventType.fromWire(wireName)
+                    .filter(KNOWN_OUTCOME_TYPES::contains);
+            if (type.isEmpty()) {
+                reportUnknownOutcomeType(wireName);
+                return;
+            }
+            EffectEvent event = outcomeEvent(
+                    type.get(), args.get(2) instanceof Map<?, ?> params ? params : Map.of());
+            SpellAbility ability = args.get(0, SpellAbility.class);
+            boolean liveGame = ability != null
+                    ? live.owns(ability)
+                    : live.ownsNullAbilityOutcome();
+            if (liveGame) {
+                bracket.recordClauseEvent(event);
+            }
+        });
+    }
+
+    /**
+     * The event an outcome's params describe: every entry a generic
+     * parameter, except three.
+     *
      * <ul>
      *   <li>{@code "subjects"}, carrying the raw Card/Player list of who the
      *   outcome happened to (the cards a restriction landed on, the players
@@ -220,59 +254,31 @@ final class ClauseOutcomeRouter {
      *   board: the same script id, and keywords spelled the way an entity's
      *   are. The token itself never reaches the event.
      * </ul>
-     *
-     * <p>Package-private rather than private, the same reason
-     * {@code clauseHandler} is: that argument order has no compiler behind it
-     * either, so this hook's own test calls it directly, the way
-     * {@code ClauseContractTest} calls {@code clauseHandler}.
      */
-    PatchHooks.Listener outcomeHandler() {
-        return PatchHooks.OUTCOME_LISTENER.listener((callback, args) -> {
-            String wireName = args.get(1, String.class);
-            if (wireName == null) {
-                return;
-            }
-            Optional<EventType> type = EventType.fromWire(wireName)
-                    .filter(KNOWN_OUTCOME_TYPES::contains);
-            if (type.isEmpty()) {
-                reportUnknownOutcomeType(wireName);
-                return;
-            }
-            EffectEvent event = new EffectEvent(type.get());
-            if (args.get(2) instanceof Map<?, ?> params) {
-                for (Map.Entry<?, ?> entry : params.entrySet()) {
-                    if ("subjects".equals(entry.getKey())) {
-                        addOutcomeSubjects(event, entry.getValue());
-                        continue;
+    private static EffectEvent outcomeEvent(EventType type, Map<?, ?> params) {
+        EffectEvent event = new EffectEvent(type);
+        for (Map.Entry<?, ?> entry : params.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            Object value = entry.getValue();
+            switch (key) {
+                case "subjects" -> addOutcomeSubjects(event, value);
+                case "source" -> event.param("source", outcomeRefOf(value));
+                case "sample" -> {
+                    if (value instanceof Card token) {
+                        event.param("token_script_id", CardSpelling.tokenScriptIdOf(token));
+                        event.param("characteristics", tokenCharacteristics(token));
                     }
-                    if ("source".equals(entry.getKey())) {
-                        event.param("source", outcomeRefOf(entry.getValue()));
-                        continue;
-                    }
-                    if ("sample".equals(entry.getKey())) {
-                        if (entry.getValue() instanceof Card token) {
-                            event.param("token_script_id", SnapshotBuilder.tokenScriptIdOf(token));
-                            event.param("characteristics", tokenCharacteristics(token));
-                        }
-                        continue;
-                    }
-                    event.param(String.valueOf(entry.getKey()), entry.getValue());
                 }
+                default -> event.param(key, value);
             }
-            SpellAbility ability = args.get(0, SpellAbility.class);
-            boolean liveGame = ability != null
-                    ? live.owns(ability)
-                    : live.ownsNullAbilityOutcome();
-            if (liveGame) {
-                bracket.recordClauseEvent(event);
-            }
-        });
+        }
+        return event;
     }
 
     /**
      * Converts a raw Card/Player list reported under the {@code "subjects"}
      * params key into the event's own subject refs -- see
-     * {@link #outcomeHandler()} for why that key is not a generic param.
+     * {@link #outcomeEvent} for why that key is not a generic param.
      */
     private static void addOutcomeSubjects(EffectEvent event, Object value) {
         if (!(value instanceof Iterable<?> subjects)) {
@@ -286,20 +292,20 @@ final class ClauseOutcomeRouter {
     /**
      * What a made token is, for a {@code token_created} event: its base
      * power and toughness, its type line and its keywords — see
-     * {@link #outcomeHandler()} for why these are rendered here.
+     * {@link #outcomeEvent} for why these are rendered here.
      */
     private static Map<String, Object> tokenCharacteristics(Card token) {
         Map<String, Object> traits = new LinkedHashMap<>();
         traits.put("power", token.getBasePower());
         traits.put("toughness", token.getBaseToughness());
         traits.put("types", token.getType().toString());
-        traits.put("keywords", SnapshotBuilder.keywordNames(token.getKeywords()));
+        traits.put("keywords", CardSpelling.keywordNames(token.getKeywords()));
         return traits;
     }
 
     /**
      * Converts a raw Card/Player reported under the {@code "source"} params
-     * key into an entity/player ref -- see {@link #outcomeHandler()} for why
+     * key into an entity/player ref -- see {@link #outcomeEvent} for why
      * that key is not a generic param. Anything else passes through
      * unconverted, which is what lets a future producer of a differently
      * shaped {@code source} degrade to its own {@code String.valueOf} rather

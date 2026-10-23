@@ -24,11 +24,11 @@ final class ProbeScheduler {
     private final Game game;
     private final String gameId;
     private final CollectionCaps caps;
-    private final ForkCollector forks;
+    private final DamageStepProbe forks;
     /** Probe branches waiting for the combat record they mirror. */
     private final ProbeQueue heldProbes = new ProbeQueue();
 
-    ProbeScheduler(Game game, String gameId, CollectionCaps caps, ForkCollector forks) {
+    ProbeScheduler(Game game, String gameId, CollectionCaps caps, DamageStepProbe forks) {
         this.game = game;
         this.gameId = gameId;
         this.caps = caps;
@@ -81,7 +81,7 @@ final class ProbeScheduler {
      * <p>The one place a branch enters the queue, which is also what lets the
      * pairing rules below be exercised without a live combat to fork.
      */
-    void hold(ForkCollector.HeldProbe held) {
+    void hold(DamageStepProbe.HeldProbe held) {
         heldProbes.hold(held);
     }
 
@@ -121,7 +121,7 @@ final class ProbeScheduler {
                         || (focus != null && !focus.equals(normalized))) {
                     continue;
                 }
-                ForkCollector.HeldProbe held =
+                DamageStepProbe.HeldProbe held =
                         forks.probe(original, card, step);
                 if (held != null) {
                     hold(held);
@@ -193,7 +193,7 @@ final class ProbeScheduler {
         if (heldProbes.isEmpty()) {
             return;
         }
-        for (ForkCollector.HeldProbe held : heldProbes.take(substep)) {
+        for (DamageStepProbe.HeldProbe held : heldProbes.take(substep)) {
             forks.writeHeldProbe(held, combatRecordId);
         }
     }

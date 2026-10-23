@@ -1,5 +1,8 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.DraftPickProtocol.PickPosition;
+import com.pricepredictor.connector.DraftPickProtocol.PickResponse;
+import com.pricepredictor.connector.json.FlatJson;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -9,8 +12,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Pure (Forge-free) tests for the live-pick side-channel protocol in
- * {@link DraftPickProtocol}: request formatting, response parsing, routing-field
- * validation, held-pack membership, and the abort/abandon outcomes (T009).
+ * {@link DraftPickProtocol}: request formatting, response parsing into
+ * {@link PickResponse}, position validation, held-pack membership, and the
+ * abort/abandon outcomes (T009).
  */
 class DraftPickProtocolTest {
 
@@ -25,7 +29,8 @@ class DraftPickProtocolTest {
     private static DraftPickProtocol.PickRequest request(
             String draftId, int seat, int packNumber, int pickNumber, List<String> pack) {
         return new DraftPickProtocol.PickRequest(
-                draftId, seat, "draft-agent", 8, packNumber, pickNumber, "BLB", pack);
+                new PickPosition(draftId, seat, packNumber, pickNumber),
+                "draft-agent", 8, "BLB", pack);
     }
 
     // ── Request formatting (data-model §2.1) ─────────────────────────────────
@@ -49,8 +54,8 @@ class DraftPickProtocolTest {
 
     @Test
     void formatPickRequestEscapesCardNames() {
-        String line = new DraftPickProtocol.PickRequest(
-                "d1", 0, "a", 8, 1, 1, "TST", List.of("Lim-Dûl's \"Vault\"")).toWireLine();
+        String line = new DraftPickProtocol.PickRequest(new PickPosition("d1", 0, 1, 1),
+                "a", 8, "TST", List.of("Lim-Dûl's \"Vault\"")).toWireLine();
         assertTrue(line.contains("Lim-Dûl's \\\"Vault\\\""));  // accented passes, quote escaped
     }
 
@@ -80,24 +85,53 @@ class DraftPickProtocolTest {
     @Test
     void parseResponseRejectsMissingSentinel() {
         assertThrows(DraftPickProtocol.DraftAbandonedException.class,
-                () -> DraftPickProtocol.parseResponse("{\"pick\":\"X\"}"));  // no sentinel
+                () -> PickResponse.parse("{\"pick\":\"X\"}"));  // no sentinel
+    }
+
+    @Test
+    void aPickResponseCarriesItsPositionAndCard() {
+        assertEquals(new PickResponse.Pick(new PickPosition("d1", 3, 2, 5), "Card B"),
+                PickResponse.parse(response("d1", 3, 2, 5, "\"pick\":\"Card B\"")));
+    }
+
+    @Test
+    void anAbortNeedsNothingElse() {
+        assertEquals(new PickResponse.Abort(), PickResponse.parse(
+                DraftPickProtocol.PICK_RESPONSE_SENTINEL + "{\"abort\":true}"));
+    }
+
+    @Test
+    void aResponseWithAnIncompletePositionIsRefused() {
+        for (String body : List.of(
+                "{\"seat\":0,\"pack_number\":1,\"pick_number\":5,\"pick\":\"A\"}",
+                "{\"draft_id\":\"d1\",\"seat\":\"0\",\"pack_number\":1,\"pick_number\":5,\"pick\":\"A\"}",
+                "{\"draft_id\":\"d1\",\"seat\":0,\"pack_number\":1,\"pick\":\"A\"}",
+                "{\"draft_id\":\"d1\",\"seat\":4294967296,\"pack_number\":1,\"pick_number\":5,"
+                        + "\"pick\":\"A\"}")) {
+            assertThrows(DraftPickProtocol.DraftAbandonedException.class,
+                    () -> PickResponse.parse(DraftPickProtocol.PICK_RESPONSE_SENTINEL + body), body);
+        }
+    }
+
+    @Test
+    void aResponseWithNoPickIsRefused() {
+        assertThrows(DraftPickProtocol.DraftAbandonedException.class,
+                () -> PickResponse.parse(response("d1", 0, 1, 5, "\"note\":\"none\"")));
     }
 
     // ── resolvePick: routing + membership + abort ────────────────────────────
 
     @Test
     void resolvePickReturnsHeldPackCard() {
-        Map<String, Object> resp = DraftPickProtocol.parseResponse(
-                response("d1", 0, 1, 5, "\"pick\":\"Card B\""));
         String name = DraftPickProtocol.resolvePick(
-                resp, request("d1", 0, 1, 5, List.of("Card A", "Card B", "Card C")));
+                PickResponse.parse(response("d1", 0, 1, 5, "\"pick\":\"Card B\"")),
+                request("d1", 0, 1, 5, List.of("Card A", "Card B", "Card C")));
         assertEquals("Card B", name);
     }
 
     @Test
     void resolvePickAbortThrowsAborted() {
-        Map<String, Object> resp = DraftPickProtocol.parseResponse(
-                response("d1", 0, 1, 5, "\"abort\":true"));
+        PickResponse resp = PickResponse.parse(response("d1", 0, 1, 5, "\"abort\":true"));
         assertThrows(DraftPickProtocol.DraftAbortedException.class,
                 () -> DraftPickProtocol.resolvePick(
                         resp, request("d1", 0, 1, 5, List.of("Card A"))));
@@ -105,28 +139,23 @@ class DraftPickProtocolTest {
 
     @Test
     void resolvePickRoutingMismatchThrowsAbandoned() {
-        Map<String, Object> resp = DraftPickProtocol.parseResponse(
-                response("d1", 7, 1, 5, "\"pick\":\"Card A\""));  // seat 7 != 0
-        assertThrows(DraftPickProtocol.DraftAbandonedException.class,
-                () -> DraftPickProtocol.resolvePick(
-                        resp, request("d1", 0, 1, 5, List.of("Card A"))));
+        for (String mismatched : List.of(
+                response("d2", 0, 1, 5, "\"pick\":\"Card A\""),
+                response("d1", 7, 1, 5, "\"pick\":\"Card A\""),
+                response("d1", 0, 2, 5, "\"pick\":\"Card A\""),
+                response("d1", 0, 1, 6, "\"pick\":\"Card A\""))) {
+            PickResponse resp = PickResponse.parse(mismatched);
+            assertThrows(DraftPickProtocol.DraftAbandonedException.class,
+                    () -> DraftPickProtocol.resolvePick(
+                            resp, request("d1", 0, 1, 5, List.of("Card A"))), mismatched);
+        }
     }
 
     @Test
     void resolvePickNotInPackThrowsAbandoned() {
-        Map<String, Object> resp = DraftPickProtocol.parseResponse(
-                response("d1", 0, 1, 5, "\"pick\":\"Not In Pack\""));
+        PickResponse resp = PickResponse.parse(response("d1", 0, 1, 5, "\"pick\":\"Not In Pack\""));
         assertThrows(DraftPickProtocol.DraftAbandonedException.class,
                 () -> DraftPickProtocol.resolvePick(
                         resp, request("d1", 0, 1, 5, List.of("Card A", "Card B"))));
-    }
-
-    @Test
-    void resolvePickMissingPickThrowsAbandoned() {
-        Map<String, Object> resp = DraftPickProtocol.parseResponse(
-                response("d1", 0, 1, 5, "\"note\":\"none\""));  // neither pick nor abort
-        assertThrows(DraftPickProtocol.DraftAbandonedException.class,
-                () -> DraftPickProtocol.resolvePick(
-                        resp, request("d1", 0, 1, 5, List.of("Card A"))));
     }
 }
