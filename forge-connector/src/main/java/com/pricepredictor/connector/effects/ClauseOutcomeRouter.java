@@ -42,15 +42,15 @@ final class ClauseOutcomeRouter {
     /**
      * The events an effect API promises, taken from the clause that ran.
      *
-     * <p>The memo is kept per thread and not per collector: a clause can resolve
-     * another, and the engine runs games on more than one thread. Each memo is
-     * wrapped because a deque holds no null, and a clause with no memo still
-     * pushes one so that every pop meets its own push. A fork's clause pushes
-     * and pops its own memo exactly as a live one does, because the game
-     * check comes after the bookkeeping, so the check cannot desynchronize
-     * this deque.
+     * <p>Each clause's observation -- its rule and what that rule's memo took --
+     * is kept per thread and not per collector: a clause can resolve another,
+     * and the engine runs games on more than one thread. A clause whose API
+     * promises nothing, or whose memo threw, still pushes one so that every
+     * pop meets its own push. A fork's clause pushes and pops its own
+     * observation exactly as a live one does, because the game check comes
+     * after the bookkeeping, so the check cannot desynchronize this deque.
      */
-    private final ThreadLocal<Deque<Optional<Object>>> clauseMemos =
+    private final ThreadLocal<Deque<ApiEvents.ClauseObservation<?>>> clauseObservations =
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
@@ -72,7 +72,7 @@ final class ClauseOutcomeRouter {
      * The same, building each clause's event from the rules {@code rules}
      * names, so a test can stand a rule that throws in for one API.
      */
-    InvocationHandler clauseHandler(Function<ApiType, ApiEvents.Rule> rules) {
+    InvocationHandler clauseHandler(Function<ApiType, ApiEvents.Rule<?>> rules) {
         return PatchHooks.CLAUSE_LISTENER.listener((callback, args) -> {
             SpellAbility clause = args.get(0, SpellAbility.class);
             if (clause == null) {
@@ -86,8 +86,8 @@ final class ClauseOutcomeRouter {
         });
     }
 
-    private void clauseResolving(SpellAbility clause, Function<ApiType, ApiEvents.Rule> rules) {
-        clauseMemos.get().push(Optional.ofNullable(ApiEvents.before(clause, rules)));
+    private void clauseResolving(SpellAbility clause, Function<ApiType, ApiEvents.Rule<?>> rules) {
+        clauseObservations.get().push(ApiEvents.observe(clause, rules));
         // A chosen mode's first clause is where a modal resolution is
         // cut into per-mode halves (FR-029a): the live bracket opens
         // the next half here, and a fork running on this thread marks
@@ -105,16 +105,18 @@ final class ClauseOutcomeRouter {
     }
 
     private void clauseResolved(
-            SpellAbility clause, boolean threw, Function<ApiType, ApiEvents.Rule> rules) {
-        Deque<Optional<Object>> memos = clauseMemos.get();
-        Object memo = memos.isEmpty() ? null : memos.pop().orElse(null);
+            SpellAbility clause, boolean threw, Function<ApiType, ApiEvents.Rule<?>> rules) {
+        Deque<ApiEvents.ClauseObservation<?>> observations = clauseObservations.get();
+        ApiEvents.ClauseObservation<?> observed = observations.isEmpty()
+                ? ApiEvents.unobserved(clause, rules)
+                : observations.pop();
         if (threw) {
             // A clause that threw did not finish, and an event claiming it
             // did would be a fact the game never contained.
             return;
         }
         if (live.owns(clause)) {
-            bracket.recordClauseEvent(ApiEvents.after(clause, memo, rules));
+            bracket.recordClauseEvent(observed.finish());
         }
     }
 

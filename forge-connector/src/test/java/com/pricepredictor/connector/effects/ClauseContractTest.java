@@ -235,16 +235,16 @@ class ClauseContractTest {
      * #resolvingContained}, the way {@code
      * AbilityUtils.notifyClauseResolving} calls them in production: that
      * containment is what lets resolution continue past the throw at all,
-     * and unless {@link ApiEvents#before} contains the throw itself, it is
-     * what swallows the throw <em>before</em> {@code clauseMemos.push(...)}
+     * and unless {@link ApiEvents#observe} contains the throw itself, it is
+     * what swallows the throw <em>before</em> {@code clauseObservations.push(...)}
      * runs -- the missing push this test exists to catch. Then the inner
      * clause's {@code onClauseResolving} throws out of {@link
-     * ApiEvents#before} before its push runs, so the inner clause's
-     * own {@code onClauseResolved} pops the OUTER clause's memo instead of
-     * its own missing one, and the outer's own pop then reads an empty deque
-     * and gets {@code null} -- so this asserts the OUTER clause's event, the
-     * sibling the inner's failure has nothing to do with, still carries its
-     * own subject.
+     * ApiEvents#observe} before its push runs, so the inner clause's
+     * own {@code onClauseResolved} pops the OUTER clause's observation instead
+     * of its own missing one, and the outer's own pop then reads an empty
+     * deque and has no memo -- so this asserts the OUTER clause's event, the
+     * sibling the inner's failure has nothing to do with, is filed once and
+     * still carries its own subject.
      */
     @Test
     void aThrowingMemoDoesNotDesyncTheSiblingsPop() throws Throwable {
@@ -261,7 +261,7 @@ class ClauseContractTest {
         inner.resetTargets();
         inner.getTargets().add(innerTarget);
 
-        ApiEvents.Rule throwingMemo = new ApiEvents.Rule(
+        ApiEvents.Rule<Object> throwingMemo = new ApiEvents.Rule<>(
                 EventType.TURN_SKIPPED,
                 (sa, host) -> {
                     throw new IllegalStateException("boom (memo)");
@@ -290,6 +290,9 @@ class ClauseContractTest {
                 + SnapshotBuilder.playerId(outerTarget) + "\"]"),
                 "the outer clause's own event must be unaffected by the inner "
                         + "clause's memo failure: " + effectHalf);
+        assertEquals(1, effectHalf.split("\"type\":\"turn_added\"", -1).length - 1,
+                "the outer clause's event is filed once, not again under the "
+                        + "inner clause that popped its observation: " + effectHalf);
         assertTrue(stderr.toString().contains("boom (memo)"),
                 "the memo's failure must be reported, not swallowed silently: "
                         + stderr);
