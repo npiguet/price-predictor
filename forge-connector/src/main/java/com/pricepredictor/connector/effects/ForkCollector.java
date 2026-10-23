@@ -11,14 +11,12 @@ import forge.game.event.GameEventSpellResolved;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -93,12 +91,21 @@ public final class ForkCollector {
 
     /** Run {@code action} with this thread marked as running a fork; see {@link #FORK_RUNNING}. */
     private static <T> T asFork(Supplier<T> action) {
-        boolean was = FORK_RUNNING.get();
-        FORK_RUNNING.set(true);
+        return withThreadLocal(FORK_RUNNING, true, action);
+    }
+
+    /**
+     * Run {@code action} with {@code local} set to {@code value}, and restore
+     * what it held before however the action ends: correct without relying
+     * on two such spans never nesting.
+     */
+    private static <V, T> T withThreadLocal(ThreadLocal<V> local, V value, Supplier<T> action) {
+        V was = local.get();
+        local.set(value);
         try {
             return action.get();
         } finally {
-            FORK_RUNNING.set(was);
+            local.set(was);
         }
     }
 
@@ -313,7 +320,7 @@ public final class ForkCollector {
             // The fork's own state, not the live game's.
             SnapshotBuilder snapshots = new SnapshotBuilder(fork);
             ForcedResolution resolution = forceResolution(fork, forked, actor, snapshots);
-            if (resolution == null || resolution.events().isEmpty()) {
+            if (resolution == null || resolution.isEmpty()) {
                 // An empty event list is not an observation. "The ability resolved
                 // and did nothing" and "the ability never got to act" render the
                 // same record, and nothing in it tells them apart. A
@@ -328,34 +335,18 @@ public final class ForkCollector {
             // that no longer exists.
             ProvenanceKey.Resolved keys = ProvenanceResolver.resolve(ability);
             String actorId = SnapshotBuilder.playerId(perspective);
-            if (resolution.modes().isEmpty()) {
+            // A modal resolution writes one half per chosen mode, by the same
+            // rule the live bracket applies (FR-029f), each through the mode's
+            // option line and with the board as it stood when that mode's
+            // first clause began. Events before the first mode's clause — the
+            // charm's own, of which there are none — ride with the first.
+            for (HeldHalves.Half<ModeSplit.Mode> half : resolution.halves()) {
                 context.emit(forkedHalf(
-                        actorId, keys, resolution.render(resolution.state()),
-                        resolution.halves().get(0)));
-            } else {
-                emitModeHalves(actorId, keys, resolution);
+                        actorId, keys.withOption(half.about().option()),
+                        resolution.render(half.about().state()), half.events()));
             }
             return true;
         });
-    }
-
-    /**
-     * A modal resolution's effect halves: one per chosen mode, by the same rule
-     * the live bracket applies (FR-029f), each through the mode's option line
-     * and with the board as it stood when that mode's first clause began.
-     * Events before the first mode's clause — the charm's own, of which there
-     * are none — ride with the first.
-     */
-    private void emitModeHalves(
-            String actorId, ProvenanceKey.Resolved keys, ForcedResolution resolution) {
-        List<ModeBoundary> modes = resolution.modes();
-        List<List<EffectEvent>> halves = resolution.halves();
-        for (int i = 0; i < modes.size(); i++) {
-            ModeBoundary boundary = modes.get(i);
-            context.emit(forkedHalf(
-                    actorId, keys.withOption(boundary.option()),
-                    resolution.render(boundary.state()), halves.get(i)));
-        }
     }
 
     /**
@@ -375,107 +366,30 @@ public final class ForkCollector {
     }
 
     /**
-     * Where one chosen mode began in a forced resolution's event stream.
+     * What a forced resolution produced: its effect halves, one per chosen
+     * mode or one for the whole resolution, each with the board it is read
+     * against and the deaths it left behind ({@link ForkEventSink#halves}).
      *
-     * @param option     the mode's {@code Choices$} position, or null
-     * @param firstEvent the index of the first event filed after its first
-     *                   clause began resolving
-     * @param state      the fork's board at that clause (FR-029b), read
-     *                   against the forced ability on the fork's stack as
-     *                   the live bracket's {@code beginMode} reads it
+     * @param refs the refs block read as the forced ability finished
+     *             resolving, where the live bracket re-reads it, or null
+     *             when the fork never saw it finish
      */
-    private record ModeBoundary(Integer option, int firstEvent, Snapshot state) {
-    }
-
-    /**
-     * What a forced resolution produced, where its modes began, and which of
-     * its events are permanents leaving the battlefield in a state-based check.
-     *
-     * @param state the fork's board at the forced cast, the moment the live
-     *              bracket reads an observed cast's: a non-modal record's
-     *              state
-     * @param refs  the refs block read as the forced ability finished
-     *              resolving, where the live bracket re-reads it, or null
-     *              when the fork never saw it finish
-     */
-    private record ForcedResolution(
-            Snapshot state, String refs, List<EffectEvent> events, List<ModeBoundary> modes,
-            Set<Integer> stateBasedLeaves) {
+    private record ForcedResolution(String refs, List<HeldHalves.Half<ModeSplit.Mode>> halves) {
 
         /** A board this resolution read, paired with its refs as the live bracket pairs them. */
         String render(Snapshot board) {
             return (refs == null ? board : board.withRefs(refs)).render();
         }
 
-        /** The events, one list per chosen mode, or one list when no mode began. */
-        List<List<EffectEvent>> halves() {
-            List<Integer> starts = new ArrayList<>();
-            for (ModeBoundary mode : modes) {
-                starts.add(mode.firstEvent());
-            }
-            return splitByMode(events, starts, stateBasedLeaves);
-        }
-    }
-
-    /**
-     * A forced resolution's events, one list per chosen mode, or one list
-     * when no mode began.
-     *
-     * <p>Every event belongs to the mode in whose span it was filed, except a
-     * death in the state-based check after the resolution. {@code
-     * GameSimulator.resolveStack} runs that check only after the whole charm
-     * has resolved, so by position every such death
-     * would fall into the last mode's half, whichever mode killed. Those are
-     * filed by the live collector's rule instead ({@link
-     * BusBracketCollector#halfForDeath}): the last half whose own events named
-     * the permanent, or the last half when none did. Order is kept within each
-     * half, so a death still follows the events that caused it.
-     *
-     * <p>A death is checked for a repeat against the half it joins, as the
-     * live collector checks it against the held half it files it into: the
-     * sink filed it unchecked ({@link ForkEventSink}), since until now no one
-     * knew which half that is.
-     *
-     * @param modeStarts       the position in {@code events} where each chosen
-     *                         mode's span begins, in order; the first span
-     *                         also takes what precedes it
-     * @param stateBasedLeaves positions in {@code events} of the deaths filed
-     *                         after the forced ability resolved, in the check
-     *                         that follows it ({@link ForkEventSink#stateBasedLeaves})
-     */
-    static List<List<EffectEvent>> splitByMode(
-            List<EffectEvent> events, List<Integer> modeStarts, Set<Integer> stateBasedLeaves) {
-        int halfCount = Math.max(1, modeStarts.size());
-        int[] spanOf = new int[events.size()];
-        List<Set<String>> touched = new ArrayList<>();
-        for (int i = 0; i < halfCount; i++) {
-            int from = i == 0 ? 0 : modeStarts.get(i);
-            int to = i + 1 < modeStarts.size() ? modeStarts.get(i + 1) : events.size();
-            List<EffectEvent> span = new ArrayList<>();
-            for (int at = from; at < to; at++) {
-                spanOf[at] = i;
-                if (!stateBasedLeaves.contains(at)) {
-                    span.add(events.get(at));
+        /** Whether no half holds an event: the forced ability did nothing observable. */
+        boolean isEmpty() {
+            for (HeldHalves.Half<ModeSplit.Mode> half : halves) {
+                if (!half.events().isEmpty()) {
+                    return false;
                 }
             }
-            touched.add(BusBracketCollector.touchedBy(span));
+            return true;
         }
-        List<EventBuffer> halves = new ArrayList<>();
-        for (int i = 0; i < halfCount; i++) {
-            halves.add(new EventBuffer());
-        }
-        for (int at = 0; at < events.size(); at++) {
-            EffectEvent event = events.get(at);
-            int half = stateBasedLeaves.contains(at) && !event.subjects().isEmpty()
-                    ? BusBracketCollector.halfForDeath(touched, event.subjects().get(0))
-                    : spanOf[at];
-            halves.get(half).file(event);
-        }
-        List<List<EffectEvent>> lists = new ArrayList<>();
-        for (EventBuffer half : halves) {
-            lists.add(List.copyOf(half.events()));
-        }
-        return lists;
     }
 
     /**
@@ -521,33 +435,20 @@ public final class ForkCollector {
      * game make the same choice. Choosing none at all is not an option: a
      * Lava Axe pushed with no target resolves into nothing.
      *
-     * @return what resolved and where its modes began; events empty if the
+     * @return what resolved, one half per chosen mode; every half empty if the
      *         ability resolved and did nothing observable; null if it could
      *         not be resolved at all
      */
     private ForcedResolution forceResolution(
             Game fork, SpellAbility ability, Player actor, SnapshotBuilder snapshots) {
-        java.util.function.Consumer<SpellAbility> previousListener = CLAUSE_LISTENER.get();
         try {
-            ability.setActivatingPlayer(actor);
-            if (!choices.chooseModes(ability) || !choices.chooseTargets(ability)) {
+            if (!drawForcedChoices(ability, actor)) {
                 return null;
             }
-            // Floor one: an X of zero resolves into the same silence a
-            // missing target does, and the fork never pays, so the leftover mana of
-            // the forked actor is what bounds the draw above it.
-            choices.announceX(ability, actor, 1);
             fork.copyLastState();
             ForcedCast cast = new ForcedCast(fork, snapshots);
-            fork.subscribeToEvents(cast);
-            // Listening from before the cast: what the card's move onto the
-            // stack and the push set off is the cast's own, as live gives it
-            // to the cast's bracket (ForkEventSink's PRE_CAST). Primed now, so
-            // a stat change the move makes has a reading to differ from.
             ForkEventSink sink = ForkEventSink.forCast(fork, ability);
-            fork.subscribeToEvents(sink);
-            fork.getStack().addAndUnfreeze(ability);
-            SpellAbility onStack = cast.onStack();
+            SpellAbility onStack = pushForcedCast(fork, ability, cast, sink);
             if (onStack == null) {
                 // Nothing reached the stack. Mostly a special action:
                 // foretell, plot and suspend are AbilityStatic, which
@@ -561,8 +462,7 @@ public final class ForkCollector {
             // live bracket's root is the stack's: an event's attributed_to is
             // read against the ability the bracket belongs to, and a fork's
             // bracket is exactly this one forced resolution.
-            sink.castAs(onStack);
-            List<ModeBoundary> modes = new ArrayList<>();
+            sink.castAs(onStack, cast.state());
             // A mode's first clause is the boundary between per-mode halves, and
             // the moment its snapshot is taken (FR-029b, FR-029f). Only this
             // ability's own modes count: the live clause handler forwards every
@@ -573,26 +473,64 @@ public final class ForkCollector {
             // Vision) shares its key too, so its modes would cut halves the
             // forced charm's events never reach. The mode's charm must be the
             // very ability on the stack, the one this record is about.
-            CLAUSE_LISTENER.set(clause -> {
+            java.util.function.Consumer<SpellAbility> modeStarts = clause -> {
                 CharmModes.ModeStart start = CharmModes.modeStartOf(clause);
                 if (start != null && start.charm() == onStack) {
-                    modes.add(new ModeBoundary(
-                            start.option(), sink.beginMode(), snapshots.ofResolving(onStack)));
+                    sink.beginMode(start.option(), snapshots.ofResolving(onStack));
                 }
+            };
+            withThreadLocal(CLAUSE_LISTENER, modeStarts, () -> {
+                GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
+                return null;
             });
-            GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
-            return new ForcedResolution(
-                    cast.state(), cast.refs(), sink.events(), List.copyOf(modes),
-                    sink.stateBasedLeaves());
+            return new ForcedResolution(cast.refs(), sink.halves());
         } catch (RuntimeException | StackOverflowError e) {
             // A forced resolution reaches states ordinary play does not — an
             // ability resolving with no legal target, a cost that was never
             // paid — and a card that throws is one this fork cannot describe.
             // Discarding is right; failing the worker is not.
             return null;
-        } finally {
-            CLAUSE_LISTENER.set(previousListener);
         }
+    }
+
+    /**
+     * Make the forced ability's choices for {@code actor}: its modes, its
+     * targets and its X, drawn at random from the legal options.
+     *
+     * @return whether a mode and a target could be chosen wherever the
+     *         ability needs one
+     */
+    private boolean drawForcedChoices(SpellAbility ability, Player actor) {
+        ability.setActivatingPlayer(actor);
+        if (!choices.chooseModes(ability) || !choices.chooseTargets(ability)) {
+            return false;
+        }
+        // Floor one: an X of zero resolves into the same silence a
+        // missing target does, and the fork never pays, so the leftover mana of
+        // the forked actor is what bounds the draw above it.
+        choices.announceX(ability, actor, 1);
+        return true;
+    }
+
+    /**
+     * Put the forced ability on the fork's stack, with {@code cast} and
+     * {@code sink} listening from before it moves.
+     *
+     * <p>Listening from before the cast: what the card's move onto the stack
+     * and the push set off is the cast's own, as live gives it to the cast's
+     * bracket ({@code ForkEventSink}'s {@code PRE_CAST}). The sink was primed
+     * when it was built, so a stat change the move makes has a reading to
+     * differ from.
+     *
+     * @return the ability the cast put on the stack, or null when nothing
+     *         reached it
+     */
+    private static SpellAbility pushForcedCast(
+            Game fork, SpellAbility ability, ForcedCast cast, ForkEventSink sink) {
+        fork.subscribeToEvents(cast);
+        fork.subscribeToEvents(sink);
+        fork.getStack().addAndUnfreeze(ability);
+        return cast.onStack();
     }
 
     /**
@@ -726,7 +664,7 @@ public final class ForkCollector {
      * @param step the damage step about to be dealt, which the fork deals too
      * @return the held branch, or null when the fork could not be taken
      */
-    public HeldProbe probe(String keyword, Card carrier, DamageStep step) {
+    HeldProbe probe(String keyword, Card carrier, DamageStep step) {
         if (!mayProbe(keyword) || carrier == null) {
             return null;
         }
@@ -767,7 +705,7 @@ public final class ForkCollector {
             return new HeldProbe(
                     ProbeScheduler.normalizeKeyword(keyword),
                     SnapshotBuilder.entityId(carrier), state, dealt.events(),
-                    SnapshotBuilder.playerId(perspective), dealt.combatFields(),
+                    SnapshotBuilder.playerId(perspective), dealt.combat(),
                     step,
                     // The *live* game's turn, which is also the fork's: the copier
                     // carries the counter across (GameCopier hands it to
@@ -794,7 +732,7 @@ public final class ForkCollector {
      * What a probe's damage step did: the fork's combat, read as the observed
      * record reads it, and the events the bus published.
      */
-    private record ProbedStep(Map<String, Object> combatFields, List<EffectEvent> events) {
+    private record ProbedStep(CombatShape combat, List<EffectEvent> events) {
     }
 
     /**
@@ -830,7 +768,7 @@ public final class ForkCollector {
             // after resolving a stack.
             fork.getAction().checkStateEffects(false, new HashSet<>());
         }
-        return new ProbedStep(shape.fields(), sink.events());
+        return new ProbedStep(shape, sink.events());
     }
 
     /**
@@ -847,10 +785,13 @@ public final class ForkCollector {
      * came next, the <b>regular</b> step's, and gate 2 would read a
      * counterfactual for a step that did not happen against a real record for
      * a different one.
+     *
+     * <p>Package-private, as {@link CombatShape} is: nothing outside this
+     * package takes a probe or completes one.
      */
-    public record HeldProbe(
+    record HeldProbe(
             String keyword, String carrier, String state,
-            List<EffectEvent> events, String actor, Map<String, Object> combatFields,
+            List<EffectEvent> events, String actor, CombatShape combat,
             DamageStep substep, int turn) {
 
         /**
@@ -860,17 +801,16 @@ public final class ForkCollector {
          * tramplers gives the keyword alone two readings, and the evaluator
          * reproducing this perturbation model-side would strip the wrong one.
          *
-         * <p>{@code combatFields} is the fork's own combat: a view of the
-         * {@link CombatShape} the probe's damage step filled in, rendered
-         * here rather than copied when the branch was taken. Nothing writes to
-         * that shape once the step has run, so it renders as the step left it.
-         * It is the counterfactual's half of what gate 2
-         * compares: the observed record says who blocked whom and how the
-         * damage was split with the keyword, and this says the same about the
-         * board without it.
+         * <p>{@code combat} is the fork's own combat, the shape the probe's
+         * damage step filled in, rendered here rather than when the branch
+         * was taken. Nothing writes to that shape once the step has run, so it
+         * renders as the step left it. It is the counterfactual's half of
+         * what gate 2 compares: the observed record says who blocked whom and
+         * how the damage was split with the keyword, and this says the same
+         * about the board without it.
          */
         String payload() {
-            return EffectRecord.probePayload(combatFields, events, keyword, carrier);
+            return EffectRecord.probePayload(combat.fields(), events, keyword, carrier);
         }
     }
 
@@ -901,7 +841,7 @@ public final class ForkCollector {
      * and it is not — the same policy {@code discardStaleProbes} applies to a
      * branch of the wrong substep.
      */
-    public boolean writeHeldProbe(HeldProbe held, String mirrorOfRecordId) {
+    boolean writeHeldProbe(HeldProbe held, String mirrorOfRecordId) {
         if (held == null || mirrorOfRecordId == null) {
             return false;
         }

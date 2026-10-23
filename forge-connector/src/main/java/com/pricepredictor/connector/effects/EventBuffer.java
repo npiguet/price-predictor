@@ -102,16 +102,6 @@ final class EventBuffer {
         return true;
     }
 
-    /**
-     * Add an event without checking it for a repeat, and without it making a
-     * later event a repeat: for an event whose repeat is judged in another
-     * buffer, as a forced resolution's state-based death is judged in the
-     * half it joins ({@code ForkCollector.splitByMode}).
-     */
-    void fileUnchecked(EffectEvent event) {
-        events.add(event);
-    }
-
     /** The events filed so far, in order. */
     List<EffectEvent> events() {
         return Collections.unmodifiableList(events);

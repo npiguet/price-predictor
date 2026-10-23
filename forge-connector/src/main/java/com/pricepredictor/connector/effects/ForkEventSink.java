@@ -8,9 +8,7 @@ import forge.game.event.GameEventSpellResolved;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Everything a forked resolution did, in order.
@@ -24,12 +22,14 @@ import java.util.Set;
  * only what the live bracket would give the forced ability ({@link Phase}).
  *
  * <p>The events are read by {@link BusEventReader}, the same reader the bracket
- * collector uses, and filed into an {@link EventBuffer}, the same buffer its
- * brackets use, so an interventional or probe record and an observed one
- * describe the same outcome the same way: the same subscriptions, the same
- * shaping, the same cause the bus names for a damage, a poison or a
- * radiation counter, and a state transition repeated within one record —
- * the whole fork, or one chosen mode's half — filed once.
+ * collector uses, and filed into an {@link EventBuffer}, split by {@link
+ * ModeSplit} and held by {@link HeldHalves}, as its brackets are, so an
+ * interventional or probe record and an observed one describe the same
+ * outcome the same way: the same subscriptions, the same shaping, the same
+ * cause the bus names for a damage, a poison or a radiation counter, a state
+ * transition repeated within one record — the whole fork, or one chosen
+ * mode's half — filed once, and a death joining the half the live rule puts
+ * it in.
  *
  * <p>Every event is stamped by {@link EventAttribution} on its way in, for the
  * same reason: {@code attributed_to} and {@code duration} are how a reader asks
@@ -50,6 +50,8 @@ final class ForkEventSink extends BusEventReader {
      * is over, and then the one the cast put on the stack ({@link #castAs}).
      */
     private SpellAbility acting;
+    /** The board at the forced cast, which a resolution no mode of which began is read against. */
+    private Snapshot castState;
     /**
      * Whether a card damaged in this fork is damaged in combat: true for a
      * damage-step probe, which deals one combat damage step, and false for an
@@ -58,15 +60,19 @@ final class ForkEventSink extends BusEventReader {
      * against the observed combat record's.
      */
     private final boolean combatDamage;
-    /** The events of the modes already closed, in order. */
-    private final List<EffectEvent> closed = new ArrayList<>();
     /**
      * The events of the open span: the whole fork, or the chosen mode now
      * resolving, which is the unit a repeat is recognised within, as it is
      * a mode's half on the live side.
      */
     private final EventBuffer open = new EventBuffer();
-    private boolean modeOpen;
+    /** The forced resolution's chosen modes, split as they resolve. */
+    private final ModeSplit modes = new ModeSplit();
+    /**
+     * The forced resolution's effect halves once it has resolved, which the
+     * deaths it left behind join; null until then.
+     */
+    private HeldHalves<ModeSplit.Mode> held;
 
     /**
      * Where the forced ability stands, which decides what an intervention
@@ -84,12 +90,14 @@ final class ForkEventSink extends BusEventReader {
      *   filed, as live files the state-based check before priority into the
      *   spell's bracket. While anything sits above it — a cast trigger:
      *   prowess, a "whenever you cast" or becomes-target trigger, storm,
-     *   cascade — nothing is: that is the item's own record live. Nor is
-     *   anything in that item's aftermath ({@link #aboveHeld}), though the
-     *   forced ability is the top again: live keeps the deaths for the
-     *   item's held half and sends the rest to no record, since none of it
-     *   belongs to an ability that has not begun to resolve. What was filed
-     *   before an item was pushed above is kept.</li>
+     *   cascade — nothing is: that is the item's own record live. What was
+     *   filed before an item was pushed above is kept.</li>
+     *   <li>{@link #ABOVE_AFTERMATH}: as {@link #BEFORE}, but an item above
+     *   the forced ability has resolved, and until the next ability reaches
+     *   the stack or resolves, nothing is filed, though the forced ability is
+     *   the top again: live keeps the deaths for the item's held half and
+     *   sends the rest to no record, since none of it belongs to an ability
+     *   that has not begun to resolve.</li>
      *   <li>{@link #RESOLVING}: from the first event published while the
      *   forced ability is the one resolving, until its {@code
      *   GameEventSpellResolved}: everything is filed, as live files the open
@@ -111,21 +119,9 @@ final class ForkEventSink extends BusEventReader {
      *   live.</li>
      * </ul>
      */
-    private enum Phase { PRE_CAST, BEFORE, RESOLVING, HELD, CLOSED }
+    private enum Phase { PRE_CAST, BEFORE, ABOVE_AFTERMATH, RESOLVING, HELD, CLOSED }
 
     private Phase phase = Phase.BEFORE;
-    /**
-     * Whether an item that resolved above the forced ability is in its
-     * aftermath: from its resolved event until the next ability reaches the
-     * stack or resolves. Nothing published then is the forced ability's.
-     */
-    private boolean aboveHeld;
-    /**
-     * Positions in {@link #events()} of the deaths filed in {@link
-     * Phase#HELD}, or of any state-based leave a probe or an ungated sink
-     * filed: the moves a modal fork files by {@code halfForDeath}.
-     */
-    private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
     private ForkEventSink(Game fork, SpellAbility acting, boolean combatDamage) {
         super(fork);
@@ -149,9 +145,14 @@ final class ForkEventSink extends BusEventReader {
      * The forced cast is over: {@code onStack} is the ability it put on the
      * stack — the one handed to it for a spell, a copy for an activation —
      * and the root everything after is read against.
+     *
+     * @param state the board at the cast, the moment the live bracket reads
+     *              an observed cast's: what a resolution no mode of which
+     *              began is read against
      */
-    void castAs(SpellAbility onStack) {
+    void castAs(SpellAbility onStack, Snapshot state) {
         acting = onStack;
+        castState = state;
     }
 
     /** A sink for a damage step dealt in a fork, with no ability resolving. */
@@ -159,42 +160,66 @@ final class ForkEventSink extends BusEventReader {
         return new ForkEventSink(fork, null, true);
     }
 
+    /** Every event filed, in order: the halves', then the open span's. */
     List<EffectEvent> events() {
-        List<EffectEvent> all = new ArrayList<>(closed);
+        List<EffectEvent> all = new ArrayList<>();
+        if (held != null) {
+            for (HeldHalves.Half<ModeSplit.Mode> half : held.halves()) {
+                all.addAll(half.events());
+            }
+        } else {
+            for (ModeSplit.ModeHalf half : modes.complete()) {
+                all.addAll(half.events());
+            }
+        }
         all.addAll(open.events());
         return List.copyOf(all);
     }
 
     /**
-     * A chosen mode's first clause is resolving: close the previous mode's
-     * span, so a repeat is recognised within one mode, as the live bracket
-     * recognises it within one mode's half.
+     * The forced resolution's effect halves, one per chosen mode or one for
+     * the whole resolution, with the deaths it left behind filed in.
      *
-     * <p>The first mode closes nothing: what was filed before its clause
-     * shares its span, as it shares the first half live.
-     *
-     * @return the position in {@link #events()} of the mode's first event
+     * <p>Held at the forced ability's resolution, and here for a fork whose
+     * forced ability never published one, so that what it filed is still
+     * divided as it would have been.
      */
-    int beginMode() {
-        if (modeOpen) {
-            closed.addAll(open.drain());
-        }
-        modeOpen = true;
-        return size();
+    List<HeldHalves.Half<ModeSplit.Mode>> halves() {
+        return hold().halves();
     }
 
     /**
-     * Where in {@link #events()} the deaths a modal fork files by {@code
-     * halfForDeath} sit: an intervention's in {@link Phase#HELD}, a probe's or
-     * an ungated sink's in any state-based check, each read as the bracket
-     * collector reads one ({@link #isStateBasedLeave}).
+     * A chosen mode's first clause is resolving: close the previous mode's
+     * half, so a repeat is recognised within one mode, as the live bracket
+     * recognises it within one mode's half (FR-029a).
+     *
+     * <p>The first mode closes nothing: what was filed before its clause
+     * shares its half, as it shares the first half live.
+     *
+     * @param option the mode's {@code Choices$} position, or null
+     * @param state  the fork's board at that clause (FR-029b), read against
+     *               the forced ability on the fork's stack as the live
+     *               bracket's {@code beginMode} reads it
      */
-    Set<Integer> stateBasedLeaves() {
-        return Set.copyOf(stateBasedLeaves);
+    void beginMode(Integer option, Snapshot state) {
+        modes.begin(option, state, open);
     }
 
-    private int size() {
-        return closed.size() + open.events().size();
+    /**
+     * The forced resolution is over: its halves are fixed, and from here only
+     * the deaths it left behind join them.
+     */
+    private HeldHalves<ModeSplit.Mode> hold() {
+        if (held == null) {
+            // The last mode's half closes with the resolution, since no next
+            // mode's first clause comes to close it.
+            modes.close(open);
+            held = new HeldHalves<>();
+            for (ModeSplit.ModeHalf half : modes.halves(castState, open.drain())) {
+                held.add(half.mode(), half.events());
+            }
+        }
+        return held;
     }
 
     @Override
@@ -230,13 +255,14 @@ final class ForkEventSink extends BusEventReader {
             return;
         }
         boolean forced = event.spell() != null && event.spell().getId() == acting.getId();
-        aboveHeld = false;
-        if (forced && (phase == Phase.BEFORE || phase == Phase.RESOLVING)) {
+        if (forced && (phase == Phase.BEFORE || phase == Phase.ABOVE_AFTERMATH
+                || phase == Phase.RESOLVING)) {
             phase = Phase.HELD;
+            hold();
         } else if (phase == Phase.HELD) {
             phase = Phase.CLOSED;
-        } else if (phase == Phase.BEFORE) {
-            aboveHeld = true;
+        } else if (phase == Phase.BEFORE || phase == Phase.ABOVE_AFTERMATH) {
+            phase = Phase.ABOVE_AFTERMATH;
         }
     }
 
@@ -246,9 +272,10 @@ final class ForkEventSink extends BusEventReader {
         if (!gated()) {
             return;
         }
-        aboveHeld = false;
-        if (phase == Phase.PRE_CAST) {
-            // The forced cast's own, the first one the fork publishes.
+        if (phase == Phase.PRE_CAST || phase == Phase.ABOVE_AFTERMATH) {
+            // The forced cast's own, the first one the fork publishes; or an
+            // ability going above the forced one, which ends the aftermath
+            // of the item that resolved there.
             phase = Phase.BEFORE;
         } else if (phase == Phase.HELD) {
             phase = Phase.CLOSED;
@@ -264,21 +291,30 @@ final class ForkEventSink extends BusEventReader {
         if (!gated()) {
             return true;
         }
-        if (phase == Phase.BEFORE && forcedOnTop()) {
-            if (game.getStack().isResolving()) {
-                phase = Phase.RESOLVING;
-            } else {
-                return !aboveHeld;
-            }
-        }
+        noticeResolutionStart();
         return switch (phase) {
             case PRE_CAST -> true;
+            case BEFORE -> forcedOnTop();
             // Everything but the payment for a spell the forced ability
             // casts, which is that spell's cost and which live leaves out too.
             case RESOLVING -> !payingForACast(acting);
             case HELD -> move != null && isStateBasedLeave(move);
-            case BEFORE, CLOSED -> false;
+            case ABOVE_AFTERMATH, CLOSED -> false;
         };
+    }
+
+    /**
+     * The forced ability has begun to resolve if it is the top of a stack
+     * that is resolving: {@link Phase#RESOLVING} from here.
+     *
+     * <p>Noticed at the first event published after it begins, because Forge
+     * publishes nothing when a resolution starts.
+     */
+    private void noticeResolutionStart() {
+        if ((phase == Phase.BEFORE || phase == Phase.ABOVE_AFTERMATH)
+                && game.getStack().isResolving() && forcedOnTop()) {
+            phase = Phase.RESOLVING;
+        }
     }
 
     /**
@@ -304,48 +340,37 @@ final class ForkEventSink extends BusEventReader {
     }
 
     /**
-     * A death the forced resolution left behind is marked where it was filed,
-     * so the fork can file it by the live rule.
+     * A death the forced resolution left behind joins the half the live rule
+     * puts it in ({@link HeldHalves#fileDeath}), and is checked there for a
+     * repeat, as the live collector checks a death against the held half it
+     * files it into.
      *
-     * <p>Filed unchecked, its repeat judged later by the half it joins
-     * ({@code ForkCollector.splitByMode}): the live collector checks a death
-     * against the half {@code halfForDeath} assigns it to, and filed here it
-     * would be checked against the open span, the last mode's, whichever
-     * half it joins. A probe's death is checked here: a damage step is one
-     * record, as the observed combat bracket is.
+     * <p>Every mode's half is complete by then: {@code
+     * GameSimulator.resolveStack} runs the state-based check only once the
+     * whole charm has resolved and published its {@code
+     * GameEventSpellResolved}, which is what holds the halves.
      *
-     * <p>A probe's leave is marked only when it was filed: a repeat the
-     * buffer refused has no position, and the next free one belongs to
-     * whatever is filed next.
-     *
-     * <p>Only an intervention's death in {@link Phase#HELD} is marked. One in
-     * the check before the forced ability resolves, or one while the tracker
-     * is frozen mid-resolution, is filed as an ordinary event, checked for a
-     * repeat in its span: live files either into the open bracket like any
-     * other event, so on a modal resolution it rides with the mode in whose
-     * span it fell rather than joining a half by {@code halfForDeath}, which
-     * is a resolved half's rule.
+     * <p>Only an intervention's death in {@link Phase#HELD} joins a half that
+     * way. One in the check before the forced ability resolves, or one while
+     * the tracker is frozen mid-resolution, is filed as an ordinary event,
+     * checked for a repeat in its span: live files either into the open
+     * bracket like any other event, so on a modal resolution it rides with
+     * the mode in whose span it fell. A probe's is ordinary too: a damage
+     * step is one record, as the observed combat bracket is.
      */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
         if (!admits(event)) {
             return;
         }
-        int at = size();
-        boolean probe = combatDamage;
-        if (!isStateBasedLeave(event) || gated() && phase != Phase.HELD) {
-            file(moved, null);
-        } else if (probe) {
-            if (file(moved, null)) {
-                stateBasedLeaves.add(at);
-            }
+        if (phase == Phase.HELD) {
+            held.fileDeath(EventAttribution.stamp(moved, acting, null), Refs.of(event.card()));
         } else {
-            open.fileUnchecked(EventAttribution.stamp(moved, acting, null));
-            stateBasedLeaves.add(at);
+            file(moved, null);
         }
     }
 
-    private boolean file(EffectEvent event, String namedCause) {
-        return open.file(EventAttribution.stamp(event, acting, namedCause));
+    private void file(EffectEvent event, String namedCause) {
+        open.file(EventAttribution.stamp(event, acting, namedCause));
     }
 }
