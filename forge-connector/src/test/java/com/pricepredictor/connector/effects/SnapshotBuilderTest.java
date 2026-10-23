@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
 import forge.game.spellability.SpellAbility;
@@ -10,9 +9,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.lang.reflect.Constructor;
-
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -31,21 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * pinned last, does: a target is a card in some zone.
  */
 class SnapshotBuilderTest {
-
-    // ── one depth for every record ──────────────────────────────────────
-
-    /**
-     * A depth a caller could choose would make {@code state.tiers} a proxy for
-     * which collector wrote a record, so the builder takes no depth at all.
-     */
-    @Test
-    void noConstructionChoosesATierDepth() {
-        Constructor<?>[] constructors = SnapshotBuilder.class.getDeclaredConstructors();
-        assertEquals(1, constructors.length,
-                "a second constructor would let a call site pick its own depth");
-        assertArrayEquals(
-                new Class<?>[]{Game.class}, constructors[0].getParameterTypes());
-    }
 
     // ── refs ────────────────────────────────────────────────────────────
 

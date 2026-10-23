@@ -4,7 +4,6 @@ import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityType;
 import com.pricepredictor.connector.ActionCounter;
 import com.pricepredictor.connector.BatchConverter;
-import com.pricepredictor.connector.ForgeEnvironmentInitializer;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.MultiCard;
 import com.pricepredictor.connector.RenderedLine;
@@ -17,7 +16,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -41,8 +39,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class ProvenanceSidecarTest {
 
-    private static final Path CARDS_FOLDER = ForgeEnvironmentInitializer.findCardsFolder();
-
     /** The converter tests' small card tree: two valid cards and one malformed. */
     private static final Path FIXTURE_CARDS = Path.of("src/test/resources/cardsfolder");
 
@@ -55,14 +51,10 @@ class ProvenanceSidecarTest {
                              List<Ability> owners, ProvenanceSidecar sidecar) {
     }
 
+    /** Convert one of the pinned feature-024 scripts. */
     private Converted convert(String relativePath) {
-        try {
-            Path file = CARDS_FOLDER.resolve(relativePath);
-            return convertSource(Files.readAllLines(file),
-                    new ScriptFile(SourceTree.CARDSFOLDER, relativePath).key());
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return converted(
+                ConvertedScript.fromFile(parser, ConvertedScript.GOLDEN_024_CARDS, relativePath));
     }
 
     /**
@@ -73,8 +65,10 @@ class ProvenanceSidecarTest {
      * removal path it takes is only reachable from a script written for it.
      */
     private Converted convertSource(List<String> source, String scriptFile) {
-        ConvertedScript converted =
-                ConvertedScript.of(parser.parseScript(source, scriptFile), scriptFile);
+        return converted(ConvertedScript.of(parser.parseScript(source, scriptFile), scriptFile));
+    }
+
+    private static Converted converted(ConvertedScript converted) {
         return new Converted(converted.parsed().card(), converted.texts(),
                 converted.rendered().stream().map(RenderedLine::owner).toList(),
                 converted.sidecar());
@@ -92,19 +86,15 @@ class ProvenanceSidecarTest {
             "a/ajanis_pridemate.txt",
             "w/wall_of_omens.txt",
             "c/counterspell.txt",
-            "a/archangel_avacyn_avacyn_the_purifier.txt"
+            "c/cryptic_command.txt",
+            "d/daybreak_ranger_nightfall_predator.txt"
     );
 
     @Test
     void convertedTextIsByteIdenticalToTheRecordingFreeRendering() {
         for (String relativePath : SAMPLE) {
-            Path file = CARDS_FOLDER.resolve(relativePath);
-            List<String> source;
-            try {
-                source = Files.readAllLines(file);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
+            List<String> source =
+                    ConvertedScript.source(ConvertedScript.GOLDEN_024_CARDS, relativePath);
             String withoutRecording = RenderedLine.join(parser
                     .parseScript(source, null)
                     .card().renderLines());

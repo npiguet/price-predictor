@@ -6,7 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-/** A provenance key as a value: its mode component, its JSON, and a resolution's two halves. */
+/**
+ * A provenance key as a value: its mode component, and a resolution's two
+ * halves. Its JSON forms are pinned by {@code ProvenanceKeyCharacterizationTest}.
+ */
 class ProvenanceKeyTest {
 
     /**

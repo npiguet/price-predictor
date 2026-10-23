@@ -710,7 +710,7 @@ class StackItemBracketTest {
         SpellAbility bolt = inHand(game, caster, "Lightning Bolt").getFirstSpellAbility();
         bolt.setActivatingPlayer(caster);
         game.getAction().checkStateEffects(false);
-        CollectionCaps caps = new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         List<String> records = ShardRun.forked(tempDir, game, caps, 5L, bolt).records();
 

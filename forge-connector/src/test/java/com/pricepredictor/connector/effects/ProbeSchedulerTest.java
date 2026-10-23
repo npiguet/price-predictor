@@ -27,10 +27,10 @@ class ProbeSchedulerTest {
     }
 
     private static ProbeScheduler probing(RecordShardWriter writer) {
-        CollectionCaps probing = new CollectionCaps(
-                1, 1.0, 2, 2, List.of("trample"), 0.0, 0.0);
-        return new ProbeScheduler(TestCards.game(), "run.0-l1.0", probing,
-                new DamageStepProbe(null, TestCollectors.context(writer, "run.0-l1.0"), new ForkBudget(probing)));
+        CollectionCaps probing =
+                TestCaps.caps().playabilityRate(1.0).probeKeywords("trample").build();
+        return new ProbeScheduler(TestCards.game(), ShardRun.GAME_ID, probing,
+                new DamageStepProbe(null, TestCollectors.context(writer, ShardRun.GAME_ID), new ForkBudget(probing)));
     }
 
     /**
@@ -43,7 +43,7 @@ class ProbeSchedulerTest {
      */
     @Test
     void aBranchIsCompletedOnlyAgainstItsOwnDamageStep() throws Exception {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
+        try (RecordShardWriter writer = ShardRun.writer(tempDir)) {
             ProbeScheduler probes = probing(writer);
             probes.hold(branch(DamageStep.FIRST_STRIKE));
             probes.hold(branch(DamageStep.REGULAR));
@@ -63,7 +63,7 @@ class ProbeSchedulerTest {
     /** With no substep named, the oldest held step is the one being written. */
     @Test
     void theOldestHeldStepIsTheOneACombatRecordCompletes() throws Exception {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
+        try (RecordShardWriter writer = ShardRun.writer(tempDir)) {
             ProbeScheduler probes = probing(writer);
             probes.hold(branch(DamageStep.FIRST_STRIKE));
             probes.hold(branch(DamageStep.REGULAR));
@@ -84,7 +84,7 @@ class ProbeSchedulerTest {
     /** A branch whose step produced no record is dropped rather than mispaired. */
     @Test
     void aBranchFromAStepThatWroteNoRecordIsDropped() throws Exception {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
+        try (RecordShardWriter writer = ShardRun.writer(tempDir)) {
             ProbeScheduler probes = probing(writer);
             probes.hold(branch(DamageStep.FIRST_STRIKE));
 

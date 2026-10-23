@@ -132,7 +132,7 @@ class MatchGeneratorRoutingTest {
     //
     // pickDeckB's happy path (a mirror is accepted) materializes a Forge Deck
     // via DeckSelection.fromFile, so it needs FModel initialized and lives in
-    // MatchGeneratorTest under -Pintegration instead. The one case that never
+    // MatchGeneratorDeckSourcingTest instead. The one case that never
     // reaches materialization -- decksOnly with literally no deck of deck A's
     // set anywhere in the side-B index -- is pure routing logic and belongs
     // here, called directly rather than via pickDeckA so no side needs Forge.

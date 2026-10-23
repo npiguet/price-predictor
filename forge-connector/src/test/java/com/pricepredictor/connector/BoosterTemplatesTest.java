@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,5 +57,42 @@ class BoosterTemplatesTest {
     void anUnknownSetHasNoTemplate() {
         assertEquals(Optional.empty(), BoosterTemplates.forSet("XXXXUNKNOWN"));
         assertEquals(Optional.empty(), BoosterTemplates.forSet(null));
+    }
+
+    @Test
+    void eligibleSetsExcludeFunnySets() {
+        List<String> eligibleSets = BoosterTemplates.eligibleSealedSets();
+
+        // Known un-sets that must be excluded
+        List<String> unsets = List.of("UGL", "UNH", "UST", "UND", "UNF");
+        for (String unset : unsets) {
+            assertFalse(eligibleSets.contains(unset),
+                    "Un-set " + unset + " must not be in eligible sets");
+        }
+    }
+
+    @Test
+    void eligibleSetsIncludeKnownSealedSets() {
+        List<String> eligibleSets = BoosterTemplates.eligibleSealedSets();
+
+        // Well-known sets that should be in the eligible list
+        List<String> expectedSets = List.of("RVR", "MH3", "BLB");
+        for (String set : expectedSets) {
+            assertTrue(eligibleSets.contains(set),
+                    "Known set " + set + " should be in eligible sets");
+        }
+    }
+
+    @Test
+    void eligibleSetsExcludeSmallBoosterSets() {
+        List<String> eligibleSets = BoosterTemplates.eligibleSealedSets();
+
+        // Legacy sets whose original boosters held only 8 cards are too small
+        // for a realistic sealed pool. Must be excluded.
+        List<String> tinyBoosterSets = List.of("DRK", "FEM");
+        for (String set : tinyBoosterSets) {
+            assertFalse(eligibleSets.contains(set),
+                    "Small-booster set " + set + " must not be in eligible sets");
+        }
     }
 }

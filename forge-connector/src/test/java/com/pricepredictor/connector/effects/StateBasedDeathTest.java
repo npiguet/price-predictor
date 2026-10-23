@@ -404,8 +404,7 @@ class StateBasedDeathTest {
         Card elves = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Llanowar Elves");
         SpellAbility charm = TestBoard.charmOf(
                 TestBoard.inHand(game, caster, "Fiery Confluence"), caster);
-        CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         // A seed whose draw chooses the creature mode and ends on the opponent mode.
         ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
@@ -547,8 +546,7 @@ class StateBasedDeathTest {
         Player caster = game.getPlayers().get(0);
         Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
         Card slashCard = TestBoard.inHand(game, caster, "Flame Slash");
-        CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 1, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps, 1L, spellOf(slashCard, caster));
         assertTrue(fork.wrote(), "the forced resolution observed nothing");

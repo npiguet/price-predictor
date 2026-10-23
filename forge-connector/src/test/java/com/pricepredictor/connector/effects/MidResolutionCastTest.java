@@ -428,7 +428,7 @@ class MidResolutionCastTest {
         SpellAbility expertise = TestBoard.inHand(game, caster, "Kari Zev's Expertise")
                 .getFirstSpellAbility();
         expertise.setActivatingPlayer(caster);
-        CollectionCaps caps = new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).probes(0).build();
 
         ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps, 5L, expertise);
 

@@ -93,4 +93,26 @@ class JsonTest {
                         .render());
         assertEquals("{}", Json.object().render());
     }
+
+    // ── strings ─────────────────────────────────────────────────────────────
+
+    @Test
+    void aQuoteInACardNameIsEscaped() {
+        assertEquals("\"Ajani\\\"s\"", Json.string("Ajani\"s"));
+    }
+
+    @Test
+    void aNewlineInReminderTextIsEscaped() {
+        assertEquals("\"a\\nb\"", Json.string("a\nb"));
+    }
+
+    @Test
+    void nullRendersAsTheLiteral() {
+        assertEquals("null", Json.string(null));
+    }
+
+    @Test
+    void anAccentedCardNameSurvivesUnescaped() {
+        assertEquals("\"Lim-Dûl\"", Json.string("Lim-Dûl"));
+    }
 }

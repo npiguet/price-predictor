@@ -1762,16 +1762,6 @@ class RulesParserTest {
         assertNull(card.text(), "Developer's note should produce null text field, got: " + card.text());
     }
 
-    // --- Helpers ---
-
-    private static int occurrences(String text, String needle) {
-        int found = 0;
-        for (int at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) {
-            found++;
-        }
-        return found;
-    }
-
     /**
      * A Class level adding a trait with no text renders the text it does have.
      *
@@ -1808,6 +1798,16 @@ class RulesParserTest {
         assertTrue(output.contains("level[3]: {3}{G}: you may look at the top card of your"
                 + " library any time.\nyou may cast creature spells from the top of your"
                 + " library."), output);
+    }
+
+    // --- Helpers ---
+
+    private static int occurrences(String text, String needle) {
+        int found = 0;
+        for (int at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) {
+            found++;
+        }
+        return found;
     }
 
     /** {@code needle} appears in {@code text}, and only once: a duplicated clause would repeat it. */

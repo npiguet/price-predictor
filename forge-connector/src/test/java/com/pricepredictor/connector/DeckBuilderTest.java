@@ -3,7 +3,6 @@ package com.pricepredictor.connector;
 import forge.deck.Deck;
 import forge.item.PaperCard;
 import forge.model.FModel;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -19,10 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Tests for DeckBuilder's four construction methods, land rebalancing,
  * and pool-card uniqueness guarantee (FR-010).
- *
- * <p>Requires Forge environment for PaperCard objects, so tagged as "integration".
  */
-@Tag("integration")
 @ExtendWith(ForgeExtension.class)
 class DeckBuilderTest {
 

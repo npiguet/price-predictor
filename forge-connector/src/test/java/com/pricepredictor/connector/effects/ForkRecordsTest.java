@@ -43,10 +43,9 @@ class ForkRecordsTest {
     @TempDir
     Path tempDir;
 
-    private static CollectionCaps caps(
-            int interventions, int probes, List<String> keywords) {
-        return new CollectionCaps(
-                2000, 0.1, interventions, probes, keywords, 0.0, 0.0);
+    /** The caps every fork test starts from: room for every mana record. */
+    private static TestCaps forkCaps() {
+        return TestCaps.caps().manaCap(2000);
     }
 
     private RecordShardWriter writer;
@@ -54,9 +53,9 @@ class ForkRecordsTest {
     private ForkBudget budget;
 
     private CollectorContext context(CollectionCaps caps) {
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        writer = ShardRun.writer(tempDir);
         budget = new ForkBudget(caps);
-        return TestCollectors.context(writer, "run.0-l1.0");
+        return TestCollectors.context(writer, ShardRun.GAME_ID);
     }
 
     private InterventionFork interventions(CollectionCaps caps) {
@@ -65,16 +64,6 @@ class ForkRecordsTest {
 
     private DamageStepProbe probes(CollectionCaps caps) {
         return new DamageStepProbe(null, context(caps), budget);
-    }
-
-    /**
-     * The fork's shard, closed so every record it wrote is on disk. The
-     * writer creates the file with its first record, so a fork that wrote
-     * nothing leaves none.
-     */
-    private Path closedShard() {
-        writer.close();
-        return writer.path();
     }
 
     /**
@@ -92,12 +81,12 @@ class ForkRecordsTest {
 
     @Test
     void aFreshGameMayIntervene() {
-        assertTrue(new ForkBudget(caps(2, 2, List.of())).mayIntervene(1));
+        assertTrue(new ForkBudget(forkCaps().interventions(2).probes(2).build()).mayIntervene(1));
     }
 
     @Test
     void anExhaustedInterventionBudgetStopsFurtherForks() {
-        assertFalse(new ForkBudget(caps(0, 2, List.of())).mayIntervene(1));
+        assertFalse(new ForkBudget(forkCaps().interventions(0).probes(2).build()).mayIntervene(1));
     }
 
     // ── the fixed per-resolution cap ────────────────────────────────────
@@ -107,7 +96,7 @@ class ForkRecordsTest {
         // A generous --interventions-per-game must not let one board absorb
         // the whole budget: two counterfactuals for it are already both worth
         // having, and a third costs a game's simulation for a third variation.
-        InterventionFork collector = interventions(caps(100, 2, List.of()));
+        InterventionFork collector = interventions(forkCaps().interventions(100).probes(2).build());
         collector.intervene(null, 7);
         collector.intervene(null, 7);
         assertFalse(collector.mayIntervene(7));
@@ -118,16 +107,16 @@ class ForkRecordsTest {
     void aDiscardedForkStillCountsAgainstItsBudget() {
         // Otherwise a systematically failing copy would retry until the game
         // ended. A null game makes every copy fail.
-        InterventionFork collector = interventions(caps(1, 2, List.of()));
+        InterventionFork collector = interventions(forkCaps().interventions(1).probes(2).build());
         assertFalse(collector.intervene(null, 1));
         assertFalse(collector.mayIntervene(1));
     }
 
     @Test
     void aFailedForkWritesNoRecord() {
-        InterventionFork collector = interventions(caps(2, 2, List.of()));
+        InterventionFork collector = interventions(forkCaps().interventions(2).probes(2).build());
         collector.intervene(null, 1);
-        assertFalse(Files.exists(closedShard()));
+        assertFalse(Files.exists(ShardRun.closed(writer)));
     }
 
     // ── the probe switch ────────────────────────────────────────────────
@@ -136,12 +125,12 @@ class ForkRecordsTest {
     void noProbeIsTakenWithTheFlagUnset() {
         // Whatever the build state: the flag is the runtime switch, and it is
         // deliberately separate from the build decision gate 2 drives.
-        assertFalse(new ForkBudget(caps(2, 2, List.of())).mayProbe("wither"));
+        assertFalse(new ForkBudget(forkCaps().interventions(2).probes(2).build()).mayProbe("wither"));
     }
 
     @Test
     void onlyTheNamedKeywordsAreProbed() {
-        ForkBudget budget = new ForkBudget(caps(2, 2, List.of("wither")));
+        ForkBudget budget = new ForkBudget(forkCaps().interventions(2).probes(2).probeKeywords("wither").build());
         assertTrue(budget.mayProbe("wither"));
         assertFalse(budget.mayProbe("lifelink"));
     }
@@ -149,17 +138,17 @@ class ForkRecordsTest {
     @Test
     void theProbeBudgetIsSpentByTakingProbes() {
         // Spent even by a fork that fails: a null game makes every copy fail.
-        DamageStepProbe collector = probes(caps(2, 1, List.of("wither")));
+        DamageStepProbe collector = probes(forkCaps().interventions(2).probes(1).probeKeywords("wither").build());
         assertNull(collector.probe("wither", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
         assertFalse(budget.mayProbe("wither"));
     }
 
     @Test
     void aProbeForAnUnnamedKeywordSpendsNothing() {
-        DamageStepProbe collector = probes(caps(2, 1, List.of("wither")));
+        DamageStepProbe collector = probes(forkCaps().interventions(2).probes(1).probeKeywords("wither").build());
         assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
         assertTrue(budget.mayProbe("wither"));
-        assertFalse(Files.exists(closedShard()));
+        assertFalse(Files.exists(ShardRun.closed(writer)));
     }
 
     // ── the held branch knows *when* it came from ───────────────────────
@@ -179,20 +168,20 @@ class ForkRecordsTest {
      */
     @Test
     void aBranchFromAnEarlierTurnIsNotWrittenAgainstThisOnesRecord() {
-        DamageStepProbe collector = probesOverAGame(caps(2, 2, List.of("trample")));
+        DamageStepProbe collector = probesOverAGame(forkCaps().interventions(2).probes(2).probeKeywords("trample").build());
 
         assertFalse(collector.writeHeldProbe(branch(7), "run.0-l1.9"),
                 "a branch seven turns older than its mirror is not a pair");
-        assertFalse(Files.exists(closedShard()));
+        assertFalse(Files.exists(ShardRun.closed(writer)));
     }
 
     /** A branch from the turn the record was written on is written. */
     @Test
     void aBranchFromThisTurnIsWritten() throws IOException {
-        DamageStepProbe collector = probesOverAGame(caps(2, 2, List.of("trample")));
+        DamageStepProbe collector = probesOverAGame(forkCaps().interventions(2).probes(2).probeKeywords("trample").build());
 
         assertTrue(collector.writeHeldProbe(branch(0), "run.0-l1.9"));
-        assertEquals(1, ShardRun.readShard(closedShard()).size());
+        assertEquals(1, ShardRun.readShard(ShardRun.closed(writer)).size());
     }
 
     /**
@@ -204,7 +193,7 @@ class ForkRecordsTest {
      */
     @Test
     void aBranchWithNoTurnIsWritten() {
-        DamageStepProbe collector = probesOverAGame(caps(2, 2, List.of("trample")));
+        DamageStepProbe collector = probesOverAGame(forkCaps().interventions(2).probes(2).probeKeywords("trample").build());
 
         assertTrue(collector.writeHeldProbe(branch(DamageStepProbe.TURN_UNKNOWN), "run.0-l1.9"));
     }
@@ -236,16 +225,16 @@ class ForkRecordsTest {
         Card bears = TestBoard.onBattlefield(game, defending, "Grizzly Bears");
         Combat combat = TestBoard.blockedCombat(game, attacking, defending, dreadmaw, bears);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        RecordShardWriter writer = ShardRun.writer(tempDir);
         DamageStepProbe.HeldProbe held;
         try {
             DamageStepProbe forks = new DamageStepProbe(
-                    game, TestCollectors.context(writer, "run.0-l1.0"),
-                    new ForkBudget(caps(0, 1, List.of("trample"))));
+                    game, TestCollectors.context(writer, ShardRun.GAME_ID),
+                    new ForkBudget(forkCaps().interventions(0).probes(1).probeKeywords("trample").build()));
             held = forks.probe("Trample", dreadmaw, DamageStep.REGULAR);
             assertNotNull(held, "the probe fork was discarded");
 
-            BusBracketCollector observed = TestCollectors.bracket(game, writer, "run.0-l1.0");
+            BusBracketCollector observed = TestCollectors.bracket(game, writer, ShardRun.GAME_ID);
             game.subscribeToEvents(observed);
             assertTrue(combat.assignCombatDamage(false), "the live step assigned no damage");
             combat.dealAssignedDamage();
@@ -288,7 +277,7 @@ class ForkRecordsTest {
         SpellAbility spell = disfigure.getFirstSpellAbility();
         spell.setActivatingPlayer(caster);
 
-        ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps(1, 0, List.of()), 1L, spell);
+        ShardRun.Fork fork = ShardRun.forked(tempDir, game, forkCaps().interventions(1).probes(0).build(), 1L, spell);
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
 
         List<String> records = fork.records();
@@ -317,7 +306,7 @@ class ForkRecordsTest {
         SpellAbility spell = blaze.getFirstSpellAbility();
         spell.setActivatingPlayer(caster);
 
-        ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps(1, 0, List.of()), 9L, spell);
+        ShardRun.Fork fork = ShardRun.forked(tempDir, game, forkCaps().interventions(1).probes(0).build(), 9L, spell);
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
 
         List<String> records = fork.records();
@@ -352,7 +341,7 @@ class ForkRecordsTest {
 
         Game forkedGame = pyroclasmBoard();
         ShardRun.Fork fork = ShardRun.forked(tempDir.resolve("forked"), forkedGame,
-                caps(1, 0, List.of()), 1L, firstSpellInHand(forkedGame));
+                forkCaps().interventions(1).probes(0).build(), 1L, firstSpellInHand(forkedGame));
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
         List<String> forced = fork.records();
         assertEquals(1, forced.size(), forced.toString());
@@ -571,7 +560,7 @@ class ForkRecordsTest {
     /** The one forced record. */
     private String forcedRecord(Game game, SpellAbility spell, long seed) throws IOException {
         ShardRun.Fork fork = ShardRun.forked(
-                tempDir.resolve("fork-" + seed), game, caps(1, 0, List.of()), seed, spell);
+                tempDir.resolve("fork-" + seed), game, forkCaps().interventions(1).probes(0).build(), seed, spell);
         assertTrue(fork.wrote(), "the forced resolution observed nothing");
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());

@@ -7,6 +7,7 @@ import forge.gamemodes.limited.BoosterDraft;
 import forge.gamemodes.limited.LimitedPoolType;
 import forge.item.SealedTemplate;
 import forge.item.generation.UnOpenedProduct;
+import org.eclipse.jetty.util.ajax.JSON;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,7 +21,10 @@ import java.io.PipedOutputStream;
 import java.io.PrintStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
@@ -120,18 +124,19 @@ class DraftWorkerMainTest {
         String setCode = uniformBoosterSet();
 
         String line = completedLine(forgeDraft(setCode));
-        assertTrue(line.startsWith(DraftWorkerMain.SENTINEL), "line must start with sentinel");
         assertFalse(line.substring(DraftWorkerMain.SENTINEL.length()).contains("\n"),
                 "transcript must be a single newline-free line");
 
-        String json = line.substring(DraftWorkerMain.SENTINEL.length());
-        // 8 seats * 3 packs = 24 boosters, each with a set_code; 8 seat agents.
-        assertEquals(24, countOccurrences(json, "\"set_code\""), "expected 24 boosters");
-        assertEquals(8, countOccurrences(json, "\"agent\""), "expected 8 seat agents");
-        assertTrue(json.contains("\"draft_id\""));
-        // Each booster has a non-empty drained picks array: an empty one would
-        // read "picks":[] and not match.
-        assertEquals(24, countOccurrences(json, "\"picks\":[\""), "every booster lists picks");
+        Map<String, Object> transcript = transcript(line);
+        assertNotNull(transcript.get("draft_id"));
+        assertEquals(8, entries(transcript, "seats").size(), "expected 8 seats");
+        // 8 seats * 3 packs = 24 boosters, each drained into its picks.
+        List<Map<String, Object>> boosters = entries(transcript, "boosters");
+        assertEquals(24, boosters.size(), "expected 24 boosters");
+        for (Map<String, Object> booster : boosters) {
+            assertNotNull(booster.get("set_code"), booster.toString());
+            assertTrue(((Object[]) booster.get("picks")).length > 0, "every booster lists picks");
+        }
     }
 
     /**
@@ -142,19 +147,14 @@ class DraftWorkerMainTest {
      */
     @Test
     void anAliasedSetIsRecordedUnderItsCanonicalCode() {
-        String json = completedLine(forgeDraft("CON"));
-
-        assertEquals(24, countOccurrences(json, "\"set_code\":\"CFX\""), json);
-        assertEquals(0, countOccurrences(json, "\"CON\""), json);
+        assertEquals(Collections.nCopies(24, "CFX"), setCodes(completedLine(forgeDraft("CON"))));
     }
 
     /** A set named by its own code is recorded under that code. */
     @Test
     void aPlainSetCodeIsRecordedUnchanged() {
         String setCode = uniformBoosterSet();
-        String json = completedLine(forgeDraft(setCode));
-
-        assertEquals(24, countOccurrences(json, "\"set_code\":" + Json.string(setCode)), json);
+        assertEquals(Collections.nCopies(24, setCode), setCodes(completedLine(forgeDraft(setCode))));
     }
 
     private static String completedLine(DraftWorkerMain.DraftResult result) {
@@ -177,14 +177,26 @@ class DraftWorkerMainTest {
                 DraftWorkerMain.emit(result, "NOT-A-SET", System.out));
     }
 
-    private static int countOccurrences(String haystack, String needle) {
-        int count = 0;
-        int idx = 0;
-        while ((idx = haystack.indexOf(needle, idx)) != -1) {
-            count++;
-            idx += needle.length();
-        }
-        return count;
+    /** The transcript a completed draft's line carries, parsed. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> transcript(String line) {
+        assertTrue(line.startsWith(DraftWorkerMain.SENTINEL), "line must start with sentinel");
+        return (Map<String, Object>) JSON.parse(line.substring(DraftWorkerMain.SENTINEL.length()));
+    }
+
+    /** The objects of one of the transcript's arrays, in order. */
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> entries(Map<String, Object> transcript, String key) {
+        return Arrays.stream((Object[]) transcript.get(key))
+                .map(entry -> (Map<String, Object>) entry)
+                .toList();
+    }
+
+    /** The set code each booster of a completed draft is recorded under, in order. */
+    private static List<Object> setCodes(String line) {
+        return entries(transcript(line), "boosters").stream()
+                .map(booster -> booster.get("set_code"))
+                .toList();
     }
 
     // ── Live model-seat pick side-channel (Forge-driven) ──────────────────────
@@ -214,13 +226,15 @@ class DraftWorkerMainTest {
                     if (!line.startsWith(DraftPickProtocol.PICK_REQUEST_SENTINEL)) {
                         continue;
                     }
-                    String json = line.substring(DraftPickProtocol.PICK_REQUEST_SENTINEL.length());
-                    respOut.println(DraftPickProtocol.PICK_RESPONSE_SENTINEL
-                            + "{\"draft_id\":\"" + jsonStringField(json, "draft_id")
-                            + "\",\"seat\":" + jsonIntField(json, "seat")
-                            + ",\"pack_number\":" + jsonIntField(json, "pack_number")
-                            + ",\"pick_number\":" + jsonIntField(json, "pick_number")
-                            + ",\"pick\":" + Json.string(firstPackCard(json)) + "}");
+                    Map<?, ?> request = (Map<?, ?>) JSON.parse(
+                            line.substring(DraftPickProtocol.PICK_REQUEST_SENTINEL.length()));
+                    respOut.println(DraftPickProtocol.PICK_RESPONSE_SENTINEL + Json.object()
+                            .value("draft_id", request.get("draft_id"))
+                            .value("seat", request.get("seat"))
+                            .value("pack_number", request.get("pack_number"))
+                            .value("pick_number", request.get("pick_number"))
+                            .value("pick", ((Object[]) request.get("pack"))[0])
+                            .render());
                 }
             } catch (IOException e) {
                 // The request pipe closed when the draft finished; expected.
@@ -235,44 +249,17 @@ class DraftWorkerMainTest {
                 setCode, "test-draft");
         out.close();  // signal the responder EOF
 
-        String line = completedLine(result);
-        assertTrue(line.startsWith(DraftWorkerMain.SENTINEL));
-        String json = line.substring(DraftWorkerMain.SENTINEL.length());
-        assertTrue(json.contains("\"draft_id\":\"test-draft\""));
-        assertEquals(8, countOccurrences(json, "\"agent\":\"draft-agent\""),
-                "every seat should carry the model label");
-        assertEquals(24, countOccurrences(json, "\"picks\":[\""), "every booster drained");
-    }
-
-    private static String jsonStringField(String json, String key) {
-        String marker = "\"" + key + "\":\"";
-        int i = json.indexOf(marker) + marker.length();
-        int j = json.indexOf('"', i);  // uuid / scalar fields carry no escaped quotes
-        return json.substring(i, j);
-    }
-
-    private static long jsonIntField(String json, String key) {
-        String marker = "\"" + key + "\":";
-        int i = json.indexOf(marker) + marker.length();
-        int j = i;
-        while (Character.isDigit(json.charAt(j))) {
-            j++;
+        Map<String, Object> transcript = transcript(completedLine(result));
+        assertEquals("test-draft", transcript.get("draft_id"));
+        List<Map<String, Object>> seats = entries(transcript, "seats");
+        assertEquals(8, seats.size());
+        for (Map<String, Object> seat : seats) {
+            assertEquals("draft-agent", seat.get("agent"), "every seat should carry the model label");
         }
-        return Long.parseLong(json.substring(i, j));
-    }
-
-    private static String firstPackCard(String json) {
-        int i = json.indexOf("\"pack\":[\"") + "\"pack\":[\"".length();
-        StringBuilder sb = new StringBuilder();
-        while (json.charAt(i) != '"') {
-            if (json.charAt(i) == '\\') {
-                sb.append(json.charAt(i + 1));  // unescape \" and \\ (card names)
-                i += 2;
-            } else {
-                sb.append(json.charAt(i));
-                i++;
-            }
+        List<Map<String, Object>> boosters = entries(transcript, "boosters");
+        assertEquals(24, boosters.size());
+        for (Map<String, Object> booster : boosters) {
+            assertTrue(((Object[]) booster.get("picks")).length > 0, "every booster drained");
         }
-        return sb.toString();
     }
 }

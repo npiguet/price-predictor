@@ -1,13 +1,11 @@
 package com.pricepredictor.connector.effects;
 
-import com.pricepredictor.connector.ForgeExtension;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
@@ -20,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * bracket on the bus and every hook installed, and every line it writes is
  * compared with the expected file, the envelope timestamps alone replaced.
  */
-@ExtendWith({ForgeExtension.class, Characterization.PinnedForgeIds.class})
+@CharacterizationTest
 class ShardCharacterizationTest {
 
     @TempDir

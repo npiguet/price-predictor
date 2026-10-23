@@ -1,16 +1,11 @@
 package com.pricepredictor.connector.effects;
 
-import com.pricepredictor.connector.ForgeExtension;
 import forge.game.ability.ApiType;
-import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
 import forge.game.phase.PhaseType;
-import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -21,7 +16,7 @@ import java.util.List;
  * is resolved from a real card the way the collectors resolve one, rather
  * than constructed, so the script path is the one the resolver derives.
  */
-@ExtendWith({ForgeExtension.class, Characterization.PinnedForgeIds.class})
+@CharacterizationTest
 class ProvenanceKeyCharacterizationTest {
 
     @Test
@@ -33,12 +28,8 @@ class ProvenanceKeyCharacterizationTest {
         Card treasure = board.token("c_a_treasure_sac", board.you);
         ProvenanceKey token = ProvenanceResolver.resolve(
                 board.ability(treasure, ApiType.Mana)).key();
-        SpellAbility charm = board.ability(board.hand("Boros Charm", board.you), ApiType.Charm);
-        charm.setActivatingPlayer(board.you);
-        List<AbilitySub> chosen = new ArrayList<>(
-                List.of(charm.getAdditionalAbilityList("Choices").get(2)));
-        charm.setChosenList(chosen);
-        CharmEffect.chainAbilities(charm, chosen);
+        SpellAbility charm = TestBoard.charmOf(board.hand("Boros Charm", board.you), board.you);
+        TestBoard.chain(charm, 2);
         ProvenanceKey mode = ProvenanceResolver.resolve(charm.getSubAbility()).key();
 
         StringBuilder text = new StringBuilder();

@@ -1,6 +1,5 @@
 package com.pricepredictor.connector.effects;
 
-import com.pricepredictor.connector.ForgeExtension;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
@@ -12,7 +11,6 @@ import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +27,7 @@ import java.util.Map;
  * Each renders the same board, which carries something in every inclusion
  * tier, so a refactor that drops or reorders any block or field shows here.
  */
-@ExtendWith({ForgeExtension.class, Characterization.PinnedForgeIds.class})
+@CharacterizationTest
 class SnapshotCharacterizationTest {
 
     @BeforeEach

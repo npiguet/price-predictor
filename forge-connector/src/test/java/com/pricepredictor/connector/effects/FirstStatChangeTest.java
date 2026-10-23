@@ -71,7 +71,7 @@ class FirstStatChangeTest {
         Player caster = game.getPlayers().get(0);
         Card bears = TestBoard.onBattlefield(game, caster, "Grizzly Bears");
         SpellAbility growth = TestBoard.spellOf(TestBoard.inHand(game, caster, "Giant Growth"), caster);
-        CollectionCaps caps = new CollectionCaps(2000, 0.1, 1, 0, List.of(), 0.0, 0.0);
+        CollectionCaps caps = TestCaps.caps().manaCap(2000).interventions(1).probes(0).build();
 
         String shard = String.join("\n",
                 ShardRun.forked(tempDir, game, caps, 1L, growth).records());

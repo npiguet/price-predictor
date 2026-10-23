@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.TestCaps;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.RecordShardWriter;
@@ -399,8 +400,7 @@ class RandomSeatControllerTest {
     /** Scenario 1: one match in eight seats a random player, A or B alike. */
     @Test
     void closeToOneMatchInEightSeatsARandomPlayerOnEitherSide() {
-        CollectionCaps caps = new CollectionCaps(
-                1, 0.1, 2, 2, List.of(), 0.125, 0.5);
+        CollectionCaps caps = TestCaps.caps().randomSeat(0.125, 0.5).build();
         Random random = new Random(11L);
         int draws = 40_000;
         int a = 0;

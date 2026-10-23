@@ -63,23 +63,13 @@ class BusBracketCollectorTest {
     }
 
     private BusBracketCollector collector(Game game) {
-        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        return TestCollectors.bracket(game, writer, "run.0-l1.0");
-    }
-
-    /**
-     * The shard, closed so every record written so far is on disk. The writer
-     * creates the file with its first record, so a collector that wrote
-     * nothing leaves none.
-     */
-    private Path closedShard() {
-        writer.close();
-        return writer.path();
+        writer = ShardRun.writer(tempDir);
+        return TestCollectors.bracket(game, writer, ShardRun.GAME_ID);
     }
 
     /** The records written so far, one parsed line each. */
     private List<String> written() throws IOException {
-        return ShardRun.readShard(closedShard());
+        return ShardRun.readShard(ShardRun.closed(writer));
     }
 
     /** A targeted burn spell, the shape a partial fizzle happens to. */
@@ -121,7 +111,7 @@ class BusBracketCollectorTest {
 
         collector.beginBracket(bolt);
 
-        assertFalse(Files.exists(closedShard()), "the cast wrote a record");
+        assertFalse(Files.exists(ShardRun.closed(writer)), "the cast wrote a record");
         assertEquals(1, collector.finishGame(Set.of(bolt.getId())),
                 "the cast is still held, to be abandoned at the end of the game");
     }
@@ -194,45 +184,6 @@ class BusBracketCollectorTest {
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"outcome\":\"countered\""), records.get(0));
         assertTrue(records.get(0).contains("\"link_id\":null"), records.get(0));
-    }
-
-    /**
-     * Losing some targets but not all is a partial fizzle.
-     *
-     * <p>{@code MagicStack.hasFizzled} strips the targets that became illegal
-     * before the spell resolves, so the count at resolution against the count at
-     * the cast is the engine's own answer. Losing every target without the engine
-     * calling it a fizzle is {@code CantFizzle}, where the spell still does what
-     * it does.
-     */
-    @Test
-    void losingSomeTargetsButNotAllIsAPartialFizzle() {
-        SpellAbility bolt = damageAbility();
-        bolt.resetTargets();
-        bolt.getTargets().add(TestCards.build("Grizzly Bears"));
-        bolt.getTargets().add(TestCards.build("Grizzly Bears"));
-
-        assertEquals(ActivationOutcome.RESOLVED,
-                ActivationLedger.outcomeOf(2, bolt));
-
-        bolt.getTargets().remove(bolt.getTargets().get(0));
-        assertEquals(ActivationOutcome.PARTIALLY_FIZZLED,
-                ActivationLedger.outcomeOf(2, bolt));
-
-        bolt.resetTargets();
-        assertEquals(ActivationOutcome.RESOLVED,
-                ActivationLedger.outcomeOf(2, bolt));
-    }
-
-    /** An untargeted spell never reads as partially fizzled. */
-    @Test
-    void anUntargetedSpellIsSimplyResolved() {
-        SpellAbility gain = AbilityFactory.getAbility(
-                "SP$ GainLife | Cost$ W | Defined$ You | LifeAmount$ 3",
-                TestCards.build("Healing Salve"));
-
-        assertEquals(ActivationOutcome.RESOLVED,
-                ActivationLedger.outcomeOf(0, gain));
     }
 
     private static Zone zone(ZoneType type) {
@@ -440,7 +391,7 @@ class BusBracketCollectorTest {
         long abandoned = collector.finishGame(Set.of(bolt.getId()));
 
         assertEquals(1, abandoned);
-        assertFalse(Files.exists(closedShard()), "no record claims one of the five");
+        assertFalse(Files.exists(ShardRun.closed(writer)), "no record claims one of the five");
     }
 
     /**
@@ -476,7 +427,7 @@ class BusBracketCollectorTest {
         long abandoned = collector.finishGame(Set.of(bolt.getId()));
 
         assertEquals(1, abandoned, "bolt never resolved and must still be counted so");
-        assertFalse(Files.exists(closedShard()),
+        assertFalse(Files.exists(ShardRun.closed(writer)),
                 "no record may claim bolt resolved -- it never did, and "
                         + "writeOffRemoved's abandoned count already says so correctly");
     }

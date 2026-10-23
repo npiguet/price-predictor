@@ -7,7 +7,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class OutputFormatterTest {
+/** How a card face, a multi-face card and an ability line render as converted text. */
+class CardFaceRenderingTest {
 
     @Test
     void vanillaCreatureFormatsCorrectly() {
