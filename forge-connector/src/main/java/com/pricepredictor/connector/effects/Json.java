@@ -90,7 +90,7 @@ public final class Json {
     }
 
     /** An empty object, for fields added one at a time. */
-    static ObjectWriter object() {
+    public static ObjectWriter object() {
         return new ObjectWriter();
     }
 
@@ -101,7 +101,7 @@ public final class Json {
      * and never drops a field: a null passed to {@link #value} is written as
      * JSON {@code null}.
      */
-    static final class ObjectWriter {
+    public static final class ObjectWriter {
 
         private final StringJoiner fields = new StringJoiner(",", "{", "}");
 
@@ -109,25 +109,25 @@ public final class Json {
         }
 
         /** A field whose value is already rendered JSON. */
-        ObjectWriter raw(String name, String json) {
+        public ObjectWriter raw(String name, String json) {
             fields.add(string(name) + ":" + json);
             return this;
         }
 
         /** A field rendered by {@link Json#value}. */
-        ObjectWriter value(String name, Object value) {
+        public ObjectWriter value(String name, Object value) {
             return raw(name, Json.value(value));
         }
 
         /** Every entry of an ordered map, as {@link #value} fields. */
-        ObjectWriter values(Map<String, ?> entries) {
+        public ObjectWriter values(Map<String, ?> entries) {
             for (Map.Entry<String, ?> entry : entries.entrySet()) {
                 value(entry.getKey(), entry.getValue());
             }
             return this;
         }
 
-        String render() {
+        public String render() {
             return fields.toString();
         }
     }

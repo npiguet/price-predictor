@@ -270,12 +270,14 @@ final class LayerContributions {
         }
 
         String toJson() {
-            return "{\"entity\":" + Json.string(entity)
-                    + ",\"pt_boost\":[" + power + "," + toughness + "]"
-                    + ",\"keywords\":" + Json.stringArray(keywords)
-                    + ",\"types\":" + Json.stringArray(types)
-                    + ",\"colors\":" + Json.stringArray(colors)
-                    + ",\"name\":" + Json.string(name) + "}";
+            return Json.object()
+                    .value("entity", entity)
+                    .value("pt_boost", List.of(power, toughness))
+                    .raw("keywords", Json.stringArray(keywords))
+                    .raw("types", Json.stringArray(types))
+                    .raw("colors", Json.stringArray(colors))
+                    .value("name", name)
+                    .render();
         }
     }
 }

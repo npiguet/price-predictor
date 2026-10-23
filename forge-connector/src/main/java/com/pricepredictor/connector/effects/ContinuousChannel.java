@@ -10,7 +10,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.StringJoiner;
 
 /**
  * One {@code continuous} record per static ability that is currently changing
@@ -88,14 +87,13 @@ final class ContinuousChannel {
         if (!allowContinuousRecord(String.valueOf(staticId), boardHash)) {
             return;
         }
-        StringJoiner rendered = new StringJoiner(",", "[", "]");
-        for (LayerContributions.Contribution contribution : contributions) {
-            rendered.add(contribution.toJson());
-        }
+        String rendered = Json.array(contributions, LayerContributions.Contribution::toJson);
         ProvenanceKey.Resolved acting = ProvenanceResolver.resolve(source);
         String state = live.snapshots().ofBoardWithout(staticId).render();
-        String payload = "{\"contributions\":" + rendered
-                + ",\"board_hash\":" + Json.string(boardHash) + "}";
+        String payload = Json.object()
+                .raw("contributions", rendered)
+                .value("board_hash", boardHash)
+                .render();
         // A second gate behind the per-board one, which cannot see this:
         // two *distinct* static ids -- a second copy of the same anthem,
         // two copies of one aura -- resolve to the same key, the same

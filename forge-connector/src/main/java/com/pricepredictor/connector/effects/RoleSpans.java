@@ -27,8 +27,11 @@ public final class RoleSpans {
     /** One tagged character range, half-open: {@code [start, end)}. */
     public record Span(int start, int end, SpanRole role) {
         public String toJson() {
-            return "{\"start\":" + start + ",\"end\":" + end
-                    + ",\"role\":" + Json.string(role.wireName()) + "}";
+            return Json.object()
+                    .value("start", start)
+                    .value("end", end)
+                    .value("role", role.wireName())
+                    .render();
         }
     }
 

@@ -23,6 +23,7 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -314,25 +315,16 @@ public class DraftWorkerMain {
 
         /** The transcript the supervisor reads, without the sentinel. */
         String toJson() {
-            StringBuilder sb = new StringBuilder(4096);
-            sb.append("{\"draft_id\":\"").append(draftId).append("\",\"boosters\":[");
-            for (int k = 0; k < picksByBooster.size(); k++) {
-                if (k > 0) {
-                    sb.append(',');
-                }
-                sb.append("{\"set_code\":").append(Json.string(setCode))
-                        .append(",\"picks\":").append(Json.stringArray(picksByBooster.get(k)))
-                        .append('}');
-            }
-            sb.append("],\"seats\":[");
-            for (int s = 0; s < agents.length; s++) {
-                if (s > 0) {
-                    sb.append(',');
-                }
-                sb.append("{\"agent\":").append(Json.string(agents[s])).append('}');
-            }
-            sb.append("]}");
-            return sb.toString();
+            return Json.object()
+                    .value("draft_id", draftId)
+                    .raw("boosters", Json.array(picksByBooster, picks -> Json.object()
+                            .value("set_code", setCode)
+                            .raw("picks", Json.stringArray(picks))
+                            .render()))
+                    .raw("seats", Json.array(Arrays.asList(agents), agent -> Json.object()
+                            .value("agent", agent)
+                            .render()))
+                    .render();
         }
     }
 

@@ -59,13 +59,10 @@ public record TraitScript(
     /** One sub-ability below a trait, addressed by its index path. */
     public record SubAbilityLink(List<Integer> path, String label) {
         public String toJson() {
-            StringBuilder sb = new StringBuilder("{\"path\":[");
-            for (int i = 0; i < path.size(); i++) {
-                if (i > 0) sb.append(',');
-                sb.append(path.get(i));
-            }
-            return sb.append("],\"label\":").append(Json.string(label)).append('}')
-                    .toString();
+            return Json.object()
+                    .value("path", path)
+                    .value("label", label)
+                    .render();
         }
     }
 

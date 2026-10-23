@@ -6,10 +6,10 @@ import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
-import java.util.StringJoiner;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -204,8 +204,10 @@ public final class PlayabilityChannel {
         }
         LegalSet attackers = LegalSet.of(candidates, legal,
                 card -> defender == null ? null : cantAttackStatic(card, defender));
-        String payload = "{\"legal_attackers\":" + attackers.legal()
-                + ",\"forbidden\":" + attackers.forbidden() + "}";
+        String payload = Json.object()
+                .raw("legal_attackers", attackers.legal())
+                .raw("forbidden", attackers.forbidden())
+                .render();
         emitLegality(PlayabilitySubkind.ATTACKERS, decider, payload);
     }
 
@@ -226,11 +228,12 @@ public final class PlayabilityChannel {
         }
         LegalSet blockers = LegalSet.of(candidates, legal,
                 card -> cantBlockByStatic(attacker, card));
-        String payload = "{\"anchor_attacker\":"
-                + Json.string(SnapshotBuilder.entityId(attacker))
-                + ",\"legal_blockers\":" + blockers.legal()
-                + ",\"forbidden\":" + blockers.forbidden()
-                + ",\"min_blockers\":" + minBlockers + "}";
+        String payload = Json.object()
+                .value("anchor_attacker", SnapshotBuilder.entityId(attacker))
+                .raw("legal_blockers", blockers.legal())
+                .raw("forbidden", blockers.forbidden())
+                .value("min_blockers", minBlockers)
+                .render();
         emitLegality(PlayabilitySubkind.BLOCKERS, decider, payload);
     }
 
@@ -247,18 +250,16 @@ public final class PlayabilityChannel {
         static LegalSet of(
                 List<Card> candidates, List<Card> legal,
                 Function<Card, StaticAbility> responsible) {
-            StringJoiner allowed = new StringJoiner(",", "[", "]");
-            for (Card card : legal) {
-                allowed.add(Json.string(SnapshotBuilder.entityId(card)));
-            }
-            StringJoiner forbidden = new StringJoiner(",", "[", "]");
+            List<String> forbidden = new ArrayList<>();
             for (Card card : candidates) {
                 if (legal.contains(card)) {
                     continue;
                 }
                 forbidden.add(forbiddenJson(card, responsible.apply(card)));
             }
-            return new LegalSet(allowed.toString(), forbidden.toString());
+            return new LegalSet(
+                    Json.array(legal, card -> Json.string(SnapshotBuilder.entityId(card))),
+                    Json.array(forbidden, Function.identity()));
         }
     }
 
@@ -287,9 +288,11 @@ public final class PlayabilityChannel {
      */
     private static String forbiddenJson(Card card, StaticAbility responsible) {
         ProvenanceKey key = responsible == null ? null : ProvenanceResolver.of(responsible);
-        return "{\"entity\":" + Json.string(SnapshotBuilder.entityId(card))
-                + ",\"responsible_static\":["
-                + (key == null ? "" : key.toJson()) + "]}";
+        return Json.object()
+                .value("entity", SnapshotBuilder.entityId(card))
+                .raw("responsible_static",
+                        ProvenanceKey.toJsonArray(key == null ? List.of() : List.of(key)))
+                .render();
     }
 
     /** Reflective, because the engine exposes these only on a patched checkout. */

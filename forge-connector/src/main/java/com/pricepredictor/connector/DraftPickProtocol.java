@@ -74,16 +74,16 @@ final class DraftPickProtocol {
 
         /** The {@code <<DRAFT-PICK-REQUEST>>} line (contracts/pick-protocol.md). */
         String toWireLine() {
-            return PICK_REQUEST_SENTINEL
-                    + "{\"draft_id\":" + Json.string(draftId)
-                    + ",\"seat\":" + seat
-                    + ",\"agent\":" + Json.string(agent)
-                    + ",\"pod_size\":" + podSize
-                    + ",\"pack_number\":" + packNumber
-                    + ",\"pick_number\":" + pickNumber
-                    + ",\"set_code\":" + Json.string(setCode == null ? "" : setCode)
-                    + ",\"pack\":" + Json.stringArray(pack)
-                    + "}";
+            return PICK_REQUEST_SENTINEL + Json.object()
+                    .value("draft_id", draftId)
+                    .value("seat", seat)
+                    .value("agent", agent)
+                    .value("pod_size", podSize)
+                    .value("pack_number", packNumber)
+                    .value("pick_number", pickNumber)
+                    .value("set_code", setCode == null ? "" : setCode)
+                    .raw("pack", Json.stringArray(pack))
+                    .render();
         }
     }
 
@@ -170,7 +170,9 @@ final class DraftPickProtocol {
     }
 
     static String formatAbandoned(String draftId, String reason) {
-        return ABANDONED_SENTINEL + "{\"draft_id\":" + Json.string(draftId)
-                + ",\"reason\":" + Json.string(reason == null ? "" : reason) + "}";
+        return ABANDONED_SENTINEL + Json.object()
+                .value("draft_id", draftId)
+                .value("reason", reason == null ? "" : reason)
+                .render();
     }
 }
