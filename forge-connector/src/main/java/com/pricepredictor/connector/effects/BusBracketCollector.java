@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.combat.Combat;
 import forge.game.event.GameEvent;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCombatEnded;
@@ -16,9 +15,7 @@ import forge.game.event.GameEventTurnPhase;
 import forge.game.spellability.SpellAbility;
 
 import java.lang.reflect.InvocationHandler;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -49,6 +46,16 @@ import java.util.Set;
  * <p>Damage steps get their own brackets, closed at the phase boundary, so a
  * first-strike combat writes two records — the only way a keyword that acts by
  * splitting the step is visible in the corpus at all.
+ *
+ * <p>This class is the {@code @Subscribe} facade: each handler is the sequence
+ * of steps an event means, and the state those steps change is owned by the
+ * collaborator named for it — {@link StackBrackets} the stack's brackets and
+ * the open one, {@link ActivationLedger} the held cost halves, {@link
+ * HeldResolutionWindow} the effect halves waiting for their state-based
+ * consequences, {@link CombatStepBracket} the damage step's record and
+ * {@link CastsUnderWay} the cast on its way onto the stack. What the bus
+ * publishes is classified by {@link #now}, after {@link #syncWithEngine} has
+ * brought what it reads up to date.
  */
 public final class BusBracketCollector extends BusEventReader {
 
@@ -67,58 +74,8 @@ public final class BusBracketCollector extends BusEventReader {
     /** The cost halves held until their casts' outcomes are known. */
     private final ActivationLedger ledger;
 
-    /** The damage step's combat being gathered, or null outside one. */
-    private CombatBracket combat;
-
-    /**
-     * Whether this damage step's combat record has been written because
-     * something used the stack after the damage.
-     *
-     * <p>A damage step has a priority window after its damage, in which
-     * combat-damage triggers and anything cast resolve. Their events are
-     * theirs, not the combat's, so the first bracket to open in the step writes
-     * the combat record, and nothing after it joins one. Reset at the next
-     * phase.
-     */
-    private boolean combatWindowClosed;
-
-    /** Told each combat record's id, for a probe that mirrors it. */
-    private final java.util.function.Consumer<String> onCombatRecord;
-
-    /**
-     * One damage step's combat, from the first event dealt in it until the
-     * step ends or something uses the stack.
-     *
-     * <p>The structure is read when the bracket opens rather than at the
-     * flush, because the flush happens at the phase boundary — after the
-     * damage has been dealt and the creatures it killed have left. Read there,
-     * an attacker that traded with its blocker is in neither list, and the
-     * record describes a combat nobody fought. Read here it matches the
-     * snapshot beside it, which is taken in the same call.
-     */
-    private static final class CombatBracket {
-        private final String state;
-        private final CombatShape shape;
-        private final EventBuffer events = new EventBuffer();
-
-        private CombatBracket(String state, Combat combat) {
-            this.state = state;
-            // Nothing has died yet, so this is the moment the attackers and
-            // blockers are all still in combat. The assignment is Forge's copy of
-            // this step's, taken before any replacement, so it reads the same
-            // whenever in the step it is read.
-            this.shape = CombatShape.of(combat);
-            shape.addAssignment(combat);
-        }
-
-        void file(EffectEvent event) {
-            events.file(event);
-        }
-
-        String payload() {
-            return EffectRecord.combatPayload(shape.fields(), events.events());
-        }
-    }
+    /** The damage step's combat record, gathered until the step ends. */
+    private final CombatStepBracket combatStep;
 
     /**
      * @param onCombatRecord told the id of each {@code combat} record as it is
@@ -139,7 +96,8 @@ public final class BusBracketCollector extends BusEventReader {
         this.ledger = new ActivationLedger(context);
         this.heldResolution = new HeldResolutionWindow(context, snapshots);
         this.castsUnderWay = new CastsUnderWay(game, ledger::holds);
-        this.onCombatRecord = onCombatRecord;
+        this.combatStep = new CombatStepBracket(
+                game, context, snapshots, heldResolution, onCombatRecord);
     }
 
     /**
@@ -179,7 +137,7 @@ public final class BusBracketCollector extends BusEventReader {
         onNextAction();
         // And whatever the combat damage killed: state-based actions run
         // before anything goes on the stack.
-        closeCombatWindow();
+        combatStep.closeWindow();
         if (ability != null) {
             writeOffEarlierCast(ability.getId());
         }
@@ -304,7 +262,7 @@ public final class BusBracketCollector extends BusEventReader {
     @Subscribe
     public void onCombatEnded(GameEventCombatEnded event) {
         onNextAction();
-        flushCombat();
+        combatStep.flush();
     }
 
     /**
@@ -342,41 +300,28 @@ public final class BusBracketCollector extends BusEventReader {
      */
     private void onStepBoundary() {
         onNextAction();
-        flushCombat();
-        combatWindowClosed = false;
+        combatStep.endStep();
         // No cast is under way across a step boundary either.
         castsUnderWay.abandonAll();
     }
 
-    /**
-     * Something is going on the stack. In a damage step that ends the
-     * combat's share of the step: the record is written now, and what
-     * resolves for the rest of the step is not the combat's.
-     */
-    private void closeCombatWindow() {
-        if (inCombatDamageStep()) {
-            flushCombat();
-            combatWindowClosed = true;
-        }
-    }
-
     @Override
     boolean cardDamageIsCombat() {
-        return inCombatDamage();
+        return combatStep.takesEventsNow();
     }
 
     /**
      * Combat damage joins the step's bracket; any other damage the open one.
      *
-     * <p>Routed by the caller's flag rather than by {@link #inCombatDamage},
-     * because a player damage carries Forge's own combat flag and a card
-     * damage has only the step to go by.
+     * <p>Routed by the caller's flag rather than by {@link
+     * CombatStepBracket#takesEventsNow}, because a player damage carries
+     * Forge's own combat flag and a card damage has only the step to go by.
      */
     @Override
     void fileDamage(EffectEvent damage, String namedCause, boolean combat) {
         if (combat) {
             EventAttribution.stamp(damage, brackets.resolving(), namedCause);
-            fileCombat(damage);
+            combatStep.file(damage);
         } else {
             syncWithEngine();
             route(damage, namedCause, now(), false);
@@ -544,7 +489,8 @@ public final class BusBracketCollector extends BusEventReader {
      */
     private Now now() {
         if (game.getStack().isResolving()) {
-            return new Now(payingForACast(brackets.resolving()) ? Cause.PAYMENT : Cause.RESOLUTION);
+            return new Now(
+                    payingForACast(brackets.resolving()) ? Cause.PAYMENT : Cause.RESOLUTION);
         }
         if (game.costPaymentStack.peek() != null) {
             return new Now(Cause.PAYMENT);
@@ -594,8 +540,8 @@ public final class BusBracketCollector extends BusEventReader {
             case ACTION -> brackets.closeForAction();
             case CONSEQUENCE -> {
                 EventAttribution.stamp(event, brackets.resolving(), namedCause);
-                if (mayBeCombat && inCombatDamage()) {
-                    fileCombat(event);
+                if (mayBeCombat && combatStep.takesEventsNow()) {
+                    combatStep.file(event);
                 } else {
                     brackets.filing().file(event);
                 }
@@ -764,7 +710,7 @@ public final class BusBracketCollector extends BusEventReader {
         // battlefield -- so it stays where flushOrphanedEvents puts it, in a
         // record of its own after this one.
         onNextAction();
-        flushCombat();
+        combatStep.flush();
         flushOrphanedEvents();
         writeOffRemoved(onStack);
         return ledger.abandonAll();
@@ -848,67 +794,10 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * Whether the game is in either combat damage step.
-     *
-     * <p>Both names are tested: Forge's first-strike step is {@code
-     * COMBAT_FIRST_STRIKE_DAMAGE}, which does not contain {@code
-     * COMBAT_DAMAGE}, so a test on that substring alone would send the step's
-     * creature damage, life changes and deaths to the ordinary bracket.
-     */
-    private boolean inCombatDamageStep() {
-        return DamageStep.of(game.getPhaseHandler()) != null;
-    }
-
-    /**
-     * Whether an event now is the combat's: dealt in a damage step, before
-     * anything has used the stack in it ({@link #combatWindowClosed}).
-     */
-    private boolean inCombatDamage() {
-        return !combatWindowClosed && inCombatDamageStep();
-    }
-
-    /** File an event into the damage step's bracket, opening it first if need be. */
-    private void fileCombat(EffectEvent event) {
-        if (combat == null) {
-            // Combat damage is the next action. Ordinarily the step boundary
-            // before it has written the held resolution already.
-            onNextAction();
-            combat = new CombatBracket(snapshots.ofBoard().render(), game.getCombat());
-        }
-        combat.file(event);
-    }
-
-    /**
-     * Write the open combat bracket, if any, as one {@code combat} record.
-     *
-     * <p>{@code ability} is absent: no single line acts in a damage step, and
-     * inventing one would attribute the whole step to whichever creature
-     * happened to be first.
-     */
-    private void flushCombat() {
-        if (combat == null) {
-            return;
-        }
-        var phase = game.getPhaseHandler();
-        String actor = phase == null || phase.getPlayerTurn() == null
-                ? null : SnapshotBuilder.playerId(phase.getPlayerTurn());
-        EffectRecord record = context.newRecord(RecordKind.COMBAT)
-                .actor(actor)
-                .state(combat.state)
-                .payload(combat.payload());
-        context.emit(record);
-        // A damage-step probe forked before this step and has been holding its
-        // branch since: it needs this record's id to say which combat it
-        // mirrors, and the id does not exist until the record is written.
-        onCombatRecord.accept(record.recordId());
-        combat = null;
-    }
-
-    /**
-     * Write a leftover resolution-bracket buffer as its own record, the rescue
-     * {@link #flushCombat} gives the combat bracket, for the same reason:
-     * something can end the game between the last bracket close and the next
-     * one, which never comes.
+     * Write a leftover resolution-bracket buffer as its own record, the
+     * rescue {@link CombatStepBracket#flush} gives the combat bracket, for the
+     * same reason: something can end the game between the last bracket close
+     * and the next one, which never comes.
      *
      * <p>Reachable by the most ordinary kind of win. {@code MagicStack} fires
      * {@code GameEventSpellResolved} as soon as a resolving ability's effect
@@ -920,10 +809,10 @@ public final class BusBracketCollector extends BusEventReader {
      * no later resolution comes to flush it: without this, {@code player_won}
      * is lost for every non-combat kill.
      *
-     * <p>{@code ability} is absent, as on {@link #flushCombat}'s record: with
-     * no resolution open there is no acting line. {@code state} is read fresh,
-     * as {@link #fileCombat} reads it, since the board captured at a cast went
-     * with the resolution that closed.
+     * <p>{@code ability} is absent, as on a combat record: with no resolution
+     * open there is no acting line. {@code state} is read fresh, as {@link
+     * CombatStepBracket#file} reads it, since the board captured at a cast
+     * went with the resolution that closed.
      *
      * <p>Only the orphans are written, never an open bracket's events. A cast
      * whose own cost payment ends the game (life paid to 0) leaves its bracket
