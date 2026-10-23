@@ -378,6 +378,7 @@ public final class BusBracketCollector extends BusEventReader {
             EventAttribution.stamp(damage, brackets.resolving(), namedCause);
             fileCombat(damage);
         } else {
+            syncWithEngine();
             route(damage, namedCause, now(), false);
         }
     }
@@ -431,6 +432,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
+        syncWithEngine();
         route(event, namedCause, now(), true);
     }
 
@@ -508,6 +510,26 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
+     * Bring this collector's view of the engine up to date, so that what
+     * {@link #now} reads off it is current: a resolution that has begun is
+     * followed ({@link StackBrackets#followResolving}), and the marks of the
+     * casts under way are kept ({@link CastsUnderWay#keepMarksCurrent}).
+     *
+     * <p>Called once at each entry point that classifies an event or a
+     * refusal, before the open bracket is read: Forge publishes nothing when a
+     * resolution starts, so the first thing it does is what opens its
+     * bracket. The two halves run under exactly the conditions {@link #now}
+     * reads them under.
+     */
+    private void syncWithEngine() {
+        if (game.getStack().isResolving()) {
+            brackets.followResolving(this::idsOnStack);
+        } else if (game.costPaymentStack.peek() == null) {
+            castsUnderWay.keepMarksCurrent(StackActions.inProgress(game.getStack()));
+        }
+    }
+
+    /**
      * What an event published now is a consequence of.
      *
      * <p>Read off the engine's own state, in this order: the stack resolving;
@@ -518,13 +540,10 @@ public final class BusBracketCollector extends BusEventReader {
      * stack naming no action, or nothing at all — is a consequence of what
      * came before.
      *
-     * <p>Not a pure read: it follows a resolution that has begun ({@link
-     * StackBrackets#followResolving}), and keeps the marks {@link CastsUnderWay#cardBeingCast}
-     * keeps.
+     * <p>A pure read, of what {@link #syncWithEngine} has brought up to date.
      */
     private Now now() {
         if (game.getStack().isResolving()) {
-            brackets.followResolving(this::idsOnStack);
             return new Now(payingForACast(brackets.resolving()) ? Cause.PAYMENT : Cause.RESOLUTION);
         }
         if (game.costPaymentStack.peek() != null) {
@@ -539,11 +558,6 @@ public final class BusBracketCollector extends BusEventReader {
             return new Now(brackets.isOpenCast(acting) ? Cause.CONSEQUENCE : Cause.ACTION);
         }
         return new Now(Cause.CONSEQUENCE);
-    }
-
-    /** {@link #now}'s cause alone, for a caller with no event to file. */
-    private Cause causeNow() {
-        return now().cause();
     }
 
     /** Whether what has this cause belongs with the open bracket, if one is open. */
@@ -599,8 +613,11 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Subscribe
     public void onAnyEvent(GameEvent event) {
-        if (brackets.open() != null && !game.getStack().isResolving()
-                && causeNow() == Cause.ACTION) {
+        if (brackets.open() == null || game.getStack().isResolving()) {
+            return;
+        }
+        syncWithEngine();
+        if (now().cause() == Cause.ACTION) {
             brackets.closeForAction();
         }
     }
@@ -642,11 +659,9 @@ public final class BusBracketCollector extends BusEventReader {
      *               {@link CharmModes} could not place
      */
     void beginMode(SpellAbility clause, Integer option) {
-        if (!fromOpenBracket(causeNow())) {
-            return;
-        }
+        syncWithEngine();
         OpenResolution open = brackets.open();
-        if (open == null || !open.hosts(clause)) {
+        if (open == null || !fromOpenBracket(now().cause()) || !open.hosts(clause)) {
             return;
         }
         open.modes.begin(option, snapshots.ofResolving(open.ability), open.events);
@@ -810,9 +825,10 @@ public final class BusBracketCollector extends BusEventReader {
      * no resolution's.
      */
     void noteDeclined() {
-        // The cause first: reading it opens the resolving item's bracket.
-        if (fromOpenBracket(causeNow()) && brackets.open() != null) {
-            brackets.open().declined = true;
+        syncWithEngine();
+        OpenResolution open = brackets.open();
+        if (open != null && fromOpenBracket(now().cause())) {
+            open.declined = true;
         }
     }
 
