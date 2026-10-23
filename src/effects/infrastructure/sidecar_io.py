@@ -122,27 +122,31 @@ def sidecar_to_dict(sidecar: ProvenanceSidecar) -> dict:
     return {
         "card": sidecar.card,
         "script_file": sidecar.script_file,
-        "lines": [
-            {
-                "line_index": line.line_index,
-                "line_kind": line.line_kind,
-                "provenance": [key.sidecar_dict() for key in line.provenance],
-                "sub_ability_links": [
-                    {"path": list(link.path), "label": link.label}
-                    for link in line.sub_ability_links
-                ],
-                "script_api_type": line.script_api_type,
-                "script_param_keys": list(line.script_param_keys),
-                "script_text": line.script_text,
-                "role_spans": [
-                    {"start": span.start, "end": span.end, "role": span.role}
-                    for span in line.role_spans
-                ],
-            }
-            for line in sidecar.lines
-        ],
+        "lines": [_line_to_dict(line) for line in sidecar.lines],
         "dropped_keys": [key.sidecar_dict() for key in sidecar.dropped_keys],
     }
+
+
+def _line_to_dict(line: SidecarLine) -> dict:
+    """One line as the converter writes it; ``prose_offset`` only where known."""
+    entry = {"line_index": line.line_index, "line_kind": line.line_kind}
+    if line.prose_offset is not None:
+        entry["prose_offset"] = line.prose_offset
+    entry.update({
+        "provenance": [key.sidecar_dict() for key in line.provenance],
+        "sub_ability_links": [
+            {"path": list(link.path), "label": link.label}
+            for link in line.sub_ability_links
+        ],
+        "script_api_type": line.script_api_type,
+        "script_param_keys": list(line.script_param_keys),
+        "script_text": line.script_text,
+        "role_spans": [
+            {"start": span.start, "end": span.end, "role": span.role}
+            for span in line.role_spans
+        ],
+    })
+    return entry
 
 
 def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
@@ -173,6 +177,7 @@ def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
                     )
                     for span in line.get("role_spans", ())
                 ),
+                prose_offset=line.get("prose_offset"),
             )
             for line in data.get("lines", ())
         ),
@@ -300,10 +305,19 @@ def prose_for(line, lines: list[str]) -> str | None:
 
     The prefix is structure rather than card text, and the role spans the
     tokenizer applies are offsets into the prose without it.
+
+    The split is the sidecar's ``prose_offset``, which the converter records
+    because it cannot be recovered from the text: a continuation line of a
+    multi-line description has no prefix, and cutting it at its first ``": "``
+    would take ``{T}: `` off it as though it were one. A sidecar written
+    before the field existed falls back to that cut, which is right for every
+    line those sidecars hold.
     """
     if not lines or not (0 <= line.line_index < len(lines)):
         return None
     rendered = lines[line.line_index]
+    if line.prose_offset is not None:
+        return rendered[line.prose_offset:]
     separator = rendered.find(": ")
     return rendered if separator < 0 else rendered[separator + 2:]
 

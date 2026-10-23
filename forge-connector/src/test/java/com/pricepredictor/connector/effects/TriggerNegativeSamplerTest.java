@@ -12,6 +12,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Which trigger evaluations are offered to the writer, and how many one line may write. */
 class TriggerNegativeSamplerTest {
 
+    /** The one acting line these tests' evaluations name. */
+    private static final ProvenanceKey LINE = new ProvenanceKey(
+            "cardsfolder/p/paralyze.txt", 0, TraitKind.TRIGGER, 0, null);
+
     /** A game's sampler, drawing from the stream a game seeded with 42 would. */
     private static TriggerNegativeSampler negatives() {
         return new TriggerNegativeSampler(new Random(GameRecording.scramble(42L)));
@@ -29,12 +33,12 @@ class TriggerNegativeSamplerTest {
         int[] kept = new int[2];
         for (int firing = 0; firing < firings; firing++) {
             if (negatives.offer(mode, true)) {
-                negatives.keep(mode, true);
+                negatives.keep(mode, LINE, true);
                 kept[0]++;
             }
             for (int i = 0; i < burst; i++) {
                 if (negatives.offer(mode, false)) {
-                    negatives.keep(mode, false);
+                    negatives.keep(mode, LINE, false);
                     kept[1]++;
                 }
             }
@@ -83,7 +87,7 @@ class TriggerNegativeSamplerTest {
         int[] kept = new int[2];
         for (int firing = 0; firing < 400; firing++) {
             if (negatives.offer("ChangesZone", true)) {
-                negatives.keep("ChangesZone", true);
+                negatives.keep("ChangesZone", LINE, true);
                 kept[0]++;
             }
             for (int i = 0; i < 20; i++) {
@@ -95,7 +99,7 @@ class TriggerNegativeSamplerTest {
                 if (refusals.nextInt(4) != 0) {
                     continue;
                 }
-                negatives.keep("ChangesZone", false);
+                negatives.keep("ChangesZone", LINE, false);
                 kept[1]++;
             }
         }
@@ -108,16 +112,17 @@ class TriggerNegativeSamplerTest {
     /**
      * A deficit that cannot be filled costs a few offers, not all of them.
      *
-     * <p>The price of offering on the deficit alone: a mode whose every acting
-     * line has hit its per-line cap owes a negative for ever, and each offer
-     * builds a snapshot on the hook that fires most often in the collector.
-     * The backoff is what keeps that bounded.
+     * <p>The price of offering on the deficit alone: a mode whose every
+     * negative is refused downstream owes one for ever, and each offer costs
+     * a key lookup at least -- a snapshot too, wherever the refusal is a
+     * duplicate's -- on the hook that fires most often in the collector. The
+     * backoff is what keeps that bounded.
      */
     @Test
     void aDeficitThatCanNeverBeFilledStopsSpendingWorkOnItself() {
         TriggerNegativeSampler negatives = negatives();
         negatives.offer("ChangesZone", true);
-        negatives.keep("ChangesZone", true);
+        negatives.keep("ChangesZone", LINE, true);
 
         int offered = 0;
         for (int i = 0; i < 20_000; i++) {
@@ -165,13 +170,27 @@ class TriggerNegativeSamplerTest {
         TriggerNegativeSampler negatives = negatives();
         int written = 0;
         for (int i = 0; i < 100; i++) {
-            if (negatives.allowLine("[key]", true)) {
+            if (negatives.lineHasRoom(LINE, true)) {
+                negatives.keep("ChangesZone", LINE, true);
                 written++;
             }
         }
         assertEquals(24, written);
         // The other verdict has its own budget: "fired" and "did not fire" are
         // different observations of the same line.
-        assertTrue(negatives.allowLine("[key]", false));
+        assertTrue(negatives.lineHasRoom(LINE, false));
+    }
+
+    /**
+     * Asking whether a line has room spends none of it: the cap counts the
+     * records written, and the handler asks before it knows whether the
+     * record will survive the duplicate check.
+     */
+    @Test
+    void askingALinesCapSpendsNothing() {
+        TriggerNegativeSampler negatives = negatives();
+        for (int i = 0; i < 100; i++) {
+            assertTrue(negatives.lineHasRoom(LINE, true));
+        }
     }
 }

@@ -1,12 +1,15 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.Ability;
+import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.ActionCounter;
 import com.pricepredictor.connector.BatchConverter;
 import com.pricepredictor.connector.ForgeEnvironmentInitializer;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.MultiCard;
 import com.pricepredictor.connector.RenderedLine;
 import com.pricepredictor.connector.RulesParser;
+import com.pricepredictor.connector.ability.TextAbility;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
 import org.junit.jupiter.api.Test;
@@ -17,6 +20,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -336,14 +340,38 @@ class ProvenanceSidecarTest {
                         .anyMatch(line -> !line.roleSpans().isEmpty()),
                 "no spans at all would pass vacuously: " + converted.lines());
         for (ProvenanceSidecar.Line line : converted.sidecar().lines()) {
-            String prose = ProvenanceSidecar.prose(
-                    converted.lines().get(line.lineIndex()));
+            String prose = converted.lines().get(line.lineIndex()).substring(line.proseOffset());
             for (RoleSpans.Span span : line.roleSpans()) {
                 assertTrue(span.start() >= 0 && span.end() <= prose.length(),
                         "span " + span + " outside the prose of: " + prose);
                 assertTrue(span.start() <= span.end());
             }
         }
+    }
+
+    /**
+     * A line's prose starts where its prefix ends, and a continuation line has
+     * none, even when its own text holds a {@code ": "}.
+     *
+     * <p>Cutting each line at its first {@code ": "} would take
+     * {@code {T}: } off the continuation as though it were a prefix, and
+     * shift every role span on it by four characters.
+     */
+    @Test
+    void aContinuationLineHoldingAColonHasNoPrefix() {
+        Ability ability = new TextAbility(
+                AbilityType.STATIC, "creatures you control have:\n{T}: add {G}.");
+        List<RenderedLine> rendered = new ArrayList<>();
+        ability.appendBlock(new ActionCounter(0), 0, rendered);
+
+        ProvenanceSidecar sidecar =
+                ProvenanceSidecar.build("Test", "cardsfolder/t/test.txt", rendered, List.of());
+
+        assertEquals(List.of("static: creatures you control have:", "{T}: add {G}."),
+                rendered.stream().map(RenderedLine::text).toList());
+        assertEquals(List.of(8, 0),
+                sidecar.lines().stream().map(ProvenanceSidecar.Line::proseOffset).toList());
+        assertTrue(sidecar.toJson().contains("\"prose_offset\":0"), sidecar.toJson());
     }
 
     // ── the file on disk ────────────────────────────────────────────────

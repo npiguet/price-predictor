@@ -269,6 +269,44 @@ class RewriteContractTest {
         assertTrue(line.contains("\"result\":\"not_replaced\""), line);
     }
 
+    /**
+     * Two replacements on one card that both decline one event are two records.
+     *
+     * <p>Archelos, Lagoon Mystic prints two {@code Moved} replacements, one
+     * applying while it is tapped and one while it is untapped, so on any
+     * entry at least one of them declines. A rewrite snapshot names the host
+     * and the event, not which of the host's replacements is answering, so the
+     * two declines render the same state and payload; only the acting line
+     * tells them apart, and without it the second line's negative would be
+     * coalesced away as a repeat of the first's.
+     */
+    @Test
+    void twoLinesDecliningOneEventEachReachTheShard() throws Throwable {
+        Card archelos = TestCards.build("Archelos, Lagoon Mystic");
+        List<ReplacementEffect> replacements =
+                List.copyOf(archelos.getCurrentState().getReplacementEffects());
+        assertEquals(2, replacements.size(), "Archelos prints two R: lines");
+        Map<AbilityKey, Object> params = new LinkedHashMap<>();
+        params.put(AbilityKey.Card, TestCards.build("Mountain"));
+        params.put(AbilityKey.Destination, ZoneType.Battlefield);
+
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            for (ReplacementEffect replacement : replacements) {
+                collector.rewrites().handler().invoke(
+                        null, onReplacement(HookShapes.Replacement.class),
+                        new Object[]{
+                                replacement, params, params, ReplacementResult.NotReplaced, null});
+            }
+        });
+
+        assertEquals(2, lines.size(), "one record per declining line: " + lines);
+        assertEquals(List.of(0L, 1L),
+                lines.stream()
+                        .map(l -> RecordLines.abilityKeys(l).get(0).get("index_within_kind"))
+                        .toList(),
+                lines.toString());
+    }
+
     // ── another game's replacement ──────────────────────────────────────
 
     /**

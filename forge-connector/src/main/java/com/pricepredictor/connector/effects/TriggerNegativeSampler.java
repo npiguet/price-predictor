@@ -28,7 +28,7 @@ final class TriggerNegativeSampler {
      *
      * <p>Only reached by a mode whose offered negatives are being refused
      * downstream -- by the duplicate check or the per-line flood cap -- so it
-     * is a bound on wasted snapshot building, not a sampling parameter.
+     * is a bound on wasted work, not a sampling parameter.
      */
     private static final int NEGATIVE_OFFERS_AT_FULL_RATE = 4;
     /** No negative is ever kept with probability below this. */
@@ -72,8 +72,10 @@ final class TriggerNegativeSampler {
      * <p>What the deterministic rule needs in exchange is a bound on wasted
      * work, because a refusal downstream leaves the deficit standing and the
      * next evaluation is offered again. A mode whose negatives are all being
-     * refused -- every acting line at its per-line cap, say -- would otherwise
-     * build a snapshot per evaluation of the busiest hook in the collector.
+     * refused -- every one a duplicate of a record already written, say --
+     * would otherwise build a snapshot per evaluation of the busiest hook in
+     * the collector, and one whose lines are all at their per-line cap would
+     * still resolve a key per evaluation.
      * {@link ModeBalance#offersSinceWrite} counts offers since that mode last
      * wrote anything and decays the rate harmonically past
      * {@link #NEGATIVE_OFFERS_AT_FULL_RATE}, so an unfillable deficit costs a
@@ -98,14 +100,20 @@ final class TriggerNegativeSampler {
     }
 
     /**
-     * Count a written evaluation against its mode's balance.
+     * Count a written evaluation against its mode's balance and its line's
+     * flood cap.
      *
      * <p>Called only for a record that reached the shard, which is what makes
      * the ratio hold over the corpus rather than over the offers: a negative
      * refused as a duplicate has not been drawn, and the deficit it leaves
-     * standing is repaid by the next evaluation of its mode.
+     * standing is repaid by the next evaluation of its mode. The same goes for
+     * the line's cap, which counts records written, not evaluations looked at.
+     *
+     * @param line the acting line, null where the trigger names none
      */
-    void keep(String mode, boolean fired) {
+    void keep(String mode, ProvenanceKey line, boolean fired) {
+        LineVerdict verdict = new LineVerdict(line, fired);
+        triggerPerLine.merge(verdict, 1, Integer::sum);
         ModeBalance balance = triggerBalance.computeIfAbsent(mode, m -> new ModeBalance());
         if (fired) {
             balance.fired++;
@@ -125,15 +133,20 @@ final class TriggerNegativeSampler {
      * bounds the ones that differ only in a board that moved a little. One
      * line's condition is worth a couple of dozen looks in a game, not the
      * hundreds an aura on a creature that keeps being pumped would write.
+     *
+     * <p>Read-only, and asked before the record is built: a line at its cap is
+     * refused without paying for the snapshot, which on the busiest hook in
+     * the collector is the expensive part. {@link #keep} spends the cap once
+     * the record is written.
+     *
+     * <p>Every trigger naming no line shares the one {@code null} line, and so
+     * one cap between them.
+     *
+     * @param line the acting line, null where the trigger names none
      */
-    boolean allowLine(String abilityJson, boolean fired) {
-        LineVerdict line = new LineVerdict(abilityJson, fired);
-        int written = triggerPerLine.getOrDefault(line, 0);
-        if (written >= TRIGGER_RECORDS_PER_LINE) {
-            return false;
-        }
-        triggerPerLine.put(line, written + 1);
-        return true;
+    boolean lineHasRoom(ProvenanceKey line, boolean fired) {
+        return triggerPerLine.getOrDefault(new LineVerdict(line, fired), 0)
+                < TRIGGER_RECORDS_PER_LINE;
     }
 
     /** One trigger mode's written evaluations, and the negatives offered since. */
@@ -145,6 +158,6 @@ final class TriggerNegativeSampler {
     }
 
     /** One acting line's verdict, the key the flood cap counts by. */
-    private record LineVerdict(String abilityJson, boolean fired) {
+    private record LineVerdict(ProvenanceKey line, boolean fired) {
     }
 }

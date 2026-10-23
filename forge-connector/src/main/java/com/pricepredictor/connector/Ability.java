@@ -15,11 +15,16 @@ public interface Ability {
     default int ordinal() { return 0; }
 
     default String formatLine(Integer actionNumber) {
+        return linePrefix(actionNumber) + descriptionText();
+    }
+
+    /** The {@code kind[n]: } a line of this ability opens with, separator included. */
+    default String linePrefix(Integer actionNumber) {
         String prefix = type().getOutputPrefix();
         if (type().isActionable() && actionNumber != null) {
-            return prefix + "[" + actionNumber + "]: " + descriptionText();
+            return prefix + "[" + actionNumber + "]: ";
         }
-        return prefix + ": " + descriptionText();
+        return prefix + ": ";
     }
 
     /**
@@ -27,7 +32,8 @@ public interface Ability {
      * each line carrying the ability that produced it.
      *
      * <p>A description that already contains newlines contributes several
-     * output lines, all attributed to this ability.
+     * output lines, all attributed to this ability; only the first carries
+     * the prefix.
      *
      * @param face the ordinal of the face being rendered
      */
@@ -40,9 +46,8 @@ public interface Ability {
         } else {
             num = null;
         }
-        for (String line : formatLine(num).split("\n", -1)) {
-            lines.add(new RenderedLine(line, this, face));
-        }
+        RenderedLine.appendLines(
+                lines, linePrefix(num), String.valueOf(descriptionText()), this, face);
         for (Ability sub : subAbilities()) {
             sub.appendBlock(counter, face, lines);
         }

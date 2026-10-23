@@ -7,6 +7,7 @@ import com.pricepredictor.connector.effects.RecordShardWriter;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Match worker entry point.
@@ -84,17 +85,17 @@ public class MatchWorkerMain {
      * step can be exercised independently of the rest of the worker.
      */
     record WorkerConfig(
-            Path outputFile,
+            Optional<Path> outputFile,
             String runId,
             int bestOf,
-            String sideADecksFile,
-            String sideBDecksFile,
+            Optional<Path> sideADecksFile,
+            Optional<Path> sideBDecksFile,
             int sideBWeight,
-            Path effectRecordsDir,
+            Optional<Path> effectRecordsDir,
             int workerIndex,
             String workerLifetime,
             boolean decksOnly,
-            Path progressFile) {
+            Optional<Path> progressFile) {
 
         /**
          * Records-only: no sealed corpus is written at all.
@@ -107,11 +108,11 @@ public class MatchWorkerMain {
          * supervisor because it is this class that constructs the writers.
          */
         boolean recordsOnly() {
-            return outputFile == null;
+            return outputFile.isEmpty();
         }
 
         boolean collectsEffectRecords() {
-            return effectRecordsDir != null;
+            return effectRecordsDir.isPresent();
         }
     }
 
@@ -127,9 +128,9 @@ public class MatchWorkerMain {
      * {@link WorkerProperties#BAD_CONFIG_EXIT} on any malformed input.
      */
     static WorkerConfig parseConfig() {
-        String outputFileProp = System.getProperty(OUTPUT_FILE);
-        String effectRecordsProp = System.getProperty(EFFECT_RECORDS_DIR);
-        if (outputFileProp == null && effectRecordsProp == null) {
+        Optional<Path> outputFile = WorkerProperties.optionalPath(OUTPUT_FILE);
+        Optional<Path> effectRecordsDir = WorkerProperties.optionalPath(EFFECT_RECORDS_DIR);
+        if (outputFile.isEmpty() && effectRecordsDir.isEmpty()) {
             throw WorkerProperties.badConfig(
                     "-D" + OUTPUT_FILE + " is required unless -D" + EFFECT_RECORDS_DIR
                             + " is set (records-only mode)");
@@ -139,11 +140,10 @@ public class MatchWorkerMain {
 
         int bestOf = WorkerProperties.bestOf(BEST_OF, DEFAULT_BEST_OF);
 
-        String sideAProp = System.getProperty(SIDE_A_DECKS_FILE);
-        String sideBProp = System.getProperty(SIDE_B_DECKS_FILE);
-        String sideBWeightProp = System.getProperty(SIDE_B_DECKS_WEIGHT);
+        Optional<Path> sideADecks = WorkerProperties.optionalPath(SIDE_A_DECKS_FILE);
+        Optional<Path> sideBDecks = WorkerProperties.optionalPath(SIDE_B_DECKS_FILE);
 
-        if (sideBProp == null && sideBWeightProp != null) {
+        if (sideBDecks.isEmpty() && WorkerProperties.optional(SIDE_B_DECKS_WEIGHT).isPresent()) {
             throw WorkerProperties.badConfig(
                     "-D" + SIDE_B_DECKS_WEIGHT + " is only valid with -D" + SIDE_B_DECKS_FILE);
         }
@@ -176,14 +176,11 @@ public class MatchWorkerMain {
         // because a progress tally must be obtainable even in records-only
         // mode -- that independence is the whole point (see the class-level
         // Javadoc entry for this property).
-        String progressFileProp = System.getProperty(PROGRESS_FILE);
+        Optional<Path> progressFile = WorkerProperties.optionalPath(PROGRESS_FILE);
 
         return new WorkerConfig(
-                outputFileProp == null ? null : Path.of(outputFileProp),
-                runId, bestOf, sideAProp, sideBProp, sideBWeight,
-                effectRecordsProp == null ? null : Path.of(effectRecordsProp),
-                workerIndex, workerLifetime, decksOnly,
-                progressFileProp == null ? null : Path.of(progressFileProp));
+                outputFile, runId, bestOf, sideADecks, sideBDecks, sideBWeight,
+                effectRecordsDir, workerIndex, workerLifetime, decksOnly, progressFile);
     }
 
     private static void initializeForge(WorkerConfig config) {
@@ -195,9 +192,8 @@ public class MatchWorkerMain {
         // that one shared directory while the others walk it during
         // FModel.initialize is a race, and a worker that reads it half-written
         // has a card database missing the very variants its decks name.
-        String variantScripts = System.getProperty(EFFECT_VARIANT_SCRIPTS);
         ForgeEnvironmentInitializer.initialize(
-                variantScripts == null ? null : Path.of(variantScripts), false);
+                WorkerProperties.optionalPath(EFFECT_VARIANT_SCRIPTS).orElse(null), false);
         System.out.println("Forge initialized. Starting match generation.");
         System.out.println("Match format: best-of-" + config.bestOf());
     }
@@ -212,16 +208,16 @@ public class MatchWorkerMain {
         // In records-only mode neither sealed writer is constructed at all —
         // not constructed-and-unused, so there is no path by which a coverage
         // or variant run can append to the sealed corpus.
-        MatchResultWriter writer = config.recordsOnly()
-                ? null : new MatchResultWriter(config.outputFile());
-        CardsPlayedWriter cardsPlayedWriter = config.recordsOnly()
-                ? null : new CardsPlayedWriter(cardsPlayedPath(config.outputFile()));
+        MatchResultWriter writer =
+                config.outputFile().map(MatchResultWriter::new).orElse(null);
+        CardsPlayedWriter cardsPlayedWriter = config.outputFile()
+                .map(output -> new CardsPlayedWriter(cardsPlayedPath(output))).orElse(null);
         // Never gated by recordsOnly(): a progress tally is not a corpus, and
         // gating it on the same guard that keeps records-only mode out of the
         // sealed corpus would leave a records-only round's progress file never
         // growing.
-        ProgressWriter progressWriter = config.progressFile() == null
-                ? null : new ProgressWriter(config.progressFile());
+        ProgressWriter progressWriter =
+                config.progressFile().map(ProgressWriter::new).orElse(null);
 
         CollectionCaps caps = CollectionCaps.fromSystemProperties();
         RecordShardWriter effectRecords = openEffectRecords(config, caps);
@@ -256,7 +252,7 @@ public class MatchWorkerMain {
             return null;
         }
         RecordShardWriter effectRecords = new RecordShardWriter(
-                config.effectRecordsDir(), config.runId(), config.workerIndex(),
+                config.effectRecordsDir().orElseThrow(), config.runId(), config.workerIndex(),
                 config.workerLifetime());
         System.out.println(
                 "Effect records: " + effectRecords.path()
@@ -347,11 +343,11 @@ public class MatchWorkerMain {
     }
 
     /** Forge-built decks when no file is named; exits with {@link WorkerProperties#BAD_CONFIG_EXIT} on a file that does not load. */
-    private static MatchGenerator.DeckSource loadDecks(String pathProp, String label) {
-        if (pathProp == null) {
+    private static MatchGenerator.DeckSource loadDecks(Optional<Path> file, String label) {
+        if (file.isEmpty()) {
             return MatchGenerator.DeckSource.FORGE_BUILT;
         }
-        Path path = Path.of(pathProp);
+        Path path = file.get();
         System.out.println("Loading " + label + " decks from " + path);
         try {
             GeneratedDecksIndex index = GeneratedDecksIndex.load(path);

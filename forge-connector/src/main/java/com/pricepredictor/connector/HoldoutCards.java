@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -53,22 +54,22 @@ final class HoldoutCards {
 
     /**
      * The list named by {@code -Dsealed.exclude.cards}, or {@link #NONE} when
-     * the property is unset.
+     * the property is unset or blank.
      *
      * @throws IllegalStateException when the property names a file that
      *         cannot be read: a depleted run that silently fell back to
      *         full-strength pools would put held-out cards in training games
      */
     static HoldoutCards fromSystemProperty() {
-        String path = System.getProperty(EXCLUDE_CARDS);
-        if (path == null || path.isBlank()) {
+        Optional<Path> path = WorkerProperties.optionalPath(EXCLUDE_CARDS);
+        if (path.isEmpty()) {
             return NONE;
         }
         try {
-            return load(Path.of(path.trim()));
+            return load(path.get());
         } catch (IOException e) {
             throw new IllegalStateException(
-                    "Cannot read -D" + EXCLUDE_CARDS + "=" + path
+                    "Cannot read -D" + EXCLUDE_CARDS + "=" + path.get()
                             + ". A depleted run that silently fell back to full-strength "
                             + "pools would put held-out cards in training games.", e);
         }

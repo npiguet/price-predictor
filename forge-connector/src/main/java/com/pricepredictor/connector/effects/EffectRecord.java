@@ -206,12 +206,13 @@ public final class EffectRecord {
     }
 
     /**
-     * The rendered state and payload, for a collector that coalesces.
+     * The rendered parts of what this record says, for {@link RecordDedup}.
      *
      * <p>A record is a duplicate of another when what it <b>says</b> repeats —
-     * the same board, the same answer — and its id and timestamp always differ.
-     * Reading the two rendered blocks is how a coalescer asks that question
-     * without reparsing the line it is about to write.
+     * the same kind of record about the same line, the same board, the same
+     * answer — and its id and timestamp always differ. Reading the rendered
+     * blocks is how a coalescer asks that question without reparsing the line
+     * it is about to write.
      */
     String stateJson() {
         return stateJson;
@@ -219,6 +220,27 @@ public final class EffectRecord {
 
     String payloadJson() {
         return payloadJson;
+    }
+
+    /**
+     * The kind, with its moment or subkind where it has one: what keeps one
+     * kind's record from coalescing with another's that renders the same
+     * blocks.
+     */
+    String kindTag() {
+        String tag = kind.wireName();
+        if (moment != null) {
+            tag += "/" + moment.wireName();
+        }
+        if (subkind != null) {
+            tag += "/" + subkind.wireName();
+        }
+        return tag;
+    }
+
+    /** Why {@link #abilityJson} is empty, as written; null where it names a line. */
+    String abilityUnresolvedWire() {
+        return abilityUnresolved == null ? null : abilityUnresolved.wireName();
     }
 
     public String toJson() {
@@ -250,8 +272,7 @@ public final class EffectRecord {
         return json
                 .value("actor_player", actorPlayer)
                 .raw("ability", abilityJson())
-                .value("ability_unresolved",
-                        abilityUnresolved == null ? null : abilityUnresolved.wireName())
+                .value("ability_unresolved", abilityUnresolvedWire())
                 .raw("state", stateJson)
                 .raw("payload", payloadJson)
                 .render();

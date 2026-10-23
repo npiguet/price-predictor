@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 
 import java.util.HashSet;
@@ -8,13 +9,22 @@ import java.util.Set;
 /**
  * The records one game has already written, by a hash of what they say.
  *
- * <p>Two records that would be byte-identical carry one observation once, so
- * collapsing them loses nothing, and the AI re-asking the same question about
- * an unmoved board makes such pairs common.
+ * <p>What a record says is everything a reader learns from it except its
+ * envelope: its kind with its moment or subkind, the player it is about, the
+ * line that acted (or why none is named), the snapshot and the payload. The
+ * envelope — record id, timestamp, run and game — differs on every record or
+ * is fixed for the game, so it can never tell two observations apart. Two
+ * records agreeing on all of the rest carry one observation, so collapsing
+ * them loses nothing, and the AI re-asking the same question about an unmoved
+ * board makes such pairs common.
  *
- * <p>One per game, shared by every channel that deduplicates: the tag keeps
- * one kind's record from colliding with another's, and nothing else
- * separates them.
+ * <p>The acting line is part of it because the snapshot does not always name
+ * it. A trigger's or replacement's snapshot carries its host and the event,
+ * not which of the host's traits is evaluating, so two same-mode triggers on
+ * one card render the same state and payload for one event; keyed without
+ * the line, only the first trigger's verdict would ever be written.
+ *
+ * <p>One per game, shared by every channel that deduplicates.
  */
 final class RecordDedup {
 
@@ -24,7 +34,8 @@ final class RecordDedup {
     private final Set<Long> written = new HashSet<>();
 
     /**
-     * Whether a record saying exactly this has not been written this game yet.
+     * Whether a record saying what {@code record} says has not been written
+     * this game yet; remembered as written when it has not.
      *
      * <p>A 64-bit hash rather than the 32-bit {@code String.hashCode}: over
      * the hundred thousand keys one game can produce,
@@ -36,15 +47,29 @@ final class RecordDedup {
      * 1200 MB heap. The duplicate rate of a run is therefore something to
      * measure rather than assume.
      */
-    boolean allowDistinct(String tag, String payload, String state) {
+    boolean allowDistinct(EffectRecord record) {
         if (written.size() >= COALESCE_MAX_KEYS) {
             return true;
         }
-        long digest = Hashing.murmur3_128().newHasher()
-                .putUnencodedChars(tag).putChar('@')
-                .putUnencodedChars(payload == null ? "" : payload).putChar('#')
-                .putUnencodedChars(state == null ? "" : state)
-                .hash().asLong();
-        return written.add(digest);
+        Hasher hasher = Hashing.murmur3_128().newHasher();
+        field(hasher, record.kindTag());
+        field(hasher, record.actorPlayer());
+        field(hasher, record.abilityJson());
+        field(hasher, record.abilityUnresolvedWire());
+        field(hasher, record.payloadJson());
+        field(hasher, record.stateJson());
+        return written.add(hasher.hash().asLong());
+    }
+
+    /**
+     * One part, length-prefixed so that no split of the same characters
+     * between two neighbouring parts hashes alike; null apart from empty.
+     */
+    private static void field(Hasher hasher, String value) {
+        if (value == null) {
+            hasher.putInt(-1);
+            return;
+        }
+        hasher.putInt(value.length()).putUnencodedChars(value);
     }
 }

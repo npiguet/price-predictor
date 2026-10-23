@@ -80,6 +80,25 @@ final class CollectorContext {
         return writer.nextRecordId();
     }
 
+    /**
+     * {@link #emit} unless this game has already written a record saying the
+     * same thing.
+     *
+     * <p>The one door every coalescing channel writes through, so what counts
+     * as "the same thing" is {@link RecordDedup}'s single answer, read off the
+     * finished record, rather than a key each channel assembles for itself and
+     * can leave a field out of.
+     *
+     * @return whether the record was written
+     */
+    boolean emitDistinct(EffectRecord record, RecordDedup dedup) {
+        if (!dedup.allowDistinct(record)) {
+            return false;
+        }
+        emit(record);
+        return true;
+    }
+
     /** Stamp {@code random_seat} and write. */
     void emit(EffectRecord record) {
         record.randomSeat(
