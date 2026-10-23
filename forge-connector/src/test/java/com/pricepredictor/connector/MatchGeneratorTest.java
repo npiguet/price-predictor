@@ -26,7 +26,7 @@ class MatchGeneratorTest {
 
     /** Forge-built decks on both sides, best-of-3, every eligible set. */
     static MatchGenerator sealedSelfPlay() {
-        return MatchGenerator.builder(MatchGenerator.computeEligibleSets(), RUN_ID).build();
+        return MatchGenerator.builder(BoosterTemplates.eligibleSealedSets(), RUN_ID).build();
     }
 
     private static MatchGenerationResult sharedMatch;
@@ -83,13 +83,13 @@ class MatchGeneratorTest {
     void theMatchWasPlayedInAnEligibleSet() {
         // An ineligible set (an un-set, say) would fail pool generation, but a
         // wrong pick that still generated would go unnoticed without this.
-        assertTrue(MatchGenerator.computeEligibleSets().contains(result.header().setCode()),
+        assertTrue(BoosterTemplates.eligibleSealedSets().contains(result.header().setCode()),
                 "set not eligible: " + result.header().setCode());
     }
 
     @Test
     void eligibleSetsExcludeFunnySets() {
-        List<String> eligibleSets = MatchGenerator.computeEligibleSets();
+        List<String> eligibleSets = BoosterTemplates.eligibleSealedSets();
 
         // Known un-sets that must be excluded
         List<String> unsets = List.of("UGL", "UNH", "UST", "UND", "UNF");
@@ -101,7 +101,7 @@ class MatchGeneratorTest {
 
     @Test
     void eligibleSetsIncludeKnownSealedSets() {
-        List<String> eligibleSets = MatchGenerator.computeEligibleSets();
+        List<String> eligibleSets = BoosterTemplates.eligibleSealedSets();
 
         // Well-known sets that should be in the eligible list
         List<String> expectedSets = List.of("RVR", "MH3", "BLB");
@@ -113,7 +113,7 @@ class MatchGeneratorTest {
 
     @Test
     void eligibleSetsExcludeSmallBoosterSets() {
-        List<String> eligibleSets = MatchGenerator.computeEligibleSets();
+        List<String> eligibleSets = BoosterTemplates.eligibleSealedSets();
 
         // Legacy sets whose original boosters held only 8 cards are too small
         // for a realistic sealed pool. Must be excluded.

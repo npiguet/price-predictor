@@ -60,12 +60,12 @@ class DraftWorkerMainTest {
         if (uniformBoosterSet != null) {
             return uniformBoosterSet;
         }
-        List<String> eligible = MatchGenerator.computeEligibleSets();
+        List<String> eligible = BoosterTemplates.eligibleSealedSets();
         assertFalse(eligible.isEmpty(), "expected at least one eligible sealed-legal set");
         for (String code : eligible) {
             CardEdition edition = StaticData.instance().getEditions().get(code);
             SealedTemplate template =
-                    edition == null ? null : edition.getBoosterTemplate("Draft");
+                    edition == null ? null : edition.getBoosterTemplate(BoosterTemplates.DRAFT_BOOSTER);
             if (template == null) {
                 continue;
             }

@@ -1,8 +1,6 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.GeneratedDecksIndex.GeneratedDeck;
-import forge.StaticData;
-import forge.card.CardEdition;
 import forge.deck.Deck;
 import forge.item.PaperCard;
 import forge.item.SealedTemplate;
@@ -226,37 +224,6 @@ public class MatchGenerator {
         MatchGenerator build() {
             return new MatchGenerator(this);
         }
-    }
-
-    /**
-     * Minimum booster size for a set to be considered sealed-viable. Matches the
-     * rule Forge itself uses in {@code AdventureEventData.isValidDraftBlock()};
-     * excludes historical sets (DRK, FEM, …) whose 8-card boosters are too small
-     * to yield a real sealed pool.
-     */
-    static final int MIN_BOOSTER_CARDS = 12;
-
-    /**
-     * Compute the list of eligible sealed-format set codes.
-     * Eligible sets have a draft booster template, are not un-sets (Type.FUNNY),
-     * and have at least {@link #MIN_BOOSTER_CARDS} cards per booster.
-     */
-    public static List<String> computeEligibleSets() {
-        List<String> eligible = new ArrayList<>();
-        for (CardEdition edition : StaticData.instance().getEditions().getOrderedEditions()) {
-            if (edition.getType() == CardEdition.Type.FUNNY) {
-                continue;
-            }
-            SealedTemplate template = edition.getBoosterTemplate("Draft");
-            if (template == null) {
-                continue;
-            }
-            if (template.getNumberOfCardsExpected() < MIN_BOOSTER_CARDS) {
-                continue;
-            }
-            eligible.add(edition.getCode());
-        }
-        return eligible;
     }
 
     /**

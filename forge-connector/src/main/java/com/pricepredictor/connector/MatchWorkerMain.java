@@ -200,7 +200,7 @@ public class MatchWorkerMain {
     }
 
     private static void runForever(WorkerConfig config) {
-        List<String> eligibleSets = MatchGenerator.computeEligibleSets();
+        List<String> eligibleSets = BoosterTemplates.eligibleSealedSets();
         System.out.println("Eligible sets: " + eligibleSets.size());
 
         MatchGenerator.DeckSource sideA = loadDecks(config.sideADecksFile(), "side-A");
