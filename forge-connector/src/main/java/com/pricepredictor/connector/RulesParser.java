@@ -71,6 +71,7 @@ public class RulesParser {
             reader.parseLine(line);
         }
         CardRules rules = reader.getCard();
+        CopiedFaces.supply(rules, scriptLines);
         MultiCard result = parseRules(rules, recorders, scriptFile);
 
         // Apply oracle fallback: if the primary face produced no ability lines and no

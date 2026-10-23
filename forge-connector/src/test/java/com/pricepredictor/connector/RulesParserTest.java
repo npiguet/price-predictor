@@ -589,6 +589,43 @@ class RulesParserTest {
                 "MeldPair:Urza, Lord Protector", "AlternateMode:Meld", "Oracle:").layout());
     }
 
+    // --- Faces copied from other cards ---
+
+    /**
+     * {@code CopyFaceFrom:} names a face another script defines rather than
+     * writing it out. Forge's card database fills the face in once every script
+     * is read, so a parser that reads the one script alone holds no face there:
+     * with both halves copied it has no front face at all.
+     */
+    @Test
+    void aSplitCardWhoseHalvesAreBothCopiedConvertsBothHalves() {
+        MultiCard card = convertFromFile("b/bind_liberate.txt");
+
+        assertEquals("split", card.layout());
+        assertEquals(List.of("bind", "liberate"),
+                card.faces().stream().map(CardFace::name).toList());
+    }
+
+    /** A copied second face is part of the card, not left out of its text. */
+    @Test
+    void aCopiedSecondFaceIsConverted() {
+        MultiCard card = convertFromFile("e/emeritus_of_conflict_lightning_bolt.txt");
+
+        assertEquals(List.of("emeritus of conflict", "lightning bolt"),
+                card.faces().stream().map(CardFace::name).toList());
+        assertTrue(rendered(card).contains("deals 3 damage to any target"), rendered(card));
+    }
+
+    /** A face no script defines fails naming it, not with a bare null. */
+    @Test
+    void aCopiedFaceNoScriptDefinesIsNamedInTheFailure() {
+        RuntimeException e = assertThrows(RuntimeException.class, () -> convert(
+                "CopyFaceFrom:No Such Face Was Ever Printed", "AlternateMode:Split",
+                "ALTERNATE", "CopyFaceFrom:Fire"));
+
+        assertTrue(e.getMessage().contains("No Such Face Was Ever Printed"), e.getMessage());
+    }
+
     // --- Meld halves ---
 
     @ParameterizedTest

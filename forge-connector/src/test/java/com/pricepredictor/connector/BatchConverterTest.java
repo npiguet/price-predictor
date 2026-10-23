@@ -36,6 +36,10 @@ class BatchConverterTest {
         assertEquals(3, result.totalFiles());
         assertEquals(2, result.succeeded());
         assertEquals(1, result.warningCount(), result.warnings().toString());
+        // Forge's parser fails on it with no message; the warning still names
+        // what was thrown rather than printing "null".
+        assertTrue(result.warnings().get(0).matches("\\[malformed_card] \\w+(Error|Exception)"),
+                result.warnings().get(0));
         try (Stream<Path> files = Files.walk(tempDir)) {
             assertEquals(
                     Set.of(tempDir.resolve("t/test_bear.txt"), tempDir.resolve("t/test_flyer.txt")),

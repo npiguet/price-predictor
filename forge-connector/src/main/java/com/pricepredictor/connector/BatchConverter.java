@@ -71,7 +71,7 @@ public class BatchConverter {
                 // malformed scripts as well as IOException/RuntimeException;
                 // catch Throwable so one bad fixture can't abort the batch.
                 String cardName = scriptFile.getFileName().toString().replace(".txt", "");
-                String warning = "[" + cardName + "] " + t.getMessage();
+                String warning = "[" + cardName + "] " + describe(t);
                 warnings.add(warning);
                 Log.warn("BatchConverter", warning);
             }
@@ -115,6 +115,19 @@ public class BatchConverter {
                 result.faces().get(0).name(), scriptKeyPath,
                 renderedLines, parsed.recorders());
         Files.writeString(sidecarPathFor(outputFile), sidecar.toJson());
+    }
+
+    /**
+     * What went wrong, for the operator: the exception's message, with its type
+     * in front, because a bare message does not say whether a script is
+     * malformed or the converter is broken, and Forge's parser throws an
+     * {@code AssertionError} or a {@code NullPointerException} with no message
+     * at all for a script it cannot make a card of.
+     */
+    static String describe(Throwable t) {
+        String message = t.getMessage();
+        String type = t.getClass().getSimpleName();
+        return message == null || message.isEmpty() ? type : type + ": " + message;
     }
 
     /** The sidecar beside a converted {@code .txt}, the pairing {@code .npz} uses. */
