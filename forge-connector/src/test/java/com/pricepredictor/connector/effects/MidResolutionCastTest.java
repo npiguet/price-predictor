@@ -4,6 +4,7 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
+import forge.game.cost.CostPayment;
 import forge.game.event.GameEventPlayerPriority;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
@@ -23,9 +24,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
+import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordLines.linkOf;
+import static com.pricepredictor.connector.effects.RecordLines.only;
+import static com.pricepredictor.connector.effects.RecordLines.records;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -89,63 +92,6 @@ class MidResolutionCastTest {
         Card bonesplitter = TestBoard.inPlay(game, owner, "Bonesplitter");
         bonesplitter.attachToEntity(tetsuo, null);
         return tetsuo;
-    }
-
-    private static List<String> records(List<String> all, String moment) {
-        List<String> found = new ArrayList<>();
-        for (String record : all) {
-            if (record.contains("\"moment\":\"" + moment + "\"")) {
-                found.add(record);
-            }
-        }
-        return found;
-    }
-
-    private static String scriptOf(String record) {
-        int at = record.indexOf("\"script_file\":\"");
-        assertTrue(at >= 0, record);
-        int from = at + "\"script_file\":\"".length();
-        return record.substring(from, record.indexOf('"', from));
-    }
-
-    private static String linkOf(String record) {
-        int at = record.indexOf("\"link_id\":\"");
-        if (at < 0) {
-            return null;
-        }
-        int from = at + "\"link_id\":\"".length();
-        return record.substring(from, record.indexOf('"', from));
-    }
-
-    /** The one record of {@code moment} acting through {@code script}. */
-    private static String only(List<String> all, String moment, String script) {
-        return only(all, moment, script, "");
-    }
-
-    /** The same, through the line of one trait kind of the script. */
-    private static String only(List<String> all, String moment, String script, String traitKind) {
-        List<String> found = new ArrayList<>();
-        for (String record : records(all, moment)) {
-            String ability = record.substring(
-                    record.indexOf("\"ability\":"), record.indexOf("\"ability_unresolved\":"));
-            if (scriptOf(record).equals(script)
-                    && ability.contains("\"trait_kind\":\"" + traitKind)) {
-                found.add(record);
-            }
-        }
-        assertEquals(1, found.size(), moment + " through " + script + ": " + all);
-        return found.get(0);
-    }
-
-    /** The types of a record's events, in order. */
-    private static List<String> eventTypes(String record) {
-        String payload = record.substring(record.indexOf("\"payload\":"));
-        List<String> types = new ArrayList<>();
-        Matcher type = Pattern.compile("\"type\":\"(\\w+)\"").matcher(payload);
-        while (type.find()) {
-            types.add(type.group(1));
-        }
-        return types;
     }
 
     private static String zoneChange(Card card, String from, String to) {
@@ -412,6 +358,77 @@ class MidResolutionCastTest {
         assertEquals(1, won.size(), "the win is written: " + all);
         assertTrue(won.get(0).contains("\"link_id\":null"),
                 "an orphan, nobody's half: " + won.get(0));
+    }
+
+    /**
+     * A cast spell whose resolution shows nothing — no event, no mode, no
+     * refusal — still writes its linked half when it resolves, with no
+     * events. Driven by hand, because a spell the engine resolves always
+     * publishes something the bracket hears.
+     */
+    @Test
+    void aCastSpellThatShowsNothingWritesAnEmptyLinkedHalf() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card elf = TestBoard.inPlay(game, caster, "Bloodbraid Elf");
+        WrappedAbility cascade = triggerOf(elf, caster);
+        SpellAbility bolt = TestBoard.inHand(game, caster, "Lightning Bolt").getFirstSpellAbility();
+        bolt.setActivatingPlayer(caster);
+
+        List<String> all = ShardRun.records(tempDir, game, (bracket, collectors) -> {
+            game.subscribeToEvents(bracket);
+            bracket.beginBracket(cascade);
+            game.getStack().setResolving(true);
+            bracket.beginBracket(bolt);
+            bracket.endBracket(cascade.getId(), false);
+            game.getStack().setResolving(false);
+            priority(game);
+            game.getStack().setResolving(true);
+            bracket.endBracket(bolt.getId(), false);
+            game.getStack().setResolving(false);
+            bracket.onNextAction();
+        });
+
+        String boltCost = only(all, "activation", BOLT);
+        String boltHalf = only(all, "resolution", BOLT);
+        assertNotNull(linkOf(boltCost), boltCost);
+        assertEquals(linkOf(boltCost), linkOf(boltHalf));
+        assertEquals(List.of(), eventTypes(boltHalf), boltHalf);
+    }
+
+    /**
+     * A refusal while a player pays for the spell the resolving ability casts
+     * — an optional cost part of it turned down — is the cast spell's, not
+     * the resolving ability's: the resolving ability, which did nothing
+     * observable, still reads {@code resolved}.
+     */
+    @Test
+    void aRefusalDuringTheCastSpellsPaymentIsNotTheResolvingAbilitys() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card elf = TestBoard.inPlay(game, caster, "Bloodbraid Elf");
+        WrappedAbility cascade = triggerOf(elf, caster);
+        SpellAbility bolt = TestBoard.inHand(game, caster, "Lightning Bolt").getFirstSpellAbility();
+        bolt.setActivatingPlayer(caster);
+        bolt.setCastFromPlayEffect(true);
+
+        List<String> all = ShardRun.records(tempDir, game, (bracket, collectors) -> {
+            bracket.beginBracket(cascade);
+            game.getStack().setResolving(true);
+            // CostPayment.payCost, paying the Bolt that the cascade casts.
+            game.costPaymentStack.push(
+                    bolt.getPayCosts().getCostParts().get(0),
+                    new CostPayment(bolt.getPayCosts(), bolt));
+            bracket.noteDeclined();
+            game.costPaymentStack.pop();
+            bracket.endBracket(cascade.getId(), false);
+            game.getStack().setResolving(false);
+            bracket.onNextAction();
+        });
+
+        String cascadeCost = only(all, "activation", BLOODBRAID);
+        assertEquals("resolved", RecordLines.outcomeOf(cascadeCost), cascadeCost);
+        assertEquals(linkOf(cascadeCost), linkOf(only(all, "resolution", BLOODBRAID)));
     }
 
     // ── the cast spell's own costs ──────────────────────────────────────

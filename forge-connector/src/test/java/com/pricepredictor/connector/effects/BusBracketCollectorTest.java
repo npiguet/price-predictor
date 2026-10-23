@@ -726,7 +726,8 @@ class BusBracketCollectorTest {
 
         collector.beginBracket(refused);
         collector.noteDeclined();
-        // A spell cast in response takes the bracket over.
+        // A spell cast in response goes on top, and the refused spell's
+        // bracket forgets what it gathered while it waited.
         collector.beginBracket(answer);
         collector.endBracket(answer.getId(), false);
         collector.onNextAction();
