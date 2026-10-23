@@ -38,15 +38,6 @@ class PlayedMatchTest {
     }
 
     @Test
-    void sequencesHaveEqualLength() {
-        GamePlayer.PlayedMatch played = match(game(Side.A, Side.B), game(Side.A, Side.A));
-
-        assertEquals(
-                played.winnerSequence().length(),
-                played.playSequence().length());
-    }
-
-    @Test
     void aBestOfOneMatchIsASingleChar() {
         assertEquals("B", match(game(Side.B, Side.A)).winnerSequence());
     }

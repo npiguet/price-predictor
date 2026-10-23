@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,47 +21,26 @@ class BatchConverterTest {
     @TempDir
     Path tempDir;
 
-    private Path getFixtureDir() {
-        return Path.of("src/test/resources/cardsfolder");
-    }
+    /** Two valid cards, {@code t/test_bear} and {@code t/test_flyer}, and one malformed. */
+    private static final Path FIXTURE = Path.of("src/test/resources/cardsfolder");
 
+    /**
+     * Every file is read, the malformed one warns without stopping the run,
+     * and each valid card is written at its own path in the mirrored tree.
+     */
     @Test
-    void batchProcessesAllFixtureFiles() throws IOException {
-        BatchConverter converter = new BatchConverter();
-        BatchConverter.BatchResult result = converter.convert(getFixtureDir(), tempDir, SourceTree.CARDSFOLDER);
+    void aTreeWithAMalformedCardConvertsTheRestAndWarnsOnce() throws IOException {
+        BatchConverter.BatchResult result =
+                new BatchConverter().convert(FIXTURE, tempDir, SourceTree.CARDSFOLDER);
 
         assertEquals(3, result.totalFiles());
-        assertTrue(result.succeeded() >= 2, "At least 2 valid files should succeed");
-    }
-
-    @Test
-    void outputDirectoryMirrorsInput() throws IOException {
-        BatchConverter converter = new BatchConverter();
-        converter.convert(getFixtureDir(), tempDir, SourceTree.CARDSFOLDER);
-
-        assertTrue(Files.exists(tempDir.resolve("t/test_bear.txt")));
-        assertTrue(Files.exists(tempDir.resolve("t/test_flyer.txt")));
-    }
-
-    @Test
-    void malformedFileLogsWarningAndContinues() throws IOException {
-        BatchConverter converter = new BatchConverter();
-        BatchConverter.BatchResult result = converter.convert(getFixtureDir(), tempDir, SourceTree.CARDSFOLDER);
-
-        assertTrue(result.warningCount() >= 1, "Malformed file should produce a warning");
-        assertTrue(result.succeeded() >= 2, "Valid files should still be converted");
-    }
-
-    @Test
-    void outputFileCountMatchesValidInput() throws IOException {
-        BatchConverter converter = new BatchConverter();
-        BatchConverter.BatchResult result = converter.convert(getFixtureDir(), tempDir, SourceTree.CARDSFOLDER);
-
-        // Count output files
-        long outputFiles = Files.walk(tempDir)
-                .filter(p -> p.toString().endsWith(".txt"))
-                .count();
-        assertEquals(result.succeeded(), (int) outputFiles);
+        assertEquals(2, result.succeeded());
+        assertEquals(1, result.warningCount(), result.warnings().toString());
+        try (Stream<Path> files = Files.walk(tempDir)) {
+            assertEquals(
+                    Set.of(tempDir.resolve("t/test_bear.txt"), tempDir.resolve("t/test_flyer.txt")),
+                    files.filter(p -> p.toString().endsWith(".txt")).collect(Collectors.toSet()));
+        }
     }
 
     // ── the converted text must not change (FR-004, SC-001) ─────────────
