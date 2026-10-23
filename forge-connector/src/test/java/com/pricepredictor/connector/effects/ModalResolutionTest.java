@@ -328,6 +328,30 @@ class ModalResolutionTest {
         }
     }
 
+    /**
+     * A copy of the forced charm is not the forced charm: Double Vision
+     * copies the forced Fiery Confluence, the copy resolves first, above it,
+     * and its modes carry the charm's key. They cut no half: the record is
+     * the forced charm's three halves, one per mode it chose, rather than
+     * three more for the copy's modes, whose events the sink never files.
+     */
+    @Test
+    void aCopyOfTheForcedCharmCutsNoHalf() throws IOException {
+        Game game = confluenceBoard();
+        TestBoard.inPlay(game, game.getPlayers().get(0), "Double Vision");
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0), 5L,
+                confluenceIn(game), STOCK_FORK);
+
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+        List<String> forced = fork.records();
+        assertEquals(3, forced.size(), forced.toString());
+        for (String half : forced) {
+            assertTrue(half.contains("\"option\":"), half);
+        }
+    }
+
     /** Grizzly Bears for the second seat and Fiery Confluence in the first's hand, in play. */
     private static Game confluenceBoard() {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
@@ -380,7 +404,8 @@ class ModalResolutionTest {
         assertFalse(record.contains("\"option\""), record);
         assertEquals(1, record.split("\"zone_change\"", -1).length - 1,
                 "the spell's own arrival, and not the trigger's Treasure: " + record);
-        assertFalse(record.contains("token_created"), record);
+        assertTrue(record.contains("{\"type\":\"zone_change\",\"subjects\":[\"E"
+                + barbarian.getId() + "\"]"), "the one move is the Barbarian's: " + record);
     }
 
     /** A mode of some other resolution cannot cut the open bracket. */
