@@ -1,11 +1,7 @@
 package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,14 +16,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * The match-outcome line and what a {@link MatchResult} accepts. Appending is
- * {@link LineAppenderTest}'s.
+ * {@link CorpusWriterTest}'s.
  */
-class MatchResultWriterTest {
+class MatchResultTest {
 
     @Test
-    void aLineIsTenFieldsInTheDocumentedOrder(@TempDir Path tmp) throws IOException {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
+    void aLineIsTenFieldsInTheDocumentedOrder() {
         List<String> deckA = new ArrayList<>(List.of(
                 "Lightning Bolt", "Snapcaster Mage", "Force of Will"));
         while (deckA.size() < 40) {
@@ -35,11 +29,7 @@ class MatchResultWriterTest {
         }
         List<String> deckB = deck40("B");
 
-        writer.write(matchResult(deckA, deckB, "ABA", "BAB"));
-
-        List<String> lines = Files.readAllLines(file);
-        assertEquals(1, lines.size());
-        String[] parts = lines.get(0).split(";", -1);
+        String[] parts = matchResult(deckA, deckB, "ABA", "BAB").toLine().split(";", -1);
         assertEquals(10, parts.length, "Expected 10 semicolon-separated fields");
         assertEquals(DateTimeFormatter.ISO_INSTANT.format(TS), parts[0]);
         assertEquals(RUN_ID, parts[1]);

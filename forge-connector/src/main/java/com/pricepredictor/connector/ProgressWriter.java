@@ -10,14 +10,14 @@ import java.nio.file.Path;
  * round has played its match budget ({@code ForgeWorkerPool.output_line_count}
  * / {@code CollectorSupervisor.progress_path}). The line's content carries no
  * meaning — it is a tally, not a corpus — so a match writes it unconditionally,
- * independent of records-only mode and of both sealed writers
- * ({@link MatchResultWriter}, {@link CardsPlayedWriter}): a counter must not
+ * independent of records-only mode and of the {@link SealedCorpus}: a counter must not
  * ride the same gate that keeps a coverage or variant round out of
  * {@code match-outcomes.txt} / {@code cards-played.txt}, or the round it
  * exists to bound could never end (see {@code MatchWorkerMain#recordMatch}).
  *
  * <p>Appending is a {@link LineAppender}'s, so concurrent workers can all
- * append to the one shared progress file without corrupting a line.
+ * append to the one shared progress file without corrupting a line. Not a
+ * {@link CorpusWriter}: the line it writes is a tally mark, not a row.
  */
 public class ProgressWriter {
 

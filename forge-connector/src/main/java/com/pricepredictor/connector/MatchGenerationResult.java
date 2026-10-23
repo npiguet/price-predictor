@@ -10,8 +10,8 @@ import java.util.List;
  * <p>The {@code cardsPlayedRows} list has the same length as the parent's
  * {@code games} — one entry per played game, in game order. The two
  * pieces are written to different files by the match worker
- * ({@code match-outcomes.txt} via {@link MatchResultWriter},
- * {@code cards-played.txt} via {@link CardsPlayedWriter}).
+ * ({@code match-outcomes.txt} and {@code cards-played.txt}, its
+ * {@link SealedCorpus}).
  *
  * <p>{@code randomSeat} marks a match one of whose seats was the random seat
  * (FR-021). Such a match is effect records only: the worker writes its

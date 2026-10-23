@@ -24,7 +24,7 @@ public record MatchResult(
         List<String> deckB,
         List<GameResult> games,
         int durationSeconds
-) {
+) implements CorpusRow {
 
     public MatchResult {
         if (games == null || games.isEmpty()) {
@@ -65,6 +65,7 @@ public record MatchResult(
      * {@code timestamp;run_id;set_code;method_A;method_B;deck_A;deck_B;games;play;duration_s},
      * the two decks as pipe-separated card names.
      */
+    @Override
     public String toLine() {
         return header.line(
                 CardNameList.format(deckA), CardNameList.format(deckB),

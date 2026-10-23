@@ -70,7 +70,7 @@ public class DraftGameWorkerMain {
         }
 
         DraftGamePlayer player = new DraftGamePlayer(
-                new GamePlayer(bestOf), new MatchResultWriter(outputFile), runId);
+                new GamePlayer(bestOf), new CorpusWriter<>(outputFile), runId);
 
         WorkerLoop.runUntilBroken(
                 () -> {

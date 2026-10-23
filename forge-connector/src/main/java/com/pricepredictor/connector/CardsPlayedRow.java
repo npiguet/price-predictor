@@ -9,7 +9,7 @@ import java.util.Set;
 
 /**
  * Per-game card-play record written to {@code output/sealed/cards-played.txt}
- * by {@link CardsPlayedWriter}.
+ * through a {@link CorpusWriter}.
  *
  * <p>Schema (eleven semicolon-separated fields, no trailing {@code ;}):
  * {@code timestamp;run_id;set_code;method_A;method_B;cards_played_A;
@@ -38,7 +38,7 @@ public record CardsPlayedRow(
         List<String> cardsNotPlayedB,
         Side winner,
         Side starter
-) {
+) implements CorpusRow {
 
     public CardsPlayedRow {
         Objects.requireNonNull(header, "header");
@@ -47,6 +47,7 @@ public record CardsPlayedRow(
     }
 
     /** Format this row as one line of {@code cards-played.txt}. */
+    @Override
     public String toLine() {
         return header.line(
                 CardNameList.format(cardsPlayedA), CardNameList.format(cardsPlayedB),
