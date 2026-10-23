@@ -54,16 +54,17 @@ public final class Json {
     }
 
     /**
-     * Any value as JSON: a boolean or number bare, a map as an object in its
-     * own iteration order, an iterable as an array, and anything else as the
-     * string literal of its {@code String.valueOf}.
+     * Any value as JSON: null as JSON {@code null}, a boolean or number bare,
+     * a map as an object in its own iteration order, an iterable as an array,
+     * and anything else as the string literal of its {@code String.valueOf}.
      *
-     * <p>A null therefore becomes the string {@code "null"}, not JSON null:
-     * that is the spelling the renderer this was lifted from always produced,
-     * and dedup hashes the rendered bytes, so a different spelling here would
-     * split one event into two.
+     * <p>Dedup hashes the rendered bytes, so this one spelling is what makes
+     * two reports of the same value the same event.
      */
     public static String value(Object value) {
+        if (value == null) {
+            return "null";
+        }
         if (value instanceof Boolean || value instanceof Number) {
             return String.valueOf(value);
         }
@@ -93,8 +94,8 @@ public final class Json {
      * A JSON object whose fields render in the order they are added.
      *
      * <p>The order is part of the record contract, so the writer never sorts
-     * and never drops a field: a null reaches the output however the value
-     * passed for it spells one.
+     * and never drops a field: a null passed to {@link #value} is written as
+     * JSON {@code null}.
      */
     static final class ObjectWriter {
 
