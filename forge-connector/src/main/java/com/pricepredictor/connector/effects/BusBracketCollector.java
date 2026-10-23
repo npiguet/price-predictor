@@ -84,8 +84,8 @@ public final class BusBracketCollector extends BusEventReader {
     /** The cast on its way onto the stack, if one is, and what it set off ({@link Cause#CAST}). */
     private final CastsUnderWay castsUnderWay;
 
-    /** The resolution waiting for its consequences, or null when none is. */
-    private HeldResolution held;
+    /** The resolution waiting for its consequences, if one is. */
+    private final HeldResolutionWindow heldResolution;
 
     /** The cost halves held until their casts' outcomes are known. */
     private final ActivationLedger ledger;
@@ -107,65 +107,6 @@ public final class BusBracketCollector extends BusEventReader {
 
     /** Told each combat record's id, for a probe that mirrors it. */
     private final java.util.function.Consumer<String> onCombatRecord;
-
-    /**
-     * One stack item's bracket, from its cast until it resolves or leaves the
-     * stack without resolving.
-     *
-     * <p>Built at the cast. A cast whose stack top holds no ability builds
-     * none, and nothing is filed for it.
-     */
-    private static final class OpenResolution {
-        private final SpellAbility ability;
-        private final ProvenanceKey.Resolved keys;
-        private final String actor;
-        /** The board at the cast, paired at the resolution with the refs read then. */
-        private final Snapshot state;
-        /** This resolution's chosen modes, split as they resolve; its own and no other's. */
-        private final ModeSplit modes = new ModeSplit();
-        /**
-         * What the bus filed for this item: the consequences of its cast —
-         * what its card's move onto the stack set off, the state-based check
-         * after it, until the next action — and what it does while it
-         * resolves.
-         */
-        private final EventBuffer events = new EventBuffer();
-
-        /**
-         * Whether the controller turned something down while this bracket was open.
-         *
-         * <p>Scoped to the bracket rather than matched against the declined
-         * ability's id, because Forge resolves a copy of the ability it was handed
-         * and an id comparison would silently never match — the same reason
-         * {@link EventAttribution} counts a clause upward from the pointer instead
-         * of downward from the root. What keeps the flag from over-claiming is the
-         * second half of the test in {@link BusBracketCollector#wasDeclined}: a
-         * resolution that produced any outcome at all is {@code resolved} however
-         * many optional clauses inside it were declined.
-         */
-        private boolean declined;
-
-        private OpenResolution(
-                SpellAbility ability, ProvenanceKey.Resolved keys, String actor, Snapshot state) {
-            this.ability = ability;
-            this.keys = keys;
-            this.actor = actor;
-            this.state = state;
-        }
-
-        /** Whether this is the bracket of the ability the engine names by id. */
-        boolean is(int abilityId) {
-            return ability.getId() == abilityId;
-        }
-
-        /**
-         * Whether a clause is on this resolution's card; see
-         * {@link BusBracketCollector#beginMode}.
-         */
-        boolean hosts(SpellAbility clause) {
-            return clause != null && clause.getHostCard() == ability.getHostCard();
-        }
-    }
 
     /**
      * The brackets of the stack items this collector saw cast, mirroring
@@ -248,45 +189,6 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * What one held effect half's record says besides its events, all of it
-     * fixed at the resolution — the id, the timestamp, the key and the board,
-     * which is the one taken before the resolution. The events can still
-     * grow, by the deaths the resolution's own effects cause; see {@link
-     * HeldResolution}.
-     */
-    private record HalfRecord(
-            String recordId, String timestamp, ProvenanceKey.Resolved keys, String state) {
-
-        static HalfRecord of(String recordId, ProvenanceKey.Resolved keys, String state) {
-            return new HalfRecord(recordId, RecordShardWriter.timestamp(), keys, state);
-        }
-    }
-
-    /**
-     * A resolution whose effect halves wait for its state-based consequences.
-     *
-     * <p>Forge does not check state-based actions when an ability finishes:
-     * {@code MagicStack.resolveStack} publishes {@code GameEventSpellResolved}
-     * and returns, and the creature a Lightning Bolt left with lethal damage
-     * dies at the next priority, inside {@code GameAction.checkStateEffects} —
-     * after {@code GameEventPlayerPriority}, so not even that event is a
-     * boundary. Written at the resolved event, the effect half would hold the
-     * damage and never the death, which a combat record, whose bracket stays
-     * open until the step ends, does hold.
-     *
-     * <p>So the halves are held from the resolution until the next real
-     * action begins ({@link #onNextAction}) — a bracket opening for a cast or
-     * a trigger, another resolution ending, a combat bracket opening, a step
-     * or phase boundary, a land played, the end of the game — and written
-     * then, exactly once.
-     *
-     * @param root the resolved ability, which the deaths are stamped against
-     */
-    private record HeldResolution(
-            SpellAbility root, String actor, String linkId, HeldHalves<HalfRecord> halves) {
-    }
-
-    /**
      * One damage step's combat, from the first event dealt in it until the
      * step ends or something uses the stack.
      *
@@ -338,6 +240,7 @@ public final class BusBracketCollector extends BusEventReader {
         this.context = context;
         this.snapshots = new SnapshotBuilder(game);
         this.ledger = new ActivationLedger(context);
+        this.heldResolution = new HeldResolutionWindow(context, snapshots);
         this.castsUnderWay = new CastsUnderWay(game, ledger::holds);
         this.onCombatRecord = onCombatRecord;
     }
@@ -457,7 +360,7 @@ public final class BusBracketCollector extends BusEventReader {
     /**
      * A resolution closes the bracket, stamps the cost half and holds the
      * effect half until the deaths it causes have happened ({@link
-     * HeldResolution}).
+     * HeldResolutionWindow}).
      *
      * <p>A fizzle writes no effect half at all. {@code MagicStack.resolveStack}
      * skips resolution entirely when the targets are gone, so the alternative is
@@ -511,7 +414,9 @@ public final class BusBracketCollector extends BusEventReader {
             resolved.modes.close(resolved.events);
         }
         if (writesEffectHalf) {
-            holdEffectHalves(resolved, link);
+            // Held rather than written: the deaths this resolution causes
+            // have not happened yet.
+            heldResolution.hold(resolved, link);
         }
         // What the resolution cast goes on top, and until the next item
         // resolves or something is cast, nothing is open: what follows is
@@ -521,33 +426,6 @@ public final class BusBracketCollector extends BusEventReader {
         orphans.clear();
         finishing = abilityId;
         castsUnderWay.dropHeld();
-    }
-
-    /**
-     * Hold a resolution's effect halves, under the cost half's link.
-     *
-     * <p>Held rather than written: the deaths this resolution causes have not
-     * happened yet. See {@link HeldResolution}.
-     */
-    private void holdEffectHalves(OpenResolution resolved, String link) {
-        // Modes, X and the named card are set while the ability resolves, so
-        // the block that carries them is re-read here and paired with the
-        // board each half was captured with: the cast's for a root half, the
-        // mode's first clause's for a mode's.
-        String refs = snapshots.refsJson(resolved.ability);
-        // A modal resolution on a patched worker writes one effect half per
-        // chosen mode, each through the mode's own option line, every one of
-        // them under the cost half's link (FR-029a, FR-029d). A mode that
-        // fizzled on its own carries an empty list under its key, which is
-        // what the schema says of any resolution that did nothing observable.
-        HeldHalves<HalfRecord> halves = new HeldHalves<>();
-        for (ModeSplit.ModeHalf half
-                : resolved.modes.halves(resolved.state, resolved.events.events())) {
-            halves.add(HalfRecord.of(
-                    context.nextRecordId(), resolved.keys.withOption(half.mode().option()),
-                    half.mode().state().withRefs(refs).render()), half.events());
-        }
-        held = new HeldResolution(resolved.ability, resolved.actor, link, halves);
     }
 
     /**
@@ -601,21 +479,7 @@ public final class BusBracketCollector extends BusEventReader {
      * the window the way the next action in a real game would.
      */
     void onNextAction() {
-        if (held == null) {
-            return;
-        }
-        HeldResolution writing = held;
-        held = null;
-        for (HeldHalves.Half<HalfRecord> half : writing.halves().halves()) {
-            HalfRecord record = half.about();
-            context.emit(context.newResolution(
-                    Moment.RESOLUTION, record.recordId(), record.timestamp())
-                    .actor(writing.actor())
-                    .ability(record.keys())
-                    .linkId(writing.linkId())
-                    .state(record.state())
-                    .payload(EffectRecord.eventsPayload(half.events())));
-        }
+        heldResolution.close();
     }
 
     /**
@@ -664,15 +528,10 @@ public final class BusBracketCollector extends BusEventReader {
         }
     }
 
-    @Override
-    void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
-        if (!holdAsConsequence(event, moved)) {
-            record(moved);
-        }
-    }
-
     /**
-     * File a permanent's leaving into the held resolution that killed it.
+     * A move a state-based check made while a resolution is held is that
+     * resolution's consequence, filed into it
+     * ({@link HeldResolutionWindow#fileDeath}); any other move is routed.
      *
      * <p>Two conditions, each closing a way an unrelated move could join:
      * <ul>
@@ -688,45 +547,14 @@ public final class BusBracketCollector extends BusEventReader {
      *   is that spell's cost, not this resolution's consequence. Outside a
      *   resolution nothing else freezes the tracker while a card moves.</li>
      * </ul>
-     *
-     * <p>Which permanent it is does not matter. Forge checks state-based
-     * actions before every priority, so the check that runs while the half
-     * is held is the first since the resolution began, and everything it
-     * finds is something the resolution left behind — including what a
-     * static it brought does: a 2/2 under the Dead Weight that just resolved,
-     * the creatures an entering Elesh Norn shrinks to nothing, the loser of
-     * the legend rule, the Aura that falls off a creature the resolution
-     * killed. The static's own stat change stays out; it is the static's
-     * continuous record, and only the move it causes is the resolution's.
-     * The window closes at the next action ({@link HeldResolution}), so a
-     * check after a land or a new cast is not this resolution's.
-     *
-     * <p>A modal resolution files the move into the half whose events named
-     * the permanent, the last of them when several did — the mode that was
-     * the last to change it — and into the last half when none did ({@link
-     * HeldHalves#fileDeath}). The cost half and the link are the resolution's
-     * and do not move.
-     *
-     * <p><b>Stamped against the resolved ability, with no clause.</b> The
-     * death is a state-based action rather than anything a clause did, so
-     * {@code attributed_to} is {@link EventAttribution#UNRESOLVED}, which is
-     * what a combat record's state-based deaths carry too, while {@code
-     * cause} is the resolved line's host card: the death is filed because
-     * that line caused it, and it is what an interventional fork writes for
-     * the same death, since its sink is still listening when
-     * {@code GameSimulator.resolveStack} runs the check against the forced
-     * ability. One death, one rendering, observed or forced.
-     *
-     * @return whether the move was filed into the held resolution, in which
-     *         case it goes nowhere else
      */
-    private boolean holdAsConsequence(GameEventCardChangeZone event, EffectEvent moved) {
-        if (held == null || !isStateBasedLeave(event)) {
-            return false;
+    @Override
+    void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
+        if (heldResolution.isHolding() && isStateBasedLeave(event)) {
+            heldResolution.fileDeath(moved, event.card());
+        } else {
+            record(moved);
         }
-        held.halves().fileDeath(
-                EventAttribution.stampAt(moved, held.root(), null, null), Refs.of(event.card()));
-        return true;
     }
 
     /**
@@ -734,7 +562,7 @@ public final class BusBracketCollector extends BusEventReader {
      *
      * <p>State-based-action deaths arrive with no ability resolving, after the
      * bracket that caused them has closed. The ones it caused never reach
-     * here: {@link #holdAsConsequence} files them into its held effect half.
+     * here: {@link #fileMove} files them into its held effect half.
      * The rest are routed by {@link #now} like any other event.
      */
     private void record(EffectEvent event) {
