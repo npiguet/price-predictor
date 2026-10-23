@@ -139,7 +139,7 @@ public class GeneratedDecksIndex {
      * Pick any random deck from the given set, without excluding mirrors of
      * anything, or empty if the set has no candidates at all.
      *
-     * <p>Exists for {@link MatchGenerator#pickDeckB}'s {@code decksOnly}
+     * <p>Exists for {@link MatchGenerator#pickDeckB}'s decks-only
      * fallback: a decks-only round has no Forge-legal deck-building path (its
      * set code can be a sentinel like {@code COVERAGE} that resolves against
      * no real Forge edition), so when {@link #randomDeckFromSet} finds no

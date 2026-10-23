@@ -41,15 +41,15 @@ import java.util.Random;
  *       GeneratedDecksIndex#randomDeckFromSet} filters to deck A's set code
  *       and excludes mirror matches by content equality. If no non-mirror
  *       candidate exists for that set, fall back to Forge methods — unless
- *       {@code decksOnly}, see below.</li>
- *   <li>{@code decksOnly}: forces the roll to always take the file-sample
- *       branch, regardless of {@code sideBWeight}. For decks that belong to
- *       no set (coverage, variant) and carry a sentinel set code the Forge
- *       method branch would fail to resolve against Forge's booster/edition
- *       tables — so under {@code decksOnly}, a non-mirror miss falls back to
- *       {@link GeneratedDecksIndex#randomAnyDeckFromSet} (accepting a mirror)
- *       rather than to Forge methods; only an empty index for that set
- *       reaches an exception. See {@link #pickDeckB} for why this case is
+ *       the round is decks-only, see below.</li>
+ *   <li>Decks-only ({@link FileDecks#ONLY}): forces the roll to always take
+ *       the file-sample branch, regardless of {@code sideBWeight}. For decks
+ *       that belong to no set (coverage, variant) and carry a sentinel set
+ *       code the Forge method branch would fail to resolve against Forge's
+ *       booster/edition tables — so a decks-only non-mirror miss falls back
+ *       to {@link GeneratedDecksIndex#randomAnyDeckFromSet} (accepting a
+ *       mirror) rather than to Forge methods; only an empty index for that
+ *       set reaches an exception. See {@link #pickDeckB} for why this case is
  *       ordinary rather than rare.</li>
  * </ul>
  *
@@ -73,6 +73,32 @@ public class MatchGenerator {
         DeckSource FORGE_BUILT = new ForgeBuilt();
     }
 
+    /** What a round's decks files are to it: one source among Forge's, or the only one. */
+    enum FileDecks {
+        /**
+         * Sealed self-play: a file is one source beside the Forge methods. A
+         * side-B miss falls back to Forge, and a name Forge cannot resolve is
+         * only logged, since a self-play deck's names came out of Forge in
+         * the first place.
+         */
+        ALONGSIDE_FORGE(DeckMaterializer.UnresolvedPolicy.WARN),
+        /**
+         * Decks-only, for coverage and variant rounds: the files are the only
+         * source, because a deck's set code can be a sentinel no Forge edition
+         * resolves. Side B always samples its file, a miss accepts a mirror
+         * rather than reach Forge, and a name Forge cannot resolve breaks the
+         * round — see {@link #DECKS_ONLY_UNRESOLVED}.
+         */
+        ONLY(DeckMaterializer.UnresolvedPolicy.FAIL);
+
+        /** What a file-sampled deck's unresolvable name does in this round. */
+        final DeckMaterializer.UnresolvedPolicy unresolved;
+
+        FileDecks(DeckMaterializer.UnresolvedPolicy unresolved) {
+            this.unresolved = unresolved;
+        }
+    }
+
     private final List<String> eligibleSetCodes;
     private final DeckBuilder deckBuilder;
     private final GamePlayer gamePlayer;
@@ -82,9 +108,24 @@ public class MatchGenerator {
     private final int sideBWeight;
     private final Random random;
     private final HoldoutCards excludedCards;
-    private final boolean decksOnly;
+    private final FileDecks fileDecks;
 
     private MatchGenerator(Builder builder) {
+        validate(builder);
+        this.eligibleSetCodes = List.copyOf(builder.eligibleSetCodes);
+        this.deckBuilder = builder.deckBuilder;
+        this.gamePlayer = builder.gamePlayer;
+        this.runId = builder.runId;
+        this.sideA = builder.sideA;
+        this.sideB = builder.sideB;
+        this.sideBWeight = builder.sideBWeight;
+        this.random = builder.random;
+        this.excludedCards = builder.excludedCards;
+        this.fileDecks = builder.fileDecks;
+    }
+
+    /** Refuse a configuration that would build matches other than the ones asked for. */
+    private static void validate(Builder builder) {
         if (builder.eligibleSetCodes.isEmpty()) {
             throw new IllegalArgumentException("Eligible set list must not be empty");
         }
@@ -98,7 +139,7 @@ public class MatchGenerator {
         }
         boolean sideAFromFile = builder.sideA instanceof DeckSource.FileSampled;
         boolean sideBFromFile = builder.sideB instanceof DeckSource.FileSampled;
-        if (builder.decksOnly && !(sideAFromFile && sideBFromFile)) {
+        if (builder.fileDecks == FileDecks.ONLY && !(sideAFromFile && sideBFromFile)) {
             // Both holes are silent, which is why they are refused rather
             // than tolerated. With side B Forge-built, rollIsFileSample()
             // returns false for every match and the whole round plays
@@ -113,16 +154,6 @@ public class MatchGenerator {
                             + ". A missing file does not fail a decks-only match, it "
                             + "quietly turns it back into sealed self-play.");
         }
-        this.eligibleSetCodes = List.copyOf(builder.eligibleSetCodes);
-        this.deckBuilder = builder.deckBuilder;
-        this.gamePlayer = builder.gamePlayer;
-        this.runId = builder.runId;
-        this.sideA = builder.sideA;
-        this.sideB = builder.sideB;
-        this.sideBWeight = builder.sideBWeight;
-        this.random = builder.random;
-        this.excludedCards = builder.excludedCards;
-        this.decksOnly = builder.decksOnly;
     }
 
     /**
@@ -149,7 +180,7 @@ public class MatchGenerator {
         private int sideBWeight;
         private Random random = MyRandom.getRandom();
         private HoldoutCards excludedCards = HoldoutCards.NONE;
-        private boolean decksOnly;
+        private FileDecks fileDecks = FileDecks.ALONGSIDE_FORGE;
 
         private Builder(List<String> eligibleSetCodes, String runId) {
             this.eligibleSetCodes = eligibleSetCodes;
@@ -186,8 +217,9 @@ public class MatchGenerator {
             return this;
         }
 
+        /** Whether the decks files are the round's only source ({@link FileDecks#ONLY}). */
         Builder decksOnly(boolean decksOnly) {
-            this.decksOnly = decksOnly;
+            this.fileDecks = decksOnly ? FileDecks.ONLY : FileDecks.ALONGSIDE_FORGE;
             return this;
         }
 
@@ -258,7 +290,7 @@ public class MatchGenerator {
     DeckSelection pickDeckA() {
         if (sideA instanceof DeckSource.FileSampled file) {
             GeneratedDeck sampled = file.index().randomDeck(random);
-            return DeckSelection.fromFile(sampled, sampled.setCode(), decksOnly);
+            return DeckSelection.fromFile(sampled, sampled.setCode(), fileDecks);
         }
         String setCode = eligibleSetCodes.get(random.nextInt(eligibleSetCodes.size()));
         return forgeBuilt(setCode);
@@ -270,8 +302,8 @@ public class MatchGenerator {
      * {@link BuildMethod#TOTAL_WEIGHT}) and — if side B samples a decks
      * file — sampling from it (weight {@code sideBWeight}). The
      * file-sample branch falls back to Forge methods when no non-mirror
-     * candidate exists for {@code setCode} — <b>except</b> under
-     * {@code decksOnly}, which has no Forge-legal fallback to reach (its set
+     * candidate exists for {@code setCode} — <b>except</b> in a decks-only
+     * round, which has no Forge-legal fallback to reach (its set
      * code can be a sentinel like {@code COVERAGE} that resolves against no
      * real Forge edition, so {@link #forgeBuilt} would find no booster
      * template for it and throw). A decks-only round's live-card pool shrinks
@@ -279,38 +311,43 @@ public class MatchGenerator {
      * left produces byte-identical decks, deterministically — an ordinary
      * tail state, not a rare one — and every match attempt would hit that
      * throw: each restarted worker gives up after {@link WorkerLoop}'s cap,
-     * and the round never appends another progress line. So under {@code decksOnly} this instead accepts a mirror
-     * via {@link GeneratedDecksIndex#randomAnyDeckFromSet}: a mirror match
+     * and the round never appends another progress line. So a decks-only
+     * round instead accepts a mirror ({@link #mirrorFor}): a mirror match
      * still puts every card in the round's decks into a game, which is all a
      * coverage or variant round requires.
      */
     DeckSelection pickDeckB(String setCode, List<String> deckACards) {
-        if (sideB instanceof DeckSource.FileSampled file && rollIsFileSample()) {
-            Optional<GeneratedDeck> pick = file.index().randomDeckFromSet(
-                    setCode, deckACards, random);
-            if (pick.isPresent()) {
-                return DeckSelection.fromFile(pick.get(), setCode, decksOnly);
-            }
-            if (decksOnly) {
-                Optional<GeneratedDeck> mirror =
-                        file.index().randomAnyDeckFromSet(setCode, random);
-                if (mirror.isPresent()) {
-                    return DeckSelection.fromFile(mirror.get(), setCode, decksOnly);
-                }
-                // Not reachable from CollectorSupervisor, which always points
-                // both sides at the same file: a decks-only side-B index with
-                // no deck of deck A's set at all is a configuration error, and
-                // silently falling through to Forge here would reintroduce
-                // this method's whole bug for a rarer trigger.
-                throw new IllegalStateException(
+        if (!(sideB instanceof DeckSource.FileSampled file) || !rollIsFileSample()) {
+            return forgeBuilt(setCode);
+        }
+        Optional<GeneratedDeck> pick = file.index().randomDeckFromSet(
+                setCode, deckACards, random);
+        if (pick.isEmpty() && fileDecks == FileDecks.ONLY) {
+            pick = Optional.of(mirrorFor(file.index(), setCode));
+        }
+        // Otherwise no non-mirror deck is available for this set; Forge builds it.
+        return pick.map(deck -> DeckSelection.fromFile(deck, setCode, fileDecks))
+                .orElseGet(() -> forgeBuilt(setCode));
+    }
+
+    /**
+     * Any deck of {@code setCode}, mirror or not, for a decks-only side B
+     * whose non-mirror search came up empty.
+     *
+     * @throws IllegalStateException when the file has no deck of the set at
+     *         all. Not reachable from CollectorSupervisor, which always points
+     *         both sides at the same file: a decks-only side-B index with no
+     *         deck of deck A's set is a configuration error, and silently
+     *         falling through to Forge here would reintroduce
+     *         {@link #pickDeckB}'s whole bug for a rarer trigger.
+     */
+    private GeneratedDeck mirrorFor(GeneratedDecksIndex index, String setCode) {
+        return index.randomAnyDeckFromSet(setCode, random).orElseThrow(
+                () -> new IllegalStateException(
                         "decksOnly is set but the side-B decks file has no "
                                 + "deck of set " + setCode + "; cannot build a "
                                 + "match without reaching the Forge-methods "
-                                + "path decksOnly exists to avoid");
-            }
-            // No non-mirror deck available for this set; fall through to Forge.
-        }
-        return forgeBuilt(setCode);
+                                + "path decksOnly exists to avoid"));
     }
 
     /**
@@ -329,7 +366,7 @@ public class MatchGenerator {
      * Roll {@code true} with probability {@code sideBWeight / (10 + sideBWeight)}
      * — the "sample from side B's file" branch. Always returns {@code false}
      * when side B is Forge-built, and always returns {@code true} (once
-     * side B has a file) when {@code decksOnly} is set.
+     * side B has a file) in a decks-only round.
      */
     boolean rollIsFileSample() {
         if (!(sideB instanceof DeckSource.FileSampled)) {
@@ -337,7 +374,7 @@ public class MatchGenerator {
         }
         // A decks-only round has no set to open a booster for: both sides come
         // from the decks file or the match cannot be built at all.
-        if (decksOnly) {
+        if (fileDecks == FileDecks.ONLY) {
             return true;
         }
         double total = BuildMethod.TOTAL_WEIGHT + sideBWeight;
@@ -373,13 +410,6 @@ public class MatchGenerator {
                     + "would play a deck of basic lands and collect nothing "
                     + "while reporting a completed match.";
 
-    /** What a file-sampled deck's unresolvable name does in this round. */
-    private static DeckMaterializer.UnresolvedPolicy filePolicy(boolean decksOnly) {
-        return decksOnly
-                ? DeckMaterializer.UnresolvedPolicy.FAIL
-                : DeckMaterializer.UnresolvedPolicy.WARN;
-    }
-
     /**
      * One side of a match: the playable {@link Deck}, its card-name list, the
      * method tag, and the set code. Bundled together so {@link #pickDeckA}
@@ -394,15 +424,16 @@ public class MatchGenerator {
          * the deck's recorded {@code label} as the method tag. {@code setCode}
          * is taken explicitly so callers can either propagate the file's
          * own set code (side A) or substitute deck A's set code (side B,
-         * where same-set pairing is enforced upstream). {@code strict} is the
-         * generator's {@code decksOnly}: a coverage or variant deck's names
-         * did not come from Forge, so one it cannot resolve is a broken round
-         * rather than a curiosity — see {@link #DECKS_ONLY_UNRESOLVED}.
+         * where same-set pairing is enforced upstream). {@code fileDecks}
+         * decides what a name Forge cannot resolve does: in a decks-only
+         * round a coverage or variant deck's names did not come from Forge,
+         * so one it cannot resolve is a broken round rather than a curiosity
+         * — see {@link #DECKS_ONLY_UNRESOLVED}.
          */
-        static DeckSelection fromFile(GeneratedDeck deck, String setCode, boolean strict) {
+        static DeckSelection fromFile(GeneratedDeck deck, String setCode, FileDecks fileDecks) {
             return new DeckSelection(
                     DeckMaterializer.materialize(
-                            deck.cardNames(), filePolicy(strict), DECKS_ONLY_UNRESOLVED),
+                            deck.cardNames(), fileDecks.unresolved, DECKS_ONLY_UNRESOLVED),
                     deck.cardNames(),
                     deck.label(),
                     setCode);
