@@ -74,7 +74,6 @@ final class CardSpelling {
         if (!card.isToken()) {
             return null;
         }
-        String stem = ScriptLocator.tokenScriptStemOf(card);
-        return stem != null ? stem : card.getName();
+        return ScriptLocator.tokenScriptStem(card).orElseGet(card::getName);
     }
 }

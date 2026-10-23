@@ -51,8 +51,9 @@ class ScriptLocatorTest {
         Card copy = TestCards.copiedToken("c_a_food_sac");
         copy.setImageKey(forge.ImageKeys.getTokenKey("no_such_token_xyz"));
 
-        // Falls through to the name-derived cardsfolder path, exactly as before
-        // this change; what must not happen is a fabricated tokenscripts path.
+        // Falls through to the name-derived cardsfolder path, the answer for any
+        // card no script is known for; what must not happen is a fabricated
+        // tokenscripts path.
         assertEquals("cardsfolder/f/food_token.txt", ScriptLocator.scriptFileOf(copy));
     }
 

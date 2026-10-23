@@ -93,14 +93,6 @@ final class ScriptLocator {
     }
 
     /**
-     * {@link #tokenScriptStem}, or null — for a caller that reports a token's
-     * script id and falls back to its printed name.
-     */
-    static String tokenScriptStemOf(Card host) {
-        return tokenScriptStem(host).orElse(null);
-    }
-
-    /**
      * A token's script-file stem, or empty when the card did not come from a
      * token script — including a token copy of a printed card.
      *
