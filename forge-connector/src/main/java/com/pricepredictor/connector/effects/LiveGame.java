@@ -132,10 +132,7 @@ final class LiveGame {
      * the host card's.
      */
     String controllerOf(Card source) {
-        if (source == null || source.getController() == null) {
-            return activePlayerId();
-        }
-        return SnapshotBuilder.playerId(source.getController());
+        return playerIdOrActive(source == null ? null : source.getController());
     }
 
     /** The deciding player's id, or the active player's where none is known. */

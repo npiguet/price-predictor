@@ -53,9 +53,7 @@ final class ManaChannel {
             if (slot < 0) {
                 return;
             }
-            Player producer = args.get(1, Player.class);
-            String player = producer != null
-                    ? SnapshotBuilder.playerId(producer) : live.activePlayerId();
+            String player = live.playerIdOrActive(args.get(1, Player.class));
             EffectEvent event = new EffectEvent(EffectEvent.MANA_PRODUCED)
                     .subject(player)
                     .param("mana_by_color", RunParamNormalizer.manaByColor(produced));

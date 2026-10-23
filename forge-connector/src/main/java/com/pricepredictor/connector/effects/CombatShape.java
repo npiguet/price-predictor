@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import com.google.common.collect.Table;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
-import forge.game.player.Player;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -78,7 +77,7 @@ final class CombatShape {
                     || !(cell.getValue() instanceof Integer amount)) {
                 continue;
             }
-            String target = targetId(cell.getColumnKey());
+            String target = Refs.ofAny(cell.getColumnKey()).orElse(null);
             if (target == null) {
                 continue;
             }
@@ -87,16 +86,6 @@ final class CombatShape {
                     .computeIfAbsent(from, key -> new LinkedHashMap<>())
                     .put(target, amount);
         }
-    }
-
-    private static String targetId(Object column) {
-        if (column instanceof Card card) {
-            return SnapshotBuilder.entityId(card);
-        }
-        if (column instanceof Player player) {
-            return SnapshotBuilder.playerId(player);
-        }
-        return null;
     }
 
     /**
