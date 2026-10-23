@@ -55,7 +55,8 @@ import java.util.UUID;
  * <ul>
  *   <li>{@code -Ddraft.agent.mix=<label:weight,...>} — required; each seat draws
  *       its agent independently per draft (FR-006).</li>
- *   <li>{@code -Ddraft.set=<CODE>} — optional; restrict every draft to one set.
+ *   <li>{@code -Ddraft.set=<CODE>} — optional; restrict every draft to one set,
+ *       recorded under its edition's code when named by an alias.
  *       When absent, a random sealed-legal set is chosen per draft (FR-009).</li>
  *   <li>{@code -Ddraft.external.agents=<label,...>} — optional; the mix labels
  *       routed through the pick side-channel. Absent/empty ⇒ byte-for-byte
@@ -199,11 +200,17 @@ public class DraftWorkerMain {
      * Run one full pod draft. On a worker-detected pick fault this emits a
      * {@code <<DRAFT-ABANDONED>>} line via the channel first.
      *
+     * @param requested     the set as the caller names it; an alias such as
+     *                      {@code CON} is drafted and recorded, in the
+     *                      transcript and in every pick request, under the
+     *                      code its edition goes by ({@code CFX}), because
+     *                      every downstream join compares set codes as strings
      * @param requiredAgent a label at least one seat must carry, or null
      */
     static DraftResult generateDraft(
-            BoosterDraft context, String setCode, AgentMix mix, Random random,
+            BoosterDraft context, String requested, AgentMix mix, Random random,
             PickChannel channel, String draftId, String requiredAgent) {
+        String setCode = BoosterTemplates.canonicalCode(requested);
         Optional<SealedTemplate> template = BoosterTemplates.forSet(setCode);
         if (template.isEmpty()) {
             return new DraftResult.Skipped("no booster template for set " + setCode);
