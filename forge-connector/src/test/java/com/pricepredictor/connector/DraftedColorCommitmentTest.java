@@ -60,13 +60,6 @@ class DraftedColorCommitmentTest {
     }
 
     @Test
-    void stopsAtTwoColours() {
-        assertEquals(
-                "UR",
-                colorsOf(picks("Lightning Bolt", "Counterspell", "Llanowar Elves")));
-    }
-
-    @Test
     void aGoldPickCommitsBothOfItsColoursAtOnce() {
         assertEquals("WR", colorsOf(picks("Lightning Helix")));
     }

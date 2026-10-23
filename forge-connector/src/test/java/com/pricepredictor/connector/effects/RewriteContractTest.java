@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.StdStreams;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
 import forge.game.replacement.ReplacementEffect;
@@ -472,7 +473,7 @@ class RewriteContractTest {
         List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) ->
                 collector.rewrites().handler().invoke(null, onReplacement(shape), args));
         assertEquals(1, lines.size(), "one replacement writes one record");
-        assertNotNull(lines.get(0));
+        assertEquals("rewrite", RecordLines.parse(lines.get(0)).get("kind"), lines.get(0));
         return lines.get(0);
     }
 }

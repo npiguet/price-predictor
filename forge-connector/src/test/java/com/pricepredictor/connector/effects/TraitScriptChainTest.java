@@ -1,7 +1,6 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.RenderedLine;
 import com.pricepredictor.connector.RulesParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,17 +48,15 @@ class TraitScriptChainTest {
             throw new UncheckedIOException(e);
         }
         String scriptFile = SourceTree.CARDSFOLDER + "/" + relativePath;
-        RulesParser.ParsedCard parsed =
-                parser.parseScript(source, file.getFileName().toString(), scriptFile);
+        RulesParser.ParsedCard parsed = parser.parseScript(source, scriptFile);
         return converted(parsed, scriptFile, parser);
     }
 
     private static Converted convertInline(String relativePath, String script) {
         RulesParser parser = new RulesParser();
         String scriptFile = SourceTree.CARDSFOLDER + "/" + relativePath;
-        RulesParser.ParsedCard parsed = parser.parseScript(
-                List.of(script.split("\n")), Path.of(relativePath).getFileName().toString(),
-                scriptFile);
+        RulesParser.ParsedCard parsed =
+                parser.parseScript(List.of(script.split("\n")), scriptFile);
         return converted(parsed, scriptFile, parser);
     }
 

@@ -284,6 +284,9 @@ class StateBasedDeathTest {
             caster.playLand(mountain, null);
             bystander.setDamage(2);
             game.getAction().checkStateEffects(false);
+            // Otherwise there is no death to join and the test below is vacuous.
+            assertTrue(game.getCardsIn(ZoneType.Graveyard).stream()
+                    .anyMatch(c -> c.getId() == bystander.getId()), "the bystander died");
             nextStep(game);
         });
 

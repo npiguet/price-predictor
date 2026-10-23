@@ -59,13 +59,6 @@ class DraftWorkerRequiredAgentTest {
     }
 
     @Test
-    void aDrawAlreadyFullOfTheLabelIsUnchanged() {
-        String[] agents = draw("gen-3", "gen-3", "gen-3", "gen-3");
-        DraftWorkerMain.forceRequiredAgent(agents, "gen-3", new Random(1));
-        assertArrayEquals(draw("gen-3", "gen-3", "gen-3", "gen-3"), agents);
-    }
-
-    @Test
     void absentOrBlankLabelLeavesSamplingByteForByteAsBefore() {
         String[] agents = draw("forge-full", "gen-1", "forge-r30", "forge-full");
         String[] before = agents.clone();

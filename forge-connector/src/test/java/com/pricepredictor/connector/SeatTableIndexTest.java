@@ -149,11 +149,15 @@ class SeatTableIndexTest {
         }
     }
 
+    /**
+     * Mirrors allowed, so the label check cannot reject a seat drawn twice:
+     * only the distinct-index draw keeps a seat from playing itself.
+     */
     @Test
     void bothSeatsAreDistinct() {
         SeatTableIndex index = new SeatTableIndex(
                 List.of(seat("d1", "gen4"), seat("d1", "gen1"), seat("d1", "forge-full")),
-                false,
+                true,
                 new Random(11));
 
         for (int i = 0; i < 200; i++) {

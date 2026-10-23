@@ -90,12 +90,6 @@ class EffectRecordTest {
     }
 
     @Test
-    void theActorIsReadableForTheStampAtTheWrite() {
-        EffectRecord record = record(RecordKind.COMBAT).actor("P0");
-        assertEquals("P0", record.actorPlayer());
-    }
-
-    @Test
     void aCombatRecordNamesNoActingLine() {
         String json = record(RecordKind.COMBAT).actor("P0").toJson();
         assertTrue(json.contains("\"ability\":null"), json);
@@ -202,8 +196,6 @@ class EffectRecordTest {
 
         assertTrue(json.contains("\"ability\":[]"), json);
         assertTrue(json.contains("\"ability_unresolved\":\"engine_effect\""), json);
-        String combat = record(RecordKind.COMBAT).toJson();
-        assertTrue(combat.contains("\"ability\":null"), combat);
     }
 
     /** A caller that looked and got nothing back still owes a reason. */

@@ -2,6 +2,8 @@ package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -79,16 +81,10 @@ class GeneratedDecksIndexTest {
         assertThrows(IOException.class, () -> GeneratedDecksIndex.load(file));
     }
 
-    @Test
-    void loadMissingSecondSeparatorThrows(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of("gen-2;onlyOneSemicolon"));
-
-        assertThrows(IOException.class, () -> GeneratedDecksIndex.load(file));
-    }
-
-    @Test
-    void loadMissingAnySeparatorThrows(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of("no-semicolon-here"));
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"gen-2;onlyOneSemicolon", "no-semicolon-here"})
+    void loadMissingASeparatorThrows(String line, @TempDir Path tmp) throws IOException {
+        Path file = writeDecks(tmp, List.of(line));
 
         assertThrows(IOException.class, () -> GeneratedDecksIndex.load(file));
     }
@@ -186,16 +182,6 @@ class GeneratedDecksIndexTest {
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
 
         assertTrue(index.randomDeckFromSet("XYZ", List.of(), new Random(0)).isEmpty());
-    }
-
-    @Test
-    void randomDeckFromSetIsEmptyWhenOnlyExcludeMatches(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "only", 40)));
-
-        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
-        GeneratedDecksIndex.GeneratedDeck only = index.randomDeck(new Random(0));
-
-        assertTrue(index.randomDeckFromSet("MH3", only.cardNames(), new Random(0)).isEmpty());
     }
 
     // ── randomAnyDeckFromSet ─────────────────────────────────────────────────

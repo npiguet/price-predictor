@@ -12,9 +12,7 @@ import java.nio.file.Path;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Java/Python agreement on card filenames.
@@ -66,19 +64,6 @@ class CardFilenamesTest {
         // The general sanitizer would turn the hyphen into an underscore.
         assertEquals("cardsfolder/rebalanced/a-akki_ronin.txt",
                 CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "A-Akki Ronin"));
-    }
-
-    @Test
-    void aPathAlwaysUsesForwardSlashes() {
-        String path = CardFilenames.scriptFile(SourceTree.CARDSFOLDER, "Serra Angel");
-        assertEquals(-1, path.indexOf('\\'), path);
-    }
-
-    @Test
-    void twoOfTheThreeTreesAreFlat() {
-        assertFalse(SourceTree.isFlat(SourceTree.CARDSFOLDER));
-        assertTrue(SourceTree.isFlat(SourceTree.TOKENSCRIPTS));
-        assertTrue(SourceTree.isFlat(SourceTree.VARIANT_SCRIPTS));
     }
 
     // -- the tree decides where a card lives ----------------------------

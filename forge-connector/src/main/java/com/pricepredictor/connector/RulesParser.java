@@ -93,15 +93,13 @@ public class RulesParser {
      * @param scriptFile the tree-prefixed script path keys should name, or null
      *                   to skip recording
      */
-    public ParsedCard parseScript(List<String> scriptLines, String filename,
-                                  String scriptFile) {
+    public ParsedCard parseScript(List<String> scriptLines, String scriptFile) {
         List<ProvenanceRecorder> recorders = new ArrayList<>();
-        MultiCard card = parseScriptInternal(scriptLines, filename, recorders,
-                scriptFile);
+        MultiCard card = parseScriptInternal(scriptLines, recorders, scriptFile);
         return new ParsedCard(card, scriptFile == null ? List.of() : recorders);
     }
 
-    private MultiCard parseScriptInternal(List<String> scriptLines, String filename,
+    private MultiCard parseScriptInternal(List<String> scriptLines,
                                           List<ProvenanceRecorder> recorders,
                                           String scriptFile) {
         reader.reset();

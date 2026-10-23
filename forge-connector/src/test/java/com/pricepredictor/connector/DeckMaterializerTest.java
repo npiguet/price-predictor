@@ -21,9 +21,13 @@ class DeckMaterializerTest {
     // ── unresolved card names ─────────────────────────────────────────────
 
     @Test
-    void nothingUnresolvedSaysNothing() {
-        assertDoesNotThrow(() -> DeckMaterializer.reportUnresolved(List.of(), 40, FAIL, WHY));
-        assertDoesNotThrow(() -> DeckMaterializer.reportUnresolved(List.of(), 40, WARN, WHY));
+    void nothingUnresolvedSaysNothing() throws Throwable {
+        String printed = StdStreams.captureStderr(() -> {
+            DeckMaterializer.reportUnresolved(List.of(), 40, FAIL, WHY);
+            DeckMaterializer.reportUnresolved(List.of(), 40, WARN, WHY);
+        });
+
+        assertEquals("", printed);
     }
 
     @Test
@@ -50,12 +54,17 @@ class DeckMaterializerTest {
     }
 
     @Test
-    void warnOnlyLogsTheMiss() {
+    void warnOnlyLogsTheMiss() throws Throwable {
         // Sealed self-play's names came out of Forge in the first place, so a
         // miss there is a surprise rather than a broken round -- and killing
         // a long self-play run over one is worse than saying so.
-        assertDoesNotThrow(() -> DeckMaterializer.reportUnresolved(
+        String printed = StdStreams.captureStderr(() -> DeckMaterializer.reportUnresolved(
                 List.of("Whatever"), 40, WARN, WHY));
+
+        assertTrue(printed.startsWith("WARNING: "), printed);
+        assertTrue(printed.contains("1 of 40"), printed);
+        assertTrue(printed.contains("Whatever"),
+                "the warning must name the card that did not resolve, got: " + printed);
     }
 
     @Test

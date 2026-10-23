@@ -88,9 +88,14 @@ class KeywordDefinitionMainTest {
         assertEquals(text, KeywordDefinitionMain.expandPlurals(text));
     }
 
+    /** The templates themselves, not just the field: one with a value slot, one without. */
     @Test
     void reminderTemplatesAreCaptured() {
-        assertTrue(json.contains("reminder_template"));
+        assertTrue(json.contains("\"reminder_template\":"
+                        + "\"This creature can't be blocked except by creatures with flying or reach.\""),
+                "Flying's reminder template is missing");
+        assertTrue(json.contains("\"reminder_template\":\"%s, Discard this card: Draw a card.\""),
+                "Cycling's reminder template is missing");
     }
 
     /**

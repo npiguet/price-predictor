@@ -144,13 +144,15 @@ class BusEventsTest {
     /**
      * {@code computeWinningPlayerName} returns null when {@code
      * GameOutcome.getWinningLobbyPlayer()} does -- a draw -- and a {@code
-     * player_won} with no winner would be a false record.
+     * player_won} with no winner would be a false record. Read against a game
+     * with real seats, because a game with none finds no winner whatever the
+     * event names.
      */
     @Test
     void aDrawNamesNoWinner() {
         GameEventGameOutcome draw = new GameEventGameOutcome(4, List.of("Draw"), null, "");
 
-        assertNull(BusEvents.gameOutcome(draw, TestCards.game()));
+        assertNull(BusEvents.gameOutcome(draw, TestBoard.twoPlayerGame("p1", "p2")));
     }
 
     /**

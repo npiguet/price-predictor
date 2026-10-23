@@ -40,21 +40,11 @@ class SnapshotBuilderTest {
      */
     @Test
     void noConstructionChoosesATierDepth() {
-        Constructor<?>[] constructors = SnapshotBuilder.class.getConstructors();
+        Constructor<?>[] constructors = SnapshotBuilder.class.getDeclaredConstructors();
         assertEquals(1, constructors.length,
                 "a second constructor would let a call site pick its own depth");
         assertArrayEquals(
                 new Class<?>[]{Game.class}, constructors[0].getParameterTypes());
-    }
-
-    /**
-     * Every snapshot declares all four tiers, so an empty hand or stack reads as
-     * empty rather than as uncollected. The literal is the contract:
-     * Python's {@code InclusionTier} and {@code record_io} mirror it.
-     */
-    @Test
-    void everySnapshotDeclaresAllFourTiers() {
-        assertEquals("[1,2,3,4]", Snapshot.TIERS_JSON);
     }
 
     // ── refs ────────────────────────────────────────────────────────────
@@ -76,6 +66,12 @@ class SnapshotBuilderTest {
 
     // ── the state's blocks ──────────────────────────────────────────────
 
+    /**
+     * The blocks in schema order, ending in all four tiers: every snapshot
+     * declares them, so an empty hand or stack reads as empty rather than as
+     * uncollected. The literal is the contract: Python's {@code InclusionTier}
+     * and {@code record_io} mirror it.
+     */
     @Test
     void theStateBlocksKeepTheOrderTheSchemaFixes() {
         assertEquals(

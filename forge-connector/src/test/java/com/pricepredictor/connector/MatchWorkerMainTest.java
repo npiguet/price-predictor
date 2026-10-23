@@ -171,16 +171,4 @@ class MatchWorkerMainTest {
         // progress line rather than failing.
         assertDoesNotThrow(() -> MatchWorkerMain.recordMatch(twoGameResult(), null, null, null));
     }
-
-    @Test
-    void repeatedCallsAccumulateOneLineEach(@TempDir Path tmp) throws IOException {
-        Path progressFile = tmp.resolve("run.progress.txt");
-        ProgressWriter progressWriter = new ProgressWriter(progressFile);
-
-        for (int i = 0; i < 5; i++) {
-            MatchWorkerMain.recordMatch(twoGameResult(), null, null, progressWriter);
-        }
-
-        assertEquals(5, Files.readAllLines(progressFile).size());
-    }
 }

@@ -67,11 +67,6 @@ final class RecordLines {
         return (Map<String, Object>) value;
     }
 
-    @SuppressWarnings("unchecked")
-    static List<Object> asList(Object value) {
-        return (List<Object>) value;
-    }
-
     /** The record's {@code payload} object. */
     static Map<String, Object> payload(String record) {
         Map<String, Object> payload = asMap(parse(record).get("payload"));

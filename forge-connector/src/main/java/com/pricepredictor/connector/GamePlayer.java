@@ -206,7 +206,7 @@ public class GamePlayer {
         long gameSeed = startMillis;
 
         while (!match.isMatchOver()) {
-            playGame(match, caps, gameSeed++).ifPresent(outcomes::add);
+            playGame(match, gameSeed++).ifPresent(outcomes::add);
         }
 
         int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
@@ -220,7 +220,7 @@ public class GamePlayer {
      * @param gameSeed seeds the game's recording
      * @return the game's outcome, or empty for a draw or an aborted game
      */
-    private Optional<GameOutcome> playGame(Match match, CollectionCaps caps, long gameSeed) {
+    private Optional<GameOutcome> playGame(Match match, long gameSeed) {
         var game = match.createGame();
         var collector = new PlayedCardCollector(game);
         game.subscribeToEvents(collector);

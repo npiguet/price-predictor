@@ -400,10 +400,14 @@ class BusBracketCollectorTest {
                 "the bus named a source, and it outranks the bracket");
     }
 
-    /** A draw reaches the collector and writes nothing -- no bracket, no shard growth. */
+    /**
+     * A draw reaches the collector and writes nothing -- no bracket, no shard
+     * growth. Bound to a game with real seats, as the winner's test is, so the
+     * draw is what names no winner rather than an empty table.
+     */
     @Test
     void aDrawnGameOutcomeWritesNothing() throws IOException {
-        BusBracketCollector collector = collector();
+        BusBracketCollector collector = collector(TestBoard.twoPlayerGame("p1", "p2"));
         SpellAbility bolt = damageAbility();
 
         collector.beginBracket(bolt);

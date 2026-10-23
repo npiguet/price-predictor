@@ -120,8 +120,9 @@ class DraftWorkerMainTest {
         assertEquals(24, countOccurrences(json, "\"set_code\""), "expected 24 boosters");
         assertEquals(8, countOccurrences(json, "\"agent\""), "expected 8 seat agents");
         assertTrue(json.contains("\"draft_id\""));
-        // Each booster has a non-empty drained picks array.
-        assertEquals(24, countOccurrences(json, "\"picks\":["), "every booster lists picks");
+        // Each booster has a non-empty drained picks array: an empty one would
+        // read "picks":[] and not match.
+        assertEquals(24, countOccurrences(json, "\"picks\":[\""), "every booster lists picks");
     }
 
     /**
@@ -246,7 +247,7 @@ class DraftWorkerMainTest {
         assertTrue(json.contains("\"draft_id\":\"test-draft\""));
         assertEquals(8, countOccurrences(json, "\"agent\":\"draft-agent\""),
                 "every seat should carry the model label");
-        assertEquals(24, countOccurrences(json, "\"picks\":["), "every booster drained");
+        assertEquals(24, countOccurrences(json, "\"picks\":[\""), "every booster drained");
     }
 
     private static String jsonStringField(String json, String key) {

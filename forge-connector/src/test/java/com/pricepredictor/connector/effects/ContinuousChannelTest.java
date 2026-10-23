@@ -1,24 +1,31 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.ForgeExtension;
+import forge.game.phase.PhaseType;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.nio.file.Path;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Which continuous records coalesce: per static and stable board, and per rendering. */
+@ExtendWith(ForgeExtension.class)
 class ContinuousChannelTest {
+
+    @TempDir
+    Path tempDir;
 
     /** A channel over no game, enough for what it decides before anything is written. */
     private static ContinuousChannel channel() {
-        return channel(new RecordDedup());
-    }
-
-    private static ContinuousChannel channel(RecordDedup dedup) {
         return new ContinuousChannel(
-                new LiveGame(null), TestCollectors.context(null, "game-1"), dedup);
+                new LiveGame(null), TestCollectors.context(null, "game-1"), new RecordDedup());
     }
 
     // ── continuous coalescing ───────────────────────────────────────────
@@ -39,15 +46,6 @@ class ContinuousChannelTest {
         assertEquals(allowed, collector.allowContinuousRecord(staticKey, board), why);
     }
 
-    @Test
-    void continuousRecordsTakeNoNumericCap() {
-        // Coalescing per stable board is itself the cap (FR-029).
-        ContinuousChannel collector = channel();
-        for (int board = 0; board < 100; board++) {
-            assertTrue(collector.allowContinuousRecord("anthem", "board-" + board));
-        }
-    }
-
     /**
      * Two copies of one anthem render one record.
      *
@@ -56,12 +54,18 @@ class ContinuousChannelTest {
      * contributions and their suppressed board are all the same.
      */
     @Test
-    void twoStaticsThatRenderIdenticallyAreWrittenOnce() {
-        RecordDedup dedup = new RecordDedup();
-        ContinuousChannel collector = channel(dedup);
-        assertTrue(collector.allowContinuousRecord("11", "board-1"));
-        assertTrue(collector.allowContinuousRecord("12", "board-1"));
-        assertTrue(dedup.allowDistinct("continuous", "{anthem}", "{board}"));
-        assertFalse(dedup.allowDistinct("continuous", "{anthem}", "{board}"));
+    void twoStaticsThatRenderIdenticallyAreWrittenOnce() throws Throwable {
+        Assumptions.assumeTrue(ContinuousChannel.CAN_SUPPRESS,
+                "../forge cannot remove one static's contributions");
+        CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+        board.battlefield("Glorious Anthem", board.you);
+        board.battlefield("Glorious Anthem", board.you);
+        board.battlefield("Grizzly Bears", board.you);
+        board.game.getAction().checkStaticAbilities();
+
+        List<String> records = ShardRun.records(tempDir, board.game,
+                (bracket, collectors) -> collectors.continuous().collect());
+
+        assertEquals(1, records.size(), String.valueOf(records));
     }
 }

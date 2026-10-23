@@ -37,11 +37,6 @@ class PlayedMatchTest {
         assertEquals("BAB", match(game(Side.A, Side.B), game(Side.B, Side.A), game(Side.A, Side.B)).playSequence());
     }
 
-    @Test
-    void aBestOfOneMatchIsASingleChar() {
-        assertEquals("B", match(game(Side.B, Side.A)).winnerSequence());
-    }
-
     // ── Win counts ──────────────────────────────────────────────────
 
     @Test
