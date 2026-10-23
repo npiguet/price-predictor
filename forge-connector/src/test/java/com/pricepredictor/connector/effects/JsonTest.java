@@ -80,14 +80,11 @@ class JsonTest {
     /** Fields come out in the order they went in, whichever method added them. */
     @Test
     void anObjectWriterKeepsTheOrderItWasGiven() {
-        Map<String, Object> leading = new LinkedHashMap<>();
-        leading.put("b", 1);
-        leading.put("a", List.of());
-
         assertEquals("{\"z\":null,\"b\":1,\"a\":[],\"y\":\"v\"}",
                 Json.object()
                         .raw("z", "null")
-                        .values(leading)
+                        .value("b", 1)
+                        .value("a", List.of())
                         .value("y", "v")
                         .render());
         assertEquals("{}", Json.object().render());

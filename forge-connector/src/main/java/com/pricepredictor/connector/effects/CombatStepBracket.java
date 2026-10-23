@@ -82,7 +82,7 @@ final class CombatStepBracket {
         }
 
         String payload() {
-            return RecordPayloads.combatPayload(shape.fields(), events.events());
+            return RecordPayloads.combatPayload(shape, events.events());
         }
     }
 

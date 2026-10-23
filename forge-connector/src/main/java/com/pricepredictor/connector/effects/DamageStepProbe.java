@@ -203,7 +203,7 @@ final class DamageStepProbe {
          * about the board without it.
          */
         String payload() {
-            return RecordPayloads.probePayload(combat.fields(), events, keyword, carrier);
+            return RecordPayloads.probePayload(combat, events, keyword, carrier);
         }
     }
 

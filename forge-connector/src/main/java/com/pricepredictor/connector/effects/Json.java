@@ -130,14 +130,6 @@ public final class Json {
             return raw(name, Json.value(value));
         }
 
-        /** Every entry of an ordered map, as {@link #value} fields. */
-        public ObjectWriter values(Map<String, ?> entries) {
-            for (Map.Entry<String, ?> entry : entries.entrySet()) {
-                value(entry.getKey(), entry.getValue());
-            }
-            return this;
-        }
-
         public String render() {
             return fields.toString();
         }
