@@ -3,7 +3,9 @@ package com.pricepredictor.connector.effects;
 import forge.card.ColorSet;
 import forge.card.MagicColor;
 import forge.game.card.Card;
+import forge.game.card.CounterType;
 import forge.game.keyword.KeywordInterface;
+import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +33,27 @@ final class CardSpelling {
      */
     static String typeName(Object type) {
         String name = type instanceof Enum<?> value ? value.name() : String.valueOf(type);
+        return name.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * A counter type as a record spells it: its name, upper-cased. A run
+     * parameter may carry the name rather than the type, and reads the same.
+     */
+    static String counterName(Object type) {
+        String name = type instanceof CounterType counter ? counter.getName() : String.valueOf(type);
+        return name.toUpperCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * A zone as a record spells it: lower-cased, or null for no zone. A run
+     * parameter may carry the name rather than the type, and reads the same.
+     */
+    static String zoneName(Object zone) {
+        if (zone == null) {
+            return null;
+        }
+        String name = zone instanceof ZoneType type ? type.name() : String.valueOf(zone);
         return name.toLowerCase(java.util.Locale.ROOT);
     }
 

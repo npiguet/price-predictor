@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
-import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -238,8 +237,8 @@ final class RunParamNormalizer {
             EffectEvent event, String mode, Map<String, Object> byName) {
         switch (event.type()) {
             case ZONE_CHANGE -> {
-                event.param("from_zone", zoneName(byName.get("Origin")));
-                event.param("to_zone", zoneName(byName.get("Destination")));
+                event.param("from_zone", CardSpelling.zoneName(byName.get("Origin")));
+                event.param("to_zone", CardSpelling.zoneName(byName.get("Destination")));
             }
             case DAMAGE_DEALT -> {
                 event.param("amount", intOf(byName.get("DamageAmount")));
@@ -270,7 +269,7 @@ final class RunParamNormalizer {
             case CARD_LOOKED_AT -> {
                 event.param("count", firstInt(
                         byName, "ScryNum", "SurveilNum", "Number", "Num"));
-                event.param("from_zone", zoneName(byName.get("Origin")));
+                event.param("from_zone", CardSpelling.zoneName(byName.get("Origin")));
             }
             case POISON_CHANGE -> event.param(
                     "delta", firstInt(byName, "Amount", "Num", "Number"));
@@ -331,7 +330,7 @@ final class RunParamNormalizer {
         Integer delta = firstInt(
                 byName, "CounterNum", "CounterAmount", "NewCounterAmount");
         if (type != null) {
-            event.param("counter_type", counterName(type));
+            event.param("counter_type", CardSpelling.counterName(type));
         }
         if (delta != null) {
             event.param("delta", delta);
@@ -367,7 +366,7 @@ final class RunParamNormalizer {
             for (com.google.common.collect.Multiset.Entry<?> entry
                     : multiset.entrySet()) {
                 total.merge(
-                        counterName(entry.getElement()), entry.getCount(), Integer::sum);
+                        CardSpelling.counterName(entry.getElement()), entry.getCount(), Integer::sum);
             }
         }
         return total;
@@ -438,21 +437,6 @@ final class RunParamNormalizer {
         }
         String text = String.valueOf(value).trim();
         return text.isEmpty() ? null : text;
-    }
-
-    private static String counterName(Object type) {
-        return type instanceof forge.game.card.CounterType counter
-                ? counter.getName().toUpperCase(java.util.Locale.ROOT)
-                : String.valueOf(type).toUpperCase(java.util.Locale.ROOT);
-    }
-
-    /** A zone, however the parameter spells it. */
-    private static String zoneName(Object value) {
-        if (value instanceof ZoneType zone) {
-            return zone.name().toLowerCase(java.util.Locale.ROOT);
-        }
-        return value == null
-                ? null : String.valueOf(value).toLowerCase(java.util.Locale.ROOT);
     }
 
     private static Integer firstInt(Map<String, Object> byName, String... keys) {

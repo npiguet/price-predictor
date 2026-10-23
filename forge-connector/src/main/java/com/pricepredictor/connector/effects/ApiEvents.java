@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.base.Strings;
 import forge.game.GameEntity;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
@@ -453,7 +454,7 @@ final class ApiEvents {
      * method as a colour choice, direction and number and all. {@code
      * hasChosenColor()} is what {@code Card} itself defines for this
      * distinction, so this reads that instead; the named-card branch is
-     * guarded by {@link #nonEmpty}.
+     * guarded by {@link Strings#emptyToNull}.
      *
      * <p>The direction, even/odd and mode readings are not optional extras,
      * though few cards reach them: {@code event_schema.py}'s {@code
@@ -512,10 +513,10 @@ final class ApiEvents {
     private static final List<ChoiceReading> CHOICES = List.of(
             new ChoiceReading("color",
                     host -> host.hasChosenColor() ? host.getChosenColor() : null),
-            new ChoiceReading("type", host -> nonEmpty(host.getChosenType())),
+            new ChoiceReading("type", host -> Strings.emptyToNull(host.getChosenType())),
             new ChoiceReading("number", host -> host.getChosenNumber() == null
                     ? null : String.valueOf(host.getChosenNumber())),
-            new ChoiceReading("card_name", host -> nonEmpty(host.getNamedCard())),
+            new ChoiceReading("card_name", host -> Strings.emptyToNull(host.getNamedCard())),
             new ChoiceReading("player", host -> Refs.ofNullable(host.getChosenPlayer())),
             new ChoiceReading("cards",
                     host -> host.getChosenCards() == null || host.getChosenCards().isEmpty()
@@ -524,11 +525,7 @@ final class ApiEvents {
                     ? null : host.getChosenDirection().name()),
             new ChoiceReading("even_odd", host -> host.getChosenEvenOdd() == null
                     ? null : host.getChosenEvenOdd().name()),
-            new ChoiceReading("mode", host -> nonEmpty(host.getChosenMode())));
-
-    private static String nonEmpty(String value) {
-        return value == null || value.isEmpty() ? null : value;
-    }
+            new ChoiceReading("mode", host -> Strings.emptyToNull(host.getChosenMode())));
 
     // ── healed damage, granted abilities, retargets ─────────────────────
 

@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.base.CaseFormat;
 import com.pricepredictor.connector.json.Json;
 import forge.game.spellability.SpellAbility;
 
@@ -111,20 +112,7 @@ final class RecordPayloads {
         if (result == null) {
             return null;
         }
-        String name = String.valueOf(result);
-        StringBuilder out = new StringBuilder(name.length() + 2);
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            if (Character.isUpperCase(c)) {
-                if (i > 0) {
-                    out.append('_');
-                }
-                out.append(Character.toLowerCase(c));
-            } else {
-                out.append(c);
-            }
-        }
-        return out.toString();
+        return CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, String.valueOf(result));
     }
 
     /**

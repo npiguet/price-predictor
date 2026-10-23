@@ -25,7 +25,6 @@ import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * One Forge bus event as one {@link EffectEvent}.
@@ -145,7 +144,7 @@ final class BusEvents {
         if (event.type() == null) {
             return null;
         }
-        String type = event.type().getName().toUpperCase(Locale.ROOT);
+        String type = CardSpelling.counterName(event.type());
         if (!"ENERGY".equals(type)) {
             return null;
         }
@@ -254,7 +253,7 @@ final class BusEvents {
     static EffectEvent counters(GameEventCardCounters event) {
         return new EffectEvent(EventType.COUNTER_CHANGE)
                 .subject(Refs.of(event.card()))
-                .param("counter_type", event.type().getName().toUpperCase(Locale.ROOT))
+                .param("counter_type", CardSpelling.counterName(event.type()))
                 .param("delta", event.newValue() - event.oldValue());
     }
 
@@ -308,10 +307,7 @@ final class BusEvents {
     }
 
     private static String zoneName(forge.game.zone.ZoneView zone) {
-        if (zone == null || zone.zoneType() == null) {
-            return null;
-        }
-        return zone.zoneType().name().toLowerCase(Locale.ROOT);
+        return zone == null ? null : CardSpelling.zoneName(zone.zoneType());
     }
 
     /**

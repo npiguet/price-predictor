@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import forge.game.CardTraitBase;
+import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
@@ -38,6 +39,17 @@ final class CharmModes {
     private static final String CHOICES = "Choices";
 
     private CharmModes() {
+    }
+
+    /**
+     * A charm's minimum number of modes as {@code CharmEffect} reads it:
+     * {@code MinCharmNum}, else {@code CharmNum}, else one — before any
+     * clamping, which each reader does for its own question.
+     */
+    static int minimumModes(SpellAbility charm) {
+        String minimum = charm.getParamOrDefault("MinCharmNum",
+                charm.getParamOrDefault("CharmNum", "1"));
+        return AbilityUtils.calculateAmount(charm.getHostCard(), minimum, charm);
     }
 
     /** A clause that opens a chosen mode, and which mode it is. */

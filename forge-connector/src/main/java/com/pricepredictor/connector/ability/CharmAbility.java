@@ -80,7 +80,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
             return null;
         }
         String header = "Choose up to " + sa.getParam("Pawprint") + " {P} worth of modes.";
-        if ("True".equals(sa.getParam("CanRepeatModes"))) {
+        if (sa.hasParam("CanRepeatModes")) {
             header += " You may choose the same mode more than once.";
         }
         return header;

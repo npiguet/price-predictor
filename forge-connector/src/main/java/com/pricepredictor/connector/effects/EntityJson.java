@@ -72,9 +72,7 @@ final class EntityJson {
 
     private static String zoneName(Card card) {
         var zone = card.getZone();
-        return zone == null
-                ? null
-                : zone.getZoneType().name().toLowerCase(java.util.Locale.ROOT);
+        return zone == null ? null : CardSpelling.zoneName(zone.getZoneType());
     }
 
     /**
@@ -109,9 +107,7 @@ final class EntityJson {
         Json.ObjectWriter counters = Json.object();
         for (com.google.common.collect.Multiset.Entry<CounterType> entry
                 : card.getCounters().entrySet()) {
-            counters.value(
-                    entry.getElement().getName().toUpperCase(java.util.Locale.ROOT),
-                    entry.getCount());
+            counters.value(CardSpelling.counterName(entry.getElement()), entry.getCount());
         }
         return counters.render();
     }
