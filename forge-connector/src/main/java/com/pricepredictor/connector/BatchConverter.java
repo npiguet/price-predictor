@@ -62,30 +62,7 @@ public class BatchConverter {
         for (Path scriptFile : ScriptFiles.under(cardsPath)) {
             totalFiles++;
             try {
-                List<String> lines = Files.readAllLines(scriptFile);
-                Path relativePath = cardsPath.relativize(scriptFile);
-                // The key's script path is the source path as written, tree
-                // included — produced identically here and by the Python reader.
-                String scriptKeyPath = tree + "/"
-                        + relativePath.toString().replace('\\', '/');
-
-                RulesParser.ParsedCard parsed =
-                        converter.parseScript(lines, scriptKeyPath);
-                MultiCard result = parsed.card();
-
-                List<RenderedLine> renderedLines = result.renderLines();
-                String output = RenderedLine.join(renderedLines);
-
-                Path outputFile = outputPath.resolve(relativePath);
-                Files.createDirectories(outputFile.getParent());
-                if (writeConvertedText) {
-                    Files.writeString(outputFile, output);
-                }
-
-                ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                        result.faces().get(0).name(), scriptKeyPath,
-                        renderedLines, parsed.recorders());
-                Files.writeString(sidecarPathFor(outputFile), sidecar.toJson());
+                convertOne(cardsPath, scriptFile, outputPath, tree, writeConvertedText);
                 succeeded++;
             } catch (Throwable t) {
                 // Forge's card-rules parser raises AssertionError on
@@ -102,6 +79,39 @@ public class BatchConverter {
         // card tree's entries.
         return new BatchResult(totalFiles, succeeded, warnings,
                 converter.missingSVars().drain());
+    }
+
+    /**
+     * Convert one script: its text, when asked for, and its sidecar, both
+     * from the same render so the sidecar's line indices describe the file.
+     */
+    private void convertOne(
+            Path cardsPath, Path scriptFile, Path outputPath, String tree,
+            boolean writeConvertedText) throws IOException {
+        List<String> lines = Files.readAllLines(scriptFile);
+        Path relativePath = cardsPath.relativize(scriptFile);
+        // The key's script path is the source path as written, tree
+        // included — produced identically here and by the Python reader.
+        String scriptKeyPath = tree + "/"
+                + relativePath.toString().replace('\\', '/');
+
+        RulesParser.ParsedCard parsed =
+                converter.parseScript(lines, scriptKeyPath);
+        MultiCard result = parsed.card();
+
+        List<RenderedLine> renderedLines = result.renderLines();
+        String output = RenderedLine.join(renderedLines);
+
+        Path outputFile = outputPath.resolve(relativePath);
+        Files.createDirectories(outputFile.getParent());
+        if (writeConvertedText) {
+            Files.writeString(outputFile, output);
+        }
+
+        ProvenanceSidecar sidecar = ProvenanceSidecar.build(
+                result.faces().get(0).name(), scriptKeyPath,
+                renderedLines, parsed.recorders());
+        Files.writeString(sidecarPathFor(outputFile), sidecar.toJson());
     }
 
     /** The sidecar beside a converted {@code .txt}, the pairing {@code .npz} uses. */
