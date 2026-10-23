@@ -20,16 +20,6 @@ class FaceOrderTest {
         return TestCards.build(name);
     }
 
-    /** The flashback keyword Blast from the Past prints. */
-    private static KeywordInterface flashbackOf(CardState state) {
-        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
-            if (keyword.getOriginal().startsWith("Flashback")) {
-                return keyword;
-            }
-        }
-        throw new AssertionError("no flashback on " + state.getCard().getName());
-    }
-
     /**
      * The ordinal both sides compute: the position of the keyword's printed
      * text among the card's intrinsic keywords, sorted. It cannot be a position
@@ -62,7 +52,7 @@ class FaceOrderTest {
     void aGrantedKeywordHasNoPrintedOrdinal() {
         Card bear = card("Grizzly Bears");
         Card blast = card("Blast from the Past");
-        KeywordInterface flashback = flashbackOf(blast.getCurrentState());
+        KeywordInterface flashback = TestCards.flashbackOf(blast.getCurrentState());
 
         assertEquals(-1,
                 FaceOrder.keywordIndex(bear.getCurrentState(), flashback),

@@ -4,7 +4,6 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.ability.AbilityKey;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
-import forge.game.combat.Combat;
 import forge.game.phase.PhaseType;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
@@ -61,15 +60,7 @@ class SnapshotCharacterizationTest {
         Card bears = board.named("Grizzly Bears");
         Card soldier = board.named("Soldier Token");
         Card giant = board.named("Hill Giant");
-        Combat combat = new Combat(board.you);
-        combat.addAttacker(bears, board.opponent);
-        combat.addAttacker(soldier, board.opponent);
-        combat.addBlocker(bears, giant);
-        combat.setBlocked(bears, true);
-        combat.setBlocked(soldier, false);
-        combat.orderBlockersForDamageAssignment();
-        combat.orderAttackersForDamageAssignment();
-        board.game.getPhaseHandler().setCombat(combat);
+        TestBoard.blockedCombat(board.game, board.you, board.opponent, bears, giant, soldier);
 
         Characterization.assertMatches("snapshot-no-acting-line.json",
                 new SnapshotBuilder(board.game).ofBoard().render() + "\n");

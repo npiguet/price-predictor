@@ -1,6 +1,5 @@
 package com.pricepredictor.connector.effects;
 
-import forge.StaticData;
 import forge.game.Game;
 import forge.game.ability.AbilityUtils;
 import forge.game.ability.ApiType;
@@ -10,7 +9,6 @@ import forge.game.card.CounterEnumType;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
-import forge.item.PaperToken;
 
 /**
  * A fresh two-player game for the characterization tests, and the cards on it.
@@ -107,12 +105,8 @@ final class CharacterizationBoard {
 
     /** A token by its script stem, on the battlefield. */
     Card token(String scriptStem, Player owner) {
-        PaperToken paper = StaticData.instance().getAllTokens().getToken(scriptStem);
-        if (paper == null) {
-            throw new AssertionError("token script not in the database: " + scriptStem);
-        }
         return game.getAction().moveToPlay(
-                CardFactory.getCard(paper, owner, game), owner, null, null);
+                CardFactory.getCard(TestCards.paperToken(scriptStem), owner, game), owner, null, null);
     }
 
     Card battlefield(String name, Player owner) {
@@ -129,32 +123,27 @@ final class CharacterizationBoard {
 
     /** A card's spell, activated by {@code activator}. */
     SpellAbility spell(Card card, Player activator) {
-        SpellAbility spell = card.getFirstSpellAbility();
-        spell.setActivatingPlayer(activator);
-        return spell;
+        return TestBoard.spellOf(card, activator);
     }
 
-    /**
-     * Cast a card's spell at a target: onto the stack zone first, then onto
-     * the stack, the order the engine's own play path takes.
-     */
+    /** {@link TestBoard#cast} on this board. */
     SpellAbility cast(Card card, Player caster, Card target) {
-        Card onStack = game.getAction().moveToStack(card, null);
-        SpellAbility spell = spell(onStack, caster);
-        spell.resetTargets();
-        spell.getTargets().add(target);
-        game.getStack().add(spell);
-        return spell;
+        return TestBoard.cast(game, card, caster, target);
     }
 
     /** The card's first ability whose API is {@code api}. */
     SpellAbility ability(Card card, ApiType api) {
-        for (SpellAbility sa : card.getSpellAbilities()) {
-            if (sa.getApi() == api) {
-                return sa;
-            }
-        }
-        throw new AssertionError("no " + api + " ability on " + card);
+        return TestBoard.ability(card, api);
+    }
+
+    /** {@link TestBoard#castAndResolve} on this board. */
+    void castAndResolve(SpellAbility ability) {
+        TestBoard.castAndResolve(game, ability);
+    }
+
+    /** {@link TestBoard#nextStep} on this board. */
+    void nextStep() {
+        TestBoard.nextStep(game);
     }
 
     /** Resolve an ability without the stack: the board it leaves is the point. */

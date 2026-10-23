@@ -3,16 +3,14 @@ package com.pricepredictor.connector.effects;
 import forge.StaticData;
 import forge.card.GamePieceType;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
+import forge.game.card.CardState;
+import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
 import forge.item.IPaperCard;
 import forge.item.PaperToken;
 
-import java.util.List;
 
 /**
  * Real Forge cards for the provenance tests.
@@ -33,14 +31,9 @@ final class TestCards {
      * A game exists only because {@code CardFactory} will not build a card
      * without one. No turn is ever taken in it.
      */
-    private static final Game GAME = newGame();
+    private static final Game GAME = TestBoard.anotherGame();
 
     private static int nextCardId = 1;
-
-    private static Game newGame() {
-        GameRules rules = new GameRules(GameType.Constructed);
-        return new Game(List.of(), rules, new Match(rules, List.of(), "ProvenanceTest"));
-    }
 
     static Game game() {
         return GAME;
@@ -51,12 +44,26 @@ final class TestCards {
         return nextCardId++;
     }
 
-    static Card build(String name) {
+    /** A card's paper printing, failing the test when the database has none. */
+    static IPaperCard paper(String name) {
         IPaperCard paper = StaticData.instance().getCommonCards().getCard(name);
         if (paper == null) {
             throw new AssertionError("card not in the database: " + name);
         }
-        return CardFactory.getCard(paper, null, nextCardId++, GAME);
+        return paper;
+    }
+
+    /** A token's paper printing by its script stem, failing the test when there is none. */
+    static PaperToken paperToken(String scriptStem) {
+        PaperToken paper = StaticData.instance().getAllTokens().getToken(scriptStem);
+        if (paper == null) {
+            throw new AssertionError("token script not in the database: " + scriptStem);
+        }
+        return paper;
+    }
+
+    static Card build(String name) {
+        return CardFactory.getCard(paper(name), null, nextCardId++, GAME);
     }
 
     /**
@@ -65,11 +72,7 @@ final class TestCards {
      * differ only in a sacrifice ability do not collide.
      */
     static Card token(String scriptStem) {
-        PaperToken paper = StaticData.instance().getAllTokens().getToken(scriptStem);
-        if (paper == null) {
-            throw new AssertionError("token script not in the database: " + scriptStem);
-        }
-        return CardFactory.getCard(paper, null, nextCardId++, GAME);
+        return CardFactory.getCard(paperToken(scriptStem), null, nextCardId++, GAME);
     }
 
     /**
@@ -95,7 +98,21 @@ final class TestCards {
         return copy;
     }
 
-    /** The first ability on a card whose API matches, for the emitter tests. */
+    /** The flashback keyword a card state prints, Blast from the Past's for one. */
+    static KeywordInterface flashbackOf(CardState state) {
+        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
+            if (keyword.getOriginal().startsWith("Flashback")) {
+                return keyword;
+            }
+        }
+        throw new AssertionError("no flashback on " + state.getCard().getName());
+    }
+
+    /**
+     * The first ability on a card whose API matches, for the emitter tests:
+     * each top-level ability is searched, its sub-ability chain included,
+     * before the next.
+     */
     static SpellAbility scriptedAbility(String cardName, String api) {
         Card card = build(cardName);
         for (SpellAbility sa : card.getCurrentState().getSpellAbilities()) {

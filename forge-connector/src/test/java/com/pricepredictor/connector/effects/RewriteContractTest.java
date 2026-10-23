@@ -16,7 +16,6 @@ import org.junit.jupiter.params.provider.EnumSource;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,7 +74,8 @@ class RewriteContractTest {
                 replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card), result, null).toJson();
 
-        assertTrue(json.contains("\"result\":\"" + WIRE.get(result) + "\""),
+        // The spellings themselves are WireVocabularyTest's pin.
+        assertTrue(json.contains("\"result\":\"" + EffectRecord.rewriteResult(result) + "\""),
                 "the lower snake case of " + result + ": " + json);
     }
 
@@ -96,15 +96,6 @@ class RewriteContractTest {
 
         assertTrue(json.contains("\"result\":null"), json);
     }
-
-    /** The wire spellings, written out rather than derived, so the test is a pin. */
-    private static final Map<ReplacementResult, String> WIRE =
-            new EnumMap<>(Map.of(
-                    ReplacementResult.Replaced, "replaced",
-                    ReplacementResult.NotReplaced, "not_replaced",
-                    ReplacementResult.Prevented, "prevented",
-                    ReplacementResult.Updated, "updated",
-                    ReplacementResult.Skipped, "skipped"));
 
     // ── outgoing, and where it is null ──────────────────────────────────
 

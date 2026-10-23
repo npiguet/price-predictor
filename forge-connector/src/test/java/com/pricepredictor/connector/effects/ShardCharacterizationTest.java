@@ -50,13 +50,8 @@ class ShardCharacterizationTest {
                     board.game.getAction().checkStateEffects(false);
 
                     board.game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DAMAGE, you);
-                    Combat combat = new Combat(you);
-                    combat.addAttacker(dreadmaw, opponent);
-                    combat.addBlocker(dreadmaw, bears);
-                    combat.setBlocked(dreadmaw, true);
-                    combat.orderBlockersForDamageAssignment();
-                    combat.orderAttackersForDamageAssignment();
-                    board.game.getPhaseHandler().setCombat(combat);
+                    Combat combat = TestBoard.blockedCombat(
+                            board.game, you, opponent, dreadmaw, bears);
                     assertTrue(combat.assignCombatDamage(false), "the step assigned no damage");
                     combat.dealAssignedDamage();
                     board.game.getAction().checkStateEffects(false);
