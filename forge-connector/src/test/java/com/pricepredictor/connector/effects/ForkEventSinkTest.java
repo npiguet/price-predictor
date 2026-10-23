@@ -311,7 +311,7 @@ class ForkEventSinkTest {
     }
 
     /**
-     * A sink for {@code forced}, set up as ForkCollector forces it: listening
+     * A sink for {@code forced}, set up as InterventionFork forces it: listening
      * before the cast, whose cast event ends the pre-push window, and with
      * the stack resolving, so what it hears next is the forced resolution's.
      */

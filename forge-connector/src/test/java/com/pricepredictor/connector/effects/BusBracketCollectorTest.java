@@ -800,7 +800,7 @@ class BusBracketCollectorTest {
 
     /**
      * A refusal reported for an ability belonging to a
-     * DIFFERENT {@code Game} -- exactly {@code ForkCollector.forceResolution}'s
+     * DIFFERENT {@code Game} -- exactly {@code InterventionFork.forceResolution}'s
      * shape, since {@code GameSimulator.resolveStack} runs the forced ability
      * through the same {@code PlayerControllerAi.confirmAction}/{@code
      * confirmBidAction} this hook is installed on, regardless of how this

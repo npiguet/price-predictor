@@ -15,9 +15,9 @@ import java.util.function.Predicate;
  */
 final class ProbeQueue {
 
-    private final List<ForkCollector.HeldProbe> held = new ArrayList<>();
+    private final List<DamageStepProbe.HeldProbe> held = new ArrayList<>();
 
-    void hold(ForkCollector.HeldProbe branch) {
+    void hold(DamageStepProbe.HeldProbe branch) {
         held.add(branch);
     }
 
@@ -34,7 +34,7 @@ final class ProbeQueue {
      * Take the branches of one damage step out of the queue, keeping the rest
      * in order.
      */
-    List<ForkCollector.HeldProbe> take(DamageStep substep) {
+    List<DamageStepProbe.HeldProbe> take(DamageStep substep) {
         return removeIf(branch -> branch.substep() == substep);
     }
 
@@ -43,10 +43,10 @@ final class ProbeQueue {
         return removeIf(branch -> branch.substep() != substep).size();
     }
 
-    private List<ForkCollector.HeldProbe> removeIf(Predicate<ForkCollector.HeldProbe> test) {
-        List<ForkCollector.HeldProbe> removed = new ArrayList<>();
-        List<ForkCollector.HeldProbe> remaining = new ArrayList<>();
-        for (ForkCollector.HeldProbe branch : held) {
+    private List<DamageStepProbe.HeldProbe> removeIf(Predicate<DamageStepProbe.HeldProbe> test) {
+        List<DamageStepProbe.HeldProbe> removed = new ArrayList<>();
+        List<DamageStepProbe.HeldProbe> remaining = new ArrayList<>();
+        for (DamageStepProbe.HeldProbe branch : held) {
             (test.test(branch) ? removed : remaining).add(branch);
         }
         held.clear();

@@ -179,7 +179,7 @@ class ClauseContractTest {
 
     /**
      * A clause resolving on a DIFFERENT {@code Game} -- exactly the shape
-     * {@code ForkCollector.forceResolution} produces, since {@code
+     * {@code InterventionFork.forceResolution} produces, since {@code
      * GameSimulator.resolveStack} runs the real resolution pipeline against a
      * {@code GameCopier} clone under {@code AIOption.USE_FULL_SIMULATION}
      * regardless of how this game's own lobby seats were registered -- must

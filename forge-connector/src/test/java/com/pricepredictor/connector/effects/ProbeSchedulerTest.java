@@ -20,17 +20,17 @@ class ProbeSchedulerTest {
     @TempDir
     Path tempDir;
 
-    private static ForkCollector.HeldProbe branch(DamageStep substep) {
-        return new ForkCollector.HeldProbe(
+    private static DamageStepProbe.HeldProbe branch(DamageStep substep) {
+        return new DamageStepProbe.HeldProbe(
                 "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null), substep,
-                ForkCollector.TURN_UNKNOWN);
+                DamageStepProbe.TURN_UNKNOWN);
     }
 
     private static ProbeScheduler probing(RecordShardWriter writer) {
         CollectionCaps probing = new CollectionCaps(
                 1, 1.0, 2, 2, List.of("trample"), 0.0, 0.0);
         return new ProbeScheduler(TestCards.game(), "run.0-l1.0", probing,
-                new ForkCollector(null, TestCollectors.context(writer, "run.0-l1.0"), probing, 1L));
+                new DamageStepProbe(null, TestCollectors.context(writer, "run.0-l1.0"), new ForkBudget(probing)));
     }
 
     /**

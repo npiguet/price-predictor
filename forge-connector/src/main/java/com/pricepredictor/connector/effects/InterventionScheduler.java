@@ -30,11 +30,11 @@ import java.util.Set;
 final class InterventionScheduler {
 
     private final Game game;
-    private final ForkCollector forks;
+    private final InterventionFork forks;
     /** Lines already offered an intervention, so a redraw does not repeat one. */
     private final Set<String> interveneSeen = new LinkedHashSet<>();
 
-    InterventionScheduler(Game game, ForkCollector forks) {
+    InterventionScheduler(Game game, InterventionFork forks) {
         this.game = game;
         this.forks = forks;
     }
