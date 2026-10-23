@@ -536,8 +536,12 @@ public final class ForkCollector {
             fork.getStack().addAndUnfreeze(ability);
             SpellAbility onStack = cast.onStack();
             if (onStack == null) {
-                // Nothing reached the stack: a frozen stack parked it, or its
-                // targeting was refused. Nothing will resolve.
+                // Nothing reached the stack. Mostly a special action:
+                // foretell, plot and suspend are AbilityStatic, which
+                // MagicStack.add resolves on the spot without a push, and
+                // live opens no bracket for one either, so there is no
+                // resolution record to write. Otherwise a frozen stack parked
+                // it or its targeting was refused, and nothing will resolve.
                 return null;
             }
             // Listening from here, once the cast is over: the card's move to
