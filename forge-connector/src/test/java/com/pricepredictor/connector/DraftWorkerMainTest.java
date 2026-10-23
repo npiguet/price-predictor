@@ -124,6 +124,37 @@ class DraftWorkerMainTest {
         assertEquals(24, countOccurrences(json, "\"picks\":["), "every booster lists picks");
     }
 
+    /**
+     * A set named by an alias is recorded under the code its edition goes by:
+     * every downstream join compares set codes as strings, so {@code --set
+     * CON} must not record a set no pool or match file names. Conflux goes by
+     * {@code CFX}.
+     */
+    @Test
+    void anAliasedSetIsRecordedUnderItsCanonicalCode() {
+        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
+
+        String json = completedLine(DraftWorkerMain.generateDraft(
+                context, "CON", AgentMix.parse("forge-full:1"), new Random(0),
+                forgeOnlyChannel(), "test-draft", null));
+
+        assertEquals(24, countOccurrences(json, "\"set_code\":\"CFX\""), json);
+        assertEquals(0, countOccurrences(json, "\"CON\""), json);
+    }
+
+    /** A set named by its own code is recorded under that code. */
+    @Test
+    void aPlainSetCodeIsRecordedUnchanged() {
+        String setCode = uniformBoosterSet();
+        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
+
+        String json = completedLine(DraftWorkerMain.generateDraft(
+                context, setCode, AgentMix.parse("forge-full:1"), new Random(0),
+                forgeOnlyChannel(), "test-draft", null));
+
+        assertEquals(24, countOccurrences(json, "\"set_code\":" + Json.string(setCode)), json);
+    }
+
     private static String completedLine(DraftWorkerMain.DraftResult result) {
         DraftWorkerMain.DraftResult.Completed completed = assertInstanceOf(
                 DraftWorkerMain.DraftResult.Completed.class, result,

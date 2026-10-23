@@ -42,17 +42,24 @@ class JsonTest {
     }
 
     /**
-     * A null nested in a map or a list is the string {@code "null"}: the
-     * spelling the renderer {@code Json.value} was lifted from always produced.
+     * A null nested in a map or a list is JSON {@code null}, not a string a
+     * reader would take for a value named "null".
      */
     @Test
-    void aNestedNullIsTheStringNull() {
+    void aNestedNullIsJsonNull() {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("k", null);
         List<Object> list = new ArrayList<>(Arrays.asList("a", null));
 
-        assertEquals("{\"k\":\"null\"}", Json.value(map));
-        assertEquals("[\"a\",\"null\"]", Json.value(list));
+        assertEquals("{\"k\":null}", Json.value(map));
+        assertEquals("[\"a\",null]", Json.value(list));
+        assertEquals("null", Json.value(null));
+    }
+
+    /** The string "null" is still a string. */
+    @Test
+    void theStringNullIsAString() {
+        assertEquals("\"null\"", Json.value("null"));
     }
 
     /** Fields come out in the order they went in, whichever method added them. */

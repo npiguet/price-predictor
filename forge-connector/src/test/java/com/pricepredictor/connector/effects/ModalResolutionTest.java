@@ -3,10 +3,12 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -285,10 +287,99 @@ class ModalResolutionTest {
     }
 
     /**
+     * Each half of a forked charm carries the state the same half of an
+     * observed resolution of the same modes carries: read at the mode's first
+     * clause with the charm on the stack and its card in the stack zone, and
+     * with the refs re-read as the charm finishes. The fork draws its modes,
+     * so the observed charm is chained with the modes its halves name, on a
+     * board built alike.
+     */
+    @Test
+    void aForkedCharmsHalvesCarryTheObservedHalvesStates() throws Throwable {
+        Game forkedGame = confluenceBoard();
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir.resolve("forked"), forkedGame,
+                new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0), 5L,
+                confluenceIn(forkedGame), STOCK_FORK);
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+        List<String> forced = fork.records();
+        int[] options = forced.stream()
+                .mapToInt(r -> Integer.parseInt(field(r, "option").replace("}]", "")))
+                .toArray();
+
+        Game observedGame = confluenceBoard();
+        SpellAbility charm = confluenceIn(observedGame);
+        TestBoard.chain(charm, options);
+        List<String> observed = ShardRun.recordsWithClauseHook(
+                tempDir.resolve("observed"), observedGame, STOCK_FORK, () -> {
+                    observedGame.getStack().addAndUnfreeze(charm);
+                    observedGame.getStack().resolveStack();
+                    observedGame.getAction().checkStateEffects(false);
+                    observedGame.fireEvent(new GameEventTurnPhase(
+                            observedGame.getPlayers().get(0), PhaseType.MAIN2, ""));
+                });
+        List<String> halves = observed.stream()
+                .filter(r -> r.contains("\"moment\":\"resolution\"")).toList();
+
+        assertEquals(options.length, halves.size(), observed.toString());
+        for (int i = 0; i < halves.size(); i++) {
+            assertTrue(stateOf(forced.get(i)).contains("\"zone\":\"stack\""), forced.get(i));
+            assertEquals(stateOf(halves.get(i)), stateOf(forced.get(i)), "half " + i);
+        }
+    }
+
+    /**
+     * A copy of the forced charm is not the forced charm: Double Vision
+     * copies the forced Fiery Confluence, the copy resolves first, above it,
+     * and its modes carry the charm's key. They cut no half: the record is
+     * the forced charm's three halves, one per mode it chose, rather than
+     * three more for the copy's modes, whose events the sink never files.
+     */
+    @Test
+    void aCopyOfTheForcedCharmCutsNoHalf() throws IOException {
+        Game game = confluenceBoard();
+        TestBoard.inPlay(game, game.getPlayers().get(0), "Double Vision");
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0), 5L,
+                confluenceIn(game), STOCK_FORK);
+
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+        List<String> forced = fork.records();
+        assertEquals(3, forced.size(), forced.toString());
+        for (String half : forced) {
+            assertTrue(half.contains("\"option\":"), half);
+        }
+    }
+
+    /** Grizzly Bears for the second seat and Fiery Confluence in the first's hand, in play. */
+    private static Game confluenceBoard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, game.getPlayers().get(0), "Fiery Confluence");
+        return game;
+    }
+
+    private static SpellAbility confluenceIn(Game game) {
+        Player caster = game.getPlayers().get(0);
+        return TestBoard.charmOf(caster.getCardsIn(ZoneType.Hand).get(0), caster);
+    }
+
+    /** A record's {@code state} object, as written. */
+    private static String stateOf(String record) {
+        int from = record.indexOf("\"state\":");
+        int to = record.indexOf(",\"payload\":");
+        assertTrue(from >= 0 && to > from, record);
+        return record.substring(from, to);
+    }
+
+    /**
      * A fork forcing a creature spell resolves the creature's own modal
      * enters trigger too, on the same host card. Those modes belong to the
      * trigger's line, not the spell's: split under the spell's key they would
      * name {@code spell[0]} with an option, a key no sidecar line carries.
+     * Nor do its events join the spell's record: live gives the trigger a
+     * record of its own.
      */
     @Test
     void aForkedSpellIsNotSplitByItsOwnTriggersModes() throws IOException {
@@ -311,8 +402,10 @@ class ModalResolutionTest {
         String record = records.get(0);
         assertTrue(record.contains("\"trait_kind\":\"spell\""), record);
         assertFalse(record.contains("\"option\""), record);
-        assertEquals(2, record.split("\"zone_change\"", -1).length - 1,
-                "the trigger's Treasure still rides in the spell's half: " + record);
+        assertEquals(1, record.split("\"zone_change\"", -1).length - 1,
+                "the spell's own arrival, and not the trigger's Treasure: " + record);
+        assertTrue(record.contains("{\"type\":\"zone_change\",\"subjects\":[\"E"
+                + barbarian.getId() + "\"]"), "the one move is the Barbarian's: " + record);
     }
 
     /** A mode of some other resolution cannot cut the open bracket. */
