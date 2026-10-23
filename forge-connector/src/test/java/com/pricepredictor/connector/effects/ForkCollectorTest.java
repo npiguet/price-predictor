@@ -4,9 +4,11 @@ import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
+import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -332,6 +334,67 @@ class ForkCollectorTest {
         List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());
         assertTrue(records.get(0).contains("\"modes\":[],\"x\":3,"), records.get(0));
+    }
+
+    // ── a forced resolution's state is read where an observed one's is ──
+
+    /**
+     * A forced resolution's state is the board an observed resolution of
+     * the same spell records: the spell on the stack, its card in the stack
+     * zone rather than in hand, and priority with its caster. The two boards
+     * are built alike and one casts Pyroclasm while the other forks and
+     * forces it. Pyroclasm has no target, and the observed cast here pays
+     * no cost, so nothing separates the two states.
+     */
+    @Test
+    void aForcedResolutionsStateIsTheObservedResolutionsState() throws Throwable {
+        Game observedGame = pyroclasmBoard();
+        SpellAbility cast = pyroclasmIn(observedGame);
+        List<String> observed = ShardRun.observed(tempDir.resolve("observed"), observedGame,
+                bracket -> {
+                    observedGame.getStack().addAndUnfreeze(cast);
+                    observedGame.getStack().resolveStack();
+                    observedGame.getAction().checkStateEffects(false);
+                    observedGame.fireEvent(new GameEventTurnPhase(
+                            observedGame.getPlayers().get(0), PhaseType.MAIN2, ""));
+                });
+        String observedHalf = observed.stream()
+                .filter(r -> r.contains("\"moment\":\"resolution\""))
+                .findFirst().orElseThrow(() -> new AssertionError(observed.toString()));
+
+        Game forkedGame = pyroclasmBoard();
+        ShardRun.Fork fork = ShardRun.forked(tempDir.resolve("forked"), forkedGame,
+                caps(1, 0, List.of()), 1L, pyroclasmIn(forkedGame));
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
+        List<String> forced = fork.records();
+        assertEquals(1, forced.size(), forced.toString());
+
+        assertTrue(stateOf(forced.get(0)).contains("\"stack_size\":1,"), forced.get(0));
+        assertEquals(stateOf(observedHalf), stateOf(forced.get(0)));
+    }
+
+    /** A Mountain for its caster, Grizzly Bears for the other seat, and Pyroclasm in hand. */
+    private static Game pyroclasmBoard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.inPlay(game, game.getPlayers().get(0), "Mountain");
+        TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, game.getPlayers().get(0), "Pyroclasm");
+        return game;
+    }
+
+    private static SpellAbility pyroclasmIn(Game game) {
+        Player caster = game.getPlayers().get(0);
+        SpellAbility spell = caster.getCardsIn(ZoneType.Hand).get(0).getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+        return spell;
+    }
+
+    /** A record's {@code state} object, as written. */
+    private static String stateOf(String record) {
+        int from = record.indexOf("\"state\":");
+        int to = record.indexOf(",\"payload\":");
+        assertTrue(from >= 0 && to > from, record);
+        return record.substring(from, to);
     }
 
     private static EffectEvent damageTo(List<EffectEvent> events, Card card) {

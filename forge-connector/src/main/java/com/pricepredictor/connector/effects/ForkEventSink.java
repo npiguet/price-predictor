@@ -1,8 +1,11 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.event.GameEventCardChangeZone;
+import forge.game.event.GameEventSpellResolved;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -60,6 +63,8 @@ final class ForkEventSink extends BusEventReader {
      */
     private final EventBuffer open = new EventBuffer();
     private boolean modeOpen;
+    /** Whether the forced ability has finished resolving; see {@link #onResolved}. */
+    private boolean actingResolved;
     /** Positions in {@link #events()} of moves off the battlefield during a state-based check. */
     private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
@@ -139,6 +144,24 @@ final class ForkEventSink extends BusEventReader {
     }
 
     /**
+     * The forced ability has finished resolving.
+     *
+     * <p>From here its own card leaving the stack is the spell being put away
+     * rather than anything it did: an instant or sorcery goes to the
+     * graveyard after {@code GameEventSpellResolved}, and the live bracket,
+     * closed by then, files that move into no half. A permanent spell's move
+     * to the battlefield happens during the resolution and is kept, as it is
+     * live.
+     */
+    @Subscribe
+    public void onResolved(GameEventSpellResolved event) {
+        if (acting != null && event.spell() != null
+                && event.spell().getId() == acting.getId()) {
+            actingResolved = true;
+        }
+    }
+
+    /**
      * A death the forced resolution left behind is marked where it was filed,
      * so a modal fork can file it by the live rule.
      *
@@ -147,10 +170,21 @@ final class ForkEventSink extends BusEventReader {
      */
     @Override
     void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
+        if (isActingSpellPutAway(event)) {
+            return;
+        }
         int at = size();
         if (file(moved, null) && isStateBasedLeave(event)) {
             stateBasedLeaves.add(at);
         }
+    }
+
+    /** The forced spell's card leaving the stack once it has resolved; see {@link #onResolved}. */
+    private boolean isActingSpellPutAway(GameEventCardChangeZone event) {
+        return actingResolved
+                && event.from() != null && event.from().zoneType() == ZoneType.Stack
+                && event.card() != null && acting.getHostCard() != null
+                && event.card().getId() == acting.getHostCard().getId();
     }
 
     private boolean file(EffectEvent event, String namedCause) {
