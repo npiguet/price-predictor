@@ -776,10 +776,14 @@ public final class BusBracketCollector extends BusEventReader {
      * record — it arrives rather than leaves — because a land is followed by
      * another state-based check, and what that one kills is the land's doing
      * (a static it brought), not the held resolution's.
+     *
+     * <p>No cast is under way across it either: a card a failed play left in
+     * the stack zone is a cast given up from here ({@link #castUnderWay}).
      */
     @Subscribe
     public void onLandPlayed(GameEventLandPlayed event) {
         onNextAction();
+        abandonCastsUnderWay();
     }
 
     // ── the two boundaries ──────────────────────────────────────────────
@@ -1156,6 +1160,9 @@ public final class BusBracketCollector extends BusEventReader {
         // One cast is under way at a time: a new card on its way means any
         // other still in the zone with no stack item was given up.
         abandonCastsUnderWayBut(cardId);
+        // A card keeps its id across zones: a mark from an earlier attempt
+        // is not this one's.
+        abandoned.remove(cardId);
         arrived.add(cardId);
     }
 
@@ -1175,7 +1182,8 @@ public final class BusBracketCollector extends BusEventReader {
      * and it stops counting until it leaves the zone, so that what follows
      * routes as if it were not there. Given up is read at the first sign the
      * attempt is over: another action in progress, another card's arrival,
-     * a cast event, a priority, a step boundary ({@link #abandoned}).
+     * a cast event, a priority, a land played, a step boundary
+     * ({@link #abandoned}).
      *
      * @param acting the action in progress, or null
      */

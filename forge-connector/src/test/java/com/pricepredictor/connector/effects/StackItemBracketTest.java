@@ -643,6 +643,53 @@ class StackItemBracketTest {
     }
 
     /**
+     * An action at priority that files nothing of its own — Rod of Ruin's
+     * activation named to the stack, one bus event that no record takes, and
+     * the stack let go — still ends the waiting Shock's consequences: the
+     * Grizzly Bears that die in the state-based check after it are not in the
+     * Shock's half.
+     */
+    @Test
+    void anActionThatFilesNothingStillEndsTheWaitingSpellsConsequences() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card[] bears = new Card[1];
+
+        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+            Card rod = TestBoard.inPlay(game, caster, "Rod of Ruin");
+            bears[0] = TestBoard.inPlay(game, opponent, "Grizzly Bears");
+            cast(game, inHand(game, caster, "Shock"), caster, opponent);
+            priority(game);
+            SpellAbility activation = null;
+            for (SpellAbility sa : rod.getSpellAbilities()) {
+                if (sa.isActivatedAbility()) {
+                    activation = sa;
+                }
+            }
+            assertNotNull(activation, "Rod of Ruin's activated ability");
+            activation.setActivatingPlayer(caster);
+            // ComputerUtil.handlePlayingSpellAbility names the action first.
+            game.getStack().freezeStack(activation);
+            game.fireEvent(new forge.game.event.GameEventAddLog(
+                    forge.game.GameLogEntryType.STACK_ADD, "an action that files nothing"));
+            game.getStack().unfreezeStack();
+            bears[0].setDamage(2);
+            game.getAction().checkStateEffects(false);
+            assertEquals(ZoneType.Graveyard,
+                    game.getZoneOf(game.getCardState(bears[0])).getZoneType(),
+                    "the Bears died in the check");
+            resolve(game);
+            nextStep(game);
+        });
+
+        String shockHalf = linkedHalf(all, SHOCK);
+        assertFalse(shockHalf.contains("\"subjects\":[\"E" + bears[0].getId() + "\"]"),
+                "the Bears' death after the action is not the Shock's: " + shockHalf);
+        assertEquals(DAMAGE, eventTypes(shockHalf), shockHalf);
+    }
+
+    /**
      * Bone Splinters cast in the combat damage step, its additional cost a
      * sacrifice: the Swamp's tap and the Elves' sacrifice pay the Splinters
      * and are not the combat's.

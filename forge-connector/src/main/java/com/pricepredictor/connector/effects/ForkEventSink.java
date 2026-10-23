@@ -134,11 +134,6 @@ final class ForkEventSink extends BusEventReader {
         primeBattlefield();
     }
 
-    /** A sink for a forced resolution of {@code acting}, already on the stack. */
-    static ForkEventSink forIntervention(Game fork, SpellAbility acting) {
-        return new ForkEventSink(fork, acting, false);
-    }
-
     /**
      * A sink for a forced resolution of {@code ability}, subscribed before
      * the forced cast so its pre-push window is filed ({@link Phase#PRE_CAST});

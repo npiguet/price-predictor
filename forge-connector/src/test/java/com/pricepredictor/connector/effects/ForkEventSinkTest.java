@@ -165,7 +165,7 @@ class ForkEventSinkTest {
 
     /** Push one completed move through a sink and read back what it filed. */
     private static EffectEvent filedMove(SpellAbility acting) {
-        ForkEventSink sink = ForkEventSink.forIntervention(null, acting);
+        ForkEventSink sink = ForkEventSink.forCast(null, acting);
         sink.onCardChangeZone(new GameEventCardChangeZone(
                 TestCards.build("Mountain"),
                 zone(ZoneType.Hand), zone(ZoneType.Battlefield)));
@@ -232,7 +232,7 @@ class ForkEventSinkTest {
     void anInterventionsDamageIsNotCombatAndNamesItsSource() {
         Card source = TestCards.build("Prodigal Pyromancer");
 
-        String json = filedDamage(ForkEventSink.forIntervention(null, null), source);
+        String json = filedDamage(ForkEventSink.forCast(null, null), source);
 
         assertTrue(json.contains("\"combat\":false"), json);
         assertTrue(json.contains("\"cause\":\"E" + source.getId() + "\""), json);
@@ -266,7 +266,7 @@ class ForkEventSinkTest {
      */
     @Test
     void aRepeatedTransitionIsFiledOnce() {
-        ForkEventSink sink = ForkEventSink.forIntervention(null, null);
+        ForkEventSink sink = ForkEventSink.forCast(null, null);
         Card bears = TestCards.build("Grizzly Bears");
 
         sink.onTapped(new GameEventCardTapped(bears, true));
@@ -283,7 +283,7 @@ class ForkEventSinkTest {
      */
     @Test
     void aRepeatIsRecognisedWithinOneModeOnly() {
-        ForkEventSink sink = ForkEventSink.forIntervention(null, null);
+        ForkEventSink sink = ForkEventSink.forCast(null, null);
         Card bears = TestCards.build("Grizzly Bears");
         GameEventCardTapped tap = new GameEventCardTapped(bears, true);
 
@@ -300,7 +300,7 @@ class ForkEventSinkTest {
     /** A quantitative repeat is two occurrences, and both are kept. */
     @Test
     void aRepeatedDamageIsKept() {
-        ForkEventSink sink = ForkEventSink.forIntervention(null, null);
+        ForkEventSink sink = ForkEventSink.forCast(null, null);
         Card bears = TestCards.build("Grizzly Bears");
         Card source = TestCards.build("Prodigal Pyromancer");
 
@@ -356,7 +356,7 @@ class ForkEventSinkTest {
     @Test
     void aForcedDeathRepeatingItsOwnHalfsLineIsDropped() {
         Game game = TestCards.game();
-        ForkEventSink sink = ForkEventSink.forIntervention(game, null);
+        ForkEventSink sink = ForkEventSink.forCast(game, null);
         Card bears = TestCards.build("Grizzly Bears");
         Card elves = TestCards.build("Llanowar Elves");
         GameEventCardChangeZone dies = new GameEventCardChangeZone(
@@ -382,7 +382,7 @@ class ForkEventSinkTest {
     @Test
     void aForcedDeathRepeatingAnotherHalfsLineIsKept() {
         Game game = TestCards.game();
-        ForkEventSink sink = ForkEventSink.forIntervention(game, null);
+        ForkEventSink sink = ForkEventSink.forCast(game, null);
         Card bears = TestCards.build("Grizzly Bears");
         Card source = TestCards.build("Prodigal Pyromancer");
         GameEventCardChangeZone dies = new GameEventCardChangeZone(
@@ -417,8 +417,12 @@ class ForkEventSinkTest {
         Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
         SpellAbility forced = TestBoard.inHand(game, caster, "Pyroclasm").getFirstSpellAbility();
         forced.setActivatingPlayer(caster);
+        // As ForkCollector forces it: the sink listening before the cast,
+        // whose cast event ends the pre-push window.
+        ForkEventSink sink = ForkEventSink.forCast(game, forced);
+        game.subscribeToEvents(sink);
         game.getStack().add(forced);
-        ForkEventSink sink = ForkEventSink.forIntervention(game, forced);
+        sink.castAs(forced);
         GameEventCardChangeZone dies = new GameEventCardChangeZone(
                 bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
 
@@ -436,7 +440,7 @@ class ForkEventSinkTest {
     @Test
     void aForcedDeathPublishedTwiceIsFiledOnce() {
         Game game = TestCards.game();
-        ForkEventSink sink = ForkEventSink.forIntervention(game, null);
+        ForkEventSink sink = ForkEventSink.forCast(game, null);
         Card bears = TestCards.build("Grizzly Bears");
         GameEventCardChangeZone dies = new GameEventCardChangeZone(
                 bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
