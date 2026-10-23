@@ -397,6 +397,36 @@ class ForkEventSinkTest {
                 types(halves.get(1)));
     }
 
+    /**
+     * A permanent leaving the battlefield while the tracker is frozen in the
+     * middle of the forced resolution — an end-the-turn effect's own
+     * state-based check, a token or counter batch — is filed as an ordinary
+     * event of the resolution, as live files it into the open bracket: a
+     * repeat in its span is refused, and it is no death for {@code
+     * halfForDeath} to place.
+     */
+    @Test
+    void aLeaveWhileTheForcedAbilityResolvesIsAnOrdinaryEvent() {
+        Game game = TestBoard.startedTwoPlayerGame(forge.game.phase.PhaseType.MAIN1);
+        forge.game.player.Player caster = game.getPlayers().get(0);
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        SpellAbility forced = TestBoard.inHand(game, caster, "Pyroclasm").getFirstSpellAbility();
+        forced.setActivatingPlayer(caster);
+        game.getStack().add(forced);
+        ForkEventSink sink = ForkEventSink.forIntervention(game, forced);
+        GameEventCardChangeZone dies = new GameEventCardChangeZone(
+                bears, zone(ZoneType.Battlefield), zone(ZoneType.Graveyard));
+
+        game.getStack().setResolving(true);
+        duringStateBasedCheck(game, () -> {
+            sink.onCardChangeZone(dies);
+            sink.onCardChangeZone(dies);
+        });
+
+        assertEquals(List.of(EffectEvent.ZONE_CHANGE), types(sink));
+        assertEquals(Set.of(), sink.stateBasedLeaves());
+    }
+
     /** A death published twice in one check is still filed once, in the half it joins. */
     @Test
     void aForcedDeathPublishedTwiceIsFiledOnce() {
