@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
@@ -50,14 +49,6 @@ public final class SnapshotBuilder {
 
     public SnapshotBuilder(Game game) {
         this.game = game;
-    }
-
-    /**
-     * {@link Refs#of(Player)}, kept for {@code GamePlayer} until it names the
-     * random seat through {@link Refs} directly.
-     */
-    public static String playerId(Player player) {
-        return Refs.of(player);
     }
 
     /**

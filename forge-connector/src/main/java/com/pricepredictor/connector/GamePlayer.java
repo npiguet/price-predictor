@@ -3,7 +3,7 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.RecordShardWriter;
-import com.pricepredictor.connector.effects.SnapshotBuilder;
+import com.pricepredictor.connector.effects.Refs;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
 import forge.game.GameRules;
@@ -224,7 +224,7 @@ public class GamePlayer {
         RandomSeatController seat = randomSeatOf(game);
         GameRecording recording = effectRecords == null ? null : new GameRecording(
                 game, effectRecords, effectRecords.nextGameId(), caps, gameSeed,
-                seat == null ? null : SnapshotBuilder.playerId(seat.getPlayer()));
+                seat == null ? null : Refs.of(seat.getPlayer()));
         try {
             // Inside the try: open() installs JVM-static hooks one by one, and
             // a hook left behind by an open() that threw part way would hand
