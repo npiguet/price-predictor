@@ -46,8 +46,10 @@ final class ForkEventSink extends BusEventReader {
      * no ability at all: it deals combat damage directly, so there is no root,
      * and its events attribute exactly the way the observed combat record's do
      * — from the pointer alone, which for a turn-based action names nothing.
+     * For an intervention it is the ability handed to the cast until the cast
+     * is over, and then the one the cast put on the stack ({@link #castAs}).
      */
-    private final SpellAbility acting;
+    private SpellAbility acting;
     /**
      * Whether a card damaged in this fork is damaged in combat: true for a
      * damage-step probe, which deals one combat damage step, and false for an
@@ -72,6 +74,11 @@ final class ForkEventSink extends BusEventReader {
      * and nothing else the drained stack does.
      *
      * <ul>
+     *   <li>{@link #PRE_CAST}: from before the forced cast moves its card to
+     *   the stack until its cast event, everything is filed — the static check
+     *   the move and the push set off — as live gives what a card's move onto
+     *   the stack sets off to that cast's bracket. The fork pays no cost, so
+     *   there is no payment to leave out.</li>
      *   <li>{@link #BEFORE}: between the cast and the resolution, what is
      *   published while the forced ability is the top of the fork's stack is
      *   filed, as live files the state-based check before priority into the
@@ -104,7 +111,7 @@ final class ForkEventSink extends BusEventReader {
      *   live.</li>
      * </ul>
      */
-    private enum Phase { BEFORE, RESOLVING, HELD, CLOSED }
+    private enum Phase { PRE_CAST, BEFORE, RESOLVING, HELD, CLOSED }
 
     private Phase phase = Phase.BEFORE;
     /**
@@ -127,9 +134,29 @@ final class ForkEventSink extends BusEventReader {
         primeBattlefield();
     }
 
-    /** A sink for a forced resolution of {@code acting}. */
+    /** A sink for a forced resolution of {@code acting}, already on the stack. */
     static ForkEventSink forIntervention(Game fork, SpellAbility acting) {
         return new ForkEventSink(fork, acting, false);
+    }
+
+    /**
+     * A sink for a forced resolution of {@code ability}, subscribed before
+     * the forced cast so its pre-push window is filed ({@link Phase#PRE_CAST});
+     * {@link #castAs} names the ability the cast put on the stack.
+     */
+    static ForkEventSink forCast(Game fork, SpellAbility ability) {
+        ForkEventSink sink = new ForkEventSink(fork, ability, false);
+        sink.phase = Phase.PRE_CAST;
+        return sink;
+    }
+
+    /**
+     * The forced cast is over: {@code onStack} is the ability it put on the
+     * stack — the one handed to it for a spell, a copy for an activation —
+     * and the root everything after is read against.
+     */
+    void castAs(SpellAbility onStack) {
+        acting = onStack;
     }
 
     /** A sink for a damage step dealt in a fork, with no ability resolving. */
@@ -225,7 +252,10 @@ final class ForkEventSink extends BusEventReader {
             return;
         }
         aboveHeld = false;
-        if (phase == Phase.HELD) {
+        if (phase == Phase.PRE_CAST) {
+            // The forced cast's own, the first one the fork publishes.
+            phase = Phase.BEFORE;
+        } else if (phase == Phase.HELD) {
             phase = Phase.CLOSED;
         }
     }
@@ -247,6 +277,7 @@ final class ForkEventSink extends BusEventReader {
             }
         }
         return switch (phase) {
+            case PRE_CAST -> true;
             // Everything but the payment for a spell the forced ability
             // casts, which is that spell's cost and which live leaves out too.
             case RESOLVING -> !payingForACast(acting);

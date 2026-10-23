@@ -534,6 +534,180 @@ class StackItemBracketTest {
         throw new AssertionError("no turn-face-up ability on " + card);
     }
 
+    // ── a cast the AI abandoned ─────────────────────────────────────────
+
+    /**
+     * What {@code ComputerUtil.handlePlayingSpellAbility} leaves behind when
+     * a charm choice, a target check or a payment fails: the card moved to the
+     * stack zone, no stack item, and nothing moving it back. Nothing after it
+     * is that cast's: a lethal Bolt still writes its win.
+     */
+    @Test
+    void aCardLeftInTheStackZoneDoesNotSwallowAWin() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        opponent.setLife(3, null);
+        Card stuck = inHand(game, caster, "Grizzly Bears");
+        Card bolt = inHand(game, caster, "Lightning Bolt");
+
+        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+            game.getAction().moveToStack(stuck, null);
+            priority(game);
+            cast(game, bolt, caster, opponent);
+            resolve(game);
+            assertTrue(game.isGameOver(), "the Bolt won the game");
+            collector.finishGame(Set.of());
+        });
+
+        assertEquals(1, all.stream().filter(r -> r.contains("\"type\":\"player_won\"")).count(),
+                "the win is written: " + all);
+        assertEquals(DAMAGE, eventTypes(linkedHalf(all, BOLT)), all.toString());
+    }
+
+    /**
+     * The Maro response with an abandoned cast's card in the stack zone: the
+     * Bolt's half holds the shrink and the death exactly as it does without
+     * it ({@link #whatAResponsesMoveOntoTheStackSetsOffIsTheResponses}).
+     */
+    @Test
+    void aCardLeftInTheStackZoneDoesNotSwallowADeath() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card stuck = inHand(game, caster, "Grizzly Bears");
+        Card shock = inHand(game, caster, "Shock");
+        Card bolt = inHand(game, opponent, "Lightning Bolt");
+        Card[] maro = new Card[1];
+
+        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+            maro[0] = TestBoard.inPlay(game, opponent, "Maro");
+            game.getAction().checkStateEffects(false);
+            game.getAction().moveToStack(stuck, null);
+            cast(game, shock, caster, opponent);
+            cast(game, bolt, opponent, caster);
+            priority(game);
+            assertEquals(ZoneType.Graveyard,
+                    game.getZoneOf(game.getCardState(maro[0])).getZoneType(),
+                    "Maro died with no card left in hand");
+            resolve(game);
+            resolve(game);
+            nextStep(game);
+        });
+
+        assertEquals(DAMAGE, eventTypes(linkedHalf(all, SHOCK)), all.toString());
+        assertEquals(List.of("pt_change", "zone_change", "damage_dealt", "life_change"),
+                eventTypes(linkedHalf(all, BOLT)), all.toString());
+    }
+
+    // ── an action is in no record ───────────────────────────────────────
+
+    /**
+     * Battering Craghorn turned face up with nothing cast after it before the
+     * game ends: its stat changes are in no record, the game-end orphan
+     * record included.
+     */
+    @Test
+    void anActionIsInNoRecordEvenAtTheEndOfTheGame() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card[] craghorn = new Card[1];
+
+        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+            for (int i = 0; i < 3; i++) {
+                TestBoard.inPlay(game, caster, "Mountain");
+            }
+            craghorn[0] = TestBoard.inPlay(game, caster, "Battering Craghorn");
+            craghorn[0].turnFaceDown(true);
+            game.getAction().checkStateEffects(false);
+            // A cast and its resolution empty the orphans of the board's setup.
+            cast(game, inHand(game, caster, "Shock"), caster, game.getPlayers().get(1));
+            resolve(game);
+            nextStep(game);
+            SpellAbility unmorph = turnFaceUpOf(craghorn[0], caster);
+            assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(caster, unmorph, null),
+                    "the AI turned the Craghorn face up");
+            assertFalse(craghorn[0].isFaceDown(), "the Craghorn is face up");
+            priority(game);
+            game.fireEvent(new GameEventTurnPhase(
+                    game.getPhaseHandler().getPlayerTurn(), PhaseType.COMBAT_BEGIN, ""));
+            collector.finishGame(Set.of());
+        });
+
+        String ref = "\"E" + craghorn[0].getId() + "\"";
+        for (String record : all) {
+            String payload = record.substring(record.indexOf("\"payload\":"));
+            assertFalse(payload.contains("\"subjects\":[" + ref + "]"),
+                    "an action's events written in a record: " + record);
+        }
+    }
+
+    /**
+     * Bone Splinters cast in the combat damage step, its additional cost a
+     * sacrifice: the Swamp's tap and the Elves' sacrifice pay the Splinters
+     * and are not the combat's.
+     */
+    @Test
+    void aPaymentInTheDamageStepIsNotTheCombats() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_DAMAGE);
+        Player caster = game.getPlayers().get(0);
+        Player opponent = game.getPlayers().get(1);
+        Card splinters = inHand(game, caster, "Bone Splinters");
+        Card swamp = TestBoard.inPlay(game, caster, "Swamp");
+        Card elves = TestBoard.inPlay(game, caster, "Llanowar Elves");
+        Card angel = TestBoard.inPlay(game, opponent, "Serra Angel");
+        SpellAbility spell = splinters.getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+        spell.resetTargets();
+        spell.getTargets().add(angel);
+
+        List<String> all = ShardRun.observed(tempDir, game, collector -> {
+            // Something dealt in the step, so the step has a combat record.
+            game.fireEvent(new forge.game.event.GameEventPlayerLivesChanged(opponent, 20, 18));
+            assertTrue(forge.ai.ComputerUtil.handlePlayingSpellAbility(caster, spell, null),
+                    "the AI cast the Splinters");
+            assertEquals(ZoneType.Graveyard,
+                    game.getZoneOf(game.getCardState(elves)).getZoneType(),
+                    "the Elves were sacrificed");
+            game.fireEvent(new GameEventTurnPhase(
+                    game.getPhaseHandler().getPlayerTurn(), PhaseType.COMBAT_END, ""));
+        });
+
+        List<String> combat = all.stream().filter(r -> r.contains("\"kind\":\"combat\"")).toList();
+        assertEquals(1, combat.size(), all.toString());
+        for (Card paid : List.of(swamp, elves)) {
+            assertFalse(combat.get(0).contains("\"subjects\":[\"E" + paid.getId() + "\"]"),
+                    "the Splinters' payment is in the combat record: " + combat.get(0));
+        }
+        assertEquals(List.of("life_change"), eventTypes(combat.get(0)), combat.get(0));
+    }
+
+    // ── a forced cast ───────────────────────────────────────────────────
+
+    /**
+     * A forced Lightning Bolt cast from the hand of Maro's controller: moving
+     * it to the stack shrinks Maro, and the forced record holds the shrink,
+     * as the live Bolt's half does.
+     */
+    @Test
+    void aForcedCastKeepsWhatItsMoveOntoTheStackSetOff() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card maro = TestBoard.inPlay(game, caster, "Maro");
+        TestBoard.inPlay(game, caster, "Grizzly Bears");
+        SpellAbility bolt = inHand(game, caster, "Lightning Bolt").getFirstSpellAbility();
+        bolt.setActivatingPlayer(caster);
+        game.getAction().checkStateEffects(false);
+        CollectionCaps caps = new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
+
+        List<String> records = ShardRun.forked(tempDir, game, caps, 5L, bolt).records();
+
+        assertEquals(1, records.size(), records.toString());
+        assertTrue(records.get(0).contains(
+                        "{\"type\":\"pt_change\",\"subjects\":[\"E" + maro.getId() + "\"]"),
+                "the shrink the forced Bolt's move from hand set off: " + records.get(0));
+    }
+
     // ── a spell that casts another ──────────────────────────────────────
 
     /**

@@ -19,9 +19,14 @@ import java.lang.reflect.Field;
  * {@code MagicStack.add} resolves in place, with no push and no cast event —
  * from the state-based check that follows a cast.
  *
+ * <p>An ability the AI gave up on is no action in progress, though the stack
+ * may still name it: {@code ComputerUtil.handlePlayingSpellAbility} returns on
+ * a failed payment without unfreezing, and marks the ability skipped.
+ *
  * <p>Read reflectively, as Forge publishes no accessor. On a checkout where
- * the field is gone, no action reads as in progress, and what a special
- * action does is filed as the state-based check would be.
+ * the field cannot be read, no action reads as in progress, what a special
+ * action does is filed as the state-based check would be, and stderr says so
+ * once.
  */
 final class StackActions {
 
@@ -36,6 +41,9 @@ final class StackActions {
             field.setAccessible(true);
             return field;
         } catch (ReflectiveOperationException | RuntimeException e) {
+            System.err.println("effect records: MagicStack.primaryAbility cannot be read ("
+                    + e + "); a special action at priority will be filed as the"
+                    + " state-based check after the last cast");
             return null;
         }
     }
@@ -46,8 +54,9 @@ final class StackActions {
             return null;
         }
         try {
-            return (SpellAbility) PRIMARY_ABILITY.get(stack);
-        } catch (IllegalAccessException e) {
+            SpellAbility primary = (SpellAbility) PRIMARY_ABILITY.get(stack);
+            return primary == null || primary.isSkip() ? null : primary;
+        } catch (IllegalAccessException | ClassCastException e) {
             return null;
         }
     }

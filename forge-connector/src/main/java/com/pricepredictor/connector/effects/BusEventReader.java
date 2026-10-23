@@ -254,6 +254,19 @@ abstract class BusEventReader {
             // statics and the counters it entered with have already reached.
             stats.prime(cardById(event.card().getId()));
         }
+        if (event.to() != null && event.to().zoneType() == ZoneType.Stack) {
+            onStackArrival(event.card().getId());
+        }
+    }
+
+    /**
+     * A card has arrived in the stack zone. Published after the static check
+     * its move set off, so what that check did has already been filed.
+     *
+     * <p>A no-op here: only the bracket collector follows a cast from the
+     * card's arrival to its cast event.
+     */
+    void onStackArrival(int cardId) {
     }
 
     /**

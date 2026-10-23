@@ -4,10 +4,12 @@ import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.combat.Combat;
+import forge.game.event.GameEvent;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventLandPlayed;
+import forge.game.event.GameEventPlayerPriority;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
@@ -88,6 +90,15 @@ public final class BusBracketCollector extends BusEventReader {
      * announced, or null when no cast is under way ({@link Cause#CAST}).
      */
     private PreCast preCast;
+
+    /** Cards whose arrival in the stack zone has been published, while they are there. */
+    private final Set<Integer> arrived = new LinkedHashSet<>();
+
+    /**
+     * Cards in the stack zone whose cast was given up, while they are there;
+     * see {@link #castUnderWay}.
+     */
+    private final Set<Integer> abandoned = new LinkedHashSet<>();
 
     /** The resolution waiting for its consequences, or null when none is. */
     private HeldResolution held;
@@ -550,6 +561,8 @@ public final class BusBracketCollector extends BusEventReader {
             if (cast != null && preCast != null && preCast.isFor(ability.getHostCard())) {
                 preCast.fileInto(cast);
             }
+            // Any other card still on its way was given up: one cast at a time.
+            abandonCastsUnderWay();
         }
         preCast = null;
         if (cast == null) {
@@ -803,7 +816,8 @@ public final class BusBracketCollector extends BusEventReader {
         onNextAction();
         flushCombat();
         combatWindowClosed = false;
-        preCast = null;
+        // No cast is under way across a step boundary either.
+        abandonCastsUnderWay();
     }
 
     /**
@@ -838,7 +852,7 @@ public final class BusBracketCollector extends BusEventReader {
             EventAttribution.stamp(damage, resolving(), namedCause);
             fileCombat(damage);
         } else {
-            route(damage, namedCause, causeNow());
+            route(damage, namedCause, causeNow(), false);
         }
     }
 
@@ -969,13 +983,7 @@ public final class BusBracketCollector extends BusEventReader {
      */
     @Override
     void fileOutcome(EffectEvent event, String namedCause) {
-        Cause cause = causeNow();
-        if (cause != Cause.RESOLUTION && inCombatDamage()) {
-            EventAttribution.stamp(event, resolving(), namedCause);
-            fileCombat(event);
-            return;
-        }
-        route(event, namedCause, cause);
+        route(event, namedCause, causeNow(), true);
     }
 
     /**
@@ -1010,10 +1018,12 @@ public final class BusBracketCollector extends BusEventReader {
          */
         PAYMENT,
         /**
-         * A card is in the stack zone and its cast not yet announced: the
-         * static check its move set off ({@code GameAction.changeZone} runs
-         * one before the cast is pushed). The cast's own consequence, held
-         * for its bracket until its cast event opens it ({@link PreCast}).
+         * A cast is under way and not yet announced ({@link #castUnderWay}):
+         * the static check its card's move onto the stack set off ({@code
+         * GameAction.changeZone} runs one before the cast is pushed), and the
+         * one {@code MagicStack.push} runs after the push and before the cast
+         * event. The cast's own consequence, held for its bracket until its
+         * cast event opens it ({@link PreCast}).
          */
         CAST,
         /**
@@ -1022,17 +1032,19 @@ public final class BusBracketCollector extends BusEventReader {
          * with no push and no cast event — a mana ability activated outside
          * any payment, or an activation being announced. Every one goes
          * through {@code ComputerUtil.handlePlayingSpellAbility}, which names
-         * it to the stack. Nobody's record; it ends the last cast's
-         * consequences, so the state-based check after it is nobody's too.
+         * it to the stack. Nobody's record: the event goes nowhere, and the
+         * action ends the last cast's consequences, so the state-based check
+         * after it is nobody's either ({@link #onAnyEvent}).
          */
         ACTION,
         /**
          * What follows a cast until the next action: the state-based check
          * after it, and the rest of {@code MagicStack.add} after the cast is
          * published. The open bracket's — the last cast's, while no action
-         * or resolution has ended its consequences — or the orphans'. A land
-         * played and a turn-based action fall here too, and find no bracket
-         * open: neither happens with anything on the stack.
+         * or resolution has ended its consequences — or the orphans'; in a
+         * combat damage step before anything used the stack, the combat's. A
+         * land played and a turn-based action fall here too, and find no
+         * bracket open: neither happens with anything on the stack.
          */
         CONSEQUENCE
     }
@@ -1042,11 +1054,11 @@ public final class BusBracketCollector extends BusEventReader {
      *
      * <p>Read off the engine's own state, in this order: the stack resolving;
      * {@code game.costPaymentStack}, which {@code CostPayment} keeps for every
-     * part being paid; a card in the stack zone that no stack item holds yet;
-     * the ability {@code MagicStack.freezeStack} names as the action in
-     * progress ({@link StackActions}). What is left — a state-based check,
-     * which freezes the stack naming no action, or nothing at all — is a
-     * consequence of what came before.
+     * part being paid; a cast under way; the ability {@code
+     * MagicStack.freezeStack} names as the action in progress ({@link
+     * StackActions}). What is left — a state-based check, which freezes the
+     * stack naming no action, or nothing at all — is a consequence of what
+     * came before.
      */
     private Cause causeNow() {
         if (game.getStack().isResolving()) {
@@ -1056,10 +1068,10 @@ public final class BusBracketCollector extends BusEventReader {
         if (game.costPaymentStack.peek() != null) {
             return Cause.PAYMENT;
         }
-        if (cardBeingCast() != null) {
+        SpellAbility acting = StackActions.inProgress(game.getStack());
+        if (castUnderWay(acting) != null) {
             return Cause.CAST;
         }
-        SpellAbility acting = StackActions.inProgress(game.getStack());
         if (acting != null) {
             return isOpenCast(acting) ? Cause.CONSEQUENCE : Cause.ACTION;
         }
@@ -1072,17 +1084,22 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * File a non-combat event where its cause puts it.
+     * File an event where its cause puts it.
      *
      * <p>Stamped here rather than where the event is built: which clause
      * produced it, how long it lasts and — absent a name off the event
      * itself — what caused it are properties of the bracket it landed in,
      * and only this side knows that.
+     *
+     * @param mayBeCombat whether a consequence in a combat damage step joins
+     *                    the combat's record: any outcome does, while a damage
+     *                    the bus says is not combat damage goes to the open
+     *                    bracket ({@link #fileDamage})
      */
-    private void route(EffectEvent event, String namedCause, Cause cause) {
+    private void route(EffectEvent event, String namedCause, Cause cause, boolean mayBeCombat) {
         if (cause != Cause.CAST && cause != Cause.PAYMENT) {
-            // The cast whose card was on its way has been announced or
-            // abandoned: what its window held is taken or dropped.
+            // The cast under way has been announced or abandoned: what its
+            // window held is taken or dropped.
             preCast = null;
         }
         switch (cause) {
@@ -1092,27 +1109,136 @@ public final class BusBracketCollector extends BusEventReader {
                 }
             }
             case CAST -> {
-                Card card = cardBeingCast();
+                Card card = castUnderWay(StackActions.inProgress(game.getStack()));
                 if (preCast == null || !preCast.isFor(card)) {
                     preCast = new PreCast(card.getId());
                 }
                 preCast.hold(event, namedCause);
             }
-            case ACTION -> {
-                open = null;
-                orphans.file(EventAttribution.stamp(event, null, namedCause));
+            case ACTION -> open = null;
+            case CONSEQUENCE -> {
+                EventAttribution.stamp(event, resolving(), namedCause);
+                if (mayBeCombat && inCombatDamage()) {
+                    fileCombat(event);
+                } else {
+                    openEvents().file(event);
+                }
             }
-            case RESOLUTION, CONSEQUENCE ->
+            case RESOLUTION ->
                     openEvents().file(EventAttribution.stamp(event, resolving(), namedCause));
         }
     }
 
     /**
-     * A card in the stack zone that no stack item holds: a spell on its way
-     * onto the stack, moved there by the play path before its costs are paid
-     * and its cast is pushed. Null when no cast is under way.
+     * Any event at all: an action at priority that has begun ends the last
+     * cast's consequences even when it files nothing of its own, so the
+     * state-based check after it is not the waiting spell's.
      */
-    private Card cardBeingCast() {
+    @Subscribe
+    public void onAnyEvent(GameEvent event) {
+        if (open != null && !game.getStack().isResolving() && causeNow() == Cause.ACTION) {
+            open = null;
+        }
+    }
+
+    /**
+     * A priority: no cast is under way across one. A card still in the stack
+     * zone with no stack item is a cast given up — a copy that failed its
+     * targeting — and no longer counts as being cast.
+     */
+    @Subscribe
+    public void onPriority(GameEventPlayerPriority event) {
+        abandonCastsUnderWay();
+    }
+
+    @Override
+    void onStackArrival(int cardId) {
+        // One cast is under way at a time: a new card on its way means any
+        // other still in the zone with no stack item was given up.
+        abandonCastsUnderWayBut(cardId);
+        arrived.add(cardId);
+    }
+
+    /**
+     * The card of the cast under way, or null when none is.
+     *
+     * <p>A cast is under way from the moment its card is in the stack zone to
+     * its cast event: before the card's arrival is published; after it, while
+     * no action names anything else — the play path chooses targets before
+     * {@code freezeStack} names the cast — and while the action in progress
+     * is that card's cast; and from the push to the cast event, while the
+     * stack's top is the action in progress and not yet announced.
+     *
+     * <p>A card in the stack zone that no stack item holds is otherwise a cast
+     * given up — {@code ComputerUtil.handlePlayingSpellAbility} returns on a
+     * failed charm choice, target check or payment without moving it back —
+     * and it stops counting until it leaves the zone, so that what follows
+     * routes as if it were not there. Given up is read at the first sign the
+     * attempt is over: another action in progress, another card's arrival,
+     * a cast event, a priority, a step boundary ({@link #abandoned}).
+     *
+     * @param acting the action in progress, or null
+     */
+    private Card castUnderWay(SpellAbility acting) {
+        Set<Integer> held = new LinkedHashSet<>();
+        for (var instance : game.getStack()) {
+            SpellAbility sa = instance == null ? null : instance.getSpellAbility();
+            if (sa != null && sa.getHostCard() != null) {
+                held.add(sa.getHostCard().getId());
+            }
+        }
+        List<Card> zone = new ArrayList<>(game.getCardsIn(ZoneType.Stack));
+        Set<Integer> inZone = new LinkedHashSet<>();
+        zone.forEach(card -> inZone.add(card.getId()));
+        arrived.retainAll(inZone);
+        abandoned.retainAll(inZone);
+        // Pushed and not yet announced: MagicStack.push's own static check.
+        var top = game.getStack().peek();
+        SpellAbility pushed = top == null ? null : top.getSpellAbility();
+        if (acting != null && pushed != null && pushed.getHostCard() != null
+                && pending.find(pushed.getId()).isEmpty()
+                && (pushed == acting || pushed.getOriginalAbility() == acting)) {
+            return pushed.getHostCard();
+        }
+        // On its way, its arrival not yet published: the newest move.
+        for (Card card : zone) {
+            int id = card.getId();
+            if (!held.contains(id) && !abandoned.contains(id) && !arrived.contains(id)) {
+                return card;
+            }
+        }
+        // Arrived: under way until its targets are chosen and the action
+        // names it, and for as long as it does. Any other action means it
+        // was given up.
+        for (Card card : zone) {
+            int id = card.getId();
+            if (held.contains(id) || abandoned.contains(id)) {
+                continue;
+            }
+            if (acting == null || isCastOf(acting, card)) {
+                return card;
+            }
+            abandoned.add(id);
+        }
+        return null;
+    }
+
+    /** Whether the action in progress is casting {@code card}. */
+    private static boolean isCastOf(SpellAbility acting, Card card) {
+        return acting != null && acting.getHostCard() != null
+                && acting.getHostCard().getId() == card.getId();
+    }
+
+    /** Every card in the stack zone that no stack item holds is a cast given up. */
+    private void abandonCastsUnderWay() {
+        abandonCastsUnderWayBut(-1);
+    }
+
+    /**
+     * The same, but for the card {@code keep}, whose cast is the one now
+     * under way, and what its window has held so far.
+     */
+    private void abandonCastsUnderWayBut(int keep) {
         Set<Integer> held = new LinkedHashSet<>();
         for (var instance : game.getStack()) {
             SpellAbility sa = instance == null ? null : instance.getSpellAbility();
@@ -1121,11 +1247,13 @@ public final class BusBracketCollector extends BusEventReader {
             }
         }
         for (Card card : game.getCardsIn(ZoneType.Stack)) {
-            if (!held.contains(card.getId())) {
-                return card;
+            if (!held.contains(card.getId()) && card.getId() != keep) {
+                abandoned.add(card.getId());
             }
         }
-        return null;
+        if (preCast != null && !preCast.isFor(keep)) {
+            preCast = null;
+        }
     }
 
     /**
@@ -1158,7 +1286,11 @@ public final class BusBracketCollector extends BusEventReader {
         }
 
         boolean isFor(Card card) {
-            return card != null && card.getId() == cardId;
+            return card != null && isFor(card.getId());
+        }
+
+        boolean isFor(int id) {
+            return id == cardId;
         }
 
         void hold(EffectEvent event, String namedCause) {
