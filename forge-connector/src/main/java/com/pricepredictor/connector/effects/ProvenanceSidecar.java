@@ -27,10 +27,20 @@ public record ProvenanceSidecar(
         List<ProvenanceKey> droppedKeys
 ) {
 
-    /** One rendered ability line and everything that produced it. */
+    /**
+     * One rendered ability line and everything that produced it.
+     *
+     * @param proseOffset where the line's prose starts, after its
+     *                    {@code kind[n]: } prefix: zero on a continuation line
+     *                    of a multi-line description, which has none. Written
+     *                    so a reader never re-derives the split from the text,
+     *                    which a continuation line holding a {@code ": "} of
+     *                    its own would defeat
+     */
     public record Line(
             int lineIndex,
             String lineKind,
+            int proseOffset,
             List<ProvenanceKey> provenance,
             TraitScript script,
             List<RoleSpans.Span> roleSpans
@@ -39,6 +49,7 @@ public record ProvenanceSidecar(
             return Json.object()
                     .value("line_index", lineIndex)
                     .value("line_kind", lineKind)
+                    .value("prose_offset", proseOffset)
                     .raw("provenance", Json.array(provenance, ProvenanceKey::toSidecarJson))
                     .raw("sub_ability_links",
                             Json.array(script.subAbilityLinks(), TraitScript.SubAbilityLink::toJson))
@@ -82,10 +93,11 @@ public record ProvenanceSidecar(
         // and an equality set would keep only the first face's.
         Set<Ability> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (int i = 0; i < renderedLines.size(); i++) {
-            Ability owner = renderedLines.get(i).owner();
+            RenderedLine rendered = renderedLines.get(i);
+            Ability owner = rendered.owner();
             if (owner == null) continue;
             seen.add(owner);
-            int face = renderedLines.get(i).face();
+            int face = rendered.face();
             ProvenanceRecorder recorder = face >= 0 && face < recorders.size()
                     ? recorders.get(face) : null;
             ProvenanceRecorder.Source source =
@@ -95,11 +107,12 @@ public record ProvenanceSidecar(
                     // The prefix the line was rendered with, so line_kind and
                     // the file agree word for word.
                     owner.type().getOutputPrefix(),
+                    rendered.prefix().length(),
                     source == null ? List.of() : List.copyOf(source.keys()),
                     source == null ? TraitScript.EMPTY : source.script(),
-                    RoleSpans.of(
-                            prose(renderedLines.get(i).text()),
-                            owner.type() == AbilityType.ACTIVATED)));
+                    // Over the prose alone: the prefix is structure rather
+                    // than card text, and the tokenizer does not see it.
+                    RoleSpans.of(rendered.prose(), owner.type() == AbilityType.ACTIVATED)));
         }
 
         List<ProvenanceKey> dropped = new ArrayList<>();
@@ -107,19 +120,5 @@ public record ProvenanceSidecar(
             dropped.addAll(recorder.droppedKeys(seen));
         }
         return new ProvenanceSidecar(cardName, scriptFile, lines, dropped);
-    }
-
-    /**
-     * The prose of a rendered line, without its {@code kind[n]: } prefix.
-     *
-     * <p>Role-span offsets are relative to this, because the prefix is
-     * structure rather than card text and the tokenizer does not see it. The
-     * prefix is a bare word plus an optional bracketed number, so the first
-     * {@code ": "} in the line always ends it — an activated ability's own cost
-     * colon comes later.
-     */
-    static String prose(String line) {
-        int separator = line.indexOf(": ");
-        return separator < 0 ? line : line.substring(separator + 2);
     }
 }

@@ -45,6 +45,7 @@ ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?)
     {
       "line_index": 3,                       // index into the converted file's rendered lines
       "line_kind": "triggered",
+      "prose_offset": 11,                    // where the prose starts, after "triggered: "
       "provenance": [                        // several keys where the line merged several traits
         { "face": 0, "trait_kind": "trigger", "index_within_kind": 0 }
       ],
@@ -90,6 +91,7 @@ join — and the mismatch is the one condition that must fail loudly.
 | A non-charm `option` line (a die-roll outcome) | `provenance: []` and no `script_text`, as before; no record acts through it |
 | A charm with no description renders no root line | its root key is in `dropped_keys`; its option lines carry their mode keys |
 | `role_spans` are character ranges over the **converted prose** | roles are `cost` \| `effect` \| `trigger-condition` \| `target-spec` |
+| The converted prose is the rendered line from `prose_offset` on | `prose_offset` is the length of the line's `kind[n]: ` prefix (ASCII), and `0` on a continuation line of a multi-line description, which has no prefix. Readers take the split from it and never re-derive it from the text, since a continuation line may hold a `": "` of its own (`{T}: add {G}.`). A sidecar without the field is read by cutting at the first `": "` |
 | Row `i` of the ability cache corresponds to `lines[i]` | rendered lines for a converted tree, script lines for the variant tree |
 
 ## Runtime-side key computation

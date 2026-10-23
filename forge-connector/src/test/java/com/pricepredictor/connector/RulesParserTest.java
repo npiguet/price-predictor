@@ -1785,6 +1785,24 @@ class RulesParserTest {
                 "name, mana cost, types and three level lines: " + output);
     }
 
+    /**
+     * A description Forge joined with {@code \r\n} renders as clean lines.
+     *
+     * <p>Ranger Class's third level adds two statics, and Forge joins their
+     * descriptions with a carriage return and a line feed. Split on the line
+     * feed alone, the first line kept the carriage return, and the converted
+     * file carried it.
+     */
+    @Test
+    void aDescriptionJoinedWithACarriageReturnRendersWithoutOne() {
+        String output = rendered(face("r/ranger_class.txt"));
+
+        assertFalse(output.contains("\r"), output);
+        assertTrue(output.contains("level[3]: {3}{G}: you may look at the top card of your"
+                + " library any time.\nyou may cast creature spells from the top of your"
+                + " library."), output);
+    }
+
     /** {@code needle} appears in {@code text}, and only once: a duplicated clause would repeat it. */
     private static void assertOccursOnce(String text, String needle) {
         assertEquals(1, occurrences(text, needle), "'" + needle + "' must appear exactly once: " + text);

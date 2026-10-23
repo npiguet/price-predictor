@@ -47,16 +47,16 @@ public record CardFace(
      */
     public List<RenderedLine> renderLines(int face) {
         List<RenderedLine> lines = new ArrayList<>();
-        addHeader(lines, face, "name: " + name);
-        if (manaCost != null) addHeader(lines, face, "mana cost: " + manaCost);
-        addHeader(lines, face, "types: " + types);
+        addHeader(lines, face, "name", name);
+        if (manaCost != null) addHeader(lines, face, "mana cost", manaCost);
+        addHeader(lines, face, "types", types);
         if (powerToughness != null) {
-            addHeader(lines, face, "power toughness: " + powerToughness);
+            addHeader(lines, face, "power toughness", powerToughness);
         }
-        if (loyalty != null) addHeader(lines, face, "loyalty: " + loyalty);
-        if (defense != null) addHeader(lines, face, "defense: " + defense);
-        if (colors != null) addHeader(lines, face, "colors: " + colors);
-        if (text != null) addHeader(lines, face, "text: " + text);
+        if (loyalty != null) addHeader(lines, face, "loyalty", loyalty);
+        if (defense != null) addHeader(lines, face, "defense", defense);
+        if (colors != null) addHeader(lines, face, "colors", colors);
+        if (text != null) addHeader(lines, face, "text", text);
 
         ActionCounter counter = new ActionCounter(0);
         for (Ability ability : abilities) {
@@ -65,9 +65,8 @@ public record CardFace(
         return lines;
     }
 
-    private static void addHeader(List<RenderedLine> lines, int face, String rendered) {
-        for (String line : rendered.split("\n", -1)) {
-            lines.add(new RenderedLine(line, null, face));
-        }
+    private static void addHeader(
+            List<RenderedLine> lines, int face, String label, String value) {
+        RenderedLine.appendLines(lines, label + ": ", value, null, face);
     }
 }
