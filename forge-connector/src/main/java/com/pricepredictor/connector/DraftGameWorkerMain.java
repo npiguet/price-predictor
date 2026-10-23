@@ -24,6 +24,9 @@ import java.nio.file.Path;
  */
 public class DraftGameWorkerMain {
 
+    /** A progress line every this many matches: a match is a few minutes of play. */
+    static final int PROGRESS_EVERY = 5;
+
     public static void main(String[] args) {
         String seatsFileProp = WorkerProperties.require("seats.file");
         String outputFileProp = WorkerProperties.require("output.file");
@@ -34,9 +37,7 @@ public class DraftGameWorkerMain {
         Path seatsFile = Path.of(seatsFileProp);
         Path outputFile = Path.of(outputFileProp);
 
-        System.out.println("Initializing Forge environment...");
-        ForgeEnvironmentInitializer.initialize();
-        System.out.println("Forge initialized. Seat table: " + seatsFile);
+        ForgeEnvironmentInitializer.initializeWorker(System.out, "Seat table: " + seatsFile);
 
         run(seatsFile, outputFile, runId, bestOf, includeMirrors);
     }
@@ -46,7 +47,8 @@ public class DraftGameWorkerMain {
      *
      * <p>A pairing that throws is abandoned without writing a row and the loop
      * draws another. Nothing was reserved for it, so nothing is lost but time —
-     * unless every pairing throws, which {@link WorkerLoop} turns into exit 1.
+     * unless every pairing throws, which {@link WorkerLoop} turns into
+     * {@link ExitCode#FAILURE}.
      */
     static void run(
             Path seatsFile,
@@ -58,7 +60,7 @@ public class DraftGameWorkerMain {
         try {
             index = SeatTableIndex.load(seatsFile, includeMirrors);
         } catch (IOException e) {
-            throw WorkerProperties.badConfig("reading " + seatsFile + ": " + e.getMessage());
+            throw ToolMain.badConfig("reading " + seatsFile + ": " + e.getMessage());
         }
 
         System.out.println(
@@ -66,7 +68,7 @@ public class DraftGameWorkerMain {
                         + index.eligiblePodCount() + " pods able to yield a pairing");
 
         if (index.eligiblePodCount() == 0) {
-            throw WorkerProperties.badConfig("no pod in the seat table can yield a pairing");
+            throw ToolMain.badConfig("no pod in the seat table can yield a pairing");
         }
 
         DraftGamePlayer player = new DraftGamePlayer(
@@ -79,6 +81,6 @@ public class DraftGameWorkerMain {
                     return WorkerLoop.Outcome.COMPLETED;
                 },
                 new WorkerLoop.Progress(
-                        System.out, 5, "matches played", "Error playing pairing"));
+                        System.out, PROGRESS_EVERY, "matches played", "Error playing pairing"));
     }
 }

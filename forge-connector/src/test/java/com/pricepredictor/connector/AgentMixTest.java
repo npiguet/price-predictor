@@ -26,8 +26,10 @@ class AgentMixTest {
 
     @Test
     void rejectsMalformed() {
+        // Every malformed mix is an IllegalArgumentException, the one type
+        // DraftWorkerMain turns into a bad-configuration exit.
         assertThrows(IllegalArgumentException.class, () -> AgentMix.parse("forge-full"));
         assertThrows(IllegalArgumentException.class, () -> AgentMix.parse("forge-full:0"));
-        assertThrows(NumberFormatException.class, () -> AgentMix.parse("forge-full:x"));
+        assertThrows(IllegalArgumentException.class, () -> AgentMix.parse("forge-full:x"));
     }
 }

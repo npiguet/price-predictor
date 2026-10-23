@@ -66,6 +66,8 @@ public class MatchWorkerMain {
 
     static final int DEFAULT_BEST_OF = 7;
     static final int DEFAULT_SIDE_B_WEIGHT = 4;
+    /** A progress line every this many matches. */
+    static final int PROGRESS_EVERY = 10;
 
     static final String OUTPUT_FILE = "output.file";
     static final String EFFECT_RECORDS_DIR = "effect.records.dir";
@@ -125,13 +127,13 @@ public class MatchWorkerMain {
     /**
      * Read every JVM system property the worker depends on, validate it, and
      * package the result as a {@link WorkerConfig}. Exits the process with
-     * {@link WorkerProperties#BAD_CONFIG_EXIT} on any malformed input.
+     * {@link ExitCode#BAD_CONFIG} on any malformed input.
      */
     static WorkerConfig parseConfig() {
         Optional<Path> outputFile = WorkerProperties.optionalPath(OUTPUT_FILE);
         Optional<Path> effectRecordsDir = WorkerProperties.optionalPath(EFFECT_RECORDS_DIR);
         if (outputFile.isEmpty() && effectRecordsDir.isEmpty()) {
-            throw WorkerProperties.badConfig(
+            throw ToolMain.badConfig(
                     "-D" + OUTPUT_FILE + " is required unless -D" + EFFECT_RECORDS_DIR
                             + " is set (records-only mode)");
         }
@@ -144,7 +146,7 @@ public class MatchWorkerMain {
         Optional<Path> sideBDecks = WorkerProperties.optionalPath(SIDE_B_DECKS_FILE);
 
         if (sideBDecks.isEmpty() && WorkerProperties.optional(SIDE_B_DECKS_WEIGHT).isPresent()) {
-            throw WorkerProperties.badConfig(
+            throw ToolMain.badConfig(
                     "-D" + SIDE_B_DECKS_WEIGHT + " is only valid with -D" + SIDE_B_DECKS_FILE);
         }
 
@@ -184,7 +186,6 @@ public class MatchWorkerMain {
     }
 
     private static void initializeForge(WorkerConfig config) {
-        System.out.println("Initializing Forge environment...");
         // Stage four's variant scripts are already in Forge's custom-cards
         // directory: VariantSidecarMain put them there, in one process, before
         // the first worker started. This one registers their names and does
@@ -192,9 +193,9 @@ public class MatchWorkerMain {
         // that one shared directory while the others walk it during
         // FModel.initialize is a race, and a worker that reads it half-written
         // has a card database missing the very variants its decks name.
-        ForgeEnvironmentInitializer.initialize(
-                WorkerProperties.optionalPath(EFFECT_VARIANT_SCRIPTS).orElse(null), false);
-        System.out.println("Forge initialized. Starting match generation.");
+        ForgeEnvironmentInitializer.initializeWorker(System.out,
+                WorkerProperties.optionalPath(EFFECT_VARIANT_SCRIPTS).orElse(null),
+                "Starting match generation.");
         System.out.println("Match format: best-of-" + config.bestOf());
     }
 
@@ -234,7 +235,7 @@ public class MatchWorkerMain {
                     return WorkerLoop.Outcome.COMPLETED;
                 },
                 new WorkerLoop.Progress(
-                        System.out, 10, "matches generated", "Error generating match"));
+                        System.out, PROGRESS_EVERY, "matches generated", "Error generating match"));
     }
 
     /**
@@ -319,7 +320,7 @@ public class MatchWorkerMain {
         progress.ifPresent(ProgressWriter::write);
     }
 
-    /** Forge-built decks when no file is named; exits with {@link WorkerProperties#BAD_CONFIG_EXIT} on a file that does not load. */
+    /** Forge-built decks when no file is named; exits with {@link ExitCode#BAD_CONFIG} on a file that does not load. */
     private static MatchGenerator.DeckSource loadDecks(Optional<Path> file, String label) {
         if (file.isEmpty()) {
             return MatchGenerator.DeckSource.FORGE_BUILT;
@@ -331,7 +332,7 @@ public class MatchWorkerMain {
             System.out.println("Loaded " + index.size() + " " + label + " decks.");
             return new MatchGenerator.DeckSource.FileSampled(index);
         } catch (Exception e) {
-            throw WorkerProperties.badConfig(
+            throw ToolMain.badConfig(
                     "loading " + label + " decks file: " + e.getMessage());
         }
     }

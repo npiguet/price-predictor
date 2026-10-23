@@ -28,8 +28,7 @@ public class VariantSidecarMain {
 
         Path variants = Path.of(variantsPath);
         if (!Files.isDirectory(variants)) {
-            System.err.println("No variant scripts at " + variantsPath);
-            throw ToolMain.exit(1);
+            throw ToolMain.badConfig("No variant scripts at " + variantsPath);
         }
 
         ToolMain.run(() -> {

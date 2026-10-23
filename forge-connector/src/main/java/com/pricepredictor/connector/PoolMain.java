@@ -24,9 +24,20 @@ import java.util.List;
  *
  * <p>Writes {@code pools.txt} to the specified path — one pool per line,
  * formatted as {@code SET_CODE;Card1|Card2|...|CardN}. Streams a progress
- * line to stdout every 1000 pools. Exits 0 on success, 1 on error.
+ * line to stdout every {@link #PROGRESS_EVERY} pools. Exits per
+ * {@link ToolMain#run}.
  */
 public class PoolMain {
+
+    /**
+     * Pools generated per call when every pool is from one set: large enough
+     * to amortise the generator's per-call set lookup, small enough that the
+     * progress lines keep coming.
+     */
+    static final int SINGLE_SET_BATCH = 1000;
+
+    /** A progress line every this many pools written. */
+    static final int PROGRESS_EVERY = 1000;
 
     public static void main(String[] args) {
         ToolMain.Args cli = ToolMain.args(
@@ -79,7 +90,7 @@ public class PoolMain {
             int written = 0;
             while (written < poolCount) {
                 // A random set is drawn per pool, so those pools come one at a time.
-                int batch = sets.isRandom() ? 1 : Math.min(1000, poolCount - written);
+                int batch = sets.isRandom() ? 1 : Math.min(SINGLE_SET_BATCH, poolCount - written);
                 String poolSetCode = sets.next();
 
                 List<List<String>> pools = generator.generate(poolSetCode, batch, excluded);
@@ -91,7 +102,7 @@ public class PoolMain {
                     written++;
                 }
 
-                if (written % 1000 == 0) {
+                if (written % PROGRESS_EVERY == 0) {
                     System.out.println("Generated " + written + "/" + poolCount + " pools");
                     System.out.flush();
                 }

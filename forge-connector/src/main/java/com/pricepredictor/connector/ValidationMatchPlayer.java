@@ -19,6 +19,9 @@ import java.util.stream.Stream;
  */
 public class ValidationMatchPlayer {
 
+    /** A progress line every this many matches. */
+    static final int PROGRESS_EVERY = 5;
+
     private final GamePlayer gamePlayer;
 
     public ValidationMatchPlayer(GamePlayer gamePlayer) {
@@ -53,7 +56,7 @@ public class ValidationMatchPlayer {
 
                 outcomes.write(ValidationOutcome.of(gamePlayer.playMatch(deckA, deckB)));
 
-                if ((i + 1) % 5 == 0) {
+                if ((i + 1) % PROGRESS_EVERY == 0) {
                     System.out.println("Validation: " + (i + 1) + "/" + lines.size() + " matches completed");
                 }
             } catch (Exception e) {

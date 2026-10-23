@@ -27,6 +27,26 @@ public class ForgeEnvironmentInitializer {
     }
 
     /**
+     * {@link #initialize()} for a long-running worker, announced on
+     * {@code log}: one line before, which a hung startup leaves last in the
+     * log, and one after naming what the worker does next.
+     */
+    static void initializeWorker(java.io.PrintStream log, String nextStep) {
+        initializeWorker(log, null, nextStep);
+    }
+
+    /**
+     * As {@link #initializeWorker(java.io.PrintStream, String)}, registering
+     * {@code variantScripts} without staging them (see
+     * {@link #initialize(Path, boolean)}), or nothing extra when it is null.
+     */
+    static void initializeWorker(java.io.PrintStream log, Path variantScripts, String nextStep) {
+        log.println("Initializing Forge environment...");
+        initialize(variantScripts, false);
+        log.println("Forge initialized. " + nextStep);
+    }
+
+    /**
      * Initialize Forge, optionally loading an extra directory of card scripts.
      *
      * <p>Stage four's synthetic variants live in

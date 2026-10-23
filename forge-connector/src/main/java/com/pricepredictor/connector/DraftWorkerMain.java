@@ -80,6 +80,8 @@ public class DraftWorkerMain {
     static final String SET = "draft.set";
     static final String EXTERNAL_AGENTS = "draft.external.agents";
     static final String REQUIRED_AGENT = "draft.required.agent";
+    /** A progress line every this many drafts. */
+    static final int PROGRESS_EVERY = 10;
 
     public static void main(String[] args) {
         // The sentinel channel is UTF-8 so Python can decode accented card
@@ -94,11 +96,15 @@ public class DraftWorkerMain {
         PickChannel channel = new PickChannel(out, new BufferedReader(
                 new InputStreamReader(System.in, StandardCharsets.UTF_8)), externalAgents);
 
-        AgentMix mix = AgentMix.parse(agentMixSpec);
+        AgentMix mix;
+        try {
+            mix = AgentMix.parse(agentMixSpec);
+        } catch (IllegalArgumentException e) {
+            throw ToolMain.badConfig("-D" + AGENT_MIX + " " + e.getMessage());
+        }
 
-        System.err.println("Initializing Forge environment...");
-        ForgeEnvironmentInitializer.initialize();
-        System.err.println("Forge initialized. Starting draft generation.");
+        // stderr: stdout carries nothing but the protocol's sentinel lines.
+        ForgeEnvironmentInitializer.initializeWorker(System.err, "Starting draft generation.");
 
         Random random = MyRandom.getRandom();
 
@@ -106,8 +112,7 @@ public class DraftWorkerMain {
         try {
             sets = SetChooser.of(setCode, random);
         } catch (IllegalStateException e) {
-            System.err.println("Error: " + e.getMessage());
-            throw ToolMain.exit(1);
+            throw ToolMain.badConfig(e.getMessage());
         }
 
         DraftSettings settings = new DraftSettings(
@@ -124,13 +129,13 @@ public class DraftWorkerMain {
                         // The supervisor closed our stdin (it stopped or crashed); exit
                         // so it can restart a fresh worker if it still wants more drafts.
                         System.err.println("Pick channel closed: " + e.getMessage());
-                        throw ToolMain.exit(0);
+                        throw ToolMain.exit(ExitCode.OK);
                     }
                     return emit(result, draftSet, out);
                 },
                 // stderr: stdout carries nothing but the protocol's sentinel lines.
                 new WorkerLoop.Progress(
-                        System.err, 10, "drafts generated", "Error generating draft"));
+                        System.err, PROGRESS_EVERY, "drafts generated", "Error generating draft"));
     }
 
     /** Write a completed draft's transcript; say why a skipped one produced none. */
