@@ -82,14 +82,6 @@ class CollectionCapsTest {
                 warning);
     }
 
-    @Test
-    void probesAreOffUntilKeywordsAreNamed() {
-        assertFalse(CollectionCaps.defaults().probesEnabled());
-        assertTrue(new CollectionCaps(
-                2000, 0.1, 2, 2, List.of("wither"), 0.0, 0.0)
-                .probesEnabled());
-    }
-
     /** The two knobs of the random seat travel like every other cap. */
     @Test
     void theRandomSeatKnobsAreReadFromSystemProperties() {

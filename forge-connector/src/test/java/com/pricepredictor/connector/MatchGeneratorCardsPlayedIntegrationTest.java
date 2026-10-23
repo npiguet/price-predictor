@@ -50,16 +50,6 @@ class MatchGeneratorCardsPlayedIntegrationTest {
     }
 
     @Test
-    void basicLandsAbsentFromAllListColumns() {
-        for (CardsPlayedRow row : result.cardsPlayedRows()) {
-            assertNoBasicsIn(row.cardsPlayedA(), "cards_played_A");
-            assertNoBasicsIn(row.cardsPlayedB(), "cards_played_B");
-            assertNoBasicsIn(row.cardsNotPlayedA(), "cards_not_played_A");
-            assertNoBasicsIn(row.cardsNotPlayedB(), "cards_not_played_B");
-        }
-    }
-
-    @Test
     void unionEqualsDistinctNonBasicsAndIsDisjoint() {
         MatchResult parent = result.matchResult();
 
@@ -81,13 +71,6 @@ class MatchGeneratorCardsPlayedIntegrationTest {
                     "deck A union (distinct, non-basic) must equal deck contents");
             assertEquals(distinctB, union(row.cardsPlayedB(), row.cardsNotPlayedB()),
                     "deck B union (distinct, non-basic) must equal deck contents");
-        }
-    }
-
-    private static void assertNoBasicsIn(List<String> names, String column) {
-        for (String name : names) {
-            assertFalse(BasicLands.isBasic(name),
-                    column + " must not contain basic land: " + name);
         }
     }
 

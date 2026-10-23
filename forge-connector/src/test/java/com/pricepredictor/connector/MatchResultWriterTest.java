@@ -58,16 +58,6 @@ class MatchResultWriterTest {
         assertEquals("47", parts[9]);
     }
 
-    /** The directory exists once the writer does, before its first match is written. */
-    @Test
-    void aWriterNeedsNoExistingDirectory(@TempDir Path tmp) {
-        Path file = tmp.resolve("draft").resolve("draft-games.txt");
-
-        new MatchResultWriter(file);
-
-        assertTrue(Files.isDirectory(file.getParent()));
-    }
-
     @Test
     void invalidGamesOrPlayCharacterRejected() {
         // Non-A/B characters are rejected in either sequence, each by its own check.

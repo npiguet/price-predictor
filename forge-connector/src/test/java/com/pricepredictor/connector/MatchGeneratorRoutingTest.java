@@ -60,17 +60,12 @@ class MatchGeneratorRoutingTest {
                 () -> generator().sideB(oneDeckFile(), -1).build());
     }
 
-    @Test
-    void sideBWeightUnusedWhenSideBIsForgeBuilt() {
-        // The weight is unused when side B is Forge-built: plain sealed
-        // self-play (both sides Forge-built, weight 0) must work.
-        assertDoesNotThrow(() -> generator().sideB(DeckSource.FORGE_BUILT, 0).build());
-    }
-
     // ── rollIsFileSample distribution ────────────────────────────────────────
 
     @Test
     void rollIsFileSampleAlwaysFalseWhenSideBIsForgeBuilt() {
+        // Plain sealed self-play: both sides Forge-built and side B's weight
+        // left at 0, which is unused there and must build.
         MatchGenerator gen = generator().build();
         for (int i = 0; i < 1000; i++) {
             assertFalse(gen.rollIsFileSample());
@@ -118,6 +113,8 @@ class MatchGeneratorRoutingTest {
 
     @Test
     void withoutDecksOnlyTheRollStillMixes() {
+        // A Forge-built side A against a sampled side B: `sealed
+        // match-outcomes --side-b-decks` is exactly this shape.
         MatchGenerator generator = generator()
                 .sideB(oneDeckFile(), 4).random(new Random(7)).build();
 
@@ -182,18 +179,5 @@ class MatchGeneratorRoutingTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> generator().sideB(oneDeckFile(), 1).decksOnly(true).build());
         assertTrue(ex.getMessage().contains("decksOnly"));
-    }
-
-    @Test
-    void bothSidesFromAFileIsTheOnlyDecksOnlyConfiguration() {
-        assertDoesNotThrow(() -> generator()
-                .sideA(oneDeckFile()).sideB(oneDeckFile(), 1).decksOnly(true).build());
-    }
-
-    @Test
-    void withoutDecksOnlyAForgeBuiltSideAIsStillOrdinary() {
-        // `sealed match-outcomes --side-b-decks` is exactly this shape and
-        // must keep working.
-        assertDoesNotThrow(() -> generator().sideB(oneDeckFile(), 4).build());
     }
 }

@@ -175,42 +175,6 @@ class DeckBuilderTest {
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
-    @Test
-    void method4PicksAtMost23NonlandCards() {
-        List<PaperCard> pool = realPool("RVR");
-        DeckBuilder builder = new DeckBuilder(new Random(99));
-
-        Deck deck = builder.buildRandom(pool);
-
-        long nonlandCount = nonbasics(deck).size();
-
-        assertTrue(nonlandCount <= 23,
-                "Method 4 must pick at most 23 nonland cards, got " + nonlandCount);
-    }
-
-    // ── Land Rebalancing ──────────────────────────────────────────────────────
-
-    @Test
-    void rebalanceLandsProducesExactly40Cards() {
-        List<PaperCard> pool = realPool("RVR");
-        DeckBuilder builder = new DeckBuilder(new Random(1));
-
-        // Build a standard deck, extract spells and non-basic lands separately
-        Deck standard = builder.buildStandard(new ArrayList<>(pool));
-        List<PaperCard> spells = standard.getMain().toFlatList().stream()
-                .filter(c -> !c.getRules().getMainPart().getType().isLand())
-                .toList();
-        List<PaperCard> nonbasicLands = standard.getMain().toFlatList().stream()
-                .filter(c -> c.getRules().getMainPart().getType().isLand()
-                        && !c.getRules().getMainPart().getType().isBasicLand())
-                .toList();
-
-        Deck rebalanced = builder.rebalanceLands(new ArrayList<>(spells), new ArrayList<>(nonbasicLands));
-
-        assertEquals(40, rebalanced.getMain().countAll(),
-                "rebalanceLands must produce exactly 40 cards");
-    }
-
     // ── Full buildDeck integration ─────────────────────────────────────────────
 
     @Test

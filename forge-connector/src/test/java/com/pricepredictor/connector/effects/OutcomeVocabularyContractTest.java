@@ -20,7 +20,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -65,26 +64,6 @@ class OutcomeVocabularyContractTest {
         return values;
     }
 
-    @Test
-    void everyEngineOutcomeTypeIsAnEventType() throws IllegalAccessException {
-        Class<?> engineOutcomes;
-        try {
-            engineOutcomes = Class.forName(PatchHooks.EFFECT_RECORD_OUTCOMES);
-        } catch (ClassNotFoundException unpatched) {
-            engineOutcomes = null;
-        }
-        assumeTrue(engineOutcomes != null, "the sibling Forge checkout is unpatched");
-
-        Set<String> engineTypes = stringConstants(engineOutcomes);
-        Set<String> unknown = new TreeSet<>(engineTypes);
-        for (EventType known : EventType.values()) {
-            unknown.remove(known.wireName());
-        }
-
-        assertFalse(engineTypes.isEmpty(), "the engine declares its outcome type names");
-        assertTrue(unknown.isEmpty(), "outcome types EventType does not know: " + unknown);
-    }
-
     /**
      * An outcome type the engine declares and {@code KNOWN_OUTCOME_TYPES} omits
      * is dropped with one stderr warning in a collection run, so the type
@@ -106,7 +85,8 @@ class OutcomeVocabularyContractTest {
         });
 
         assertTrue(String.join("\n", records).contains("\"type\":\"" + type + "\""),
-                "the engine's " + type + " outcome never reached the shard: " + records);
+                "the engine's " + type + " outcome never reached the shard -- is it an"
+                        + " EventType, and in KNOWN_OUTCOME_TYPES? " + records);
     }
 
     /** A Card and a Player in {@code subjects} become entity and player refs in the shard. */

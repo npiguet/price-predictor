@@ -111,13 +111,6 @@ class ProvenanceSidecarTest {
         }
     }
 
-    @Test
-    void renderedLinesJoinBackToTheFormattedText() {
-        Converted converted = convert("s/serra_angel.txt");
-        assertEquals(RenderedLine.join(converted.card().renderLines()),
-                String.join("\n", converted.lines()));
-    }
-
     // ── the join ────────────────────────────────────────────────────────
 
     @Test

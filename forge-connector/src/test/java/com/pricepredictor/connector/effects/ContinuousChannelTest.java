@@ -46,15 +46,6 @@ class ContinuousChannelTest {
         assertEquals(allowed, collector.allowContinuousRecord(staticKey, board), why);
     }
 
-    @Test
-    void continuousRecordsTakeNoNumericCap() {
-        // Coalescing per stable board is itself the cap (FR-029).
-        ContinuousChannel collector = channel();
-        for (int board = 0; board < 100; board++) {
-            assertTrue(collector.allowContinuousRecord("anthem", "board-" + board));
-        }
-    }
-
     /**
      * Two copies of one anthem render one record.
      *

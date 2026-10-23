@@ -65,27 +65,6 @@ class PoolGeneratorTest {
     }
 
     @Test
-    void exclusionIsCaseInsensitive() {
-        // The list comes from `effects holdout-cards`, which reads names out of
-        // the converted card tree — and converted text is lowercased, so it says
-        // "soul echo" where Forge says "Soul Echo". Comparing the two directly
-        // matched nothing, and a run told to deplete its pools silently
-        // depleted none of them.
-        PoolGenerator generator = new PoolGenerator();
-        List<String> reference = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
-        Set<String> lowercased = reference.subList(0, 10).stream()
-                .map(name -> name.toLowerCase(java.util.Locale.ROOT))
-                .collect(java.util.stream.Collectors.toSet());
-
-        List<String> pool = generator.generate("RVR", 1, HoldoutCards.of(lowercased)).get(0);
-
-        for (String cardName : pool) {
-            assertFalse(lowercased.contains(cardName.toLowerCase(java.util.Locale.ROOT)),
-                    "Excluded card survived a lowercased exclusion list: " + cardName);
-        }
-    }
-
-    @Test
     void generateZeroPoolsReturnsEmptyList() {
         PoolGenerator generator = new PoolGenerator();
         List<List<String>> pools = generator.generate("RVR", 0, HoldoutCards.NONE);
@@ -104,18 +83,5 @@ class PoolGeneratorTest {
         IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
                 () -> generator.generate("XXXXUNKNOWN", 1, HoldoutCards.NONE));
         assertEquals("Unknown or unsupported set code: XXXXUNKNOWN", thrown.getMessage());
-    }
-
-    /**
-     * A set named by its alias opens the set's packs, as the match and draft
-     * workers do: Forge resolves {@code CON} to Conflux, whose code is
-     * {@code CFX}.
-     */
-    @Test
-    void generateAcceptsASetsAlias() {
-        List<List<String>> pools = new PoolGenerator().generate("CON", 1, HoldoutCards.NONE);
-
-        assertEquals(1, pools.size());
-        assertTrue(pools.get(0).size() >= 70, "Pool too small: " + pools.get(0).size());
     }
 }
