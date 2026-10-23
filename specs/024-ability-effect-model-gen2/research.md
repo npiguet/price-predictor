@@ -40,7 +40,7 @@ Constitution Principle VII. Every bullet cites a concrete file or symbol.
 | MLM head, script-API heads | `E/domain/effect_model.py:256-257, 316-334, 751-765` | **Wire** (FR-060b). `mlm_head` is built from the `ENCODER_D_MODEL` constant (`:38, :317`) and must follow `--encoder-d-model`. |
 | `pairing_proj`, `pairing_loss` | `E/domain/effect_model.py:329, 923`; test `tests/unit/effects/domain/test_effect_model.py:477` | **Remove** (FR-060). |
 | `AbilityEncoderConfig.e_noise` | `E/domain/ability_encoder.py:64, 82, 177-181` | **Remove** (FR-057), with a load shim that drops the key (`effect_model_store.py:257`). |
-| `RandomSeatController` | — | **New, no prior concept.** The nearest relatives are `ForkCollector`'s random choosers (see adjacent prior art) and its live-game test (`belongsToLiveGame`), used here inverted. |
+| `RandomSeatController` | — | **New, no prior concept.** The nearest relatives are `ForkCollector`'s random choosers (see adjacent prior art) and its live-game test (`LiveGame.owns`), used here inverted. |
 | `keyword_formatting` | — | **New.** Mirrors Forge's per-keyword-class reminder formatting (`KeywordWithCost.java:30-35`, `KeywordWithCostAndAmount.java:55-60`, `KeywordWithAmount`); no Python equivalent exists, and `_instantiate` (`ability_tokenizer.py:339-359`) fills `%s` with raw text today. |
 | `RuleFamily`, `OutcomeSignature`, `MaskedTemplate`, `ProbeSet`, `Scorecard` | — | **New.** No existing concept shares the name or the responsibility. `price_predictor/domain/price_buckets.py` is the nearest pattern for rarity buckets but buckets prices, not game counts; the names do not collide. |
 
@@ -101,8 +101,8 @@ path as `tests/unit/scripts/test_regenerate_forge_api_list.py` does. No deviatio
 
 **Rationale**: Forge gives a mode no identity of its own. `CharmEffect.chainAbilities`
 (forge/`CharmEffect.java:287-311`) copies each chosen mode, overwrites its `CharmOrder` with its chain
-position, and sets no back-reference; `ProvenanceKey.resolve` climbs every copy to the root
-(`ProvenanceKey.java:230-233`). The only stable identity is the position in `Choices$`, which both the
+position, and sets no back-reference; `ProvenanceResolver.resolve` climbs every copy to the root
+(`ProvenanceResolver.resolveRoot`). The only stable identity is the position in `Choices$`, which both the
 converter (`CharmAbility.java:57`, `getAdditionalAbilityList("Choices")`) and the collector (the spell's
 chosen list, which `chainAbilities` sorts in place by original `CharmOrder`) can compute. An additive
 member keeps compatibility rule 1.
@@ -134,7 +134,7 @@ the AI or a fork set it, so the random seat and `RandomChoices` always call `set
 **Rationale**: `createControllerFor` is private but `createIngamePlayer` is public and not final;
 `Player.setFirstController` is public. No engine change (FR-024). Forks clone players through
 `GameCopier.clonePlayer` (forge/`GameCopier.java:211-219`), which keeps any `LobbyPlayerAi` subclass,
-so the controller checks that its game is the live game (`belongsToLiveGame`, `PatchedCollectors.java:1608`)
+so the controller checks that its game is the live game (`RandomSeatController.isLive()`)
 and defers to `super` everywhere in a fork.
 
 ### The random seat's decision points and how each draw is made

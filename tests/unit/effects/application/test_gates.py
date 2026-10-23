@@ -13,29 +13,15 @@ import numpy as np
 import pytest
 
 from effects.application.evaluate_effect_model import (
-    GATE1_MIN_DEVIANCE_REDUCTION,
-    GATE1_MIN_GATE_F1_GAIN,
-    GATE1_MIN_ZONE_ACCURACY_GAIN,
-    GATE3_COSINE_PAIRS,
-    GATE3_MAX_MEAN_COSINE,
-    GATE3_MAX_TOP_COMPONENT,
-    STAGE_GATED_CHECKS,
-    CheckStatus,
-    EvaluationReport,
-    GateOneMetrics,
-    Stratum,
-    cosine_distance,
-    evaluate_gate_one,
+    NOT_IMPLEMENTED_CHECKS,
+    not_implemented,
+)
+from effects.application.evaluation_context import parse_baseline_checkpoint
+from effects.application.gate_one import GateOneMetrics, evaluate_gate_one
+from effects.application.gate_two import evaluate_gate_two, evaluate_keyword
+from effects.application.geometry_checks import (
     evaluate_gate_three,
-    evaluate_gate_two,
-    evaluate_keyword,
     evaluate_ward_canary,
-    f1_score,
-    mean_pairwise_cosine,
-    parse_variant_checkpoint,
-    poisson_deviance,
-    skip_unavailable,
-    top_component_share,
 )
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
@@ -45,7 +31,16 @@ from effects.domain.damage_step_keywords import (
     KeywordEffect,
     Subject,
 )
-from effects.domain.effect_model import FIELDS_BY_NAME
+from effects.domain.effect_head_layout import FIELDS_BY_NAME
+from effects.domain.evaluation_report import CheckName, CheckStatus, EvaluationReport
+from effects.domain.gate_metrics import (
+    balanced_accuracy,
+    cosine_distance,
+    f1_score,
+    mean_pairwise_cosine,
+    poisson_deviance,
+    top_component_share,
+)
 
 
 class TestGateOne:
@@ -63,11 +58,6 @@ class TestGateOne:
             affected_gate_f1=0.70, zone_outcome_accuracy=0.60,
             mean_poisson_deviance=0.90,
         )
-
-    def test_the_thresholds_are_the_specs(self):
-        assert GATE1_MIN_GATE_F1_GAIN == 0.05
-        assert GATE1_MIN_ZONE_ACCURACY_GAIN == 0.05
-        assert GATE1_MIN_DEVIANCE_REDUCTION == 0.05
 
     def test_all_three_margins_holding_passes(self):
         result = evaluate_gate_one(self._passing(), self._identity())
@@ -111,6 +101,19 @@ class TestGateOne:
         model = GateOneMetrics(0.70, 0.60, 0.094)  # 6% relative
         assert evaluate_gate_one(model, identity).status is CheckStatus.PASS
 
+    def test_a_margin_that_could_not_be_measured_fails(self):
+        """No zone target on the stratum makes the accuracy NaN; a NaN margin
+        compared against its floor is False, which used to read as a pass."""
+        model = GateOneMetrics(0.70, float("nan"), 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "zone-outcome accuracy" in result.detail
+        assert "not measured" in result.detail
+
+    def test_an_unmeasured_model_deviance_fails(self):
+        model = GateOneMetrics(0.70, 0.60, float("nan"))
+        assert evaluate_gate_one(model, self._identity()).status is CheckStatus.FAIL
+
 
 class TestGateOneMetrics:
     def test_f1_is_one_for_a_perfect_gate(self):
@@ -137,6 +140,16 @@ class TestGateOneMetrics:
     def test_an_empty_slice_is_nan_rather_than_zero(self):
         assert math.isnan(poisson_deviance(np.array([]), np.array([])))
 
+    def test_zone_accuracy_weighs_every_observed_outcome_the_same(self):
+        """Answering the dominant class every time scores one over the number
+        of classes observed, not that class's share (FR-109)."""
+        observed = np.array([0] * 9 + [1])
+        always_stayed = np.zeros(10, dtype=int)
+        assert balanced_accuracy(always_stayed, observed) == pytest.approx(0.5)
+
+    def test_zone_accuracy_of_nothing_is_nan(self):
+        assert math.isnan(balanced_accuracy(np.array([]), np.array([])))
+
 
 class TestGateTwo:
     """Per keyword, routing only — it blocks nothing."""
@@ -147,13 +160,6 @@ class TestGateTwo:
             "trample", "indestructible", "wither", "infect",
         }
 
-    def test_every_row_names_a_predicate_fields_and_a_direction(self):
-        for row in DAMAGE_STEP_KEYWORDS:
-            assert row.qualifies_when
-            assert row.effects
-            for effect in row.effects:
-                assert effect.direction in (-1, 1)
-
     def test_every_affected_field_is_a_real_head_output(self):
         for row in DAMAGE_STEP_KEYWORDS:
             for effect in row.effects:
@@ -162,14 +168,10 @@ class TestGateTwo:
                     "head does not predict"
                 )
 
-    def test_the_thresholds_are_the_specs(self):
-        assert MIN_QUALIFYING_RECORDS == 200
-        assert MIN_DIRECTION_AGREEMENT == 0.70
-
     def test_enough_records_and_enough_agreement_passes(self):
         verdict = evaluate_keyword(
             KEYWORDS_BY_NAME["deathtouch"],
-            qualifying_records=500, agreeing_records=400,
+            qualifying_records=500, agreeing=400,
         )
         assert verdict.passed
         assert not verdict.routed_to_probe
@@ -178,7 +180,7 @@ class TestGateTwo:
         """Untested is not passed — that is how a canary stops being one."""
         verdict = evaluate_keyword(
             KEYWORDS_BY_NAME["wither"],
-            qualifying_records=40, agreeing_records=40,
+            qualifying_records=40, agreeing=40,
         )
         assert verdict.routed_to_probe
         assert "under-sampled" in verdict.reason
@@ -186,7 +188,7 @@ class TestGateTwo:
     def test_too_little_agreement_routes_to_a_probe(self):
         verdict = evaluate_keyword(
             KEYWORDS_BY_NAME["trample"],
-            qualifying_records=1000, agreeing_records=600,
+            qualifying_records=1000, agreeing=600,
         )
         assert verdict.routed_to_probe
         assert "direction agreement" in verdict.reason
@@ -195,13 +197,13 @@ class TestGateTwo:
         verdict = evaluate_keyword(
             KEYWORDS_BY_NAME["lifelink"],
             qualifying_records=MIN_QUALIFYING_RECORDS,
-            agreeing_records=int(MIN_QUALIFYING_RECORDS * MIN_DIRECTION_AGREEMENT),
+            agreeing=int(MIN_QUALIFYING_RECORDS * MIN_DIRECTION_AGREEMENT),
         )
         assert verdict.passed
 
     def test_the_gate_blocks_nothing(self):
         verdicts = [
-            evaluate_keyword(row, qualifying_records=10, agreeing_records=0)
+            evaluate_keyword(row, qualifying_records=10, agreeing=0)
             for row in DAMAGE_STEP_KEYWORDS
         ]
         result = evaluate_gate_two(verdicts)
@@ -212,11 +214,11 @@ class TestGateTwo:
         verdicts = [
             evaluate_keyword(
                 KEYWORDS_BY_NAME["infect"], qualifying_records=10,
-                agreeing_records=10,
+                agreeing=10,
             ),
             evaluate_keyword(
                 KEYWORDS_BY_NAME["lifelink"], qualifying_records=500,
-                agreeing_records=500,
+                agreeing=500,
             ),
         ]
         detail = evaluate_gate_two(verdicts).detail
@@ -226,7 +228,7 @@ class TestGateTwo:
     def test_all_passing_says_no_probe_machinery_is_needed(self):
         """That output is the whole reason the gate runs before stage three."""
         verdicts = [
-            evaluate_keyword(row, qualifying_records=500, agreeing_records=500)
+            evaluate_keyword(row, qualifying_records=500, agreeing=500)
             for row in DAMAGE_STEP_KEYWORDS
         ]
         assert "no stage-three probe machinery" in evaluate_gate_two(verdicts).detail
@@ -267,11 +269,6 @@ class TestGateTwo:
 
 
 class TestGateThree:
-    def test_the_thresholds_are_the_specs(self):
-        assert GATE3_MAX_MEAN_COSINE == 0.5
-        assert GATE3_COSINE_PAIRS == 10_000
-        assert GATE3_MAX_TOP_COMPONENT == 0.30
-
     def test_a_spread_space_passes(self):
         rng = np.random.default_rng(0)
         vectors = rng.normal(size=(400, 64))
@@ -297,6 +294,18 @@ class TestGateThree:
     def test_it_blocks_shipping(self):
         vectors = np.ones((100, 8))
         assert evaluate_gate_three(vectors).blocks
+
+    def test_an_all_zero_space_fails(self):
+        """The effect head once trained on an all-zero e: no variance at all is
+        the most collapsed a space can be, not an unmeasurable one."""
+        result = evaluate_gate_three(np.zeros((100, 64)))
+        assert result.status is CheckStatus.FAIL
+        assert "principal component" in result.detail
+
+    def test_too_few_vectors_to_measure_fails(self):
+        result = evaluate_gate_three(np.ones((1, 8)))
+        assert result.status is CheckStatus.FAIL
+        assert "not measured" in result.detail
 
     def test_mean_cosine_is_one_for_identical_vectors(self):
         vectors = np.tile(np.arange(1.0, 9.0), (50, 1))
@@ -370,52 +379,31 @@ class TestWardCanary:
         assert math.isnan(cosine_distance(np.zeros(3), np.ones(3)))
 
 
-class TestStageGatedChecks:
-    def test_the_three_later_stage_checks_are_named(self):
-        assert set(STAGE_GATED_CHECKS) == {
-            "matched-real-vs-fork", "probe-diff", "role-polarity",
-        }
+class TestUnimplementedChecks:
+    """FR-116 names three checks that were never built.
 
-    def test_a_check_with_no_records_skips_rather_than_failing(self):
-        """A check that measured nothing is not a failure."""
-        result = skip_unavailable("role-polarity")
-        assert result.status is CheckStatus.SKIPPED
-        assert not result.blocks
-        assert "stage two" in result.detail
+    The corpus holds forks and mana records, so a line blaming missing records
+    would send an operator looking for data that is already there.
+    """
 
-    def test_the_fork_checks_name_stage_three(self):
-        for name in ("matched-real-vs-fork", "probe-diff"):
-            assert "stage three" in skip_unavailable(name).detail
+    def test_each_reports_not_implemented_and_blocks_nothing(self):
+        for name in (
+            CheckName.MATCHED_REAL_VS_FORK, CheckName.PROBE_DIFF,
+            CheckName.ROLE_POLARITY,
+        ):
+            result = not_implemented(name)
+            assert result.status is CheckStatus.NOT_IMPLEMENTED
+            assert not result.blocks
+            assert result.detail.startswith("not implemented")
 
+    def test_none_claims_the_corpus_lacks_its_records(self):
+        for name in NOT_IMPLEMENTED_CHECKS:
+            assert "does not have" not in not_implemented(name).detail
 
-class TestRolePolarity:
-    """The narrowest possible test of the role embedding."""
-
-    def test_opposite_signs_read_as_the_roles_separating(self):
-        from effects.application.evaluate_effect_model import evaluate_role_polarity
-
-        result = evaluate_role_polarity(-0.8, 0.9)
-        assert result.status is CheckStatus.REPORTED
-        assert "cost position predicts a mana decrease" in result.detail
-
-    def test_the_same_sign_reads_as_the_roles_not_separating(self):
-        from effects.application.evaluate_effect_model import evaluate_role_polarity
-
-        result = evaluate_role_polarity(0.5, 0.9)
-        assert "not separating them" in result.detail
-
-    def test_it_waits_for_mana_records(self):
-        from effects.application.evaluate_effect_model import evaluate_role_polarity
-
-        result = evaluate_role_polarity(None, None)
-        assert result.status is CheckStatus.SKIPPED
-        assert "stage two" in result.detail
-
-    def test_it_blocks_nothing_either_way(self):
-        from effects.application.evaluate_effect_model import evaluate_role_polarity
-
-        assert not evaluate_role_polarity(0.5, 0.5).blocks
-        assert not evaluate_role_polarity(-0.5, 0.5).blocks
+    def test_the_report_marks_them_apart_from_a_skip(self):
+        report = EvaluationReport()
+        report.add(not_implemented(CheckName.PROBE_DIFF))
+        assert report.render().startswith("[todo] probe-diff: not implemented")
 
 
 class TestReport:
@@ -424,7 +412,7 @@ class TestReport:
         report.add(evaluate_gate_one(
             GateOneMetrics(0.70, 0.60, 0.90), GateOneMetrics(0.60, 0.50, 1.00),
         ))
-        report.add(skip_unavailable("role-polarity"))
+        report.add(not_implemented(CheckName.ROLE_POLARITY))
         assert report.ships
 
     def test_a_blocking_gate_stops_it(self):
@@ -436,7 +424,7 @@ class TestReport:
     def test_gate_two_never_stops_it(self):
         report = EvaluationReport()
         report.keyword_verdicts = [
-            evaluate_keyword(row, qualifying_records=1, agreeing_records=0)
+            evaluate_keyword(row, qualifying_records=1, agreeing=0)
             for row in DAMAGE_STEP_KEYWORDS
         ]
         report.add(evaluate_gate_two(report.keyword_verdicts))
@@ -467,23 +455,17 @@ class TestReport:
         assert "mean_pairwise_cosine=" in rendered
         assert "top_component_share=" in rendered
 
-    def test_the_four_strata_are_named(self):
-        assert {s.value for s in Stratum} == {
-            "unique-text", "shared-text", "novel-combination",
-            "numeric-extrapolation",
-        }
-
 
 class TestVariantCheckpointFlag:
     def test_it_parses_name_equals_path(self):
-        name, path = parse_variant_checkpoint("identity=models/x/latest.pt")
+        name, path = parse_baseline_checkpoint("identity=models/x/latest.pt")
         assert name == "identity"
         assert path.name == "latest.pt"
 
     def test_a_bare_path_is_rejected(self):
         with pytest.raises(ValueError, match="NAME=PATH"):
-            parse_variant_checkpoint("models/x/latest.pt")
+            parse_baseline_checkpoint("models/x/latest.pt")
 
     def test_an_empty_name_is_rejected(self):
         with pytest.raises(ValueError, match="NAME=PATH"):
-            parse_variant_checkpoint("=models/x/latest.pt")
+            parse_baseline_checkpoint("=models/x/latest.pt")

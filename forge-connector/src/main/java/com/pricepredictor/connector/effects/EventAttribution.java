@@ -10,28 +10,22 @@ import java.util.Set;
 /**
  * The three fields an event carries about where it came from and how long it lasts.
  *
- * <p>All three were declared on the event shape and never written by the bus
- * paths. {@code duration} is why {@code pt_duration} and
- * {@code type_color_duration} were the only two head fields no target path fed:
- * an effect that pumps a creature and one that pumps it permanently produced
- * identical records, so there was nothing to learn the difference from.
+ * <p>{@code duration} is what feeds the {@code pt_duration} and
+ * {@code type_color_duration} head fields: without it an effect that pumps a creature
+ * until end of turn and one that pumps it permanently produce identical
+ * records, so there is nothing to learn the difference from.
  *
- * <p>{@code cause} joined them here rather than living in each shaper because
- * it answers the same question about the same instant as the other two, and
+ * <p>{@code cause} is stamped here rather than in each shaper because it
+ * answers the same question about the same instant as the other two, and
  * because it has a default the shapers cannot know: an event the engine names
  * no causer for was still produced by whatever line was resolving. Stamping all
- * three at one door is what stopped the fork paths writing nulls while the
- * observed path wrote answers.
+ * three at one door keeps the fork paths and the observed path writing the
+ * same answers.
  */
 final class EventAttribution {
 
     private EventAttribution() {
     }
-
-    /** The head's three buckets; the full vocabulary is DURATIONS in Python. */
-    static final String INSTANT = "instant";
-    static final String END_OF_TURN = "end_of_turn";
-    static final String PERMANENT = "permanent";
 
     /**
      * Script durations that outlast the turn.
@@ -71,11 +65,11 @@ final class EventAttribution {
      * The acting line's own top-level clause produced this event.
      *
      * <p>A literal rather than {@code null}, because "the root did it" and "no
-     * pointer was available" are different facts and the corpus could not tell
-     * them apart. A single-clause ability legitimately has no sub-ability and
-     * the root is the right answer; the pointer failing to land looks exactly
-     * the same from the record. Reported apart, the sub-ability share becomes a
-     * number that can be read; conflated, it was 3.2% of nothing interpretable.
+     * pointer was available" are different facts and a null would conflate
+     * them. A single-clause ability legitimately has no sub-ability and the
+     * root is the right answer; the pointer failing to land looks exactly the
+     * same from the record. Reported apart, the sub-ability share is a number
+     * that can be read.
      */
     static final String ROOT = "root";
 
@@ -97,15 +91,9 @@ final class EventAttribution {
      * walks the acting ability's chain looking for the one the engine says is
      * resolving. {@link #ROOT} and {@link #UNRESOLVED} are the other two
      * answers; attribution never drops an event and never returns null.
-     */
-    static String attributedTo(SpellAbility root) {
-        return attributedTo(root, PatchHooks.currentSubAbility());
-    }
-
-    /**
-     * The same answer, from a pointer the caller already read.
      *
-     * <p>The hook is read once where an event is stamped and the arithmetic
+     * <p>{@code pointer} is the sub-ability hook's answer, read by the caller.
+     * The hook is read once where an event is stamped and the arithmetic
      * over it is what can be wrong, so the two are separated: this half needs
      * no patched checkout and no resolving thread to exercise.
      *
@@ -130,7 +118,7 @@ final class EventAttribution {
         // Counted upward from the resolving clause rather than downward from
         // the acting one. Forge resolves a copy of the ability it was handed,
         // so the bracket's root and the pointer's chain need not be the same
-        // objects, and a walk down from the root matched nothing at all.
+        // objects, and a walk down from the root would match nothing at all.
         int index = 0;
         SpellAbility parent = resolving.getParent();
         while (parent instanceof AbilitySub above) {
@@ -144,45 +132,33 @@ final class EventAttribution {
     }
 
     /**
-     * How long the acting script says its effect lasts.
+     * How long the acting script says an event of {@code eventType} lasts.
      *
      * <p>Read from the resolving clause's own {@code Duration$}, falling back to
      * the root line's — a sub-ability that declares none inherits the line's.
      * The source is the script rather than the engine's cleanup registration
-     * because the script is where the answer is written down; an effect whose
-     * duration lives only in Java reads as {@code instant}, which is also the
-     * right answer for the many events that do not last at all.
-     */
-    static String duration(SpellAbility root) {
-        return duration(root, PatchHooks.currentSubAbility());
-    }
-
-    static String duration(SpellAbility root, Object pointer) {
-        return duration(root, pointer, null);
-    }
-
-    /**
-     * The duration of an event of {@code eventType}, from the script.
+     * because the script is where the answer is written down.
      *
      * <p>A declared {@code Duration$} is bucketed as it says. An undeclared one
      * is instant for an event with no lasting state, and otherwise whatever
      * Forge applies to the resolving clause's API: end of turn for a pump,
      * permanent for a counter.
      */
-    static String duration(SpellAbility root, Object pointer, String eventType) {
+    static EventDuration duration(SpellAbility root, Object pointer, String eventType) {
         String declared = declaredDuration(root, pointer);
         if (declared == null) {
             if (eventType == null || !LASTING_STATE.contains(eventType)) {
-                return INSTANT;
+                return EventDuration.INSTANT;
             }
             String api = apiOf(pointer instanceof SpellAbility resolving ? resolving : root);
-            return api != null && END_OF_TURN_BY_DEFAULT.contains(api) ? END_OF_TURN : PERMANENT;
+            return api != null && END_OF_TURN_BY_DEFAULT.contains(api)
+                    ? EventDuration.END_OF_TURN : EventDuration.PERMANENT;
         }
         String key = declared.toLowerCase(Locale.ROOT);
         if (LASTING.contains(key)) {
-            return PERMANENT;
+            return EventDuration.PERMANENT;
         }
-        return END_OF_TURN;
+        return EventDuration.END_OF_TURN;
     }
 
     /**
@@ -203,8 +179,8 @@ final class EventAttribution {
      * <p>Null when nothing was resolving — a combat damage step, a turn-based
      * action — which writes no {@code cause} at all rather than a placeholder.
      * A caller that has a better answer than the bracket, such as the source
-     * the bus itself named on a damage event, passes it to
-     * {@link #stamp(EffectEvent, SpellAbility, Object, String)} and it wins.
+     * the bus itself named on a damage event, passes it to {@link #stamp} and
+     * it wins.
      */
     static String cause(SpellAbility root, Object pointer) {
         Card host = hostOf(pointer instanceof SpellAbility resolving ? resolving : null);
@@ -237,17 +213,10 @@ final class EventAttribution {
     }
 
     /**
-     * Stamp all three onto an event, from the bracket alone.
+     * Stamp all three onto an event, for the clause resolving now.
      *
      * <p>Applied where an event is filed rather than where it is built, because
      * only the collector knows which ability's bracket it landed in.
-     */
-    static EffectEvent stamp(EffectEvent event, SpellAbility root) {
-        return stamp(event, root, PatchHooks.currentSubAbility(), null);
-    }
-
-    /**
-     * The same, with a cause the caller read off the event itself.
      *
      * <p>{@code namedCause} wins over the bracket's, and null defers to it.
      * The precedence is the caller's to state rather than something read back
@@ -260,14 +229,17 @@ final class EventAttribution {
         // Read once: all three fields answer the same question about the same
         // instant, and reading the hook twice could straddle a clause boundary
         // in a nested resolution.
-        return stamp(event, root, PatchHooks.currentSubAbility(), namedCause);
+        return stampAt(event, root, PatchHooks.currentSubAbility(), namedCause);
     }
 
-    static EffectEvent stamp(EffectEvent event, SpellAbility root, Object pointer) {
-        return stamp(event, root, pointer, null);
-    }
-
-    static EffectEvent stamp(
+    /**
+     * The same, for a clause the caller names rather than the hook.
+     *
+     * <p>A null {@code pointer} says no clause produced the event, which
+     * attributes it to {@link #UNRESOLVED} and takes its duration and cause
+     * from {@code root} alone.
+     */
+    static EffectEvent stampAt(
             EffectEvent event, SpellAbility root, Object pointer, String namedCause) {
         if (event == null) {
             return null;

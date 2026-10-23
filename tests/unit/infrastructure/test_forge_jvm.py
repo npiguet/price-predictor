@@ -20,7 +20,7 @@ from price_predictor.infrastructure.forge_jvm import (
 class TestResolveConnectorJar:
     def test_raises_when_jar_missing(self, tmp_path):
         with patch.object(forge_jvm, "project_root", return_value=tmp_path):
-            with pytest.raises(FileNotFoundError, match="mvn package"):
+            with pytest.raises(FileNotFoundError, match="mvn install"):
                 resolve_connector_jar()
 
     def test_returns_path_when_jar_exists(self, tmp_path):

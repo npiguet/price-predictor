@@ -11,7 +11,7 @@ from __future__ import annotations
 import random
 from types import SimpleNamespace
 
-from effects.domain.effect_model import ZONE_OUTCOMES
+from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.lethality_counterfactuals import (
@@ -22,15 +22,15 @@ from effects.domain.lethality_counterfactuals import (
     qualify,
 )
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionPayload
+from effects.domain.records import EffectRecord, ResolutionPayload
 from effects.domain.state_snapshot import (
     EntityState,
     GlobalState,
     PlayerState,
     PowerToughness,
     Refs,
-    StateSnapshot,
 )
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 DIED = ZONE_OUTCOMES.index("died")
 BOLT = ("NumDmg$ 3 | SP$ DealDamage | SpellDescription$ CARDNAME deals 3 damage to "
@@ -49,18 +49,16 @@ def _creature(entity_id: str, toughness: int, *, damage: int = 0, **overrides) -
 
 
 def _record(events, entities, *, x=None, targets=("E1",)) -> EffectRecord:
-    state = StateSnapshot(
+    state = make_snapshot(
         global_=GlobalState(turn=3, phase="main1", active="P0", priority="P0", stack_size=1),
         players=(PlayerState(id="P0", life=20, hand=3, library=30, graveyard=0),
                  PlayerState(id="P1", life=20, hand=3, library=30, graveyard=0)),
-        entities=(EntityState(id="S1", name="spell", zone="stack", controller="P0"),
-                  *entities),
+        entities=(make_entity("S1", "spell", zone="stack"), *entities),
         refs=Refs(targets=targets, source="S1", x=x),
     )
-    return EffectRecord(
-        record_id="r.0-0.1", run_id="r", timestamp="t", game_id="r.0-0.1",
-        kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION, actor_player="P0",
-        state=state, payload=ResolutionPayload(events=tuple(events)), ability=(KEY,),
+    return make_record(
+        record_id="r.0-0.1", run_id="r", game_id="r.0-0.1", state=state,
+        payload=ResolutionPayload(events=tuple(events)), ability=(KEY,),
     )
 
 
@@ -79,8 +77,8 @@ def _shrunk(subject: str, amount: int) -> Event:
                  duration="end_of_turn")
 
 
-def _line(text: str):
-    return SimpleNamespace(script_text=text)
+def _line(text: str, role_spans=()):
+    return SimpleNamespace(script_text=text, role_spans=role_spans)
 
 
 def _no_keywords(entity) -> set[str]:
@@ -172,7 +170,7 @@ class TestCopies:
         rng = random.Random(7)
         outcomes = set()
         for number in range(200):
-            copy = counterfactual(record, qualified, targets, BOLT, rng, number)
+            copy = counterfactual(record, qualified, targets, _line(BOLT), BOLT, rng, number)
             amount = int(copy.text.split("NumDmg$ ")[1].split()[0])
             creature = copy.record.state.entity("E1")
             fields = copy.targets["E1"].fields
@@ -185,7 +183,7 @@ class TestCopies:
 
     def test_a_copy_reads_its_text_under_a_key_of_its_own(self):
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
-        copy = counterfactual(record, _qualify(record), derive_targets(record), BOLT,
+        copy = counterfactual(record, _qualify(record), derive_targets(record), _line(BOLT), BOLT,
                               random.Random(1), 0)
         assert copy.key.script_file.startswith(f"{COUNTERFACTUAL_TREE}/")
         assert copy.record.ability == (copy.key,)
@@ -196,7 +194,7 @@ class TestCopies:
         record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
         text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
         qualified = _qualify(record, text)
-        copy = counterfactual(record, qualified, derive_targets(record), text,
+        copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
                               random.Random(3), 0)
         assert copy.key is None and copy.text is None
         assert copy.targets["E1"].fields["damage_taken"] == copy.record.state.refs.x
@@ -204,7 +202,7 @@ class TestCopies:
     def test_a_player_s_life_follows_the_amount(self):
         life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -3})
         record = _record([_damage("E1", 3), _died("E1"), life], [_creature("E1", 2)])
-        copy = counterfactual(record, _qualify(record), derive_targets(record), BOLT,
+        copy = counterfactual(record, _qualify(record), derive_targets(record), _line(BOLT), BOLT,
                               random.Random(5), 0)
         assert copy.targets["P1"].fields["life_delta"] == -copy.targets["E1"].fields[
             "damage_taken"]
@@ -216,8 +214,48 @@ class TestCopies:
         assert "NumAtt$ -5" in edited and "NumDef$ -5" in edited and "-5/-5" in edited
 
 
+class TestTheProseSurface:
+    """On the prose surface the encoded text is the converted prose, which holds
+    no ``NumDmg$``: a copy edits the amount in the prose too, or not at all."""
+
+    PROSE = "cardname deals 3 damage to target creature."
+
+    def test_a_copy_edits_the_amount_in_the_prose_and_the_script_alike(self):
+        record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
+        copy = counterfactual(record, _qualify(record), derive_targets(record),
+                              _line(BOLT), self.PROSE, random.Random(1), 0)
+        amount = copy.targets["E1"].fields["damage_taken"]
+        assert copy.text == f"cardname deals {int(amount)} damage to target creature."
+        assert f"NumDmg$ {int(amount)}" in copy.script
+
+    def test_prose_naming_no_amount_keeps_the_amount_and_moves_the_toughness(self):
+        record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
+        prose = "cardname deals damage to target creature."
+        copy = counterfactual(record, _qualify(record), derive_targets(record),
+                              _line(BOLT), prose, random.Random(1), 0)
+        assert copy.key is None
+        assert copy.targets["E1"].fields["damage_taken"] == 3.0
+
+    def test_role_spans_move_with_an_edit_that_changes_the_prose_length(self):
+        from effects.domain.provenance import RoleSpan
+
+        record = _record([_damage("E1", 10), _died("E1")], [_creature("E1", 2)])
+        script = BOLT.replace("3", "10")
+        prose = "cardname deals 10 damage to target creature."
+        target = prose.index("target")
+        spans = (RoleSpan(0, target, "effect"), RoleSpan(target, len(prose), "target-spec"))
+        copy = counterfactual(
+            record, _qualify(record, script), derive_targets(record),
+            _line(script, spans), prose, random.Random(1), 0,
+        )
+        moved = copy.text.index("target")
+        assert [(s.start, s.end) for s in copy.role_spans] == [
+            (0, moved), (moved, len(copy.text)),
+        ]
+
+
 class TestStepWiring:
-    """``StepPreparation._counterfactuals``: copies per qualifying record, staged."""
+    """``StepPreparer._counterfactuals``: copies per qualifying record, staged."""
 
     class _Batcher:
         def __init__(self):
@@ -230,22 +268,22 @@ class TestStepWiring:
         def text_of(self, key):
             return BOLT
 
-        def stand_in(self, key, text, like):
+        def stand_in(self, key, text, like, *, script=None, role_spans=None):
             self.staged[key] = (text, like)
 
     def test_each_qualifying_record_gets_its_copies_and_their_texts(self):
-        from effects.application.step_preparation import StepPreparation
+        from effects.application.step_preparation import StepPreparer
 
         preparer = SimpleNamespace(
             config=SimpleNamespace(lethality_copies=3),
-            _keyword_resolver=lambda sidecars: SimpleNamespace(keywords_of=_no_keywords),
+            _keywords=SimpleNamespace(keywords_of=_no_keywords),
         )
         lethal_bolt = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         contradicted = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 9)])
         records = [lethal_bolt, contradicted]
         batcher = self._Batcher()
-        copies = StepPreparation._counterfactuals(
-            preparer, records, [derive_targets(r) for r in records], batcher, None)
+        copies = StepPreparer._counterfactuals(
+            preparer, records, [derive_targets(r) for r in records], batcher)
         assert len(copies) == 3
         assert {copy.key for copy in copies} == set(batcher.staged)
         assert all(batcher.staged[copy.key] == (copy.text, KEY) for copy in copies)

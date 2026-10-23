@@ -1,0 +1,19 @@
+checkpoint,run,role,epoch,e_width,lethality_copies,lr_scale,card_disjoint,game_disjoint,gate_f1,zone_acc,deviance,probe_directory
+e64 (earlier inputs),e64 (earlier inputs),best,15,64,0,1,3.9272,3.1782,0.827,0.96,0.025,2026-10-gen2-e64-earlier-inputs
+e64,e64,best,25,64,0,1,3.7344,3.0332,0.818,0.958,0.02,2026-10-gen2-e64
+e128,e128,best,22,128,0,1,3.8907,3.1078,0.824,0.966,0.025,2026-10-gen2-e128
+e64-lethality,e64-lethality,best,28,64,8,1,3.6994,3.0177,0.812,0.968,0.02,2026-10-gen2-e64-lethality
+e128-lethality,e128-lethality,best,22,128,8,1,3.8353,3.0226,0.813,0.961,0.028,2026-10-gen2-e128-lethality
+e256-lethality,e256-lethality,best,28,256,8,1,3.7365,2.9645,0.814,0.969,0.022,2026-10-gen2-e256-lethality
+A64 best,A64,best,42,64,8,1,3.5187,2.9063,0.817,0.966,0.018,2026-10-gen2-e64-lethality-ext20
+A64 last,A64,last,53,64,8,1,3.7591,2.913,0.796,0.97,0.02,2026-10-gen2-e64-lethality-ext20-last
+B64 best,B64,best,43,64,8,0.1,3.5062,2.8796,0.811,0.966,0.018,2026-10-gen2-e64-lethality-lr0.1
+B64 last,B64,last,62,64,8,0.1,3.6429,2.9419,0.801,0.968,0.021,2026-10-gen2-e64-lethality-lr0.1-last
+A128 best,A128,best,30,128,8,1,3.708,2.9081,0.807,0.963,0.021,2026-10-gen2-e128-lethality-ext20
+A128 last,A128,last,47,128,8,1,3.8019,2.864,0.81,0.977,0.025,2026-10-gen2-e128-lethality-ext20-last
+B128 best,B128,best,37,128,8,0.1,3.6336,2.8598,0.816,0.974,0.023,2026-10-gen2-e128-lethality-lr0.1
+B128 last,B128,last,50,128,8,0.1,3.6893,2.8456,0.822,0.97,0.024,2026-10-gen2-e128-lethality-lr0.1-last
+A256 best,A256,best,53,256,8,1,3.5625,2.8682,0.823,0.97,0.02,2026-10-gen2-e256-lethality-ext20
+A256 last,A256,last,53,256,8,1,3.5625,2.8682,0.823,0.97,0.02,2026-10-gen2-e256-lethality-ext20-last
+B256 best,B256,best,55,256,8,0.1,3.5836,2.8324,0.818,0.974,0.02,2026-10-gen2-e256-lethality-lr0.1-best
+B256 last,B256,last,73,256,8,0.1,3.6543,2.8597,0.817,0.976,0.022,2026-10-gen2-e256-lethality-lr0.1-last

@@ -12,12 +12,12 @@ Layout:
   as of 2026-10-07, plus the four synthetic scripts marked below. The tree is letter-keyed
   like Forge's so every provenance key reads `cardsfolder/<letter>/<name>.txt`.
 - `tokenscripts/<name>.txt` — one token script, flat like Forge's token tree.
-- `expected/cardsfolder/…`, `expected/tokenscripts/…` — what `python -m price_predictor convert`
-  wrote for them before the change: the `.txt` (the byte-identity reference) and the gen-1
-  `.provenance.json` (kept for comparison; the gen-2 sidecars differ by design).
+- `expected/cardsfolder/…`, `expected/tokenscripts/…` — the `.txt` that `python -m price_predictor convert`
+  wrote for them before the change: the byte-identity reference. The gen-1 sidecars are not kept:
+  no test compares them, and the gen-2 sidecars differ by design.
 
 Regenerate the `expected/` tree only with the pre-024 converter; after it, the `.txt` files
-must still match and the sidecars are the new contract.
+must still match.
 
 One line was re-captured by hand: `expected/cardsfolder/t/tundra.txt`'s synthetic mana line.
 The pre-024 converter rendered a dual land's colours in the iteration order of a `Map.of`,
@@ -25,6 +25,10 @@ which the JVM salts per run, so the first capture read `{U} or {W}` while the sh
 `output/cardsfolder/` corpus (and every other dual land in it) reads `{W} or {U}`. The
 converter now renders colour-wheel order deterministically, and the golden carries the
 corpus's order.
+
+The synthetic mana lines of `m/mountain.txt` and `t/tundra.txt` were later edited by hand to
+end in a period, when the synthesized land-mana line took the shape of a scripted mana line
+(`{T}: add {W} or {U}.`, with the serial comma from three colours on).
 
 | Script | Why it is here |
 |---|---|

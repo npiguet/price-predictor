@@ -26,8 +26,9 @@ class KeywordDefinitionConnector:
         """Write keyword definitions to ``output_path``; return the exit code.
 
         Raises:
-            FileNotFoundError: If the connector JAR is missing (the error names
-                the ``mvn package`` command) or java is not on PATH.
+            FileNotFoundError: If the connector JAR is missing — it is built
+                with ``mvn install -DskipTests`` in ``forge-connector`` — or
+                java is not on PATH.
         """
         # KeywordDefinitionMain calls ForgeEnvironmentInitializer.initialize(),
         # which reaches GuiBase / FModel in forge-gui and pulls forge-ai

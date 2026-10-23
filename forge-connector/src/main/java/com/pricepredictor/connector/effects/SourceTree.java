@@ -28,8 +28,8 @@ import java.util.Map;
  * <p>"Letter-keyed" describes the tree; it does not generate it. Forge files
  * {@code +2 Mace} under {@code p/}, {@code 1996 World Champion} under
  * {@code n/}, {@code P. Joven and Chandler} under {@code j/}, and every
- * unreleased card under {@code upcoming/} whatever its initial — 86 files at
- * the time of writing. The converter walks the tree and keys each sidecar by
+ * unreleased card under {@code upcoming/} whatever its initial. The converter
+ * walks the tree and keys each sidecar by
  * the path it read the file from, so a collector that <em>derives</em> a path
  * instead disagrees with the sidecar for exactly those cards, and the mis-join
  * is silent: only a {@code keyword} key is checked against its sidecar, so a
@@ -48,10 +48,6 @@ public final class SourceTree {
 
     public static boolean isFlat(String tree) {
         return TOKENSCRIPTS.equals(tree) || VARIANT_SCRIPTS.equals(tree);
-    }
-
-    public static boolean isKnown(String tree) {
-        return CARDSFOLDER.equals(tree) || isFlat(tree);
     }
 
     // -- where a loader says it read a file ------------------------------
@@ -104,10 +100,10 @@ public final class SourceTree {
      * {@link CardFilenames#derivedDirectory} would, or it does not hold that
      * stem at all and the caller has nothing better than the derived answer.
      *
-     * <p>Only the disagreements are kept. The tree is ~33,700 files and 86 of
-     * them are filed somewhere other than under their initial, so an index of
-     * the exceptions is three orders of magnitude smaller than an index of the
-     * tree while answering the same question — and it is built from the tree
+     * <p>Only the disagreements are kept. A few dozen of the tree's tens of
+     * thousands of files are filed somewhere other than under their initial, so
+     * an index of the exceptions is orders of magnitude smaller than an index
+     * of the tree while answering the same question — and it is built from the tree
      * itself, so it stays right as the tree changes rather than freezing
      * today's list of oddities into code. The walk happens at most once per JVM
      * and only when something asks: the collector's first route is
@@ -119,25 +115,6 @@ public final class SourceTree {
         return exceptions(tree).get(stem);
     }
 
-    /**
-     * Point a tree at its on-disk root, discarding any index already built.
-     *
-     * <p>A caller that knows where the tree is says so; everything else falls
-     * back to Forge's own {@code cardsfolder}. Tests index a temporary tree
-     * this way rather than the installation's.
-     */
-    public static synchronized void useTree(String tree, Path root) {
-        ROOTS.put(tree, root);
-        INDEXES.remove(tree);
-    }
-
-    /** Forget every installed root and index, so one test cannot bias another. */
-    static synchronized void forgetTrees() {
-        ROOTS.clear();
-        INDEXES.clear();
-    }
-
-    private static final Map<String, Path> ROOTS = new HashMap<>();
     private static final Map<String, Map<String, String>> INDEXES = new HashMap<>();
 
     private static synchronized Map<String, String> exceptions(String tree) {
@@ -149,9 +126,8 @@ public final class SourceTree {
         return index;
     }
 
+    /** Forge's own {@code cardsfolder}; no other tree is letter-keyed. */
     private static Path rootOf(String tree) {
-        Path installed = ROOTS.get(tree);
-        if (installed != null) return installed;
         if (!CARDSFOLDER.equals(tree)) return null;
         try {
             return ForgeEnvironmentInitializer.findCardsFolder();
@@ -183,8 +159,8 @@ public final class SourceTree {
             });
         } catch (IOException e) {
             // A half-walked tree still answers for what it saw, and the rest
-            // falls back to derivation — which is what happened before this
-            // existed, so a partial answer is never worse than no index.
+            // falls back to derivation, which is the answer with no index at
+            // all, so a partial answer is never worse than none.
         }
         return found;
     }

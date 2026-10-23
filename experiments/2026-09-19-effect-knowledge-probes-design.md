@@ -1,118 +1,122 @@
 # Ability effect model — knowledge probes
 
-Design record for a suite of probes on the ability effect model described in the model design record, [`2026-09-04-ability-effect-model-design.md`](2026-09-04-ability-effect-model-design.md). An ability encoder turns each ability line into one vector `e`. `e` depends only on the line's text, so lines that read the same, on whatever card, share one `e`. An effect head then predicts what an ability does to the board. The effect head has two parts. The first part, the trunk, is a stack of transformer layers. Each layer recomputes every slot's vector from the vectors of all the slots in a sequence. The sequence holds one slot for the game, one per player, an `[ACT]` slot holding the acting ability's `e`, and, for each object on the board, a `[CARD]` slot followed by that object's ability vectors. The second part, the output heads, is a set of small layers. They read the trunk's output at those slots and predict each output field, such as whether an entity dies or how much damage it takes.
+## TL;DR
 
-Gen-1 is the checkpoint of run `09.17f`, the model weights that run saved. The model design record's Outcome section reports its results. Gen-2 is a sweep: a set of training runs, called arms, that differ in the width of `e` and the size of the encoder, described in the gen-2 record, [`2026-09-18-effect-model-gen2-improvements-design.md`](2026-09-18-effect-model-gen2-improvements-design.md). The suite runs on gen-1 and on every arm.
+The effect model's losses and gates cannot say what game knowledge a checkpoint holds, or whether it lives in the ability vector `e`, which a game agent would reuse, or in the trunk. Probes on gen-1 and seventeen gen-2 checkpoints find that gen-2's `e` holds what a line states, such as its costs and timing, and on its own answers pump duration and affordability. The trunk answers deaths and trigger firing, and a wider `e` does not move deaths into `e`. The model counts mana without checking its colour, and predicts far fewer cards drawn than a script states. On most board questions the probe rather than `e` may be the limit, so no question yet makes a firm case for moving work into `e`. `e` also barely holds how much a text's outcome depends on the board, the property the model's design rests on.
 
-Each corpus withholds two validation strata from training. The game-disjoint stratum holds whole games whose ability texts the model trained on. The card-disjoint stratum holds games that contain a held-out card, whose ability texts the model never saw.
+## Background
 
-A probe is a small model fitted to predict a known label from a model's internal vector. How well it predicts measures how readably the vector holds that label. The existing embedding probes in `scripts/effect_embedding_probes/` read `e` alone. They label each text from its script or from its effect profile: the shares of its resolutions in which affected entities died, changed zone, took damage and so on. The probes designed here also read the trunk, and they compare the two.
+The effect model's losses and gates cannot say what game knowledge a checkpoint holds, or whether that knowledge lives in the ability vectors or in the body of the model that reads them. Gen-3 needs the second answer most. It aims to hold as much of the model's knowledge as possible in the vectors, so it has to know which work to move there. This record covers a suite of probes that asks the model what it knows about Magic, and where in the model that knowledge lives.
 
-The suite has three methods and a set of board sweeps. Method A, the read-out ladder, fits probes to inputs taken from progressively deeper in the model. Method B, an ablation, replaces `e` in the frozen model and measures how much the loss rises. A frozen model's weights stay as trained and are not updated. The loss is the prediction error the model was trained to minimise, measured per output field. Method C trains a shallow trunk on frozen `e`. Board sweeps edit one input of a real record and read the full model's prediction.
+The model learns from effect records: Forge, the open-source Magic rules engine, plays both sides of sealed games, and each record holds the board before an event, such as an ability resolving, and what the event changed. Every ability on a Forge card is a line of script. An encoder turns each ability into one vector `e`. An effect head reads the `e` vectors together with the board and predicts what the ability does to every card and player, and its shared body, which every prediction passes through, is the trunk. The model is described in the gen-2 record, [`2026-09-18-effect-model-gen2-improvements-design.md`](2026-09-18-effect-model-gen2-improvements-design.md), and its original design in [`2026-09-04-ability-effect-model-design.md`](2026-09-04-ability-effect-model-design.md).
 
-## The probes measure what game knowledge each model holds, and how much of it lives in `e` rather than in the trunk
+### Knowledge in `e` survives into the game agent, and knowledge that lives only in the trunk may not
 
-The suite has three goals. The first is to find game knowledge the model encodes beyond what the existing embedding probes show. The second is to measure how much of that knowledge lives in `e` and how much in the trunk. Gen-3 aims to hold as much of the knowledge as possible in `e`, so this measurement shapes gen-3's architecture. The third is to compare the arms of gen-2's sweep.
-
-Knowledge that lives in `e` survives into the game agent, and knowledge that lives only in the trunk may not. The game agent ([`2026-09-12-game-playing-agent-design.md`](2026-09-12-game-playing-agent-design.md)) reuses the ability encoder through its cache, which stores one precomputed `e` per ability line. It may retrain the trunk or replace it. Whatever the trunk re-derives from context every time it computes a prediction is then lost to the agent, which has to learn it again from its own much weaker training signal.
+Where knowledge lives matters because `e` is the part that gets reused. The game agent ([`2026-09-12-game-playing-agent-design.md`](2026-09-12-game-playing-agent-design.md)) would reuse the ability encoder through its cache, which stores one precomputed `e` per ability line. It may retrain the trunk or replace it. Whatever the trunk re-derives from the board every time it computes a prediction is then lost to the agent, which has to learn it again from its own much weaker training signal.
 
 One vector per ability is also easier to interpret. It can be inspected, compared with another ability's vector and reused by any consumer without running a board through the trunk.
 
-## The probes cover what an ability does to the board, in ten families, and leave strategic value to the game agent
+### The embedding probes read only `e`, gen-1's text taught it nothing about blocking, and the design's central claim was never tested
+
+The existing embedding probes in `scripts/effect_embedding_probes/` read `e` alone, so they cannot say what the trunk adds to it. They label each text from its script or from its effect profile, the shares of its resolutions in which affected entities died, changed zone, took damage and so on. They show that the encoder keeps which kind of outcome an ability produces and loses its amounts and costs.
+
+Gen-1 learned least about evasion and blocking. Gen-1's two blocker fields score exactly at the level of the state-only baseline, the gen-1 model trained with every ability vector zeroed so that it predicts from the board alone. The text taught the model nothing about who may block whom.
+
+The claim the model design rests on had never been tested: that training the encoder against the board yields a better `e` than training it on text alone. The model design record's `no-state` baseline was meant to test that claim by reading the acting ability's text without the board. It zeroed the board and every ability vector, the acting one included. Its encoder therefore never trained.
+
+### The trunk reads each ability's `e` in a slot of its own beside the board
+
+The trunk is a transformer: a stack of layers in which every input slot can draw on every other. It reads one slot for the game (`[GLOBAL]`), one per player (`[PLAYER]`), an `[ACT]` slot holding the acting ability's `e`, and a block for each object in the board snapshot. A card block is a `[CARD]` slot followed by the `e` of each spell or activated line the object carries, its ability slots. A permanent's statics, triggers and replacements are never in a block. Small output heads read the trunk and predict each output field, such as whether an entity dies or how much damage it takes. The affected gate is the output field that gives the model's predicted chance that a card or player is changed at all. A verdict head answers yes/no questions about the acting ability, such as whether it is affordable and whether a trigger fires.
+
+![Diagram of the effect model. A Forge script passes through a tokenizer and the ability encoder to a vector e of width 64, 128 or 256. In training only, noise is added to e, an MLM head reads the encoder's tokens, and value, API-type and parameter-key heads read e alone. e feeds the [ACT] slot and the ability slots of each object's block in the trunk's input, beside [GLOBAL], two [PLAYER] slots and [CARD] slots. Statics, triggers and replacements are never in a block. A six-layer trunk feeds the created-objects, verdict and per-entity heads. Numbered badges mark where read-out ladder rungs 0, 1, 1w, 1o, 2 and 3 read, and a panel shows the three ablation scopes.](2026-09-18-effect-model-gen2/charts/diagram-model-and-probes.png)
+
+*Dashed parts exist only in training. The MLM head, a masked-language-model head, trains the encoder to restore hidden words of the script. The rose badges mark the input each rung of the [read-out ladder](#the-read-out-ladder-measures-the-share-of-the-models-knowledge-e-carries-from-the-board-alone-to-the-models-own-answer-method-a) probes, and the slot rows of the ablation panel show which slots each [ablation](#replacing-e-in-the-frozen-trunk-measures-how-much-the-trunk-relies-on-it-and-supports-the-ladder-method-b) scope replaces.*
+
+## Description of the experiment
+
+The suite has three goals. The first is to find game knowledge the model encodes beyond what the embedding probes show. The second is to measure how much of that knowledge lives in `e` and how much in the trunk. Gen-3 aims to hold as much of the knowledge as possible in `e`, so this measurement shapes gen-3's architecture. The third is to compare the arms of gen-2's width sweep, its runs over the width of `e`.
+
+The suite has three methods and a set of board sweeps, and each reads probe items drawn from games kept out of training ([the strata](#probe-items-come-from-two-strata-of-games-kept-out-of-training-frozen-once-per-corpus)). Unlike the embedding probes, it also reads the trunk and compares the two.
+
+- **The read-out ladder (method A)** fits probes to inputs taken from progressively deeper in the model, from the board alone to the trunk's output, and sets them beside the model's own answer. It measures how much of the model's knowledge `e` alone carries, and how much `e` adds over a random vector of its width.
+- **Ablations (method B)** replace `e` in the trained model and measure how much each output field's loss rises. The loss is the prediction error the model was trained to minimise.
+- **Board sweeps** edit one input of a real record, such as a target's toughness or the mana a player has, and read how the model's prediction moves.
+- **Method C** would train a shallow trunk on frozen `e`, and stays off by default ([why](#a-shallow-trunk-trained-on-frozen-e-would-imitate-the-game-agents-reuse-of-the-encoder-and-stays-off-by-default-method-c)).
+
+### The probes cover what an ability does to the board, in ten families, and leave strategic value to the game agent
 
 The encoder's job is to capture an ability's immediate effect on the board. Strategic value, such as a card's win rate or its price, is out of scope for two reasons. The training corpus does not contain it, so the model has no signal to learn it from. Learning it is the game agent's job.
 
-The ten families below are what the probes target. Each label comes from a source that exists without the model: the parsed script, or an outcome observed in the effect-record corpus.
+The ten families below are what the probes ask about. Each label comes from a source that exists without the model: the parsed script, or an outcome observed in the effect-record corpus.
 
-| Family | Targets | Label sources |
-|---|---|---|
-| Magnitudes and thresholds | damage, power and toughness change, counter and life amounts; whether the effect kills a creature of toughness *t*; each amount per mana of cost | parsed script parameters; observed outcomes in resolution records |
-| Mana production | colours produced, amount, any colour, spending restrictions, conditional production | the script's mana parameters; the `mana_produced` events of mana resolution records |
-| Mana usage | the ability's own mana cost; cost reducers and taxes on other spells; whether it is affordable on a given board | the line's `Cost$`, which labels no spell line, because a spell's mana cost belongs to its card; playability decision records |
-| Timing and non-mana costs | instant speed, a tap cost, a sacrifice or life cost | the script |
-| Interactions | whether ability A's event fires ability B's trigger, over pairs of lines | trigger records joined to resolution records |
-| Side | whose permanents and resources the effect changes: its controller's, the opponents', or both | the side of each affected entity in resolution records; the script's target and player restrictions |
-| Evasion and blocking | which defending creatures may legally block a given attacker | legality records of the `blockers` subkind |
-| Target legality | whether an ability may target a given permanent that has hexproof, shroud, protection or ward | the legal-target sets of playability decision records |
-| Duration and repeatability | whether a change lasts until end of turn, stays, or comes as a counter; whether the ability can be used again | the events' duration field; the line kind and whether the cost taps or sacrifices |
-| State dependence | how much a text's outcome varies across the boards it resolved on | the spread of each text's observed outcomes across its resolution records |
+| Family | Probe questions | Label sources | Where reported |
+|---|---|---|---|
+| Magnitudes and thresholds | damage, power and toughness change, counter and life amounts; whether the effect kills a creature of toughness *t*; each amount per mana of cost | parsed script parameters; observed outcomes in resolution records | [ladder](#e-alone-carries-pump-duration-and-affordability-and-the-trunk-answers-the-other-board-questions) (dies, damage taken); [line properties](#gen-2s-e-holds-whether-a-line-taps-or-sacrifices-almost-perfectly-and-its-timing-and-most-of-its-amounts-well); [`e` over a random vector](#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality); the toughness and damage sweeps in [the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#the-model-compares-damage-with-toughness-only-after-training-shows-it-the-rule-directly) |
+| Mana production | colours produced, amount, any colour, spending restrictions, conditional production | the script's mana parameters; the `mana_produced` events of mana resolution records | [`e` over a random vector](#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality) only; observed mana not measured |
+| Mana usage | the ability's own mana cost; cost reducers and taxes on other spells; whether it is affordable on a given board | the line's `Cost$`, which labels no spell line, because a spell's mana cost belongs to its card; playability decision records | [ladder](#e-alone-carries-pump-duration-and-affordability-and-the-trunk-answers-the-other-board-questions) (affordable); [colour](#colour-the-model-counts-the-mana-a-player-has-and-barely-checks-its-colour); [sweeps](#the-affordable-verdict-never-clearly-passes-one-half-and-a-sweepers-predicted-deaths-rise-by-a-fifth-per-creature-added); [line properties](#gen-2s-e-holds-whether-a-line-taps-or-sacrifices-almost-perfectly-and-its-timing-and-most-of-its-amounts-well) (total cost) |
+| Timing and non-mana costs | instant speed, a tap cost, a sacrifice or life cost | the script | [line properties](#gen-2s-e-holds-whether-a-line-taps-or-sacrifices-almost-perfectly-and-its-timing-and-most-of-its-amounts-well); [`e` over a random vector](#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality) (life cost) |
+| Interactions | whether ability A's event fires ability B's trigger, over pairs of lines | trigger records joined to resolution records | [ladder](#e-alone-carries-pump-duration-and-affordability-and-the-trunk-answers-the-other-board-questions) (trigger fires); one pair probe in [`e` over a random vector](#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality); otherwise not measured |
+| Side | whose permanents and resources the effect changes: its controller's, the opponents', or both | the side of each affected entity in resolution records; the script's target and player restrictions | [ladder](#e-alone-carries-pump-duration-and-affordability-and-the-trunk-answers-the-other-board-questions) (card affected); [`e` over a random vector](#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality) |
+| Evasion and blocking | which defending creatures may legally block a given attacker | legality records of the `blockers` subkind | [ladder](#e-alone-carries-pump-duration-and-affordability-and-the-trunk-answers-the-other-board-questions) (may block); [evasion](#evasion-the-model-knows-an-evasive-attacker-is-hard-to-block-and-which-blocker-answers-it-only-for-horsemanship-and-fear) |
+| Target legality | whether an ability may target a given permanent that has hexproof, shroud, protection or ward | the legal-target sets of playability decision records | [ladder](#e-alone-carries-pump-duration-and-affordability-and-the-trunk-answers-the-other-board-questions); [targeting](#targeting-the-model-follows-who-controls-a-target-and-barely-checks-the-card-type-a-restriction-names) |
+| Duration and repeatability | whether a change lasts until end of turn, stays, or comes as a counter; whether the ability can be used again | the events' duration field; the line kind and whether the cost taps or sacrifices | [ladder](#e-alone-carries-pump-duration-and-affordability-and-the-trunk-answers-the-other-board-questions) (pump duration); [line properties](#gen-2s-e-holds-whether-a-line-taps-or-sacrifices-almost-perfectly-and-its-timing-and-most-of-its-amounts-well) (repeatable); [`e` over a random vector](#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality) |
+| State dependence | how much a text's outcome varies across the boards it resolved on | the spread of each text's observed outcomes across its resolution records | [state dependence](#e-barely-holds-how-much-a-texts-outcome-varies-from-board-to-board) |
 
-The embedding probes already show that the encoder keeps which kind of outcome an ability produces and loses its amounts and costs. The first five families extend that to thresholds, to mana and to pairs of abilities, and they ask the same questions of the trunk.
+The first five families extend what the embedding probes show to thresholds, to mana and to pairs of abilities, and they ask the same questions of the trunk.
 
-The last five families each target a property the first five leave out.
+The last five families each cover a property the first five leave out.
 
-- **Side** is the property that separates removal from a pump spell and a sweeper from an anthem. The fifth principal component of gen-1's `e` vectors already follows the opponent's share of affected entities, and no existing probe targets it.
-- **Evasion and blocking** is where gen-1 learned least. Gen-1's two blocker fields score exactly at the level of the state-only baseline, the gen-1 model trained with every ability vector zeroed so that it predicts from the board alone. The text taught the model nothing about who may block whom.
+- **Side** is the property that separates removal from a pump spell and a sweeper from an anthem. The fifth principal component of gen-1's `e` vectors already follows the opponent's share of affected entities, and no existing probe asks about it.
+- **Evasion and blocking** is where gen-1 learned least ([gen-1's blocker fields](#the-embedding-probes-read-only-e-gen-1s-text-taught-it-nothing-about-blocking-and-the-designs-central-claim-was-never-tested)).
 - **Target legality** decides whether a removal spell can be aimed at all.
 - **Duration and repeatability** separate abilities whose immediate effect is identical: a +1/+1 counter and a pump until end of turn, or a repeatable activation and a one-shot spell.
-- **State dependence** tests the claim the model design rests on: that training the encoder against the board yields a better `e` than training it on text alone. The model design record's `no-state` baseline was meant to test that claim by reading the acting ability's text without the board. It zeroed the board and every ability vector, the acting one included. Its encoder therefore never trained, and the claim remains untested.
+- **State dependence** tests the claim the model design rests on: that training the encoder against the board yields a better `e` than training it on text alone. No earlier baseline tested it ([the `no-state` baseline](#the-embedding-probes-read-only-e-gen-1s-text-taught-it-nothing-about-blocking-and-the-designs-central-claim-was-never-tested)).
 
-## The read-out ladder measures the vector's share of what the model knows, and is the headline for gen-3 (method A)
+### The read-out ladder measures the share of the model's knowledge `e` carries, from the board alone to the model's own answer (method A)
 
-The ladder reads one target from inputs of increasing depth, and each input is a rung. Rungs 0 to 2 fit the same two probes to their input: a linear probe, and a small MLP (multi-layer perceptron), a network of linear layers with a non-linear function between them, which can read a relationship a linear probe misses. Both are fixed as the probe-architecture subsection below describes. Rung 3 is the model's own prediction. Two further rungs are controls on rung 1. For a target that depends on the board, the rungs are:
+The ladder is the headline because its share answers the question gen-3's architecture turns on: whether a piece of knowledge sits in `e` or in the trunk.
 
-| Rung | Input to the probe |
-|---|---|
-| 0 | the raw features the trunk receives, with every `e` zeroed |
-| 1 | rung 0 plus the acting ability's `e` and, for a target about one entity, the pooled `e` of that entity's own abilities, with no trunk |
-| 1w, width control | rung 1 with each `e` replaced by a fixed random vector per text, of the same width |
-| 1o, oracle | rung 0 plus the true values the target depends on, parsed from the script, such as the damage amount or the cost by colour |
-| 2 | the trunk's output at the relevant slot: `[ACT]` for a target about the ability, the target's `[CARD]` slot for a target about one entity |
-| 3 | the model's own head prediction, with no probe |
+The ladder asks one question, such as "does this creature die?", of six inputs taken from progressively deeper in the model, and each input is a rung. A question is about one card on the board, the card asked about, or about the acting ability itself. A question whose answer depends on the board is a board question.
 
-Rung 1 includes the target entity's own ability vectors because an outcome such as "this creature dies" can turn on that creature's abilities, indestructible for one.
+- **Rung 0, the board alone.** The input features the trunk receives, with every `e` zeroed, concatenated into one vector:
+  - the game: turn, phase and step, whose turn it is and who holds priority, the kind of record;
+  - the acting ability's slot without its `e`: the announced X, the number of modes, targets and choices;
+  - the acting player and one opponent: life, cards in hand, library and graveyard, poison, mana available by colour;
+  - each player's objects in the snapshot, as the average of their card features;
+  - for a question about one card, that card's own features: card types, supertypes and colours, mana value, power and toughness with their boosts and counters, marked damage, counters, zone, tapped and summoning sick, combat status, keyword flags, whose it is, whether it is targeted.
+- **Rung 1, the board plus `e`.** Rung 0's vector with three `e` vectors appended. The first is the acting ability's. The second is the average `e` of the spell and activated lines of the card asked about; its keywords, such as indestructible, are already among rung 0's keyword flags. The third is a partner's, where the question has one: for a trigger, the line whose event fired it, where [the interaction join](#interaction-labels-come-from-joining-triggers-to-resolutions-because-no-trigger-record-names-the-ability-behind-its-event) finds one, and for a blocker, the attacker's average `e`. The vectors are only concatenated; no transformer combines them with the board.
+- **Rung 1w, the width control.** Rung 1 with each `e` replaced by a fixed random vector of the same width, one per text.
+- **Rung 1o, the oracle.** Rung 0 plus the numbers the acting line's script states, and its partner's: damage, power and toughness change, counters placed and removed, cards drawn, mana cost by colour, and whether the cost taps or sacrifices. It carries nothing else of the line, such as what kind of effect it is or how long it lasts, and none of the lines of the card asked about.
+- **Rung 2, the trunk's output.** The trained trunk's output at the `[CARD]` slot of the card asked about, or at `[ACT]` for a question about the ability: one vector the transformer computed after attending over the whole board, every card's ability vectors included.
+- **Rung 3, the model's own answer.** The trained model's output head applied to that same trunk output, with no probe. For damage taken it is the predicted amount alone, because every item took damage.
 
-Every rung is scored so that higher is better. A yes/no target is scored by AUC, the probability that a random positive item scores above a random negative one. An amount is scored by R². Rung 0 is what the board alone tells a probe. Rung 3 is what the whole model knows.
+Rungs 0 to 2 are not read by the model's output heads. Each is read by a probe fitted afresh for one question on one input. The probe is a two-layer MLP (multi-layer perceptron: layers of weighted sums with a non-linear function between them, which can read a relationship a linear model misses). A probe's score says how much of the answer its input holds in a form a small network can read.
 
-The headline for gen-3 is the vector's share, (rung 1 − rung 0) / (rung 3 − rung 0), reported with a bootstrap confidence interval for each of the two probes. It is the fraction of the gap between the board alone and the whole model that the ability vectors close without any trunk. A share near 1 means `e` carries the knowledge, and a share near 0 means the trunk supplies it.
+The share `e` carries is (rung 1 − rung 0) / (rung 3 − rung 0): the fraction of the distance from the board alone to the model's own answer that `e` closes without the trunk. A share near 1 means `e` carries the knowledge, and a share near 0 means the trunk supplies it. Rungs 1w and 1o are controls on rung 1. Every rung is scored so that higher is better. The share is computed only above a minimum gap, and interpreted only where the oracle rung allows ([the rule](#the-share-e-carries-is-interpreted-only-where-the-oracle-shows-a-probe-could-use-the-true-numbers)).
 
-A property of a line that does not depend on the board, such as the damage it deals or its mana cost by colour, gets a short ladder: `e` alone, its width control, and the trunk's output at `[ACT]`. A line property a probe reads much better from the trunk's output than from `e` is one the trunk re-derives from context, and one `e` could have held.
+A probe is scored by AUC for a yes/no question, the chance that a true case scores above a false one, so 0.5 is chance. An amount is scored by R², the share of its variance the prediction explains, where 0 is no better than predicting the amount's mean.
 
-An optional per-layer view probes the output of each trunk layer in turn. It shows at what depth a fact appears, which feeds the sizing of gen-3's trunk.
+A property of a line that does not depend on the board, such as the damage it deals or its mana cost by colour, gets a short ladder. Its rungs are `e` alone, read as rung 1, the width control as rung 1w, and the trunk's output at `[ACT]` as rung 2. A line property a probe reads much better from the trunk's output at `[ACT]` than from `e` is one the trunk re-derives from context, and one `e` could have held.
 
-### Every probe is fitted on folds split by text, so no probe can look up a text's label
+The per-layer view would probe the output of each trunk layer in turn. It shows at what depth a fact appears, which feeds the sizing of gen-3's trunk.
 
-The cross-validation folds never put one text on both sides. Every probe is fitted on all folds but one and scored on the fold left out, in turn. `e` is a fixed function of the text. A probe fitted on some records of a text and scored on other records of the same text could read the label off which text it is, and that lookup would inflate rung 1. Where a probe item pools the lines of one card, the folds are grouped by card, as the embedding probes already group them. Rungs 0, 2 and 3 use the same folds, so the rungs of one target are comparable.
+### Replacing `e` in the frozen trunk measures how much the trunk relies on it, and supports the ladder (method B)
 
-### The share is reported only where the model knows more than the board
-
-The share is computed only where rung 3 exceeds rung 0 by a minimum gap, fixed before the first run. Below that gap the denominator is near zero and the ratio means nothing. Gen-1 already has such fields. The state-only baseline is the trained-model counterpart of rung 0. Reading the text gains nothing over it on the two blocker fields, and one percentage point on damage taken. The raw rungs are printed for every target either way.
-
-A share above 1 is possible. The probe is fitted to this one target alone, while the model's heads are trained on every output field together. The probe can therefore extract the target from `e` better than the heads do. A share above 1 says that `e` holds the target at least as readably as the model applies it.
-
-### The oracle rung says whether a low share is the vector's fault or the probe's
-
-A low rung 1 has two causes. Either `e` lacks the knowledge, or the probe cannot combine `e` with the board. The second is likely for the thresholds, where the probe must compare an amount with a toughness. Rung 1o gives the probe the true amount instead of `e`. If rung 1o comes close to rung 3, the probe can do the comparison, and a low rung 1 means `e` lacks the amount. If rung 1o stays well below rung 3, the probe is the limit, and the share on that target is not interpreted.
-
-### The width control keeps arms of different widths comparable
-
-A probe that reads a wider vector has more inputs, and it scores higher on that account alone. Rung 1w gives the probe a vector of the same width with no content, a fixed random vector per text. Under folds split by text such a vector carries nothing from one text to another, so whatever it adds over rung 0 is what width alone buys.
-
-The arms of gen-2's sweep are compared on rung 1 minus rung 1w, not on the share. The share's denominator is each arm's own rung 3, so an arm with a weaker head shows a larger share. The share answers where knowledge lives, for gen-3's design.
-
-### Both probes are fixed across every checkpoint, and the MLP's share is the headline
-
-Rungs 0 to 2 use a fixed pair of probes: a linear probe and a two-layer MLP of fixed width. Its hyperparameters, the settings chosen before fitting such as its width, learning rate and regularisation strength, are fixed once for every checkpoint. A difference in a rung between two checkpoints then reflects the models and not the probe.
-
-Every rung reports both probes' scores, and the share and the arm comparison are computed once per probe type. One computation never mixes the two types across rungs, because a ratio of a linear score to an MLP score would compare two different instruments. The MLP's share is the headline: the game agent reads `e` through non-linear layers, so the MLP's score is the closer measure of what it can use. The linear share shows whether a fact sits in `e` in a form a linear read-out finds.
-
-## Replacing `e` in the frozen trunk measures how much the trunk relies on it, and supports the ladder (method B)
-
-Method B runs each frozen model over the validation samples and reports each output field's loss increase when `e` is replaced by one of three substitutes.
+Method B runs each frozen model, with its weights as trained, over the validation samples and reports each output field's loss increase when `e` is replaced by one of three substitutes. It scores the per-entity output fields and not the verdict head.
 
 | Replacement for `e` | What the loss increase measures |
 |---|---|
 | noise matched to the vectors' mean and covariance | whether the trunk relies on `e` at all |
-| the mean `e` of the line's API type, the first word of its Forge script, which names the effect the line runs | whether it relies on `e` beyond the API type |
+| the mean `e` of the line's API type, the first word of its script, which names the effect it runs, such as `DealDamage` | whether it relies on `e` beyond the API type |
 | the `e` of the other text whose vector lies closest | how sensitive it is to fine differences between texts |
 
-The same replacements are also applied to the `[ACT]` slot alone and to the card slots alone. The comparison shows whether the trunk leans on the acting ability's vector or on the vectors of the abilities around it.
+The same replacements are applied in three scopes: every ability slot, the `[ACT]` slot alone, and the ability slots of the card blocks alone. The comparison shows whether the trunk leans on the acting ability's vector or on the vectors of the abilities around it.
 
-Ablation measures reliance, not location. A trunk can lean on `e` and still do the work itself: it may need `e` to know which ability it is looking at and then compute everything else from the board. That is why the ladder is the headline and the ablation supports it.
+Ablation measures reliance, not location. A trunk can lean on `e` and still do the work itself: it may need `e` to know which ability it is looking at and then compute everything else from the board. The ladder is the headline for that reason, and the ablation supports it.
 
-### The card slots hold no static, trigger or replacement, so a second ablation measures what their absence costs
+#### The card blocks hold no static, trigger or replacement, so a second ablation measures what their absence costs
 
-The state snapshot gives each permanent its spell and activated abilities as card-slot lines, and nothing else. A permanent's statics, triggers and replacements reach the model only through what they have already done to the board: an anthem's +1/+1 is in the toughness, a granted keyword is in the flags. About a quarter of the permanents on the battlefield in card-disjoint records carry such a line on their current face, triggers most often.
+The full ablation cannot show what an unlisted line costs. Its card-block replacement costs almost nothing because the lines that would matter were never in the card blocks, and the records where they matter are a small part of its sample. Who may block a creature, and what a destroy turns into, are the two places the missing lines matter most. About a quarter of the permanents on the battlefield in card-disjoint records carry such a line on their current face, triggers most often.
 
 | battlefield permanents in 1,500 records of the first card-disjoint shard, counted once per record | count |
 |---|---:|
@@ -122,11 +126,7 @@ The state snapshot gives each permanent its spell and activated abilities as car
 | with a non-keyword static | 3,010 |
 | with a replacement | 1,274 |
 
-A Pacifism shows the model an enchantment attached to a creature and no text, and a Rest in Peace shows it an enchantment that does nothing.
-
-What a static decides at the moment of the record therefore reaches the model as no text. Who may block a creature, and what a destroy turns into, are the two places this matters most. The full ablation cannot show it: its card-slot replacement costs almost nothing because the lines that would matter were never in the card slots, and the records where they matter are a small part of its sample.
-
-The board-abilities ablation runs method B on six subsets of the validation strata instead. Each pairs records where an unlisted line decides the answer with a control of the same kind where none does.
+The board-abilities ablation runs method B on six subsets of the validation strata instead. Each pairs records where an unlisted line decides the answer with a control of the same kind where none does. A resolution is recorded in two halves, the cost paid and the effect, and the resolution subsets read the effect half.
 
 | subset | records |
 |---|---|
@@ -137,38 +137,485 @@ The board-abilities ablation runs method B on six subsets of the validation stra
 | resolution-static | an effect half, with a non-keyword static on another permanent and no replacement |
 | resolution-none | an effect half, with no static, trigger or replacement line on any other permanent |
 
-Gen-2 does not list the missing lines; the gen-3 draft records the collector change that would. The subsets' losses on gen-2's arms are the baseline that change is measured against. A model that reads the lines should lower the loss on legality-static and resolution-replacement toward their controls, and its card-slot ablation there should rise above zero.
+Gen-2 does not list the missing lines. The gen-3 draft records the change to the collector, the code in Forge that writes effect records, that would list them. The subsets' losses on gen-2's checkpoints are the baseline that change is measured against. A model that reads the lines should lower the loss on legality-static and resolution-replacement toward their controls, and its card-block ablation there should rise above zero.
 
-## The share and the ablation together say which families gen-3 must move into `e`
+### The share and the ablation together say which families gen-3 must move into `e`
 
-Each pattern of share, reliance and oracle rung points to one next step: a change to gen-3's architecture, more corpus records, or a stronger probe.
+Each pattern of share, reliance and oracle rung points to one next step: a change to gen-3's architecture, more corpus records, or a stronger probe. [What gen-3 takes from the probes](#gen-3-inherits-two-board-questions-already-in-e-and-no-firm-case-for-moving-another-into-it) applies the rule.
 
 - A family with a low share and high reliance is one where the trunk does work `e` could carry. Gen-3 then moves that work into `e` in one of two ways. It can add auxiliary heads, extra output layers that predict the family's labels from `e` alone, so that only `e` can satisfy their training signal. Or it can use a thinner trunk that cannot re-derive the knowledge itself.
 - A family that no rung predicts well is knowledge the model lacks altogether. That is a corpus problem, not an architecture problem, and the fix is records that show the effect.
 - A family whose oracle rung stays below rung 3 needs a stronger probe before its share says anything.
 
-No cut-off for a low or a high share exists yet, so the first runs' shares are compared family against family rather than against a fixed threshold.
+The design fixes no cut-off for a low or a high share, so shares are compared family against family rather than against a fixed threshold.
 
-## Board sweeps edit one input of a real record and read where the full model's prediction steps
+### Board sweeps edit one input of a real record and read where the full model's prediction steps
 
 A threshold that depends on the board is probed by a board sweep. The board sweep takes a real record, edits one input over a range of values, and reads the full model's prediction at each value. A model that knows the threshold shows a step at the right value.
 
 - **Toughness sweep.** A damage ability sits in the acting slot. One target creature's toughness runs from 1 to 8, and the sweep reads the predicted death probability for that creature. A model that knows Lightning Bolt shows a step between toughness 3 and toughness 4.
 - **Affordability sweep.** An ability sits in the acting slot. The acting player's untapped production runs from none to more than enough, and the sweep reads the predicted affordable verdict. The verdict should step at exactly the cost: `{2}{R}` needs three mana, one of them red.
-- **Board-size sweep.** A sweeper sits in the acting slot. The number of opposing creatures runs from 0 to 8, by copying a creature entity of the record's board, and the sweep reads the predicted deaths summed over the board. They should rise one for one. This is the model design record's scaling calibration, which no run has yet measured.
+- **Board-size sweep.** A sweeper sits in the acting slot. The number of opposing creatures runs from 0 to 8, by copying a creature entity of the record's board, and the sweep reads the predicted deaths summed over the board. They should rise one for one. This is the scaling calibration the model design record asks for.
 - **Damage sweep.** The board stays fixed with a target of toughness 4. The acting text is one damage spell's script with `NumDmg$` set from 1 to 8, and the checkpoint's own encoder encodes each version. The predicted death should step between 3 and 4. The toughness sweep moves the board, and the damage sweep moves the text. The damage sweep therefore tests whether `e` carries the amount in a form the trunk can compare with toughness. Run on a triggered damage ability as well, it also tests gen-2's whole-chain encoding, which encodes every script line an ability owns as one text. On a triggered ability the damage amount sits in a sub-ability's script line, and only whole-chain encoding brings that line to the encoder.
 
-## A shallow trunk trained on frozen `e` imitates the game agent's reuse of the encoder, and stays off by default (method C)
+### A shallow trunk trained on frozen `e` would imitate the game agent's reuse of the encoder, and stays off by default (method C)
 
 Method C trains a deliberately shallow trunk on frozen `e`, with one transformer layer or none, and compares it with the full model. It is the closest imitation of the game agent reusing the encoder with a trunk of its own.
 
-It costs several GPU hours per checkpoint, against one to two for the rest of the suite. Two training runs of the same shallow trunk also differ by chance, so its result compares less well between checkpoints than the ladder's probes, whose architecture and settings are fixed across checkpoints. It therefore runs only behind a flag, when a family's results call for it.
+Method C costs several GPU hours per checkpoint, against under twenty minutes for the rest of the suite. Two training runs of the same shallow trunk also differ by chance, so its result compares less well between checkpoints than the ladder's probes, whose architecture and settings are fixed across checkpoints. It therefore runs only behind a flag.
 
-## Four families need labels assembled from several corpus records or fields
+### Probe items come from two strata of games kept out of training, frozen once per corpus
 
-### Interaction labels come from joining triggers to resolutions, because no trigger record names the ability behind its event
+Every model trained on one corpus is probed on the same items, drawn from two validation strata and frozen once per corpus. Each corpus withholds the two strata from training, whole games at a time ([diagram](2026-09-18-effect-model-gen2/charts/diagram-validation-strata.png), [the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#two-validation-strata-keep-whole-games-out-of-training-and-one-of-them-holds-texts-the-model-never-trained-on)). The card-disjoint stratum holds games that contain a held-out card, whose ability texts the model never trained on. The game-disjoint stratum holds games the model never saw whose ability texts it did train on. A property of a line is read on two sets of texts: the held-out lines, the texts of held-out cards, and the trained lines, every other text.
 
-No trigger record names the ability that caused its event. About half the records name a `cause` entity in their event's params, but `cause` is the object that caused the event, not the ability. No record sets `attributed_to`. The counts are over the 1,000 games of gen-1's game-disjoint stratum.
+The probe set is frozen, and the interaction join rate measured, before the first run on a corpus, since both are properties of the corpus. Gen-1's set is built over gen-1's corpus, against gen-1's provenance sidecars, and gen-2's once over gen-2's final corpus for every arm.
+
+### Every probe is scored on cards or texts it was never fitted on
+
+Each probe is fitted on four fifths of the items and scored on the fifth it never saw, five times over. Items about one card are split by that card. Items about the acting ability, and line properties, are split by their text. A probe is therefore never scored on a card or text it was fitted on. Rungs 0, 2 and 3 use the same folds as rung 1, so the rungs of one question are comparable. On a question about one card the acting ability's text can still fall on both sides of a split, which matters for the width control below.
+
+Folds are split by the card or text an item is about because `e` is a fixed function of the text. A probe fitted on some records of a text and scored on other records of the same text could read the label off which text it is, and that lookup would inflate rung 1. A question about one card pools that card's lines, so its folds are split by card, as the embedding probes already group them.
+
+### A random vector of `e`'s width separates what `e` holds from what its width buys
+
+Rung 1 minus rung 1w measures what `e`'s content adds to a probe beyond the extra inputs its width brings. A probe that reads a wider vector has more inputs, and it scores higher on that account alone. Rung 1w gives the probe a vector of the same width with no content, a fixed random vector per text. On a line property the folds are split by text, so such a vector carries nothing from one text to another, and rung 1w measures width alone. On a question about one card the folds are split by card, and the acting text can fall on both sides. Rung 1w then gives each acting text a fixed code, and the probe can learn that text's usual answer from it. On those questions the comparison is between `e` and a code that names the acting text.
+
+#### The arms are compared on what their `e` holds, and the share answers where knowledge lives
+
+The arms of gen-2's width sweep are compared on rung 1 minus rung 1w, which says what each arm's `e` holds. The share is not used for that comparison, because its denominator is each arm's own rung 3, so an arm with a weaker head shows a larger share. The share answers where knowledge lives, for gen-3's design. The gen-2 record compares the arms' own answers.
+
+### The share `e` carries is interpreted only where the oracle shows a probe could use the true numbers
+
+The share is computed only where rung 3 exceeds rung 0 by at least 0.05, a minimum gap fixed before the first run. Below that gap the denominator is near zero, and the model knows no more than the board. Gen-1 already has such fields. The state-only baseline is the trained-model counterpart of rung 0. Reading the text gains nothing over it on the two blocker fields, and one percentage point on damage taken. The raw rungs are printed for every question either way.
+
+A low share has two possible causes. Either `e` lacks the answer, or a probe cannot combine `e` with the board, as when it must compare a damage amount with a toughness. The oracle rung separates the two, because it hands the probe the true numbers in place of `e`. A share below nine tenths is interpreted only where the oracle rung closes at least half the gap. Below that, even the true numbers leave the probe far from the model's answer, and the probe is the limit.
+
+The oracle rung was built for the thresholds, where a probe that cannot combine `e` with the board was expected: there the probe must compare an amount with a toughness.
+
+#### A share above 1 means the probe reads the question from `e` better than the model's heads do
+
+The probe is fitted to this one question alone, while the model's heads are trained on every output field together. The probe can therefore extract the answer from `e` better than the heads do. A share above 1 says that `e` holds the answer at least as readably as the model applies it.
+
+### Both probes are fixed across every checkpoint, and the MLP's share is the headline
+
+Rungs 0 to 2 use a fixed pair of probes: a linear probe and a two-layer MLP of fixed width. Its hyperparameters, the settings chosen before fitting such as its width, learning rate and regularisation strength, are fixed once for every checkpoint. A difference in a rung between two checkpoints then reflects the models and not the probe.
+
+Every rung reports both probes' scores, and the share and the arm comparison are computed once per probe type. One computation never mixes the two types across rungs, because a ratio of a linear score to an MLP score would compare two different instruments. The MLP's share is the headline: the game agent reads `e` through non-linear layers, so the MLP's score is the closer measure of what it can use. The linear share shows whether a fact sits in `e` in a form a linear read-out finds.
+
+### Four families need labels assembled from several corpus records or fields
+
+#### Interaction labels come from joining triggers to resolutions, because no trigger record names the ability behind its event
+
+No trigger record names the ability that caused its event, so the interaction label is built by a join ([the counts](#fewer-than-one-fired-trigger-in-ten-joins-to-a-resolution-because-most-are-caused-by-a-spell-being-cast)). A fired trigger record carries its pending event. The resolution record in the same game whose events contain that event names the ability that produced it. That ability and the trigger's line form a positive pair. The join rate is the share of fired trigger records whose pending event the join finds in a resolution record.
+
+Pairs the join cannot reach are mined from the scripts. A death trigger paired with a sacrifice outlet, or a lifegain trigger paired with a lifegain ability, is a positive pair by construction. Trigger records that were evaluated and did not fire are the negatives. They occur naturally in the corpus, because the collector records non-fired evaluations of the same event type.
+
+#### Playability decision records carry everything affordability and target legality need
+
+A decision record is enough to recompute whether a candidate ability was affordable. Each candidate carries its `affordable` flag and its `cost_after_adjustment`, and each player carries `untapped_production` and `floating_mana` by colour. The mana-usage family reads both its labels and the affordability sweep from these fields. The same records carry each candidate's legal-target set, which labels the target-legality family.
+
+#### State dependence is labelled from the spread of each text's own outcomes
+
+A text's state-dependence label, its outcome spread, is how much its observed outcome varies across its resolution records. Each record's outcome is summarised by the effect-profile statistics the embedding probes use. The label is the spread of those statistics across the text's records. In the probe fit, each text is weighted by n/(n+5), where n is its number of resolutions, so a text seen once counts for little.
+
+"Draw a card" scores near zero. A sweeper, whose deaths follow the size of the opposing board, scores high. A probe that reads this label from `e` shows whether training against the board left a trace in the vector.
+
+### Probe items are keyed by provenance, so one frozen probe set serves every checkpoint trained on a corpus
+
+Every probe item is keyed by its provenance, never by its text. Gen-2's whole-chain encoding changes every line's text, so a probe item keyed by text in gen-1 would match nothing in gen-2, while its provenance key still names the same trait. The provenance key `(script_file, face, trait_kind, index_within_kind)` names the Forge script, the card face, the kind of trait and the trait's position among its kind that a line was rendered from. A provenance sidecar is the file `convert` writes beside each converted card, mapping each provenance key to its rendered line.
+
+Four parts of the suite let it compare checkpoints.
+
+- **A model adapter** takes any checkpoint and resolves its vocabulary, its cache and its width of `e`.
+- **A frozen probe set** enumerates the probe items, their labels and the games they come from once per corpus, and hashes them into the digest each scorecard records.
+- **Probe games no later corpus build trains on.** The card-disjoint games name a held-out card, so no build ever trains on them. Gen-2's `build-corpus` places a game in the game-disjoint stratum by a rule that depends only on the game, so a rebuild over a grown corpus keeps every game-disjoint probe game out of training as well.
+- **A scorecard comparison** reads several scorecards and sets them side by side, per family and per rung.
+
+### The suite runs on the trained model unchanged, from a script directory the gen-2 spec describes
+
+`EffectModel.forward` takes `e_vectors` as an argument of its own and returns the trunk's output at every slot, so an ablation passes a different tensor and the ladder reads the returned outputs, with no change to the model. The suite lives in `scripts/effect_knowledge_probes/` beside the embedding probes, and its normative description is the probe-tooling section of [`../specs/2026-10-06-ability-effect-model-gen2.md`](../specs/2026-10-06-ability-effect-model-gen2.md).
+
+### Each checkpoint runs the probes that read only the cache first
+
+Each checkpoint is probed once its cache of `e` vectors exists: gen-1 first, and each gen-2 checkpoint after its training finishes. Each probing run reads the cache first, so a broken cache or a wrong adapter shows before any GPU time goes to the trunk. The order is:
+
+1. the line properties and the state-dependence probe, from the cache alone, with their width controls;
+2. the trunk's output at `[ACT]` for every line property, and rungs 0 to 3 for every board question, on both strata;
+3. the four board sweeps;
+4. the ablation, over the validation samples.
+
+The per-layer view comes after the ablation, on the families with a low share. After the last arm, `compare` ranks the arms on rung 1 minus rung 1w per family, beside the memorization gap, how much better an arm does on texts it trained on than on held-out ones. Gen-1 and gen-2 are read against each other by direction only, because they are probed on different corpora.
+
+## Result
+
+**`e` carries what a line states, and adds next to nothing over a random vector on deaths, trigger firing and block legality.** A probe is a small network fitted to read one answer from one input. From the board and `e` alone, without the trunk, a probe recovers nearly all of what the model knows about whether an ability is affordable and how long a pump lasts. Against a random vector of the same width, which carries no content, `e` gains the most on a line's costs, amounts, timing and the side its effect lands on. On deaths it gains almost nothing at widths 64 and 128 and less than nothing at width 256, so four times the width does not move deaths into `e`. On deaths, trigger firing, affected cards, target legality and damage taken, a probe on the trunk's output reads about as much as the model's own answer. On these questions the probes cannot say whether `e` holds what they need. Whether a creature may block is known from the board alone, partly because gen-2's labels for it record which creatures the AI had already planned to block with ([the read-out ladder](#e-alone-carries-pump-duration-and-affordability-and-the-trunk-answers-the-other-board-questions), [`e` over a random vector](#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality)).
+
+**Gen-2's `e` holds whether a line taps or sacrifices almost perfectly, and its timing and most of its amounts well, where gen-1's held little of these.** Costs and timing transfer to held-out lines, the texts of cards the model never trained on. Power and toughness changes do not ([line properties](#gen-2s-e-holds-whether-a-line-taps-or-sacrifices-almost-perfectly-and-its-timing-and-most-of-its-amounts-well)).
+
+**`e` barely holds how much a text's outcome varies from board to board, which training against the board was meant to put there.** A probe reads under a fifth of that spread from `e` on trained lines and nothing on held-out lines, where gen-1's `e` read a quarter. The probes therefore find no support for the claim the model's design rests on, that training the encoder against the board gives a better `e` than training it on text alone ([state dependence](#e-barely-holds-how-much-a-texts-outcome-varies-from-board-to-board)).
+
+**The trunk reads the acting ability's `e` and ignores the `e` of the abilities already on the board.** Replacing the acting ability's `e` with noise costs as much as replacing every `e`. Replacing only the `e` of the abilities on the board costs nothing measurable, on every checkpoint ([ablation](#the-trunk-reads-the-acting-abilitys-e-and-ignores-the-e-of-the-abilities-on-the-board)).
+
+**A restriction the board snapshot does not list costs the model the most on attack legality, on every checkpoint.** The snapshot gives each permanent only its spell and activated abilities, so a Pacifism reaches the model as an enchantment with no text. Where such a static keeps a creature from attacking, the attack-legality loss is between one and a half and four and a half times its loss with no restriction ([board abilities](#a-restriction-the-board-snapshot-does-not-list-costs-the-model-the-most-on-attack-legality)).
+
+**The model knows an evasive attacker is hard to block, but pairs it with the blocker that answers it only for horsemanship and fear.** Intimidate is read as fear, reach barely answers flying, and shadow and "can't be blocked" change nothing. The predicted chance of any block is low, because the block labels the model trained on mark many legal blocks as forbidden ([evasion](#evasion-the-model-knows-an-evasive-attacker-is-hard-to-block-and-which-blocker-answers-it-only-for-horsemanship-and-fear)).
+
+**The model follows who controls a target, and barely checks the card type a restriction names.** A creature that loses its creature type stays a legal target of "target creature" ([targeting](#targeting-the-model-follows-who-controls-a-target-and-barely-checks-the-card-type-a-restriction-names)).
+
+**The model counts the mana a player has and barely checks its colour.** One land fewer lowers the affordable verdict, the model's predicted chance that a spell can be paid for, four to ten times as much as one land of the wrong colour. Two extra lands of the wrong colour make an uncastable spell look more affordable than a castable one. The affordable label the model trained on carries some of Forge's AI cost policy as well as the rules ([colour](#colour-the-model-counts-the-mana-a-player-has-and-barely-checks-its-colour)).
+
+**The model knows which player draws, discards or mills and where a moved card goes, and barely uses the number of cards the script states.** Six cards drawn are predicted as about two. Retargeting a draw, discard or mill moves only part of the predicted effect to the new player ([zones](#zones-the-model-knows-which-player-draws-discards-or-mills-and-where-a-moved-card-goes-and-barely-uses-the-number-of-cards)).
+
+**The affordable verdict never clearly passes one half as the affordability sweep adds mana, on every gen-2 checkpoint.** The verdict rises with the mana given. The model still separates affordable candidates from unaffordable ones almost perfectly, so it reads affordability partly from something the sweep does not set ([sweeps](#the-affordable-verdict-never-clearly-passes-one-half-and-a-sweepers-predicted-deaths-rise-by-a-fifth-per-creature-added)).
+
+**A sweeper is predicted to kill about one creature in five, on every gen-2 checkpoint.** The board-size sweep adds opposing creatures one at a time, and the predicted deaths rise by about a fifth of a death per creature, where a sweeper kills one per creature ([sweeps](#the-affordable-verdict-never-clearly-passes-one-half-and-a-sweepers-predicted-deaths-rise-by-a-fifth-per-creature-added)).
+
+**Only pump duration and affordability already live in `e`, and no other board question has a share firm enough to move it there.** Deaths and affected cards show the pattern that calls for moving work into `e`: the board plus `e` carries little of the model's answer, and the trunk's loss rises steeply without the acting `e`. On both, the probe rather than `e` may be the limit, so a stronger probe has to confirm the share first. Block legality is a labelling problem, which gen-3's collection fixes ([what gen-3 takes](#gen-3-inherits-two-board-questions-already-in-e-and-no-firm-case-for-moving-another-into-it)).
+
+Method C, the per-layer view, most of the interaction family and observed mana production were not measured. Method C, a shallow trunk trained on frozen `e`, never ran, and neither did the per-layer view, which would probe each trunk layer in turn. The interaction family, whether one ability's event fires another's trigger, is reported only through the interaction join rate and one pair probe. The observed-mana label counted mana events rather than mana and scored no rung ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#the-observed-mana-probe-label-counted-mana-events-rather-than-mana)). The linear probes' scores are in the data and not discussed.
+
+This record reports where the model's knowledge lives, and the probes aimed at single rule families: evasion, targeting, mana colour, card movement, and the board sweeps. The gen-2 record judges gen-2's training changes and the rules they targeted: the death rule, the lethal boundary, the combat grid, gate 2, checkpoint selection, the losses and the width of `e`. Gate 2 is the gen-2 record's check that combat keywords move predictions the way they move real outcomes.
+
+Gen-1 and seventeen gen-2 checkpoints were probed. Medians are taken over the fourteen gen-2 checkpoints trained with lethality copies, extra training records whose deaths are labelled by the rule, unless a table says otherwise. Every chart shares one key for the width of `e` and the stage of training ([checkpoints and key](#gen-1-and-seventeen-gen-2-checkpoints-from-twelve-runs-were-probed-and-every-chart-shares-one-key)). All the data is in [`2026-09-18-effect-model-gen2/`](2026-09-18-effect-model-gen2/README.md), shared with the gen-2 record, and every chart is drawn from it by `scripts/effect_gen2_report/make_charts.py`.
+
+### `e` alone carries pump duration and affordability, and the trunk answers the other board questions
+
+On two board questions `e` carries the answer: how long a pump lasts and whether an ability is affordable. On the other board questions a probe on the trunk's output reads about as much as the model's own answer or more, and the board plus `e` reads far less. The oracle closes little of the gap on those questions, so the ladder cannot tell whether `e` lacks the answer or the probe cannot use it.
+
+| question, card-disjoint records | item | share carried by `e`, median over 14 checkpoints | range | share a random vector closes, median | share the oracle closes, median | share interpreted |
+|---|---|---:|---|---:|---:|---|
+| how long a pump lasts | a permanent whose power or toughness a resolution changed: does the change end at end of turn | 1.01 | 0.90–1.06 | 0.10 | 0.24 | yes, `e` closes the gap |
+| affordable | a candidate in a playability decision: can its controller pay for it | 0.93 | 0.85–0.97 | 0.45 | 0.85 | yes |
+| damage taken | a creature a resolution damaged: how much damage, scored by R² | 0.56 | 0.46–0.75 | 0.13 | 0.15 | no |
+| legal target | a battlefield permanent in a targeting decision: is it a legal target | 0.51 | 0.19–0.58 | −0.63 | 0.03 | no |
+| trigger fires | an evaluated trigger: does it fire | 0.30 | 0.22–0.36 | 0.10 | 0.15 | no |
+| legal target, protected | the same, for a permanent with hexproof, shroud, protection or ward | 0.28 | 0.17–0.41 | −0.22 | −0.15 | no |
+| card affected | a battlefield permanent in a resolution: does the resolution change it at all | 0.23 | 0.16–0.37 | −0.12 | 0.05 | no |
+| dies | a creature a resolution damaged: does it die | 0.20 | 0.04–0.30 | 0.16 | 0.04 | no |
+| may block | a creature in a block-legality record: may it block this attacker | — | — | — | — | no share: the model scores no better than the board alone |
+
+*MLP probes. A negative share means the rung scores below the board alone. Data: `probe_ladder.csv`.*
+
+![The read-out ladder for nine board questions: each rung's median and range, and each checkpoint's share with the random-vector and oracle shares marked, rows where the share is not interpreted shaded](2026-09-18-effect-model-gen2/charts/probe-ladder.png)
+
+*(a) Each rung's median over the 14 checkpoints with copies, card-disjoint records, drawn as the rung's own name; the stroke spans the checkpoints. Yes/no questions are scored by AUC, damage taken by R² on its own axis. (b) Each checkpoint's share carried by `e`, in the shared key. The grey tick labelled 1w marks the median share a random vector of `e`'s width closes, and the dashed purple tick labelled 1o the median share the oracle rung closes. Shaded rows are the questions whose share is not interpreted. May block has no share, because the model's answer scores no better than the board alone. Data: `probe_ladder.csv`.*
+
+- **What the line states, `e` carries.** How long a pump lasts turns on the script, and whether an ability is affordable turns on its cost. Rung 1 closes nine tenths or more of the gap on both at the median, with no trunk. On affordability, a random vector of `e`'s width closes nearly half the gap by itself, so `e`'s content accounts for about half of that share.
+- **On the other board questions the trunk answers, and the ladder cannot say whether `e` could.** Deaths, trigger firing, which cards are affected, target legality and damage taken all depend on the board. On each, a probe on the trunk's output reads about as much as the model's own answer, or more on damage taken, and the board plus `e` reads far less. The oracle closes a twentieth of the gap or less on deaths, affected cards and target legality, and about a seventh on triggers and damage taken. A probe on the board and the true numbers therefore stays far from the answer, and a low share may be the probe's limit rather than `e`'s. The oracle carries only the stated numbers, and it scores below rung 1 on every question but may block, where the two are level.
+- **On deaths, `e` adds no more than a random vector of its width.** Rung 1 and rung 1w score the same on deaths at the median, and on the four 256-wide checkpoints rung 1 scores below rung 1w ([`e` over a random vector](#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality)).
+- **Whether a creature may block is known from the board alone, partly because the labels come from the AI's block plan.** A probe on the board alone scores about as well as one on the board plus `e`, and a few hundredths below one on the trunk's output. On card-disjoint records the model's own answer scores no better than the board alone, and below it on most checkpoints, so no share is defined. More than half of the gen-2 corpus's "may not block" labels name a creature the AI had already planned to block another attacker with, and the snapshot shows that planned block ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#most-block-legality-labels-that-say-a-creature-may-not-block-describe-the-ais-unfinished-block-plan), [chart](2026-09-18-effect-model-gen2/charts/planned-block-labels.png)). A probe can therefore predict the label from the plan without knowing any rule.
+
+Rungs 2 and 3 read the same trunk output in two ways, and they agree on every question but damage taken and may block. The probe at rung 2 is fitted to one question alone. The output head at rung 3 was trained on every output field at once, and is what the model actually answers. A gap between them can be knowledge the trunk holds and the model's own answer does not use. It can also come from where the probe is fitted. The probe is fitted on the stratum it is scored on, so on card-disjoint records it learns from labelled examples of texts the head never trained on. On may block, the model's answer trails the rung-2 probe on card-disjoint records and matches it on game-disjoint ones. That pattern points to the probe learning the held-out cards' restrictions from its own fitting data. On damage taken, a probe reads about two thirds of the variance from the trunk's output, and the model's own damage field a little over half at the median and up to two thirds.
+
+On game-disjoint records the oracle still closes under a fifth of the gap on the same board questions at the median, so the same rule leaves their shares uninterpreted there too. Pump duration and affordability keep median shares above nine tenths there.
+
+Gen-1 and gen-2 were probed on different corpora, so they compare by direction only. Gen-1's `e` carried affordability as gen-2's does. Gen-1 could not be asked about deaths at all, because its corpus never recorded a death caused by a resolution.
+
+### `e` adds most over a random vector of its width on what a line states, and next to nothing on deaths, trigger firing and block legality
+
+`e` beats a random vector of its width by a large amount on nearly every property a line states, and by the least on the board questions the line does not settle. Rung 1 minus rung 1w is that comparison ([the width control](#a-random-vector-of-es-width-separates-what-e-holds-from-what-its-width-buys)). Among line properties, mana production is the exception. On deaths, trigger firing and block legality `e` adds a few hundredths of AUC at most, and on affected cards and target legality up to an eighth.
+
+![Rung 1 minus rung 1w per checkpoint: the nine board questions as one marker per checkpoint sorted by median gain, and the line properties as a heatmap per checkpoint, yes/no properties and amounts in separate blocks](2026-09-18-effect-model-gen2/charts/e-over-random.png)
+
+*Every value is rung 1 minus rung 1w from the MLP probe. Top: the board questions on card-disjoint records, one marker per checkpoint in the shared key, rows sorted from the largest median gain over the gen-2 checkpoints to the smallest. Shaded rows are the three board questions whose answer the line states. Damage taken is an amount, so its gain is in R² and sits apart, below a thin divider. Bottom: the line properties on held-out lines, as (rung 1 − rung 1w) × 100 per checkpoint, except damage per mana (trained lines only) and the interaction pair, whether one line's event fires another's trigger (all pairs). The yes/no properties are AUC gains and the amounts R² gains, and each block is coloured in its own unit. Purple is a gain and red a loss. The colour reaches full strength at an AUC gain of 0.5, the largest an AUC can gain over chance, and at an R² gain of 1. A random vector's R² falls below zero, so an amount's gain can pass 100. Gen-1 is probed on its own corpus. Data: `probe_ladder.csv`.*
+
+- **Deaths do not move into `e` with width.** On deaths `e` adds at most four hundredths of AUC at widths 64 and 128, and less than nothing at width 256, where a random vector of the same width scores higher. Trigger firing gains a few hundredths at every width. Four times the width of `e` therefore does not move what decides deaths or triggers into the vector.
+- **Pump duration gains more than any board question whose answer the line does not state, and affordability does so only at width 256.** Pump duration leads them on every checkpoint. Affordability gains about as much as target legality under protection on the 64-wide and 128-wide checkpoints, and clearly more on the 256-wide ones. Damage taken, the third board question whose answer the line states, gains about three tenths of R², a unit of its own. The damage amount, the duration and the cost are written in the script.
+- **Costs and amounts gain the most, timing and side clearly, and mana production least.** The total cost, the generic cost and most coloured pips, the coloured mana symbols of a cost, gain the most. The side an effect lands on, its controller's, an opponent's or both, gains about as much as the timing and the costs that tap or sacrifice. The amount of mana a line produces swings from a large gain to a large loss between the 64-wide checkpoints.
+- **Gen-1's `e` gains far more on three properties.** On the amount of mana a line produces, whether it produces any colour, and how much a text's outcome varies across boards, gen-1's `e` beats a random vector by far more than any gen-2 checkpoint. It also beats every gen-2 checkpoint by a smaller margin on six more, among them colourless mana production and whether a change lasts until end of turn or comes as a counter. The two generations were probed on different corpora.
+- **The 128-wide and 256-wide `e` score below a random vector on colourless pips** on most checkpoints, while the 64-wide `e` gains on them.
+
+Rung 1 minus rung 1w is also how the arms of the width sweep, gen-2's runs over the width of `e`, compare on what their `e` holds. The gen-2 record compares the arms' own answers to the probe questions ([width](2026-09-18-effect-model-gen2-improvements-design.md#the-64-wide-and-256-wide-runs-split-the-measures-and-the-128-wide-runs-trail-on-the-probes-at-every-stage)).
+
+### Gen-2's `e` holds whether a line taps or sacrifices almost perfectly, and its timing and most of its amounts well
+
+A probe reading `e` alone, with no board and no trunk, recovers whether a line taps or sacrifices nearly perfectly on every gen-2 checkpoint. On trained lines it ranks whether a line is instant speed correctly nine times in ten, and whether it is repeatable nearly always. Gen-1's `e` read whether a line sacrifices or is instant speed not far above chance on held-out lines. The width control sits near chance on every yes/no property in the chart and below zero on every amount, so the gains are content and not width.
+
+![Line properties and the outcome spread across boards read from e alone, trained and held-out lines, gen-1 against gen-2 checkpoints](2026-09-18-effect-model-gen2/charts/line-properties.png)
+
+*Seven checkpoints in the shared key: gen-1, the three arms with copies, and the last epochs of runs B64, B128 and B256. Each segment runs from the score on trained lines (small dot), texts the model trained on, to the score on held-out lines (marker), texts it never saw. The grey tick is the same probe on a random vector of `e`'s width, on held-out lines. The bottom row, below the divider labelled state dependence, is the outcome spread across boards, scored by R² like the amounts ([state dependence](#e-barely-holds-how-much-a-texts-outcome-varies-from-board-to-board)). Data: `probe_ladder.csv` (rungs 1 and 1w, MLP, strata `trained` and `held-out`; the bottom row from family `state-dependence`).*
+
+Amounts transfer less well than costs, and a wider `e` does not change that. The damage amount and the total mana cost read nearly as well on held-out lines as on trained ones. Power and toughness changes read well on trained lines and poorly on held-out ones, with toughness change at a quarter of its variance or less. The 256-wide arm reads damage, cost and counters on held-out lines slightly worse than the 64-wide and 128-wide arms, and power change slightly better.
+
+The gains over gen-1 cannot be credited to one change, because gen-2 changed two things that both reach `e`. Its encoder reads an ability's whole chain of script lines. Two heads that read `e` alone also train it in gen-2, one predicting the API type and one the amounts the script states. The probes cannot separate the two. The gen-2 record reads the same kinds of property from gen-1's and gen-2's `e` with a linear probe, a straight-line fit from `e` to a property ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#gen-2s-e-spreads-over-two-to-three-times-gen-1s-directions-and-a-linear-probe-reads-a-lines-kind-cost-and-amounts-from-it-far-better)).
+
+Every gen-2 held-out score is a little high. About one held-out text in eight also trains on a card that is not held out, such as Flying, so the held-out lines mix in trained texts ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#the-knowledge-probes-filed-trained-texts-as-held-out-lines)).
+
+### `e` barely holds how much a text's outcome varies from board to board
+
+Training the encoder against the board was meant to leave a trace in `e` of how much a text's outcome depends on the board, and the probes barely find one. The label, the outcome spread, is the spread of a text's observed outcomes across the boards it resolved on. "Draw a card" scores near zero, and a sweeper, whose deaths follow the size of the opposing board, scores high. On trained lines a probe reads between a twentieth and a fifth of that spread from `e`, the least on the 256-wide continuation runs. On held-out lines it reads nothing: its R² falls below zero on every gen-2 checkpoint but `e64 (earlier inputs)`, which sits at zero. Gen-1's `e` read a quarter of the spread on its held-out lines. The two generations were probed on different corpora, so they compare by direction only.
+
+| outcome spread across boards, R² of an MLP probe | trained lines | held-out lines |
+|---|---:|---:|
+| gen-1's `e` | 0.18 | 0.24 |
+| gen-2's `e`, median over 17 checkpoints | 0.16 | −0.16 |
+| gen-2's `e`, range | 0.06 to 0.17 | −0.24 to 0.03 |
+| a random vector of `e`'s width, gen-2 | −0.42 to −0.19 | −0.38 to −0.18 |
+| a random vector of `e`'s width, gen-1 | −0.36 | −0.54 |
+
+*Gen-2 has 2,044 trained and 307 held-out lines with the label; gen-1 has 2,028 and 155. The bottom row of the [line-properties chart](#gen-2s-e-holds-whether-a-line-taps-or-sacrifices-almost-perfectly-and-its-timing-and-most-of-its-amounts-well) draws the same probe for gen-1 and six gen-2 checkpoints, from trained to held-out lines. The outcome-spread row of the [`e` over a random vector](#e-adds-most-over-a-random-vector-of-its-width-on-what-a-line-states-and-next-to-nothing-on-deaths-trigger-firing-and-block-legality) chart shows it as a gain over the random vector. Data: `probe_ladder.csv` (family `state-dependence`).*
+
+The outcome-spread probe was built to test the claim the model design rests on: that training the encoder against the board yields a better `e` than training it on text alone. On gen-2 it finds no support for that claim.
+
+### The trunk reads the acting ability's `e` and ignores the `e` of the abilities on the board
+
+Replacing `e` with noise matched to the vectors' mean and covariance raises the loss most on the affected gate, keywords gained and power change, and it raises it just as much when only the `[ACT]` slot is replaced. Replacing only the `e` in the card blocks' ability slots costs nothing measurable, on every gen-2 checkpoint as on gen-1.
+
+![Loss increase per field when e is replaced, for three replacements and three scopes, one marker per checkpoint](2026-09-18-effect-model-gen2/charts/ablation.png)
+
+*One panel per replacement: noise matched to the vectors' mean and covariance, the mean `e` of the line's API type, and the `e` of the nearest other text. Per field, one marker per checkpoint with copies for each scope: every ability slot, the `[ACT]` slot alone, and the ability slots of the card blocks alone. Medians under 0.1 are printed. Data: `ablation.csv`.*
+
+The two other replacements show what the trunk takes from `e`. The `e` of the nearest other text costs little on any field, so fine differences between similar texts matter little to the trunk. The mean `e` of the line's API type costs nearly as much as noise on keywords gained. Every keyword grant shares the `Keyword` API type, so the type's mean says that a keyword is granted and not which.
+
+The ablation shows which `e` the trunk uses, not what the trunk works out from it. The trunk needs the acting `e` to know which ability it is looking at. The read-out ladder shows a probe on the trunk's output answering the board questions that the board plus `e` does not.
+
+### A restriction the board snapshot does not list costs the model the most on attack legality
+
+Where a static the snapshot does not list keeps a creature from attacking, every checkpoint's attack-legality loss rises well above its loss with no restriction. The snapshot gives each permanent its spell and activated abilities as lines in its card block, and nothing else. A permanent's statics, triggers and replacements reach the model only through what they have already done to the board: an anthem's +1/+1 is in the toughness, a granted keyword is in the flags. A Pacifism shows the model an enchantment attached to a creature and no text, and a Rest in Peace an enchantment that does nothing. The board-abilities ablation pairs records where an unlisted line decides the answer with a control of the same kind where none does, 600 records per subset ([the subsets](#the-card-blocks-hold-no-static-trigger-or-replacement-so-a-second-ablation-measures-what-their-absence-costs)).
+
+![Each checkpoint's loss on restricted records divided by its loss on the unrestricted control, per restriction, log scale, with the two keyword-restriction controls shaded apart](2026-09-18-effect-model-gen2/charts/board-abilities.png)
+
+*Each marker is one checkpoint's loss on the field named, on records where the restriction or line is present, divided by its loss on the unrestricted control of the same kind. A marker right of ×1 means the unlisted line raises the model's loss. The two shaded keyword rows are controls: the card's keyword flags show those restrictions to the model. The range at the right spans the checkpoints. Data: `board_abilities.csv`.*
+
+- **Attack legality is the clearest case.** Where a static that is not a keyword keeps a creature from attacking, as Pacifism does, the loss is between one and a half and four and a half times the unrestricted loss. Every checkpoint's restricted loss sits above every checkpoint's unrestricted one. A keyword restriction, which the card's keyword flags carry, is the easiest case of the three.
+- **Block legality follows the same order with smaller gaps.** On the arms a static restriction costs about as much as no restriction, and on the continuation runs up to about twice as much.
+- **On resolutions, a replacement or a static on another permanent about doubles the zone-outcome loss at the median.** These are the records where a destroy turns into an exile, or does nothing.
+
+On the restricted subsets, noise in the card blocks moves the charted fields' loss by six hundredths at most, in either direction, because the lines that would matter are not in the card blocks to begin with. The subsets differ in more than the unlisted line, since a board with Pacifism is a different game state from one without. The gaps therefore bound the cost of the missing text rather than measure it exactly.
+
+### Evasion: the model knows an evasive attacker is hard to block, and which blocker answers it only for horsemanship and fear
+
+Every gen-2 checkpoint lowers the predicted chance of a block when the attacker gains flying, horsemanship or fear, and all but one when it gains intimidate. Only horsemanship and fear are also tied to the blockers that answer them. The evasion grid takes 40 real block-legality records from the validation games, one per game, in which the blocker was legal and neither creature has an evasion keyword. It grants the attacker one keyword and gives the blocker one trait, then reads the model's predicted chance that this blocker may block this attacker. The rule's answer is computed for every edited record. The script is `scripts/effect_knowledge_probes/evasion_grid.py`.
+
+The evasion grid is not part of the plan: it was added after the first runs, as were the targeting, colour and zone probes below. Each of the four edits or scores real validation records and reads the full model, as the gen-2 record's damage and combat grids do for the death rule and combat.
+
+The absolute level of the prediction is not a probability to read at face value. Even with no keyword and no trait, where every block is legal, arm `e64-lethality` predicts about one in ten, run B64's last epoch about one in three and run B256's last epoch about one in two. The model learned that level from block labels that mark many legal blocks as forbidden ([the read-out ladder](#e-alone-carries-pump-duration-and-affordability-and-the-trunk-answers-the-other-board-questions)). The comparisons below are therefore within each checkpoint: how much a blocker trait lifts the prediction against an attacker with the keyword, against how much it lifts it against an attacker without one. These rankings within a row compare edits of one record and are less exposed to the labels than the absolute level.
+
+![Heatmap of the lift each blocker trait gives the predicted chance of a block, per attacker keyword, median over 17 checkpoints, coloured by the lift against the no-keyword row's in the same column, cells the rule allows marked](2026-09-18-effect-model-gen2/charts/evasion-grid.png)
+
+*Each cell's text is the median over the 17 gen-2 checkpoints of the lift: the predicted chance of a block with the blocker's trait, divided by the chance with no trait, against the same attacker. The top row is the reference, the lift against an attacker with no keyword. The colour compares each cell with the reference. It is the median over checkpoints of the cell's lift divided by the top row's lift in the same column, on a log scale from ×0.5 to ×8. The top row is therefore neutral. Purple marks a trait that lifts the prediction more against the keyword than against a plain attacker, and red one that lifts it less. Under each lift, n/17 counts the checkpoints where the trait lifts the prediction more against that keyword than against a plain attacker. A black corner marks a block the rule allows, and a hollow corner a block it allows only when the attacker is black too. Data: `evasion_grid.csv`.*
+
+- **Horsemanship and fear are paired with their answers.** A horsemanship blocker lifts the prediction several times more against a horsemanship attacker than against a plain one, and an artifact or black blocker does the same against fear, on every checkpoint.
+- **Intimidate is read as fear.** An artifact blocker answers it, as the rule says. A black blocker answers it too, which the rule allows only when the attacker is black as well. A blocker that shares the attacker's colour, the answer the rule names, barely registers.
+- **Flying is only half paired.** A flying blocker answers a flying attacker somewhat more than a plain one. Reach, which the rule treats exactly like flying here, lifts the prediction hardly more than no trait at all.
+- **Some traits read as "a good blocker" whatever the attacker.** A horsemanship or flying blocker lifts the prediction against every attacker, a plain one included, though neither trait matters against a plain attacker.
+- **Shadow and "can't be blocked" change nothing.** Granting either leaves the row nearly identical to the plain one. A shadow blocker is predicted to block a little less against every attacker, and not more against a shadow one, which is why the shadow row ranks below chance.
+- **The two protection rows are identical by construction.** The keyword flags carry protection without its colour, so protection from the blocker's colour and protection from another colour give the model the same input.
+
+Ranking the allowed blocks against the forbidden ones within each attacker row gives one AUC per keyword. Horsemanship ranks near perfectly on every checkpoint, fear well above chance, flying and intimidate near chance, and shadow below it. No width and no stage of training moves the pooled ranking off about 0.6, so what the model knows about evasion was settled early and did not change with the continuation runs.
+
+![Ranking AUC per attacker keyword, one marker per checkpoint](2026-09-18-effect-model-gen2/charts/evasion-ranking.png)
+
+*AUC of the predictions on the blocks a row allows against the ones it forbids, over the grid's cells and records, in the shared key. "Can't be blocked" and protection from the blocker's colour allow no block and have no ranking. Data: `evasion_ranking.csv`.*
+
+### Targeting: the model follows who controls a target, and barely checks the card type a restriction names
+
+On real targeting decisions the model separates legal targets from illegal ones almost perfectly, whatever the restriction, but much of this rests on what a target looks like rather than on the restriction's own condition. The targeting probe, added after the first runs, takes 1,500 real targeting decisions from the validation games, at most three per game. Each battlefield permanent on the board is an item, labelled legal or not by Forge's own list of legal targets. The model's answer is the affected gate at that permanent's slot. Items are grouped by the acting ability's `ValidTgts$` restriction and by the kind of condition it states. The script is `scripts/effect_knowledge_probes/target_restrictions.py`.
+
+| kind of restriction | items | legal | AUC, median over 17 checkpoints | range |
+|---|---:|---:|---:|---|
+| a card type only, such as `Creature` or `Any` | 10,859 | 2,410 | 0.999 | 0.997–0.999 |
+| who controls it, such as `Creature.YouCtrl` | 1,414 | 242 | 0.998 | 0.984–0.999 |
+| other, such as `Permanent.nonLand` | 1,225 | 224 | 0.982 | 0.959–0.989 |
+| attacking, blocking or tapped | 451 | 36 | 0.992 | 0.977–0.996 |
+| a colour, such as `Creature.nonBlack` | 420 | 77 | 0.967 | 0.958–0.989 |
+| a number, such as `Creature.powerLE2` | 267 | 57 | 0.974 | 0.966–0.985 |
+| a keyword, such as `Creature.withFlying` | 60 | 11 | 0.980 | 0.935–0.989 |
+
+*Data: `target_families.csv`, and per restriction `target_restrictions.csv`. A supertype family holds 79 items with 2 legal ones, too few to weigh.*
+
+The illegal targets on a real board are mostly easy: a land when the restriction asks for a creature, or the acting player's own creature when it asks for an opponent's. A flip asks the harder question. It takes a legal target of a restriction with a single condition and breaks exactly that condition, which by the rule makes it illegal.
+
+![Change in the predicted legality of each flip's targets, after the flip minus before, one marker per checkpoint, against the rule's change of −1](2026-09-18-effect-model-gen2/charts/target-flips.png)
+
+*For each flip, each checkpoint's change in the mean predicted legality of the targets, after the flip minus before, in the shared key; the grey bar is the median. By the rule every target is legal before the flip and illegal after it, a change of −1. Rows with fewer than 20 targets are drawn faint as too few to weigh. Data: `target_flips.csv`, which also holds each checkpoint's legality before and after the flip.*
+
+- **Control is learned.** A target of "target creature you control" handed to the opponent loses between two thirds and nine tenths of its predicted legality on every checkpoint but `e64 (earlier inputs)`, which loses under half.
+- **A creature that loses its creature type stays a legal target of "target creature".** The prediction barely moves on 1,380 targets. The edit leaves the permanent its power, toughness and combat status, so the model may read creature-ness from those rather than from the type line. Either way, the model does not check the condition the restriction states. Lands that lose the land type barely move either, except on `e64`, where they lose three tenths of their predicted legality.
+- **The other flips are too few to weigh.** The predicted legality of artifacts that lose the artifact type drops by about a third at the median, on 8 targets. Enchantments that lose the enchantment type rest on 7 targets, and the opponent's creatures handed to the acting player on 14, which the model already doubted before the flip.
+
+No restriction in the sample states `nonLegendary` alone, so the legendary flip did not run.
+
+### Colour: the model counts the mana a player has and barely checks its colour
+
+On every gen-2 checkpoint, taking one land away lowers the affordable verdict four to ten times as much as turning one land to a colour the cost cannot use. Two extra lands of the wrong colour raise the verdict above the exact board that casts the spell, even when a pip is left unpaid. The colour probe, added after the first runs, takes 300 real playability decisions from the validation games, at most two per game, whose candidate has a mana cost basic lands pay one pip each. It replaces the acting player's lands with untapped basics in six configurations. The off colour is the first of white, blue, black, red and green the cost does not name. The rule's answer is computed for every configuration by matching pips to lands. The script is `scripts/effect_knowledge_probes/colour_pips.py`.
+
+| configuration | the acting player's untapped basics | the rule |
+|---|---|---|
+| exact | one land of each coloured pip's colour, one off-colour land per point of generic mana | affordable |
+| surplus | exact, plus two off-colour lands | affordable |
+| one short | exact, less one land | not affordable |
+| pip missing | exact, with one coloured pip's land turned off-colour | not affordable |
+| pip missing, +2 | pip missing, plus two off-colour lands | not affordable |
+| all off colour | as many lands as the cost, all off-colour | not affordable |
+
+The verdict's absolute level is low on every checkpoint: the exact board, which always casts the spell, is predicted affordable at about one in five. The comparisons are therefore made within each decision, as the change from the exact board.
+
+![Change in the affordable verdict from the exact lands for each configuration, and the ranking AUCs, one marker per checkpoint](2026-09-18-effect-model-gen2/charts/colour-pips.png)
+
+*Left: each checkpoint's mean change in the predicted affordable verdict from the exact lands, over 300 decisions, in the shared key; the exact lands are the zero line, and each row label gives the rule's answer. Right: the AUC of affordable boards ranked above unaffordable ones, over every configuration, for the exact and surplus boards against the three off-colour ones, and for the exact board against one land short. Data: `colour_pips.csv` and `colour_pips_ranking.csv`.*
+
+| configuration | change from exact, median over 17 checkpoints | range | decisions below exact, median |
+|---|---:|---|---:|
+| surplus | +0.106 | +0.064 to +0.134 | 0% |
+| one short | −0.108 | −0.069 to −0.136 | 100% |
+| pip missing | −0.018 | −0.009 to −0.027 | 75% |
+| pip missing, +2 | +0.087 | +0.056 to +0.119 | 1% |
+| all off colour | −0.021 | −0.011 to −0.033 | 79% |
+
+*Data: `colour_pips.csv`; per kind of cost, `colour_pips_by_cost.csv`.*
+
+- **The amount of mana is read.** One land fewer lowers the verdict on every decision and every checkpoint, and two lands more raise it.
+- **The colour is barely read.** A missing pip lowers the verdict on three decisions in four, by a sixth as much as a missing land at the median and between a quarter and a tenth across checkpoints. Lands that are all off-colour lower it barely more than one wrong land does.
+- **More mana of the wrong colour outweighs the missing colour.** A board one pip short with two extra off-colour lands is predicted more affordable than the exact board on nearly every decision, on every checkpoint.
+- **The pips of one colour are not counted.** On the 52 costs with a repeated pip, such as `{1}{U}{U}` given a single Island, the missing pip leaves the verdict where it was.
+- **Ranking by colour is close to chance.** Ranked against the unaffordable boards that only differ in colour, the affordable ones score an AUC of 0.52 to 0.56. Ranked against one land short, the exact board scores 0.63 to 0.73.
+
+The training labels do show colour deciding affordability. The corpus is stored in shards, files of records. In a sample of 21 training shards, 204 of the 894 land-payable candidates Forge judged unaffordable had enough mana in the wrong colours, so nearly a quarter of those labels turn on colour alone. The read-out ladder finds that the board plus `e` carries nearly all of what the model knows about affordability. That fits a model that judges affordability from the cost and the amount of mana, and never matches the cost's pips against the colours the lands make.
+
+The `affordable` label gen-2 trained on carries some of Forge's AI cost policy as well as the rules. The label comes from Forge's AI cost check. That check matches pips to mana sources by the rules, so a colour shortfall is labelled correctly. It also refuses some costs the rules allow, such as a planeswalker's last loyalty, a Ward cost the AI dislikes and a Casualty sacrifice. A few candidates with enough mana of the right colours are therefore labelled unaffordable, in training and in the probes' own labels.
+
+### Zones: the model knows which player draws, discards or mills and where a moved card goes, and barely uses the number of cards
+
+Draws, discards, mills and moves between hand, library, graveyard, exile and the battlefield are predicted well on every gen-2 checkpoint. The weak points are two. The number of cards a script states moves the prediction far less than it should. Handing a player target to the other player moves only part of the predicted effect with it. The zone probe, added after the first runs, takes 2,000 real resolutions from the validation games, at most three per game, whose acting chain names an API that moves cards: `Draw`, `Discard`, `Mill`, `ChangeZone`, `ChangeZoneAll`, `Dig`, and the destroy and sacrifice APIs so that exile has something to be told apart from. The script is `scripts/effect_knowledge_probes/zone_effects.py`.
+
+The model knows whether a player draws, discards or mills, and which player, and predicts fewer cards than the player gets. Card counts are read at the player slots. The model's answer for a player is the affected gate times the field's predicted count.
+
+| cards a player | player slots | affected | AUC, median over 17 checkpoints | range | more predicted for the affected player, median | actual cards, mean | predicted cards, median |
+|---|---:|---:|---:|---|---:|---:|---:|
+| draws | 4,000 | 616 | 0.989 | 0.981–0.992 | 97% | 1.35 | 1.09 |
+| discards | 4,000 | 148 | 0.997 | 0.995–0.998 | 99% | 1.21 | 0.90 |
+| mills | 4,000 | 120 | 0.995 | 0.981–0.997 | 98% | 2.76 | 2.17 |
+
+*The "more predicted for the affected player" column covers the records where exactly one player was affected: 419 for draws, 124 for discards, 84 for mills. Data: `zone_counts.csv`.*
+
+- **Whether a player is affected, and which one, is known.** The model separates affected players from the rest at an AUC near 0.99, and predicts more cards for the affected player than for the other on about nine records in ten or more, on every checkpoint.
+- **The count is predicted below the real one.** Every field's median prediction is short of the mean actual count, by a fifth for draws, a quarter for discards and a fifth for mills.
+
+Where a moved card goes is right on most moves, and two pairs of destinations get confused. Card moves are read at the moved card's slot, grouped by the zone the card was in. Whether a card moves at all is ranked near perfectly from the battlefield, the graveyard and the hand.
+
+| starting zone | cards | moved | AUC that a card moves, median over 17 checkpoints | range |
+|---|---:|---:|---:|---|
+| battlefield | 29,146 | 767 | 0.994 | 0.991–0.995 |
+| graveyard | 5,805 | 187 | 0.996 | 0.992–0.998 |
+| hand | 14,408 | 226 | 0.987 | 0.977–0.990 |
+
+*The stack and exile hold 7 and 2 moved cards, too few to weigh. Data: `zone_moves.csv`.*
+
+For the cards that did move, the chart shows how often the model's most probable destination other than staying put is the right one. The head names an outcome by its event, so a card put into a graveyard from anywhere is `died` and a card put onto the battlefield is `blinked`; the chart names the destination zone.
+
+![Share of moved cards whose most probable destination is right, by starting zone and destination, one marker per checkpoint, with each row's most common wrong destination](2026-09-18-effect-model-gen2/charts/zone-outcomes.png)
+
+*One marker per checkpoint, in the shared key. Rows with fewer than 20 cards are greyed, and rows with fewer than nine are left out. The right margin names each row's most common wrong destination and on how many of the 17 checkpoints it is the most common. Data: `zone_outcomes.csv`, which holds every row, with the outcome predicted most often in place of the right one.*
+
+- **From the battlefield, all four common destinations are right on more than nine moves in ten** at the median: graveyard, exile, hand and library. The usual mistake is between graveyard and exile, a destroy read as an exile or the reverse.
+- **From the graveyard, exile and library are near perfect.** Returning a card to its owner's hand and returning it to the battlefield are confused with each other, and some checkpoints get only three in five of either right.
+- **Discards are mostly right.** A card discarded from hand goes to the graveyard in the model's answer on six moves in seven at the median, and to exile on most of the rest.
+- **Blinks are the weakest move, on too few cards to weigh.** A permanent exiled and returned to the battlefield is right on seven of its 10 moves at the median and on three on the worst checkpoint.
+
+The predicted count rises with the number of cards the script states, but covers a fraction of the range. The amount sweep sets the literal `NumCards$` of 40 draw, 40 discard and 40 mill scripts to each value from 1 to 6, re-encodes the text with the checkpoint's own encoder, and reads the predicted count at the affected player, as the gen-2 record's damage sweep does for damage.
+
+![Predicted cards at the affected player as the script's number of cards rises, one line per checkpoint, against the script's number](2026-09-18-effect-model-gen2/charts/zone-amounts.png)
+
+*One curve per checkpoint, in the shared key; grey curves are the arms without copies. The black line is the script's number. Data: `zone_amounts.csv`.*
+
+| effect | predicted cards at 1 card, median over 17 checkpoints | at 6 cards, median | at 6 cards, the six arms | at 6 cards, the 11 continuation checkpoints |
+|---|---:|---:|---|---|
+| draw | 1.15 | 1.86 | 1.47–1.87 | 1.67–2.25 |
+| discard | 0.79 | 1.12 | 1.00–1.41 | 0.78–1.57 |
+| mill | 1.83 | 3.90 | 1.94–3.49 | 3.35–4.87 |
+
+*The rule predicts 1 card at one and 6 at six. Data: `zone_amounts.csv`.*
+
+- **Draws and mills rise far less than the rule.** From one card to six, the median predicted draw rises by less than one card, where the rule rises by five. Mills about double.
+- **Discard barely moves**, and the earliest checkpoint, `e64 (earlier inputs)`, does not rise at all.
+- **On mills the continuation runs follow the number more closely than the arms do.** Every continuation checkpoint but run A256's predicts more cards at six than any arm. On draws the two ranges overlap, and on discards the continuation checkpoints spread wider on both sides.
+
+The amount sweep reads the head only, so it cannot say whether the trunk holds the number and the head fails to use it.
+
+The predicted effect follows a player target only partly. The target flip takes the draw, discard and mill records with exactly one player target, where the targeted player is the one affected, and hands the target to the other player. The rule moves the whole effect with it.
+
+![Share of the predicted cards still at the originally targeted player after the target is handed over, one marker per checkpoint](2026-09-18-effect-model-gen2/charts/zone-who.png)
+
+*After the target is handed to the other player: the share of the predicted cards still at the originally targeted player, in the shared key. The rule puts it at 0. Before the flip that share is 95% to 98% at the median per effect. Data: `zone_who.csv`, which also holds each player's predicted count before and after.*
+
+- **Most of the predicted cards move, and a quarter to a third stay.** Before the flip the targeted player holds nineteen twentieths of the predicted cards at the median. After it, the originally targeted player still holds about a third of a draw and a quarter of a discard or a mill.
+- **How much moves varies widely between checkpoints.** The 64-wide continuation runs move nearly all of a discard to the new target, and the 256-wide continuation runs nearly all of a mill. Arm `e128-lethality` leaves two thirds of a discard and a mill where the target was. No order by width or by stage of training holds across the three effects.
+
+### The affordable verdict never clearly passes one half, and a sweeper's predicted deaths rise by a fifth per creature added
+
+Both sweeps reported here fall short of the rule on every gen-2 checkpoint. The affordable verdict rises gradually with the mana given instead of stepping to certainty at the cost, and a sweeper's predicted deaths rise far slower than one per creature. The toughness and damage sweeps measure the damage-versus-toughness rule, which only appeared once training added lethality copies, so the gen-2 record reports them with its damage grids: [the death rule](2026-09-18-effect-model-gen2-improvements-design.md#the-model-compares-damage-with-toughness-only-after-training-shows-it-the-rule-directly) and [where the boundary sits](2026-09-18-effect-model-gen2-improvements-design.md#where-the-boundary-sits-wanders-between-epochs-at-the-full-learning-rate-and-settles-near-the-rule-at-a-tenth-of-it).
+
+![Affordability sweep and board-size sweep, one line per checkpoint](2026-09-18-effect-model-gen2/charts/other-sweeps.png)
+
+*Left: the predicted affordable verdict as the acting player's untapped mana rises, one curve per gen-2 checkpoint in the shared key; the numbers along the bottom are the items behind each point, and the bold line marks an even chance. The flat grey curve near 0.29 is `e64 (earlier inputs)`, probed before the sweep set the lands ([the fix](#the-affordability-sweep-sets-the-lands-as-well-as-the-mana-2026-10-15)). Right: predicted deaths summed over the board as opposing creatures are added, one curve per checkpoint, gen-1 dark; the dashed line is the rule's one death per creature. Data: `sweeps.csv`.*
+
+- **The affordable verdict rises with the mana given and never clearly passes one half.** Only arm `e256-lethality` reaches it, by under a hundredth, at 7 and 8 mana, where the points rest on 6 and 4 items. The rise is gradual because each point averages items with different costs. The model's own answer separates affordable candidates from unaffordable ones at an AUC of 0.98 in the read-out ladder, so it reads affordability partly from something the sweep does not set.
+- **A sweeper is predicted to kill about a fifth of the creatures added.** Every gen-2 checkpoint rises by about a fifth of a death per creature, with or without copies and at every width, where a sweeper kills one per creature. Gen-1 rose by a fiftieth. The sweep cannot tell whether the records' sweepers carry conditions that spare most creatures or the model spreads its confidence thinly over the board.
+
+### Gen-3 inherits two board questions already in `e` and no firm case for moving another into it
+
+Applied to the board questions, the design's rule for gen-3 finds two already in `e` and none whose share is firm enough to move into it ([the rule](#the-share-and-the-ablation-together-say-which-families-gen-3-must-move-into-e)). The rule reads three numbers per question. The share and the oracle's share come from the read-out ladder. Reliance is how far the loss of the output field the answer comes from rises when noise replaces `e` at the `[ACT]` slot alone, as a multiple of that field's loss with the true `e`.
+
+| board question | share carried by `e`, median | share the oracle closes, median | share interpreted | output field | loss rise with noise at `[ACT]`, in multiples of the field's loss, median | next step by the rule |
+|---|---:|---:|---|---|---:|---|
+| how long a pump lasts | 1.01 | 0.24 | yes | `pt_duration` | 4.74 | none: already in `e` |
+| affordable | 0.93 | 0.85 | yes | verdict head | not measured | none: already in `e` |
+| damage taken | 0.56 | 0.15 | no | `damage_taken` | 0.45 | a stronger probe |
+| legal target | 0.51 | 0.03 | no | the affected gate | 1.66 | a stronger probe |
+| trigger fires | 0.30 | 0.15 | no | verdict head | not measured | a stronger probe |
+| legal target, protected | 0.28 | −0.15 | no | the affected gate | 1.66 | a stronger probe |
+| card affected | 0.23 | 0.05 | no | the affected gate | 1.66 | a stronger probe, then into `e` if the low share holds |
+| dies | 0.20 | 0.04 | no | `zone_outcome` | 2.18 | a stronger probe, then into `e` if the low share holds |
+| may block | — | — | no share | `blocker_legal` | 0.00 | the corpus: labels from the rules |
+
+*Card-disjoint records, MLP probes, medians over the 14 checkpoints with copies. The loss rise is the increase in the field's loss over the validation samples when noise matched to the vectors' mean and covariance replaces `e` at the `[ACT]` slot alone, divided by the field's loss with the true `e`. The legal-target questions read the affected gate, as card affected does. The ablation scores only the per-entity fields, so the questions the verdict head answers have no loss rise. Data: `probe_ladder.csv`, `ablation.csv`.*
+
+![Scatter of the share e carries against the trunk's reliance on the acting ability's e, one cloud of checkpoints and one median marker per board question, hollow where the oracle rung leaves the share uninterpreted](2026-09-18-effect-model-gen2/charts/share-vs-reliance.png)
+
+*One cloud per board question: a small dot for each of the 14 checkpoints with copies, and a large marker at the medians. The share carried by `e` is the read-out ladder's (rung 1 − rung 0) / (rung 3 − rung 0), MLP probes on card-disjoint records. Reliance is the table's loss rise with noise at `[ACT]`, drawn as a percentage of the field's own loss on a log scale. A hollow marker is a question whose share is not interpreted, because the oracle rung closes under half of the gap. The chart draws the four board questions that each have an output field of their own. The two legal-target questions read the affected gate, as card affected does, so their reliance is card affected's, and their shares are in the table. May block has no share, and the ablation does not score the verdict head that answers affordability and trigger firing. The corner notes name what each region means under the design's rule, which fixes no cut-off between them. Data: `probe_ladder.csv`, `ablation.csv` (replacement `noise`, scope `act`).*
+
+- **Pump duration and affordability already live in `e`, and gen-3 has nothing to move there.** Both shares pass nine tenths. The trunk leans on the acting `e` for pump duration more than for any other question in the table: noise at `[ACT]` adds nearly five times the field's own loss. Affordability's reliance is not measured, and a random vector of `e`'s width closes nearly half of its share by itself.
+- **Deaths, affected cards, target legality, trigger firing and damage taken need a stronger probe before gen-3 can act on their shares.** On each, the oracle closes about a seventh of the gap or less, so the probe rather than `e` may be the limit. Deaths and affected cards have the lowest shares, and noise at `[ACT]` adds more than one and a half times the field's own loss on affected cards and more than twice on deaths. A low share with high reliance is the pattern the rule answers by moving work into `e`, through auxiliary heads that read `e` alone or a thinner trunk. Deaths and affected cards are therefore gen-3's first candidates once a stronger probe confirms their shares. The high reliance may also mean only that the trunk needs the acting `e` to know which ability is acting, which the ablation cannot tell apart from using its content. A wider `e` is not the route for deaths, since four times the width did not move them into `e`. The suite's two deeper reads, the per-layer view and method C, never ran, so no stronger probe exists yet.
+- **Block legality is a labelling problem, which gen-3 fixes in collection.** The model's own answer scores no better than the board alone, so the model lacks the rule rather than holding it outside `e`. The rule treats knowledge the model lacks as a corpus problem rather than an architecture problem. More than half of gen-2's "may not block" labels name a creature the AI had already planned to block with. Gen-3 records block and attack legality at Forge's declare steps, before anyone declares ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-forge-hooks-and-collectors-recorded-planned-events-as-real-ones-and-several-outcomes-reached-the-wrong-record)).
+
+### Gen-1 and seventeen gen-2 checkpoints from twelve runs were probed, and every chart shares one key
+
+The suite probed gen-1 and 17 gen-2 checkpoints from twelve training runs. A checkpoint is the model's saved weights at one epoch of training, a fixed block of 5,000 training batches. The first gen-2 runs, the arms, train from scratch and are named after the width of `e`. Arms `e64` and `e128` train on the corpus alone. Arms `e64-lethality`, `e128-lethality` and `e256-lethality` add lethality copies: training copies of a damage record with the damage and the hit creature's toughness redrawn, and the death labelled by the rule. `e64 (earlier inputs)` is the first run of arm `e64`, on inputs later corrected.
+
+Continuation runs carry each arm with copies further. An A run resumes its arm at the full learning rate, the step size of each weight update, and a B run starts from its A run's kept epoch at a tenth of it. Each run keeps the epoch with the lowest loss on card-disjoint records, and a continuation run is probed at that kept epoch (`A64 best`) and at its last (`A64 last`). Run A256's kept epoch is its last, so it counts once. Run B256 keeps the checkpoint it started from, and `B256 best` is its own lowest epoch, 55. "The 14 checkpoints with copies" are the 17 less the three arms without copies. The [run lineage chart](2026-09-18-effect-model-gen2/charts/run-lineage.png) draws every run and checkpoint, the gen-2 record [explains the naming](2026-09-18-effect-model-gen2-improvements-design.md#result), and its [runs table](2026-09-18-effect-model-gen2-improvements-design.md#twelve-runs-share-one-corpus-one-seed-and-one-encoder-and-differ-in-width-lethality-copies-and-learning-rate) lists their directories.
+
+The charts share one key. Colour gives the width of `e`: blue 64, orange 128, green 256. A point's marker gives the stage, a triangle for an arm, a square for an A run and a circle for a B run. A curve's style gives it too, dotted for an arm, dashed for an A run and solid for a B run. A filled marker is a run's kept epoch and a hollow one its last; `B256 best` is half filled. The arms without copies are grey triangles, `e64 (earlier inputs)` a lighter grey, and gen-1 dark grey. In a chart with one row per question, each checkpoint sits at its own fixed height within the row, the earliest stage on top; the height carries no value.
+
+### Each probe set is frozen once per corpus, and a probing run takes under twenty minutes
+
+Every gen-2 checkpoint is probed on one probe set, frozen over gen-2's corpus with every amount label capped at 40 (digest `ab6452679131`). The first run of arm `e64` used the set before the cap (digest `927c88b0fae4`), and gen-1 a set frozen over gen-1's corpus (digest `361fc75ce1cc`). Each scorecard is `reports/knowledge-probes-*/scorecard.json` in the checkpoint's run directory under `models/effects/runs/`, and gen-1's is `output/effects/reports/knowledge-probes-2026-09-17-full-textless-corpus-20261009/scorecard.json`. The gen-2 record's [runs table](2026-09-18-effect-model-gen2-improvements-design.md#twelve-runs-share-one-corpus-one-seed-and-one-encoder-and-differ-in-width-lethality-copies-and-learning-rate) lists every run and checkpoint.
+
+A probing run takes 14 to 19 minutes and under 0.6 GiB of GPU memory, against a budget of two hours and 8 GB, and freezing a probe set a few minutes more. The board-abilities subsets of arm `e64` ran separately, in `models/effects/runs/2026-10-gen2-e64/reports/board-run/`.
+
+| probe set | line items | record items | interaction pairs | interaction join rate |
+|---|---:|---:|---:|---:|
+| gen-1's corpus | 34,802 | 33,329 | 1,792 | 6.8% |
+| gen-2's corpus | 36,178 | 35,699 | 2,010 | 7.0% |
+
+### The first run, on gen-1, found two gaps that gen-2 closed (2026-10-08)
+
+**Gen-1's verdict head was never trained.** Gen-1's trainer never called the verdict loss, so the two questions that head serves, whether a candidate is affordable and whether a trigger fires, had no model read-out. A head with random weights can still score far from chance, because the trunk's output at `[ACT]` is dominated by one direction that on its own separates affordable candidates. Gen-2 trains the verdict head, and its read-outs match the trunk's.
+
+| read-out of gen-1's trunk at `[ACT]`, affordability | AUC |
+|---|---:|
+| top principal component (47.5% of the variance) | 0.877 |
+| gen-1's untrained verdict head | 0.899 |
+| 200 fresh verdict heads, median distance from 0.5 | 0.187 |
+| 200 fresh verdict heads, share at least 0.4 from 0.5 | 1.0% |
+
+**Gen-1's corpus never recorded a death caused by a resolution.** Every `dies` label was zero, and the toughness and damage sweeps read 0.000 at every value. Gen-1's collectors wrote a resolution's record before Forge ran its state-based actions and discarded the deaths those actions produced. Gen-2's collectors hold a resolution's record through the state-based check that follows it, so gen-2's corpus carries these deaths, and gen-2 is the first generation the death sweeps can measure.
+
+### Fewer than one fired trigger in ten joins to a resolution, because most are caused by a spell being cast
+
+The interaction join finds the resolution behind under a tenth of fired triggers in both probe sets. Most fired triggers are enters-the-battlefield or cast triggers. Their cause is a permanent spell's own cast. A cast has no ability line and no resolution record, so the join finds nothing for those triggers. The script-mined pairs supply the interactions the join cannot reach.
+
+The trigger records offer no shortcut. About half name a `cause` entity in their event's params, but `cause` is the object that caused the event, not the ability. No record sets `attributed_to`. The counts are over the 1,000 games of gen-1's game-disjoint stratum.
 
 | Trigger records | Count |
 |---|---:|
@@ -178,641 +625,17 @@ No trigger record names the ability that caused its event. About half the record
 | naming a `cause` entity and fired | 4,380 |
 | setting `attributed_to` | 0 |
 
-The interaction label is therefore built by a join. A fired trigger record carries its pending event. The resolution record in the same game whose events contain that event names the ability that produced it. That ability and the trigger's line form a positive pair. The join rate is the share of fired trigger records whose pending event the join finds in a resolution record.
+### The affordability sweep sets the lands as well as the mana (2026-10-15)
 
-Pairs the join cannot reach are mined from the scripts. A death trigger paired with a sacrifice outlet, or a lifegain trigger paired with a lifegain ability, is a positive pair by construction.
+The affordability sweep first edited only the acting player's untapped production, one number per colour, and left every land on the board as it was. The verdict then stayed flat near 0.29 from no mana to more than enough, because the model reads affordability from the lands themselves. From 2026-10-15 the sweep sets the acting player's lands to match the mana it gives, and the verdict rises with it. Run `e64 (earlier inputs)` was probed on 2026-10-13, before the change, and its affordability sweep is the flat one.
 
-Trigger records that were evaluated and did not fire are the negatives. They occur naturally in the corpus, because the collector records non-fired evaluations of the same event type.
+## Future plans
 
-### Playability decision records carry everything affordability and target legality need
+Gen-3 takes the probes' findings in two directions, and the [gen-3 draft](2026-XX-XX-effect-model-gen3-design.md) carries the full discussion. Where a gap traces to the labels or to the board input, gen-3 changes collection and the snapshot. Where a share is not yet interpreted, gen-3 needs a stronger probe before it moves any work into `e`.
 
-A decision record is enough to recompute whether a candidate ability was affordable. Each candidate carries its `affordable` flag and its `cost_after_adjustment`, and each player carries `untapped_production` and `floating_mana` by colour. The mana-usage family reads both its labels and the affordability sweep from these fields. The same records carry each candidate's legal-target set, which labels the target-legality family.
-
-### State dependence is labelled from the spread of each text's own outcomes
-
-A text's state-dependence label is how much its observed outcome varies across its resolution records. Each record's outcome is summarised by the effect-profile statistics the embedding probes use. The label is the spread of those statistics across the text's records. In the probe fit, each text is weighted by n/(n+5), where n is its number of resolutions, so a text seen once counts for little.
-
-"Draw a card" scores near zero. A sweeper, whose deaths follow the size of the opposing board, scores high. A probe that reads this label from `e` shows whether training against the board left a trace in the vector.
-
-## Probe items are keyed by provenance, so one frozen probe set serves every checkpoint trained on a corpus
-
-Every probe item is keyed by its provenance, never by its text. Gen-2's whole-chain encoding changes every line's text, so a probe item keyed by text in gen-1 would match nothing in gen-2. Its provenance key still names the same trait. The provenance key `(script_file, face, trait_kind, index_within_kind)` names the Forge script, the card face, the kind of trait and the trait's position among its kind that a line was rendered from. A provenance sidecar is the file `convert` writes beside each converted card, mapping each provenance key to its rendered line.
-
-Four parts of the suite let it compare checkpoints.
-
-- **A model adapter.** One loader takes any checkpoint and resolves its vocabulary, its cache and its width of `e`, so no probe assumes gen-1's paths or its 64 dimensions.
-- **A frozen probe set with a digest.** The probe items, their labels and the games they come from are enumerated once per corpus and hashed. Every checkpoint trained on that corpus is probed on the same set, and the scorecard records the digest.
-- **Probe games no later corpus build trains on.** The card-disjoint games name a held-out card, so no build ever trains on them. Gen-2's `build-corpus` places a game in the game-disjoint stratum by a rule that depends only on the game, so a rebuild over a grown corpus keeps every game-disjoint probe game out of training as well.
-- **A scorecard comparison.** One command reads several scorecards and sets them side by side, per family and per rung.
-
-Gen-1 and gen-2 are probed on different corpora, because gen-2's corpus is collected anew. Their scorecards compare by direction rather than figure by figure.
-
-## The model takes `e` as a separate input, so methods A and B need no model change
-
-`EffectModel.forward` in `src/effects/domain/effect_model.py` takes `e_vectors` as an argument of its own and returns the trunk's output at every slot. A replacement for `e` is a different tensor passed in that argument. Rungs 2 and 3 read the returned outputs and the heads applied to them. The per-layer view reads each layer's output through a forward hook, a callback PyTorch runs on a layer's output each time the model computes a prediction, which also leaves the model untouched.
-
-## The build is a probe script directory beside the embedding probes
-
-The suite is analysis tooling like the other probe scripts. Its normative description is the probe-tooling section of [`../specs/2026-10-06-ability-effect-model-gen2.md`](../specs/2026-10-06-ability-effect-model-gen2.md).
-
-- **Code.** A new `scripts/effect_knowledge_probes/` directory sits beside `scripts/effect_embedding_probes/` and reuses its loaders. Its modules are `labels`, `ladder`, `sweeps`, `ablation`, `compare` and `run`. `run` probes one checkpoint, with method C behind a flag. `compare` reads several scorecards.
-- **Probe records.** They come from both validation strata of the corpus the checkpoint trained on. Every board-dependent result is reported for the two strata separately. Line-level probes read every line of the checkpoint's cache, and report the held-out and the trained lines separately too.
-- **Output.** Tables and one JSON scorecard per checkpoint go to `output/effects/reports/knowledge-probes-<checkpoint>-<date>/`.
-- **Tests.** Unit tests cover the share calculation and its minimum-gap rule, the label extractors, the board-sweep editor and the fold assignment, which must never put one text in two folds. Fixtures are built from real records.
-- **Cost.** A run takes one to two GPU hours per checkpoint, on the same 8 GB GPU the training runs use, so runs are queued between trainings rather than beside them.
-
-## Run plan: freeze the probe set, run the cheap probes first, then compare
-
-The suite runs once per checkpoint, after the checkpoint's cache exists. Gen-1 is probed first, as soon as the suite is built, and each gen-2 arm after its training finishes.
-
-### Before the first run on a corpus
-
-1. **Freeze the probe set.** Enumerate the probe items by provenance key, their labels, the probe games of both strata and the board-sweep records, and write the digest. Gen-1's set is built over gen-1's corpus, against gen-1's provenance sidecars, as the gen-2 record's stage 0 describes. Gen-2's set is built once over gen-2's final corpus and serves every arm.
-2. **Measure the interaction join rate.** It is a property of the corpus, not of a checkpoint, so it is measured once per probe set.
-
-### For each checkpoint, in order
-
-The order puts the probes that read only the cache first. A broken cache or a wrong adapter then shows before any GPU time is spent on the trunk.
-
-1. **Probes that read `e` alone.** Every line property from the cache, with its width control. No GPU is needed.
-2. **The state-dependence probe**, also from the cache.
-3. **The probes that read validation records.** The trunk's output at `[ACT]` for every line property, then rungs 0, 1, 1w, 1o, 2 and 3 for every board-dependent target, on both strata.
-4. **The four board sweeps**: toughness, affordability, board size and damage.
-5. **Method B**, the ablation, over the validation samples.
-6. **The per-layer view**, on the families with a low share, where gen-3's trunk sizing needs the depth at which the fact appears.
-
-Method C stays off unless a family's results call for it.
-
-### After the last arm
-
-1. **`compare` over every scorecard of the sweep**, ranking arms on rung 1 minus rung 1w per family. Beside it sit the memorization gap, how much better an arm does on texts it trained on than on unseen ones, and the other results the gen-2 record lists.
-2. **The Outcome section records the comparison**, and reads gen-1 against gen-2 by direction.
-
-## Outcome / Result
-
-### Gen-1 (2026-10-08)
-
-The first run probed the gen-1 checkpoint (`models/effects/runs/2026-09-17-full-textless-corpus/latest.pt`) against a probe set frozen over gen-1's curated corpus and read through a kept-aside copy of gen-1's sidecars. The scorecard is `output/effects/reports/knowledge-probes-2026-09-17-full-textless-corpus-20261009/scorecard.json`, probe-set digest `361fc75ce1cc`. Unless a table says otherwise, scores are the MLP probe's: AUC for yes/no targets, R² for amounts.
-
-#### The suite fits its budget with room to spare
-
-A full probing run took 19 minutes of wall time and peaked at 0.58 GiB of GPU memory, against a budget of two hours and 8 GB. Freezing the probe set took a few minutes more and needs no GPU.
-
-| item | value |
-|---|---|
-| line items | 34,802 |
-| record items | 33,329 |
-| interaction pairs | 1,792 |
-| interaction join rate | 6.8% |
-| wall time, probing run | 1,160 s |
-| peak GPU memory | 0.58 GiB |
-
-The join rate is low because the join can pair a trigger only with a resolution record that names the ability behind its event. Most fired triggers are entering-the-battlefield or cast triggers. Their cause is a permanent spell's own cast, which has no ability line, and a spell-cast event has no resolution record at all. The script-mined pairs supply the interactions the join cannot reach.
-
-#### `e` carries what kind of ability a line is, and little of its amounts
-
-A probe reading `e` alone recognises most line properties far above the width control, the same probe fitted on a fixed random vector per text. Amounts are the exception: `e` explains a third of the variance in damage, little of the mana cost and none of the toughness change. This is the gap the value head is meant to close.
-
-| line property | `e` | width control | trunk at `[ACT]` |
-|---|---:|---:|---:|
-| lasts as a counter (`as_counter`) | 0.998 | 0.512 | 0.994 |
-| lasts until end of turn | 0.990 | 0.510 | 0.987 |
-| produces colourless mana | 0.996 | 0.524 | 0.992 |
-| repeatable | 0.863 | 0.501 | 0.964 |
-| affects each player or permanent | 0.894 | 0.497 | 0.929 |
-| damage amount (R²) | 0.348 | −0.102 | 0.682 |
-| power change (R²) | 0.523 | −0.326 | 0.638 |
-| toughness change (R²) | −0.011 | −0.192 | 0.507 |
-| total mana cost (R²) | 0.142 | −0.517 | 0.048 |
-
-These are trained lines. On held-out lines, damage and counters placed read lower, and power change and toughness change fall to near zero.
-
-#### Affordability lives in `e`; blocking legality does not
-
-On the board-dependent targets, rung 0 reads the board with every `e` zeroed and rung 1 adds the acting line's `e`. Affordability rises from 0.74 to 0.95 when `e` is added, far above the width control, so the vector carries the cost the verdict turns on. Whether a creature may block barely moves between the two rungs, so `e` adds nothing the board does not already say.
-
-| target, card-disjoint | rung 0 | rung 1 | 1w | 1o | rung 2 | rung 3 | share |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| affordable | 0.736 | 0.953 | 0.798 | 0.965 | 0.947 | — | — |
-| may block | 0.671 | 0.674 | 0.670 | 0.677 | 0.711 | 0.748 | 0.03 |
-| entity affected | 0.893 | 0.919 | 0.867 | 0.899 | 0.995 | 0.997 | 0.25 |
-| trigger fires | 0.781 | 0.831 | 0.799 | 0.818 | 0.851 | — | — |
-| legal target | 0.929 | 0.948 | 0.907 | 0.936 | 0.980 | 0.955 | — |
-
-Rung 1w replaces each `e` with its width control, rung 1o adds the parsed script values instead of `e`, rung 2 is the trunk's output and rung 3 the model's own prediction. Affordability and blocking show the same pattern on the game-disjoint stratum. Target legality has no share because the board alone already reads it: rung 3 exceeds rung 0 by less than the minimum gap. Its rung 3 is read from the gate, which a decision record raises on exactly its legal targets. The `target_legal` field is trained only on legal targets, always to 1, so its output carries nothing about an illegal entity.
-
-#### Gen-1's verdict head was never trained, so affordability and trigger firing have no model read-out
-
-Gen-1's trainer never called the verdict loss, and its verdict head sits at its initial weights. The two targets that head serves, whether a candidate is affordable and whether a trigger fires, therefore have no rung 3 and no share. The trunk does carry both: rung 2 reaches 0.95 on affordability and 0.85 on firing.
-
-A head with random weights can still score far from 0.5, which is why rung 3 is withheld rather than read. The trunk's output at `[ACT]` is dominated by one direction, which holds nearly half its variance and on its own separates affordable candidates from unaffordable ones. A freshly initialized head lands 0.4 or more from chance about one time in a hundred, and gen-1's own head, at 0.899, sits at that edge.
-
-| read-out of the trunk at `[ACT]`, affordability | AUC |
-|---|---:|
-| top principal component (47.5% of the variance) | 0.877 |
-| gen-1's untrained verdict head | 0.899 |
-| 200 fresh verdict heads, median distance from 0.5 | 0.187 |
-| 200 fresh verdict heads, share at least 0.4 from 0.5 | 1.0% |
-
-#### No death is ever predicted from damage, because gen-1's corpus never records one
-
-Every `dies` label is zero, and the toughness and damage sweeps read 0.000 at every value. Gen-1's collectors wrote a resolution's record before Forge ran its state-based actions, and discarded the deaths those actions then produced. A creature killed by a burn spell therefore appears in the record with its damage and without its death, and the model has learned that damage kills nothing. On a sample of twelve real shards, none of 565 lethal-looking resolution damage events carries the death, while combat records, written after the check, carry most of theirs.
-
-The board-size sweep shows the model does predict deaths when the record itself carries them: predicted deaths summed over the board rise steadily from 0.003 with no opposing creature to 0.154 with eight. The collectors now hold a resolution's record through the state-based check that follows it and add every permanent that leaves the battlefield there, so gen-2's corpus carries these deaths; a twelve-match pilot keeps twenty-three of twenty-three.
-
-| sweep | 1 or 0 | 4 | 8 |
-|---|---:|---:|---:|
-| toughness of the target, its predicted death | 0.000 | 0.000 | 0.000 |
-| `NumDmg$` on a spell, toughness-4 target's death | 0.000 | 0.000 | 0.000 |
-| opposing creatures, deaths summed over the board | 0.003 | 0.089 | 0.154 |
-
-The affordability sweep reads the verdict head and is not run on gen-1.
-
-#### The trunk reads `e` almost only at `[ACT]`, and any nearby text's `e` does as well
-
-Replacing `e` with matched noise raises the loss most on keywords gained, the gate and damage taken. Applied to `[ACT]` alone the increase is almost the same as applied everywhere, and applied to the card slots alone it is near zero, so the trunk barely uses the vectors of the abilities on the board. Replacing `e` with the nearest other text's vector costs almost nothing on any field.
-
-| field | base loss | noise, every slot | noise, `[ACT]` | noise, card slots | API-type mean | nearest text |
-|---|---:|---:|---:|---:|---:|---:|
-| gate | 1.010 | +1.190 | +1.082 | +0.044 | +0.318 | +0.017 |
-| keywords gained | 0.066 | +1.122 | +1.080 | +0.020 | +0.694 | +0.015 |
-| damage taken | 0.543 | +0.280 | +0.250 | +0.002 | +0.062 | +0.000 |
-| life change | 0.363 | +0.295 | +0.258 | +0.003 | +0.087 | +0.006 |
-| colours gained | 0.025 | +0.182 | +0.188 | −0.001 | +0.114 | +0.019 |
-
-### Gen-2 arms
-
-Every arm is probed on one probe set, frozen over gen-2's corpus (probe-set digest `927c88b0fae4`), and read against gen-1 by direction. Gen-1's set was frozen over gen-1's corpus, so the two compare family by family rather than item by item. Unless a table says otherwise, scores are the MLP probe's: AUC for yes/no targets, R² for amounts. The arm's training and gates are recorded in the gen-2 record's sweep section.
-
-#### Arm `e64` (2026-10-13)
-
-This run predates the input corrections in the gen-2 record, and arm `e64` trains again on the corrected inputs. The first run keeps gen-1's sizes, `e` 64 wide and an encoder of four layers 256 wide, and its checkpoint is from epoch 15. The scorecard is `models/effects/runs/2026-10-gen2-e64-earlier-inputs/reports/knowledge-probes-2026-10-gen2-e64-20261013/scorecard.json`. Probing took 14 minutes and peaked at 0.34 GiB of GPU memory, and freezing the set took 5 minutes more.
-
-| item | value |
-|---|---|
-| line items | 36,178 |
-| record items | 35,699 |
-| interaction pairs | 2,010 |
-| interaction join rate | 7.0% |
-
-##### `e` now holds a line's costs, its timing and most of its amounts
-
-A probe reading `e` alone recovers a line's costs and timing almost perfectly, where gen-1's `e` gave them up close to chance on held-out lines. It reads mana cost and damage on held-out lines nearly as well as on trained ones. Every width control stays at chance, with AUC near 0.5 and R² below zero, so the gain is content and not width. Gen-2 changes both what the encoder reads, an ability's whole chain, and what trains it, with a value head and a script-API head that read `e` alone. One arm cannot separate the two.
-
-| line property | gen-1, trained | arm, trained | gen-1, held-out | arm, held-out |
-|---|---:|---:|---:|---:|
-| total mana cost (R²) | 0.142 | 0.837 | −0.186 | 0.738 |
-| damage amount (R²) | 0.348 | 0.697 | 0.243 | 0.692 |
-| counters placed (R²) | 0.596 | 0.640 | 0.479 | 0.542 |
-| power change (R²) | 0.523 | — | 0.083 | 0.398 |
-| toughness change (R²) | −0.011 | — | 0.061 | 0.255 |
-| tap cost | 0.738 | 1.000 | 0.658 | 0.999 |
-| sacrifice cost | 0.737 | 0.999 | 0.579 | 0.888 |
-| instant speed | 0.779 | 0.882 | 0.584 | 0.768 |
-| repeatable | 0.863 | 0.985 | 0.755 | 0.917 |
-| affects each player or permanent | 0.894 | 0.988 | 0.807 | 0.970 |
-| affects an opponent | 0.849 | 0.949 | 0.801 | 0.878 |
-| produces red mana | 0.623 | 0.954 | — | — |
-| a trigger fires on a paired line's event, all lines | 0.842 | 0.948 | — | — |
-
-The arm's trained-line R² on power, toughness and life change is left out because three script literals decide it. Jumbo Cactuar's +9,999 power, Overkill's −9,999 toughness and The Millennium Calendar's 1,000 life dominate those labels' variance. The probe labels are not capped at 40 as the model's targets are, so the R² measures how those three lines are fitted. None of the three is held out, so the held-out columns are unaffected.
-
-##### `e` carries affordability and how long a pump lasts; the trunk supplies deaths, trigger firing and blocking
-
-On affordability and on a power change lasting until end of turn, `e` closes nearly the whole gap between the board alone and the model's own prediction. Rung 0 reads the board with every `e` zeroed, and rung 1 adds the ability vectors. On a creature's death and on whether a trigger fires, it closes about a third or less, and the trunk's output at rung 2 carries what the model predicts. Blocking legality gains nothing from `e`, as in gen-1.
-
-| target, card-disjoint | rung 0 | rung 1 | 1w | rung 2 | rung 3 | share | gen-1 rung 3 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| affordable | 0.729 | 0.963 | 0.852 | 0.973 | 0.976 | 0.95 | — |
-| power change lasts until end of turn | 0.844 | 0.994 | 0.838 | 0.996 | 0.992 | 1.02 | 0.939 |
-| legal target | 0.930 | 0.964 | 0.922 | 0.989 | 0.984 | 0.64 | 0.955 |
-| legal target, carrying protection | 0.738 | 0.805 | 0.681 | 0.960 | 0.893 | 0.43 | 0.635 |
-| trigger fires | 0.693 | 0.758 | 0.727 | 0.879 | 0.872 | 0.36 | — |
-| entity affected | 0.789 | 0.838 | 0.758 | 0.972 | 0.976 | 0.26 | 0.997 |
-| dies | 0.736 | 0.759 | 0.751 | 0.935 | 0.928 | 0.12 | — |
-| may block | 0.884 | 0.877 | 0.866 | 0.890 | 0.802 | — | 0.748 |
-
-Gen-2 trains the verdict head, so affordability and trigger firing have a model read-out for the first time, and both match the trunk's output. Target legality against a hexproof, shroud, protection or ward permanent rose the most of the targets gen-1 could already read. Gen-1 labelled every pump as instant, so its duration row compares nothing. The game-disjoint stratum agrees except on death, where the model's own prediction falls to 0.77 while the trunk's output stays at 0.94, on 256 records.
-
-The model's own blocking prediction scores below a probe on the board alone, and its `blocker_legal` field removed less of its constant-predictor floor as training went on, 64% at epoch 9 and 54% at epoch 15. The board alone reads blocking far better in gen-2's sample than in gen-1's, so the two rows of rung 0 do not compare.
-
-##### Deaths now follow the target's toughness, and barely the damage amount
-
-Gen-2's corpus records the deaths a resolution's damage causes, and the model predicts them. The toughness sweep falls steadily as the target's toughness rises, where gen-1 read zero at every value. Each sweep averages twenty records with different damage amounts, so a step at each record's own threshold shows as a slope. The board-size sweep rises by about a fifth of a death per added opposing creature, against the one per creature a sweeper should give, and against a fiftieth in gen-1.
-
-The damage sweep moves the text instead of the board: it re-encodes one spell with `NumDmg$` from 1 to 8 against a toughness-4 target. The predicted death rises only slightly, with no step between 3 and 4, on a spell and on a triggered ability alike. The line probe above reads the damage amount from `e`, so the amount is in the vector, but not in a form the trunk compares with a toughness. The ladder agrees: on death, `e` adds little over the board, and the trunk's output carries the whole prediction.
-
-| sweep | 1, or 0 creatures | 4 | 8 |
-|---|---:|---:|---:|
-| toughness of the target, its death, gen-1 | 0.000 | 0.000 | 0.000 |
-| toughness of the target, its death, arm | 0.861 | 0.569 | 0.127 |
-| `NumDmg$` on a spell, toughness-4 target's death, gen-1 | 0.000 | 0.000 | 0.000 |
-| `NumDmg$` on a spell, toughness-4 target's death, arm | 0.447 | 0.578 | 0.551 |
-| `NumDmg$` on a triggered ability, same, arm | 0.674 | 0.751 | 0.782 |
-| opposing creatures, deaths summed over the board, gen-1 | 0.003 | 0.089 | 0.154 |
-| opposing creatures, deaths summed over the board, arm | 0.001 | 0.782 | 1.479 |
-
-##### The affordability sweep leaves the verdict flat, because it edits an input the model does not decide by
-
-The affordable verdict stays near 0.29 from no mana to two more than the cost. The sweep edits the acting player's untapped production, one number per colour, and leaves every land on the board as it was. The model still separates affordable candidates at 0.976 AUC, so it reads affordability from something the sweep leaves unchanged, most likely the untapped lands and their mana abilities. The sweep cannot show a step until it edits the lands as well.
-
-##### The trunk still reads `e` almost only at `[ACT]`, and now needs the exact keyword a line grants
-
-Replacing `e` with matched noise at `[ACT]` alone costs about as much as replacing it everywhere, and replacing it in the card slots alone costs almost nothing, as in gen-1. The nearest other text's vector still costs little on any field.
-
-| field | base loss | noise, every slot | noise, `[ACT]` | noise, card slots | API-type mean | nearest text |
-|---|---:|---:|---:|---:|---:|---:|
-| gate | 1.088 | +1.320 | +1.322 | +0.011 | +0.242 | +0.037 |
-| keywords gained | 0.130 | +0.826 | +0.848 | −0.002 | +0.829 | +0.033 |
-| power change | 0.227 | +1.147 | +1.205 | −0.001 | +0.292 | +0.010 |
-| +1/+1 counters | 0.080 | +0.311 | +0.313 | +0.001 | +0.019 | −0.001 |
-| damage taken | 0.543 | +0.205 | +0.196 | +0.009 | +0.043 | +0.015 |
-| poison | 0.050 | +0.030 | +0.025 | +0.004 | −0.036 | +0.002 |
-
-On keywords gained, the API type's mean vector costs as much as noise, where in gen-1 it cost about three fifths as much. Every keyword grant shares the `Keyword` API type, so its mean says that a keyword is granted and not which. On poison, the API type's mean lowers the loss: the per-text vectors make the model's poison predictions worse than a vector carrying only the type would.
-
-##### `e` still says little about how much a text's outcome varies
-
-The state-dependence probe reads about the same small share of each text's outcome spread from the arm's `e` as from gen-1's on trained lines, R² 0.16 against 0.18. On held-out lines it reads almost none, where gen-1's `e` read a quarter of the spread on its 155 held-out lines.
-
-#### Arm `e64` on the corrected inputs (2026-10-15)
-
-The second run of arm `e64` trains on the corrected inputs, the at-least targets and the repaired corpus described in the gen-2 record, and its checkpoint is from epoch 25. The probe set is frozen again over the same corpus with every amount label capped at 40 (probe-set digest `ab6452679131`). It holds as many items as the first run's set and differs from it in the capped labels. The scorecard is `models/effects/runs/2026-10-gen2-e64/reports/knowledge-probes-2026-10-gen2-e64-20261015/scorecard.json`, and `compare-vs-earlier-inputs.md` beside it sets the two runs side by side. Probing took 14 minutes and peaked at 0.36 GiB of GPU memory, and freezing the set took 5 minutes more.
-
-##### The model predicts deaths and damage better, and the trunk still supplies most of it
-
-The model's own prediction of a creature's death, its damage taken, its blocking and its protected-target legality all improve on the first run. The largest gain is on the game-disjoint stratum, where the first run's death prediction fell well below its trunk's output; the second run's comes much closer to it. The ladder keeps its shape: on death and damage, `e` adds little over the board, and the trunk's output at rung 2 carries the prediction.
-
-| target, card-disjoint | rung 0 | rung 1 | rung 2 | model, first run | model, second run |
-|---|---:|---:|---:|---:|---:|
-| dies | 0.768 | 0.787 | 0.920 | 0.928 | 0.941 |
-| dies, game-disjoint | 0.729 | 0.764 | 0.928 | 0.77 | 0.892 |
-| damage taken (R²) | −0.161 | 0.144 | 0.461 | −0.007 | 0.234 |
-| may block | 0.872 | 0.869 | 0.878 | 0.802 | 0.837 |
-| legal target, carrying protection | 0.754 | 0.811 | 0.950 | 0.893 | 0.932 |
-| trigger fires | 0.695 | 0.759 | 0.899 | 0.872 | 0.900 |
-| affordable | 0.726 | 0.959 | 0.980 | 0.976 | 0.977 |
-
-##### The damage sweep rises more steeply with the stated damage, still without a step between 3 and 4
-
-Raising a spell's `NumDmg$` from 1 to 8 against a toughness-4 target now lifts the predicted death from under a half to about two thirds, where the first run moved it by a tenth. The rise is spread over the whole range, and the step from 3 to 4 is smaller than the step from 1 to 2. The trunk therefore reads more of the amount than before, but still not as a threshold it compares with the target's toughness. The triggered ability shows the same pattern.
-
-The toughness sweep falls less steeply than in the first run. At toughness 1 the predicted death is about one half, where the first run's was near nine in ten, and at toughness 8 the two runs agree. Each point averages twenty records with different damage amounts, so a lower start means the model doubts more of the small-target deaths. The board-size sweep is unchanged, at about a fifth of a death per added creature.
-
-| sweep | 1, or 0 creatures | 3 | 4 | 8 |
-|---|---:|---:|---:|---:|
-| toughness of the target, its death, first run | 0.861 | 0.696 | 0.569 | 0.127 |
-| toughness of the target, its death, second run | 0.563 | 0.519 | 0.466 | 0.122 |
-| `NumDmg$` on a spell, toughness-4 target's death, first run | 0.447 | 0.522 | 0.578 | 0.551 |
-| `NumDmg$` on a spell, toughness-4 target's death, second run | 0.454 | 0.569 | 0.629 | 0.683 |
-| `NumDmg$` on a triggered ability, same, second run | 0.616 | 0.709 | 0.767 | 0.793 |
-| opposing creatures, deaths summed over the board, second run | 0.002 | 0.591 | 0.779 | 1.501 |
-
-##### The affordability sweep now rises with the mana given, and never passes one half
-
-With the acting player's lands set to match the edited production, the affordable verdict climbs from near zero with no mana to just under one half with seven or eight. The first run's sweep, which left the lands unchanged, stayed flat near 0.29. The climb is gradual because each point averages items with different costs. The verdict stays below one half even at eight mana, so the model reads affordability partly from something the sweep does not set, while still separating affordable candidates at 0.977 AUC.
-
-| untapped mana given | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| affordable verdict, first run | 0.287 | 0.287 | 0.288 | 0.288 | 0.257 | 0.254 | 0.249 | 0.291 | 0.272 |
-| affordable verdict, second run | 0.009 | 0.091 | 0.147 | 0.215 | 0.262 | 0.342 | 0.374 | 0.471 | 0.462 |
-| items | 20 | 20 | 20 | 20 | 17 | 15 | 12 | 6 | 4 |
-
-##### `e` holds the damage amount and the coloured costs better, and power and toughness changes on held-out lines worse
-
-A probe reading `e` alone recovers a line's damage and each coloured mana cost better than from the first run's `e`, on held-out lines as on trained ones. With labels capped at 40, the trained-line power, toughness and life changes are readable for the first time, and `e` holds most of each. On held-out lines, power and toughness change fell.
-
-| line property, MLP probe on `e` | first run, trained | second run, trained | first run, held-out | second run, held-out |
-|---|---:|---:|---:|---:|
-| damage amount (R²) | 0.697 | 0.843 | 0.692 | 0.754 |
-| red mana in the cost (R²) | 0.701 | 0.839 | 0.325 | 0.504 |
-| blue mana in the cost (R²) | 0.738 | 0.828 | 0.513 | 0.627 |
-| total mana cost (R²) | 0.837 | 0.870 | 0.738 | 0.767 |
-| power change (R²) | — | 0.720 | 0.398 | 0.345 |
-| toughness change (R²) | — | 0.729 | 0.255 | 0.149 |
-| life change (R²) | — | 0.560 | 0.339 | 0.445 |
-
-The ablation and the state-dependence probe repeat the first run's results. Noise in `e` at `[ACT]` alone costs as much as noise everywhere, and noise in the card slots costs almost nothing. The probe reads about a sixth of each trained text's outcome spread from `e`, and none on held-out lines.
-
-##### A static restriction the model cannot read costs it most on attack legality, and a replacement doubles its zone loss
-
-Where a non-keyword static keeps a creature from attacking, the model's attack-legality loss is well above the unrestricted control, while a keyword restriction is the easiest case of the three. Blocking shows the same order with smaller gaps. On resolutions, a replacement on another permanent doubles the zone-outcome loss of the control, and a non-keyword static raises it almost as much. Noise in the card slots costs nothing on any subset, because the lines that would matter are not in the card slots. These are the baseline the gen-3 snapshot change is measured against. The subsets differ in more than the unlisted line, since a record with Pacifism on the board is a different game state from one without, so the gaps bound the cost of the missing text rather than measure it exactly.
-
-The run reads 600 records per subset, 300 from each validation stratum, and its report is `models/effects/runs/2026-10-gen2-e64/reports/board-run/`.
-
-| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
-|---|---:|---:|---:|---:|---:|---:|
-| attack legality | 0.991 | 0.080 | 0.625 | | | |
-| block legality | 0.759 | 0.491 | 0.673 | | | |
-| minimum blockers | 0.651 | 0.821 | 0.279 | | | |
-| zone outcome | | | | 0.129 | 0.109 | 0.061 |
-| affected gate | 1.376 | 1.813 | 0.520 | 1.040 | 0.804 | 0.814 |
-
-#### Arm `e128` (2026-10-16)
-
-Arm `e128` doubles the width of `e` and keeps every other setting of arm `e64`'s second run; its checkpoint is from epoch 22. It is probed on the same frozen set (digest `ab6452679131`), so the two arms compare item by item. The scorecard is `models/effects/runs/2026-10-gen2-e128/reports/knowledge-probes-2026-10-gen2-e128-20261015/scorecard.json`.
-
-##### Deaths fall with toughness more steeply, and still not at each spell's own damage
-
-The toughness sweep starts higher and falls further than arm `e64`'s, and its per-record curves fall around toughness 3 to 4 rather than 4 to 6. A 1-damage spell's curve now drops sooner, but still one to three steps after toughness 1. The damage sweep rises more steeply with the stated amount, again with no step between 3 and 4. The trunk reads more of the amount from the wider `e`, without yet comparing it with the toughness.
-
-| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
-|---|---:|---:|---:|---:|---:|---:|
-| toughness of the target, its death, `e64` | 0.563 | 0.542 | 0.519 | 0.466 | 0.317 | 0.122 |
-| toughness of the target, its death, `e128` | 0.861 | 0.757 | 0.564 | 0.344 | 0.204 | 0.064 |
-| `NumDmg$` on a spell, toughness-4 target's death, `e64` | 0.454 | 0.530 | 0.569 | 0.629 | 0.653 | 0.683 |
-| `NumDmg$` on a spell, toughness-4 target's death, `e128` | 0.252 | 0.389 | 0.500 | 0.595 | 0.647 | 0.733 |
-
-The affordability sweep climbs more slowly than arm `e64`'s, to 0.38 at eight mana against 0.46.
-
-##### The model's death prediction holds, and its damage prediction falls back
-
-The model's own prediction of a creature's death is as good as arm `e64`'s. Its damage-taken prediction falls back to no better than a constant, where arm `e64`'s explained about a quarter of the variance, although the trunk's output still holds nearly as much. Blocking and protected-target legality are a little lower.
-
-| target, card-disjoint, the model's own prediction | `e64` | `e128` |
-|---|---:|---:|
-| dies | 0.941 | 0.945 |
-| damage taken (R²) | 0.234 | −0.039 |
-| damage taken, trunk output (rung 2, R²) | 0.461 | 0.428 |
-| may block | 0.837 | 0.812 |
-| legal target, carrying protection | 0.932 | 0.925 |
-| trigger fires | 0.900 | 0.897 |
-
-##### The board-abilities gaps keep their direction on attack legality and narrow on resolutions
-
-On attack legality, a non-keyword static restriction stays far harder than no restriction, and the gap widens because the unrestricted case improved. On block legality, the unrestricted case is now the harder one. On resolutions, the zone loss with a replacement on another permanent falls to nearly the control's, so arm `e64`'s doubling does not repeat. The subsets hold 600 records each, so the smaller differences may not repeat; the attack-legality gap is far larger than any of them.
-
-| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
-|---|---:|---:|---:|---:|---:|---:|
-| attack legality, `e64` | 0.991 | 0.080 | 0.625 | | | |
-| attack legality, `e128` | 0.955 | 0.057 | 0.323 | | | |
-| block legality, `e64` | 0.759 | 0.491 | 0.673 | | | |
-| block legality, `e128` | 0.802 | 0.473 | 0.876 | | | |
-| zone outcome, `e64` | | | | 0.129 | 0.109 | 0.061 |
-| zone outcome, `e128` | | | | 0.102 | 0.110 | 0.096 |
-
-#### Arm `e64-lethality` (2026-10-16)
-
-Arm `e64-lethality` is arm `e64`'s second run with `--lethality-copies 8`, and its checkpoint is from epoch 28. It is probed on the same frozen set (digest `ab6452679131`). The scorecard is `models/effects/runs/2026-10-gen2-e64-lethality/reports/knowledge-probes-2026-10-gen2-e64-lethality-20261016/scorecard.json`.
-
-##### The toughness sweep falls to nothing by toughness 6, and the damage sweep rises past one half between 3 and 5
-
-Averaged over its twenty records, the toughness sweep now falls steeply and reaches nothing by toughness 6, where arm `e64`'s still predicted a death about one time in three at toughness 5. Read record by record, each curve falls at or within one point of its spell's damage, which the gen-2 record tabulates. The damage sweep against a toughness-4 target rises from near nothing at 1 damage to above four in five at 6. It crosses one half between 3 and 4 for a spell and a triggered ability alike, which is where the rule puts the step, though the spell reaches only one half at 4 damage.
-
-| sweep | 1 | 2 | 3 | 4 | 5 | 6 | 8 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| toughness of the target, its death, `e64` | 0.563 | 0.542 | 0.519 | 0.466 | 0.317 | 0.213 | 0.122 |
-| toughness of the target, its death, `e64-lethality` | 0.696 | 0.570 | 0.411 | 0.257 | 0.095 | 0.036 | 0.003 |
-| `NumDmg$` on a spell, toughness-4 target's death, `e64` | 0.454 | 0.530 | 0.569 | 0.629 | 0.653 | 0.686 | 0.683 |
-| `NumDmg$` on a spell, toughness-4 target's death, `e64-lethality` | 0.087 | 0.255 | 0.383 | 0.509 | 0.723 | 0.803 | 0.845 |
-| `NumDmg$` on a triggered ability, same, `e64-lethality` | 0.144 | 0.234 | 0.464 | 0.652 | 0.779 | 0.878 | 0.923 |
-
-##### The trunk now holds most of the damage a creature takes, and the model's own damage read-out does not follow
-
-The trunk's output at rung 2 explains six tenths of the damage each creature takes, against under half in arm `e64`. The model's own damage-taken prediction falls back, as it did in arm `e128`, so the information reaches the trunk and not the output head's damage field. Death, protected-target legality and trigger firing all rise slightly.
-
-| target, card-disjoint | rung 2, `e64` | rung 2, `e64-lethality` | model, `e64` | model, `e64-lethality` |
-|---|---:|---:|---:|---:|
-| dies | 0.920 | 0.947 | 0.941 | 0.943 |
-| damage taken (R²) | 0.461 | 0.615 | 0.234 | 0.062 |
-| legal target, carrying protection | 0.950 | 0.968 | 0.932 | 0.951 |
-| trigger fires | 0.899 | 0.887 | 0.900 | 0.915 |
-| may block | 0.878 | 0.904 | 0.837 | 0.822 |
-
-##### The board-abilities subsets keep arm `e64`'s pattern
-
-Attack legality restricted by a non-keyword static stays far harder than no restriction. Block legality is harder unrestricted than restricted, as in arm `e128`. A replacement on another permanent still raises the zone loss over the control. Noise in the card slots still costs nothing, since the copies change no card slot's text.
-
-| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
-|---|---:|---:|---:|---:|---:|---:|
-| attack legality | 1.014 | 0.050 | 0.318 | | | |
-| block legality | 0.917 | 0.539 | 1.065 | | | |
-| zone outcome | | | | 0.115 | 0.128 | 0.047 |
-
-#### Arm `e128-lethality` (2026-10-17)
-
-Arm `e128-lethality` is arm `e128` with `--lethality-copies 8`, and its checkpoint is from epoch 22. It is probed on the same frozen set (digest `ab6452679131`). The scorecard is `models/effects/runs/2026-10-gen2-e128-lethality/reports/knowledge-probes-2026-10-gen2-e128-lethality-20261017/scorecard.json`.
-
-##### The toughness sweep falls fastest of any arm, and the damage sweep crosses one half two points of damage late
-
-Averaged over its twenty records, the toughness sweep falls below one half by toughness 2 and to nothing by 5, faster than either arm `e128` or arm `e64-lethality`. Read record by record, each curve falls at or near its spell's own damage, which the gen-2 record tabulates. The damage sweep against a toughness-4 target crosses one half between 5 and 6 damage, for a spell and a triggered ability alike. The rule puts that step between 3 and 4, and arm `e64-lethality` crossed it between 3 and 4. The gen-2 record's training-records boundary shows that where the step falls moves between checkpoints, so this displacement belongs to the epoch-22 checkpoint rather than to the arm.
-
-| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
-|---|---:|---:|---:|---:|---:|---:|
-| toughness of the target, its death, `e128` | 0.861 | 0.757 | 0.564 | 0.344 | 0.204 | 0.064 |
-| toughness of the target, its death, `e64-lethality` | 0.696 | 0.570 | 0.411 | 0.257 | 0.095 | 0.003 |
-| toughness of the target, its death, `e128-lethality` | 0.779 | 0.401 | 0.210 | 0.094 | 0.027 | 0.001 |
-| `NumDmg$` on a spell, toughness-4 target's death, `e128` | 0.252 | 0.389 | 0.500 | 0.595 | 0.647 | 0.733 |
-| `NumDmg$` on a spell, toughness-4 target's death, `e64-lethality` | 0.087 | 0.255 | 0.383 | 0.509 | 0.723 | 0.845 |
-| `NumDmg$` on a spell, toughness-4 target's death, `e128-lethality` | 0.063 | 0.107 | 0.154 | 0.291 | 0.438 | 0.871 |
-| `NumDmg$` on a triggered ability, same, `e64-lethality` | 0.144 | 0.234 | 0.464 | 0.652 | 0.779 | 0.923 |
-| `NumDmg$` on a triggered ability, same, `e128-lethality` | 0.083 | 0.100 | 0.115 | 0.184 | 0.350 | 0.899 |
-
-##### The trunk holds as much of the damage taken as arm `e64-lethality`'s, and the model's own damage read-out keeps arm `e64`'s level
-
-The trunk's output at rung 2 explains as much of the damage each creature takes as arm `e64-lethality`'s, against well under half in arm `e128`. Unlike arm `e64-lethality`, the model's own damage-taken prediction comes back to arm `e64`'s level. Death, blocking, protected-target legality and trigger firing stay within three hundredths of arm `e128`.
-
-| target, card-disjoint | rung 2, `e128` | rung 2, `e128-lethality` | model, `e128` | model, `e128-lethality` |
-|---|---:|---:|---:|---:|
-| dies | 0.922 | 0.928 | 0.945 | 0.945 |
-| damage taken (R²) | 0.428 | 0.632 | −0.039 | 0.213 |
-| legal target, carrying protection | 0.961 | 0.971 | 0.925 | 0.930 |
-| trigger fires | 0.898 | 0.894 | 0.897 | 0.897 |
-| may block | 0.877 | 0.907 | 0.812 | 0.798 |
-
-##### The board-abilities subsets keep arm `e128`'s pattern
-
-Attack legality restricted by a non-keyword static stays far harder than no restriction. Block legality is harder unrestricted than restricted. A replacement on another permanent raises the zone loss only slightly over the control, as in arm `e128`. Noise in the card slots still costs nothing.
-
-| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
-|---|---:|---:|---:|---:|---:|---:|
-| attack legality | 1.011 | 0.058 | 0.240 | | | |
-| block legality | 0.806 | 0.477 | 0.879 | | | |
-| zone outcome | | | | 0.099 | 0.104 | 0.087 |
-
-#### Run A, arm `e64-lethality` continued to epoch 53 (2026-10-17)
-
-Run A continues arm `e64-lethality` for twenty more epochs at the same learning rate and is probed at two checkpoints: epoch 42, its best card-disjoint loss, and epoch 53, its last. Both are probed on the same frozen set (digest `ab6452679131`). The scorecards are `models/effects/runs/2026-10-gen2-e64-lethality-ext20/reports/knowledge-probes-2026-10-gen2-e64-lethality-ext20-20261017/scorecard.json` and `models/effects/runs/2026-10-gen2-e64-lethality-ext20-last/reports/knowledge-probes-2026-10-gen2-e64-lethality-ext20-last-20261017/scorecard.json`.
-
-##### The damage sweep crosses one half a point late at epoch 42 and a point early at epoch 53
-
-The two checkpoints place the step in opposite directions from the rule, which puts it between 3 and 4 damage against a toughness-4 target. Epoch 42 crosses one half between 4 and 5 for a spell and a triggered ability alike. Epoch 53 crosses between 2 and 3 for both. The toughness sweep follows: epoch 42's falls faster than arm `e64-lethality`'s, epoch 53's more slowly. The gen-2 record shows the same movement of the boundary on the training records, epoch by epoch.
-
-| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
-|---|---:|---:|---:|---:|---:|---:|
-| toughness of the target, its death, `e64-lethality` | 0.696 | 0.570 | 0.411 | 0.257 | 0.095 | 0.003 |
-| toughness of the target, its death, run A epoch 42 | 0.639 | 0.441 | 0.298 | 0.123 | 0.062 | 0.008 |
-| toughness of the target, its death, run A epoch 53 | 0.670 | 0.565 | 0.510 | 0.425 | 0.240 | 0.046 |
-| `NumDmg$` on a spell, toughness-4 target's death, `e64-lethality` | 0.087 | 0.255 | 0.383 | 0.509 | 0.723 | 0.845 |
-| `NumDmg$` on a spell, same, run A epoch 42 | 0.042 | 0.125 | 0.212 | 0.453 | 0.757 | 0.876 |
-| `NumDmg$` on a spell, same, run A epoch 53 | 0.119 | 0.406 | 0.730 | 0.860 | 0.872 | 0.895 |
-| `NumDmg$` on a triggered ability, same, `e64-lethality` | 0.144 | 0.234 | 0.464 | 0.652 | 0.779 | 0.923 |
-| `NumDmg$` on a triggered ability, same, run A epoch 42 | 0.092 | 0.136 | 0.206 | 0.351 | 0.710 | 0.946 |
-| `NumDmg$` on a triggered ability, same, run A epoch 53 | 0.224 | 0.352 | 0.655 | 0.853 | 0.938 | 0.985 |
-
-Read record by record at epoch 42, most of the spells' and triggered abilities' curves fall at their own damage. Three of the four activated pings for 1 damage are again predicted to spare a toughness-1 creature, at 0.31 or less, as in arm `e64-lethality`.
-
-##### The trunk holds more of the damage taken, and the model reads blocking better at both checkpoints
-
-The trunk's output at rung 2 explains about two thirds of the damage each creature takes at both checkpoints, more than any earlier arm. The model's own damage-taken prediction comes back to arm `e64`'s level. The model's blocking prediction gains about five hundredths at both, matching blocking legality's recovery in the gen-2 record. Its death prediction falls at epoch 53, where the boundary has moved toward a death.
-
-| target, card-disjoint | rung 2, `e64-lethality` | rung 2, epoch 42 | rung 2, epoch 53 | model, `e64-lethality` | model, epoch 42 | model, epoch 53 |
-|---|---:|---:|---:|---:|---:|---:|
-| dies | 0.947 | 0.966 | 0.940 | 0.943 | 0.948 | 0.910 |
-| damage taken (R²) | 0.615 | 0.681 | 0.674 | 0.062 | 0.205 | 0.170 |
-| may block | 0.904 | 0.923 | 0.923 | 0.822 | 0.873 | 0.865 |
-| legal target, carrying protection | 0.968 | 0.969 | 0.965 | 0.951 | 0.952 | 0.965 |
-| trigger fires | 0.887 | 0.890 | 0.902 | 0.915 | 0.913 | 0.922 |
-
-##### Unrestricted block legality improves most in the board-abilities subsets
-
-Block legality with no restriction on the board, the hardest block subset in arms `e128` and `e64-lethality`, is now the easiest of the three. Attack legality restricted by a non-keyword static stays far harder than no restriction. A replacement on another permanent doubles the zone loss over the control at epoch 42 and barely raises it at epoch 53.
-
-| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
-|---|---:|---:|---:|---:|---:|---:|
-| attack legality, `e64-lethality` | 1.014 | 0.050 | 0.318 | | | |
-| attack legality, epoch 42 | 0.982 | 0.036 | 0.381 | | | |
-| attack legality, epoch 53 | 0.953 | 0.024 | 0.341 | | | |
-| block legality, `e64-lethality` | 0.917 | 0.539 | 1.065 | | | |
-| block legality, epoch 42 | 0.643 | 0.498 | 0.432 | | | |
-| block legality, epoch 53 | 0.723 | 0.497 | 0.462 | | | |
-| zone outcome, `e64-lethality` | | | | 0.115 | 0.128 | 0.047 |
-| zone outcome, epoch 42 | | | | 0.118 | 0.136 | 0.058 |
-| zone outcome, epoch 53 | | | | 0.108 | 0.107 | 0.094 |
-
-#### Run B, run A continued from epoch 42 at a tenth of the learning rate (2026-10-18)
-
-Run B continues run A from its epoch 42 at a tenth of the learning rate for twenty epochs and is probed at two checkpoints: epoch 43, its best card-disjoint loss, and epoch 62, its last. Both are probed on the same frozen set (digest `ab6452679131`). The scorecards are `models/effects/runs/2026-10-gen2-e64-lethality-lr0.1/reports/knowledge-probes-2026-10-gen2-e64-lethality-lr0.1-20261018/scorecard.json` and `models/effects/runs/2026-10-gen2-e64-lethality-lr0.1-last/reports/knowledge-probes-2026-10-gen2-e64-lethality-lr0.1-last-20261018/scorecard.json`.
-
-##### At its last epoch the damage sweep steps where the rule puts it, for a spell and a triggered ability alike
-
-Run B's last epoch puts the step of the damage sweep against a toughness-4 target where the rule does, between 3 and 4 damage, for a spell and a triggered ability alike. Arm `e64-lethality` did too, and neither of run A's checkpoints did. Run B's best epoch crosses one half at 4 damage for a spell, by a hair, and between 4 and 5 for a triggered ability, close to run A's epoch 42. Its best epoch's toughness sweep matches run A's epoch 42, and its last epoch's falls more slowly, though far less so than run A's epoch 53.
-
-| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
-|---|---:|---:|---:|---:|---:|---:|
-| toughness of the target, its death, run A epoch 42 | 0.639 | 0.441 | 0.298 | 0.123 | 0.062 | 0.008 |
-| toughness of the target, its death, run B epoch 43 | 0.626 | 0.401 | 0.298 | 0.138 | 0.061 | 0.006 |
-| toughness of the target, its death, run B epoch 62 | 0.651 | 0.457 | 0.410 | 0.256 | 0.104 | 0.002 |
-| `NumDmg$` on a spell, toughness-4 target's death, run A epoch 42 | 0.042 | 0.125 | 0.212 | 0.453 | 0.757 | 0.876 |
-| `NumDmg$` on a spell, same, run B epoch 43 | 0.018 | 0.103 | 0.215 | 0.510 | 0.753 | 0.865 |
-| `NumDmg$` on a spell, same, run B epoch 62 | 0.032 | 0.124 | 0.379 | 0.768 | 0.828 | 0.868 |
-| `NumDmg$` on a triggered ability, same, run A epoch 42 | 0.092 | 0.136 | 0.206 | 0.351 | 0.710 | 0.946 |
-| `NumDmg$` on a triggered ability, same, run B epoch 43 | 0.069 | 0.121 | 0.201 | 0.354 | 0.630 | 0.945 |
-| `NumDmg$` on a triggered ability, same, run B epoch 62 | 0.103 | 0.182 | 0.338 | 0.672 | 0.840 | 0.946 |
-
-##### The last epoch's damage read-outs are the best of any checkpoint
-
-Run B's last epoch explains more of the damage each creature takes than any earlier checkpoint, at rung 2 and in the model's own prediction alike. Its death prediction falls slightly. At its best epoch, run B matches run A's epoch 42 on every read-out within about a hundredth.
-
-| target, card-disjoint | rung 2, run A epoch 42 | rung 2, run B epoch 43 | rung 2, run B epoch 62 | model, run A epoch 42 | model, run B epoch 43 | model, run B epoch 62 |
-|---|---:|---:|---:|---:|---:|---:|
-| dies | 0.966 | 0.954 | 0.942 | 0.948 | 0.957 | 0.938 |
-| damage taken (R²) | 0.681 | 0.689 | 0.716 | 0.205 | 0.204 | 0.285 |
-| may block | 0.923 | 0.917 | 0.923 | 0.873 | 0.868 | 0.880 |
-| legal target, carrying protection | 0.969 | 0.969 | 0.965 | 0.952 | 0.960 | 0.958 |
-| trigger fires | 0.890 | 0.897 | 0.900 | 0.913 | 0.918 | 0.922 |
-
-##### The board-abilities subsets keep run A's pattern
-
-Attack legality restricted by a non-keyword static stays far harder than no restriction. Block legality is about as hard unrestricted as with a keyword restriction, and a static restriction is harder than both. A replacement on another permanent still raises the zone loss over the control.
-
-| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
-|---|---:|---:|---:|---:|---:|---:|
-| attack legality, epoch 43 | 0.939 | 0.029 | 0.399 | | | |
-| attack legality, epoch 62 | 0.911 | 0.028 | 0.430 | | | |
-| block legality, epoch 43 | 0.705 | 0.500 | 0.519 | | | |
-| block legality, epoch 62 | 0.730 | 0.499 | 0.457 | | | |
-| zone outcome, epoch 43 | | | | 0.100 | 0.093 | 0.038 |
-| zone outcome, epoch 62 | | | | 0.107 | 0.097 | 0.058 |
-
-#### Run A128, arm `e128-lethality` continued to epoch 47 (2026-10-18)
-
-Run A128 continues arm `e128-lethality` for twenty more epochs at the same learning rate and is probed at two checkpoints: epoch 30, its best card-disjoint loss, and epoch 47, its last. Both are probed on the same frozen set (digest `ab6452679131`). The scorecards are `models/effects/runs/2026-10-gen2-e128-lethality-ext20/reports/knowledge-probes-2026-10-gen2-e128-lethality-ext20-20261018/scorecard.json` and `models/effects/runs/2026-10-gen2-e128-lethality-ext20-last/reports/knowledge-probes-2026-10-gen2-e128-lethality-ext20-last-20261018/scorecard.json`.
-
-##### The damage sweep crosses one half a point early at epoch 30 and a point late at epoch 47
-
-The two checkpoints place the step on opposite sides of the rule, which puts it between 3 and 4 damage against a toughness-4 target, in the opposite order from run A. Epoch 30 crosses one half between 2 and 3 damage for a spell and a triggered ability alike. Epoch 47 crosses between 4 and 5 for both. The toughness sweep follows: epoch 30's falls far more slowly than arm `e128-lethality`'s, and epoch 47's about as fast.
-
-| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
-|---|---:|---:|---:|---:|---:|---:|
-| toughness of the target, its death, `e128-lethality` | 0.779 | 0.401 | 0.210 | 0.094 | 0.027 | 0.001 |
-| toughness of the target, its death, run A128 epoch 30 | 0.826 | 0.717 | 0.466 | 0.356 | 0.219 | 0.024 |
-| toughness of the target, its death, run A128 epoch 47 | 0.761 | 0.449 | 0.258 | 0.126 | 0.053 | 0.001 |
-| `NumDmg$` on a spell, toughness-4 target's death, `e128-lethality` | 0.063 | 0.107 | 0.154 | 0.291 | 0.438 | 0.871 |
-| `NumDmg$` on a spell, same, run A128 epoch 30 | 0.156 | 0.263 | 0.659 | 0.821 | 0.843 | 0.873 |
-| `NumDmg$` on a spell, same, run A128 epoch 47 | 0.054 | 0.069 | 0.104 | 0.287 | 0.620 | 0.865 |
-| `NumDmg$` on a triggered ability, same, `e128-lethality` | 0.083 | 0.100 | 0.115 | 0.184 | 0.350 | 0.899 |
-| `NumDmg$` on a triggered ability, same, run A128 epoch 30 | 0.313 | 0.342 | 0.598 | 0.779 | 0.843 | 0.927 |
-| `NumDmg$` on a triggered ability, same, run A128 epoch 47 | 0.102 | 0.152 | 0.200 | 0.369 | 0.632 | 0.923 |
-
-Read record by record at epoch 30, the activated pings for 1 damage are predicted to kill a toughness-1 creature at 0.69 or more, as in arm `e128-lethality`.
-
-##### The model reads blocking and trigger firing better at both checkpoints
-
-The model's own blocking prediction gains about four hundredths at both checkpoints, and its trigger-firing prediction about two. Its damage-taken read-out keeps arm `e128-lethality`'s level. Death and protected-target legality fall slightly at epoch 30 and recover at epoch 47.
-
-| target, card-disjoint | rung 2, `e128-lethality` | rung 2, epoch 30 | rung 2, epoch 47 | model, `e128-lethality` | model, epoch 30 | model, epoch 47 |
-|---|---:|---:|---:|---:|---:|---:|
-| dies | 0.928 | 0.932 | 0.925 | 0.945 | 0.933 | 0.951 |
-| damage taken (R²) | 0.632 | 0.655 | 0.635 | 0.213 | 0.210 | 0.214 |
-| may block | 0.907 | 0.900 | 0.906 | 0.798 | 0.844 | 0.842 |
-| legal target, carrying protection | 0.971 | 0.942 | 0.965 | 0.930 | 0.925 | 0.951 |
-| trigger fires | 0.894 | 0.897 | 0.907 | 0.897 | 0.914 | 0.917 |
-
-##### Unrestricted attack legality worsens at the best checkpoint and recovers at the last
-
-Attack legality restricted by a non-keyword static stays far harder than no restriction at both checkpoints. Unrestricted attack legality is harder at epoch 30 than at any other checkpoint trained with lethality copies, and recovers at epoch 47. A replacement on another permanent still raises the zone loss over the control.
-
-| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
-|---|---:|---:|---:|---:|---:|---:|
-| attack legality, epoch 30 | 0.961 | 0.046 | 0.593 | | | |
-| attack legality, epoch 47 | 0.960 | 0.036 | 0.219 | | | |
-| block legality, epoch 30 | 0.736 | 0.618 | 0.576 | | | |
-| block legality, epoch 47 | 0.744 | 0.489 | 0.514 | | | |
-| zone outcome, epoch 30 | | | | 0.115 | 0.107 | 0.070 |
-| zone outcome, epoch 47 | | | | 0.091 | 0.078 | 0.037 |
-
-#### Run B128, run A128 continued from epoch 30 at a tenth of the learning rate (2026-10-19)
-
-Run B128 continues run A128 from its epoch 30 at a tenth of the learning rate for twenty epochs and is probed at two checkpoints: epoch 37, its best card-disjoint loss, and epoch 50, its last. Both are probed on the same frozen set (digest `ab6452679131`). The scorecards are `models/effects/runs/2026-10-gen2-e128-lethality-lr0.1/reports/knowledge-probes-2026-10-gen2-e128-lethality-lr0.1-20261019/scorecard.json` and `models/effects/runs/2026-10-gen2-e128-lethality-lr0.1-last/reports/knowledge-probes-2026-10-gen2-e128-lethality-lr0.1-last-20261019/scorecard.json`.
-
-##### Both checkpoints put the damage sweep's step where the rule does
-
-Both checkpoints cross one half between 3 and 4 damage against a toughness-4 target, for a spell and a triggered ability alike, which is where the rule puts the step. Run A128's epoch 30, where run B128 started, crossed a point early. Read record by record at epoch 37, the activated pings for 1 damage kill a toughness-1 creature at 0.64 or more and a toughness-2 one at 0.28 or less.
-
-| sweep | 1 | 2 | 3 | 4 | 5 | 8 |
-|---|---:|---:|---:|---:|---:|---:|
-| toughness of the target, its death, run A128 epoch 30 | 0.826 | 0.717 | 0.466 | 0.356 | 0.219 | 0.024 |
-| toughness of the target, its death, run B128 epoch 37 | 0.859 | 0.546 | 0.365 | 0.228 | 0.086 | 0.003 |
-| toughness of the target, its death, run B128 epoch 50 | 0.830 | 0.493 | 0.336 | 0.177 | 0.093 | 0.001 |
-| `NumDmg$` on a spell, toughness-4 target's death, run A128 epoch 30 | 0.156 | 0.263 | 0.659 | 0.821 | 0.843 | 0.873 |
-| `NumDmg$` on a spell, same, run B128 epoch 37 | 0.056 | 0.136 | 0.319 | 0.683 | 0.823 | 0.854 |
-| `NumDmg$` on a spell, same, run B128 epoch 50 | 0.050 | 0.112 | 0.199 | 0.574 | 0.827 | 0.855 |
-| `NumDmg$` on a triggered ability, same, run A128 epoch 30 | 0.313 | 0.342 | 0.598 | 0.779 | 0.843 | 0.927 |
-| `NumDmg$` on a triggered ability, same, run B128 epoch 37 | 0.165 | 0.237 | 0.349 | 0.622 | 0.811 | 0.952 |
-| `NumDmg$` on a triggered ability, same, run B128 epoch 50 | 0.129 | 0.190 | 0.303 | 0.635 | 0.864 | 0.965 |
-
-##### The model's own damage read-out is the best of any checkpoint
-
-The model's damage-taken prediction explains about a third of the variance at both checkpoints, more than any earlier checkpoint. Death and protected-target legality rise by about a hundredth over run A128's epoch 30, and the rest stay within a hundredth.
-
-| target, card-disjoint | rung 2, A128 epoch 30 | rung 2, B128 epoch 37 | rung 2, B128 epoch 50 | model, A128 epoch 30 | model, B128 epoch 37 | model, B128 epoch 50 |
-|---|---:|---:|---:|---:|---:|---:|
-| dies | 0.932 | 0.944 | 0.942 | 0.933 | 0.942 | 0.944 |
-| damage taken (R²) | 0.655 | 0.673 | 0.674 | 0.210 | 0.339 | 0.358 |
-| may block | 0.900 | 0.899 | 0.899 | 0.844 | 0.837 | 0.848 |
-| legal target, carrying protection | 0.942 | 0.955 | 0.958 | 0.925 | 0.931 | 0.939 |
-| trigger fires | 0.897 | 0.903 | 0.901 | 0.914 | 0.916 | 0.914 |
-
-##### The board-abilities subsets keep run A128's pattern
-
-Attack legality restricted by a non-keyword static stays far harder than no restriction. A replacement on another permanent still raises the zone loss over the control.
-
-| field loss | legality-static | legality-keyword | legality-none | resolution-replacement | resolution-static | resolution-none |
-|---|---:|---:|---:|---:|---:|---:|
-| attack legality, epoch 37 | 0.944 | 0.025 | 0.425 | | | |
-| attack legality, epoch 50 | 0.941 | 0.026 | 0.523 | | | |
-| block legality, epoch 37 | 0.716 | 0.531 | 0.706 | | | |
-| block legality, epoch 50 | 0.709 | 0.534 | 0.512 | | | |
-| zone outcome, epoch 37 | | | | 0.098 | 0.092 | 0.054 |
-| zone outcome, epoch 50 | | | | 0.076 | 0.064 | 0.035 |
+- A stronger probe, such as the per-layer view or method C, to read the shares of deaths, affected cards, target legality, trigger firing and damage taken.
+- Deaths and affected cards moved into `e` if their low shares hold, through auxiliary heads that read `e` alone or a thinner trunk rather than a wider `e` ([the rule applied](#gen-3-inherits-two-board-questions-already-in-e-and-no-firm-case-for-moving-another-into-it)).
+- Block and attack legality recorded at Forge's declare steps, before anyone declares, so that no label records the AI's block plan ([gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-forge-hooks-and-collectors-recorded-planned-events-as-real-ones-and-several-outcomes-reached-the-wrong-record)).
+- Every line of a permanent listed in the snapshot, measured against gen-2's losses on the six board-abilities subsets ([board abilities](#a-restriction-the-board-snapshot-does-not-list-costs-the-model-the-most-on-attack-legality), [gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-snapshot-should-list-every-line-of-a-permanent-not-only-its-spell-and-activated-abilities)).
+- What a creature has protection from, in the keyword flags, which carry protection without its colour, so the evasion grid's two protection rows are identical by construction ([evasion](#evasion-the-model-knows-an-evasive-attacker-is-hard-to-block-and-which-blocker-answers-it-only-for-horsemanship-and-fear), [gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-keyword-flags-should-say-what-a-creature-has-protection-from)).
+- Affordability labelled from the mana and additional-cost checks alone, without Forge's AI cost policy ([colour](#colour-the-model-counts-the-mana-a-player-has-and-barely-checks-its-colour), [gen-3 draft](2026-XX-XX-effect-model-gen3-design.md#the-model-has-to-learn-every-rule-that-depends-on-whose-turn-or-which-step-it-is-and-collection-records-which-check-decided-each-one)).

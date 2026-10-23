@@ -22,8 +22,8 @@ class RoleSpansTest {
         return prose.substring(span.start(), span.end());
     }
 
-    private static RoleSpans.Span roleIn(List<RoleSpans.Span> spans, String role) {
-        return spans.stream().filter(s -> s.role().equals(role)).findFirst()
+    private static RoleSpans.Span roleIn(List<RoleSpans.Span> spans, SpanRole role) {
+        return spans.stream().filter(s -> s.role() == role).findFirst()
                 .orElse(null);
     }
 
@@ -31,8 +31,8 @@ class RoleSpansTest {
     void anActivatedAbilitySplitsAtItsCostColon() {
         String prose = "{T}, pay 2 life: draw a card.";
         List<RoleSpans.Span> spans = RoleSpans.of(prose, true);
-        assertEquals("{T}, pay 2 life:", textOf(prose, roleIn(spans, RoleSpans.COST)));
-        assertEquals(" draw a card.", textOf(prose, roleIn(spans, RoleSpans.EFFECT)));
+        assertEquals("{T}, pay 2 life:", textOf(prose, roleIn(spans, SpanRole.COST)));
+        assertEquals(" draw a card.", textOf(prose, roleIn(spans, SpanRole.EFFECT)));
     }
 
     @Test
@@ -40,9 +40,9 @@ class RoleSpansTest {
         String prose = "whenever this creature attacks, draw a card.";
         List<RoleSpans.Span> spans = RoleSpans.of(prose, false);
         assertEquals("whenever this creature attacks,",
-                textOf(prose, roleIn(spans, RoleSpans.TRIGGER_CONDITION)));
+                textOf(prose, roleIn(spans, SpanRole.TRIGGER_CONDITION)));
         assertEquals(" draw a card.",
-                textOf(prose, roleIn(spans, RoleSpans.EFFECT)));
+                textOf(prose, roleIn(spans, SpanRole.EFFECT)));
     }
 
     @Test
@@ -50,14 +50,14 @@ class RoleSpansTest {
         String prose = "when this enters (from anywhere, somehow), draw a card.";
         List<RoleSpans.Span> spans = RoleSpans.of(prose, false);
         assertEquals("when this enters (from anywhere, somehow),",
-                textOf(prose, roleIn(spans, RoleSpans.TRIGGER_CONDITION)));
+                textOf(prose, roleIn(spans, SpanRole.TRIGGER_CONDITION)));
     }
 
     @Test
     void atAlsoOpensATriggerCondition() {
         String prose = "at the beginning of your upkeep, gain 1 life.";
         List<RoleSpans.Span> spans = RoleSpans.of(prose, false);
-        assertEquals(RoleSpans.TRIGGER_CONDITION, spans.get(0).role());
+        assertEquals(SpanRole.TRIGGER_CONDITION, spans.get(0).role());
     }
 
     @Test
@@ -65,7 +65,7 @@ class RoleSpansTest {
         String prose = "creatures you control get +1/+1.";
         List<RoleSpans.Span> spans = RoleSpans.of(prose, false);
         assertEquals(1, spans.size());
-        assertEquals(RoleSpans.EFFECT, spans.get(0).role());
+        assertEquals(SpanRole.EFFECT, spans.get(0).role());
         assertEquals(prose, textOf(prose, spans.get(0)));
     }
 
@@ -74,14 +74,14 @@ class RoleSpansTest {
         String prose = "draw a card.";
         List<RoleSpans.Span> spans = RoleSpans.of(prose, true);
         assertEquals(1, spans.size());
-        assertEquals(RoleSpans.EFFECT, spans.get(0).role());
+        assertEquals(SpanRole.EFFECT, spans.get(0).role());
     }
 
     @Test
     void aTargetPhraseIsSpannedInsideTheClauseItAppearsIn() {
         String prose = "deal 3 damage to target creature or player.";
         List<RoleSpans.Span> spans = RoleSpans.of(prose, false);
-        RoleSpans.Span target = roleIn(spans, RoleSpans.TARGET_SPEC);
+        RoleSpans.Span target = roleIn(spans, SpanRole.TARGET_SPEC);
         assertEquals("target creature or player", textOf(prose, target));
     }
 
@@ -90,7 +90,7 @@ class RoleSpansTest {
         String prose = "target creature fights target creature you don't control.";
         List<RoleSpans.Span> spans = RoleSpans.of(prose, false);
         assertEquals(2, spans.stream()
-                .filter(s -> s.role().equals(RoleSpans.TARGET_SPEC)).count());
+                .filter(s -> s.role() == SpanRole.TARGET_SPEC).count());
     }
 
     @Test
@@ -98,7 +98,7 @@ class RoleSpansTest {
         String prose = "untarget the creature.";
         List<RoleSpans.Span> spans = RoleSpans.of(prose, false);
         assertTrue(spans.stream().noneMatch(
-                s -> s.role().equals(RoleSpans.TARGET_SPEC)));
+                s -> s.role() == SpanRole.TARGET_SPEC));
     }
 
     @Test
@@ -119,7 +119,7 @@ class RoleSpansTest {
 
     @Test
     void aSpanRendersAsTheJsonTheSidecarCarries() {
-        RoleSpans.Span span = new RoleSpans.Span(0, 34, RoleSpans.TRIGGER_CONDITION);
+        RoleSpans.Span span = new RoleSpans.Span(0, 34, SpanRole.TRIGGER_CONDITION);
         assertEquals("{\"start\":0,\"end\":34,\"role\":\"trigger-condition\"}",
                 span.toJson());
     }

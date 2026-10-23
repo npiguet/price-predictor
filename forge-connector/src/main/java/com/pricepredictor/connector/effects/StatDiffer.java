@@ -17,12 +17,13 @@ import java.util.Set;
  * <p>Forge's bus publishes what an effect <i>did</i> only for the outcomes that
  * have their own event: damage, counters, zone changes, taps. A pump, an anthem
  * recompute, an animation and a colour change all publish the same thing — the
- * card's stats changed — and say nothing about what changed. So the whole
- * "gets +2/+2 and gains flying" family, which is most of what a limited deck
- * does, produced records whose event list was empty or nearly so.
+ * card's stats changed — and say nothing about what changed. Read off the bus
+ * alone, the whole "gets +2/+2 and gains flying" family, which is most of what
+ * a limited deck does, would produce records whose event list is empty or
+ * nearly so.
  *
- * <p>This closes that by remembering each card's computed characteristics and
- * describing the difference when the engine says they moved. Computed rather
+ * <p>So this remembers each card's computed characteristics and describes
+ * the difference when the engine says they moved. Computed rather
  * than printed, for the reason every other characteristic in a snapshot is: the
  * model has to predict what happens to the 5/5 an anthem made, not to the 4/4
  * on the card.
@@ -66,8 +67,13 @@ final class StatDiffer {
                     .param("toughness_delta", now.toughness() - before.toughness()));
         }
         addKeywordEvents(events, subject, before.keywords(), now.keywords());
-        addTypeEvent(events, subject, before.types(), now.types());
-        addColorEvent(events, subject, before.colors(), now.colors());
+        addSetChangeEvent(events, subject, EffectEvent.TYPE_CHANGE,
+                "types_added", "types_removed", before.types(), now.types());
+        // colors_removed is this side's addition to the type's normalization:
+        // the head has a colors_lost field and the event carried no way to say
+        // a colour went away.
+        addSetChangeEvent(events, subject, EffectEvent.COLOR_CHANGE,
+                "colors", "colors_removed", before.colors(), now.colors());
         if (!java.util.Objects.equals(before.controller(), now.controller())) {
             events.add(new EffectEvent(EffectEvent.CONTROL_CHANGE)
                     .subject(subject)
@@ -79,8 +85,9 @@ final class StatDiffer {
     /**
      * Remember a card's characteristics without reporting a change.
      *
-     * <p>Used when a card arrives on the battlefield, so that its first real
-     * change is a change rather than its whole self.
+     * <p>Used when a card arrives on the battlefield, and for every card on a
+     * forked board, so that its first real change is a change rather than
+     * nothing at all: Forge publishes a stats change only after applying it.
      */
     void prime(Card card) {
         if (card != null) {
@@ -112,35 +119,20 @@ final class StatDiffer {
         }
     }
 
-    private static void addTypeEvent(
-            List<EffectEvent> events, String subject,
+    /** One event naming what joined and what left a set, or none when neither did. */
+    private static void addSetChangeEvent(
+            List<EffectEvent> events, String subject, String type,
+            String addedParam, String removedParam,
             Set<String> before, Set<String> now) {
         Set<String> added = difference(now, before);
         Set<String> removed = difference(before, now);
         if (added.isEmpty() && removed.isEmpty()) {
             return;
         }
-        events.add(new EffectEvent(EffectEvent.TYPE_CHANGE)
+        events.add(new EffectEvent(type)
                 .subject(subject)
-                .param("types_added", List.copyOf(added))
-                .param("types_removed", List.copyOf(removed)));
-    }
-
-    private static void addColorEvent(
-            List<EffectEvent> events, String subject,
-            Set<String> before, Set<String> now) {
-        Set<String> added = difference(now, before);
-        Set<String> removed = difference(before, now);
-        if (added.isEmpty() && removed.isEmpty()) {
-            return;
-        }
-        // colors_removed is this side's addition to the type's normalization:
-        // the head has a colors_lost field and the event carried no way to say
-        // a colour went away.
-        events.add(new EffectEvent(EffectEvent.COLOR_CHANGE)
-                .subject(subject)
-                .param("colors", List.copyOf(added))
-                .param("colors_removed", List.copyOf(removed)));
+                .param(addedParam, List.copyOf(added))
+                .param(removedParam, List.copyOf(removed)));
     }
 
     private static Set<String> difference(Set<String> from, Set<String> without) {
@@ -157,16 +149,7 @@ final class StatDiffer {
                 keywords.add(original.toLowerCase(Locale.ROOT));
             }
         }
-        Set<String> types = new LinkedHashSet<>();
-        for (var type : card.getType().getCoreTypes()) {
-            types.add(SnapshotBuilder.typeName(type));
-        }
-        for (var supertype : card.getType().getSupertypes()) {
-            types.add(SnapshotBuilder.typeName(supertype));
-        }
-        for (String subtype : card.getType().getSubtypes()) {
-            types.add(SnapshotBuilder.typeName(subtype));
-        }
+        Set<String> types = new LinkedHashSet<>(TypeLine.names(card.getType()));
         return new Stats(
                 card.getNetPower(), card.getNetToughness(), keywords, types,
                 new LinkedHashSet<>(SnapshotBuilder.colorLetters(card.getColor())),

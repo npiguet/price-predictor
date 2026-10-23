@@ -19,20 +19,33 @@ generalizes to unseen text, and holding out cards would shrink the eight
 populations to nothing while answering a question gate 1 already answers.
 
 And the count and the agreement describe **one population**, decided by the
-table's own predicate (:mod:`effects.domain.damage_step_keywords`). The
-under-sampled verdict and the agreement verdict sit on the same report line, and
-two populations behind them would make that line unreadable.
+table's own predicate (:mod:`effects.domain.damage_step_keywords`), over the
+combats the games actually played: a damage-step probe or an intervention is a
+fork of a real board and qualifies nothing. The under-sampled verdict and the
+agreement verdict sit on the same report line, and two populations behind them
+would make that line unreadable. Within it the threshold counts **records** —
+FR-119's 200 is a count of combats — while the agreement averages the
+**observations**, one per (record, carrier), because each carrier is its own
+perturbation and a combat holding two first strikers answers twice.
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
+from itertools import batched, chain, islice
+from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 
+from effects.application.gate_one import BATCH_RECORDS
 from effects.domain.damage_step_keywords import (
+    DAMAGE_STEP_KEYWORDS,
+    MIN_DIRECTION_AGREEMENT,
+    MIN_QUALIFYING_RECORDS,
     CombatParticipant,
     DamageStepKeyword,
     KeywordResolver,
@@ -40,28 +53,48 @@ from effects.domain.damage_step_keywords import (
     qualifying_observations,
     subject_id,
 )
-from effects.domain.effect_model import (
-    FIELD_SLICES,
-    FIELDS_BY_NAME,
-    ZONE_OUTCOMES,
-    FieldSpec,
-    FieldType,
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, FieldSpec, FieldType
+from effects.domain.evaluation_report import (
+    CheckName,
+    CheckResult,
+    CheckStatus,
+    KeywordVerdict,
 )
+from effects.domain.head_decoding import HeadReading
+
+if TYPE_CHECKING:
+    from effects.infrastructure.model_runner import Runnable
 
 logger = logging.getLogger(__name__)
+
+#: Records read eagerly before gate 2 loads its checkpoint. The loader measures
+#: each slot kind's width from real records, and every combat record on a board
+#: with a creature and a player answers that identically.
+SLOT_WIDTH_SAMPLE = 8
 
 #: Records read between two progress lines. The game-disjoint stratum streams
 #: from the raw corpus and runs for many minutes with nothing else to say.
 PROGRESS_EVERY_RECORDS = 50_000
 
-#: Observations per forward pass. Half of gate 1's record batch, because every
+#: Observations per forward pass: half of gate 1's record batch, because every
 #: observation is built twice — as collected and perturbed — in one batch.
-BATCH_OBSERVATIONS = 16
+BATCH_OBSERVATIONS = BATCH_RECORDS // 2
+
+
+class FieldAgreement(NamedTuple):
+    """How many of one effect's scored observations moved the rules' way."""
+
+    agreeing: int
+    scored: int
 
 
 @dataclass(frozen=True, slots=True)
 class KeywordScore:
     """One keyword's population and how much of it agreed.
+
+    ``qualifying`` counts distinct records, ``observations`` the (record,
+    carrier) perturbations scored, and ``agreeing`` the observations that
+    moved every field the rules' way.
 
     ``per_field`` is reported beside the total because the two halves of a row
     fail differently: a keyword whose damage field moves and whose zone field
@@ -72,38 +105,33 @@ class KeywordScore:
     qualifying: int = 0
     agreeing: int = 0
     #: ``effect label -> (agreeing, scored)``.
-    per_field: dict[str, tuple[int, int]] = field(default_factory=dict)
+    per_field: dict[str, FieldAgreement] = field(default_factory=dict)
+    observations: int = 0
 
 
-def count_qualifying_all(
-    records, rows: tuple[DamageStepKeyword, ...], sidecars=None,
-) -> dict[str, int]:
-    """Every row's qualifying count, in one pass over the corpus.
+@dataclass(slots=True)
+class _Tally:
+    """One keyword's running counts while the pass is still reading."""
 
-    One pass rather than one per keyword: each entity's keyword set is resolved
-    once and checked against all eight, which is the difference between an
-    evaluation that finishes and one that does not.
+    records: set[str] = field(default_factory=set)
+    observations: int = 0
+    agreeing: int = 0
+    per_field: dict[str, FieldAgreement] = field(default_factory=dict)
 
-    The unit is a ``(record, carrier)`` observation, not a record: two creatures
-    with lifelink in one combat are two independent perturbations, and the
-    scorer scores them separately.
-    """
-    resolver = KeywordResolver(sidecars)
-    counts = {row.keyword: 0 for row in rows}
-    for record in records:
-        for row, _participant in qualifying_observations(record, rows, resolver):
-            counts[row.keyword] += 1
-    return counts
+    def add(self, record_id: str, agreed: bool, per_effect: dict[str, bool]) -> None:
+        self.records.add(record_id)
+        self.observations += 1
+        self.agreeing += 1 if agreed else 0
+        for label, ok in per_effect.items():
+            agreeing, scored = self.per_field.get(label, FieldAgreement(0, 0))
+            self.per_field[label] = FieldAgreement(
+                agreeing + (1 if ok else 0), scored + 1,
+            )
 
-
-def count_qualifying(records, row: DamageStepKeyword, sidecars=None) -> int:
-    """One row's qualifying count.
-
-    Without ``sidecars`` only the overlay channel is visible, and the count then
-    describes a different population than the gate's table does — printed first
-    strike is most first strike.
-    """
-    return count_qualifying_all(records, (row,), sidecars)[row.keyword]
+    def score(self) -> KeywordScore:
+        return KeywordScore(
+            len(self.records), self.agreeing, self.per_field, self.observations,
+        )
 
 
 # ── decoding a head into one comparable number ──────────────────────────
@@ -114,34 +142,26 @@ def read_field(
 ) -> float:
     """One field's prediction as a single scalar, on the field's own scale.
 
-    Each head has a layout of its own and none of them is a bare value: a count
-    predicts a log rate, a signed delta predicts three direction logits and a
-    magnitude, and a categorical predicts logits over classes. The scalar has to
-    be comparable between the two builds and nothing more, so each type is
-    decoded into the quantity the rules talk about — expected damage, expected
-    signed life change, probability of dying.
+    Each head has a layout of its own and none of them is a bare value, so each
+    type is decoded into the quantity the rules talk about — expected damage,
+    expected signed life change, probability of dying — through
+    :class:`HeadReading`, **gated**: ``P(affected)`` times the field's value.
+    The field heads train only where an entity was affected, so they cannot
+    say that an entity was not; removing first strike from an attacker leaves
+    its blocker unaffected in the first-strike step, and that move is in the
+    gate alone.
 
     Any other type raises rather than guessing: the table pins every effect to a
     real head, and a row naming a field this cannot read is a table bug.
     """
-    start, end = FIELD_SLICES[spec.name]
-    slice_ = vector[start:end]
+    reading = HeadReading(vector)
     match spec.type:
-        case FieldType.COUNT:
-            return float(torch.exp(slice_[0]))
-        case FieldType.SIGNED_DELTA:
-            probabilities = torch.softmax(slice_[:3], dim=-1)
-            sign = float(probabilities[2] - probabilities[0])
-            return sign * float(torch.exp(slice_[3]))
+        case FieldType.COUNT | FieldType.SIGNED_DELTA:
+            return float(reading.expected(spec.name))
         case FieldType.CATEGORICAL:
-            if spec.name != "zone_outcome" or category is None:
-                raise ValueError(
-                    f"gate 2 can only read a class of zone_outcome, not "
-                    f"{spec.name}"
-                )
-            return float(torch.softmax(slice_, dim=-1)[
-                ZONE_OUTCOMES.index(category)
-            ])
+            if category is None:
+                raise ValueError(f"gate 2 reads a class of {spec.name}, and names none")
+            return float(reading.p_class(spec.name, category))
     raise ValueError(
         f"gate 2 cannot read {spec.name}: no rule for a {spec.type} field"
     )
@@ -203,7 +223,6 @@ def score_keywords(
     encoder,
     model,
     batcher,
-    sidecars,
     *,
     fields: tuple[FieldSpec, ...],
 ) -> dict[str, KeywordScore]:
@@ -216,57 +235,68 @@ def score_keywords(
     a parsed record costs about 45 KB, and the game-disjoint split is a thousand
     games.
     """
-    resolver = KeywordResolver(sidecars)
-    #: keyword -> [qualifying, agreeing, {effect label: (agreeing, scored)}].
-    totals: dict[str, list] = {row.keyword: [0, 0, {}] for row in rows}
-    pending: list = []
+    # The batcher's own sidecar cache, never a second one: the resolver decides
+    # which entity carries a keyword and the surface builder decides which slot
+    # to drop for it, and the two reading different joins is exactly how a
+    # perturbation strips nothing.
+    resolver = KeywordResolver(batcher.sidecars)
+    tallies = {row.keyword: _Tally() for row in rows}
+    progress = _Progress()
 
     encoder.eval()
     model.eval()
-    started = time.monotonic()
-    read = observed = 0
-    with torch.no_grad():
-        for record in records:
-            read += 1
-            if read % PROGRESS_EVERY_RECORDS == 0:
-                logger.info(
-                    "gate 2: %d records read, %d observations scored (%.0fs)",
-                    read, observed, time.monotonic() - started,
-                )
-            for row, participant in qualifying_observations(
-                record, rows, resolver,
-            ):
-                pending.append((record, row, participant))
-                observed += 1
-                if len(pending) == BATCH_OBSERVATIONS:
-                    _score_chunk(
-                        pending, encoder, model, batcher, totals,
-                        fields=fields, keywords_of=resolver.keywords_of,
-                    )
-                    pending = []
-        if pending:
+    with torch.inference_mode():
+        observations = _qualifying(records, rows, resolver, progress)
+        for chunk in batched(observations, BATCH_OBSERVATIONS):
             _score_chunk(
-                pending, encoder, model, batcher, totals,
+                chunk, encoder, model, batcher, tallies,
                 fields=fields, keywords_of=resolver.keywords_of,
             )
-    logger.info(
-        "gate 2: %d records read, %d observations scored (%.0fs)",
-        read, observed, time.monotonic() - started,
-    )
+    progress.log()
+    return {keyword: tally.score() for keyword, tally in tallies.items()}
 
-    return {
-        keyword: KeywordScore(
-            qualifying=tally[0], agreeing=tally[1], per_field=tally[2],
+
+@dataclass(slots=True)
+class _Progress:
+    """Records read and observations found, for the periodic progress line."""
+
+    read: int = 0
+    observed: int = 0
+    started: float = field(default_factory=time.monotonic)
+
+    def log(self) -> None:
+        logger.info(
+            "gate 2: %d records read, %d observations scored (%.0fs)",
+            self.read, self.observed, time.monotonic() - self.started,
         )
-        for keyword, tally in totals.items()
-    }
+
+
+def _qualifying(
+    records, rows: tuple[DamageStepKeyword, ...], resolver: KeywordResolver,
+    progress: _Progress,
+) -> Iterator[tuple]:
+    """Every qualifying ``(record, row, participant)``, read lazily.
+
+    A fork — a damage-step probe or an intervention — is never one: it re-runs
+    a real board the population already holds, so counting it would weigh that
+    combat twice and count a near-duplicate toward the threshold.
+    """
+    for record in records:
+        progress.read += 1
+        if progress.read % PROGRESS_EVERY_RECORDS == 0:
+            progress.log()
+        if record.fork or record.interventional:
+            continue
+        for row, participant in qualifying_observations(record, rows, resolver):
+            progress.observed += 1
+            yield record, row, participant
 
 
 def _score_chunk(
-    chunk: list, encoder, model, batcher, totals: dict[str, list], *,
+    chunk: tuple, encoder, model, batcher, tallies: dict[str, _Tally], *,
     fields, keywords_of: KeywordsOf,
 ) -> None:
-    """Run one chunk of observations, paired, and fold it into ``totals``."""
+    """Run one chunk of observations, paired, and fold it into ``tallies``."""
     # Every observation twice: as collected, then with its keyword removed from
     # its carrier. One batch, so the two builds share the encoded abilities and
     # differ only in the perturbation.
@@ -275,10 +305,10 @@ def _score_chunk(
         {participant.carrier.id: frozenset({row.keyword})}
         for _record, row, participant in chunk
     ]
-    batch, surfaces = batcher.build(built, encoder, strips)
+    batch, surfaces, _encoded = batcher.build(built, encoder, strips)
     outputs = model.per_entity(model(**batch)).cpu()
 
-    for offset, (_record, row, participant) in enumerate(chunk):
+    for offset, (record, row, participant) in enumerate(chunk):
         twin = len(chunk) + offset
         agreed, per_effect = score_observation(
             row, participant,
@@ -286,12 +316,7 @@ def _score_chunk(
             _subject_vectors(surfaces[twin], outputs[twin], row, participant),
             fields=fields, keywords_of=keywords_of,
         )
-        tally = totals[row.keyword]
-        tally[0] += 1
-        tally[1] += 1 if agreed else 0
-        for label, ok in per_effect.items():
-            agreeing, scored = tally[2].get(label, (0, 0))
-            tally[2][label] = (agreeing + (1 if ok else 0), scored + 1)
+        tallies[row.keyword].add(record.record_id, agreed, per_effect)
 
 
 def _subject_vectors(
@@ -316,3 +341,165 @@ def _subject_vectors(
         if key in wanted:
             found[key] = outputs[index]
     return found
+
+
+# ── the verdict ─────────────────────────────────────────────────────────
+
+
+def evaluate_keyword(
+    row: DamageStepKeyword,
+    *,
+    qualifying_records: int,
+    agreeing: int,
+    observations: int | None = None,
+    per_field: dict[str, FieldAgreement] | None = None,
+) -> KeywordVerdict:
+    """Route one keyword: pass, or send it to a stage-three probe (FR-119).
+
+    Under-sampled routes the same way as wrong. A keyword with 40 qualifying
+    records has not been tested, and treating "untested" as "passed" is how a
+    canary stops being one.
+
+    The threshold reads ``qualifying_records``; the agreement is ``agreeing``
+    over ``observations``, which default to one per record.
+
+    ``per_field`` is reported but never routes: a row's verdict is "did every
+    field move", and the breakdown says *which* one did not — a keyword whose
+    magnitude moves and whose consequence does not is a different problem from
+    one the model ignores entirely, and the combined percentage cannot tell them
+    apart.
+    """
+    if observations is None:
+        observations = qualifying_records
+    agreement = agreeing / observations if observations else 0.0
+    breakdown = _render_per_field(per_field)
+    if qualifying_records < MIN_QUALIFYING_RECORDS:
+        return KeywordVerdict(
+            row.keyword, qualifying_records, agreement, routed_to_probe=True,
+            reason=(
+                f"under-sampled: {qualifying_records} qualifying records < "
+                f"{MIN_QUALIFYING_RECORDS}" + breakdown
+            ),
+            observations=observations,
+        )
+    if agreement < MIN_DIRECTION_AGREEMENT:
+        return KeywordVerdict(
+            row.keyword, qualifying_records, agreement, routed_to_probe=True,
+            reason=(
+                f"direction agreement {agreement:.1%} < "
+                f"{MIN_DIRECTION_AGREEMENT:.0%} on {', '.join(row.fields)}"
+                f" over {observations} observations" + breakdown
+            ),
+            observations=observations,
+        )
+    return KeywordVerdict(
+        row.keyword, qualifying_records, agreement, routed_to_probe=False,
+        reason=(
+            f"direction agreement {agreement:.1%} over {observations} "
+            "observations" + breakdown
+        ),
+        observations=observations,
+    )
+
+
+def _render_per_field(per_field: dict[str, FieldAgreement] | None) -> str:
+    """The per-effect tail of a keyword's report line, or nothing."""
+    if not per_field:
+        return ""
+    parts = [
+        f"{label} {agreeing / scored:.0%}"
+        for label, (agreeing, scored) in per_field.items() if scored
+    ]
+    return f" ({', '.join(parts)})" if parts else ""
+
+
+def evaluate_gate_two(verdicts: list[KeywordVerdict]) -> CheckResult:
+    """The canary's routing report. **Blocks nothing** (FR-119).
+
+    Its output is a build decision, not a ship decision: the keywords routed
+    here are exactly the ones stage three needs probe machinery for, and a run
+    where none are routed means that machinery is never written.
+    """
+    routed = [v.keyword for v in verdicts if v.routed_to_probe]
+    detail = (
+        "all eight keywords pass; no stage-three probe machinery is needed"
+        if not routed
+        else f"routed to a stage-three probe: {', '.join(routed)}"
+    )
+    return CheckResult(
+        CheckName.GATE_2, CheckStatus.REPORTED, detail,
+        {v.keyword: v.direction_agreement for v in verdicts},
+    )
+
+
+# ── the gate ────────────────────────────────────────────────────────────
+
+
+def gate_two_records(config, provenance, *, corpus_path: Path | None) -> Iterator:
+    """The combat records of the checkpoint's **game-disjoint** games (FR-120).
+
+    Game-disjoint rather than card-disjoint: the gate asks whether the model
+    uses a keyword it has seen, not whether it generalizes to text it has not,
+    and holding out the carriers as well would empty six of the eight
+    populations to answer a question gate 1 already answers.
+
+    From the curated corpus's ``validation/game-disjoint`` when the checkpoint
+    trained on one: the raw shards also hold the records curation refused or
+    repaired away. The raw corpus is read only for a checkpoint with no corpus.
+
+    An iterator, not a list. The split is a thousand games and a parsed record
+    costs about 45 KB, so the scorer reads it a chunk at a time.
+    """
+    from effects.domain.records import RecordKind
+    from effects.infrastructure.record_io import read_records_matching
+
+    games = frozenset(provenance.game_disjoint_games)
+    if not games:
+        return iter(())
+    if corpus_path is not None:
+        from effects.infrastructure.corpus_store import CorpusStore
+
+        directory = CorpusStore(corpus_path).game_disjoint_dir
+    else:
+        directory = Path(config.records_dir)
+    return read_records_matching(
+        directory, game_ids=games, kinds={RecordKind.COMBAT.value},
+    )
+
+
+def run_gate_two(
+    records: Iterable,
+    load: Callable[[list], Runnable],
+    rows: tuple[DamageStepKeyword, ...] = DAMAGE_STEP_KEYWORDS,
+) -> list[KeywordVerdict]:
+    """Score the eight keywords and route each one (FR-119 – FR-122).
+
+    ``load`` turns a few records into the checkpoint ready to run, with a
+    batcher measured from them; the evaluator passes its main checkpoint's,
+    loaded once for the whole run. Nothing is loaded when ``records`` holds no
+    combat record to score: every keyword is then under-sampled at n=0, which
+    is the same verdict a corpus with forty records gets and for the same
+    reason.
+    """
+    records = iter(records)
+    # A handful of records up front, because the loader measures the slot
+    # widths from real ones; the rest stays a stream the scorer reads in chunks.
+    head = list(islice(records, SLOT_WIDTH_SAMPLE))
+    if not head:
+        scores = {row.keyword: KeywordScore() for row in rows}
+    else:
+        runnable = load(head)
+        scores = score_keywords(
+            chain(head, records), rows, runnable.encoder, runnable.model,
+            runnable.batcher, fields=runnable.fields,
+        )
+    return [
+        evaluate_keyword(
+            row,
+            qualifying_records=scores[row.keyword].qualifying,
+            agreeing=scores[row.keyword].agreeing,
+            observations=scores[row.keyword].observations,
+            per_field=scores[row.keyword].per_field,
+        )
+        for row in rows
+    ]

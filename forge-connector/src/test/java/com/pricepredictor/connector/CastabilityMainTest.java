@@ -3,12 +3,12 @@ package com.pricepredictor.connector;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
 import java.util.Map;
 
-import static com.pricepredictor.connector.CastabilityMain.CASTABLE;
-import static com.pricepredictor.connector.CastabilityMain.UNCASTABLE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,50 +25,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ExtendWith(ForgeExtension.class)
 class CastabilityMainTest {
 
-    private static String verdict(String name) {
-        Map<String, String> verdicts = CastabilityMain.consult(List.of(name));
+    private static CastabilityMain.Verdict verdict(String name) {
+        Map<String, CastabilityMain.Verdict> verdicts = CastabilityMain.consult(List.of(name));
         assertTrue(verdicts.containsKey(name), name + " should get a verdict");
         return verdicts.get(name);
     }
 
-    @Test
-    void anInstantIsCastable() {
-        assertEquals(CASTABLE, verdict("Lightning Bolt"));
-    }
-
-    @Test
-    void aSorceryIsCastable() {
-        assertEquals(CASTABLE, verdict("Wrath of God"));
-    }
-
-    /**
-     * Benediction of Moons has no {@code A:SP$} line at all: its spell is
-     * synthesised by the Haunt keyword. Only the engine knows that, which is
-     * why the consult instantiates the card instead of reading its script.
-     */
-    @Test
-    void aSpellSynthesisedFromAKeywordIsCastable() {
-        assertEquals(CASTABLE, verdict("Benediction of Moons"));
-    }
-
-    @Test
-    void aCreatureIsCastable() {
-        assertEquals(CASTABLE, verdict("Grizzly Bears"));
-    }
-
-    @Test
-    void aNoncreaturePermanentIsCastable() {
-        assertEquals(CASTABLE, verdict("Sol Ring"));
-    }
-
-    @Test
-    void aLandIsUncastable() {
-        assertEquals(UNCASTABLE, verdict("Forest"));
-    }
-
-    @Test
-    void aNonbasicLandIsUncastable() {
-        assertEquals(UNCASTABLE, verdict("Wasteland"));
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = ';', value = {
+            "an instant is castable;                                     Lightning Bolt;       CASTABLE",
+            "a sorcery is castable;                                      Wrath of God;         CASTABLE",
+            // Benediction of Moons has no A:SP$ line at all: its spell is synthesised by the
+            // Haunt keyword. Only the engine knows that, which is why the consult instantiates
+            // the card instead of reading its script.
+            "a spell synthesised from a keyword (Benediction of Moons) is castable; Benediction of Moons; CASTABLE",
+            "a creature is castable;                                     Grizzly Bears;        CASTABLE",
+            "a noncreature permanent is castable;                        Sol Ring;             CASTABLE",
+            "a basic land is uncastable;                                 Forest;               UNCASTABLE",
+            "a nonbasic land is uncastable;                              Wasteland;            UNCASTABLE",
+    })
+    void theEngineJudgesEachKindOfCard(String ignoredCase, String name, CastabilityMain.Verdict expected) {
+        assertEquals(expected, verdict(name));
     }
 
     @Test
@@ -82,7 +59,7 @@ class CastabilityMainTest {
         List<String> names = List.of(
                 "Forest", "Lightning Bolt", "No Such Card Was Ever Printed", "Grizzly Bears");
 
-        Map<String, String> verdicts = CastabilityMain.consult(names);
+        Map<String, CastabilityMain.Verdict> verdicts = CastabilityMain.consult(names);
 
         assertEquals(List.of("Forest", "Lightning Bolt", "Grizzly Bears"),
                 List.copyOf(verdicts.keySet()));

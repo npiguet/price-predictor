@@ -43,8 +43,7 @@ MAX_NUMERIC_SHIFT = 3
 #: script that fails to load rather than a card that plays differently.
 NUMERIC_PARAM_KEYS: frozenset[str] = frozenset({
     "NumDmg", "NumCards", "LifeAmount", "CounterNum", "NumAtt", "NumDef",
-    "Amount", "Num", "NumCounters", "NumTimes", "TgtPrompt", "PowerBonus",
-    "ToughnessBonus",
+    "Amount", "Num", "NumCounters", "NumTimes", "PowerBonus", "ToughnessBonus",
 })
 
 _PARAM_RE = re.compile(r"(\w+)\$\s*([^|]+?)(?=\s*\||\s*$)")
@@ -173,3 +172,36 @@ def variant_name(card_name: str, index: int) -> str:
     ``lightning_bolt_(variant_0).txt``.
     """
     return f"{card_name} Variant {index}"
+
+
+def script_card_name(lines: list[str]) -> str | None:
+    """The card name a Forge script's first ``Name:`` line declares."""
+    for line in lines:
+        if line.startswith("Name:"):
+            return line[len("Name:"):].strip()
+    return None
+
+
+def renamed_script(lines: list[str], name: str) -> list[str]:
+    """Give the variant its own name so Forge files it as a separate card."""
+    return [
+        f"Name:{name}" if line.startswith("Name:") else line for line in lines
+    ]
+
+
+def is_multi_face(source_lines: list[str]) -> bool:
+    """Whether a Forge script declares more than one card face.
+
+    A variant takes its own name, and renaming is a rewrite of the script's
+    first ``Name:`` line -- which on a two-faced card renames the front and
+    leaves the back answering to the original. Forge then builds card rules
+    whose faces disagree, and the failure is not a skipped card: ``StaticData``
+    throws while constructing the whole database, so every Forge startup that
+    sees the script dies, including runs with nothing to do with variants.
+
+    Perturbing one parameter of one face is not what these scripts are for
+    anyway, so they are left alone rather than renamed more cleverly.
+    """
+    return any(
+        line.strip().startswith("ALTERNATE") for line in source_lines
+    )

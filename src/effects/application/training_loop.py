@@ -4,8 +4,8 @@
 functions of their inputs, all unit-testable with no torch. This module owns the
 part that needs a GPU: running each step's device half, stepping the optimizer,
 and validating between epochs. Each step's host half — assembling the batch
-into tensors — is ``step_preparation``'s, and runs in worker processes
-(``step_workers``) or on a thread here.
+into tensors — is a ``StepPreparer``'s, which the loop owns and which runs in
+worker processes (``step_workers``) or on a thread here.
 
 The loop's shape follows four constraints from the spec:
 
@@ -35,53 +35,62 @@ from __future__ import annotations
 
 import logging
 import random
-import shutil
 import time
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
 
+from effects.application.ability_text import known_texts
 from effects.application.gate_one import measure
+from effects.application.resume_state import ResumeState
 from effects.application.step_preparation import (
     NO_TEXT_BUCKET,
+    SHIPPED_HEADS,
+    TRAINING_HEADS,
+    Head,
     HeadTargets,
     PreparedStep,
     PreparerSettings,
     ShardClosed,
     ShardOpened,
     ShardTask,
-    StepPreparation,
+    StepPreparer,
+    StepReady,
     one_ahead,
+    training_heads,
 )
 from effects.application.surface_batching import (
-    IDENTITY_TABLE_SIZE,
+    EncodedBatch,
+    IdentityTable,
+    Materializer,
     NoiseState,
-    SurfaceBatcher,
 )
+from effects.application.text_staging import MaskedTokens, MlmMasker
 from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
     WEIGHT_DECAY,
-    ContextCache,
-    CorpusSplit,
     EarlyStopper,
     EpochResult,
-    HeldOutCards,
-    SplitAccumulator,
     TrainEffectModelConfig,
     check_holdout,
     epoch_shards,
     fields_for_epoch,
     learning_rate_at,
     load_shard,
-    sampling_class,
     steps_per_shard,
-    variant_masks,
     warmup_steps,
+)
+from effects.application.training_log import (
+    format_floor,
+    format_norms,
+    format_parts,
+    format_shares,
+    format_terms,
 )
 from effects.domain.ability_encoder import (
     AbilityEncoder,
@@ -94,47 +103,44 @@ from effects.domain.ability_tokenizer import (
     TOKENIZER_RULES,
     TOKENIZER_RULES_KEY,
 )
+from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import (
     INPUT_LAYOUT,
     INPUT_LAYOUT_KEY,
     SlotKind,
-    act_features,
-    card_features,
-    global_features,
-    player_features,
+    feature_widths,
 )
-from effects.domain.effect_model import (
-    FLOOR_EPSILON,
-    SAMPLING_CLASSES,
-    EffectModel,
-    EffectModelConfig,
-    EntityTargetBatch,
-    FieldSpec,
+from effects.domain.effect_head_layout import FieldSpec
+from effects.domain.effect_losses import (
     api_loss,
-    constant_predictor_floor,
     created_objects_loss,
     mlm_loss,
     per_entity_loss,
     value_loss,
     verdict_loss,
 )
+from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.loss_floor import (
+    EntityTargetBatch,
+    PartsMean,
+    constant_predictor_floor,
+)
 from effects.domain.rarity import RARITY_BUCKETS
+from effects.domain.sampling import SAMPLING_CLASSES, BatchPlan, sampling_class
+from effects.domain.split import CorpusSplit
+from effects.domain.strata import VALIDATION_STRATA, Stratum
+from effects.domain.surface_collation import gather_entities
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
-    RESUME_BEST_NAME,
-    RESUME_NAME,
     EffectCheckpoint,
     EffectModelStore,
-    ResumeMismatchError,
     SplitProvenance,
     content_hash,
-    load_resume_state,
-    resume_mismatches,
-    save_resume_state,
 )
 from effects.infrastructure.model_runner import IDENTITY_TABLE_KEY
 from effects.infrastructure.sidecar_io import (
     script_vocabularies,
+    sidecar_roots,
 )
 from price_predictor.infrastructure.torch_training import clip_per_group
 
@@ -149,9 +155,6 @@ PROBE_RECORDS = 64
 #: loop is on another worker's; the cap bounds the shared memory a run with
 #: few shards and long ones would otherwise queue.
 MAX_STEPS_AHEAD = 32
-
-#: Re-exported: the training loop's tests and callers name them here.
-__all__ = ["NO_TEXT_BUCKET", "HeadTargets", "PreparedStep", "TrainingLoop"]
 
 #: Cap on the fraction of CUDA memory the caching allocator may reserve for
 #: this process (FR-095). On Windows the driver pages excess reservation out
@@ -211,10 +214,10 @@ def resets_at(config, *, epoch: int) -> bool:
 def parameter_groups(encoder, model, identity_table=None) -> list[dict]:
     """One optimizer group per module, named for ``clip_per_group``.
 
-    Clipped apart rather than together (FR-095): the head's gradient norm ran
-    five to twenty times the encoder's in the first run, and a joint clip at
-    1.0 scaled the encoder's update by the head's norm — the one path the
-    effect loss reaches the encoder through, cut to a twentieth.
+    Clipped apart rather than together (FR-095): the head's gradient norm runs
+    several times the encoder's, and a joint clip at 1.0 would scale the
+    encoder's update by the head's norm — the one path the effect loss reaches
+    the encoder through.
     """
     groups = [
         {"name": "encoder", "params": list(encoder.parameters())},
@@ -225,89 +228,169 @@ def parameter_groups(encoder, model, identity_table=None) -> list[dict]:
     return groups
 
 
-def _format_norms(norms: Mapping[str, float]) -> str:
-    """The pre-clip gradient norms, or nothing before the first backward."""
-    if not norms:
-        return ""
-    body = ", ".join(f"{name} {value:.2f}" for name, value in norms.items())
-    return f"\n  |g| {body} (clipped per group at {MAX_GRAD_NORM:g})"
+@dataclass
+class StepLoss:
+    """One batch's losses, on the device."""
+
+    #: What backward runs on: ``shipped`` plus the weighted training-only heads.
+    total: torch.Tensor
+    #: The objective validation scores: the per-entity loss and the shipped
+    #: heads, so the train and validation numbers printed side by side measure
+    #: one objective.
+    shipped: torch.Tensor
+    #: The per-entity loss by field, as floats, when the step asked for them.
+    parts: dict[str, float]
+    #: Every head's own term, by head.
+    terms: dict[str, torch.Tensor]
+    #: The MLM pass's masked tokens, left for after the main backward.
+    pending_mlm: MaskedTokens | None = None
 
 
-def _explained(name: str, value: float, floor: Mapping[str, float] | None) -> str:
-    """How much of the constant predictor's loss this field's head removed.
+def combine_terms(
+    loss: torch.Tensor, terms: Mapping[str, torch.Tensor],
+    weights: Mapping[Head, float],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """``(total, shipped)`` from the per-entity loss and the head terms (FR-060a).
 
-    ``1 - loss/floor`` against the best constant prediction for the field
-    (FR-127c): zero is the base rate, negative is worse than predicting it. A
-    field's loss is a number in nats with no scale of its own, so on its own it
-    cannot say whether the head learned the field or learned how often it fires.
-
-    A field whose targets never vary has no deviance to explain and reads
-    ``n/a`` rather than dividing by nothing at all.
+    The shipped heads join the per-entity loss at unit weight; the
+    training-only heads are added at their own weights for backward alone.
     """
-    if floor is None:
-        return ""
-    reference = floor.get(name)
-    if reference is None or reference < FLOOR_EPSILON:
-        return " (n/a)"
-    return f" ({round(100.0 * (1.0 - value / reference))}%)"
+    shipped = loss
+    for head in SHIPPED_HEADS:
+        if head in terms:
+            shipped = shipped + terms[head]
+    total = shipped
+    for head in TRAINING_HEADS:
+        if head in terms:
+            total = total + weights[head] * terms[head]
+    return total, shipped
 
 
-def _format_parts(
-    parts: Mapping[str, float], floor: Mapping[str, float] | None = None,
-) -> str:
-    """Each field's loss term, largest first, and what it explains.
+@dataclass
+class RunContext:
+    """What every step of a run trains, and where the run has got to."""
 
-    Ordered by size rather than by name because the question this line answers
-    is which term the loss is made of: a single field carrying nearly all of it
-    is what a blow-up looks like, and alphabetical order buries that.
+    encoder_config: AbilityEncoderConfig
+    model_config: EffectModelConfig
+    encoder: AbilityEncoder
+    model: EffectModel
+    optimizer: torch.optim.Optimizer
+    warmup: int
+    #: Training steps taken over the whole run; every step's draws are seeded
+    #: by its place in the run.
+    step: int = 0
 
-    ``floor`` is the card-disjoint constant-predictor floor and is passed only
-    for that breakdown; the per-shard training line has no floor of its own —
-    its records change every shard — and prints the terms alone.
+
+@dataclass
+class EpochTally:
+    """One epoch's training numbers, summed on the device and read once.
+
+    Read per step, each would synchronize once per batch for a number nothing
+    looks at until the epoch closes.
     """
-    if not parts:
-        return ""
-    ranked = sorted(parts.items(), key=lambda kv: -kv[1])
-    body = ", ".join(
-        f"{name} {value:.3f}{_explained(name, value, floor)}"
-        for name, value in ranked
-    )
-    return f"\n  fields: {body}"
+
+    running: torch.Tensor
+    taken: int = 0
+    terms: dict[str, torch.Tensor] = field(default_factory=dict)
+    #: Trained records by rarity bucket and by rule family (FR-055), counted on
+    #: the host from each batch's plan.
+    buckets: Counter[str] = field(default_factory=Counter)
+    families: Counter[str] = field(default_factory=Counter)
+
+    def add_shares(self, ready: StepReady) -> None:
+        self.buckets.update(ready.buckets)
+        self.families.update(ready.families)
+
+    def add_step(self, loss: StepLoss) -> None:
+        self.running += loss.shipped.detach()
+        self.taken += 1
+        for term, value in loss.terms.items():
+            held = self.terms.get(term)
+            self.terms[term] = value.detach() if held is None else held + value.detach()
+
+    @property
+    def train_loss(self) -> float:
+        return float(self.running) / max(self.taken, 1)
+
+    def mean_terms(self) -> dict[str, float]:
+        steps = max(self.taken, 1)
+        return {name: float(value) / steps for name, value in self.terms.items()}
 
 
-def _format_floor(floor: Mapping[str, float]) -> str:
-    """The floor itself, ordered like the breakdown it scales."""
-    ranked = sorted(floor.items(), key=lambda kv: -kv[1])
-    return ", ".join(f"{name} {value:.3f}" for name, value in ranked)
+@dataclass
+class ShardStats:
+    """One shard's training numbers, for the line it logs when it ends."""
+
+    #: Summed on the device like the epoch's running loss; read on that line.
+    loss: torch.Tensor
+    waited: float = 0.0
+    batch_waited: float = 0.0
+    steps: int = 0
+    learning_rate: float = 0.0
+    #: The last reported step's loss by field, gradient norms and head terms.
+    parts: dict[str, float] = field(default_factory=dict)
+    norms: dict[str, float] = field(default_factory=dict)
+    heads: dict[str, float] = field(default_factory=dict)
+
+    def add_step(self, loss: StepLoss, *, reported: bool) -> None:
+        self.loss += loss.shipped.detach()
+        self.steps += 1
+        if reported:
+            self.heads = {term: float(value.detach()) for term, value in loss.terms.items()}
+        if loss.parts:
+            self.parts = loss.parts
+
+    def log(self, task: ShardTask, of: int, opened: ShardOpened | None, *, trained: float) -> None:
+        name = Path(task.shard).name
+        trainable = opened.trainable if opened is not None else 0
+        held_back = opened.held_back if opened is not None else 0
+        if not trainable:
+            logger.info(
+                "epoch %d | shard %d/%d %s | nothing trainable, all %d records "
+                "held back | skipped",
+                task.epoch, task.position, of, name, held_back,
+            )
+            return
+        logger.info(
+            "epoch %d | shard %d/%d %s | %d records trainable, %d held back | "
+            "%d steps | loss %.4f | lr %.2e | %.1f steps/s | "
+            "wait %.1fs, batch wait %.1fs, train %.1fs%s%s%s",
+            task.epoch, task.position, of, name, trainable, held_back, task.budget,
+            float(self.loss) / self.steps if self.steps else float("nan"),
+            self.learning_rate, task.budget / trained if trained > 0 else float("nan"),
+            self.waited, self.batch_waited, trained, format_norms(self.norms),
+            format_parts(self.parts), format_terms(self.heads),
+        )
 
 
-#: The loss terms beside the per-entity loss (FR-060a, FR-058, FR-060b). The
-#: first two are shipped heads and enter the validation loss; the last three
-#: are training-only and enter the training loss at their flags' weights.
-SHIPPED_TERMS: tuple[str, ...] = ("verdict", "created_objects")
-TRAINING_TERMS: tuple[str, ...] = ("value", "mlm", "api")
+def _timed(steps, task: ShardTask, of: int):
+    """Each of a shard's messages with how long it was waited for."""
+    while True:
+        waiting = time.perf_counter()
+        try:
+            message = next(steps, None)
+        except Exception:
+            logger.error(
+                "epoch %d | shard %d/%d %s | preparing it failed",
+                task.epoch, task.position, of, Path(task.shard).name,
+            )
+            raise
+        if message is None:
+            return
+        yield message, time.perf_counter() - waiting
 
 
-def format_shares(counts: Mapping[str, int], order: Sequence[str] = ()) -> str:
-    """``label share%`` per label, in ``order`` first and then largest first."""
-    total = sum(counts.values())
-    if not total:
-        return "none"
-    ordered = [label for label in order if label in counts] + sorted(
-        (label for label in counts if label not in order),
-        key=lambda label: -counts[label],
-    )
-    return ", ".join(
-        f"{label} {100.0 * counts[label] / total:.1f}%" for label in ordered
-    )
+def _optimizer_step(optimizer, *, read: bool) -> dict[str, float]:
+    """Clip each group, step and zero; the pre-clip norms only when ``read``.
 
-
-def _format_terms(terms: Mapping[str, float]) -> str:
-    """The head terms of the loss, or nothing when there were none."""
-    if not terms:
-        return ""
-    body = ", ".join(f"{name} {value:.3f}" for name, value in terms.items())
-    return f"\n  heads: {body}"
+    Read back only on the step that logs them: each read stalls the step until
+    the GPU drains.
+    """
+    clipped = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM, read=False)
+    norms = {group: float(value) for group, value in clipped.items()} if read else {}
+    optimizer.step()
+    optimizer.zero_grad(set_to_none=True)
+    return norms
 
 
 class FloorCache:
@@ -335,24 +418,24 @@ class FloorCache:
         self.floor = dict(floor)
 
 
-class TrainingLoop(StepPreparation):
+class TrainingLoop:
     """Owns one training run end to end.
 
     Holds one shard of the corpus at a time. The corpus is 14M records and would
     need hundreds of gigabytes resident; a shard needs about one, and an epoch is
     a walk over ``--shards-per-epoch`` of them rather than a pass over the whole.
 
-    The host half of each step is ``StepPreparation``'s, run either here, on a
-    thread (``--prefetch-workers 0``), or in worker processes; this class owns
-    the device half and everything between steps.
+    Each step's host half is its ``preparer``'s — built once the run knows its
+    feature widths and script-API vocabularies, and run here, on a thread
+    (``--prefetch-workers 0``), or as one per worker process — and this class
+    owns the device half and everything between steps.
     """
 
     def __init__(
         self,
         config: TrainEffectModelConfig,
         *,
-        held_out: HeldOutCards,
-        inherited: CorpusSplit | None,
+        split: CorpusSplit,
         training_shards: Sequence[Path],
         validation_samples: Mapping[str, Path],
         holdout_permille: int,
@@ -374,10 +457,9 @@ class TrainingLoop(StepPreparation):
         #: thread above it moves where the host half runs and not what it
         #: computes, so it is not a training setting.
         self.prefetch_workers = max(int(config.prefetch_workers), 0)
-        self.held_out = held_out
-        #: The corpus's own split, which every ``--corpus`` run inherits; the
-        #: host half reads it to keep validation games out of training.
-        self.inherited = inherited
+        #: The corpus's own split, read from its manifest: the host half keeps
+        #: its validation games out of training, and the checkpoint records it.
+        self.split = split
         self.training_shards = list(training_shards)
         #: The corpus's fixed validation samples, one file per stratum
         #: (FR-089). Read once by ``_load_validation`` and never redrawn: the
@@ -386,8 +468,8 @@ class TrainingLoop(StepPreparation):
         self.validation_samples = dict(validation_samples)
         #: The holdout rule the corpus was composed against, read from its
         #: manifest and stamped onto the checkpoint. The trainer has no flags
-        #: for it any more: a depleted collection run was generated against
-        #: these two numbers, and re-deriving them here could only disagree.
+        #: for it: a depleted collection run was generated against these two
+        #: numbers, and re-deriving them here could only disagree.
         self.holdout_permille = holdout_permille
         self.holdout_max_carriers = holdout_max_carriers
         #: Records in the manifest's gate-1 slice — resolution records whose
@@ -412,21 +494,17 @@ class TrainingLoop(StepPreparation):
         #: The curated dataset's manifest digest at read time (FR-147), read
         #: into the checkpoint's provenance by ``_provenance`` below.
         self.corpus_digest = corpus_digest
-        self.accumulator = (
-            SplitAccumulator.inheriting(inherited) if inherited is not None
-            else SplitAccumulator(held_out_cards=tuple(sorted(held_out.names)))
-        )
-        self.masks = variant_masks(config.variant)
+        self.masks = baseline_masks(config.variant)
         # The surface follows the vocabulary the run loads, so the text an
         # ability is encoded from and the vocabulary it is tokenized against can
         # never disagree.
         self.surface = surface_of(config.vocab_path)
-        #: One per run, handed to every batcher, so a text the encoder's window
+        #: One per run, handed to the preparer, so a text the encoder's window
         #: cuts short is reported once rather than every batch (FR-006).
         self.truncations = TruncationLog(
             log_truncation(logger, "train-effect-model"),
         )
-        self.identity_table = None
+        self.identity_table: IdentityTable | None = None
         #: Resolved once here rather than read from the config at each use, so
         #: the value logged at startup and written to the checkpoint is the one
         #: every draw actually used.
@@ -438,14 +516,11 @@ class TrainingLoop(StepPreparation):
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        #: Whether `_loss_for` wraps the forward pass and loss in bf16
+        #: Whether the device half runs the forward pass and loss under bf16
         #: autocast (FR-095). Resolved once here rather than at each call, so
         #: the value logged at startup and the value every batch runs under
         #: are the same one.
         self.autocast: bool = autocast_enabled(self.device)
-        self.context_cache = (
-            ContextCache(config.cache_refresh) if config.context_cache else None
-        )
         #: What each card-disjoint field term is scaled against, recomputed
         #: when the curriculum changes the field set and not otherwise.
         self.floor = FloorCache()
@@ -454,24 +529,19 @@ class TrainingLoop(StepPreparation):
         self.probe: list = []
         self.present: set[str] = set()
         #: Noise on every training batch's ``e`` (FR-056), its ratio ramping
-        #: in over the first epoch's steps. Never handed to a scoring batcher.
+        #: in over the first epoch's steps. Never handed to a scoring batch.
         self.noise = NoiseState(config.e_noise, config.steps_per_epoch)
         #: The script-API head's classes (FR-060b), fixed before the model is
         #: built and recorded on the checkpoint.
         self.api_types: list[str] = []
         self.param_keys: list[str] = []
-        self._init_preparation()
-        #: The last ``_loss_for``'s head terms, as device tensors.
-        self._last_terms: dict[str, torch.Tensor] = {}
-        #: The step's masked tokens and batcher, for `_mlm_backward`.
-        self._pending_mlm = None
-        #: This epoch's head terms, summed on the device and read once.
-        self._epoch_terms: dict[str, torch.Tensor] = {}
-        self._epoch_term_steps = 0
-        #: This epoch's trained records by rarity bucket and by rule family
-        #: (FR-055), counted on the host from each batch's plan.
-        self._bucket_counts: defaultdict[str, int] = defaultdict(int)
-        self._family_counts: defaultdict[str, int] = defaultdict(int)
+        #: The host half, built once the widths and vocabularies are known.
+        self.preparer: StepPreparer | None = None
+        #: The device halves: training's carries the noise on ``e``, scoring's
+        #: none. Built with the run, once the identity table exists.
+        self._training: Materializer | None = None
+        self._scoring: Materializer | None = None
+        self._resume: ResumeState | None = None
         #: Each epoch's field set, built once; see ``_fields_for``.
         self._epoch_fields: dict[int, tuple[FieldSpec, ...]] = {}
 
@@ -489,16 +559,27 @@ class TrainingLoop(StepPreparation):
             folders.append(Path(self.config.variant_scripts))
         return script_vocabularies(folders)
 
+    def _preparer_settings(self, widths: dict[SlotKind, int]) -> PreparerSettings:
+        """What every preparer of this run is built from, here or in a worker."""
+        return PreparerSettings(
+            config=self.config, seed=self.seed, split=self.split,
+            rarity=self.rarity, api_types=tuple(self.api_types),
+            param_keys=tuple(self.param_keys), widths=dict(widths),
+            heads=training_heads(self.config, api_types=self.api_types),
+            legality_mode_counts=self.legality_mode_counts,
+        )
+
     def _load_validation(self) -> None:
         """Read the corpus's fixed samples; nothing is drawn here (FR-089)."""
-        self.card_disjoint = load_shard(self.validation_samples["card-disjoint"])
-        self.game_disjoint = load_shard(self.validation_samples["game-disjoint"])
+        self.card_disjoint = load_shard(self.validation_samples[Stratum.CARD_DISJOINT])
+        self.game_disjoint = load_shard(self.validation_samples[Stratum.GAME_DISJOINT])
         self.probe = self.card_disjoint[:PROBE_RECORDS] or self.game_disjoint[:PROBE_RECORDS]
         self.present = {
             sampling_class(record) for record in (*self.card_disjoint, *self.game_disjoint)
         }
-        for stratum, records in (("card-disjoint", self.card_disjoint),
-                                 ("game-disjoint", self.game_disjoint)):
+        for stratum, records in zip(
+            VALIDATION_STRATA, (self.card_disjoint, self.game_disjoint),
+        ):
             logger.info(
                 "%s validation: %d records over %d games, %d classes",
                 stratum, len(records), len({r.game_id for r in records}),
@@ -524,177 +605,98 @@ class TrainingLoop(StepPreparation):
             len(self.present), len(SAMPLING_CLASSES), ", ".join(missing),
         )
 
-    def _feature_widths(self, records: Sequence) -> dict[SlotKind, int]:
-        """Measure each slot kind's width from a real record.
-
-        Measured rather than declared: the vocabularies the features are built
-        from live in one module, and a constant here would be a second place to
-        keep them in step.
-        """
-        probe = records[0]
-        widths = {
-            SlotKind.GLOBAL: len(global_features(probe)),
-            SlotKind.ACT: len(act_features(probe)),
-            SlotKind.PLAYER: 0,
-            SlotKind.CARD: 0,
-        }
-        for record in records:
-            if record.state.players:
-                widths[SlotKind.PLAYER] = len(
-                    player_features(record.state.players[0], record)
-                )
-            if record.state.entities:
-                widths[SlotKind.CARD] = len(
-                    card_features(record.state.entities[0], record)
-                )
-            if widths[SlotKind.PLAYER] and widths[SlotKind.CARD]:
-                break
-        return widths
-
     # ── stepping ────────────────────────────────────────────────────────
 
-    def _training_heads(self, model) -> frozenset[str]:
-        """The training-only heads a step computes; a zero weight computes none."""
-        heads = set()
-        if self.config.value_weight > 0.0:
-            heads.add("value")
-        if self.config.api_weight > 0.0 and model.api_type_head is not None:
-            heads.add("api")
-        if self.config.mlm_weight > 0.0 and model.mlm_head is not None:
-            heads.add("mlm")
-        return frozenset(heads)
+    def _autocast(self):
+        """bf16 autocast on CUDA (FR-095); a no-op context elsewhere."""
+        return torch.autocast(
+            device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
+        )
 
-    def _loss_for(
-        self, plan, encoder, model, tokenizer, sidecars, widths, step,
-        *, report_parts: bool = False, fields=None, training: bool = True,
-        collect: list[EntityTargetBatch] | None = None,
-        prepared: PreparedStep | None = None,
-        batcher: SurfaceBatcher | None = None,
-    ):
-        """``(loss, parts)`` for one planned batch, or ``None`` when empty.
+    def _head_weights(self) -> dict[Head, float]:
+        """The training-only heads' weights in the backward pass."""
+        return {
+            Head.VALUE: self.config.value_weight,
+            Head.MLM: self.config.mlm_weight,
+            Head.API: self.config.api_weight,
+        }
+
+    def _device_loss(
+        self, prepared: PreparedStep, run: RunContext, materializer: Materializer,
+        *, report_parts: bool = False,
+    ) -> StepLoss:
+        """One prepared step's losses: the device half.
 
         ``report_parts`` reads each field's term back as a float, which is one
-        device synchronization per active field. Passed only on the batch a
-        progress line is about to report, so the cost lands a few times a
-        minute rather than on all five thousand steps of an epoch.
+        device synchronization per active field. Training passes it only on a
+        shard's last step, whose line reports the breakdown, so the cost lands
+        once per shard rather than on every step of an epoch.
 
-        ``fields`` is the epoch's own field set (FR-082): every batch of an
-        epoch scores the same objective, and validation scores that same one,
-        so the two numbers printed side by side are comparable. Left ``None``
-        the batch derives its own from the classes it holds, which is what
-        other callers building their own batches need.
-
-        ``collect`` receives this batch's targets, which is how the
-        constant-predictor floor is scored over exactly the entities the loss
-        was. The targets do not depend on the weights, so the pass that reads
-        the loss hands them over rather than a second pass re-deriving them.
-
-        ``prepared`` is the step's host half when the caller built it ahead of
-        time, as training does; without it the host half runs here first,
-        which is what validation does. Either way this is the device half.
-        A training step's host half carries no batcher of its own, and
-        ``batcher`` is the device-side one the loop hands every step.
+        Both training and validation go through here, so both run under
+        autocast. Backward and the optimizer step stay outside it (bf16 needs
+        no grad scaler); the encoder's own forward runs inside
+        ``materialize``, which is why the context encloses the whole device
+        half and not just the model.
         """
-        if prepared is None:
-            prepared = self._prepare_step(
-                plan, tokenizer, sidecars, widths, step, fields=fields,
-                training=training,
-                heads=self._training_heads(model) if training else frozenset(),
+        with self._autocast():
+            batch, _surfaces, encoded = materializer.materialize(
+                prepared.batch, run.encoder,
             )
-            if prepared is None:
-                return None
-        if collect is not None:
-            # Kept on the host: the floor is scored once per field set, and a
-            # copy of every validation target on the device would sit beside
-            # the model for the rest of the run.
-            collect.append(EntityTargetBatch(
-                prepared.gate, prepared.field_targets, prepared.mask,
-            ))
-        # Both training and validation go through here, so both run under
-        # autocast. Backward and the optimizer step stay outside this context
-        # (bf16 needs no grad scaler); the encoder's own forward happens
-        # inside `.materialize(...)` (`SurfaceBatcher._encode_staged` calls
-        # `encoder(**batch)`), which is why the context has to enclose the
-        # batch's device half and not just `model(**batch)`.
-        with torch.autocast(
-            device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
-        ):
-            if prepared.batcher is not None:
-                batcher = prepared.batcher
-            batch, _surfaces = batcher.materialize(prepared.batch, encoder)
-            hidden = model(**batch)
-            outputs = model.per_entity(hidden)
-            # One batched gather rather than a slice per row: `index` selects
-            # each surface's [CARD] and [PLAYER] columns, and the rows are
-            # independent.
-            index = prepared.index.to(self.device, non_blocking=True)
-            gathered = outputs.gather(
-                1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
+            hidden = run.model(**batch)
+            outputs = run.model.per_entity(hidden)
+            gathered = gather_entities(
+                outputs, prepared.index.to(self.device, non_blocking=True),
             )
-            # The gate and the entity mask stay on the host, where they were
-            # built: the loss picks its rows there, so the step never waits
-            # for the device to say which entities were real or affected.
+            # The gate, the entity mask and the presence masks stay on the
+            # host, where they were built: the loss picks its rows there, so
+            # the step never waits for the device to say which entities were
+            # real, affected or supervised.
             loss, parts = per_entity_loss(
                 gathered, prepared.gate,
-                {
-                    k: v.to(self.device, non_blocking=True)
-                    for k, v in prepared.field_targets.items()
-                },
+                prepared.field_targets.to(self.device, non_blocking=True),
                 prepared.mask, fields=prepared.fields,
                 report_parts=report_parts,
             )
-            terms = self._head_terms(
-                prepared.heads, batcher, encoder, model, hidden,
-            )
-        self._last_terms = terms
-        # The shipped heads join the per-entity loss at unit weight (FR-060a)
-        # and are what validation scores; the training-only heads are added
-        # for the backward pass alone, so the train and validation numbers
-        # printed side by side measure one objective.
-        shipped = loss
-        for name in SHIPPED_TERMS:
-            if name in terms:
-                shipped = shipped + terms[name]
-        total = shipped
-        weights = {
-            "value": self.config.value_weight,
-            "mlm": self.config.mlm_weight,
-            "api": self.config.api_weight,
-        }
-        for name in TRAINING_TERMS:
-            if name in terms:
-                total = total + weights[name] * terms[name]
-        return total, parts, shipped
+            terms = self._head_terms(prepared.heads, encoded, run.model, hidden)
+        total, shipped = combine_terms(loss, terms, self._head_weights())
+        return StepLoss(
+            total=total, shipped=shipped, parts=parts, terms=terms,
+            pending_mlm=prepared.heads.mlm,
+        )
 
     def _head_terms(
-        self, targets: HeadTargets, batcher, encoder, model, hidden,
+        self, targets: HeadTargets, encoded: EncodedBatch, model, hidden,
     ) -> dict[str, torch.Tensor]:
-        """Every loss term beside the per-entity one, as device tensors.
+        """Every loss term beside the per-entity one and the MLM pass's, as
+        device tensors.
 
-        Scores what ``_head_targets`` prepared: a head with no targets there is
-        not computed at all, which is how a zero weight and a scoring pass both
-        reach this.
+        Scores what the step's host half prepared: a head with no targets there
+        is not computed at all, which is how a zero weight and a scoring pass
+        both reach this. The MLM pass is a second encoder forward over the
+        batch's texts, left for ``_mlm_backward`` to run after the main loss's
+        backward has freed the first pass's activations: run here, both
+        passes' graphs were alive at once and a batch of long texts overflowed
+        8 GB. The gradient is the same sum either way.
         """
         terms: dict[str, torch.Tensor] = {}
         if targets.verdict is not None:
             target, mask = targets.verdict
-            terms["verdict"] = verdict_loss(
+            terms[Head.VERDICT] = verdict_loss(
                 model.verdict(hidden).float(),
                 target.to(self.device, non_blocking=True), mask,
             )
         if targets.created is not None:
             target, mask = targets.created
-            terms["created_objects"] = created_objects_loss(
+            terms[Head.CREATED_OBJECTS] = created_objects_loss(
                 model.created_objects(hidden).float(),
                 target.to(self.device, non_blocking=True), mask,
             )
-        encoded = getattr(batcher, "encoded", None)
-        if encoded is None or encoded.matrix is None:
-            return terms
         matrix = encoded.matrix
+        if matrix is None:
+            return terms
         if targets.value is not None:
             values, mask = targets.value
-            terms["value"] = value_loss(
+            terms[Head.VALUE] = value_loss(
                 model.value_head(matrix).float(),
                 values.to(self.device, non_blocking=True),
                 # Kept on the host: the loss decides which rows it scores there.
@@ -702,48 +704,36 @@ class TrainingLoop(StepPreparation):
             )
         if targets.api is not None:
             types, keys = targets.api
-            terms["api"] = api_loss(
+            terms[Head.API] = api_loss(
                 model.api_type_head(matrix).float(), types,
                 model.param_key_head(matrix).float()
                 if model.param_key_head is not None else None,
                 keys.to(self.device, non_blocking=True)
                 if model.param_key_head is not None else None,
             )
-        # The MLM pass is a second encoder forward over the batch's texts. It is
-        # left for `_mlm_backward`, which runs it after the main loss's backward
-        # has freed the first pass's activations: run here, both passes' graphs
-        # were alive at once and a batch of long texts overflowed 8 GB. The
-        # gradient is the same sum either way.
-        self._pending_mlm = (
-            (targets.mlm, batcher) if targets.mlm is not None else None
-        )
         return terms
 
-    def _mlm_backward(self, encoder, model) -> None:
+    def _mlm_backward(self, loss: StepLoss, encoder, model) -> None:
         """The MLM term's forward and backward, after the main loss's backward.
 
         Its weighted gradient adds to the one already accumulated, which is the
         gradient of the summed objective; the term is recorded with the step's
         other heads for the epoch line.
         """
-        pending, self._pending_mlm = self._pending_mlm, None
-        if pending is None:
+        masked: MaskedTokens | None = loss.pending_mlm
+        if masked is None:
             return
-        masked, batcher = pending
-        with torch.autocast(
-            device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
-        ):
-            token_hidden, token_targets, token_mask = batcher.mlm_forward(
-                encoder, masked,
-            )
+        loss.pending_mlm = None
+        with self._autocast():
+            token_hidden, token_targets = MlmMasker.forward(encoder, masked, self.device)
             term = mlm_loss(
-                model.mlm_head(token_hidden).float(), token_targets, token_mask,
+                model.mlm_head(token_hidden).float(), token_targets, rows=masked.rows,
             )
         (self.config.mlm_weight * term / self.config.grad_accum).backward()
-        self._last_terms = {**self._last_terms, "mlm": term.detach()}
+        loss.terms[Head.MLM] = term.detach()
 
     def _training_settings(self) -> dict:
-        """The flags a sweep arm differs by, and the script-API vocabularies (FR-063).
+        """The flags a sweep arm differs by, the seed, and the script-API vocabularies (FR-063).
 
         ``lethality_copies`` is written only when set, so a run without copies
         records, and resumes against, exactly the settings it always did.
@@ -754,6 +744,8 @@ class TrainingLoop(StepPreparation):
         )
         return {
             **copies,
+            # The drawn one when --seed was absent: the only way to repeat it.
+            "seed": self.seed,
             "e_noise": self.config.e_noise,
             "value_weight": self.config.value_weight,
             "mlm_weight": self.config.mlm_weight,
@@ -768,6 +760,41 @@ class TrainingLoop(StepPreparation):
     # ── the run ─────────────────────────────────────────────────────────
 
     def execute(self) -> int:
+        if not self._announce_run():
+            return 1
+        widths = feature_widths(self.probe)
+        self._warn_on_thin_holdout()
+        self._cap_cuda_memory()
+        self.api_types, self.param_keys = self._script_vocabularies()
+        if self.api_types:
+            logger.info(
+                "Script-API head over %d API types and %d parameter keys.",
+                len(self.api_types), len(self.param_keys),
+            )
+        settings = self._preparer_settings(widths)
+        self.preparer = StepPreparer(settings, truncations=self.truncations)
+        run = self._build_run(self.preparer.tokenizer.vocab_size, widths)
+        stopper = EarlyStopper(self.config.patience)
+        first_epoch = 1
+        if self.config.resume:
+            first_epoch = self._resume.restore(run, stopper)
+            if first_epoch is None:
+                return 0
+
+        pool = self._start_workers(settings, first_epoch=first_epoch)
+        try:
+            for epoch in range(first_epoch, self.config.epochs + 1):
+                if self._run_epoch(epoch, run, stopper, pool):
+                    break
+        finally:
+            # On every way out — the last epoch, an early stop, an exception
+            # or an interrupt — so no worker outlives the run.
+            if pool is not None:
+                pool.close()
+        return 0
+
+    def _announce_run(self) -> bool:
+        """Load the validation samples and log the run's draw; False when empty."""
         logger.info(
             "Reading the corpus's validation samples: %s.",
             ", ".join(str(path) for path in self.validation_samples.values()),
@@ -779,8 +806,7 @@ class TrainingLoop(StepPreparation):
                 "The corpus's validation samples hold no records, so there is "
                 "nothing to measure feature widths from.",
             )
-            return 1
-
+            return False
         logger.info(
             "Seed %d (%s), %d of %d training shards per epoch, drawn across "
             "the corpus.",
@@ -791,15 +817,15 @@ class TrainingLoop(StepPreparation):
             len(self.training_shards),
         )
         logger.info("Classes present: %s", ", ".join(sorted(self.present)))
+        return True
 
-        tokenizer = self._build_tokenizer()
-        sidecars = self._build_sidecars()
-        widths = self._feature_widths(self.probe)
+    def _warn_on_thin_holdout(self) -> None:
+        """The gate-1 slice is the build's count, not this run's (FR-088b).
 
-        # The gate-1 slice is the build's count, not this run's (FR-088b). An
-        # empty card-disjoint sample stops the run: left alone it trains for
-        # its full patience, validates `nan` every epoch, and saves no
-        # checkpoint at all.
+        An empty card-disjoint sample stops the run: left alone it trains for
+        its full patience, validates `nan` every epoch, and saves no
+        checkpoint at all.
+        """
         warning = check_holdout(
             card_disjoint_records=len(self.card_disjoint),
             unique_text_records=self.gate_one_records,
@@ -807,33 +833,26 @@ class TrainingLoop(StepPreparation):
         if warning:
             logger.warning("%s", warning)
 
+    def _cap_cuda_memory(self) -> None:
+        """See :data:`CUDA_MEMORY_FRACTION`."""
         if self.device.type == "cuda":
-            # The Windows driver pages excess reservation out to host RAM
-            # instead of raising, so the allocator needs an explicit cap: it
-            # fragments on the corpus's variable batch shapes and reserves far
-            # more than it ever allocates, and only a hard cap forces it to
-            # free that cache before the card is full.
             torch.cuda.set_per_process_memory_fraction(CUDA_MEMORY_FRACTION)
 
+    def _build_run(self, vocab_size: int, widths) -> RunContext:
+        """The encoder, the model, the optimizer and both device halves."""
         encoder_config = AbilityEncoderConfig(
-            vocab_size=tokenizer.vocab_size,
+            vocab_size=vocab_size,
             e_dim=self.config.e_dim,
             d_model=self.config.encoder_d_model,
             n_layers=self.config.encoder_layers,
         )
-        self.api_types, self.param_keys = self._script_vocabularies()
-        if self.api_types:
-            logger.info(
-                "Script-API head over %d API types and %d parameter keys.",
-                len(self.api_types), len(self.param_keys),
-            )
         model_config = EffectModelConfig(
             global_features=widths[SlotKind.GLOBAL],
             act_features=widths[SlotKind.ACT],
             player_features=widths[SlotKind.PLAYER],
             card_features=widths[SlotKind.CARD],
             e_dim=self.config.e_dim,
-            vocab_size=tokenizer.vocab_size,
+            vocab_size=vocab_size,
             n_api_types=len(self.api_types),
             n_param_keys=len(self.param_keys),
             encoder_d_model=encoder_config.d_model,
@@ -845,223 +864,219 @@ class TrainingLoop(StepPreparation):
         # encoder's parameters go unused for that variant and its own table is
         # what the optimizer has to see.
         self.identity_table = (
-            torch.nn.Embedding(IDENTITY_TABLE_SIZE, self.config.e_dim).to(
-                self.device
+            self._identity_table() if self.masks.identity_embedding else None
+        )
+        self._training = Materializer(
+            self.device, self.masks, self.identity_table, noise=self.noise,
+        )
+        self._scoring = Materializer(self.device, self.masks, self.identity_table)
+        self._resume = ResumeState(
+            self.config, seed=self.seed, corpus_digest=self.corpus_digest,
+            training_settings=self._training_settings, noise=self.noise,
+            identity_table=self.identity_table, device=self.device,
+        )
+        return RunContext(
+            encoder_config=encoder_config, model_config=model_config,
+            encoder=encoder, model=model,
+            optimizer=torch.optim.AdamW(
+                parameter_groups(encoder, model, self.identity_table),
+                lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY,
+            ),
+            warmup=warmup_steps(
+                epochs=self.config.epochs,
+                steps_per_epoch=self.config.steps_per_epoch,
+            ),
+        )
+
+    def _identity_table(self) -> IdentityTable:
+        """The identity baseline's table, one row per text the sidecars hold."""
+        texts = known_texts(
+            sidecar_roots(self.config.cards_folders, self.config.variant_scripts),
+            self.surface,
+        )
+        logger.info("Identity table over %d ability texts.", len(texts))
+        return IdentityTable(texts, self.config.e_dim).to(self.device)
+
+    def _run_epoch(
+        self, epoch: int, run: RunContext, stopper: EarlyStopper, pool,
+    ) -> bool:
+        """Train, validate, report and save one epoch; True when it stops the run."""
+        run.encoder.train()
+        run.model.train()
+        # With --grad-accum > 1 the last steps of an epoch can leave a partial
+        # accumulation staged for a step that never comes; dropping it here
+        # keeps it from crossing into the next epoch or over the curriculum
+        # switch, where the objective is no longer the same one.
+        run.optimizer.zero_grad(set_to_none=True)
+        tally = EpochTally(running=torch.zeros((), device=self.device))
+        fields = self._fields_for(epoch)
+        if resets_at(self.config, epoch=epoch):
+            stopper.reset()
+            logger.info(
+                "epoch %d enables the sparse field group (%d fields now); "
+                "the early stopper starts over", epoch, len(fields),
             )
-            if self.masks.identity_embedding
-            else None
+        self._train_epoch(epoch, run, tally, pool)
+        result, card_parts = self._validate_epoch(epoch, run, tally, fields)
+        metrics = self._progress_metrics(run, fields)
+        self._log_epoch(result, metrics, card_parts, tally)
+        self._log_unresolved()
+        return self._close_epoch(epoch, run, stopper, result)
+
+    def _train_epoch(self, epoch: int, run: RunContext, tally: EpochTally, pool) -> None:
+        drawn, tasks = self._epoch_tasks(epoch)
+        if pool is None:
+            self._train_in_process(tasks, drawn, run, tally)
+            return
+        for task in tasks:
+            self._train_on_shard(task, pool.shard(), 0.0, run, tally, of=drawn)
+            self._release_cache()
+        if epoch < self.config.epochs:
+            # Queued before validation rather than after it, so the workers
+            # read and prepare the next epoch's first shards while this
+            # process validates. Its draw and field set are functions of the
+            # seed and the epoch alone, so nothing validation decides could
+            # change them; an early stop discards them with the pool.
+            for task in self._epoch_tasks(epoch + 1)[1]:
+                pool.submit(task)
+
+    def _validate_epoch(
+        self, epoch: int, run: RunContext, tally: EpochTally, fields,
+    ) -> tuple[EpochResult, dict[str, float]]:
+        """Both strata's loss, the card-disjoint one by field, and the floor."""
+        card_parts: dict[str, float] = {}
+        # Collected only on the epoch that has a floor to compute: the targets
+        # are a copy of the whole sample, and holding them past the one pass
+        # that reads them would cost that for nothing.
+        collected: list[EntityTargetBatch] | None = (
+            [] if self.floor.stale(fields) else None
+        )
+        result = EpochResult(
+            epoch=epoch,
+            train_loss=tally.train_loss,
+            card_disjoint_loss=self._validate(
+                self.card_disjoint, run, parts=card_parts, fields=fields,
+                collect=collected,
+            ),
+            game_disjoint_loss=self._validate(self.game_disjoint, run, fields=fields),
+        )
+        if collected is not None:
+            self.floor.update(
+                fields, constant_predictor_floor(collected, fields=fields),
+            )
+            logger.info(
+                "Constant-predictor floor (card-disjoint): %s",
+                format_floor(self.floor.floor),
+            )
+        return result, card_parts
+
+    def _progress_metrics(self, run: RunContext, fields):
+        """Gate 1's three numbers on the whole card-disjoint sample, every epoch.
+
+        The loss says the objective fell; these say whether the model knows
+        *that* something happens, *what*, and *how much*. A progress reading,
+        not the gate itself: the evaluator's gate 1 scores only the unique-text
+        stratum (records whose acting text is on no training card), while this
+        sample also carries card-disjoint records whose text the model has
+        seen elsewhere. A run whose loss falls while all three sit still is
+        worth seeing early regardless.
+        """
+        metrics = measure(
+            self.card_disjoint, run.encoder, run.model,
+            self.preparer.batcher(training=False, materializer=self._scoring),
+            fields=fields,
+        )
+        # `measure` calls `eval()` and does not call `train()` back — its
+        # other caller is the evaluator, which never trains.
+        run.encoder.train()
+        run.model.train()
+        return metrics
+
+    def _log_epoch(
+        self, result: EpochResult, metrics, card_parts: dict[str, float],
+        tally: EpochTally,
+    ) -> None:
+        logger.info(
+            "epoch %d | train %.4f | card-disjoint %.4f | "
+            "game-disjoint %.4f | gate F1 %.3f | zone acc %.3f | "
+            "deviance %.3f%s",
+            result.epoch, result.train_loss, result.card_disjoint_loss,
+            result.game_disjoint_loss, metrics.affected_gate_f1,
+            metrics.zone_outcome_accuracy, metrics.mean_poisson_deviance,
+            format_parts(card_parts, self.floor.floor),
+        )
+        logger.info(
+            "epoch %d | trained records by rarity bucket: %s%s\n"
+            "  by rule family: %s",
+            result.epoch,
+            format_shares(tally.buckets, (*RARITY_BUCKETS, NO_TEXT_BUCKET)),
+            format_terms(tally.mean_terms()),
+            format_shares(tally.families),
         )
 
-        optimizer = torch.optim.AdamW(
-            parameter_groups(encoder, model, self.identity_table),
-            lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY,
+    def _log_unresolved(self) -> None:
+        """Scripts the converted corpus does not hold, asked for by any process."""
+        # This process's lookups and every worker's, which each counted
+        # against a sidecar cache of its own.
+        unresolved = Counter(self.preparer.sidecars.unresolved) + self._unresolved_elsewhere
+        if not unresolved:
+            return
+        logger.info(
+            "%d ability scripts the converted corpus does not hold, "
+            "%d lookups so far; those abilities reach the model as no "
+            "text. Most asked: %s. A `_token` stem under cardsfolder/ "
+            "is a token keyed to the wrong tree — it is the token's own "
+            "cast-spell key, which maps to no text either way, while "
+            "its ability lines are keyed under tokenscripts/ and do "
+            "resolve; a variant-scripts/ key needs --variant-scripts.",
+            len(unresolved),
+            sum(unresolved.values()),
+            ", ".join(f"{name} ({hits})" for name, hits in unresolved.most_common(3)),
         )
-        warmup = warmup_steps(
-            epochs=self.config.epochs, steps_per_epoch=self.config.steps_per_epoch,
+
+    def _close_epoch(
+        self, epoch: int, run: RunContext, stopper: EarlyStopper, result: EpochResult,
+    ) -> bool:
+        """Save what the epoch earned and its resume state; True to stop early."""
+        best = stopper.update(result.card_disjoint_loss)
+        if best:
+            EffectModelStore(self.config.resolved_model_output()).save(
+                self._checkpoint(epoch, run, stopper),
+            )
+        if self.config.save_every_epoch:
+            EffectModelStore(
+                self.config.resolved_model_output() / EPOCHS_DIR,
+            ).save(self._checkpoint(epoch, run, stopper))
+        self._resume.save(epoch, run, stopper, finished=stopper.should_stop, best=best)
+        if stopper.should_stop:
+            logger.info(
+                "Early stop: %d epochs without a new card-disjoint best",
+                self.config.patience,
+            )
+        return stopper.should_stop
+
+    def _checkpoint(
+        self, epoch: int, run: RunContext, stopper: EarlyStopper,
+    ) -> EffectCheckpoint:
+        return EffectCheckpoint(
+            encoder_config=run.encoder_config,
+            model_config=run.model_config,
+            encoder_state=run.encoder.state_dict(),
+            model_state=run.model.state_dict(),
+            provenance=self._provenance(),
+            variant=self.config.variant,
+            best_val_loss=stopper.best,
+            epoch=epoch,
+            # The identity baseline's e lives in this table rather than in the
+            # encoder, so a checkpoint without it reloads as random vectors and
+            # hands gate 1 a margin nobody earned.
+            extra=(
+                {IDENTITY_TABLE_KEY: self.identity_table.state()}
+                if self.identity_table is not None else {}
+            ),
+            cards_folders=tuple(str(folder) for folder in self.config.cards_folders),
+            training_settings=self._training_settings(),
         )
-
-        stopper = EarlyStopper(self.config.patience)
-        store = EffectModelStore(self.config.resolved_model_output())
-        step = 0
-        first_epoch = 1
-        if self.config.resume:
-            resumed = self._restore(encoder, model, optimizer, stopper)
-            if resumed is None:
-                return 0
-            first_epoch, step = resumed
-
-        heads = self._training_heads(model)
-        pool = self._start_workers(widths, heads, first_epoch=first_epoch)
-        try:
-            for epoch in range(first_epoch, self.config.epochs + 1):
-                encoder.train()
-                model.train()
-                # With --grad-accum > 1 the last steps of an epoch can leave a
-                # partial accumulation staged for a step that never comes; dropping
-                # it here keeps it from crossing into the next epoch or over the
-                # curriculum switch, where the objective is no longer the same one.
-                optimizer.zero_grad(set_to_none=True)
-                # Accumulated on the device and read once at the end of the epoch.
-                # Reading it per step would synchronize once per batch for a number
-                # nothing looks at until the epoch closes.
-                running = torch.zeros((), device=self.device)
-                taken = 0
-                self._epoch_terms = {}
-                self._epoch_term_steps = 0
-                self._bucket_counts.clear()
-                self._family_counts.clear()
-                fields = self._fields_for(epoch)
-                if resets_at(self.config, epoch=epoch):
-                    stopper.reset()
-                    logger.info(
-                        "epoch %d enables the sparse field group (%d fields now); "
-                        "the early stopper starts over", epoch, len(fields),
-                    )
-                drawn, tasks = self._epoch_tasks(epoch)
-                if pool is not None:
-                    for task in tasks:
-                        step, taken = self._train_on_shard(
-                            task, pool.shard(), 0.0, encoder=encoder, model=model,
-                            tokenizer=tokenizer, sidecars=sidecars, widths=widths,
-                            optimizer=optimizer, warmup=warmup, running=running,
-                            step=step, taken=taken, of=drawn,
-                        )
-                        self._release_cache()
-                    if epoch < self.config.epochs:
-                        # Queued before validation rather than after it, so the
-                        # workers read and prepare the next epoch's first shards
-                        # while this process validates. Its draw and field set are
-                        # functions of the seed and the epoch alone, so nothing
-                        # validation decides could change them; an early stop
-                        # discards them with the pool.
-                        for task in self._epoch_tasks(epoch + 1)[1]:
-                            pool.submit(task)
-                else:
-                    step, taken = self._train_in_process(
-                        tasks, drawn, encoder=encoder, model=model,
-                        tokenizer=tokenizer, sidecars=sidecars, widths=widths,
-                        optimizer=optimizer, warmup=warmup, running=running,
-                        step=step, taken=taken, heads=heads,
-                    )
-
-                card_parts: dict[str, float] = {}
-                # Collected only on the epoch that has a floor to compute: the
-                # targets are a copy of the whole sample, and holding them past the
-                # one pass that reads them would cost that for nothing.
-                collected: list[EntityTargetBatch] | None = (
-                    [] if self.floor.stale(fields) else None
-                )
-                result = EpochResult(
-                    epoch=epoch,
-                    train_loss=float(running) / max(taken, 1),
-                    card_disjoint_loss=self._validate(
-                        self.card_disjoint, encoder, model, tokenizer, sidecars,
-                        widths, step, parts=card_parts, fields=fields,
-                        collect=collected,
-                    ),
-                    game_disjoint_loss=self._validate(
-                        self.game_disjoint, encoder, model, tokenizer, sidecars,
-                        widths, step, fields=fields,
-                    ),
-                )
-                if collected is not None:
-                    self.floor.update(
-                        fields, constant_predictor_floor(collected, fields=fields),
-                    )
-                    del collected
-                    logger.info(
-                        "Constant-predictor floor (card-disjoint): %s",
-                        _format_floor(self.floor.floor),
-                    )
-                # Gate 1's three numbers on the whole card-disjoint sample, every
-                # epoch. The loss says the objective fell; these say whether the
-                # model knows *that* something happens, *what*, and *how much* —
-                # a progress reading, not the gate itself: the evaluator's actual
-                # gate 1 scores only the unique-text stratum (records whose acting
-                # text is on no training card), while this sample also carries
-                # card-disjoint records whose text the model has seen elsewhere. A
-                # run whose loss falls while all three sit still is worth seeing
-                # early regardless.
-                metrics = measure(
-                    self.card_disjoint, encoder, model,
-                    self._batcher(tokenizer, sidecars, widths, training=False),
-                    fields=fields,
-                )
-                # `measure` calls `eval()` and does not call `train()` back — its
-                # other caller is the evaluator, which never trains. The next
-                # epoch's first line does, so this only matters for the save
-                # below, but a mode left flipped by a diagnostic is not a thing to
-                # leave for the next reader to rediscover.
-                encoder.train()
-                model.train()
-                logger.info(
-                    "epoch %d | train %.4f | card-disjoint %.4f | "
-                    "game-disjoint %.4f | gate F1 %.3f | zone acc %.3f | "
-                    "deviance %.3f%s",
-                    result.epoch, result.train_loss, result.card_disjoint_loss,
-                    result.game_disjoint_loss, metrics.affected_gate_f1,
-                    metrics.zone_outcome_accuracy, metrics.mean_poisson_deviance,
-                    _format_parts(card_parts, self.floor.floor),
-                )
-                # One read per term per epoch: summed on the device all epoch.
-                steps = max(self._epoch_term_steps, 1)
-                logger.info(
-                    "epoch %d | trained records by rarity bucket: %s%s\n"
-                    "  by rule family: %s",
-                    epoch,
-                    format_shares(self._bucket_counts, (*RARITY_BUCKETS, NO_TEXT_BUCKET)),
-                    _format_terms({
-                        name: float(value) / steps
-                        for name, value in self._epoch_terms.items()
-                    }),
-                    format_shares(self._family_counts),
-                )
-                # This process's lookups and every worker's, which each
-                # counted against a sidecar cache of its own.
-                unresolved = Counter(sidecars.unresolved) + self._unresolved_elsewhere
-                if unresolved:
-                    worst = sorted(
-                        unresolved.items(), key=lambda kv: -kv[1],
-                    )[:3]
-                    logger.info(
-                        "%d ability scripts the converted corpus does not hold, "
-                        "%d lookups so far; those abilities reach the model as no "
-                        "text. Most asked: %s. A `_token` stem under cardsfolder/ "
-                        "is a token keyed to the wrong tree — it is the token's own "
-                        "cast-spell key, which maps to no text either way, while "
-                        "its ability lines are keyed under tokenscripts/ and do "
-                        "resolve; a variant-scripts/ key needs --variant-scripts.",
-                        len(unresolved),
-                        sum(unresolved.values()),
-                        ", ".join(f"{name} ({hits})" for name, hits in worst),
-                    )
-                def checkpoint() -> EffectCheckpoint:
-                    return EffectCheckpoint(
-                        encoder_config=encoder_config,
-                        model_config=model_config,
-                        encoder_state=encoder.state_dict(),
-                        model_state=model.state_dict(),
-                        provenance=self._provenance(),
-                        variant=self.config.variant,
-                        best_val_loss=stopper.best,
-                        epoch=epoch,
-                        # The identity baseline's e lives in this table rather
-                        # than in the encoder, so a checkpoint without it reloads
-                        # as random vectors and hands gate 1 a margin nobody
-                        # earned.
-                        extra=(
-                            {IDENTITY_TABLE_KEY: self.identity_table.state_dict()}
-                            if self.identity_table is not None else {}
-                        ),
-                        cards_folders=tuple(
-                            str(folder) for folder in self.config.cards_folders
-                        ),
-                        training_settings=self._training_settings(),
-                    )
-
-                best = stopper.update(result.card_disjoint_loss)
-                if best:
-                    store.save(checkpoint())
-                if self.config.save_every_epoch:
-                    EffectModelStore(
-                        self.config.resolved_model_output() / EPOCHS_DIR,
-                    ).save(checkpoint())
-                self._save_resume(
-                    epoch, step, encoder, model, optimizer, stopper,
-                    finished=stopper.should_stop, best=best,
-                )
-                if stopper.should_stop:
-                    logger.info(
-                        "Early stop: %d epochs without a new card-disjoint best",
-                        self.config.patience,
-                    )
-                    break
-        finally:
-            # On every way out — the last epoch, an early stop, an exception
-            # or an interrupt — so no worker outlives the run.
-            if pool is not None:
-                pool.close()
-        return 0
 
     # ── one epoch's shards ──────────────────────────────────────────────
 
@@ -1103,133 +1118,7 @@ class TrainingLoop(StepPreparation):
             if budget > 0
         ]
 
-    # ── resuming ────────────────────────────────────────────────────────
-
-    def _resume_settings(self) -> dict:
-        """Every setting a resumed epoch has to share with the interrupted run.
-
-        The draws need no state of their own: every shard draw, shuffle and
-        per-step draw is seeded by the seed, the epoch and the step's place in
-        it, so the seed and the shapes that place a step are what must match.
-        The epoch count and the patience are left out, so an interrupted run
-        can be resumed with more epochs or more patience.
-        """
-        config = self.config
-        return {
-            "seed": self.seed,
-            "corpus_digest": self.corpus_digest,
-            "variant": config.variant,
-            "e_dim": config.e_dim,
-            "encoder_layers": config.encoder_layers,
-            "encoder_d_model": config.encoder_d_model,
-            "steps_per_epoch": config.steps_per_epoch,
-            "shards_per_epoch": config.shards_per_epoch,
-            "batch_size": config.batch_size,
-            "grad_accum": config.grad_accum,
-            "curriculum_epoch": config.curriculum_epoch,
-            "withhold_keyword": config.withhold_keyword,
-            "keyword_expand_p": config.keyword_expand_p,
-            "context_dropout": config.context_dropout,
-            **self._training_settings(),
-        }
-
-    def _save_resume(
-        self, epoch: int, step: int, encoder, model, optimizer, stopper, *,
-        finished: bool, best: bool = False,
-    ) -> None:
-        """Everything the next epoch needs, written once the epoch is scored.
-
-        The model's whole state, training-only heads included — the saved
-        checkpoint drops those, and a resumed run would have to relearn them —
-        with the optimizer's moments, the noise's running covariance and the
-        random generators, which dropout and the noise draw read on the device.
-        """
-        noise = self.noise
-        save_resume_state(self.config.resolved_model_output(), {
-            "epoch": epoch,
-            "step": step,
-            "finished": finished,
-            "settings": self._resume_settings(),
-            "encoder": encoder.state_dict(),
-            "model": model.state_dict(),
-            "identity_table": (
-                self.identity_table.state_dict()
-                if self.identity_table is not None else None
-            ),
-            "optimizer": optimizer.state_dict(),
-            "stopper": {"best": stopper.best, "since_best": stopper.since_best},
-            "noise": {
-                "sigma": noise.sigma,
-                "step": noise.step,
-                "factor": noise._factor,
-                "draws_since_factor": noise._draws_since_factor,
-            },
-            "rng": {
-                "cpu": torch.get_rng_state(),
-                "cuda": (
-                    torch.cuda.get_rng_state_all()
-                    if torch.cuda.is_available() else None
-                ),
-            },
-        })
-        if best:
-            # The best epoch's own resume state, so a later run can continue
-            # from the best epoch rather than the last one (FR-063f).
-            directory = self.config.resolved_model_output()
-            shutil.copyfile(directory / RESUME_NAME, directory / RESUME_BEST_NAME)
-
-    def _restore(self, encoder, model, optimizer, stopper) -> tuple[int, int] | None:
-        """``(first epoch, step)`` to continue from; None when nothing is left.
-
-        Refuses a resume file written under other settings: resumed from a
-        different seed or corpus, the run would be neither the interrupted one
-        nor a fresh one.
-        """
-        state = load_resume_state(self.config.resolved_model_output())
-        mismatches = resume_mismatches(state["settings"], self._resume_settings())
-        if mismatches:
-            raise ResumeMismatchError(
-                "The resume file was written under other settings: "
-                + "; ".join(mismatches)
-            )
-        encoder.load_state_dict(state["encoder"])
-        model.load_state_dict(state["model"])
-        if self.identity_table is not None and state["identity_table"] is not None:
-            self.identity_table.load_state_dict(state["identity_table"])
-        optimizer.load_state_dict(state["optimizer"])
-        stopper.best = state["stopper"]["best"]
-        stopper.since_best = state["stopper"]["since_best"]
-        noise = state["noise"]
-        self.noise.sigma = (
-            noise["sigma"].to(self.device) if noise["sigma"] is not None else None
-        )
-        self.noise.step = noise["step"]
-        self.noise._factor = (
-            noise["factor"].to(self.device) if noise["factor"] is not None else None
-        )
-        self.noise._draws_since_factor = noise["draws_since_factor"]
-        torch.set_rng_state(state["rng"]["cpu"])
-        if state["rng"]["cuda"] is not None and torch.cuda.is_available():
-            torch.cuda.set_rng_state_all(state["rng"]["cuda"])
-        epoch, step = state["epoch"], state["step"]
-        # Recomputed under this run's patience rather than read from the file,
-        # so a run that stopped early continues when given more patience, or
-        # none (FR-063f).
-        if stopper.should_stop or epoch >= self.config.epochs:
-            logger.info(
-                "The resume file records a finished run (epoch %d); nothing "
-                "to resume.", epoch,
-            )
-            return None
-        logger.info(
-            "Resuming after epoch %d, step %d: best card-disjoint %.4f, %d "
-            "epoch(s) since.", epoch, step, stopper.best, stopper.since_best,
-        )
-        return epoch + 1, step
-
-    def _start_workers(
-        self, widths, heads: frozenset[str], *, first_epoch: int = 1,
-    ):
+    def _start_workers(self, settings: PreparerSettings, *, first_epoch: int = 1):
         """The step-preparing processes, with ``first_epoch`` queued; None for none.
 
         Each worker may hold one shard's steps prepared ahead (up to
@@ -1251,14 +1140,7 @@ class TrainingLoop(StepPreparation):
             "each.", self.prefetch_workers, depth,
         )
         pool = StepWorkerPool(
-            PreparerSettings(
-                config=self.config, seed=self.seed, held_out=self.held_out,
-                inherited=self.inherited, rarity=self.rarity,
-                api_types=tuple(self.api_types),
-                param_keys=tuple(self.param_keys), widths=dict(widths),
-                heads=heads, legality_mode_counts=self.legality_mode_counts,
-            ),
-            workers=self.prefetch_workers, depth=max(depth, 1),
+            settings, workers=self.prefetch_workers, depth=max(depth, 1),
             pin=self.device.type == "cuda",
         )
         try:
@@ -1270,10 +1152,9 @@ class TrainingLoop(StepPreparation):
         return pool
 
     def _train_in_process(
-        self, tasks: Sequence[ShardTask], drawn: int, *, encoder, model,
-        tokenizer, sidecars, widths, optimizer, warmup, running, step, taken,
-        heads: frozenset[str],
-    ) -> tuple[int, int]:
+        self, tasks: Sequence[ShardTask], drawn: int, run: RunContext,
+        tally: EpochTally,
+    ) -> None:
         """One epoch's shards with the host half in this process.
 
         One shard is read on a thread while the previous one trains. Reading
@@ -1304,15 +1185,8 @@ class TrainingLoop(StepPreparation):
                     loader.submit(load_shard, tasks[index + 1].shard)
                     if index + 1 < len(tasks) else None
                 )
-                steps = self._local_steps(
-                    task, records, tokenizer, sidecars, widths, heads=heads,
-                )
-                step, taken = self._train_on_shard(
-                    task, steps, waited, encoder=encoder, model=model,
-                    tokenizer=tokenizer, sidecars=sidecars, widths=widths,
-                    optimizer=optimizer, warmup=warmup, running=running,
-                    step=step, taken=taken, of=drawn,
-                )
+                steps = self._local_steps(task, records)
+                self._train_on_shard(task, steps, waited, run, tally, of=drawn)
                 self._release_cache()
                 # Before the next shard is waited for, so the one in hand and
                 # the one being read are the only two resident.
@@ -1321,13 +1195,9 @@ class TrainingLoop(StepPreparation):
             # Including on the way out of an exception, where a prefetch may
             # still be reading a shard nobody will train on.
             loader.shutdown(wait=True, cancel_futures=True)
-        return step, taken
 
-    def _local_steps(
-        self, task: ShardTask, records, tokenizer, sidecars, widths, *,
-        heads: frozenset[str],
-    ):
-        """``shard_steps`` in this process, one step ahead on a thread.
+    def _local_steps(self, task: ShardTask, records):
+        """The preparer's ``shard_steps`` in this process, one step ahead on a thread.
 
         The thread prepares the next step's host half while the main thread
         runs this one's device half, whose torch calls release the
@@ -1335,9 +1205,8 @@ class TrainingLoop(StepPreparation):
         the run, so the thread changes when a step is prepared and not what
         it holds; ``prefetch_batches`` off runs the same generator in place.
         """
-        steps = self.shard_steps(
-            task, records, tokenizer, sidecars, widths, heads=heads,
-            pin=self.device.type == "cuda",
+        steps = self.preparer.shard_steps(
+            task, records, pin=self.device.type == "cuda",
         )
         if not self.prefetch_batches:
             yield from steps
@@ -1361,13 +1230,12 @@ class TrainingLoop(StepPreparation):
             torch.cuda.empty_cache()
 
     def _note_opened(self, opened: ShardOpened) -> None:
-        """Fold a shard's split into the run's; say what the rarity table covers.
+        """Say, once per run, how much of a shard the rarity table covers.
 
         The coverage is said once per run rather than once per shard: a table
         matching nothing is otherwise invisible, since every weight falls back
         to the shard's own count and the run looks exactly like a healthy one.
         """
-        self.accumulator.note_games(opened.tainted, frozenset(), reserved=False)
         if (
             opened.rarity_coverage is None or not opened.trainable
             or self._rarity_reported
@@ -1390,9 +1258,9 @@ class TrainingLoop(StepPreparation):
             self.truncations.note(text, keys)
 
     def _train_on_shard(
-        self, task: ShardTask, steps, waited, *, encoder, model, tokenizer,
-        sidecars, widths, optimizer, warmup, running, step, taken, of,
-    ) -> tuple[int, int]:
+        self, task: ShardTask, steps, waited: float, run: RunContext,
+        tally: EpochTally, *, of: int,
+    ) -> None:
         """Take ``task.budget`` steps on one shard, from its prepared steps.
 
         ``steps`` yields the shard's messages in order — a ``ShardOpened``,
@@ -1409,42 +1277,15 @@ class TrainingLoop(StepPreparation):
         waited for their preparation — near nothing when the preparation
         keeps ahead of the device, and the host half's whole cost when it
         runs in place.
-
-        Returns the advanced ``(step, taken)`` counters.
         """
-        epoch, position, budget = task.epoch, task.position, task.budget
-        name = Path(task.shard).name
-        # The device half's batcher: a training step's host half carries
-        # none, and nothing here reads the tokenizer or the sidecars.
-        device = self._batcher(tokenizer, sidecars, widths, training=True)
+        stats = ShardStats(loss=torch.zeros((), device=self.device), waited=waited)
         started = time.perf_counter()
         opened: ShardOpened | None = None
-        # Accumulated on the device like the epoch's own running loss, and read
-        # back once, on the line this shard logs when it ends.
-        shard_loss = torch.zeros((), device=self.device)
-        shard_steps = 0
         index = 0
-        parts: dict[str, float] = {}
-        norms: dict[str, float] = {}
-        heads: dict[str, float] = {}
-        learning_rate = 0.0
-        batch_waited = 0.0
         try:
-            while True:
-                waiting = time.perf_counter()
-                try:
-                    message = next(steps, None)
-                except Exception:
-                    logger.error(
-                        "epoch %d | shard %d/%d %s | preparing it failed",
-                        epoch, position, of, name,
-                    )
-                    raise
-                elapsed = time.perf_counter() - waiting
-                if message is None:
-                    break
+            for message, elapsed in _timed(steps, task, of):
                 if isinstance(message, ShardOpened):
-                    waited += elapsed
+                    stats.waited += elapsed
                     started = time.perf_counter()
                     opened = message
                     self._note_opened(message)
@@ -1452,130 +1293,75 @@ class TrainingLoop(StepPreparation):
                 if isinstance(message, ShardClosed):
                     self._note_closed(message)
                     continue
-                batch_waited += elapsed
-                for group in optimizer.param_groups:
-                    group["lr"] = learning_rate = learning_rate_at(
-                        step, warmup=warmup,
-                    ) * self.config.lr_scale
+                stats.batch_waited += elapsed
+                stats.learning_rate = self._set_learning_rate(run)
                 # Counted from the plan where it was prepared: no device read
                 # (FR-055).
-                for bucket, count in message.buckets.items():
-                    self._bucket_counts[bucket] += count
-                for family, count in message.families.items():
-                    self._family_counts[family] += count
+                tally.add_shares(message)
                 # Decided before the forward pass: the decomposition has to be
-                # asked for while the loss is being computed, not after.
-                #
-                # The last step of every shard reports, whatever the clock
-                # says, so the shard's own line always carries a
-                # decomposition. A wall-clock interval alone was silent here:
-                # it was written when a shard took 278 steps over three
-                # minutes, and a shard now takes twenty over seconds, so the
-                # window never elapsed and no shard ever reported.
-                due = reports_now(index=index, budget=budget)
+                # asked for while the loss is being computed, not after. The
+                # last step of every shard reports, so the shard's own line
+                # always carries one.
+                due = reports_now(index=index, budget=task.budget)
                 index += 1
-                if message.prepared is None:
-                    continue
-                self.noise.step = step
-                computed = self._loss_for(
-                    None, encoder, model, tokenizer, sidecars, widths, step,
-                    report_parts=due, fields=task.fields,
-                    prepared=message.prepared, batcher=device,
-                )
-                if computed is None:
-                    continue
-                loss, batch_parts, *rest = computed
-                # The objective validation scores; `loss` adds the
-                # training-only heads on top for the backward pass.
-                shipped = rest[0] if rest else loss
-                (loss / self.config.grad_accum).backward()
-                self._mlm_backward(encoder, model)
-                if (step + 1) % self.config.grad_accum == 0:
-                    # Read back only on the step that logs them: each read
-                    # stalls the step until the GPU drains.
-                    clipped = clip_per_group(
-                        optimizer, max_norm=MAX_GRAD_NORM, read=False,
-                    )
-                    if due:
-                        norms = {
-                            group: float(value) for group, value in clipped.items()
-                        }
-                    optimizer.step()
-                    optimizer.zero_grad(set_to_none=True)
-                running += shipped.detach()
-                shard_loss += shipped.detach()
-                for term, value in self._last_terms.items():
-                    held = self._epoch_terms.get(term)
-                    self._epoch_terms[term] = (
-                        value.detach() if held is None else held + value.detach()
-                    )
-                self._epoch_term_steps += 1
-                if due:
-                    heads = {
-                        term: float(value.detach())
-                        for term, value in self._last_terms.items()
-                    }
-                shard_steps += 1
-                step += 1
-                taken += 1
-                if batch_parts:
-                    parts = batch_parts
-                if self.context_cache is not None:
-                    self.context_cache.note_batch()
+                if message.prepared is not None:
+                    self._train_step(message.prepared, run, tally, stats, due)
         finally:
             # Including on the way out of an exception, where a thread may
             # still be preparing a step nobody will take.
             close = getattr(steps, "close", None)
             if close is not None:
                 close()
+        stats.log(task, of, opened, trained=time.perf_counter() - started)
 
-        trainable = opened.trainable if opened is not None else 0
-        held_back = opened.held_back if opened is not None else 0
-        if not trainable:
-            logger.info(
-                "epoch %d | shard %d/%d %s | nothing trainable, all %d records "
-                "held back | skipped",
-                epoch, position, of, name, held_back,
-            )
-            return step, taken
-        trained = time.perf_counter() - started
-        logger.info(
-            "epoch %d | shard %d/%d %s | %d records trainable, %d held back | "
-            "%d steps | loss %.4f | lr %.2e | %.1f steps/s | "
-            "wait %.1fs, batch wait %.1fs, train %.1fs%s%s%s",
-            epoch, position, of, name, trainable, held_back, budget,
-            float(shard_loss) / shard_steps if shard_steps else float("nan"),
-            learning_rate, budget / trained if trained > 0 else float("nan"),
-            waited, batch_waited, trained, _format_norms(norms),
-            _format_parts(parts), _format_terms(heads),
-        )
-        return step, taken
+    def _set_learning_rate(self, run: RunContext) -> float:
+        rate = learning_rate_at(run.step, warmup=run.warmup) * self.config.lr_scale
+        for group in run.optimizer.param_groups:
+            group["lr"] = rate
+        return rate
+
+    def _train_step(
+        self, prepared: PreparedStep, run: RunContext, tally: EpochTally,
+        stats: ShardStats, due: bool,
+    ) -> None:
+        """One step's device half: forward, backward, and the optimizer on the
+        accumulation boundary."""
+        self.noise.step = run.step
+        computed = self._device_loss(prepared, run, self._training, report_parts=due)
+        # `total` adds the training-only heads to the objective validation
+        # scores, `shipped`, for the backward pass.
+        (computed.total / self.config.grad_accum).backward()
+        self._mlm_backward(computed, run.encoder, run.model)
+        # Counted within the epoch, which drops any partial accumulation it
+        # began: the run's global step would put every later epoch's boundary
+        # on the wrong micro-step.
+        if (tally.taken + 1) % self.config.grad_accum == 0:
+            norms = _optimizer_step(run.optimizer, read=due)
+            if due:
+                stats.norms = norms
+        tally.add_step(computed)
+        stats.add_step(computed, reported=due)
+        run.step += 1
 
     def _validate(
-        self, records, encoder, model, tokenizer, sidecars, widths, step,
+        self, records, run: RunContext,
         *, parts: dict[str, float] | None = None, fields=None,
         collect: list[EntityTargetBatch] | None = None,
     ) -> float:
         """Mean loss over the stratum, batched the way training batches.
 
-        One batch per game is what this did, and a game is not a batch. Eight
-        games is eight numbers, and one of them blowing up moves the mean by a
-        factor of twenty-eight. Worse, a batch's class composition decides which
-        fields carry loss at all — ``active_fields`` keeps a field only while
-        some class in the batch supervises it — so a batch holding one game's
-        natural proportions scores a different set of fields than a training
-        batch does, and the two numbers printed side by side were never
-        measuring the same thing.
-
-        Fixed-size batches over a shuffled sample fix both, and ``fields`` is
+        Fixed-size batches over the sample (shuffled when the corpus was
+        built), not one batch per game: a game is a handful of numbers, one of
+        which blowing up moves a per-game mean many times over, and its class
+        composition would decide which fields carry loss at all. ``fields`` is
         the epoch's own set rather than each batch's, so the validation number
         and the training number beside it score the same objective even where a
         batch happens to hold no record of some class. ``parts`` collects the
         loss by field, averaged over batches, which is what says *which* term
         is not moving when the total is not moving. ``collect`` takes each
-        batch's targets along the way, so the constant-predictor floor those
-        terms are scaled by is scored on this sample and this masking rather
-        than on a second pass's.
+        batch's targets along the way, kept on the host, so the
+        constant-predictor floor those terms are scaled by is scored on this
+        sample and this masking rather than on a second pass's.
 
         Records are still grouped by game *within* a batch, for the same reason
         training groups them: one encode of an ability text then serves every
@@ -1583,43 +1369,40 @@ class TrainingLoop(StepPreparation):
         """
         if not records:
             return float("nan")
-        encoder.eval()
-        model.eval()
-        from effects.application.train_effect_model import BatchPlan
+        run.encoder.eval()
+        run.model.eval()
 
         size = self.config.batch_size
         total = torch.zeros((), device=self.device)
         batches = 0
-        summed: dict[str, float] = defaultdict(float)
-        counted: dict[str, int] = defaultdict(int)
+        means = PartsMean()
         with torch.no_grad():
             for start in range(0, len(records), size):
                 chunk = records[start:start + size]
                 grouped: dict[str, list] = defaultdict(list)
                 for record in chunk:
                     grouped[record.game_id].append(record)
-                computed = self._loss_for(
-                    BatchPlan(dict(grouped)), encoder, model, tokenizer,
-                    sidecars, widths, step, report_parts=parts is not None,
-                    fields=fields, training=False, collect=collect,
+                prepared = self.preparer.prepare_step(
+                    BatchPlan(dict(grouped)), step=run.step, fields=fields,
+                    training=False,
                 )
-                if computed is None:
+                if prepared is None:
                     continue
+                if collect is not None:
+                    collect.append(EntityTargetBatch(
+                        prepared.gate, prepared.field_targets, prepared.mask,
+                    ))
+                computed = self._device_loss(
+                    prepared, run, self._scoring, report_parts=parts is not None,
+                )
                 # Accumulated on the device; read once below.
-                total += computed[0]
+                total += computed.total
                 batches += 1
-                for name, value in computed[1].items():
-                    summed[name] += value
-                    counted[name] += 1
-        encoder.train()
-        model.train()
+                means.add(computed.parts)
+        run.encoder.train()
+        run.model.train()
         if parts is not None:
-            # Averaged over the batches that carried each field rather than over
-            # every batch: a field its batch did not supervise contributes no
-            # zero, which would read as the model having got it right.
-            parts.update(
-                {name: summed[name] / counted[name] for name in summed}
-            )
+            parts.update(means.means())
         return float(total) / batches if batches else float("nan")
 
     def _provenance(self) -> SplitProvenance:
@@ -1632,7 +1415,7 @@ class TrainingLoop(StepPreparation):
         recomputed against a grown corpus would not be the one this model
         trained against.
         """
-        split = self.accumulator.split()
+        split = self.split
         return SplitProvenance(
             held_out_cards=split.held_out_cards,
             card_disjoint_games=tuple(sorted(split.card_disjoint_games)),
@@ -1654,8 +1437,3 @@ class TrainingLoop(StepPreparation):
             # Resolved from the manifest at startup when the flag was absent.
             holdout_unit=self.config.holdout_unit or "text",
         )
-
-
-def config_summary(config: TrainEffectModelConfig) -> dict:
-    """The run's settings, for the log line and the checkpoint's extras."""
-    return {k: str(v) for k, v in asdict(config).items()}

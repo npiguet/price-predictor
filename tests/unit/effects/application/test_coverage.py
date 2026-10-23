@@ -16,43 +16,35 @@ from effects.application.collect_coverage import (
     DEFAULT_DECKS_PER_ROUND,
     DEFAULT_NO_PROGRESS_ROUNDS,
     DEFAULT_TARGET_RECORDS,
-    CardCoverage,
     CollectCoverageConfig,
+    residues,
+)
+from effects.domain.coverage import (
+    CardCoverage,
     ConsultVerdict,
-    count_coverage,
     deck_weights,
     is_complete,
     qualifying_cards,
     rank_by_consult,
-    residues,
     retire_stalled,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
     EffectRecord,
-    Moment,
-    RecordKind,
     ResolutionPayload,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, Refs, StateSnapshot
+from effects.domain.state_snapshot import EntityState, Refs
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
 def _entity(entity_id: str, name: str) -> EntityState:
-    return EntityState(
-        id=entity_id, name=name, zone="battlefield", controller="P0",
-    )
+    return make_entity(entity_id, name)
 
 
 def _record(entities, *, source=None, targets=(), events=()) -> EffectRecord:
-    return EffectRecord(
-        record_id="r.0.1", run_id="r", timestamp="t", game_id="r.0.1",
-        kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION,
-        actor_player="P0",
-        state=StateSnapshot(
-            global_=GlobalState(
-                turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-            ),
-            players=(),
+    return make_record(
+        record_id="r.0.1", run_id="r", game_id="r.0.1",
+        state=make_snapshot(
             entities=tuple(entities),
             refs=Refs(source=source, targets=tuple(targets)),
         ),
@@ -107,7 +99,7 @@ class TestSatisfactionCounting:
         records = [
             _record([_entity("E1", "Shock")], source="E1") for _ in range(3)
         ]
-        assert count_coverage(records)["Shock"] == 3
+        assert sum("Shock" in qualifying_cards(r) for r in records) == 3
 
 
 class TestConsultRanksButNeverDrops:
@@ -262,8 +254,10 @@ class TestConfig:
 class TestCoverageDeckBuilding:
     """A coverage deck is 40 cards and favours the cards that need records."""
 
-    def _texts(self, names):
-        return {n: f"name: {n}\nmana cost: {{1}}{{G}}\ntypes: creature\n" for n in names}
+    def _candidates(self, names):
+        from effects.domain.coverage import DeckCandidate
+
+        return {n: DeckCandidate(n, "{1}{G}") for n in names}
 
     def test_a_deck_is_forty_cards_with_twenty_three_nonlands(self):
         import random
@@ -272,7 +266,7 @@ class TestCoverageDeckBuilding:
 
         names = [f"card {i}" for i in range(40)]
         decks = build_coverage_decks(
-            {n: 1.0 for n in names}, self._texts(names), count=3,
+            {n: 1.0 for n in names}, self._candidates(names), count=3,
             rng=random.Random(1),
         )
 
@@ -296,14 +290,14 @@ class TestCoverageDeckBuilding:
         weights = {n: 1.0 for n in names}
         weights["card 0"] = 500.0
         decks = build_coverage_decks(
-            weights, self._texts(names), count=40, rng=random.Random(1),
+            weights, self._candidates(names), count=40, rng=random.Random(1),
         )
 
         flat = [n for deck in decks for n in deck]
         assert flat.count("card 0") > flat.count("card 1")
 
     def test_a_card_with_no_converted_text_is_skipped(self):
-        """A weight can name a card the tree has no text for; basics need text."""
+        """A weight can name a card the tree has no text for; basics need its cost."""
         import random
 
         from effects.application.collect_coverage import build_coverage_decks
@@ -311,10 +305,29 @@ class TestCoverageDeckBuilding:
         names = [f"card {i}" for i in range(40)]
         decks = build_coverage_decks(
             {**{n: 1.0 for n in names}, "ghost": 5.0},
-            self._texts(names), count=2, rng=random.Random(1),
+            self._candidates(names), count=2, rng=random.Random(1),
         )
 
         assert all("ghost" not in deck for deck in decks)
+
+
+class TestDeckCandidateFromConvertedText:
+    """The cost a converted card hands the manabase heuristic."""
+
+    def test_the_mana_cost_line_is_read(self):
+        from effects.domain.coverage import DeckCandidate
+
+        candidate = DeckCandidate.from_converted_text(
+            "bolt", "name: bolt\nmana cost: {2}{R}{R}\ntypes: instant\n",
+        )
+        assert candidate == DeckCandidate("bolt", "{2}{R}{R}")
+        assert candidate.mana_cost_line() == "{2}{R}{R}"
+
+    @pytest.mark.parametrize("text", ["name: land\ntypes: land\n", "mana cost:  \n"])
+    def test_a_missing_or_empty_cost_is_none(self, text):
+        from effects.domain.coverage import DeckCandidate
+
+        assert DeckCandidate.from_converted_text("x", text).mana_cost is None
 
 
 class TestHeldOutExclusion:
@@ -325,7 +338,7 @@ class TestHeldOutExclusion:
 
     def test_held_out_cards_are_absent_from_the_coverage_unit(self, tmp_path):
         from effects.application.collect_coverage import build_coverage_units
-        from effects.application.train_effect_model import load_card_files
+        from effects.infrastructure.card_sources import load_card_files
 
         (tmp_path / "s").mkdir()
         for stem, name in (("serra_angel", "Serra Angel"), ("shock", "Shock")):
@@ -344,12 +357,11 @@ def test_satisfied_is_records_at_or_above_target(records, target, expected):
 
 
 class TestRunClosesTheSupervisor:
-    """final-fix-3.md item 5: ``CollectorSupervisor.stop()`` -- the only
-    caller of ``WorkerLogFiles.close_all()`` -- was never invoked by
-    ``run()``, so a coverage run's worker log handles (opened for exactly the
-    latched effect-record failure reporters F4 exists to make visible to an
-    operator) stayed open until the interpreter exited on its own, not when
-    the run itself finished.
+    """``CollectorSupervisor.stop()`` is the only caller of
+    ``WorkerLogFiles.close_all()``. Unless ``run()`` invokes it, a coverage
+    run's worker log handles -- opened so the latched effect-record failure
+    reporters are visible to an operator -- stay open until the interpreter
+    exits on its own, not when the run itself finishes.
     """
 
     def _config(self, tmp_path, **overrides):
@@ -378,7 +390,7 @@ class TestRunClosesTheSupervisor:
         import effects.infrastructure.collector_connector as collector_connector
 
         monkeypatch.setattr(
-            collect_coverage, "consult_castability", lambda names, folder: {},
+            collect_coverage, "consult_castability", lambda names: {},
         )
         supervisor = MagicMock()
         monkeypatch.setattr(
@@ -403,7 +415,7 @@ class TestRunClosesTheSupervisor:
         import effects.infrastructure.collector_connector as collector_connector
 
         monkeypatch.setattr(
-            collect_coverage, "consult_castability", lambda names, folder: {},
+            collect_coverage, "consult_castability", lambda names: {},
         )
         supervisor = MagicMock()
         supervisor.play_round.side_effect = RuntimeError("boom")
@@ -547,7 +559,7 @@ class TestTheRoundPlaysTheComputedDecks:
 
 
 class TestARoundEndsInItsReport:
-    """Final review, CRITICAL 1, at the level the operator sees.
+    """A round ends in its report, at the level the operator sees.
 
     ``run``'s ``finally`` calls ``CollectorSupervisor.stop()``, which called a
     pool method that does not exist, so every round ended in
@@ -597,13 +609,14 @@ class TestARoundEndsInItsReport:
 
 
 class TestCtrlCEndsTheRun:
-    """Final review, IMPORTANT 3: nothing in ``effects`` read
+    """Nothing in ``effects`` used to read
     ``ForgeWorkerPool.interrupted``, so ``run`` built a fresh pool for the
     next round and Ctrl-C degraded to "skip this round, start another".
 
     ``spec=CollectorSupervisor`` rather than a bare ``MagicMock`` on purpose:
     a bare one answers to ``interrupted`` whether or not the supervisor
-    exposes it, which is the same blindness that let CRITICAL 1 ship.
+    exposes it, which is the same blindness ``TestARoundEndsInItsReport``
+    exists for.
     """
 
     def _two_round_config(self, tmp_path):
@@ -651,7 +664,7 @@ class TestCtrlCEndsTheRun:
 
 
 class TestOnlyDeckedCardsCountAStalledRound:
-    """Final review, IMPORTANT 4: ``retire_stalled`` counted a stalled round
+    """``retire_stalled`` used to count a stalled round
     against every card that gained no qualifying record, including cards no
     deck that round ever held.
 
@@ -908,6 +921,23 @@ class TestCountingReportsProgress:
 
         assert not [r for r in caplog.messages if "shard" in r and "of 3" in r]
 
+    def test_the_held_out_round_reports_progress_too(self, tmp_path, caplog) -> None:
+        """Its first pass reads the same whole corpus, and was silent."""
+        from effects.application.collect_coverage import TextCoverageCounter
+        from effects.domain.coverage import TextCoverage
+
+        self._shards(tmp_path, 120)
+        counter = TextCoverageCounter(
+            {"cardsfolder": str(tmp_path / "none")}, progress_every=50,
+        )
+
+        with caplog.at_level("INFO"):
+            read = counter.update({"t": TextCoverage(text="t")}, tmp_path, workers=1)
+
+        assert read == 120
+        progress = [r for r in caplog.messages if "of 120 shard" in r]
+        assert len(progress) >= 2, f"expected periodic progress, got {progress}"
+
     def test_a_counting_worker_never_loads_torch(self, tmp_path) -> None:
         """One pool worker per core, each loading torch's CUDA DLLs, exhausts
         the Windows paging file beside a training job — and counting a shard
@@ -1007,7 +1037,7 @@ _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 
 class TestHeldOutTextUnit:
     def test_a_held_out_text_is_one_only_listed_cards_carry(self):
-        from effects.application.collect_coverage import held_out_texts_of
+        from effects.domain.coverage import held_out_texts_of
 
         texts = held_out_texts_of(frozenset({"alpha", "beta"}), {
             "alpha": ["SP$ Rare | Thing$ 1", "SP$ Common"],
@@ -1041,7 +1071,7 @@ class TestHeldOutTextUnit:
         assert counted == expected
 
     def test_satisfaction_is_distinct_games_at_the_floor(self):
-        from effects.application.collect_coverage import TextCoverage
+        from effects.domain.coverage import TextCoverage
 
         unit = TextCoverage(text="t", games={"g1", "g2", "g3", "g4"})
         assert not unit.satisfied(5)
@@ -1050,18 +1080,16 @@ class TestHeldOutTextUnit:
 
     def test_the_round_ends_without_waiting_on_uncastable_texts(self):
         """FR-037 / spec Story 2 scenario 6."""
-        from effects.application.collect_coverage import (
-            TextCoverage,
-            is_text_round_complete,
-            text_residues,
-        )
+        from effects.application.collect_coverage import text_residues
+        from effects.domain.coverage import TextCoverage, awaited_texts, is_complete
 
         coverage = {
             "done": TextCoverage(text="done", games={f"g{i}" for i in range(5)}),
             "retired": TextCoverage(text="retired", games={"g1"}, retired=True),
             "stuck": TextCoverage(text="stuck", castable=False),
         }
-        assert is_text_round_complete(coverage, 5)
+        assert set(awaited_texts(coverage)) == {"done", "retired"}
+        assert is_complete(awaited_texts(coverage), 5)
         residues = text_residues(coverage, 5)
         assert residues.under_floor == {"retired": 1}
         assert residues.uncastable == ("stuck",)
@@ -1071,9 +1099,10 @@ class TestHeldOutTextUnit:
         """Spec Story 2 scenario 5."""
         import random
 
-        from effects.application.collect_coverage import (
+        from effects.application.collect_coverage import build_coverage_decks
+        from effects.domain.coverage import (
+            DeckCandidate,
             TextCoverage,
-            build_coverage_decks,
             text_deck_weights,
         )
 
@@ -1083,8 +1112,10 @@ class TestHeldOutTextUnit:
         )}
         weights = text_deck_weights(coverage, carriers, 5)
         assert weights == {"alpha": 5.0}
-        texts = {"alpha": "name: alpha\nmana cost: {R}\n", "beta": "name: beta\n"}
-        decks = build_coverage_decks(weights, texts, 3, rng=random.Random(0))
+        candidates = {
+            "alpha": DeckCandidate("alpha", "{R}"), "beta": DeckCandidate("beta", None),
+        }
+        decks = build_coverage_decks(weights, candidates, 3, rng=random.Random(0))
         basics = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
         assert all(set(deck) <= {"alpha"} | basics for deck in decks)
 
@@ -1151,12 +1182,12 @@ class TestNonDeckTypesLeaveTheUnit:
         ("artifact attraction", False),
     ])
     def test_the_types_line_decides(self, types, deckable):
-        from effects.application.collect_coverage import is_deckable
+        from effects.domain.coverage import is_deckable
 
         assert is_deckable(f"name: x\ntypes: {types}\n") is deckable
 
     def test_a_card_without_a_types_line_is_kept(self):
-        from effects.application.collect_coverage import is_deckable
+        from effects.domain.coverage import is_deckable
 
         assert is_deckable("name: x\n")
 
@@ -1175,7 +1206,7 @@ class TestNonDeckTypesLeaveTheUnit:
         (tmp_path / "records").mkdir()
         consulted: list[list[str]] = []
 
-        def _consult(names, folder):
+        def _consult(names):
             consulted.append(list(names))
             return {}
 
@@ -1225,14 +1256,14 @@ class TestNonDeckTypesLeaveTheUnit:
         }
         consulted: list[list[str]] = []
 
-        def _consult(names, folder):
+        def _consult(names):
             consulted.append(list(names))
             return {}
 
         with patch.object(collector_connector, "CollectorSupervisor",
                           return_value=MagicMock(interrupted=False)), \
              patch.object(collect_coverage, "consult_castability", _consult), \
-             patch("effects.application.train_effect_model.load_card_texts",
+             patch("effects.infrastructure.card_sources.load_card_texts",
                    return_value=texts_by_card), \
              caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
@@ -1252,12 +1283,3 @@ class TestHeldOutRoundCaps:
         from effects.domain.collection_caps import CollectionCaps
 
         assert held_out_round_caps(CollectionCaps()).playability_rate == 1.0
-
-    def test_what_if_legality_queries_stay_at_the_runs_rate(self):
-        from effects.application.collect_coverage import held_out_round_caps
-        from effects.domain.collection_caps import CollectionCaps
-
-        assert held_out_round_caps(CollectionCaps()).legality_rate == 0.0
-        assert held_out_round_caps(
-            CollectionCaps(legality_rate=0.3)
-        ).legality_rate == 0.3

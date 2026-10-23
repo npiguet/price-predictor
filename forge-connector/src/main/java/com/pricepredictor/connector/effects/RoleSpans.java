@@ -24,16 +24,11 @@ public final class RoleSpans {
     private RoleSpans() {
     }
 
-    public static final String COST = "cost";
-    public static final String EFFECT = "effect";
-    public static final String TRIGGER_CONDITION = "trigger-condition";
-    public static final String TARGET_SPEC = "target-spec";
-
     /** One tagged character range, half-open: {@code [start, end)}. */
-    public record Span(int start, int end, String role) {
+    public record Span(int start, int end, SpanRole role) {
         public String toJson() {
             return "{\"start\":" + start + ",\"end\":" + end
-                    + ",\"role\":" + Json.string(role) + "}";
+                    + ",\"role\":" + Json.string(role.wireName()) + "}";
         }
     }
 
@@ -55,18 +50,18 @@ public final class RoleSpans {
 
         int triggerEnd = triggerConditionEnd(lower);
         if (triggerEnd > 0) {
-            spans.add(new Span(0, triggerEnd, TRIGGER_CONDITION));
-            spans.add(new Span(triggerEnd, text.length(), EFFECT));
+            spans.add(new Span(0, triggerEnd, SpanRole.TRIGGER_CONDITION));
+            spans.add(new Span(triggerEnd, text.length(), SpanRole.EFFECT));
         } else if (activated) {
             int costEnd = costEnd(text);
             if (costEnd > 0) {
-                spans.add(new Span(0, costEnd, COST));
-                spans.add(new Span(costEnd, text.length(), EFFECT));
+                spans.add(new Span(0, costEnd, SpanRole.COST));
+                spans.add(new Span(costEnd, text.length(), SpanRole.EFFECT));
             } else {
-                spans.add(new Span(0, text.length(), EFFECT));
+                spans.add(new Span(0, text.length(), SpanRole.EFFECT));
             }
         } else {
-            spans.add(new Span(0, text.length(), EFFECT));
+            spans.add(new Span(0, text.length(), SpanRole.EFFECT));
         }
 
         spans.addAll(targetSpans(lower));
@@ -158,7 +153,7 @@ public final class RoleSpans {
             while (end > after && Character.isWhitespace(lower.charAt(end - 1))) {
                 end--;
             }
-            spans.add(new Span(start, end, TARGET_SPEC));
+            spans.add(new Span(start, end, SpanRole.TARGET_SPEC));
             from = end;
         }
         return spans;

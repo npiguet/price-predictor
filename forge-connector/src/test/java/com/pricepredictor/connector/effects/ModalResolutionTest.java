@@ -1,37 +1,22 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
-import forge.StaticData;
-import forge.ai.LobbyPlayerAi;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
-import forge.game.ability.ApiType;
-import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
+import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -58,71 +43,20 @@ class ModalResolutionTest {
     @TempDir
     Path tempDir;
 
-    /** Forge's clause listener, argument for argument; see {@code ClauseContractTest}. */
-    interface ClauseListenerShape {
-        void onClauseResolving(SpellAbility clause);
-
-        void onClauseResolved(SpellAbility clause, boolean threw);
-    }
+    /** Why a fork test skips on a stock checkout. */
+    private static final String STOCK_FORK =
+            "to split a fork's modes; a stock fork writes one root half";
 
     private static Method resolving() {
-        try {
-            return ClauseListenerShape.class.getMethod("onClauseResolving", SpellAbility.class);
-        } catch (NoSuchMethodException e) {
-            throw new AssertionError(e);
-        }
+        return HookShapes.method(HookShapes.Clause.class, "onClauseResolving");
     }
 
-    /** A game with two players, so a snapshot has a life total to move. */
-    private static Game twoPlayerGame() {
-        Deck deck = new Deck();
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("a", null)),
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(players, rules, new Match(rules, players, "ModalResolutionTest"));
-        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, game.getPlayers().get(0));
-        return game;
-    }
-
-    /** The charm spell of a real card, activated by {@code owner}. */
+    /**
+     * The charm spell of a real card, activated by {@code owner}, in a game
+     * with two players so a snapshot has a life total to move.
+     */
     private static SpellAbility charmOf(Game game, Player owner, String cardName) {
-        Card card = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(cardName), owner, game);
-        for (SpellAbility sa : card.getSpellAbilities()) {
-            if (sa.getApi() == ApiType.Charm) {
-                sa.setActivatingPlayer(owner);
-                return sa;
-            }
-        }
-        throw new AssertionError("no charm on " + cardName);
-    }
-
-    /** Chain the modes at these Choices$ positions, as the cast would. */
-    private static List<AbilitySub> chain(SpellAbility charm, int... positions) {
-        List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
-        List<AbilitySub> chosen = new ArrayList<>();
-        for (int position : positions) {
-            chosen.add(choices.get(position));
-        }
-        charm.setChosenList(chosen);
-        CharmEffect.chainAbilities(charm, chosen);
-        List<AbilitySub> clones = new ArrayList<>();
-        for (SpellAbility sub = charm.getSubAbility(); sub != null; sub = sub.getSubAbility()) {
-            clones.add((AbilitySub) sub);
-        }
-        return clones;
-    }
-
-    private List<String> readShard(Path path) throws IOException {
-        if (!Files.exists(path)) {
-            return List.of();
-        }
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
+        return TestBoard.charmOf(TestBoard.card(game, owner, cardName), owner);
     }
 
     private static String field(String json, String key) {
@@ -138,30 +72,30 @@ class ModalResolutionTest {
     /** A chosen mode's clone keys to the charm's line plus its Choices$ position. */
     @Test
     void aModeCloneResolvesToTheRootKeyWithItsOption() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Boros Charm");
-        List<AbilitySub> clones = chain(charm, 0, 2);
+        List<AbilitySub> clones = TestBoard.chain(charm, 0, 2);
 
-        ProvenanceKey root = ProvenanceKey.resolve(charm).key();
+        ProvenanceKey root = ProvenanceResolver.resolve(charm).key();
         assertNotNull(root);
         assertNull(root.option(), "the charm itself is the root line");
-        assertEquals(root.withOption(0), ProvenanceKey.resolve(clones.get(0)).key());
-        assertEquals(root.withOption(2), ProvenanceKey.resolve(clones.get(1)).key());
+        assertEquals(root.withOption(0), ProvenanceResolver.resolve(clones.get(0)).key());
+        assertEquals(root.withOption(2), ProvenanceResolver.resolve(clones.get(1)).key());
     }
 
     /** A mode's own sub-abilities resolve under the mode, and open no mode of their own. */
     @Test
     void aModesOwnSubAbilityCarriesTheModesOptionAndOpensNoMode() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Season of Gathering");
         // Mode 0 is "put a +1/+1 counter", which chains a pump and a cleanup.
-        List<AbilitySub> clones = chain(charm, 0);
+        List<AbilitySub> clones = TestBoard.chain(charm, 0);
         assertTrue(clones.size() >= 2, "the mode's chain should follow its clone: " + clones);
         AbilitySub mode = clones.get(0);
         AbilitySub pump = clones.get(1);
 
-        ProvenanceKey root = ProvenanceKey.resolve(charm).key();
-        assertEquals(root.withOption(0), ProvenanceKey.resolve(pump).key());
+        ProvenanceKey root = ProvenanceResolver.resolve(charm).key();
+        assertEquals(root.withOption(0), ProvenanceResolver.resolve(pump).key());
         assertNotNull(CharmModes.modeStartOf(mode));
         assertNull(CharmModes.modeStartOf(pump), "a sub-ability of a mode opens nothing");
     }
@@ -169,9 +103,9 @@ class ModalResolutionTest {
     /** Spec Story 3 scenario 13: one mode chosen twice gives two clones under one option. */
     @Test
     void aRepeatedModeIsTwoClonesOfOneOption() {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Brokers Confluence");
-        List<AbilitySub> clones = chain(charm, 1, 1, 0);
+        List<AbilitySub> clones = TestBoard.chain(charm, 1, 1, 0);
 
         assertEquals(3, clones.size());
         assertEquals(0, CharmModes.modeStartOf(clones.get(0)).option());
@@ -189,35 +123,26 @@ class ModalResolutionTest {
      */
     @Test
     void aPatchedWorkerWritesOneEffectHalfPerChosenMode() throws Throwable {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         SpellAbility charm = charmOf(game, caster, "Boros Charm");
-        List<AbilitySub> clones = chain(charm, 0, 2);
+        List<AbilitySub> clones = TestBoard.chain(charm, 0, 2);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
 
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{charm});
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{charm});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.DAMAGE_DEALT).param("amount", 4));
             // The first mode's effect: a life total that moved, which the
             // second mode's snapshot must show.
             caster.getOpponents().get(0).setLife(16, null);
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+            bracket.onNextAction();
+        });
 
-        List<String> records = readShard(path);
         assertEquals(3, records.size(), records.toString());
         String cost = records.get(0);
         String first = records.get(1);
@@ -243,28 +168,19 @@ class ModalResolutionTest {
     /** Spec Story 3 scenario 13 on the record: a repeated mode acts in two halves. */
     @Test
     void aRepeatedModeActsInOneHalfPerResolution() throws Throwable {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Brokers Confluence");
-        List<AbilitySub> clones = chain(charm, 0, 0, 2);
+        List<AbilitySub> clones = TestBoard.chain(charm, 0, 0, 2);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
             for (AbilitySub clone : clones) {
-                collectors.clauseHandler().invoke(null, resolving(), new Object[]{clone});
+                collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clone});
             }
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+            bracket.onNextAction();
+        });
 
-        List<String> records = readShard(path);
         assertEquals(4, records.size(), records.toString());
         assertTrue(records.get(1).contains("\"option\":0}"), records.get(1));
         assertTrue(records.get(2).contains("\"option\":0}"), records.get(2));
@@ -278,28 +194,19 @@ class ModalResolutionTest {
      */
     @Test
     void aModeThatDidNothingKeepsItsOwnEmptyHalf() throws Throwable {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Boros Charm");
-        List<AbilitySub> clones = chain(charm, 0, 2);
+        List<AbilitySub> clones = TestBoard.chain(charm, 0, 2);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(0)});
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{clones.get(1)});
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+            bracket.onNextAction();
+        });
 
-        List<String> records = readShard(path);
         assertEquals(3, records.size(), records.toString());
         assertTrue(records.get(1).contains("\"option\":0}"), records.get(1));
         assertTrue(records.get(1).contains("\"events\":[]"), records.get(1));
@@ -314,26 +221,21 @@ class ModalResolutionTest {
      * what degraded means here: the bracket is driven without it.
      */
     @Test
-    void aDegradedWorkerWritesOneRootHalfWithEveryModesEvents() throws IOException {
-        Game game = twoPlayerGame();
+    void aDegradedWorkerWritesOneRootHalfWithEveryModesEvents() throws Throwable {
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Boros Charm");
-        chain(charm, 0, 2);
+        TestBoard.chain(charm, 0, 2);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        try {
+        // The patched collectors are never handed a clause: the bracket alone
+        // is driven, as on a checkout without the hook.
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.DAMAGE_DEALT).param("amount", 4));
             bracket.recordClauseEvent(new EffectEvent(EffectEvent.KEYWORD_CHANGE));
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+            bracket.onNextAction();
+        });
 
-        List<String> records = readShard(path);
         assertEquals(2, records.size(), records.toString());
         String effect = records.get(1);
         assertFalse(effect.contains("\"option\""), "the root line acts: " + effect);
@@ -353,53 +255,28 @@ class ModalResolutionTest {
      */
     @Test
     void aForkedCharmWritesOneEffectHalfPerChosenMode() throws IOException {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card bears = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Grizzly Bears"), opponent, game);
-        game.getAction().moveToPlay(bears, opponent, null, null);
+        TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
         // In hand, where the fork's copier can find it: a card in no zone has
         // no counterpart in the copy.
-        Card confluence = game.getAction().moveTo(
-                forge.game.zone.ZoneType.Hand,
-                CardFactory.getCard(StaticData.instance().getCommonCards()
-                        .getCard("Fiery Confluence"), caster, game),
-                null, null);
-        SpellAbility charm = null;
-        for (SpellAbility sa : confluence.getSpellAbilities()) {
-            if (sa.getApi() == ApiType.Charm) {
-                charm = sa;
-            }
-        }
-        assertNotNull(charm);
-        charm.setActivatingPlayer(caster);
+        SpellAbility charm = TestBoard.charmOf(
+                TestBoard.inHand(game, caster, "Fiery Confluence"), caster);
         // A game in play: GameAction.checkStateEffects freezes the stack and
         // returns early on a game that has not started, which leaves the
         // fork's stack frozen and the forced ability parked off it.
         game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), 0.1);
+                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        boolean wrote;
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", caps, 1L)) {
-            org.junit.jupiter.api.Assumptions.assumeTrue(
-                    collectors.install() > 0 && collectors.installedHooks().contains("clause-events"),
-                    "../forge has no clause hook; a stock fork writes one root half");
-            ForkCollector forks = new ForkCollector(game, writer, "run.0-l1.0", caps, 5L);
-            collectors.withForks(forks);
-            wrote = forks.intervene(charm, 1);
-        } finally {
-            writer.close();
-        }
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, caps, 5L, charm, STOCK_FORK);
 
-        assertTrue(wrote, "the forced resolution observed something");
-        List<String> records = readShard(path);
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+        List<String> records = fork.records();
         assertEquals(3, records.size(), records.toString());
-        ProvenanceKey root = ProvenanceKey.resolve(charm).key();
+        ProvenanceKey root = ProvenanceResolver.resolve(charm).key();
         for (String record : records) {
             assertTrue(record.contains("\"interventional\":true"), record);
             assertFalse(record.contains("\"link_id\":\""), "a forced half has no partner: " + record);
@@ -410,77 +287,142 @@ class ModalResolutionTest {
     }
 
     /**
+     * Each half of a forked charm carries the state the same half of an
+     * observed resolution of the same modes carries: read at the mode's first
+     * clause with the charm on the stack and its card in the stack zone, and
+     * with the refs re-read as the charm finishes. The fork draws its modes,
+     * so the observed charm is chained with the modes its halves name, on a
+     * board built alike.
+     */
+    @Test
+    void aForkedCharmsHalvesCarryTheObservedHalvesStates() throws Throwable {
+        Game forkedGame = confluenceBoard();
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir.resolve("forked"), forkedGame,
+                new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0), 5L,
+                confluenceIn(forkedGame), STOCK_FORK);
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+        List<String> forced = fork.records();
+        int[] options = forced.stream()
+                .mapToInt(r -> Integer.parseInt(field(r, "option").replace("}]", "")))
+                .toArray();
+
+        Game observedGame = confluenceBoard();
+        SpellAbility charm = confluenceIn(observedGame);
+        TestBoard.chain(charm, options);
+        List<String> observed = ShardRun.recordsWithClauseHook(
+                tempDir.resolve("observed"), observedGame, STOCK_FORK, () -> {
+                    observedGame.getStack().addAndUnfreeze(charm);
+                    observedGame.getStack().resolveStack();
+                    observedGame.getAction().checkStateEffects(false);
+                    observedGame.fireEvent(new GameEventTurnPhase(
+                            observedGame.getPlayers().get(0), PhaseType.MAIN2, ""));
+                });
+        List<String> halves = observed.stream()
+                .filter(r -> r.contains("\"moment\":\"resolution\"")).toList();
+
+        assertEquals(options.length, halves.size(), observed.toString());
+        for (int i = 0; i < halves.size(); i++) {
+            assertTrue(stateOf(forced.get(i)).contains("\"zone\":\"stack\""), forced.get(i));
+            assertEquals(stateOf(halves.get(i)), stateOf(forced.get(i)), "half " + i);
+        }
+    }
+
+    /**
+     * A copy of the forced charm is not the forced charm: Double Vision
+     * copies the forced Fiery Confluence, the copy resolves first, above it,
+     * and its modes carry the charm's key. They cut no half: the record is
+     * the forced charm's three halves, one per mode it chose, rather than
+     * three more for the copy's modes, whose events the sink never files.
+     */
+    @Test
+    void aCopyOfTheForcedCharmCutsNoHalf() throws IOException {
+        Game game = confluenceBoard();
+        TestBoard.inPlay(game, game.getPlayers().get(0), "Double Vision");
+
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, new CollectionCaps(2000, 0.1, 2, 0, List.of(), 0.0, 0.0), 5L,
+                confluenceIn(game), STOCK_FORK);
+
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+        List<String> forced = fork.records();
+        assertEquals(3, forced.size(), forced.toString());
+        for (String half : forced) {
+            assertTrue(half.contains("\"option\":"), half);
+        }
+    }
+
+    /** Grizzly Bears for the second seat and Fiery Confluence in the first's hand, in play. */
+    private static Game confluenceBoard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, game.getPlayers().get(0), "Fiery Confluence");
+        return game;
+    }
+
+    private static SpellAbility confluenceIn(Game game) {
+        Player caster = game.getPlayers().get(0);
+        return TestBoard.charmOf(caster.getCardsIn(ZoneType.Hand).get(0), caster);
+    }
+
+    /** A record's {@code state} object, as written. */
+    private static String stateOf(String record) {
+        int from = record.indexOf("\"state\":");
+        int to = record.indexOf(",\"payload\":");
+        assertTrue(from >= 0 && to > from, record);
+        return record.substring(from, to);
+    }
+
+    /**
      * A fork forcing a creature spell resolves the creature's own modal
      * enters trigger too, on the same host card. Those modes belong to the
      * trigger's line, not the spell's: split under the spell's key they would
      * name {@code spell[0]} with an option, a key no sidecar line carries.
+     * Nor do its events join the spell's record: live gives the trigger a
+     * record of its own.
      */
     @Test
     void aForkedSpellIsNotSplitByItsOwnTriggersModes() throws IOException {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        Card barbarian = game.getAction().moveTo(
-                forge.game.zone.ZoneType.Hand,
-                CardFactory.getCard(StaticData.instance().getCommonCards()
-                        .getCard("Plundering Barbarian"), caster, game),
-                null, null);
+        Card barbarian = TestBoard.inHand(game, caster, "Plundering Barbarian");
         SpellAbility creatureSpell = barbarian.getFirstSpellAbility();
         assertNotNull(creatureSpell);
         creatureSpell.setActivatingPlayer(caster);
         game.setAge(forge.game.GameStage.Play);
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 2, 0, List.of(), 0.1);
+                2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        boolean wrote;
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", caps, 1L)) {
-            org.junit.jupiter.api.Assumptions.assumeTrue(
-                    collectors.install() > 0 && collectors.installedHooks().contains("clause-events"),
-                    "../forge has no clause hook; a stock fork writes one root half");
-            ForkCollector forks = new ForkCollector(game, writer, "run.0-l1.0", caps, 5L);
-            collectors.withForks(forks);
-            wrote = forks.intervene(creatureSpell, 1);
-        } finally {
-            writer.close();
-        }
+        ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                tempDir, game, caps, 5L, creatureSpell, STOCK_FORK);
 
-        assertTrue(wrote, "the forced resolution observed something");
-        List<String> records = readShard(path);
+        assertTrue(fork.wrote(), "the forced resolution observed something");
+        List<String> records = fork.records();
         assertEquals(1, records.size(), records.toString());
         String record = records.get(0);
         assertTrue(record.contains("\"trait_kind\":\"spell\""), record);
         assertFalse(record.contains("\"option\""), record);
-        assertEquals(2, record.split("\"zone_change\"", -1).length - 1,
-                "the trigger's Treasure still rides in the spell's half: " + record);
+        assertEquals(1, record.split("\"zone_change\"", -1).length - 1,
+                "the spell's own arrival, and not the trigger's Treasure: " + record);
+        assertTrue(record.contains("{\"type\":\"zone_change\",\"subjects\":[\"E"
+                + barbarian.getId() + "\"]"), "the one move is the Barbarian's: " + record);
     }
 
     /** A mode of some other resolution cannot cut the open bracket. */
     @Test
     void anotherCharmsModeDoesNotCutTheOpenBracket() throws Throwable {
-        Game game = twoPlayerGame();
+        Game game = TestBoard.twoPlayerGame(PhaseType.MAIN1);
         SpellAbility charm = charmOf(game, game.getPlayers().get(0), "Boros Charm");
         SpellAbility other = charmOf(game, game.getPlayers().get(1), "Boros Charm");
-        List<AbilitySub> otherClones = chain(other, 1);
+        List<AbilitySub> otherClones = TestBoard.chain(other, 1);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.withBracket(bracket);
+        List<String> records = ShardRun.records(tempDir, game, (bracket, collectors) -> {
             bracket.beginBracket(charm);
-            collectors.clauseHandler().invoke(null, resolving(), new Object[]{otherClones.get(0)});
-            assertEquals(0, bracket.modeHalvesOpen());
+            collectors.clauses().clauseHandler().invoke(null, resolving(), new Object[]{otherClones.get(0)});
             bracket.endBracket(charm.getId(), false);
-            bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+            bracket.onNextAction();
+        });
 
-        List<String> records = readShard(path);
         assertEquals(2, records.size(), records.toString());
         assertFalse(records.get(1).contains("\"option\""), records.get(1));
     }

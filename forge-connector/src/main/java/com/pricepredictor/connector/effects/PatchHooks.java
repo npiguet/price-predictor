@@ -5,6 +5,9 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Reaches the engine patch's hooks without linking against them.
@@ -31,6 +34,8 @@ public final class PatchHooks {
     static final String ABILITY_UTILS = "forge.game.ability.AbilityUtils";
     static final String EFFECT_RECORD_OUTCOMES = "forge.game.ability.EffectRecordOutcomes";
     static final String AI_CONTROLLER = "forge.ai.AiController";
+    static final String COMBAT_LEGALITY_OBSERVER =
+            "forge.game.combat.CombatLegalityObserver";
     static final String ABILITY_MANA_PART =
             "forge.game.spellability.AbilityManaPart";
     static final String CANT_ATTACK_BLOCK =
@@ -38,19 +43,82 @@ public final class PatchHooks {
     static final String CARD = "forge.game.card.Card";
     static final String COMBAT = "forge.game.combat.Combat";
     static final String PLAYER_CONTROLLER_AI = "forge.ai.PlayerControllerAi";
+    static final String EFFECT_RECORD_HOOK = "forge.game.ability.EffectRecordHook";
 
     /**
      * One method the engine patch adds, and what having it buys.
      *
-     * @param owner   the Forge class it is declared on
-     * @param method  its name, which is the whole contract — the collectors look
-     *                it up by string and a rename degrades a channel silently
-     * @param unlocks what stops working without it
+     * @param owner     the Forge class it is declared on
+     * @param method    its name, which is the whole contract — the collectors
+     *                  look it up by string and a rename degrades a channel
+     *                  silently
+     * @param unlocks   what stops working without it
+     * @param callbacks for a listener setter, the methods of the listener it
+     *                  takes, which are as much the contract as the setter's
+     *                  own name; empty for every other hook
      */
-    public record Hook(String owner, String method, String unlocks) {
+    public record Hook(String owner, String method, String unlocks, List<Callback> callbacks) {
+
+        /** A hook that takes no listener. */
+        Hook(String owner, String method, String unlocks) {
+            this(owner, method, unlocks, List.of());
+        }
 
         boolean present() {
-            return find(owner, method).present();
+            return lookUp().isPresent();
+        }
+
+        /** The method itself, found the way {@link PatchHooks#find} finds it. */
+        Optional<Method> lookUp() {
+            return find(owner, method);
+        }
+
+        /** Install a listener on this setter, or do nothing; see {@link PatchHooks#install}. */
+        boolean install(InvocationHandler handler) {
+            return PatchHooks.install(owner, method, handler);
+        }
+
+        /** Remove the listener this setter holds, or do nothing. */
+        void uninstall() {
+            PatchHooks.uninstall(owner, method);
+        }
+
+        /**
+         * A handler for this setter's listener, which hands {@code body} each
+         * of the {@link #callbacks} the engine makes.
+         *
+         * <p>Any other method the proxy is asked for, and a callback called
+         * with fewer arguments than its {@link Callback#arity}, answers null
+         * and does nothing, the way an absent hook would: a handler that
+         * threw instead would throw out of the engine's own call.
+         */
+        InvocationHandler listener(ListenerBody body) {
+            return (proxy, invoked, args) -> {
+                for (Callback callback : callbacks) {
+                    if (callback.methodName().equals(invoked.getName())) {
+                        if (args != null && args.length >= callback.arity()) {
+                            body.on(callback, new Args(args));
+                        }
+                        return null;
+                    }
+                }
+                return null;
+            };
+        }
+
+        /** Call this static method, or answer null; see {@link PatchHooks#invokeStatic}. */
+        Object invoke(Class<?>[] parameterTypes, Object... args) {
+            return invokeStatic(owner, method, parameterTypes, args);
+        }
+
+        /** Read this no-argument accessor off {@code target}, or answer null. */
+        Object read(Object target) {
+            return PatchHooks.read(target, method);
+        }
+
+        /** Call this one-{@code long}-argument accessor on {@code target}, or answer null. */
+        Object read(Object target, long argument) {
+            return PatchHooks.read(target, method, argument);
         }
 
         @Override
@@ -60,15 +128,88 @@ public final class PatchHooks {
     }
 
     /**
+     * One method of a listener interface the patch declares: the name the
+     * engine calls it by, and the arguments a handler needs before it acts.
+     *
+     * <p>The arity is a floor rather than the declared count. A revision that
+     * widened a listener appended its new arguments, and a worker still runs
+     * against an older jar, so a handler reads those through
+     * {@link Args#optional} and the shorter call still reaches it.
+     */
+    enum Callback {
+        ON_REPLACEMENT("onReplacement", 3),
+        ON_CONDITION_EVALUATED("onConditionEvaluated", 3),
+        ON_CANDIDATE("onCandidate", 1),
+        ON_ATTACKERS_DECLARABLE("onAttackersDeclarable", 4),
+        ON_BLOCKERS_DECLARABLE("onBlockersDeclarable", 5),
+        ON_CLAUSE_RESOLVING("onClauseResolving", 1),
+        ON_CLAUSE_RESOLVED("onClauseResolved", 1),
+        ON_MANA_PRODUCED("onManaProduced", 3),
+        ON_CONFIRM("onConfirm", 2),
+        ON_OUTCOME("onOutcome", 3);
+
+        private final String methodName;
+        private final int arity;
+
+        Callback(String methodName, int arity) {
+            this.methodName = methodName;
+            this.arity = arity;
+        }
+
+        String methodName() {
+            return methodName;
+        }
+
+        int arity() {
+            return arity;
+        }
+    }
+
+    /** What a listener does with one callback, once its arguments are there. */
+    @FunctionalInterface
+    interface ListenerBody {
+        void on(Callback callback, Args args);
+    }
+
+    /**
+     * One callback's arguments, read by position.
+     *
+     * <p>By position because nothing here compiles against the listener
+     * interface. A typed read answers null for a value of another type, the
+     * way an {@code instanceof} test does, so a drifted signature costs the
+     * argument rather than throwing out of the engine's call.
+     */
+    static final class Args {
+        private final Object[] values;
+
+        private Args(Object[] values) {
+            this.values = values;
+        }
+
+        /** The argument at {@code index}, which the callback's arity guarantees. */
+        Object get(int index) {
+            return values[index];
+        }
+
+        /** The argument at {@code index} if it is a {@code type}, or null. */
+        <T> T get(int index, Class<T> type) {
+            return type.isInstance(values[index]) ? type.cast(values[index]) : null;
+        }
+
+        /** An argument past the arity, or null where an older jar did not pass it. */
+        Object optional(int index) {
+            return index < values.length ? values[index] : null;
+        }
+    }
+
+    /**
      * Every hook the collectors need, and the specification of the patch.
      *
      * <p>This list is the patch's description. The patch itself is a branch in
      * the sibling checkout — {@code effect-record-hooks} in {@code ../forge} —
-     * because a branch is what git is for; keeping exported {@code .patch} files
-     * beside it meant maintaining a second copy of the same history by hand,
-     * and the two could disagree. What could not live in a branch is *why* each
-     * hook exists and what breaks without it, so that lives here, next to the
-     * code that reads them.
+     * and this repo keeps no exported copy of it, which could disagree with the
+     * branch. What a branch cannot hold is *why* each hook exists and what
+     * breaks without it, so that lives here, next to the code that reads them.
      *
      * <p>Reconstructing a lapsed patch starts here: each entry names the class,
      * the method, and the record channel it feeds.
@@ -86,53 +227,109 @@ public final class PatchHooks {
      * event; the setter's name did not change, so this list still reports the
      * hook present against either shape. What tells them apart at runtime is the
      * record: an older jar yields a {@code result} of null on every rewrite. The
-     * handlers therefore read the tail arguments by {@code args.length} rather
-     * than assuming them, because a partly-current patch must degrade the way an
+     * handlers therefore read the tail arguments through {@link Args#optional}
+     * rather than assuming them, because a partly-current patch must degrade the way an
      * absent one does instead of throwing inside a dynamic proxy.
      */
-    public static final List<Hook> REQUIRED = List.of(
-            new Hook(TRIGGER_HANDLER, "getEffectRecordCause",
-                    "cause attribution; this is the hook mode detection probes"),
-            new Hook(TRIGGER_HANDLER, "setEffectRecordTriggerListener",
-                    "trigger records, fired and not"),
-            new Hook(REPLACEMENT_HANDLER, "setEffectRecordListener",
-                    "rewrite records: the event a replacement received, what it "
-                    + "rewrote in place, which of the five ReplacementResults "
-                    + "it returned and which ability stood in for the event"),
-            new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
-                    "per-clause attribution: an event's attributed_to"),
-            new Hook(ABILITY_UTILS, "setEffectRecordClauseListener",
-                    "the events an effect API describes but the bus never announces"),
-            new Hook(AI_CONTROLLER, "setEffectRecordPlayabilityListener",
-                    "playability records, the decision subkind"),
-            new Hook(AI_CONTROLLER, "setEffectRecordCombatListener",
-                    "the playability record's attackers and blockers subkinds"),
-            new Hook(CANT_ATTACK_BLOCK, "cantAttackStatic",
-                    "each forbidden attacker's responsible_static"),
-            new Hook(CANT_ATTACK_BLOCK, "cantBlockByStatic",
-                    "each forbidden blocker's responsible_static"),
-            new Hook(ABILITY_MANA_PART, "setEffectRecordManaListener",
-                    "mana records, and with them the role-polarity probe"),
-            new Hook(CARD, "getChangedCardTypesByStatic",
-                    "a continuous contribution's types"),
-            new Hook(CARD, "getChangedCardColorsByStatic",
-                    "a continuous contribution's colors"),
-            new Hook(CARD, "getTypeWithout",
-                    "removing the acting static's types from a continuous snapshot"),
-            new Hook(CARD, "getColorWithout",
-                    "removing the acting static's colours from a continuous snapshot"),
-            new Hook(CARD, "getKeywordsWithout",
-                    "removing the acting static's keywords from a continuous snapshot"),
-            new Hook(CARD, "getChangedCardNames",
-                    "a continuous contribution's name"),
-            new Hook(COMBAT, "getAssignedDamage",
-                    "a combat record's assignment_choices"),
-            new Hook(PLAYER_CONTROLLER_AI, "setEffectRecordConfirmListener",
-                    "the declined outcome: an optional effect the controller "
-                    + "was offered and turned down"),
-            new Hook(EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
-                    "the outcomes an effect computes and discards: a coin's "
-                    + "result, a clash's winner, a vote's tally, a pile's size"));
+    public static final List<Hook> REQUIRED;
+
+    /** The resolving clause, and the hook mode detection probes. */
+    static final Hook SUB_ABILITY = new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
+            "per-clause attribution: an event's attributed_to; this is "
+            + "the hook mode detection probes");
+    static final Hook TRIGGER_LISTENER = new Hook(
+            TRIGGER_HANDLER, "setEffectRecordTriggerListener",
+            "trigger records, fired and not",
+            List.of(Callback.ON_CONDITION_EVALUATED));
+    static final Hook REPLACEMENT_LISTENER = new Hook(
+            REPLACEMENT_HANDLER, "setEffectRecordListener",
+            "rewrite records: the event a replacement received, what it "
+            + "rewrote in place, which of the five ReplacementResults "
+            + "it returned and which ability stood in for the event",
+            List.of(Callback.ON_REPLACEMENT));
+    static final Hook CLAUSE_LISTENER = new Hook(
+            ABILITY_UTILS, "setEffectRecordClauseListener",
+            "the events an effect API describes but the bus never announces",
+            List.of(Callback.ON_CLAUSE_RESOLVING, Callback.ON_CLAUSE_RESOLVED));
+    static final Hook PLAYABILITY_LISTENER = new Hook(
+            AI_CONTROLLER, "setEffectRecordPlayabilityListener",
+            "playability records, the decision subkind",
+            List.of(Callback.ON_CANDIDATE));
+    static final Hook COMBAT_LISTENER = new Hook(
+            COMBAT_LEGALITY_OBSERVER, "setEffectRecordCombatListener",
+            "the playability record's attackers and blockers subkinds",
+            List.of(Callback.ON_ATTACKERS_DECLARABLE, Callback.ON_BLOCKERS_DECLARABLE));
+    static final Hook CANT_ATTACK_STATIC = new Hook(CANT_ATTACK_BLOCK, "cantAttackStatic",
+            "each forbidden attacker's responsible_static");
+    static final Hook CANT_BLOCK_BY_STATIC = new Hook(CANT_ATTACK_BLOCK, "cantBlockByStatic",
+            "each forbidden blocker's responsible_static");
+    static final Hook MANA_LISTENER = new Hook(
+            ABILITY_MANA_PART, "setEffectRecordManaListener",
+            "mana records, and with them the role-polarity probe",
+            List.of(Callback.ON_MANA_PRODUCED));
+    static final Hook CHANGED_TYPES_BY_STATIC = new Hook(CARD, "getChangedCardTypesByStatic",
+            "a continuous contribution's types");
+    static final Hook CHANGED_COLORS_BY_STATIC = new Hook(CARD, "getChangedCardColorsByStatic",
+            "a continuous contribution's colors");
+    static final Hook TYPE_WITHOUT = new Hook(CARD, "getTypeWithout",
+            "removing the acting static's types from a continuous snapshot");
+    static final Hook COLOR_WITHOUT = new Hook(CARD, "getColorWithout",
+            "removing the acting static's colours from a continuous snapshot");
+    static final Hook KEYWORDS_WITHOUT = new Hook(CARD, "getKeywordsWithout",
+            "removing the acting static's keywords from a continuous snapshot");
+    static final Hook CHANGED_NAMES = new Hook(CARD, "getChangedCardNames",
+            "a continuous contribution's name");
+    static final Hook ASSIGNED_DAMAGE = new Hook(COMBAT, "getAssignedDamage",
+            "a combat record's assignment_choices");
+    static final Hook CONFIRM_LISTENER = new Hook(
+            PLAYER_CONTROLLER_AI, "setEffectRecordConfirmListener",
+            "the declined outcome: an optional effect the controller "
+            + "was offered and turned down",
+            List.of(Callback.ON_CONFIRM));
+    static final Hook OUTCOME_LISTENER = new Hook(
+            EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
+            "the outcomes an effect computes and discards: a coin's "
+            + "result, a clash's winner, a vote's tally, a pile's size",
+            List.of(Callback.ON_OUTCOME));
+
+    /**
+     * The components of the two layer records {@link #CHANGED_COLORS_BY_STATIC}
+     * and {@link #CHANGED_NAMES} hand out.
+     *
+     * <p>Not in {@link #REQUIRED}, because a lookup cannot tell them from stock
+     * Forge's: the records exist there too, private, and a record's accessors
+     * are public whatever the record's own access, so {@link #find} would
+     * report them present on a checkout where reading them fails. What the
+     * patch changes is the records' visibility, and the two accessors that
+     * return them are what imply it.
+     */
+    static final Hook COLOR_CHANGE_ADDITIONAL = new Hook(CARD + "$CardColor", "additional",
+            "whether a continuous contribution adds its colours or sets them");
+    static final Hook COLOR_CHANGE_COLORS = new Hook(CARD + "$CardColor", "color",
+            "a continuous contribution's colours");
+    static final Hook NAME_CHANGE_NAME = new Hook(CARD + "$CardChangedName", "newName",
+            "a continuous contribution's name");
+
+    static {
+        REQUIRED = List.of(
+                SUB_ABILITY, TRIGGER_LISTENER, REPLACEMENT_LISTENER, CLAUSE_LISTENER,
+                PLAYABILITY_LISTENER, COMBAT_LISTENER, CANT_ATTACK_STATIC,
+                CANT_BLOCK_BY_STATIC, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
+                CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
+                CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER);
+    }
+
+    /**
+     * The hooks whose listener has thrown in this JVM, which the engine has
+     * since been ignoring: each slot reports its first failure once on
+     * stderr and carries on, so a channel can go quiet mid-run. Empty on an
+     * unpatched checkout.
+     */
+    @SuppressWarnings("unchecked")
+    public static List<String> silencedHooks() {
+        Object failed = readStatic(EFFECT_RECORD_HOOK, "failedHooks");
+        return failed instanceof List<?> names ? (List<String>) names : List.of();
+    }
 
     /** The required hooks this checkout does not have. */
     public static List<Hook> missing() {
@@ -166,41 +363,50 @@ public final class PatchHooks {
         return out.toString();
     }
 
-    /** What a hook lookup produced, or why it did not. */
-    public record Lookup(Class<?> owner, Method method) {
-
-        public boolean present() {
-            return method != null;
-        }
-
-        static Lookup absent() {
-            return new Lookup(null, null);
-        }
+    /** A static method's owner and name, the key {@link #find} looks up by. */
+    private record Named(String owner, String method) {
     }
 
-    /** Find a static method by owner and name, or report it absent. */
-    public static Lookup find(String className, String methodName) {
+    /**
+     * Every lookup made so far, absent ones included, by owner and name.
+     *
+     * <p>The classpath is fixed for the life of the JVM, so an answer never
+     * changes, and the sub-ability pointer is read through here for every
+     * event the collectors stamp.
+     */
+    private static final Map<Named, Optional<Method>> LOOKUPS = new ConcurrentHashMap<>();
+
+    /**
+     * Find a public static method by owner and name, or report it absent.
+     *
+     * <p>By name alone, the first match of any arity: the setters and the
+     * pointer the patch adds have no overload to be confused with.
+     */
+    public static Optional<Method> find(String className, String methodName) {
+        return LOOKUPS.computeIfAbsent(new Named(className, methodName), PatchHooks::lookUp);
+    }
+
+    private static Optional<Method> lookUp(Named named) {
         try {
-            Class<?> owner = Class.forName(className);
-            for (Method method : owner.getMethods()) {
-                if (method.getName().equals(methodName)) {
-                    return new Lookup(owner, method);
+            for (Method method : Class.forName(named.owner()).getMethods()) {
+                if (method.getName().equals(named.method())) {
+                    return Optional.of(method);
                 }
             }
         } catch (ClassNotFoundException | LinkageError ignored) {
             // An unpatched checkout, or a Forge upgrade that moved the class.
         }
-        return Lookup.absent();
+        return Optional.empty();
     }
 
     /** Read a no-argument static getter, or null when the hook is absent. */
     public static Object readStatic(String className, String methodName) {
-        Lookup lookup = find(className, methodName);
-        if (!lookup.present()) {
+        Optional<Method> getter = find(className, methodName);
+        if (getter.isEmpty()) {
             return null;
         }
         try {
-            return lookup.method().invoke(null);
+            return getter.get().invoke(null);
         } catch (ReflectiveOperationException | RuntimeException e) {
             return null;
         }
@@ -217,11 +423,11 @@ public final class PatchHooks {
      */
     public static boolean install(
             String className, String setterName, InvocationHandler handler) {
-        Lookup lookup = find(className, setterName);
-        if (!lookup.present() || lookup.method().getParameterCount() != 1) {
+        Optional<Method> setter = find(className, setterName);
+        if (setter.isEmpty() || setter.get().getParameterCount() != 1) {
             return false;
         }
-        Class<?> listenerType = lookup.method().getParameterTypes()[0];
+        Class<?> listenerType = setter.get().getParameterTypes()[0];
         if (!listenerType.isInterface()) {
             return false;
         }
@@ -230,7 +436,7 @@ public final class PatchHooks {
                 new Class<?>[]{listenerType},
                 handler);
         try {
-            lookup.method().invoke(null, proxy);
+            setter.get().invoke(null, proxy);
             return true;
         } catch (ReflectiveOperationException | RuntimeException e) {
             return false;
@@ -239,12 +445,12 @@ public final class PatchHooks {
 
     /** Remove a listener the same way it was installed. */
     public static void uninstall(String className, String setterName) {
-        Lookup lookup = find(className, setterName);
-        if (!lookup.present()) {
+        Optional<Method> setter = find(className, setterName);
+        if (setter.isEmpty()) {
             return;
         }
         try {
-            lookup.method().invoke(null, new Object[]{null});
+            setter.get().invoke(null, new Object[]{null});
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Nothing to undo on an unpatched checkout.
         }
@@ -260,13 +466,72 @@ public final class PatchHooks {
     public static Object invokeStatic(
             String className, String methodName, Class<?>[] parameterTypes,
             Object... args) {
-        try {
-            Method method = Class.forName(className)
-                    .getMethod(methodName, parameterTypes);
-            return method.invoke(null, args);
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+        Optional<Method> method = STATIC_OVERLOADS.computeIfAbsent(
+                new Overload(className, methodName, List.of(parameterTypes)),
+                PatchHooks::staticOverload);
+        if (method.isEmpty()) {
             return null;
         }
+        try {
+            return method.get().invoke(null, args);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** A static method's owner, name and exact parameter types. */
+    private record Overload(String owner, String method, List<Class<?>> parameterTypes) {
+    }
+
+    /** {@link #invokeStatic}'s lookups, absent ones included. */
+    private static final Map<Overload, Optional<Method>> STATIC_OVERLOADS =
+            new ConcurrentHashMap<>();
+
+    private static Optional<Method> staticOverload(Overload overload) {
+        try {
+            return Optional.of(Class.forName(overload.owner()).getMethod(
+                    overload.method(), overload.parameterTypes().toArray(Class<?>[]::new)));
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** An instance method's name and exact parameter types. */
+    private record Shape(String method, List<Class<?>> parameterTypes) {
+    }
+
+    /** {@link #read}'s two parameter lists, built once rather than per entity. */
+    private static final List<Class<?>> NO_ARGUMENT = List.of();
+    private static final List<Class<?>> ONE_LONG = List.of(long.class);
+
+    /**
+     * Public methods by receiver class, absent ones included, keyed by name
+     * and parameter types.
+     *
+     * <p>A class's methods never change, and {@link #read} runs for every
+     * entity of every snapshot. A {@link ClassValue} rather than a map keyed
+     * by class, so the cache never keeps a receiver class or its loader alive.
+     */
+    private static final ClassValue<Map<Shape, Optional<Method>>> INSTANCE_METHODS =
+            new ClassValue<>() {
+                @Override
+                protected Map<Shape, Optional<Method>> computeValue(Class<?> type) {
+                    return new ConcurrentHashMap<>();
+                }
+            };
+
+    /** A public method of {@code type}, or empty when it has none of that shape. */
+    private static Optional<Method> instanceMethod(
+            Class<?> type, String methodName, List<Class<?>> parameterTypes) {
+        return INSTANCE_METHODS.get(type).computeIfAbsent(
+                new Shape(methodName, parameterTypes), shape -> {
+                    try {
+                        return Optional.of(type.getMethod(
+                                shape.method(), shape.parameterTypes().toArray(Class<?>[]::new)));
+                    } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+                        return Optional.empty();
+                    }
+                });
     }
 
     /**
@@ -282,8 +547,12 @@ public final class PatchHooks {
         if (target == null) {
             return null;
         }
+        Optional<Method> method = instanceMethod(target.getClass(), methodName, NO_ARGUMENT);
+        if (method.isEmpty()) {
+            return null;
+        }
         try {
-            return target.getClass().getMethod(methodName).invoke(target);
+            return method.get().invoke(target);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
             return null;
         }
@@ -294,32 +563,19 @@ public final class PatchHooks {
         if (target == null) {
             return null;
         }
+        Optional<Method> method = instanceMethod(target.getClass(), methodName, ONE_LONG);
+        if (method.isEmpty()) {
+            return null;
+        }
         try {
-            return target.getClass()
-                    .getMethod(methodName, long.class)
-                    .invoke(target, argument);
+            return method.get().invoke(target, argument);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
             return null;
         }
     }
 
-    /** Whether every named no-argument-or-long method is present on a class. */
-    public static boolean present(String className, String... methodNames) {
-        for (String methodName : methodNames) {
-            if (!find(className, methodName).present()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** The trigger currently running, when the cause hook is present. */
-    public static Object currentTriggerCause() {
-        return readStatic(TRIGGER_HANDLER, "getEffectRecordCause");
-    }
-
     /** The sub-ability currently resolving, when the pointer hook is present. */
     public static Object currentSubAbility() {
-        return readStatic(ABILITY_UTILS, "getEffectRecordSubAbility");
+        return readStatic(SUB_ABILITY.owner(), SUB_ABILITY.method());
     }
 }

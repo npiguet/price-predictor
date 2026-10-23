@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import java.text.Normalizer;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Card name to on-disk filename, mirroring the Python
@@ -15,7 +16,7 @@ import java.util.Locale;
  * Python suite uses.
  *
  * <p>This is the <b>fallback</b>, not the primary route. Forge's folder loader
- * records the file it read each card from, so {@link ProvenanceKey} asks
+ * records the file it read each card from, so {@link ScriptLocator} asks
  * {@code CardRules.getPath()} first and then its file stem in
  * {@code CardRules.getNormalizedName()} — Forge's filenames disagree with its
  * card names often enough that a sanitizer alone loses cards. The sanitizer
@@ -33,6 +34,9 @@ public final class CardFilenames {
     /** Alchemy/Arena rebalanced cards live in this directory rather than a letter one. */
     public static final String REBALANCED_DIR = "rebalanced";
 
+    private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}+");
+    private static final Pattern UNDERSCORE_RUN = Pattern.compile("_+");
+
     /**
      * The filename stem for a card name, without extension or directory.
      *
@@ -42,8 +46,8 @@ public final class CardFilenames {
      * Forge's own filename convention.
      */
     public static String sanitize(String name) {
-        String ascii = Normalizer.normalize(name, Normalizer.Form.NFKD)
-                .replaceAll("\\p{M}+", "");
+        String ascii = COMBINING_MARKS.matcher(
+                Normalizer.normalize(name, Normalizer.Form.NFKD)).replaceAll("");
         String sanitized = ascii.toLowerCase(Locale.ROOT)
                 .replace(" // ", "_")
                 .replace(" ", "_")
@@ -57,7 +61,7 @@ public final class CardFilenames {
                 .replace(".", "")
                 .replace("-", "_")
                 .replace("/", "");
-        sanitized = sanitized.replaceAll("_+", "_");
+        sanitized = UNDERSCORE_RUN.matcher(sanitized).replaceAll("_");
         return trimUnderscores(sanitized);
     }
 
@@ -85,7 +89,7 @@ public final class CardFilenames {
      *
      * <p>{@link SourceTree} is asked first for a letter-keyed tree, because the
      * tree is the authority on where it files a card and the initial is only a
-     * convention it keeps 99.7% of the time. Derivation answers for the rest —
+     * convention it keeps for nearly every card. Derivation answers for the rest —
      * a stem the tree does not hold at all still has to name something.
      */
     public static String scriptFileForStem(String tree, String stem) {

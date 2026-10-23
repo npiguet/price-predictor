@@ -129,35 +129,33 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
         List<Ability> result = new ArrayList<>();
         forge.game.card.Card host = sa.getHostCard();
         if (host == null) return result;
-
-        // Triggers$ param: extract TriggerDescription from each trigger SVar
-        String triggers = sa.getParam("Triggers");
-        if (triggers != null && !triggers.isEmpty()) {
-            for (String name : triggers.split(",")) {
-                String svarText = host.getSVar(name.trim());
-                if (svarText == null || svarText.isEmpty()) continue;
-                // Skip trigger SVars that fire from a specific zone (TriggerZones$): these are
-                // also registered as top-level triggers and would duplicate the triggered ability.
-                if (svarText.contains("TriggerZones$")) continue;
-                String desc = extractParam(svarText, "TriggerDescription");
-                if (desc != null && !isRedundantDescription(desc, parentDesc)) {
-                    result.add(new SpellEffect(desc, List.of()));
-                }
-            }
-        }
-        // ReplacementEffects$ param: extract Description from each replacement SVar
-        String replacements = sa.getParam("ReplacementEffects");
-        if (replacements != null && !replacements.isEmpty()) {
-            for (String name : replacements.split(",")) {
-                String svarText = host.getSVar(name.trim());
-                if (svarText == null || svarText.isEmpty()) continue;
-                String desc = extractParam(svarText, "Description");
-                if (desc != null && !isRedundantDescription(desc, parentDesc)) {
-                    result.add(new SpellEffect(desc, List.of()));
-                }
-            }
-        }
+        // Trigger SVars that fire from a specific zone (TriggerZones$) are also registered
+        // as top-level triggers and would duplicate the triggered ability.
+        addSVarDescriptions(host, sa.getParam("Triggers"), "TriggerDescription",
+                "TriggerZones$", parentDesc, result);
+        addSVarDescriptions(host, sa.getParam("ReplacementEffects"), "Description",
+                null, parentDesc, result);
         return result;
+    }
+
+    /**
+     * One SpellEffect per SVar named in {@code svarNames} (comma-separated), from its
+     * {@code descParam} value, skipping SVars containing {@code skipMarker} and
+     * descriptions redundant with {@code parentDesc}.
+     */
+    private static void addSVarDescriptions(forge.game.card.Card host, String svarNames,
+                                            String descParam, String skipMarker,
+                                            String parentDesc, List<Ability> result) {
+        if (svarNames == null || svarNames.isEmpty()) return;
+        for (String name : svarNames.split(",")) {
+            String svarText = host.getSVar(name.trim());
+            if (svarText == null || svarText.isEmpty()) continue;
+            if (skipMarker != null && svarText.contains(skipMarker)) continue;
+            String desc = extractParam(svarText, descParam);
+            if (desc != null && !isRedundantDescription(desc, parentDesc)) {
+                result.add(new SpellEffect(desc, List.of()));
+            }
+        }
     }
 
     /**
@@ -186,21 +184,11 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
     }
 
     /**
-     * Parse a "Key$ value | ..." SVar text and extract the value for the given key.
-     * Strips reminder text, normalizes casing; returns null if absent or empty.
+     * The normalized value of {@code paramName} in a "Key$ value | ..." SVar
+     * text, or null if absent or empty.
      */
     private static String extractParam(String svarText, String paramName) {
-        String key = paramName + "$ ";
-        int idx = svarText.indexOf(key);
-        if (idx < 0) return null;
-        int start = idx + key.length();
-        int end = svarText.indexOf(" |", start);
-        String raw = end >= 0 ? svarText.substring(start, end).trim() : svarText.substring(start).trim();
-        if (raw.isEmpty()) return null;
-        String stripped = AbilityDescription.stripReminderText(raw);
-        String normalized = AbilityDescription.normalize(stripped);
-        if (normalized == null || normalized.isEmpty()) return null;
-        return AbilityDescription.applyCasing(normalized);
+        return AbilityDescription.normalize(SpellAbilityUtils.svarParam(svarText, paramName));
     }
 
 }

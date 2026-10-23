@@ -164,6 +164,18 @@ class TestKeywordExpansion:
         expanded = tokenizer.expand_keywords(tokens, probability=1.0)
         assert [t.text for t in expanded][:3] == ["cant", "be", "blocked"]
 
+    def test_a_forced_keyword_expands_at_probability_zero(self, tokenizer):
+        """``--withhold-keyword``: the model reads the definition, never the token."""
+        tokens = tokenizer.tokenize("flying")
+        expanded = tokenizer.expand_keywords(tokens, forced=frozenset({"flying"}))
+        assert [t.text for t in expanded][:3] == ["cant", "be", "blocked"]
+        assert all(t.expanded_from == "flying" for t in expanded)
+
+    def test_forcing_one_keyword_leaves_the_others_alone(self, tokenizer):
+        tokens = tokenizer.tokenize("flying")
+        kept = tokenizer.expand_keywords(tokens, forced=frozenset({"vigilance"}))
+        assert [t.text for t in kept] == ["flying"]
+
     def test_an_unknown_keyword_always_expands(self, tokenizer):
         """Forced expansion is what makes a set the vocabulary predates readable."""
         unknown = AbilityTokenizer(_vocab(), _definitions())
@@ -306,7 +318,9 @@ class TestTokenizeCache:
         assert second[-1].text != "extra"
         assert len(second) == 3
 
-    def test_role_spans_bypass_the_cache(self, tokenizer, monkeypatch):
+    def test_the_cache_keys_on_the_spans_as_well_as_the_text(self, tokenizer, monkeypatch):
+        """The prose surface tokenizes with spans on every step (FR-069), so
+        they are cached too, and never mistaken for another span set's."""
         calls = []
         original = AbilityTokenizer._split_with_offsets
 
@@ -315,15 +329,17 @@ class TestTokenizeCache:
             return original(self, text)
 
         monkeypatch.setattr(AbilityTokenizer, "_split_with_offsets", counting)
+        spans = (RoleSpan(0, 4, "cost"),)
 
         tokenizer.tokenize("draw a card")
         tokenizer.tokenize("draw a card")
         assert calls == ["draw a card"]
 
-        tokenizer.tokenize("draw a card", (RoleSpan(0, 4, "cost"),))
+        assert tokenizer.tokenize("draw a card", spans)[0].role == "cost"
+        assert tokenizer.tokenize("draw a card", spans)[0].role == "cost"
         assert calls == ["draw a card", "draw a card"]
 
-        tokenizer.tokenize("draw a card")
+        assert tokenizer.tokenize("draw a card")[0].role is None
         assert calls == ["draw a card", "draw a card"]
 
     def test_the_cache_is_capped(self, tokenizer, monkeypatch):
@@ -589,6 +605,14 @@ class TestKeywordLines:
         assert texts[-5:] == ["that", "player", "pays", "{2}", "."]
         assert "%" not in texts
         assert texts.count("ward") == 0
+        assert all(t.expanded_from == "ward" for t in expanded)
+
+    def test_a_forced_keyword_line_expands_whole_at_probability_zero(self):
+        tokenizer = _open_tokenizer()
+        expanded = tokenizer.expand_keywords(
+            tokenizer.tokenize("Ward:2"), forced=frozenset({"ward"}),
+        )
+        assert [t.text for t in expanded][-5:] == ["that", "player", "pays", "{2}", "."]
         assert all(t.expanded_from == "ward" for t in expanded)
 
     def test_a_known_keyword_line_stays_tokens_at_inference(self):

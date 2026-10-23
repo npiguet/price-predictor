@@ -32,45 +32,21 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
                     title = reminder;
                 }
             }
-            if (kw == Keyword.KICKER) {
-                String[] kickerParts = ki.getOriginal().split(":", 3);
-                if (kickerParts.length >= 3) {
-                    Cost cost2 = new Cost(kickerParts[2], false);
-                    title = title + " and/or " + cost2.toSimpleString();
-                }
-            }
-            if (kw == Keyword.AFFINITY && ki instanceof KeywordWithTypeInterface kti) {
-                title = "Affinity for " + kti.getTypeDescription();
-            }
-            if (kw == Keyword.CRAFT) {
-                title = buildCraftTitle(ki.getOriginal());
-            }
-            if (kw == Keyword.PROTECTION) {
-                // getOriginal() returns the raw script keyword, e.g.:
-                //   "Protection:Creature"         (simple type)
-                //   "Protection:Card.MultiColor:multicolored"  (filter with description)
-                // Build "Protection from <target>" from it.
-                // Color-based protection ("K:Protection from white") already has the
-                // correct format in getOriginal(), so no special-casing needed there.
-                String original = ki.getOriginal();
-                int firstColon = original.indexOf(':');
-                if (firstColon >= 0) {
-                    String details = original.substring(firstColon + 1);
-                    // If the details contain a second colon, the text after it is the
-                    // human-readable target (e.g. "Card.MultiColor:multicolored" → "multicolored").
-                    int innerColon = details.indexOf(':');
-                    if (innerColon >= 0) {
-                        details = details.substring(innerColon + 1);
+            switch (kw) {
+                case KICKER -> {
+                    String secondCost = new KeywordSpec(ki.getOriginal()).rest(2);
+                    if (secondCost != null) {
+                        title = title + " and/or " + new Cost(secondCost, false).toSimpleString();
                     }
-                    title = "Protection from " + details.toLowerCase();
-                } else {
-                    // The colon-free form ("K:Protection from white") is already oracle
-                    // text, so getOriginal() is the answer. getTitle() is not: Forge
-                    // splits the script line on its first space, leaving "from white" as
-                    // the type description, and Protection.getTitle() then prepends
-                    // "Protection from " to produce "Protection from from white".
-                    title = original;
                 }
+                case AFFINITY -> {
+                    if (ki instanceof KeywordWithTypeInterface kti) {
+                        title = "Affinity for " + kti.getTypeDescription();
+                    }
+                }
+                case CRAFT -> title = buildCraftTitle(ki.getOriginal());
+                case PROTECTION -> title = protectionTitle(ki.getOriginal());
+                default -> { }
             }
         }
 
@@ -81,6 +57,24 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
 
         AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
         return new StandardKeyword(kwType, AbilityDescription.applyCasing(title));
+    }
+
+    /**
+     * "Protection from &lt;target&gt;", built from the raw script keyword.
+     *
+     * <p>{@code Protection:Creature} names its target directly, and
+     * {@code Protection:Card.MultiColor:multicolored} gives it after a filter,
+     * as the human-readable text after the second colon. The colon-free form
+     * ({@code Protection from white}) is already oracle text, so the original
+     * is the answer. The keyword's title is not: Forge splits the script line
+     * on its first space, leaving "from white" as the type description, and
+     * Protection.getTitle() then prepends "Protection from " to produce
+     * "Protection from from white".
+     */
+    private static String protectionTitle(String original) {
+        KeywordSpec spec = new KeywordSpec(original);
+        String target = spec.size() > 2 ? spec.rest(2) : spec.rest(1);
+        return target == null ? original : "Protection from " + target.toLowerCase();
     }
 
     /**
@@ -95,10 +89,11 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      *   - Simple type: extract first word of TYPE from ExileCtrlOrGrave<N/TYPE.suffix>
      */
     private static String buildCraftTitle(String original) {
-        String[] parts = original.split(":", 4);
-        if (parts.length < 2) return original;
+        KeywordSpec spec = new KeywordSpec(original);
+        if (spec.size() < 2) return original;
 
-        String costPart = parts[1];
+        String costPart = spec.part(1);
+        String explicitType = spec.part(2);
 
         // Mana: strip all ExileCtrlOrGrave<…> specs and XMin\d+ constraint tokens
         String mana = costPart
@@ -109,9 +104,9 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
 
         // Type description (three sub-patterns)
         String typeDesc;
-        if (parts.length >= 3 && !parts[2].isEmpty()) {
+        if (explicitType != null && !explicitType.isEmpty()) {
             // Explicit human-readable description in k[2] (Throne of Grim Captain, Eye of Ojer Taq)
-            typeDesc = parts[2];
+            typeDesc = explicitType;
         } else if (costPart.contains("XMin")) {
             // Variable-count exile (Sunbird Standard): "one or more"
             typeDesc = "one or more";
@@ -142,8 +137,8 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      * Pattern B (Specialize): "Specialize:cost::full sentence.:ReduceCost$ SVar"
      *   → uses the full sentence from parts[3] directly
      *
-     * (Adapt and Monstrosity were removed from the {@link Keyword} enum in
-     * recent Forge revisions, so their pattern is no longer reachable.)
+     * (Adapt and Monstrosity are not members of the {@link Keyword} enum, so
+     * no pattern covers them.)
      */
     private static String extractReduceCostDescription(Keyword kw, String original) {
         if (original == null) return null;
@@ -161,9 +156,9 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
 
         // Pattern B: Specialize — full description is in parts[3], ReduceCost$ marker in parts[4]
         if (kw == Keyword.SPECIALIZE) {
-            String[] parts = original.split(":", 5);
-            if (parts.length >= 5 && original.contains("ReduceCost$") && !parts[3].isEmpty()) {
-                return parts[3];
+            KeywordSpec spec = new KeywordSpec(original);
+            if (spec.size() >= 5 && original.contains("ReduceCost$") && !spec.part(3).isEmpty()) {
+                return spec.part(3);
             }
         }
 

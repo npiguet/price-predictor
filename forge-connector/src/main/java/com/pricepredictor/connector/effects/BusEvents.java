@@ -58,7 +58,7 @@ final class BusEvents {
      * cause an event ends up carrying is a decision about precedence — the
      * source the bus named beats the ability whose bracket the event landed in
      * — and this class deliberately holds no opinion about brackets. The
-     * collector combines the two; see {@code BusBracketCollector.record}.
+     * collector combines the two; see {@code BusBracketCollector.fileOutcome}.
      */
     static String causeOf(GameEventCardDamaged event) {
         return cardRef(event.source());
@@ -94,36 +94,36 @@ final class BusEvents {
     }
 
     private static String cardRef(CardView view) {
-        return view == null ? null : "E" + view.getId();
+        return view == null ? null : Refs.of(view);
     }
 
     private static String playerRef(PlayerView view) {
-        return view == null ? null : "P" + view.getId();
+        return view == null ? null : Refs.of(view);
     }
 
     static EffectEvent cardDamaged(GameEventCardDamaged event, boolean combat) {
         return new EffectEvent(EffectEvent.DAMAGE_DEALT)
-                .subject("E" + event.card().getId())
+                .subject(Refs.of(event.card()))
                 .param("amount", event.amount())
                 .param("combat", combat);
     }
 
     static EffectEvent playerDamaged(GameEventPlayerDamaged event) {
         return new EffectEvent(EffectEvent.DAMAGE_DEALT)
-                .subject("P" + event.target().getId())
+                .subject(Refs.of(event.target()))
                 .param("amount", event.amount())
                 .param("combat", event.combat());
     }
 
     static EffectEvent lifeChanged(GameEventPlayerLivesChanged event) {
         return new EffectEvent(EffectEvent.LIFE_CHANGE)
-                .subject("P" + event.player().getId())
+                .subject(Refs.of(event.player()))
                 .param("delta", event.newLives() - event.oldLives());
     }
 
     static EffectEvent poisoned(GameEventPlayerPoisoned event) {
         return new EffectEvent(EffectEvent.POISON_CHANGE)
-                .subject("P" + event.receiver().getId())
+                .subject(Refs.of(event.receiver()))
                 .param("delta", event.amount());
     }
 
@@ -159,19 +159,19 @@ final class BusEvents {
             return null;
         }
         return new EffectEvent(EffectEvent.ENERGY_CHANGE)
-                .subject("P" + event.receiver().getId())
+                .subject(Refs.of(event.receiver()))
                 .param("delta", event.amount() - event.oldValue());
     }
 
     static EffectEvent radiation(GameEventPlayerRadiation event) {
         return new EffectEvent(EffectEvent.RADIATION_CHANGE)
-                .subject("P" + event.receiver().getId())
+                .subject(Refs.of(event.receiver()))
                 .param("delta", event.change());
     }
 
     static EffectEvent speed(GameEventSpeedChanged event) {
         return new EffectEvent(EffectEvent.SPEED_CHANGED)
-                .subject("P" + event.player().getId())
+                .subject(Refs.of(event.player()))
                 .param("delta", event.newValue() - event.oldValue());
     }
 
@@ -184,14 +184,12 @@ final class BusEvents {
     /**
      * A regeneration shield doing its job: heal, tap, remove from combat.
      *
-     * <p>Read off the bus rather than through the mode table {@code
-     * describeParams} consults, because that table's {@code "Regenerated"}
-     * entry names no real Forge mode — {@code TriggerType} and {@code
-     * ReplacementType} spell regeneration's own trigger and replacement modes
-     * differently, so the entry can never match at runtime. It is a dead
-     * reference, the same shape as the original {@code damage_prevented} /
-     * {@code spell_copied} finding, not a live path serving a different
-     * purpose. {@code RegenerationEffect.resolve()} (fire site: {@code
+     * <p>Read off the bus rather than through the run-parameter mode table
+     * ({@code RunParamNormalizer}), which has no entry for it: {@code
+     * TriggerType} and {@code ReplacementType} spell regeneration's own
+     * trigger and replacement modes differently, and no mode a hook reports
+     * is the regeneration itself. {@code RegenerationEffect.resolve()}
+     * (fire site: {@code
      * RegenerationEffect.java:49}, the only one in the engine) publishes this
      * once per card actually regenerated.
      *
@@ -229,9 +227,8 @@ final class BusEvents {
      * winningPlayerName} -- a {@code LobbyPlayer}'s display name, not a ref --
      * so it is matched back against {@code game.getPlayers()} here rather than
      * carried through as a name: every other subject on this branch is an
-     * entity or player ref, and Task 7 shipped {@code damage_prevented.source}
-     * as a display name once, which silently dropped every row a reader joined
-     * to {@code state.entities}.
+     * entity or player ref, and a display name in a ref's place silently drops
+     * every row a reader joins to {@code state.entities}.
      *
      * <p>Null on a draw: {@code winningPlayerName} is null whenever {@code
      * GameOutcome.getWinningLobbyPlayer()} is, and a {@code player_won} with no
@@ -243,8 +240,9 @@ final class BusEvents {
      * Forge's own outcome names no separate cause of the win.
      *
      * <p>Two players sharing a lobby name is not a shape this connector's own
-     * worker setup produces -- {@code GamePlayer.LOBBY_NAME_A}/{@code _B} are
-     * always distinct strings -- but nothing enforces that in general, so a
+     * worker setup produces -- the two seats' lobby names ({@code
+     * Side.lobbyName()}) are always distinct strings -- but nothing enforces
+     * that in general, so a
      * collision is broken by taking the first match in {@code
      * game.getPlayers()}'s own order rather than guessing further.
      */
@@ -265,7 +263,7 @@ final class BusEvents {
 
     static EffectEvent counters(GameEventCardCounters event) {
         return new EffectEvent(EffectEvent.COUNTER_CHANGE)
-                .subject("E" + event.card().getId())
+                .subject(Refs.of(event.card()))
                 .param("counter_type", event.type().getName().toUpperCase(Locale.ROOT))
                 .param("delta", event.newValue() - event.oldValue());
     }
@@ -273,23 +271,21 @@ final class BusEvents {
     static EffectEvent tapped(GameEventCardTapped event) {
         return new EffectEvent(
                 event.tapped() ? EffectEvent.TAPPED : EffectEvent.UNTAPPED)
-                .subject("E" + event.card().getId());
+                .subject(Refs.of(event.card()));
     }
 
     /**
      * One completed move, with both ends of it.
      *
      * <p>Read from {@code GameEventCardChangeZone}, which fires once per move
-     * and carries the zone the card left as well as the one it reached. It
-     * replaces the per-zone-list notification {@code GameEventZone}, which is
+     * and carries the zone the card left as well as the one it reached, rather
+     * than from the per-zone-list notification {@code GameEventZone}, which is
      * not a move at all: {@code Zone.remove} publishes one for the zone the
      * card left, {@code Zone.add} another for the zone it reached and
-     * {@code MagicStack} a third for the stack, so one cast rendered three
-     * events of which the first named a destination the card never reached and
-     * the third repeated the second verbatim. That triple fire is where every
-     * exact-duplicate event measured in a record came from, and reading the
-     * move instead is the only way {@code from_zone} — a documented parameter
-     * of the event type that nothing had ever written — gets filled at all.
+     * {@code MagicStack} a third for the stack, so one cast would render three
+     * events, the first naming a destination the card never reached and the
+     * third repeating the second verbatim. Reading the move is also the only
+     * way {@code from_zone} gets filled at all.
      *
      * <p>Null when neither end is known, which is a move this collector has
      * nothing to say about rather than a move to nowhere.
@@ -299,10 +295,9 @@ final class BusEvents {
      * with the costs that were paid. Filed as an outcome it is worse than
      * redundant: it lands in whichever bracket happens to be open, so an
      * opponent's instant cast in response reads as something the resolving
-     * ability did. It was 54% of the whole zone_change channel. A move
-     * <i>off</i> the stack is kept, because that one is an outcome — the
-     * permanent arriving, or the spell going to the graveyard — and now says
-     * {@code from_zone=stack} where before it said nothing.
+     * ability did. A move <i>off</i> the stack is kept, because that one is an
+     * outcome — the permanent arriving, or the spell going to the graveyard —
+     * and says {@code from_zone=stack}.
      */
     static EffectEvent cardMoved(GameEventCardChangeZone event) {
         if (event.card() == null) {
@@ -317,7 +312,7 @@ final class BusEvents {
             return null;
         }
         return new EffectEvent(EffectEvent.ZONE_CHANGE)
-                .subject("E" + event.card().getId())
+                .subject(Refs.of(event.card()))
                 .param("from_zone", from)
                 .param("to_zone", to);
     }
@@ -364,7 +359,7 @@ final class BusEvents {
             return null;
         }
         return new EffectEvent(type)
-                .subject("P" + event.card().getOwner().getId())
+                .subject(Refs.of(event.card().getOwner()))
                 .param("count", 1);
     }
 
@@ -376,7 +371,7 @@ final class BusEvents {
         boolean attaching = event.newTarget() != null;
         return new EffectEvent(
                 attaching ? EffectEvent.ATTACHED : EffectEvent.UNATTACHED)
-                .subject("E" + event.equipment().getId());
+                .subject(Refs.of(event.equipment()));
     }
 
     /**
@@ -390,7 +385,7 @@ final class BusEvents {
         if (event.player() == null || count <= 0) {
             return List.of();
         }
-        String player = "P" + event.player().getId();
+        String player = Refs.of(event.player());
         return List.of(
                 new EffectEvent(EffectEvent.CARD_LOOKED_AT)
                         .subject(player).param("count", count),
@@ -404,7 +399,7 @@ final class BusEvents {
         if (event.player() == null || count <= 0) {
             return List.of();
         }
-        String player = "P" + event.player().getId();
+        String player = Refs.of(event.player());
         List<EffectEvent> events = new ArrayList<>();
         events.add(new EffectEvent(EffectEvent.CARD_LOOKED_AT)
                 .subject(player).param("count", count));

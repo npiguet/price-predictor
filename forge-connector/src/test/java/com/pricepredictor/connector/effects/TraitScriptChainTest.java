@@ -1,7 +1,7 @@
 package com.pricepredictor.connector.effects;
 
-import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.ForgeExtension;
+import com.pricepredictor.connector.RenderedLine;
 import com.pricepredictor.connector.RulesParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,13 +51,7 @@ class TraitScriptChainTest {
         String scriptFile = SourceTree.CARDSFOLDER + "/" + relativePath;
         RulesParser.ParsedCard parsed =
                 parser.parseScript(source, file.getFileName().toString(), scriptFile);
-        List<Ability> owners = new ArrayList<>();
-        List<Integer> faceOfLine = new ArrayList<>();
-        List<String> lines = parsed.card().renderLines(owners, faceOfLine);
-        ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                parsed.card().faces().get(0).name(), scriptFile, parsed.card(),
-                lines, owners, faceOfLine, parsed.recorders());
-        return new Converted(lines, sidecar, parser.missingSVars());
+        return converted(parsed, scriptFile, parser);
     }
 
     private static Converted convertInline(String relativePath, String script) {
@@ -67,13 +60,17 @@ class TraitScriptChainTest {
         RulesParser.ParsedCard parsed = parser.parseScript(
                 List.of(script.split("\n")), Path.of(relativePath).getFileName().toString(),
                 scriptFile);
-        List<Ability> owners = new ArrayList<>();
-        List<Integer> faceOfLine = new ArrayList<>();
-        List<String> lines = parsed.card().renderLines(owners, faceOfLine);
+        return converted(parsed, scriptFile, parser);
+    }
+
+    private static Converted converted(RulesParser.ParsedCard parsed, String scriptFile,
+                                       RulesParser parser) {
+        List<RenderedLine> rendered = parsed.card().renderLines();
         ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                parsed.card().faces().get(0).name(), scriptFile, parsed.card(),
-                lines, owners, faceOfLine, parsed.recorders());
-        return new Converted(lines, sidecar, parser.missingSVars());
+                parsed.card().faces().get(0).name(), scriptFile,
+                rendered, parsed.recorders());
+        return new Converted(rendered.stream().map(RenderedLine::text).toList(),
+                sidecar, parser.missingSVars());
     }
 
     private static List<ProvenanceSidecar.Line> linesOfKind(Converted converted, String kind) {
@@ -134,7 +131,7 @@ class TraitScriptChainTest {
                 root.script().scriptText());
         assertEquals("Charm", root.script().apiType());
         assertEquals(List.of(new ProvenanceKey(
-                        "cardsfolder/c/cryptic_command.txt", 0, ProvenanceKey.KIND_SPELL, 0)),
+                        "cardsfolder/c/cryptic_command.txt", 0, TraitKind.SPELL, 0)),
                 root.provenance());
     }
 
@@ -148,7 +145,7 @@ class TraitScriptChainTest {
         for (int i = 0; i < options.size(); i++) {
             ProvenanceSidecar.Line option = options.get(i);
             assertEquals(List.of(new ProvenanceKey("cardsfolder/c/cryptic_command.txt",
-                            0, ProvenanceKey.KIND_SPELL, 0, i)),
+                            0, TraitKind.SPELL, 0, i)),
                     option.provenance(), "mode " + i);
             assertEquals(apis.get(i), option.script().apiType(), "mode " + i);
             String text = option.script().scriptText();
@@ -209,8 +206,8 @@ class TraitScriptChainTest {
     @Test
     void twoChainsDifferingOnlyInLabelNamesRenderTheSameText() {
         // The sub-ability's own SpellDescription renders a second spell line,
-        // which feature 023 left unkeyed and textless: the trait's line is the
-        // first, and it now carries the whole chain.
+        // which stays unkeyed and textless: the trait's line is the first,
+        // and it carries the whole chain.
         List<ProvenanceSidecar.Line> a = linesOfKind(convert("l/label_a.txt"), "spell");
         List<ProvenanceSidecar.Line> b = linesOfKind(convert("l/label_b.txt"), "spell");
         assertEquals(2, a.size());
@@ -255,7 +252,7 @@ class TraitScriptChainTest {
         assertFalse(text.contains("SV2: "), "the undefined segment is left out: " + text);
         assertEquals(1, count(text, "[SEG]"), text);
 
-        List<MissingSVarReport.Entry> entries = undefined.report().entries();
+        List<MissingSVarReport.Entry> entries = undefined.report().drain();
         assertEquals(1, entries.size(), entries.toString());
         MissingSVarReport.Entry entry = entries.get(0);
         assertEquals("Undefined SVar", entry.card());
@@ -268,8 +265,8 @@ class TraitScriptChainTest {
 
     @Test
     void aCardWithEveryLabelDefinedReportsNothing() {
-        assertTrue(convert("c/cryptic_command.txt").report().isEmpty());
-        assertTrue(convert("a/anticausal_vestige.txt").report().isEmpty());
+        assertTrue(convert("c/cryptic_command.txt").report().drain().isEmpty());
+        assertTrue(convert("a/anticausal_vestige.txt").report().drain().isEmpty());
     }
 
     // ── charms: shared sub-abilities, no description, triggers, chapters ──
@@ -293,7 +290,7 @@ class TraitScriptChainTest {
     void aDescriptionlessCharmDropsItsRootKeyAndKeysItsModes() {
         Converted doomsday = convert("d/doomsday_confluence.txt");
         ProvenanceKey root = new ProvenanceKey(
-                "cardsfolder/d/doomsday_confluence.txt", 0, ProvenanceKey.KIND_SPELL, 0);
+                "cardsfolder/d/doomsday_confluence.txt", 0, TraitKind.SPELL, 0);
 
         assertTrue(linesOfKind(doomsday, "spell").isEmpty(), doomsday.lines().toString());
         assertTrue(doomsday.sidecar().droppedKeys().contains(root),
@@ -333,7 +330,7 @@ class TraitScriptChainTest {
         assertTrue(text.endsWith(" [SEG] SV1: Choices$ SV2,SV3 | DB$ Charm"),
                 "the charm names its modes and inlines none: " + text);
         ProvenanceKey root = new ProvenanceKey(
-                "cardsfolder/a/abiding_grace.txt", 0, ProvenanceKey.KIND_TRIGGER, 0);
+                "cardsfolder/a/abiding_grace.txt", 0, TraitKind.TRIGGER, 0);
         assertEquals(List.of(root), trigger.provenance());
 
         List<ProvenanceSidecar.Line> options = linesOfKind(grace, "option");
@@ -362,8 +359,8 @@ class TraitScriptChainTest {
             for (ProvenanceKey key : keys) {
                 assertEquals(Integer.valueOf(i), key.option(), "mode " + i + ": " + keys);
             }
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_TRIGGER, 0, i)), keys.toString());
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_KEYWORD, 0, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 0, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.KEYWORD, 0, i)), keys.toString());
             assertEquals(apis.get(i), options.get(i).script().apiType());
         }
     }
@@ -391,7 +388,8 @@ class TraitScriptChainTest {
         String mode = linesOfKind(season, "option").get(0).script().scriptText();
 
         assertTrue(mode.contains("Choices$ Creature.YouCtrl"), mode);
-        assertTrue(season.report().isEmpty(), season.report().entries().toString());
+        List<MissingSVarReport.Entry> left = season.report().drain();
+        assertTrue(left.isEmpty(), left.toString());
     }
 
     @Test
@@ -448,9 +446,12 @@ class TraitScriptChainTest {
     }
 
     @Test
-    void aLineWithNoParametersHasNoText() {
-        assertNull(TraitScript.of(null).scriptText());
-        assertEquals(List.of(), TraitScript.of(null).paramKeys());
+    void aLineWithNoTraitHasNoTextAndNoParameters() {
+        TraitScript script = TraitScript.of(null, null, null);
+
+        assertNull(script.scriptText());
+        assertEquals(List.of(), script.paramKeys());
+        assertEquals(TraitScript.EMPTY, script);
     }
 
     // ── a charm line carrying several roots ─────────────────────────────
@@ -479,8 +480,8 @@ class TraitScriptChainTest {
         for (int i = 0; i < options.size(); i++) {
             String file = "cardsfolder/a/appa_loyal_sky_bison.txt";
             List<ProvenanceKey> keys = options.get(i).provenance();
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_TRIGGER, 0, i)), keys.toString());
-            assertTrue(keys.contains(new ProvenanceKey(file, 0, ProvenanceKey.KIND_TRIGGER, 1, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 0, i)), keys.toString());
+            assertTrue(keys.contains(new ProvenanceKey(file, 0, TraitKind.TRIGGER, 1, i)), keys.toString());
         }
     }
 }

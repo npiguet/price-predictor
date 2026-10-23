@@ -123,7 +123,7 @@ public final class EffectEvent {
     private final String type;
     private final List<String> subjects = new ArrayList<>();
     private final Map<String, Object> params = new LinkedHashMap<>();
-    private String duration;
+    private EventDuration duration;
     private String attributedTo;
 
     public EffectEvent(String type) {
@@ -173,8 +173,8 @@ public final class EffectEvent {
         return param("cause", ref);
     }
 
-    /** ``end_of_turn``, ``permanent``, … for a continuous outcome. */
-    public EffectEvent duration(String value) {
+    /** How long the outcome lasts; null where nothing stamped it. */
+    public EffectEvent duration(EventDuration value) {
         this.duration = value;
         return this;
     }
@@ -210,39 +210,8 @@ public final class EffectEvent {
         }
         return "{\"type\":" + Json.string(type)
                 + ",\"subjects\":" + subjectJson
-                + ",\"params\":" + renderParams()
-                + ",\"duration\":" + Json.string(duration)
+                + ",\"params\":" + Json.value(params)
+                + ",\"duration\":" + Json.string(duration == null ? null : duration.wireName())
                 + ",\"attributed_to\":" + Json.string(attributedTo) + "}";
-    }
-
-    private String renderParams() {
-        StringJoiner joiner = new StringJoiner(",", "{", "}");
-        for (Map.Entry<String, Object> entry : params.entrySet()) {
-            joiner.add(Json.string(entry.getKey()) + ":" + renderValue(entry.getValue()));
-        }
-        return joiner.toString();
-    }
-
-    private static String renderValue(Object value) {
-        if (value instanceof Boolean || value instanceof Number) {
-            return String.valueOf(value);
-        }
-        if (value instanceof Map<?, ?> map) {
-            StringJoiner joiner = new StringJoiner(",", "{", "}");
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                joiner.add(
-                        Json.string(String.valueOf(entry.getKey())) + ":"
-                                + renderValue(entry.getValue()));
-            }
-            return joiner.toString();
-        }
-        if (value instanceof Iterable<?> items) {
-            StringJoiner joiner = new StringJoiner(",", "[", "]");
-            for (Object item : items) {
-                joiner.add(renderValue(item));
-            }
-            return joiner.toString();
-        }
-        return Json.string(String.valueOf(value));
     }
 }

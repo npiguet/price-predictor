@@ -1,13 +1,13 @@
 package com.pricepredictor.connector;
 
 import forge.StaticData;
+import forge.card.CardDb;
 import forge.card.CardEdition;
+import forge.card.CardType;
 import forge.card.MagicColor;
 import forge.card.mana.ManaCost;
 import forge.card.mana.ManaCostShard;
-import forge.deck.CardPool;
 import forge.deck.Deck;
-import forge.deck.DeckSection;
 import forge.gamemodes.limited.BoosterDeckBuilder;
 import forge.gamemodes.limited.DeckColors;
 import forge.gamemodes.limited.DraftedColorCommitment;
@@ -22,15 +22,8 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * Builds a 40-card sealed deck from a booster pool using one of four weighted methods.
- *
- * <p>Method weights: 1=40%, 2=30%, 3=20%, 4=10%.
- * <ul>
- *   <li>Method 1: Standard Forge sealed deck builder</li>
- *   <li>Method 2: Forge builder + 3 spell swaps + land rebalance</li>
- *   <li>Method 3: Forge builder + 8 spell swaps + land rebalance</li>
- *   <li>Method 4: 23 random spells + land rebalance</li>
- * </ul>
+ * Builds a 40-card sealed deck from a booster pool using one of the four
+ * weighted {@link BuildMethod}s.
  *
  * <p>"Nonland card" means a spell (creature, instant, sorcery, enchantment, artifact,
  * planeswalker) — cards whose type line does not include "Land". Non-basic lands (dual
@@ -40,16 +33,18 @@ import java.util.Random;
  */
 public class DeckBuilder {
 
-    public static final String METHOD_FORGE_BEST = "forge-best";
-    public static final String METHOD_FORGE_3SUB = "forge-3sub";
-    public static final String METHOD_FORGE_8SUB = "forge-8sub";
-    public static final String METHOD_RANDOM = "random";
+    static final int DECK_SIZE = 40;
 
-    private static final double[] METHOD_THRESHOLDS = {0.4, 0.7, 0.9, 1.0};
+    /** Spells {@link BuildMethod#RANDOM} draws: a typical 23-spell, 17-land deck. */
+    static final int RANDOM_DECK_SPELLS = 23;
+
+    /** Where basics come from when no spell's set prints them; GRN always does. */
+    static final String FALLBACK_BASIC_LAND_SET = "GRN";
+
     private final Random random;
 
-    /** A constructed deck together with the method tag that produced it. */
-    public record BuiltDeck(Deck deck, String method) {}
+    /** A constructed deck together with the method that produced it. */
+    public record BuiltDeck(Deck deck, BuildMethod method) {}
 
     public DeckBuilder() {
         this.random = MyRandom.getRandom();
@@ -68,24 +63,17 @@ public class DeckBuilder {
      * @return the 40-card deck and its method tag
      */
     public BuiltDeck buildDeck(List<PaperCard> pool) {
-        int method = selectMethod();
-        return switch (method) {
-            case 1 -> new BuiltDeck(buildStandard(pool), METHOD_FORGE_BEST);
-            case 2 -> new BuiltDeck(buildWithSwaps(pool, 3), METHOD_FORGE_3SUB);
-            case 3 -> new BuiltDeck(buildWithSwaps(pool, 8), METHOD_FORGE_8SUB);
-            case 4 -> new BuiltDeck(buildRandom(pool), METHOD_RANDOM);
-            default -> throw new IllegalStateException("Unexpected method: " + method);
+        BuildMethod method = selectMethod();
+        Deck deck = switch (method) {
+            case FORGE_BEST -> buildStandard(pool);
+            case FORGE_3SUB, FORGE_8SUB -> buildWithSwaps(pool, method.swaps());
+            case RANDOM -> buildRandom(pool);
         };
+        return new BuiltDeck(deck, method);
     }
 
-    int selectMethod() {
-        double roll = random.nextDouble();
-        for (int i = 0; i < METHOD_THRESHOLDS.length; i++) {
-            if (roll < METHOD_THRESHOLDS[i]) {
-                return i + 1;
-            }
-        }
-        return 4;
+    BuildMethod selectMethod() {
+        return BuildMethod.forRoll(random.nextDouble());
     }
 
     Deck buildStandard(List<PaperCard> pool) {
@@ -116,62 +104,65 @@ public class DeckBuilder {
     }
 
     Deck buildWithSwaps(List<PaperCard> pool, int swapCount) {
-        // 1. Build standard deck
-        List<PaperCard> poolCopy = new ArrayList<>(pool);
-        Deck standardDeck = new SealedDeckBuilder(poolCopy).buildDeck();
+        List<PaperCard> standard = buildStandard(pool).getMain().toFlatList();
+        // Basic lands are dropped from both halves: they are rebalanced to the
+        // swapped spells' pips at the end.
+        NonBasics chosen = NonBasics.of(standard);
+        NonBasics remaining = NonBasics.of(poolMinus(pool, standard));
+        swapTypeMatched(chosen, remaining, swapCount);
+        return rebalanceLands(chosen.spells(), chosen.lands());
+    }
 
-        // 2. Partition standard deck into spells and non-basic lands (discard basic lands)
-        List<PaperCard> spellsInDeck = new ArrayList<>();
-        List<PaperCard> nonbasicLandsInDeck = new ArrayList<>();
-        for (PaperCard card : standardDeck.getMain().toFlatList()) {
-            if (card.getRules().getMainPart().getType().isBasicLand()) {
-                // discard — will rebalance basic lands after swaps
-            } else if (card.getRules().getMainPart().getType().isLand()) {
-                nonbasicLandsInDeck.add(card);
-            } else {
-                spellsInDeck.add(card);
+    /**
+     * A card list's nonbasic cards split by type: spells, and nonbasic lands.
+     * Both lists are mutable, so a swap can move cards between them in place.
+     */
+    record NonBasics(List<PaperCard> spells, List<PaperCard> lands) {
+
+        static NonBasics of(List<PaperCard> cards) {
+            NonBasics split = new NonBasics(new ArrayList<>(), new ArrayList<>());
+            for (PaperCard card : cards) {
+                CardType type = card.getRules().getMainPart().getType();
+                if (type.isBasicLand()) {
+                    continue;
+                }
+                (type.isLand() ? split.lands : split.spells).add(card);
             }
+            return split;
         }
 
-        // 3. Remaining pool = original pool minus all selected deck cards
-        List<PaperCard> remainingPool = new ArrayList<>(pool);
-        for (PaperCard deckCard : standardDeck.getMain().toFlatList()) {
-            remainingPool.remove(deckCard);
+        int size() {
+            return spells.size() + lands.size();
         }
-        // Split remaining pool by type (pool has no basic lands)
-        List<PaperCard> spellsRemaining = new ArrayList<>();
-        List<PaperCard> nonbasicLandsRemaining = new ArrayList<>();
-        for (PaperCard card : remainingPool) {
-            if (card.getRules().getMainPart().getType().isLand()) {
-                nonbasicLandsRemaining.add(card);
-            } else {
-                spellsRemaining.add(card);
+    }
+
+    /** {@code pool} with one copy of each of {@code taken} removed. */
+    private static List<PaperCard> poolMinus(List<PaperCard> pool, List<PaperCard> taken) {
+        List<PaperCard> remaining = new ArrayList<>(pool);
+        for (PaperCard card : taken) {
+            remaining.remove(card);
+        }
+        return remaining;
+    }
+
+    /**
+     * Swap {@code swapCount} of {@code chosen}'s cards for {@code remaining}'s,
+     * spells only for spells and nonbasic lands only for nonbasic lands. Each
+     * swap picks uniformly from all of {@code chosen}; a pick whose type has no
+     * replacement left still uses up a swap.
+     */
+    private void swapTypeMatched(NonBasics chosen, NonBasics remaining, int swapCount) {
+        for (int swapsLeft = swapCount; swapsLeft > 0 && chosen.size() > 0; swapsLeft--) {
+            int pick = random.nextInt(chosen.size());
+            boolean spell = pick < chosen.spells().size();
+            List<PaperCard> from = spell ? chosen.spells() : chosen.lands();
+            List<PaperCard> replacements = spell ? remaining.spells() : remaining.lands();
+            if (replacements.isEmpty()) {
+                continue;
             }
+            from.remove(spell ? pick : pick - chosen.spells().size());
+            from.add(replacements.remove(random.nextInt(replacements.size())));
         }
-
-        // 4. Type-matched swaps: spells swap with spells, non-basic lands with non-basic lands.
-        // Each swap picks randomly from all deck non-basics, then replaces from the matching pool.
-        List<PaperCard> chosenSpells = new ArrayList<>(spellsInDeck);
-        List<PaperCard> chosenNonbasics = new ArrayList<>(nonbasicLandsInDeck);
-        int swapsLeft = swapCount;
-        while (swapsLeft > 0) {
-            int totalSwappable = chosenSpells.size() + chosenNonbasics.size();
-            if (totalSwappable == 0) break;
-            int pick = random.nextInt(totalSwappable);
-            if (pick < chosenSpells.size()) {
-                if (spellsRemaining.isEmpty()) { swapsLeft--; continue; }
-                chosenSpells.remove(pick);
-                chosenSpells.add(spellsRemaining.remove(random.nextInt(spellsRemaining.size())));
-            } else {
-                if (nonbasicLandsRemaining.isEmpty()) { swapsLeft--; continue; }
-                chosenNonbasics.remove(pick - chosenSpells.size());
-                chosenNonbasics.add(nonbasicLandsRemaining.remove(random.nextInt(nonbasicLandsRemaining.size())));
-            }
-            swapsLeft--;
-        }
-
-        // 5. Rebalance basic lands based on spell pip counts; keep non-basic lands
-        return rebalanceLands(chosenSpells, chosenNonbasics);
     }
 
     Deck buildRandom(List<PaperCard> pool) {
@@ -183,7 +174,7 @@ public class DeckBuilder {
             }
         }
 
-        int pickCount = Math.min(23, spellPool.size());
+        int pickCount = Math.min(RANDOM_DECK_SPELLS, spellPool.size());
         List<PaperCard> chosen = new ArrayList<>(pickCount);
         List<PaperCard> mutablePool = new ArrayList<>(spellPool);
         for (int i = 0; i < pickCount; i++) {
@@ -208,11 +199,34 @@ public class DeckBuilder {
      * @return 40-card Deck
      */
     Deck rebalanceLands(List<PaperCard> spells, List<PaperCard> nonbasicLands) {
-        int basicLandsNeeded = 40 - spells.size() - nonbasicLands.size();
+        int basicLandsNeeded = DECK_SIZE - spells.size() - nonbasicLands.size();
+        if (basicLandsNeeded < 0) {
+            throw new IllegalArgumentException("Cannot build a " + DECK_SIZE + "-card deck from "
+                    + spells.size() + " spells and " + nonbasicLands.size() + " non-basic lands");
+        }
 
-        // Count WUBRG mana pips across spells to determine basic land proportions.
-        // Non-basic lands are intentionally excluded — they have no mana cost.
-        int[] pips = new int[5]; // W=0, U=1, B=2, R=3, G=4
+        int[] basicCounts = distributeBasics(countColourPips(spells), basicLandsNeeded);
+
+        // Source basic land cards from a set in the spell pool, else the fallback
+        String setCode = findBasicLandSet(spells);
+        List<PaperCard> cards = new ArrayList<>(spells);
+        cards.addAll(nonbasicLands);
+        for (int i = 0; i < basicCounts.length; i++) {
+            if (basicCounts[i] == 0) continue;
+            PaperCard landCard = basicLand(MagicColor.Constant.BASIC_LANDS.get(i), setCode);
+            for (int j = 0; j < basicCounts[i]; j++) {
+                cards.add(landCard);
+            }
+        }
+        return DeckMaterializer.deckOf(cards);
+    }
+
+    /**
+     * Count WUBRG mana pips across spells to determine basic land proportions.
+     * Non-basic lands are intentionally excluded — they have no mana cost.
+     */
+    private static int[] countColourPips(List<PaperCard> spells) {
+        int[] pips = new int[MagicColor.WUBRG.length]; // W=0, U=1, B=2, R=3, G=4
         for (PaperCard card : spells) {
             ManaCost mc = card.getRules().getMainPart().getManaCost();
             for (ManaCostShard shard : mc) {
@@ -223,46 +237,52 @@ public class DeckBuilder {
                 }
             }
         }
+        return pips;
+    }
 
+    /**
+     * Distribute basic land slots proportionally to the pips (greedy, WUBRG order;
+     * the last required colour absorbs any rounding remainder).
+     */
+    private static int[] distributeBasics(int[] pips, int basicLandsNeeded) {
         int totalPips = Arrays.stream(pips).sum();
         if (totalPips == 0) {
             // Colorless deck: distribute equally across all five types
+            pips = new int[pips.length];
             Arrays.fill(pips, 1);
-            totalPips = 5;
+            totalPips = pips.length;
         }
 
-        // Source basic land cards from a set in the spell pool, fallback to GRN
-        String setCode = findBasicLandSet(spells);
-
-        // Distribute basic land slots proportionally (greedy, WUBRG order;
-        // last required color absorbs any rounding remainder)
-        List<PaperCard> basicLands = new ArrayList<>(basicLandsNeeded);
+        int[] counts = new int[pips.length];
         int remaining = basicLandsNeeded;
         int remainingPips = totalPips;
-
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < pips.length; i++) {
             if (pips[i] == 0 || remaining == 0) continue;
             int count = (remainingPips == pips[i])
                     ? remaining
                     : Math.round((float) remaining * pips[i] / remainingPips);
-            count = Math.max(0, Math.min(count, remaining));
-
-            String landName = MagicColor.Constant.BASIC_LANDS.get(i);
-            PaperCard landCard = FModel.getMagicDb().getCommonCards().getCard(landName, setCode);
-            for (int j = 0; j < count && landCard != null; j++) {
-                basicLands.add(landCard);
-            }
-            remaining -= count;
+            counts[i] = Math.max(0, Math.min(count, remaining));
+            remaining -= counts[i];
             remainingPips -= pips[i];
         }
+        return counts;
+    }
 
-        // Assemble: spells + non-basic lands + basic lands
-        Deck deck = new Deck();
-        CardPool main = deck.getOrCreate(DeckSection.Main);
-        for (PaperCard card : spells) main.add(card);
-        for (PaperCard land : nonbasicLands) main.add(land);
-        for (PaperCard land : basicLands) main.add(land);
-        return deck;
+    /**
+     * The basic land from {@code setCode}, or its default printing when that set has none —
+     * a missing land must fail loudly, since a silently skipped slot leaves the deck short.
+     */
+    static PaperCard basicLand(String landName, String setCode) {
+        CardDb cards = FModel.getMagicDb().getCommonCards();
+        PaperCard land = cards.getCard(landName, setCode);
+        if (land == null) {
+            land = cards.getCard(landName);
+        }
+        if (land == null) {
+            throw new IllegalStateException(
+                    "No printing of basic land '" + landName + "' (requested set " + setCode + ")");
+        }
+        return land;
     }
 
     private String findBasicLandSet(List<PaperCard> cards) {
@@ -272,6 +292,6 @@ public class DeckBuilder {
                 return card.getEdition();
             }
         }
-        return "GRN"; // fallback: Guilds of Ravnica always has basic lands
+        return FALLBACK_BASIC_LAND_SET;
     }
 }

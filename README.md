@@ -248,17 +248,10 @@ java -cp "forge-connector/target/forge-connector-1.0.0-SNAPSHOT-jar-with-depende
 
 ### Java Connector (forge-connector)
 
-A zero-dependency Java 17+ library that lets MTG Forge (or any Java application)
-get price predictions from the running service with 5 lines of code. See
-[`forge-connector/README.md`](forge-connector/README.md) for full documentation.
-
-```java
-var client = new PricePredictorClient();
-var estimate = client.predict(CardAttributes.builder()
-    .type("Creature").manaCost("1 G G")
-    .power("2").toughness("2").build());
-System.out.println(estimate.predictedPriceEur());
-```
+A Java 17+ module of command-line workers the Python side runs against the
+sibling Forge checkout: card conversion, sealed pool generation, self-play
+match workers, draft workers and scorer evaluation. See
+[`forge-connector/README.md`](forge-connector/README.md).
 
 ## ML Approach
 
@@ -430,7 +423,7 @@ src/price_predictor/
     transformer_model.py  CardPriceTransformerModel architecture
     transformer_dataset.py  PyTorch Dataset for transformer training
 forge-connector/    Java Maven module for Forge integration
-  src/main/java/    PricePredictorClient, CardScriptConverter, BatchConverter, ConvertMain
+  src/main/java/    ConvertMain and the other CLI workers the Python side spawns
   src/test/java/    JUnit 5 tests (unit + @Tag("integration") for Forge-dependent tests)
 tests/
   unit/             Fast unit tests (fixture-based)

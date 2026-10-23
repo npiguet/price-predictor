@@ -7,7 +7,8 @@ beside the sealed encoder's own, and read its validation accuracy against a
 scorer trained without it (FR-071). The answer is informational and gates
 nothing.
 
-Everything happens under ``--scratch-dir``, in four steps:
+Everything happens under ``--scratch-dir``, which must not hold vectors from
+an earlier run, in four steps:
 
 1. the converted ``.txt`` files are copied into ``<scratch>/cardsfolder/``;
 2. ``python -m sealed encode-cards`` writes the sealed vectors of
@@ -35,10 +36,12 @@ from pathlib import Path
 
 import numpy as np
 
+from effects.infrastructure import default_paths
+
 logger = logging.getLogger(__name__)
 
 #: The converted tree the scratch copy is taken from. Read, never written.
-DEFAULT_CARDS_PATH = Path("output/cardsfolder")
+DEFAULT_CARDS_PATH = Path(default_paths.DEFAULT_CARDS_FOLDERS[0])
 
 #: The vocabulary file a sealed encoder checkpoint is paired with: the sealed
 #: pipeline writes it beside the checkpoint, which is where ``encode-cards``'s
@@ -51,19 +54,19 @@ SEALED_VOCAB_NAME = "vocab.txt"
 class ScorerSmokeTestConfig:
     scratch_dir: Path
     checkpoint: Path = field(
-        default_factory=lambda: Path("models/effects/effect-model/latest.pt"),
+        default_factory=lambda: Path(default_paths.DEFAULT_CHECKPOINT),
     )
     sealed_encoder_checkpoint: Path = field(
-        default_factory=lambda: Path("models/sealed/encoder/latest.pt"),
+        default_factory=lambda: Path(default_paths.DEFAULT_SEALED_ENCODER),
     )
     abilities_root: Path = field(
-        default_factory=lambda: Path("output/effects/abilities"),
+        default_factory=lambda: Path(default_paths.DEFAULT_ABILITIES_ROOT),
     )
     cards_path: Path = DEFAULT_CARDS_PATH
     #: The match outcomes Phase A trains on. Read, never written; the sealed
     #: corpus lives wherever the operator keeps its training data.
     outcomes_path: Path = field(
-        default_factory=lambda: Path("output/sealed/match-outcomes.txt"),
+        default_factory=lambda: Path(default_paths.DEFAULT_MATCH_OUTCOMES),
     )
 
     @property
@@ -157,27 +160,45 @@ def pooled_e_by_path(abilities_root: Path, *, variant: str = "full") -> dict[str
     return pooled
 
 
+def refuse_encoded_scratch(scratch_cards: Path) -> None:
+    """Refuse a scratch tree an earlier run already encoded.
+
+    ``encode-cards`` skips a card whose vector exists, so a re-run would splice
+    pooled ``e`` into an already-spliced vector a second time. Refused rather
+    than cleared: nothing here deletes a file, so a ``--scratch-dir`` pointed at
+    a real tree by mistake costs nothing.
+    """
+    encoded = next(Path(scratch_cards).rglob("*.npz"), None)
+    if encoded is not None:
+        raise ValueError(
+            f"{scratch_cards} already holds encoded vectors ({encoded}) from an "
+            "earlier run; pass an empty --scratch-dir"
+        )
+
+
 def run(config: ScorerSmokeTestConfig, *, runner=subprocess.run) -> ScorerSmokeTestResult:
     """Build the scratch tree, splice ``e`` in, and run Phase A on it."""
     from effects.application.geometry_checks import write_scorer_smoke_cache
-    from effects.infrastructure.effect_model_store import EffectModelStore
+    from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
     checkpoint_path = Path(config.checkpoint)
-    checkpoint = EffectModelStore(checkpoint_path.parent).load(checkpoint_path)
+    checkpoint = load_effect_checkpoint(checkpoint_path)
     pooled = pooled_e_by_path(config.abilities_root, variant=checkpoint.variant)
     if not pooled:
         raise FileNotFoundError(
             f"no ability cache for {checkpoint_path} under {config.abilities_root}; "
             "run encode-abilities first"
         )
-    width = 2 * checkpoint.encoder_config.e_dim
+    e_dim = checkpoint.encoder_config.e_dim
+    width = 2 * e_dim
     widths = {vector.shape[0] for vector in pooled.values()}
     if widths != {width}:
         raise ValueError(
             f"the cache under {config.abilities_root} pools to widths "
-            f"{sorted(widths)}, not the {width} {checkpoint_path}'s e_dim gives; "
-            "it was encoded by another checkpoint"
+            f"{sorted(widths)}, not the {width} that {checkpoint_path}'s e_dim "
+            f"of {e_dim} gives: it was not encoded at this checkpoint's width"
         )
+    refuse_encoded_scratch(config.scratch_cards)
 
     copied = copy_card_texts(config.cards_path, config.scratch_cards)
     logger.info("copied %d converted cards into %s", copied, config.scratch_cards)

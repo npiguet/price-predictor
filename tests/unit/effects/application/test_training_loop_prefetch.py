@@ -19,15 +19,15 @@ import pytest
 import torch
 
 from effects.application import training_loop as loop_module
+from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import (
-    HeldOutCards,
     TrainEffectModelConfig,
     epoch_shards,
 )
 from effects.application.training_loop import TrainingLoop
 from effects.domain.records import CombatPayload, RecordKind
+from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
-from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
     make_record,
@@ -105,13 +105,13 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
             mark("load", path.name, "finish")
             return [f"{path.name} records"]
 
-        def train_on_shard(self, task, steps, waited, *,
-                           step, taken, **kwargs):
+        def train_on_shard(self, task, steps, waited, run, tally, **kwargs):
             mark("train", task.shard.name, "start")
             time.sleep(PAUSE)
             trained.append((task.shard.name, steps))
             mark("train", task.shard.name, "finish")
-            return step + task.budget, taken + task.budget
+            run.step += task.budget
+            tally.taken += task.budget
 
         def pool(*args, **kwargs):
             pools.append(_SpyPool(*args, **kwargs))
@@ -131,30 +131,23 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
         monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
         monkeypatch.setattr(TrainingLoop, "_train_on_shard", train_on_shard)
-        monkeypatch.setattr(
-            TrainingLoop, "_training_heads", lambda self, model: frozenset(),
-        )
         # The shard's records stand in for the steps they would prepare.
         monkeypatch.setattr(
-            TrainingLoop, "_local_steps",
-            lambda self, task, records, *args, **kwargs: records,
+            TrainingLoop, "_local_steps", lambda self, task, records: records,
         )
         monkeypatch.setattr(
             TrainingLoop, "_validate",
             lambda self, records, *args, **kwargs: 1.0,
         )
         monkeypatch.setattr(
-            TrainingLoop, "_build_tokenizer",
+            StepPreparer, "_build_tokenizer",
             lambda self: type("T", (), {"vocab_size": 8})(),
-        )
-        monkeypatch.setattr(
-            TrainingLoop, "_build_sidecars", lambda self: SidecarCache({}),
         )
         # The script-API vocabulary is read off every real sidecar; none here.
         monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
         monkeypatch.setattr(
-            TrainingLoop, "_feature_widths",
-            lambda self, records: dict.fromkeys(loop_module.SlotKind, 4),
+            loop_module, "feature_widths",
+            lambda records: dict.fromkeys(loop_module.SlotKind, 4),
         )
         config = TrainEffectModelConfig(
             corpus=str(tmp_path), epochs=1, steps_per_epoch=SHARDS,
@@ -165,8 +158,7 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         )
         return TrainingLoop(
             config,
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, training_shards=shards, validation_samples=samples,
+            split=CorpusSplit(), training_shards=shards, validation_samples=samples,
             holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
             rarity={}, corpus_digest="",
         ).execute()

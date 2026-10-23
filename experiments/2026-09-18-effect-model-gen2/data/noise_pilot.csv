@@ -1,0 +1,6 @@
+measure,ratio 0.05,ratio 0.1,ratio 0.2
+"card-disjoint loss, epoch 3",4.566,4.509,4.459
+"game-disjoint loss, epoch 3",4.479,4.51,4.511
+"gate F1, epoch 3",0.774,0.775,0.769
+"zone accuracy, epoch 3",0.938,0.947,0.949
+"value-head training loss, epoch 3",1.71,1.82,2.06

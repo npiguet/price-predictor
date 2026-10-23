@@ -2,28 +2,10 @@ package com.pricepredictor.connector.effects;
 
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
-import forge.game.card.Card;
-import forge.game.card.CardView;
-import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
-import forge.game.event.GameEventCardCounters;
-import forge.game.event.GameEventCardDamaged;
-import forge.game.event.GameEventCardRegenerated;
-import forge.game.event.GameEventCardStatsChanged;
-import forge.game.event.GameEventCardTapped;
-import forge.game.event.GameEventDayTimeChanged;
-import forge.game.event.GameEventGameOutcome;
-import forge.game.event.GameEventPlayerCounters;
-import forge.game.event.GameEventPlayerDamaged;
-import forge.game.event.GameEventPlayerLivesChanged;
-import forge.game.event.GameEventPlayerPoisoned;
-import forge.game.event.GameEventPlayerRadiation;
-import forge.game.event.GameEventScry;
-import forge.game.event.GameEventShuffle;
-import forge.game.event.GameEventSpeedChanged;
-import forge.game.event.GameEventSurveil;
+import forge.game.event.GameEventSpellAbilityCast;
+import forge.game.event.GameEventSpellResolved;
 import forge.game.spellability.SpellAbility;
-import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -34,35 +16,28 @@ import java.util.Set;
  * Everything a forked resolution did, in order.
  *
  * <p>The bracket collector sorts events into a resolution bracket or a combat
- * one, because a real game interleaves them. A fork has no such problem: it is
- * created, one ability is forced to resolve, and it is thrown away, so every
- * event the bus publishes in that window belongs to that resolution. Appending
- * them flat is the whole job.
+ * one, because a real game interleaves them. A fork is simpler: it is created,
+ * one ability is forced to resolve or one damage step is dealt, and it is
+ * thrown away. A probe's damage step is the whole fork, so a probe files every
+ * event. A forced resolution shares its fork with whatever else resolves while
+ * {@code GameSimulator.resolveStack} drains the stack, so an intervention files
+ * only what the live bracket would give the forced ability ({@link Phase}).
  *
- * <p>Shapes each event through {@link BusEvents}, the same reading the bracket
- * collector uses, so an interventional record and an observed one describe the
- * same outcome the same way. <b>That claim is only true if this subscribes to
- * the same events</b>, and for the first collected corpus it did not: the sink
- * listened to seven of the sixteen the bracket collector listens to, so a fork
- * of "draw a card" or "gets +2/+2 and gains flying" recorded an empty event
- * list and the counterfactual read as "the ability did nothing". The whole fork
- * vocabulary measured across that corpus was {@code zone_change} and
- * {@code counter_change}, against seventeen types on real resolutions.
- *
- * <p>Its own {@link StatDiffer}, primed by nothing: a fork lives for one
- * resolution, so the first computed characteristics it sees are the baseline
- * the resolution moved away from.
+ * <p>The events are read by {@link BusEventReader}, the same reader the bracket
+ * collector uses, and filed into an {@link EventBuffer}, the same buffer its
+ * brackets use, so an interventional or probe record and an observed one
+ * describe the same outcome the same way: the same subscriptions, the same
+ * shaping, the same cause the bus names for a damage, a poison or a
+ * radiation counter, and a state transition repeated within one record —
+ * the whole fork, or one chosen mode's half — filed once.
  *
  * <p>Every event is stamped by {@link EventAttribution} on its way in, for the
  * same reason: {@code attributed_to} and {@code duration} are how a reader asks
  * which clause of the line did this and how long it lasts, and a fork that
  * answered null to both was not describing the outcome the same way after all.
- * Across the smoke corpus that silence was most of the 30.9% of events with no
- * attribution at all.
  */
-final class ForkEventSink {
+final class ForkEventSink extends BusEventReader {
 
-    private final Game fork;
     /**
      * The line whose resolution is being watched, or null when nothing resolves.
      *
@@ -71,226 +46,306 @@ final class ForkEventSink {
      * no ability at all: it deals combat damage directly, so there is no root,
      * and its events attribute exactly the way the observed combat record's do
      * — from the pointer alone, which for a turn-based action names nothing.
+     * For an intervention it is the ability handed to the cast until the cast
+     * is over, and then the one the cast put on the stack ({@link #castAs}).
      */
-    private final SpellAbility acting;
-    private final StatDiffer stats = new StatDiffer();
-    private final List<EffectEvent> events = new ArrayList<>();
-    /** Positions in {@link #events} of moves off the battlefield during a state-based check. */
+    private SpellAbility acting;
+    /**
+     * Whether a card damaged in this fork is damaged in combat: true for a
+     * damage-step probe, which deals one combat damage step, and false for an
+     * intervention, whose forced resolution is not one. The flag is what a
+     * reader uses to tell the two apart, and a probe's damage is compared
+     * against the observed combat record's.
+     */
+    private final boolean combatDamage;
+    /** The events of the modes already closed, in order. */
+    private final List<EffectEvent> closed = new ArrayList<>();
+    /**
+     * The events of the open span: the whole fork, or the chosen mode now
+     * resolving, which is the unit a repeat is recognised within, as it is
+     * a mode's half on the live side.
+     */
+    private final EventBuffer open = new EventBuffer();
+    private boolean modeOpen;
+
+    /**
+     * Where the forced ability stands, which decides what an intervention
+     * files: what the live bracket would put in the forced ability's record,
+     * and nothing else the drained stack does.
+     *
+     * <ul>
+     *   <li>{@link #PRE_CAST}: from before the forced cast moves its card to
+     *   the stack until its cast event, everything is filed — the static check
+     *   the move and the push set off — as live gives what a card's move onto
+     *   the stack sets off to that cast's bracket. The fork pays no cost, so
+     *   there is no payment to leave out.</li>
+     *   <li>{@link #BEFORE}: between the cast and the resolution, what is
+     *   published while the forced ability is the top of the fork's stack is
+     *   filed, as live files the state-based check before priority into the
+     *   spell's bracket. While anything sits above it — a cast trigger:
+     *   prowess, a "whenever you cast" or becomes-target trigger, storm,
+     *   cascade — nothing is: that is the item's own record live. Nor is
+     *   anything in that item's aftermath ({@link #aboveHeld}), though the
+     *   forced ability is the top again: live keeps the deaths for the
+     *   item's held half and sends the rest to no record, since none of it
+     *   belongs to an ability that has not begun to resolve. What was filed
+     *   before an item was pushed above is kept.</li>
+     *   <li>{@link #RESOLVING}: from the first event published while the
+     *   forced ability is the one resolving, until its {@code
+     *   GameEventSpellResolved}: everything is filed, as live files the open
+     *   bracket's events, except the payment for a spell the forced ability
+     *   casts — a cascaded spell's additional cost, a madness cast's mana —
+     *   which is that spell's cost, as live reads it ({@link
+     *   BusEventReader#payingForACast}). A permanent leaving the battlefield
+     *   while the tracker is frozen mid-resolution — an end-the-turn effect's own
+     *   state-based check, a token or counter batch — is filed as an
+     *   ordinary event, checked for a repeat in its span, as live files it
+     *   into the open bracket.</li>
+     *   <li>{@link #HELD}: only the permanents leaving the battlefield in a
+     *   state-based check, as live holds a resolved half for the deaths it
+     *   caused. A stat change a static makes once the ability is gone, or the
+     *   spell's own card going to the graveyard, is not the ability's.</li>
+     *   <li>{@link #CLOSED}: once the next ability reaches the stack or
+     *   resolves, as the next action closes live's held window. A trigger the
+     *   resolution caused is that next ability, and has a record of its own
+     *   live.</li>
+     * </ul>
+     */
+    private enum Phase { PRE_CAST, BEFORE, RESOLVING, HELD, CLOSED }
+
+    private Phase phase = Phase.BEFORE;
+    /**
+     * Whether an item that resolved above the forced ability is in its
+     * aftermath: from its resolved event until the next ability reaches the
+     * stack or resolves. Nothing published then is the forced ability's.
+     */
+    private boolean aboveHeld;
+    /**
+     * Positions in {@link #events()} of the deaths filed in {@link
+     * Phase#HELD}, or of any state-based leave a probe or an ungated sink
+     * filed: the moves a modal fork files by {@code halfForDeath}.
+     */
     private final Set<Integer> stateBasedLeaves = new LinkedHashSet<>();
 
-    ForkEventSink(Game fork, SpellAbility acting) {
-        this.fork = fork;
+    private ForkEventSink(Game fork, SpellAbility acting, boolean combatDamage) {
+        super(fork);
         this.acting = acting;
-    }
-
-    List<EffectEvent> events() {
-        return List.copyOf(events);
+        this.combatDamage = combatDamage;
+        primeBattlefield();
     }
 
     /**
-     * Where in {@link #events()} a permanent left the battlefield while a
-     * state-based check was running, read as the fork's view tracker being
-     * frozen, the way {@code BusBracketCollector.holdAsConsequence} reads it.
+     * A sink for a forced resolution of {@code ability}, subscribed before
+     * the forced cast so its pre-push window is filed ({@link Phase#PRE_CAST});
+     * {@link #castAs} names the ability the cast put on the stack.
+     */
+    static ForkEventSink forCast(Game fork, SpellAbility ability) {
+        ForkEventSink sink = new ForkEventSink(fork, ability, false);
+        sink.phase = Phase.PRE_CAST;
+        return sink;
+    }
+
+    /**
+     * The forced cast is over: {@code onStack} is the ability it put on the
+     * stack — the one handed to it for a spell, a copy for an activation —
+     * and the root everything after is read against.
+     */
+    void castAs(SpellAbility onStack) {
+        acting = onStack;
+    }
+
+    /** A sink for a damage step dealt in a fork, with no ability resolving. */
+    static ForkEventSink forProbe(Game fork) {
+        return new ForkEventSink(fork, null, true);
+    }
+
+    List<EffectEvent> events() {
+        List<EffectEvent> all = new ArrayList<>(closed);
+        all.addAll(open.events());
+        return List.copyOf(all);
+    }
+
+    /**
+     * A chosen mode's first clause is resolving: close the previous mode's
+     * span, so a repeat is recognised within one mode, as the live bracket
+     * recognises it within one mode's half.
+     *
+     * <p>The first mode closes nothing: what was filed before its clause
+     * shares its span, as it shares the first half live.
+     *
+     * @return the position in {@link #events()} of the mode's first event
+     */
+    int beginMode() {
+        if (modeOpen) {
+            closed.addAll(open.drain());
+        }
+        modeOpen = true;
+        return size();
+    }
+
+    /**
+     * Where in {@link #events()} the deaths a modal fork files by {@code
+     * halfForDeath} sit: an intervention's in {@link Phase#HELD}, a probe's or
+     * an ungated sink's in any state-based check, each read as the bracket
+     * collector reads one ({@link #isStateBasedLeave}).
      */
     Set<Integer> stateBasedLeaves() {
         return Set.copyOf(stateBasedLeaves);
     }
 
-    boolean isEmpty() {
-        return events.isEmpty();
+    private int size() {
+        return closed.size() + open.events().size();
+    }
+
+    @Override
+    boolean cardDamageIsCombat() {
+        return combatDamage;
+    }
+
+    @Override
+    void fileDamage(EffectEvent damage, String namedCause, boolean combat) {
+        fileOutcome(damage, namedCause);
     }
 
     /**
      * File one event, attributed.
      *
-     * <p>The single door in, so a new subscriber cannot forget the stamp —
-     * which is exactly how the fork paths came to write events with a null
-     * {@code attributed_to} while the observed path stamped every one of its
-     * own. The bracket collector's {@code record} is the sibling of this.
+     * <p>The single door in, so no event can miss the stamp. The bracket
+     * collector's {@code fileOutcome} is the sibling of this.
      */
-    private void file(EffectEvent event) {
-        if (event != null) {
-            events.add(EventAttribution.stamp(event, acting));
-        }
-    }
-
-    /** File a reading that produced several events, all from the same clause. */
-    private void fileAll(List<EffectEvent> produced) {
-        for (EffectEvent event : produced) {
-            file(event);
-        }
-    }
-
-    @Subscribe
-    public void onCardDamaged(GameEventCardDamaged event) {
-        // Not combat: a forced resolution is not a combat damage step, and the
-        // flag is what a reader uses to tell the two apart.
-        file(BusEvents.cardDamaged(event, false));
-    }
-
-    @Subscribe
-    public void onPlayerDamaged(GameEventPlayerDamaged event) {
-        file(BusEvents.playerDamaged(event));
-    }
-
-    @Subscribe
-    public void onLifeChanged(GameEventPlayerLivesChanged event) {
-        file(BusEvents.lifeChanged(event));
-    }
-
-    @Subscribe
-    public void onPoisoned(GameEventPlayerPoisoned event) {
-        file(BusEvents.poisoned(event));
-    }
-
-    @Subscribe
-    public void onCounters(GameEventCardCounters event) {
-        file(BusEvents.counters(event));
-    }
-
-    /**
-     * Energy, read the same way the bracket collector reads it — see
-     * {@code BusBracketCollector.onPlayerCounters}. Kept in step by {@link
-     * ForkEventSinkTest#aForkHearsEveryOutcomeAnObservedRecordHears}, so this
-     * one cannot drift from that one the way the sink's whole subscription
-     * list once did.
-     */
-    @Subscribe
-    public void onPlayerCounters(GameEventPlayerCounters event) {
-        file(BusEvents.playerCounter(event));
-    }
-
-    @Subscribe
-    public void onRadiation(GameEventPlayerRadiation event) {
-        file(BusEvents.radiation(event));
-    }
-
-    @Subscribe
-    public void onSpeed(GameEventSpeedChanged event) {
-        file(BusEvents.speed(event));
-    }
-
-    @Subscribe
-    public void onDayTime(GameEventDayTimeChanged event) {
-        file(BusEvents.dayTime(event));
-    }
-
-    /**
-     * A regeneration shield doing its job, read the same way the bracket
-     * collector reads it — see {@code BusBracketCollector.onRegenerated}. Kept
-     * in step by {@link ForkEventSinkTest#aForkHearsEveryOutcomeAnObservedRecordHears}.
-     */
-    @Subscribe
-    public void onRegenerated(GameEventCardRegenerated event) {
-        file(BusEvents.regenerated(event));
-    }
-
-    /** A library shuffled, read the same way — see {@code BusBracketCollector.onShuffle}. */
-    @Subscribe
-    public void onShuffle(GameEventShuffle event) {
-        file(BusEvents.libraryShuffled(event));
-    }
-
-    /**
-     * The game ended, read the same way — see {@code
-     * BusBracketCollector.onGameOutcome}. {@code file} already skips a null
-     * event (a draw, or a winning name this fork's own game cannot resolve).
-     */
-    @Subscribe
-    public void onGameOutcome(GameEventGameOutcome event) {
-        file(BusEvents.gameOutcome(event, fork));
-    }
-
-    @Subscribe
-    public void onTapped(GameEventCardTapped event) {
-        file(BusEvents.tapped(event));
-    }
-
-    /**
-     * A completed move, and the draw, discard or mill it may also be.
-     *
-     * <p>One event per move, from the event that carries both ends of it. The
-     * per-zone-list notification the sink used to read fires three times for one
-     * cast and names the wrong destination on the first, which is why the fork
-     * event lists were both duplicated and wrong.
-     */
-    @Subscribe
-    public void onCardChangeZone(GameEventCardChangeZone event) {
-        EffectEvent moved = BusEvents.cardMoved(event);
-        if (moved != null && event.from() != null
-                && event.from().zoneType() == ZoneType.Battlefield
-                && fork != null && fork.getTracker().isFrozen()) {
-            // A state-based check is running -- the same reading the live
-            // collector takes -- so this is a death the forced resolution
-            // left behind, which a modal fork files by the live rule.
-            stateBasedLeaves.add(events.size());
-        }
-        file(moved);
-        file(BusEvents.libraryMovement(event));
-        if (event.card() != null && event.from() != null
-                && event.from().zoneType() == ZoneType.Battlefield) {
-            // Off the battlefield a card's computed characteristics stop
-            // meaning anything, and one that returns is a new object.
-            stats.forget(event.card().getId());
+    @Override
+    void fileOutcome(EffectEvent event, String namedCause) {
+        if (admits(null)) {
+            file(event, namedCause);
         }
     }
 
     /**
-     * The engine says a card's stats moved; this says what moved.
-     *
-     * <p>The bus publishes one event for a pump, an anthem recompute, an
-     * animation and a colour change alike, and names only the card — so without
-     * the difference the whole "gets +2/+2 and gains flying" family, which is
-     * most of what a limited deck does, forks into an empty event list.
+     * An ability has finished resolving: the forced one, which opens the held
+     * window, or the next one, which closes it.
      */
     @Subscribe
-    public void onStatsChanged(GameEventCardStatsChanged event) {
-        if (event.cards() == null) {
+    public void onResolved(GameEventSpellResolved event) {
+        if (!gated()) {
             return;
         }
-        for (CardView view : event.cards()) {
-            if (view == null) {
-                continue;
-            }
-            Card card = cardById(view.getId());
-            if (card != null) {
-                fileAll(stats.diff(card));
-            }
+        boolean forced = event.spell() != null && event.spell().getId() == acting.getId();
+        aboveHeld = false;
+        if (forced && (phase == Phase.BEFORE || phase == Phase.RESOLVING)) {
+            phase = Phase.HELD;
+        } else if (phase == Phase.HELD) {
+            phase = Phase.CLOSED;
+        } else if (phase == Phase.BEFORE) {
+            aboveHeld = true;
         }
     }
 
+    /** The next ability has reached the stack, which closes a held window. */
     @Subscribe
-    public void onAttachment(GameEventCardAttachment event) {
-        file(BusEvents.attachment(event));
-    }
-
-    @Subscribe
-    public void onScry(GameEventScry event) {
-        fileAll(BusEvents.scry(event));
-    }
-
-    @Subscribe
-    public void onSurveil(GameEventSurveil event) {
-        fileAll(BusEvents.surveil(event));
+    public void onCast(GameEventSpellAbilityCast event) {
+        if (!gated()) {
+            return;
+        }
+        aboveHeld = false;
+        if (phase == Phase.PRE_CAST) {
+            // The forced cast's own, the first one the fork publishes.
+            phase = Phase.BEFORE;
+        } else if (phase == Phase.HELD) {
+            phase = Phase.CLOSED;
+        }
     }
 
     /**
-     * The fork's battlefield card an id names, or null.
+     * Whether an event published now is the forced ability's, by {@link Phase}.
      *
-     * <p>The bus hands out views rather than cards, and a view carries the id
-     * and not the object. The battlefield is small enough that a scan costs less
-     * than an index kept in step with every zone change — and a fork's is
-     * shorter still, because it lives for one resolution.
+     * @param move the move the event is, or null for any other event
      */
-    private Card cardById(int id) {
-        if (fork == null) {
-            return null;
+    private boolean admits(GameEventCardChangeZone move) {
+        if (!gated()) {
+            return true;
         }
-        for (Card card : fork.getCardsIn(ZoneType.Battlefield)) {
-            if (card.getId() == id) {
-                return card;
+        if (phase == Phase.BEFORE && forcedOnTop()) {
+            if (game.getStack().isResolving()) {
+                phase = Phase.RESOLVING;
+            } else {
+                return !aboveHeld;
             }
         }
-        return null;
+        return switch (phase) {
+            case PRE_CAST -> true;
+            // Everything but the payment for a spell the forced ability
+            // casts, which is that spell's cost and which live leaves out too.
+            case RESOLVING -> !payingForACast(acting);
+            case HELD -> move != null && isStateBasedLeave(move);
+            case BEFORE, CLOSED -> false;
+        };
+    }
+
+    /**
+     * Whether this sink files by {@link Phase}: an intervention over a game
+     * whose stack it can read. A probe's damage step is the whole fork, and a
+     * sink with no game or no forced line has nothing to gate on.
+     */
+    private boolean gated() {
+        return !combatDamage && acting != null && game != null;
+    }
+
+    /**
+     * Whether the forced ability is the top of the fork's stack. While the
+     * stack is resolving, that makes it the one resolving: {@code
+     * MagicStack.resolveStack} leaves it on top until it has finished. Read
+     * in {@link Phase#RESOLVING} no longer; anything pushed above it
+     * mid-resolution does not end its span, the resolved event does.
+     */
+    private boolean forcedOnTop() {
+        var top = game.getStack().peek();
+        return top != null && top.getSpellAbility() != null
+                && top.getSpellAbility().getId() == acting.getId();
+    }
+
+    /**
+     * A death the forced resolution left behind is marked where it was filed,
+     * so the fork can file it by the live rule.
+     *
+     * <p>Filed unchecked, its repeat judged later by the half it joins
+     * ({@code ForkCollector.splitByMode}): the live collector checks a death
+     * against the half {@code halfForDeath} assigns it to, and filed here it
+     * would be checked against the open span, the last mode's, whichever
+     * half it joins. A probe's death is checked here: a damage step is one
+     * record, as the observed combat bracket is.
+     *
+     * <p>A probe's leave is marked only when it was filed: a repeat the
+     * buffer refused has no position, and the next free one belongs to
+     * whatever is filed next.
+     *
+     * <p>Only an intervention's death in {@link Phase#HELD} is marked. One in
+     * the check before the forced ability resolves, or one while the tracker
+     * is frozen mid-resolution, is filed as an ordinary event, checked for a
+     * repeat in its span: live files either into the open bracket like any
+     * other event, so on a modal resolution it rides with the mode in whose
+     * span it fell rather than joining a half by {@code halfForDeath}, which
+     * is a resolved half's rule.
+     */
+    @Override
+    void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
+        if (!admits(event)) {
+            return;
+        }
+        int at = size();
+        boolean probe = combatDamage;
+        if (!isStateBasedLeave(event) || gated() && phase != Phase.HELD) {
+            file(moved, null);
+        } else if (probe) {
+            if (file(moved, null)) {
+                stateBasedLeaves.add(at);
+            }
+        } else {
+            open.fileUnchecked(EventAttribution.stamp(moved, acting, null));
+            stateBasedLeaves.add(at);
+        }
+    }
+
+    private boolean file(EffectEvent event, String namedCause) {
+        return open.file(EventAttribution.stamp(event, acting, namedCause));
     }
 }

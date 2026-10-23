@@ -26,13 +26,7 @@ public final class MissingSVarReport {
             StringBuilder sb = new StringBuilder();
             sb.append(card == null ? "?" : card);
             if (line != null) {
-                sb.append(" (").append(line.scriptFile()).append(") face")
-                        .append(line.face()).append('/')
-                        .append(line.traitKind()).append('[')
-                        .append(line.indexWithinKind()).append(']');
-                if (line.option() != null) {
-                    sb.append("/option").append(line.option());
-                }
+                sb.append(' ').append(line.describe());
             }
             return sb.append(": ").append(parameter).append("$ ").append(label).toString();
         }
@@ -42,14 +36,6 @@ public final class MissingSVarReport {
 
     public void add(String card, ProvenanceKey line, String parameter, String label) {
         entries.add(new Entry(card, line, parameter, label));
-    }
-
-    public List<Entry> entries() {
-        return List.copyOf(entries);
-    }
-
-    public boolean isEmpty() {
-        return entries.isEmpty();
     }
 
     /** Take every entry collected so far, leaving the report empty for the next tree. */

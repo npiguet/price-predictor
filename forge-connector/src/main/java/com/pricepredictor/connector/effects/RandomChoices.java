@@ -22,11 +22,10 @@ import java.util.Random;
  *
  * <p>Two callers, one implementation. An interventional fork forces an ability
  * the AI never chose and wants what the effect <b>does</b> rather than what the
- * AI thinks is good, so it draws at random (and was the first home of these
- * draws, in {@code ForkCollector}); the random seat makes the same draws for a
- * play it picked at random, with no {@code P} gate (FR-022c). The fork's first
- * version ignored {@code MinCharmNum}, repeated modes and Pawprint, which both
- * FR-022c and FR-029f need, so one widened implementation fixes both.
+ * AI thinks is good, so it draws at random; the random seat makes the same
+ * draws for a play it picked at random, with no {@code P} gate (FR-022c). Both
+ * need {@code MinCharmNum}, repeated modes and Pawprint honoured (FR-022c,
+ * FR-029f), so one implementation serves both.
  *
  * <p>Every draw is uniform over the legal elements, element by element
  * (FR-022b): a target count between the clause's minimum and maximum, then that
@@ -253,10 +252,5 @@ public final class RandomChoices {
             max = min;
         }
         ability.setXManaCostPaid(max < min ? min : min + random.nextInt(max - min + 1));
-    }
-
-    /** The seeded source, for a caller that shuffles alongside these draws. */
-    public Random random() {
-        return random;
     }
 }

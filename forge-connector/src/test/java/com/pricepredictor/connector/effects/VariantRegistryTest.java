@@ -1,8 +1,9 @@
 package com.pricepredictor.connector.effects;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import com.pricepredictor.connector.ForgeExtension;
+import forge.game.card.Card;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -23,13 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * sidecar that does not exist, and the reader fails loudly on a corpus that is
  * in fact correct.
  */
+@ExtendWith(ForgeExtension.class)
 class VariantRegistryTest {
 
-    @BeforeEach
-    @AfterEach
-    void reset() {
-        VariantRegistry.clear();
-    }
+    // The registry is JVM-wide, so each test names its variants uniquely.
 
     @Test
     void anUnregisteredNameIsNotAVariant() {
@@ -44,7 +42,6 @@ class VariantRegistryTest {
 
         VariantRegistry.registerAll(dir);
 
-        assertEquals(2, VariantRegistry.size());
         assertTrue(VariantRegistry.isVariant("Lightning Bolt Variant 0"));
         assertTrue(VariantRegistry.isVariant("Shock Variant 1"));
         assertFalse(VariantRegistry.isVariant("Lightning Bolt"));
@@ -52,28 +49,40 @@ class VariantRegistryTest {
 
     @Test
     void aNonScriptFileIsIgnored(@TempDir Path dir) throws IOException {
-        write(dir, "lightning_bolt_variant_0.txt", "Lightning Bolt Variant 0");
-        Files.writeString(
-                dir.resolve("lightning_bolt_variant_0.provenance.json"), "{}");
+        write(dir, "bolt_variant_2.txt", "Bolt Variant 2");
+        // Only the extension tells a script from these: each holds a Name: line.
+        Files.writeString(dir.resolve("bolt_variant_2.provenance.json"),
+                "Name:Sidecar Not A Script\n");
+        Files.writeString(dir.resolve("loadable.lst"), "Name:Listed Not A Script\n");
 
         VariantRegistry.registerAll(dir);
 
-        assertEquals(1, VariantRegistry.size());
+        assertTrue(VariantRegistry.isVariant("Bolt Variant 2"));
+        assertFalse(VariantRegistry.isVariant("Listed Not A Script"));
+        assertFalse(VariantRegistry.isVariant("Sidecar Not A Script"));
     }
 
     @Test
-    void aMissingDirectoryRegistersNothing(@TempDir Path dir) {
+    void aMissingOrNonDirectorySourceRegistersNothing(@TempDir Path dir) throws IOException {
+        write(dir, "lonely.txt", "Lonely Variant 3");
+
         VariantRegistry.registerAll(dir.resolve("absent"));
-        assertEquals(0, VariantRegistry.size());
+        // A script file is not a tree to walk, even though it holds a name.
+        VariantRegistry.registerAll(dir.resolve("lonely.txt"));
+
+        assertFalse(VariantRegistry.isVariant("Lonely Variant 3"));
     }
 
     @Test
-    void aVariantKeyNamesTheVariantTree() {
-        VariantRegistry.register("Lightning Bolt Variant 0");
-        assertEquals(
-                "variant-scripts/lightning_bolt_variant_0.txt",
-                CardFilenames.scriptFile(
-                        SourceTree.VARIANT_SCRIPTS, "Lightning Bolt Variant 0"));
+    void aRegisteredVariantsKeyNamesTheVariantTree(@TempDir Path dir)
+            throws IOException {
+        write(dir, "lightning_bolt_variant_4.txt", "Lightning Bolt Variant 4");
+        VariantRegistry.registerAll(dir);
+        Card variant = new Card(TestCards.nextCardId(), TestCards.game());
+        variant.setName("Lightning Bolt Variant 4");
+
+        assertEquals("variant-scripts/lightning_bolt_variant_4.txt",
+                ScriptLocator.scriptFileOf(variant));
     }
 
     private static void write(Path dir, String file, String name)

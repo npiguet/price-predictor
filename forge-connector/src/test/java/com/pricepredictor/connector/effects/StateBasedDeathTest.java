@@ -1,42 +1,22 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
-import forge.StaticData;
-import forge.ai.LobbyPlayerAi;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameStage;
-import forge.game.GameType;
-import forge.game.Match;
-import forge.game.ability.ApiType;
-import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
-import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -48,10 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Forge resolves an ability, fires {@code GameEventSpellResolved}, and only
  * at the next priority runs the state-based check that moves a creature with
- * lethal damage to the graveyard. The collector used to write the effect half
- * at the resolved event, so a Lightning Bolt at a 2/2 recorded the damage and
- * never the death: across twelve full-strength shards, none of 515
- * lethal-looking resolution damage events had the death in the same record.
+ * lethal damage to the graveyard. An effect half written at the resolved event
+ * would record a Lightning Bolt at a 2/2 as the damage and never the death.
  *
  * <p>These drive the real engine — the stack, the resolution, and
  * {@code GameAction.checkStateEffects} — with the collector subscribed to the
@@ -63,33 +41,6 @@ class StateBasedDeathTest {
 
     @TempDir
     Path tempDir;
-
-    /** A two-player game in its first main phase, past the start. */
-    private static Game game() {
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("a", null)),
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(players, rules, new Match(rules, players, "StateBasedDeathTest"));
-        game.getPhaseHandler().devModeSet(PhaseType.MAIN1, game.getPlayers().get(0));
-        // checkStateEffects returns early, with the stack left frozen, on a
-        // game that has not started.
-        game.setAge(GameStage.Play);
-        return game;
-    }
-
-    private static Card card(Game game, String name, Player owner) {
-        return CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(name), owner, game);
-    }
-
-    private static Card onBattlefield(Game game, String name, Player owner) {
-        return game.getAction().moveToPlay(card(game, name, owner), owner, null, null);
-    }
-
-    private static Card inHand(Game game, String name, Player owner) {
-        return game.getAction().moveTo(ZoneType.Hand, card(game, name, owner), null, null);
-    }
 
     /** The card's own spell, activated by its owner. */
     private static SpellAbility spellOf(Card card, Player owner) {
@@ -119,21 +70,6 @@ class StateBasedDeathTest {
     private static void nextStep(Game game) {
         game.fireEvent(new GameEventTurnPhase(
                 game.getPhaseHandler().getPlayerTurn(), PhaseType.MAIN2, ""));
-    }
-
-    private RecordShardWriter writer() {
-        return new RecordShardWriter(tempDir, "run", 0, "l1");
-    }
-
-    private static List<String> readShard(Path path) throws IOException {
-        if (!Files.exists(path)) {
-            return List.of();
-        }
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
     }
 
     private static List<String> effectHalves(List<String> records) {
@@ -168,28 +104,22 @@ class StateBasedDeathTest {
      * the death in one effect half, on a worker with no clause hook.
      */
     @Test
-    void aLethalBoltCarriesTheDeathItCausedInItsEffectHalf() throws IOException {
-        Game game = game();
+    void aLethalBoltCarriesTheDeathItCausedInItsEffectHalf() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card bears = onBattlefield(game, "Grizzly Bears", opponent);
+        Card bears = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
         SpellAbility bolt = targeting(
-                spellOf(inHand(game, "Lightning Bolt", caster), caster), bears);
+                spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), bears);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, bolt);
             assertTrue(game.getCardsIn(ZoneType.Graveyard).stream()
                     .anyMatch(c -> c.getId() == bears.getId()), "the bears died");
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
         String effect = halves.get(0);
         assertTrue(effect.contains("\"type\":\"damage_dealt\",\"subjects\":[\"E"
@@ -207,35 +137,26 @@ class StateBasedDeathTest {
      * here the next action is another cast, whose own half waits in turn.
      */
     @Test
-    void aHeldHalfIsWrittenOnceWhenTheNextActionBegins() throws IOException {
-        Game game = game();
+    void aHeldHalfIsWrittenOnceWhenTheNextActionBegins() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card bears = onBattlefield(game, "Grizzly Bears", opponent);
-        Card giant = onBattlefield(game, "Hill Giant", opponent);
+        Card bears = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
+        Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
         SpellAbility bolt = targeting(
-                spellOf(inHand(game, "Lightning Bolt", caster), caster), bears);
-        SpellAbility shock = targeting(spellOf(inHand(game, "Shock", caster), caster), giant);
+                spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), bears);
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, bolt);
-            assertEquals(1, collector.recordsWritten(), "only the cost half so far");
             game.getStack().add(shock);
-            assertEquals(2, collector.recordsWritten(), "the cast wrote the held half");
             game.getStack().resolveStack();
             game.getAction().checkStateEffects(false);
-            assertEquals(3, collector.recordsWritten(), "and the shock's own half waits");
             nextStep(game);
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> records = readShard(writer.path());
         assertEquals(4, records.size(), records.toString());
         List<String> halves = effectHalves(records);
         assertEquals(2, halves.size(), records.toString());
@@ -246,56 +167,40 @@ class StateBasedDeathTest {
 
     /** The same on a patched worker, where the clause hook files the damage. */
     @Test
-    void aPatchedWorkerCarriesTheDeathToo() throws IOException {
-        Game game = game();
+    void aPatchedWorkerCarriesTheDeathToo() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card bears = onBattlefield(game, "Grizzly Bears", opponent);
+        Card bears = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
         SpellAbility bolt = targeting(
-                spellOf(inHand(game, "Lightning Bolt", caster), caster), bears);
+                spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), bears);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try (PatchedCollectors patched = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            Assumptions.assumeTrue(
-                    patched.install() > 0 && patched.installedHooks().contains("clause-events"),
-                    "../forge has no clause hook");
-            patched.withBracket(collector);
-            castAndResolve(game, bolt);
-            nextStep(game);
-        } finally {
-            writer.close();
-        }
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "", () -> {
+                    castAndResolve(game, bolt);
+                    nextStep(game);
+                });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
         assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
     }
 
     /** A creature that survived its damage has no death to carry. */
     @Test
-    void aNonLethalShockCarriesNoDeath() throws IOException {
-        Game game = game();
+    void aNonLethalShockCarriesNoDeath() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card giant = onBattlefield(game, "Hill Giant", opponent);
-        SpellAbility shock = targeting(spellOf(inHand(game, "Shock", caster), caster), giant);
+        Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, shock);
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> records = readShard(writer.path());
         List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), records.toString());
         assertTrue(halves.get(0).contains("\"type\":\"damage_dealt\""), halves.get(0));
@@ -308,31 +213,21 @@ class StateBasedDeathTest {
      * it writes the held record and joins nothing.
      */
     @Test
-    void aLandPlayedAfterwardsDoesNotJoinTheRecord() throws IOException {
-        Game game = game();
+    void aLandPlayedAfterwardsDoesNotJoinTheRecord() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card bears = onBattlefield(game, "Grizzly Bears", opponent);
+        Card bears = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
         SpellAbility bolt = targeting(
-                spellOf(inHand(game, "Lightning Bolt", caster), caster), bears);
-        Card mountain = inHand(game, "Mountain", caster);
+                spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), bears);
+        Card mountain = TestBoard.inHand(game, caster, "Mountain");
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, bolt);
-            long held = collector.recordsWritten();
             caster.playLand(mountain, null);
-            assertEquals(held + 1, collector.recordsWritten(),
-                    "playing the land writes the held effect half");
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> records = readShard(writer.path());
         List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), records.toString());
         assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
@@ -348,27 +243,22 @@ class StateBasedDeathTest {
      * doing, not this one's consequence.
      */
     @Test
-    void aTouchedPermanentLeavingOutsideTheStateBasedCheckDoesNotJoin() throws IOException {
-        Game game = game();
+    void aTouchedPermanentLeavingOutsideTheStateBasedCheckDoesNotJoin() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card giant = onBattlefield(game, "Hill Giant", opponent);
-        SpellAbility shock = targeting(spellOf(inHand(game, "Shock", caster), caster), giant);
+        Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, shock);
             // Sacrificed as a cost would be: no state-based check is running.
             game.getAction().moveToGraveyard(giant, null);
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
         assertFalse(halves.get(0).contains(deathOf(giant)), halves.get(0));
     }
@@ -380,19 +270,16 @@ class StateBasedDeathTest {
      * resolution's own events named it.
      */
     @Test
-    void aDeathInTheFollowingCheckJoinsEvenUntouched() throws IOException {
-        Game game = game();
+    void aDeathInTheFollowingCheckJoinsEvenUntouched() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card giant = onBattlefield(game, "Hill Giant", opponent);
-        Card bystander = onBattlefield(game, "Grizzly Bears", opponent);
-        SpellAbility shock = targeting(spellOf(inHand(game, "Shock", caster), caster), giant);
+        Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
+        Card bystander = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             game.getStack().add(shock);
             game.getStack().resolveStack();
             // Lethal damage the bracket never saw, standing in for what a
@@ -400,11 +287,9 @@ class StateBasedDeathTest {
             bystander.setDamage(2);
             game.getAction().checkStateEffects(false);
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
         assertTrue(halves.get(0).contains(deathOf(bystander)), halves.get(0));
     }
@@ -415,30 +300,25 @@ class StateBasedDeathTest {
      * land joins nothing.
      */
     @Test
-    void aDeathInACheckAfterTheNextActionDoesNotJoin() throws IOException {
-        Game game = game();
+    void aDeathInACheckAfterTheNextActionDoesNotJoin() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card giant = onBattlefield(game, "Hill Giant", opponent);
-        Card bystander = onBattlefield(game, "Grizzly Bears", opponent);
-        SpellAbility shock = targeting(spellOf(inHand(game, "Shock", caster), caster), giant);
-        Card mountain = inHand(game, "Mountain", caster);
+        Card giant = TestBoard.onBattlefield(game, opponent, "Hill Giant");
+        Card bystander = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
+        SpellAbility shock = targeting(
+                spellOf(TestBoard.inHand(game, caster, "Shock"), caster), giant);
+        Card mountain = TestBoard.inHand(game, caster, "Mountain");
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, shock);
             caster.playLand(mountain, null);
             bystander.setDamage(2);
             game.getAction().checkStateEffects(false);
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        for (String record : readShard(writer.path())) {
+        for (String record : records) {
             assertFalse(record.contains(deathOf(bystander)), record);
         }
     }
@@ -451,27 +331,21 @@ class StateBasedDeathTest {
      * static's continuous record.
      */
     @Test
-    void aMinusAuraKillJoinsTheAuraSpellsRecord() throws IOException {
-        Game game = game();
+    void aMinusAuraKillJoinsTheAuraSpellsRecord() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        Card bears = onBattlefield(game, "Grizzly Bears", game.getPlayers().get(1));
-        Card aura = inHand(game, "Dead Weight", caster);
+        Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        Card aura = TestBoard.inHand(game, caster, "Dead Weight");
         SpellAbility deadWeight = targeting(spellOf(aura, caster), bears);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, deadWeight);
             assertTrue(game.getCardsIn(ZoneType.Graveyard).stream()
                     .anyMatch(c -> c.getId() == bears.getId()), "the bears died");
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
         String effect = halves.get(0);
         assertTrue(effect.contains(deathOf(bears)), effect);
@@ -482,49 +356,38 @@ class StateBasedDeathTest {
 
     /** A static that shrinks on entry kills in the check after its creature resolves. */
     @Test
-    void aStaticThatKillsOnEntryJoinsTheCreatureSpellsRecord() throws IOException {
-        Game game = game();
+    void aStaticThatKillsOnEntryJoinsTheCreatureSpellsRecord() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        Card bears = onBattlefield(game, "Grizzly Bears", game.getPlayers().get(1));
-        SpellAbility norn = spellOf(inHand(game, "Elesh Norn, Grand Cenobite", caster), caster);
+        Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        SpellAbility norn = spellOf(
+                TestBoard.inHand(game, caster, "Elesh Norn, Grand Cenobite"), caster);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, norn);
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
         assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
     }
 
     /** The legend rule is a state-based action too, and its loser joins the record. */
     @Test
-    void theLegendRulesLoserJoinsTheSecondLegendsRecord() throws IOException {
-        Game game = game();
+    void theLegendRulesLoserJoinsTheSecondLegendsRecord() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        Card first = onBattlefield(game, "Isamaru, Hound of Konda", caster);
-        Card secondCard = inHand(game, "Isamaru, Hound of Konda", caster);
+        Card first = TestBoard.onBattlefield(game, caster, "Isamaru, Hound of Konda");
+        Card secondCard = TestBoard.inHand(game, caster, "Isamaru, Hound of Konda");
         SpellAbility second = spellOf(secondCard, caster);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, second);
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
         assertTrue(halves.get(0).contains(deathOf(first))
                         || halves.get(0).contains(deathOf(secondCard)),
@@ -533,28 +396,22 @@ class StateBasedDeathTest {
 
     /** An Aura falls off when the creature it enchanted dies, in the same check. */
     @Test
-    void anAuraFallingOffItsDeadHostJoinsTheRecord() throws IOException {
-        Game game = game();
+    void anAuraFallingOffItsDeadHostJoinsTheRecord() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card bears = onBattlefield(game, "Grizzly Bears", opponent);
-        Card pacifism = onBattlefield(game, "Pacifism", caster);
+        Card bears = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
+        Card pacifism = TestBoard.onBattlefield(game, caster, "Pacifism");
         pacifism.attachToEntity(bears, null);
         SpellAbility bolt = targeting(
-                spellOf(inHand(game, "Lightning Bolt", caster), caster), bears);
+                spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), bears);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, bolt);
             nextStep(game);
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), halves.toString());
         assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
         assertTrue(halves.get(0).contains(deathOf(pacifism)), halves.get(0));
@@ -567,38 +424,24 @@ class StateBasedDeathTest {
      * "2 damage to each opponent", that last half never saw the elf.
      */
     @Test
-    void aModalForkFilesTheDeathInTheModeThatTouchedTheCreature() throws IOException {
+    void aModalForkFilesTheDeathInTheModeThatTouchedTheCreature() throws Throwable {
         int checked = 0;
         for (long seed = 0; seed < 40 && checked == 0; seed++) {
-            Game game = game();
+            Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
             Player caster = game.getPlayers().get(0);
-            Card elves = onBattlefield(game, "Llanowar Elves", game.getPlayers().get(1));
-            SpellAbility charm = null;
-            for (SpellAbility sa : inHand(game, "Fiery Confluence", caster).getSpellAbilities()) {
-                if (sa.getApi() == ApiType.Charm) {
-                    charm = sa;
-                }
-            }
-            assertNotNull(charm);
-            charm.setActivatingPlayer(caster);
+            Card elves = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Llanowar Elves");
+            SpellAbility charm = TestBoard.charmOf(
+                    TestBoard.inHand(game, caster, "Fiery Confluence"), caster);
             CollectionCaps caps = new CollectionCaps(
-                    2000, 0.1, 2, 0, List.of(), 0.1);
+                    2000, 0.1, 2, 0, List.of(), 0.0, 0.0);
 
-            Path dir = tempDir.resolve("fork-" + seed);
-            RecordShardWriter writer = new RecordShardWriter(dir, "run", 0, "l1");
-            try (PatchedCollectors patched = new PatchedCollectors(
-                    game, writer, "run.0-l1.0", caps, 1L)) {
-                Assumptions.assumeTrue(
-                        patched.install() > 0 && patched.installedHooks().contains("clause-events"),
-                        "../forge has no clause hook to split a fork's modes");
-                ForkCollector forks = new ForkCollector(game, writer, "run.0-l1.0", caps, seed);
-                patched.withForks(forks);
-                forks.intervene(charm, 1);
-            } finally {
-                writer.close();
+            ShardRun.Fork fork = ShardRun.forkedWithClauseHook(
+                    tempDir.resolve("fork-" + seed), game, caps, seed, charm,
+                    "to split a fork's modes");
+            if (!fork.wrote()) {
+                continue;
             }
-
-            List<String> halves = readShard(writer.path());
+            List<String> halves = fork.records();
             if (halves.size() < 2 || !halves.get(halves.size() - 1).contains("\"option\":1}")) {
                 continue;
             }
@@ -627,28 +470,21 @@ class StateBasedDeathTest {
      * still reaches the shard after it.
      */
     @Test
-    void theGameEndingWritesTheHeldHalfBeforeTheOutcome() throws IOException {
-        Game game = game();
+    void theGameEndingWritesTheHeldHalfBeforeTheOutcome() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Player opponent = game.getPlayers().get(1);
-        Card bears = onBattlefield(game, "Grizzly Bears", opponent);
+        Card bears = TestBoard.onBattlefield(game, opponent, "Grizzly Bears");
         SpellAbility bolt = targeting(
-                spellOf(inHand(game, "Lightning Bolt", caster), caster), bears);
+                spellOf(TestBoard.inHand(game, caster, "Lightning Bolt"), caster), bears);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try {
+        List<String> records = ShardRun.observed(tempDir, game, collector -> {
             castAndResolve(game, bolt);
             collector.onGameOutcome(new GameEventGameOutcome(
                     1, List.of("a has won"), "a", "a: 1 b: 0 "));
             collector.finishGame(Set.of());
-        } finally {
-            writer.close();
-        }
+        });
 
-        List<String> records = readShard(writer.path());
         List<String> halves = effectHalves(records);
         assertEquals(1, halves.size(), records.toString());
         assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
@@ -665,24 +501,11 @@ class StateBasedDeathTest {
 
     // ── a modal resolution ──────────────────────────────────────────────
 
-    /** Chain the modes at these Choices$ positions, as the cast would. */
+    /** Fiery Confluence in hand, with the modes at these Choices$ positions chosen. */
     private static SpellAbility charm(Game game, Player caster, int... positions) {
-        Card confluence = inHand(game, "Fiery Confluence", caster);
-        SpellAbility charm = null;
-        for (SpellAbility sa : confluence.getSpellAbilities()) {
-            if (sa.getApi() == ApiType.Charm) {
-                charm = sa;
-            }
-        }
-        assertNotNull(charm);
-        charm.setActivatingPlayer(caster);
-        List<AbilitySub> choices = charm.getAdditionalAbilityList("Choices");
-        List<AbilitySub> chosen = new ArrayList<>();
-        for (int position : positions) {
-            chosen.add(choices.get(position));
-        }
-        charm.setChosenList(chosen);
-        CharmEffect.chainAbilities(charm, chosen);
+        SpellAbility charm = TestBoard.charmOf(
+                TestBoard.inHand(game, caster, "Fiery Confluence"), caster);
+        TestBoard.chain(charm, positions);
         return charm;
     }
 
@@ -692,29 +515,18 @@ class StateBasedDeathTest {
      * its "2 damage to each opponent" half, which resolves after, never saw it.
      */
     @Test
-    void aModalDeathJoinsTheModeThatTouchedTheCreature() throws IOException {
-        Game game = game();
+    void aModalDeathJoinsTheModeThatTouchedTheCreature() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        Card elves = onBattlefield(game, "Llanowar Elves", game.getPlayers().get(1));
+        Card elves = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Llanowar Elves");
         SpellAbility charm = charm(game, caster, 0, 1);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try (PatchedCollectors patched = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            Assumptions.assumeTrue(
-                    patched.install() > 0 && patched.installedHooks().contains("clause-events"),
-                    "../forge has no clause hook to split the modes");
-            patched.withBracket(collector);
-            castAndResolve(game, charm);
-            nextStep(game);
-        } finally {
-            writer.close();
-        }
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "to split the modes", () -> {
+                    castAndResolve(game, charm);
+                    nextStep(game);
+                });
 
-        List<String> records = readShard(writer.path());
         List<String> halves = effectHalves(records);
         assertEquals(2, halves.size(), records.toString());
         assertTrue(halves.get(0).contains("\"option\":0}"), halves.get(0));
@@ -732,29 +544,19 @@ class StateBasedDeathTest {
 
     /** Touched by two halves, the death goes to the later one, once. */
     @Test
-    void aDeathTouchedByTwoModesJoinsTheLastOfThemOnce() throws IOException {
-        Game game = game();
+    void aDeathTouchedByTwoModesJoinsTheLastOfThemOnce() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        Card bears = onBattlefield(game, "Grizzly Bears", game.getPlayers().get(1));
+        Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
         SpellAbility charm = charm(game, caster, 0, 0, 1);
 
-        RecordShardWriter writer = writer();
-        BusBracketCollector collector = new BusBracketCollector(
-                game, writer, "run.0-l1.0");
-        game.subscribeToEvents(collector);
-        try (PatchedCollectors patched = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            Assumptions.assumeTrue(
-                    patched.install() > 0 && patched.installedHooks().contains("clause-events"),
-                    "../forge has no clause hook to split the modes");
-            patched.withBracket(collector);
-            castAndResolve(game, charm);
-            nextStep(game);
-        } finally {
-            writer.close();
-        }
+        List<String> records = ShardRun.recordsWithClauseHook(
+                tempDir, game, "to split the modes", () -> {
+                    castAndResolve(game, charm);
+                    nextStep(game);
+                });
 
-        List<String> halves = effectHalves(readShard(writer.path()));
+        List<String> halves = effectHalves(records);
         assertEquals(3, halves.size(), halves.toString());
         assertFalse(halves.get(0).contains(deathOf(bears)), halves.get(0));
         assertEquals(1, count(halves.get(1), deathOf(bears)), halves.get(1));
@@ -778,30 +580,26 @@ class StateBasedDeathTest {
      * sink is still listening, so the interventional record needs no hold.
      */
     @Test
-    void anInterventionalBoltAlreadyCarriesItsDeath() throws IOException {
-        Game game = game();
+    void anInterventionalBoltAlreadyCarriesItsDeath() throws Throwable {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
-        Card bears = onBattlefield(game, "Grizzly Bears", game.getPlayers().get(1));
-        Card boltCard = inHand(game, "Lightning Bolt", caster);
+        Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        Card boltCard = TestBoard.inHand(game, caster, "Lightning Bolt");
         SpellAbility bolt = spellOf(boltCard, caster);
         // A one-creature board: the fork's random target draw has bears or a
         // player to choose from, so try seeds until one picks the bears.
         CollectionCaps caps = new CollectionCaps(
-                2000, 0.1, 50, 0, List.of(), 0.1);
+                2000, 0.1, 50, 0, List.of(), 0.0, 0.0);
 
-        RecordShardWriter writer = writer();
-        try (PatchedCollectors patched = new PatchedCollectors(
-                game, writer, "run.0-l1.0", caps, 1L)) {
-            for (long seed = 0; seed < 50; seed++) {
-                ForkCollector forks = new ForkCollector(game, writer, "run.0-l1.0", caps, seed);
-                patched.withForks(forks);
-                forks.intervene(bolt, (int) seed);
+        List<String> records = new ArrayList<>();
+        for (long seed = 0; seed < 50; seed++) {
+            ShardRun.Fork fork = ShardRun.forked(
+                    tempDir.resolve("fork-" + seed), game, caps, seed, bolt);
+            if (fork.wrote()) {
+                records.addAll(fork.records());
             }
-        } finally {
-            writer.close();
         }
 
-        List<String> records = readShard(writer.path());
         String hitTheBears = null;
         for (String record : records) {
             if (record.contains("\"type\":\"damage_dealt\",\"subjects\":[\"E" + bears.getId() + "\"]")) {

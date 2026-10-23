@@ -6,7 +6,7 @@ checks exist but that they *fire*: the corpus that motivated them parsed
 cleanly, satisfied every schema test, and was worthless, so a validator that
 passed it would be worse than none.
 
-The synthetic shards are written through :class:`ShardWriter` rather than by
+The synthetic shards are written through :class:`RawShardWriter` rather than by
 hand, so a defect is planted in the records themselves and has to survive a
 real serialize/parse round trip to be found — the same path a collector's
 output takes.
@@ -53,13 +53,12 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
-    EntityState,
     GlobalState,
     InclusionTier,
     StateSnapshot,
 )
-from effects.infrastructure.record_io import ShardWriter
 from effects.infrastructure.sidecar_io import SidecarCache, write_sidecar
+from tests.unit.effects.builders import RawShardWriter, make_entity, make_snapshot
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _BEARS = "cardsfolder/g/grizzly_bears.txt"
@@ -70,16 +69,12 @@ _STAGE_TWO = frozenset({
 
 
 def _snapshot(turn: int = 3, names: tuple[str, ...] = (), tiers=None) -> StateSnapshot:
-    return StateSnapshot(
+    return make_snapshot(
         global_=GlobalState(
             turn=turn, phase="main1", active="P0", priority="P0", stack_size=0,
         ),
-        players=(),
         entities=tuple(
-            EntityState(
-                id=f"E{index}", name=name, zone="battlefield", controller="P0",
-            )
-            for index, name in enumerate(names)
+            make_entity(f"E{index}", name) for index, name in enumerate(names)
         ),
         tiers=_STAGE_TWO if tiers is None else tiers,
     )
@@ -319,12 +314,12 @@ class TestRecordIdCollision:
         the id has to survive the writer and the reader to be the thing an
         operator would actually have on disk.
         """
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
         # The second lifetime of the same worker slot, counting from zero again
         # into its own shard: exactly what the 60-second recycle produces.
-        with ShardWriter(tmp_path, "run", 0, "L2") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L2") as writer:
             writer.write(_resolution("run.0-L1.0", game_id="run.0-L1.0"))
 
         findings = validate_corpus(read_window(tmp_path))
@@ -334,10 +329,10 @@ class TestRecordIdCollision:
 
     def test_two_lifetimes_that_namespace_their_ids_pass(self, tmp_path):
         """The same restart, with the fix in place, is not a defect."""
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
-        with ShardWriter(tmp_path, "run", 0, "L2") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L2") as writer:
             writer.write(_resolution("run.0-L2.0", game_id="run.0-L2.0"))
         assert _named(validate_corpus(read_window(tmp_path)), "record_id").ok
 
@@ -642,7 +637,7 @@ class TestDuplicates:
 
 class TestTheWindow:
     def test_limit_stops_reading(self, tmp_path):
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
         assert len(list(read_window(tmp_path, limit=2))) == 2
@@ -668,17 +663,17 @@ class TestTheCli:
         return args.func(args)
 
     def test_a_clean_directory_exits_zero(self, tmp_path, capsys):
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
         assert self._run(tmp_path) == 0
         assert "invariants hold" in capsys.readouterr().out
 
     def test_a_planted_collision_exits_non_zero_and_names_it(self, tmp_path, capsys):
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
-        with ShardWriter(tmp_path, "run", 0, "L2") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L2") as writer:
             writer.write(_resolution("run.0-L1.0", game_id="run.0-L1.0"))
         assert self._run(tmp_path) == 1
         out = capsys.readouterr().out
@@ -704,7 +699,7 @@ class TestTheCli:
         self, tmp_path, capsys,
     ):
         """The summary must not claim a verdict on a number nothing judged."""
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
         assert self._run(tmp_path) == 0
@@ -714,7 +709,7 @@ class TestTheCli:
 
     def test_a_watched_number_alone_never_fails_the_run(self, tmp_path, capsys):
         """Zero probes and no attribution are reported, and exit stays zero."""
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
         assert self._run(tmp_path) == 0
@@ -724,7 +719,7 @@ class TestTheCli:
     def test_a_floor_passed_on_the_command_line_turns_a_watch_into_a_failure(
         self, tmp_path, capsys,
     ):
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
             writer.write(
@@ -753,7 +748,7 @@ class TestTheCli:
         """
         _write_bears_sidecar(tmp_path, (0, 2))
         shards = tmp_path / "records"
-        with ShardWriter(shards, "run", 0, "L1") as writer:
+        with RawShardWriter(shards, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
             writer.write(
@@ -773,7 +768,7 @@ class TestTheCli:
     ):
         _write_bears_sidecar(tmp_path, (0, 2))
         shards = tmp_path / "records"
-        with ShardWriter(shards, "run", 0, "L1") as writer:
+        with RawShardWriter(shards, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
             writer.write(
@@ -793,7 +788,7 @@ class TestTheCli:
         self, tmp_path, capsys,
     ):
         """No tree on this machine is not evidence that the corpus joins."""
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
         assert self._run(
@@ -1103,7 +1098,7 @@ class TestKeywordKeysJoinTheirSidecar:
         """
         sidecars = _write_bears_sidecar(tmp_path, (0, 2))
         shards = tmp_path / "records"
-        with ShardWriter(shards, "run", 0, "L1") as writer:
+        with RawShardWriter(shards, "run", 0, "L1") as writer:
             for record in _healthy():
                 writer.write(record)
             writer.write(self._record(1))

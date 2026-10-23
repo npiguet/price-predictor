@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.google.common.base.Strings;
 import com.pricepredictor.connector.effects.Json;
 import forge.game.card.Card;
 import forge.game.keyword.Keyword;
@@ -45,23 +46,14 @@ import java.util.regex.Pattern;
 public class KeywordDefinitionMain {
 
     public static void main(String[] args) {
-        String outputPath = "output/effects/keyword-definitions.json";
-        for (int i = 0; i < args.length; i++) {
-            if ("--output".equals(args[i]) && i + 1 < args.length) {
-                outputPath = args[++i];
-            }
-        }
+        String outputPath = ToolMain.args(args, "--output")
+                .get("--output", "output/effects/keyword-definitions.json");
 
-        try {
+        ToolMain.run(() -> {
             ForgeEnvironmentInitializer.initialize();
             System.out.println("Wrote keyword definitions to "
                     + writeTo(Path.of(outputPath)));
-            System.exit(0);
-        } catch (IOException | RuntimeException e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
-        }
+        });
     }
 
     /** Render the document and write it, creating the parent directory. */
@@ -93,7 +85,7 @@ public class KeywordDefinitionMain {
             }
             entries.add(Json.string(keyword.toString()) + ":{"
                     + "\"reminder_template\":"
-                    + Json.string(emptyToNull(expandPlurals(keyword.getReminderText())))
+                    + Json.string(Strings.emptyToNull(expandPlurals(keyword.getReminderText())))
                     + ",\"generated_script\":" + Json.string(generatedScript(keyword))
                     + ",\"formatter\":" + Json.string(formatterOf(keyword))
                     + "}");
@@ -229,10 +221,5 @@ public class KeywordDefinitionMain {
             sb.append(entry.getKey()).append("$ ").append(entry.getValue());
         }
         return sb.toString();
-    }
-
-    /** Null rather than "" for a keyword with no reminder text of its own. */
-    private static String emptyToNull(String value) {
-        return value == null || value.isEmpty() ? null : value;
     }
 }

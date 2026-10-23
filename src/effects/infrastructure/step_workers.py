@@ -361,9 +361,3 @@ class StepWorkerPool:
             # training process's own exit.
             channel.cancel_join_thread()
             channel.close()
-
-    def __enter__(self) -> StepWorkerPool:
-        return self
-
-    def __exit__(self, *exc) -> None:
-        self.close()

@@ -1,0 +1,7 @@
+cardsfolder record: {"script_file":"cardsfolder/l/lightning_bolt.txt","face":0,"trait_kind":"spell","index_within_kind":0}
+cardsfolder sidecar: {"face":0,"trait_kind":"spell","index_within_kind":0}
+tokenscripts record: {"script_file":"tokenscripts/c_a_treasure_sac.txt","face":0,"trait_kind":"spell","index_within_kind":1}
+tokenscripts sidecar: {"face":0,"trait_kind":"spell","index_within_kind":1}
+option record: {"script_file":"cardsfolder/b/boros_charm.txt","face":0,"trait_kind":"spell","index_within_kind":0,"option":2}
+option sidecar: {"face":0,"trait_kind":"spell","index_within_kind":0,"option":2}
+array: [{"script_file":"cardsfolder/l/lightning_bolt.txt","face":0,"trait_kind":"spell","index_within_kind":0},{"script_file":"tokenscripts/c_a_treasure_sac.txt","face":0,"trait_kind":"spell","index_within_kind":1},{"script_file":"cardsfolder/b/boros_charm.txt","face":0,"trait_kind":"spell","index_within_kind":0,"option":2}]

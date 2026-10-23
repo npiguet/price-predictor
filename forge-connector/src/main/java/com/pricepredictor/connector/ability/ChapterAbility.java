@@ -47,16 +47,15 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
             if (stripped.contains("ABILITY")) {
                 SpellAbility execute = trigger.getOverridingAbility();
                 if (execute != null && execute.getApi() == ApiType.Charm) {
-                    String charmHeader = CharmAbility.synthesizeCharmHeader(execute);
-                    if (charmHeader == null) charmHeader = "choose one";
-                    stripped = stripped.replace("ABILITY", charmHeader);
                     // Owned by the trigger: two chapters naming one charm SVar
                     // share the charm object, and only the trigger tells
                     // chapter I's option lines from chapter II's.
-                    List<Ability> options = CharmAbility.optionsFrom(execute, trigger);
-                    String normalized = AbilityDescription.normalize(stripped);
-                    if (normalized == null) continue;
-                    abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized), options));
+                    CharmAbility.Expanded expanded =
+                            CharmAbility.expandPlaceholder(stripped, execute, trigger);
+                    if (expanded.description() == null) continue;
+                    abilities.add(new ChapterAbility(
+                            AbilityType.CHAPTER.formatDescription(expanded.description()),
+                            expanded.options()));
                     continue;
                 }
             }
@@ -64,12 +63,9 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
             if (isHeaderOnly(stripped)) {
                 SpellAbility execute = trigger.getOverridingAbility();
                 if (execute != null) {
-                    List<Ability> effectNodes = SpellEffect.fromChain(execute);
-                    if (!effectNodes.isEmpty()) {
-                        String effectText = collectChainText(effectNodes.get(0));
-                        if (!effectText.isEmpty()) {
-                            stripped = stripped + " " + effectText;
-                        }
+                    String effectText = SpellAbilityUtils.chainText(execute);
+                    if (!effectText.isEmpty()) {
+                        stripped = stripped + " " + effectText;
                     }
                 }
             }
@@ -89,15 +85,5 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
         int dashIdx = desc.indexOf('\u2014'); // em-dash
         if (dashIdx < 0) return false;
         return desc.substring(dashIdx + 1).trim().isEmpty();
-    }
-
-    /** Collect and concatenate description text from an ability node and all its descendants. */
-    private static String collectChainText(Ability node) {
-        StringBuilder sb = new StringBuilder(node.descriptionText());
-        for (Ability child : node.subAbilities()) {
-            String ct = collectChainText(child);
-            if (!ct.isEmpty()) sb.append(' ').append(ct);
-        }
-        return sb.toString();
     }
 }

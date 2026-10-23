@@ -1,14 +1,9 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.StaticData;
-import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.ability.AbilityFactory;
+import forge.game.ability.ApiType;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,24 +11,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStreamReader;
-import java.io.PrintStream;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The clause hook's argument order, and the shape Forge declares it in.
+ * The clause hook's argument order.
  *
  * <p>The connector never links against {@code AbilityUtils.EffectRecordClauseListener}
  * — it is installed as a dynamic proxy over whatever the patched checkout
@@ -47,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>{@link ApiEventsTest} covers what {@link ApiEvents} says about a clause
  * once it is handed one. What is here is the wiring that hands it one at all:
- * {@link PatchedCollectors#clauseHandler()}, called the way the engine calls
+ * {@link ClauseOutcomeRouter#clauseHandler()}, called the way the engine calls
  * it, with two real, distinct, non-null values so a position swap has
  * something to disagree with rather than two nulls agreeing by accident.
  */
@@ -62,65 +50,20 @@ class ClauseContractTest {
      * test trips {@code ApiEvents}' emitter-failure or memo-failure latch
      * first -- in this class or, within one JVM, {@code ApiEventsTest} --
      * leaves every test after it unable to see its own "did this print"
-     * outcome. Two latches since final-fix-3.md item 4 (they no longer share
-     * one), so both are reset here.
+     * outcome. There are two latches, one per failure kind, so both are reset
+     * here.
      */
     @BeforeEach
-    void resetEmitterFailureLatch() {
-        ApiEvents.resetEmitterFailureLatchForTest();
-        ApiEvents.resetMemoFailureLatchForTest();
+    void resetFailureLatches() {
+        TestLatches.reset(ApiEvents.class, "EMITTER_FAILURE_REPORTED");
+        TestLatches.reset(ApiEvents.class, "MEMO_FAILURE_REPORTED");
     }
 
-    /**
-     * Forge's listener, copied argument for argument.
-     *
-     * <p>Copied rather than referenced on purpose: the connector compiles
-     * against stock Forge, where this interface does not exist at all, and a
-     * test that imported it would stop the whole module building on an
-     * unpatched checkout. {@link #theStandInIsForgesOwnDeclaration} is what
-     * keeps the copy true.
-     */
-    public interface ListenerShape {
-        void onClauseResolving(SpellAbility clause);
-
-        void onClauseResolved(SpellAbility clause, boolean threw);
-    }
-
-    private static Method methodNamed(Class<?> shape, String name) {
-        for (Method method : shape.getMethods()) {
-            if (method.getName().equals(name)) {
-                return method;
-            }
-        }
-        throw new AssertionError(shape + " declares no " + name);
+    private static Method clauseMethod(String name) {
+        return HookShapes.method(HookShapes.Clause.class, name);
     }
 
     // ── the argument order, pinned ──────────────────────────────────────
-
-    /**
-     * The stand-in above is what Forge declares, position by position, for
-     * both halves of the listener.
-     *
-     * <p>Reflective, so an unpatched checkout skips the assertion rather than
-     * failing it — the same degradation every hook lookup makes.
-     */
-    @Test
-    void theStandInIsForgesOwnDeclaration() {
-        PatchHooks.Lookup setter = PatchHooks.find(
-                PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
-        if (!setter.present()) {
-            return;
-        }
-        Class<?> declared = setter.method().getParameterTypes()[0];
-        for (String name : List.of("onClauseResolving", "onClauseResolved")) {
-            Class<?>[] theirs = methodNamed(declared, name).getParameterTypes();
-            Class<?>[] ours = methodNamed(ListenerShape.class, name).getParameterTypes();
-            assertEquals(ours.length, theirs.length, name + " arity");
-            for (int i = 0; i < theirs.length; i++) {
-                assertEquals(ours[i], theirs[i], name + " argument " + i);
-            }
-        }
-    }
 
     /**
      * Two real, distinguishable arguments in, and each one read off its own
@@ -164,39 +107,27 @@ class ClauseContractTest {
     @Test
     void aSwappedCallWritesNoEvent() throws Throwable {
         SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                TestCards.game(), writer, "run.0-l1.0");
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                PatchedCollectors.CollectionCaps.defaults(), 1L)) {
-            collector.withBracket(bracket);
-            InvocationHandler handler = collector.clauseHandler();
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            InvocationHandler handler = collector.clauses().clauseHandler();
             bracket.beginBracket(sa);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{Boolean.FALSE, sa});
             bracket.endBracket(sa.getId(), false);
-            bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+            bracket.onNextAction();
+        });
 
-        String effectHalf = readShard(path).get(1);
+        String effectHalf = records.get(1);
         assertFalse(effectHalf.contains("\"type\":\"turn_added\""), effectHalf);
     }
 
     // ── the mechanism: nested memos do not cross ─────────────────────────
 
     /**
-     * Every rule in {@code ApiEvents} passed a null {@code Memo} until the
-     * critical fix that gave {@code AddTurn}/{@code SkipTurn}/{@code
-     * SkipPhase} a real one (the targeted-player list, captured before
-     * resolution): before that, the {@code ThreadLocal<Deque<Object>>} this
-     * handler keeps was only ever exercised on its always-empty path, and a
-     * LIFO-pairing bug in it would first surface in Task 7 — someone else's
-     * task, building the first production rule that genuinely needs one.
-     * Pinned here instead, on the two real rules that supply one now.
+     * The {@code ThreadLocal<Deque<Object>>} this handler keeps pairs each
+     * clause's memo with its own resolved half, last in first out. Pinned
+     * here on two real rules that supply one — {@code AddTurn} and {@code
+     * SkipTurn}, whose memo is the targeted-player list captured before
+     * resolution — one nested inside the other.
      *
      * <p>Drives the documented firing order for a two-clause ability --
      * {@code resolving(root)}, {@code resolving(sub)}, {@code
@@ -221,119 +152,94 @@ class ClauseContractTest {
         inner.resetTargets();
         inner.getTargets().add(innerTarget);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                TestCards.game(), writer, "run.0-l1.0");
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                PatchedCollectors.CollectionCaps.defaults(), 1L)) {
-            collector.withBracket(bracket);
-            InvocationHandler handler = collector.clauseHandler();
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            InvocationHandler handler = collector.clauses().clauseHandler();
             bracket.beginBracket(outer);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{outer});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{inner});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{inner, false});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{outer, false});
             bracket.endBracket(outer.getId(), false);
-            bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
+            bracket.onNextAction();
+        });
 
-        String effectHalf = readShard(path).get(1);
+        String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
                 + SnapshotBuilder.playerId(outerTarget) + "\"]"), effectHalf);
         assertTrue(effectHalf.contains("\"type\":\"turn_skipped\",\"subjects\":[\""
                 + SnapshotBuilder.playerId(innerTarget) + "\"]"), effectHalf);
     }
 
-    // ── F2: another game's clause must not reach this game's bracket ────
+    // ── another game's clause must not reach this game's bracket ────────
 
     /**
-     * F2: a clause resolving on a DIFFERENT {@code Game} -- exactly the shape
+     * A clause resolving on a DIFFERENT {@code Game} -- exactly the shape
      * {@code ForkCollector.forceResolution} produces, since {@code
      * GameSimulator.resolveStack} runs the real resolution pipeline against a
      * {@code GameCopier} clone under {@code AIOption.USE_FULL_SIMULATION}
-     * regardless of how this game's own lobby seats were registered (ruling
-     * R31) -- must not reach the live game's bracket. {@code GameCopier}
+     * regardless of how this game's own lobby seats were registered -- must
+     * not reach the live game's bracket. {@code GameCopier}
      * builds every copied {@code Card} against a new {@code Game} object, so
      * a fork's clause's own host card already carries a different
      * {@code Game} than this collector's.
      *
-     * <p>Companion to {@code PatchedCollectorTest
+     * <p>Companion to {@code OutcomeHandlerTest
      * .anOutcomeFromAnotherGameDoesNotReachThisGamesBracket}, which covers
-     * the same fix on the outcome hook's half.
+     * the same check on the outcome hook's half.
      */
     @Test
     void aClauseFromAnotherGameDoesNotReachThisGamesBracket() throws Throwable {
-        GameRules forkRules = new GameRules(GameType.Constructed);
-        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
-        Card forkHost = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Grizzly Bears"),
-                null, 900001, fork);
+        Card forkHost = TestBoard.cardInAnotherGame("Grizzly Bears");
         SpellAbility forkAbility = AbilityFactory.getAbility(
                 "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
-        Player forkTarget = new Player("fork-target", fork, 92201);
+        Player forkTarget = new Player("fork-target", forkHost.getGame(), 92201);
         forkAbility.resetTargets();
         forkAbility.getTargets().add(forkTarget);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collector = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0",
-                    PatchedCollectors.CollectionCaps.defaults(), 1L)) {
-                collector.withBracket(bracket);
-                InvocationHandler handler = collector.clauseHandler();
-                bracket.beginBracket(forkAbility);
-                handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
-                        new Object[]{forkAbility});
-                handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
-                        new Object[]{forkAbility, false});
-                bracket.endBracket(forkAbility.getId(), false);
-                bracket.flushHeldResolution();
-            }
-        } finally {
-            writer.close();
-        }
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            InvocationHandler handler = collector.clauses().clauseHandler();
+            bracket.beginBracket(forkAbility);
+            handler.invoke(null, clauseMethod("onClauseResolving"),
+                    new Object[]{forkAbility});
+            handler.invoke(null, clauseMethod("onClauseResolved"),
+                    new Object[]{forkAbility, false});
+            bracket.endBracket(forkAbility.getId(), false);
+            bracket.onNextAction();
+        });
 
-        String shard = String.join("\n", readShard(path));
+        String shard = String.join("\n", records);
         assertFalse(shard.contains("turn_added"),
                 "a fork's clause must not land in the live game's record: " + shard);
     }
 
-    // ── F3: a throwing memo must not desync a sibling's pop ─────────────
+    // ── a throwing memo must not desync a sibling's pop ─────────────────
 
     /**
-     * F3: a clause whose own {@code Memo} throws must not desynchronize the
+     * A clause whose own {@code Memo} throws must not desynchronize the
      * deque for the clauses around it.
      *
      * <p>Same shape as {@link #nestedClausesDoNotCrossTheirMemos}, except the
-     * inner clause's memo throws -- forced through {@link
-     * ApiEvents#setRuleOverrideForTest}, a seam built for exactly this (see
-     * its own javadoc): no real script is known to make
+     * inner clause's memo throws -- forced by handing the clause handler a
+     * rule lookup that answers a throwing rule for {@code SkipTurn} and the
+     * real one for everything else: no real script is known to make
      * {@code AbilityUtils.getDefinedPlayers}/{@code getDefinedCards} throw --
      * every unrecognized input degrades to an empty list instead -- so there
      * is no real card this could be pinned to without hand-feeding the code a
-     * state the engine never produces, exactly the trap this branch's own
-     * test bar warns against.
+     * state the engine never produces.
      *
      * <p>The {@code onClauseResolving} calls go through {@link
      * #resolvingContained}, the way {@code
      * AbilityUtils.notifyClauseResolving} calls them in production: that
      * containment is what lets resolution continue past the throw at all,
-     * and before {@link ApiEvents#before}'s own fix, it is exactly what
-     * swallows the throw <em>before</em> {@code clauseMemos.push(...)} runs
-     * -- the missing push this test exists to catch. Before the fix: the
-     * inner clause's {@code onClauseResolving} throws out of {@code
-     * ApiEvents.before(inner)} before its push runs, so the inner clause's
+     * and unless {@link ApiEvents#before} contains the throw itself, it is
+     * what swallows the throw <em>before</em> {@code clauseMemos.push(...)}
+     * runs -- the missing push this test exists to catch. Then the inner
+     * clause's {@code onClauseResolving} throws out of {@link
+     * ApiEvents#before} before its push runs, so the inner clause's
      * own {@code onClauseResolved} pops the OUTER clause's memo instead of
      * its own missing one, and the outer's own pop then reads an empty deque
      * and gets {@code null} -- so this asserts the OUTER clause's event, the
@@ -355,51 +261,38 @@ class ClauseContractTest {
         inner.resetTargets();
         inner.getTargets().add(innerTarget);
 
-        ApiEvents.setRuleOverrideForTest("SkipTurn", new ApiEvents.Rule(
+        ApiEvents.Rule throwingMemo = new ApiEvents.Rule(
                 EffectEvent.TURN_SKIPPED,
                 (sa, host) -> {
                     throw new IllegalStateException("boom (memo)");
                 },
-                (sa, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED)));
+                (sa, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED));
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        PrintStream originalErr = System.err;
-        try {
-            BusBracketCollector bracket = new BusBracketCollector(
-                    TestCards.game(), writer, "run.0-l1.0");
-            try (PatchedCollectors collector = new PatchedCollectors(
-                    TestCards.game(), writer, "run.0-l1.0",
-                    PatchedCollectors.CollectionCaps.defaults(), 1L)) {
-                collector.withBracket(bracket);
-                InvocationHandler handler = collector.clauseHandler();
-                System.setErr(new PrintStream(captured, true));
+        StringBuilder stderr = new StringBuilder();
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            InvocationHandler handler = collector.clauses().clauseHandler(
+                    api -> api == ApiType.SkipTurn ? throwingMemo : ApiEvents.ruleFor(api));
+            stderr.append(StdStreams.captureStderr(() -> {
                 bracket.beginBracket(outer);
                 resolvingContained(handler, outer);
                 resolvingContained(handler, inner);
-                handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+                handler.invoke(null, clauseMethod("onClauseResolved"),
                         new Object[]{inner, false});
-                handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+                handler.invoke(null, clauseMethod("onClauseResolved"),
                         new Object[]{outer, false});
                 bracket.endBracket(outer.getId(), false);
-                bracket.flushHeldResolution();
-            } finally {
-                System.setErr(originalErr);
-            }
-        } finally {
-            writer.close();
-            ApiEvents.clearRuleOverridesForTest();
-        }
+                bracket.onNextAction();
+            }));
+        });
 
-        String effectHalf = readShard(path).get(1);
+        String effectHalf = records.get(1);
         assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
                 + SnapshotBuilder.playerId(outerTarget) + "\"]"),
                 "the outer clause's own event must be unaffected by the inner "
                         + "clause's memo failure: " + effectHalf);
-        assertTrue(captured.toString().contains("boom (memo)"),
+        assertTrue(stderr.toString().contains("boom (memo)"),
                 "the memo's failure must be reported, not swallowed silently: "
-                        + captured);
+                        + stderr);
     }
 
     /**
@@ -413,11 +306,11 @@ class ClauseContractTest {
     private static void resolvingContained(InvocationHandler handler, SpellAbility clause)
             throws Throwable {
         try {
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{clause});
         } catch (RuntimeException e) {
             // Mirrors AbilityUtils.notifyClauseResolving's own containment,
-            // which catches RuntimeException and nothing wider (ruling R8) --
+            // which catches RuntimeException and nothing wider --
             // an Error is left to propagate here too.
         }
     }
@@ -429,35 +322,17 @@ class ClauseContractTest {
      * resolved, on a real bracket -- and return the shard's rendered lines.
      */
     private List<String> resolveClause(SpellAbility sa, boolean threw) throws Throwable {
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        BusBracketCollector bracket = new BusBracketCollector(
-                TestCards.game(), writer, "run.0-l1.0");
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                PatchedCollectors.CollectionCaps.defaults(), 1L)) {
-            collector.withBracket(bracket);
-            InvocationHandler handler = collector.clauseHandler();
+        List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) -> {
+            InvocationHandler handler = collector.clauses().clauseHandler();
             bracket.beginBracket(sa);
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+            handler.invoke(null, clauseMethod("onClauseResolving"),
                     new Object[]{sa});
-            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+            handler.invoke(null, clauseMethod("onClauseResolved"),
                     new Object[]{sa, threw});
             bracket.endBracket(sa.getId(), false);
-            bracket.flushHeldResolution();
-        } finally {
-            writer.close();
-        }
-        List<String> records = readShard(path);
+            bracket.onNextAction();
+        });
         assertEquals(2, records.size(), records.toString());
         return records;
-    }
-
-    private static List<String> readShard(Path path) throws Exception {
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
     }
 }

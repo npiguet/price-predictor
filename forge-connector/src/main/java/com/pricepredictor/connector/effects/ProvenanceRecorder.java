@@ -137,14 +137,7 @@ public final class ProvenanceRecorder {
         TraitScript script = TraitScript.ofKeyword(original);
         for (Ability ability : abilities) {
             if (ability == null) continue;
-            Source existing = byAbility.get(ability);
-            if (existing == null) {
-                List<ProvenanceKey> keys = new ArrayList<>();
-                keys.add(key);
-                byAbility.put(ability, new Source(keys, script));
-            } else if (!existing.keys().contains(key)) {
-                existing.keys().add(key);
-            }
+            claim(ability, key, script);
         }
     }
 
@@ -240,11 +233,6 @@ public final class ProvenanceRecorder {
     /** What produced this ability, or null if it came from no runtime trait. */
     public Source sourceOf(Ability ability) {
         return byAbility.get(ability);
-    }
-
-    /** Every key declared on this face, in declaration order. */
-    public Set<ProvenanceKey> declaredKeys() {
-        return declared;
     }
 
     /** Keys that no surviving ability claims — the deduplicated traits. */

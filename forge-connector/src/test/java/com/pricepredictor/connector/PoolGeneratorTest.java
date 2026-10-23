@@ -11,33 +11,20 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(ForgeExtension.class)
 class PoolGeneratorTest {
 
-    private static final Set<String> BASIC_LAND_NAMES = Set.of(
-            "Plains", "Island", "Swamp", "Mountain", "Forest",
-            "Wastes", "Snow-Covered Plains", "Snow-Covered Island",
-            "Snow-Covered Swamp", "Snow-Covered Mountain", "Snow-Covered Forest"
-    );
-
     @Test
     void generateReturnsCorrectPoolCount() {
         PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 5);
+        List<List<String>> pools = generator.generate("RVR", 5, HoldoutCards.NONE);
         assertEquals(5, pools.size());
-    }
-
-    @Test
-    void generateSinglePool() {
-        PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 1);
-        assertEquals(1, pools.size());
     }
 
     @Test
     void generatePoolContainsNoBasicLands() {
         PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 3);
+        List<List<String>> pools = generator.generate("RVR", 3, HoldoutCards.NONE);
         for (List<String> pool : pools) {
             for (String cardName : pool) {
-                assertFalse(BASIC_LAND_NAMES.contains(cardName),
+                assertFalse(BasicLands.isBasic(cardName),
                         "Basic land found in pool: " + cardName);
             }
         }
@@ -46,7 +33,7 @@ class PoolGeneratorTest {
     @Test
     void generatePoolHasExpectedSize() {
         PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 1);
+        List<List<String>> pools = generator.generate("RVR", 1, HoldoutCards.NONE);
         List<String> pool = pools.get(0);
         // 6 boosters × ~14–15 non-land cards = 84–90 cards
         assertTrue(pool.size() >= 70,
@@ -56,33 +43,23 @@ class PoolGeneratorTest {
     }
 
     @Test
-    void generatePoolOmitsExcludedCards() {
+    void generatePoolOmitsExcludedCardsAndKeepsItsSize() {
         // A depleted training pool must never contain a held-out card: the whole
         // point is that the training corpus can be collected without discarding
-        // the games those cards appear in.
+        // the games those cards appear in. Its size holds because a card is
+        // redrawn within the slot rather than dropped: a pool short of cards
+        // would build a different deck, and the depleted corpus is supposed to
+        // differ from the full-strength one only in which cards exist.
         PoolGenerator generator = new PoolGenerator();
-        List<String> reference = generator.generate("RVR", 1).get(0);
+        List<String> reference = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
         Set<String> excluded = Set.copyOf(reference.subList(0, 10));
 
-        List<String> pool = generator.generate("RVR", 1, excluded).get(0);
+        List<String> pool = generator.generate("RVR", 1, HoldoutCards.of(excluded)).get(0);
 
         for (String cardName : pool) {
             assertFalse(excluded.contains(cardName),
                     "Excluded card found in depleted pool: " + cardName);
         }
-    }
-
-    @Test
-    void generatePoolKeepsItsSizeWhenCardsAreExcluded() {
-        // Redrawn within the slot rather than dropped: a pool short of cards
-        // would build a different deck, and the depleted corpus is supposed to
-        // differ from the full-strength one only in which cards exist.
-        PoolGenerator generator = new PoolGenerator();
-        List<String> reference = generator.generate("RVR", 1).get(0);
-        Set<String> excluded = Set.copyOf(reference.subList(0, 10));
-
-        List<String> pool = generator.generate("RVR", 1, excluded).get(0);
-
         assertTrue(pool.size() >= 70, "Depleted pool too small: " + pool.size());
         assertTrue(pool.size() <= 100, "Depleted pool too large: " + pool.size());
     }
@@ -95,12 +72,12 @@ class PoolGeneratorTest {
         // matched nothing, and a run told to deplete its pools silently
         // depleted none of them.
         PoolGenerator generator = new PoolGenerator();
-        List<String> reference = generator.generate("RVR", 1).get(0);
+        List<String> reference = generator.generate("RVR", 1, HoldoutCards.NONE).get(0);
         Set<String> lowercased = reference.subList(0, 10).stream()
                 .map(name -> name.toLowerCase(java.util.Locale.ROOT))
                 .collect(java.util.stream.Collectors.toSet());
 
-        List<String> pool = generator.generate("RVR", 1, lowercased).get(0);
+        List<String> pool = generator.generate("RVR", 1, HoldoutCards.of(lowercased)).get(0);
 
         for (String cardName : pool) {
             assertFalse(lowercased.contains(cardName.toLowerCase(java.util.Locale.ROOT)),
@@ -109,28 +86,36 @@ class PoolGeneratorTest {
     }
 
     @Test
-    void generatePoolWithNoExclusionsIsTheOrdinaryPool() {
-        PoolGenerator generator = new PoolGenerator();
-        List<String> pool = generator.generate("RVR", 1, Set.of()).get(0);
-        assertTrue(pool.size() >= 70, "Pool too small: " + pool.size());
-    }
-
-    @Test
     void generateZeroPoolsReturnsEmptyList() {
         PoolGenerator generator = new PoolGenerator();
-        List<List<String>> pools = generator.generate("RVR", 0);
+        List<List<String>> pools = generator.generate("RVR", 0, HoldoutCards.NONE);
         assertEquals(0, pools.size());
     }
 
     @Test
     void generateThrowsForNullSetCode() {
         PoolGenerator generator = new PoolGenerator();
-        assertThrows(IllegalArgumentException.class, () -> generator.generate(null, 1));
+        assertThrows(IllegalArgumentException.class, () -> generator.generate(null, 1, HoldoutCards.NONE));
     }
 
     @Test
     void generateThrowsForUnknownSetCode() {
         PoolGenerator generator = new PoolGenerator();
-        assertThrows(IllegalArgumentException.class, () -> generator.generate("XXXXUNKNOWN", 1));
+        IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
+                () -> generator.generate("XXXXUNKNOWN", 1, HoldoutCards.NONE));
+        assertEquals("Unknown or unsupported set code: XXXXUNKNOWN", thrown.getMessage());
+    }
+
+    /**
+     * A set named by its alias opens the set's packs, as the match and draft
+     * workers do: Forge resolves {@code CON} to Conflux, whose code is
+     * {@code CFX}.
+     */
+    @Test
+    void generateAcceptsASetsAlias() {
+        List<List<String>> pools = new PoolGenerator().generate("CON", 1, HoldoutCards.NONE);
+
+        assertEquals(1, pools.size());
+        assertTrue(pools.get(0).size() >= 70, "Pool too small: " + pools.get(0).size());
     }
 }

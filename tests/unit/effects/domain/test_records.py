@@ -180,12 +180,8 @@ class TestAbilityUnresolved:
         with pytest.raises(ValueError, match="closed vocabulary"):
             make_record(ability=(), ability_unresolved="dunno")
 
-    def test_it_is_collection_metadata_and_never_a_model_input(
-        self, make_record,
-    ):
-        record = make_record(ability=(), ability_unresolved="engine_effect")
+    def test_it_is_collection_metadata(self):
         assert "ability_unresolved" in COLLECTION_METADATA_FIELDS
-        assert "ability_unresolved" not in record.model_input_fields()
 
 
 class TestDiscriminators:
@@ -229,24 +225,6 @@ class TestCollectionMetadataStaysOutOfTheModel:
             "random_seat", "what_if",
         }
 
-    def test_no_metadata_field_reaches_the_model_input_projection(
-        self, make_record,
-    ):
-        record = make_record(interventional=True, fork=True)
-        assert not COLLECTION_METADATA_FIELDS & set(record.model_input_fields())
-
-    def test_the_projection_keeps_the_game_situation(self, make_record):
-        fields = make_record().model_input_fields()
-        assert set(fields) == {
-            "kind", "moment", "subkind", "actor_player", "ability", "state",
-            "payload",
-        }
-
-    def test_identity_fields_are_not_model_inputs_either(self, make_record):
-        """ids join records to a split; they say nothing about the game."""
-        fields = make_record().model_input_fields()
-        assert not {"record_id", "run_id", "game_id", "timestamp"} & set(fields)
-
 
 class TestIdentity:
     def test_record_id_carries_the_worker_slot_and_the_jvm_lifetime(
@@ -254,7 +232,6 @@ class TestIdentity:
     ):
         record = make_record(record_id="run-uuid.4-mk3p9x2q.10237")
         assert record.worker == "4"
-        assert record.lifetime == "mk3p9x2q"
 
     def test_a_pre_lifetime_id_still_reads_as_its_worker(self, make_record):
         """The corpus is append-only, so shards written before the segment stay.
@@ -264,7 +241,6 @@ class TestIdentity:
         """
         record = make_record(record_id="run-uuid.4.10237")
         assert record.worker == "4"
-        assert record.lifetime == ""
 
     def test_a_record_is_immutable_once_written(self, make_record):
         record = make_record()
@@ -344,9 +320,8 @@ class TestGen2Flags:
         with pytest.raises(ValueError, match="what_if"):
             make_record(what_if=True)
 
-    def test_both_are_collection_metadata(self, make_record):
-        record = make_record(random_seat=True)
-        assert not {"random_seat", "what_if"} & set(record.model_input_fields())
+    def test_both_are_collection_metadata(self):
+        assert {"random_seat", "what_if"} <= COLLECTION_METADATA_FIELDS
 
 
 def _legality(subkind: str) -> dict:

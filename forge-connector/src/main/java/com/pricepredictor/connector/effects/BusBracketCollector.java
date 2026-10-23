@@ -1,45 +1,27 @@
 package com.pricepredictor.connector.effects;
 
-import com.google.common.collect.Table;
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.player.Player;
-import forge.game.zone.ZoneType;
-import forge.game.card.CardView;
-import forge.game.event.GameEventCardAttachment;
+import forge.game.combat.Combat;
+import forge.game.event.GameEvent;
 import forge.game.event.GameEventCardChangeZone;
-import forge.game.event.GameEventCardCounters;
-import forge.game.event.GameEventCardDamaged;
-import forge.game.event.GameEventCardRegenerated;
-import forge.game.event.GameEventCardStatsChanged;
-import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventCombatEnded;
-import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameFinished;
-import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventLandPlayed;
-import forge.game.event.GameEventScry;
-import forge.game.event.GameEventShuffle;
-import forge.game.event.GameEventSurveil;
-import forge.game.event.GameEventPlayerCounters;
-import forge.game.event.GameEventPlayerDamaged;
-import forge.game.event.GameEventPlayerLivesChanged;
-import forge.game.event.GameEventPlayerPoisoned;
-import forge.game.event.GameEventPlayerRadiation;
-import forge.game.event.GameEventSpeedChanged;
+import forge.game.event.GameEventPlayerPriority;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 
 import java.lang.reflect.InvocationHandler;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 
@@ -47,15 +29,17 @@ import java.util.StringJoiner;
  * Stage-one collection: the public event bus plus a bracket around resolution.
  *
  * <p>No patched Forge. Events arriving on the bus are attributed to whatever the
- * stack said was resolving when the bracket opened — correct for the common case
- * of one thing resolving at a time, and approximate where two resolve together.
- * Every record it writes is stamped {@code degraded} so a corpus never claims
- * more precision than it has.
+ * stack says is resolving — correct for the common case of one thing resolving
+ * at a time, and approximate where two resolve together. Every record it writes
+ * is stamped {@code degraded} so a corpus never claims more precision than it
+ * has.
  *
- * <p>The bracket is delimited by the bus itself: a cast opens one, a resolution
- * closes it. The resolving ability is read from {@code game.getStack()} rather
- * than from the event, because the event carries a view and the provenance key
- * needs the model object.
+ * <p>The brackets are delimited by the bus itself: a cast opens one, a
+ * resolution closes it. There is one per stack item ({@link StackRecords}), so
+ * a spell under a trigger it set off, or under a response, keeps its own until
+ * it resolves. The resolving ability is read from {@code game.getStack()}
+ * rather than from the event, because the event carries a view and the
+ * provenance key needs the model object.
  *
  * <p>The cost half is <b>held</b> from the cast until the bracket closes, so it
  * can be stamped with what actually became of the spell. Every other record this
@@ -63,29 +47,140 @@ import java.util.StringJoiner;
  * {@code outcome} is a field of it and a spell that is countered before it
  * resolves never publishes anything else the collector could attach the answer
  * to. A cast still on the stack when the game ends is dropped rather than given
- * one of the five outcomes it did not have — but it is now counted and named
- * rather than vanishing; see {@link #finishGame}.
+ * one of the five outcomes it did not have, and counted and named on stderr;
+ * see {@link #finishGame}.
  *
  * <p>Damage steps get their own brackets, closed at the phase boundary, so a
  * first-strike combat writes two records — the only way a keyword that acts by
  * splitting the step is visible in the corpus at all.
  */
-public final class BusBracketCollector {
+public final class BusBracketCollector extends BusEventReader {
 
-    private final Game game;
-    private final RecordShardWriter writer;
+    private final CollectorContext context;
     private final SnapshotBuilder snapshots;
-    private final AttributionMode mode;
-    private final String gameId;
 
-    /** The ability the open bracket attributes to, or null between brackets. */
-    private SpellAbility resolving;
-    private ProvenanceKey.Resolved resolvingKeys =
-            new ProvenanceKey.Resolved(null, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
-    private String resolvingActor;
-    private String openBracketState;
-    private final List<EffectEvent> bracketEvents = new ArrayList<>();
-    private final Set<String> bracketEventKeys = new LinkedHashSet<>();
+    /** One bracket per stack item this collector saw cast. */
+    private final StackRecords stack = new StackRecords();
+
+    /**
+     * The bracket the bus files into now, or null when nothing is: from a cast
+     * until the next action or resolution, the cast's own, and while something
+     * resolves, the resolving item's ({@link #followResolution}). Which events
+     * it takes is {@link #causeNow}'s to say.
+     */
+    private OpenResolution open;
+
+    /**
+     * What the bus filed while no bracket was open: the aftermath of a
+     * resolution, the state-based check before anything is cast again.
+     *
+     * <p>{@link #flushOrphanedEvents} finds it if the game ends before a cast
+     * or a resolution empties it again — the ordinary place of a win.
+     */
+    private final EventBuffer orphans = new EventBuffer();
+
+    /**
+     * The ability whose resolution was the last published, while Forge may
+     * still be finishing it, or null; see {@link #followResolution}.
+     */
+    private Integer finishing;
+
+    /**
+     * What a card on its way onto the stack set off before its cast was
+     * announced, or null when no cast is under way ({@link Cause#CAST}).
+     */
+    private PreCast preCast;
+
+    /** Cards whose arrival in the stack zone has been published, while they are there. */
+    private final Set<Integer> arrived = new LinkedHashSet<>();
+
+    /**
+     * Cards in the stack zone whose cast was given up, while they are there;
+     * see {@link #castUnderWay}.
+     */
+    private final Set<Integer> abandoned = new LinkedHashSet<>();
+
+    /** The resolution waiting for its consequences, or null when none is. */
+    private HeldResolution held;
+
+    private final PendingActivations pending = new PendingActivations();
+
+    /** The damage step's combat being gathered, or null outside one. */
+    private CombatBracket combat;
+
+    /**
+     * Whether this damage step's combat record has been written because
+     * something used the stack after the damage.
+     *
+     * <p>A damage step has a priority window after its damage, in which
+     * combat-damage triggers and anything cast resolve. Their events are
+     * theirs, not the combat's, so the first bracket to open in the step writes
+     * the combat record, and nothing after it joins one. Reset at the next
+     * phase.
+     */
+    private boolean combatWindowClosed;
+
+    /** Told each combat record's id, for a probe that mirrors it. */
+    private final java.util.function.Consumer<String> onCombatRecord;
+
+    /**
+     * One stack item's bracket, from its cast until it resolves or leaves the
+     * stack without resolving.
+     *
+     * <p>Built at the cast. A cast whose stack top holds no ability builds
+     * none, and nothing is filed for it.
+     */
+    private static final class OpenResolution {
+        private final SpellAbility ability;
+        private final ProvenanceKey.Resolved keys;
+        private final String actor;
+        /** The board at the cast, paired at the resolution with the refs read then. */
+        private final Snapshot state;
+        /** This resolution's chosen modes, split as they resolve; its own and no other's. */
+        private final ModeSplit modes = new ModeSplit();
+        /**
+         * What the bus filed for this item: the consequences of its cast —
+         * what its card's move onto the stack set off, the state-based check
+         * after it, until the next action — and what it does while it
+         * resolves.
+         */
+        private final EventBuffer events = new EventBuffer();
+
+        /**
+         * Whether the controller turned something down while this bracket was open.
+         *
+         * <p>Scoped to the bracket rather than matched against the declined
+         * ability's id, because Forge resolves a copy of the ability it was handed
+         * and an id comparison would silently never match — the same reason
+         * {@link EventAttribution} counts a clause upward from the pointer instead
+         * of downward from the root. What keeps the flag from over-claiming is the
+         * second half of the test in {@link BusBracketCollector#wasDeclined}: a
+         * resolution that produced any outcome at all is {@code resolved} however
+         * many optional clauses inside it were declined.
+         */
+        private boolean declined;
+
+        private OpenResolution(
+                SpellAbility ability, ProvenanceKey.Resolved keys, String actor, Snapshot state) {
+            this.ability = ability;
+            this.keys = keys;
+            this.actor = actor;
+            this.state = state;
+        }
+
+        /** Whether this is the bracket of the ability the engine names by id. */
+        boolean is(int abilityId) {
+            return ability.getId() == abilityId;
+        }
+
+        /**
+         * Whether a clause is on this resolution's card; see
+         * {@link BusBracketCollector#beginMode}.
+         */
+        boolean hosts(SpellAbility clause) {
+            return clause != null && clause.getHostCard() == ability.getHostCard();
+        }
+    }
 
     /**
      * One chosen mode of the open modal resolution, once its first clause has
@@ -100,26 +195,156 @@ public final class BusBracketCollector {
      */
     private static final class ModeHalf {
         private final Integer option;
-        private final String state;
+        private final Snapshot state;
         private final List<EffectEvent> events = new ArrayList<>();
 
-        private ModeHalf(Integer option, String state) {
+        private ModeHalf(Integer option, Snapshot state) {
             this.option = option;
             this.state = state;
         }
     }
 
-    /** The modes of the open resolution whose halves are complete, in order. */
-    private final List<ModeHalf> modeHalves = new ArrayList<>();
-    /** The mode whose clauses are resolving now, or null outside one. */
-    private ModeHalf openMode;
+    /**
+     * A modal resolution's chosen modes, split at each mode's first clause.
+     *
+     * <p>Owned by the {@link OpenResolution} it splits, so it goes wherever
+     * that resolution goes and no other resolution ever sees it. That matters
+     * for a mode that casts a spell (Tetsuo, Imperial Champion's second mode):
+     * Forge resolves nothing inside a resolution, so the cast spell's
+     * {@code GameEventSpellAbilityCast} arrives in the middle of the mode, the
+     * charm then finishes and publishes its {@code GameEventSpellResolved},
+     * and the spell resolves afterwards, on its own. The charm keeps its
+     * bracket, and so its split, until its own resolution closes them; the
+     * spell's bracket opens later with a split of its own, empty.
+     */
+    private static final class ModeSplit {
+        /** The modes whose halves are complete, in order. */
+        private final List<ModeHalf> complete = new ArrayList<>();
+        /** The mode whose clauses are resolving now, or null outside one. */
+        private ModeHalf current;
+
+        /** Complete the current mode's half and open one for the next mode. */
+        void begin(Integer option, Snapshot state, EventBuffer bracketEvents) {
+            close(bracketEvents);
+            current = new ModeHalf(option, state);
+        }
+
+        /** Move the bracket's events into the current mode's half and complete it. */
+        void close(EventBuffer bracketEvents) {
+            if (current == null) {
+                return;
+            }
+            current.events.addAll(bracketEvents.drain());
+            complete.add(current);
+            current = null;
+        }
+
+        /** Whether no mode's half is complete: the resolution writes one root half. */
+        boolean isEmpty() {
+            return complete.isEmpty();
+        }
+
+        /** Whether any complete half holds an event. */
+        boolean anyEvents() {
+            for (ModeHalf half : complete) {
+                if (!half.events.isEmpty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        List<ModeHalf> complete() {
+            return complete;
+        }
+    }
+
+    /**
+     * The brackets of the stack items this collector saw cast, mirroring
+     * Forge's stack: one per item, keyed by its ability's id, which is the key
+     * {@code MagicStack} itself finds an item by
+     * ({@code getInstanceMatchingSpellAbilityID}) and the id both the
+     * resolution and the cost half carry.
+     *
+     * <p>An item's bracket outlives everything put on the stack above it. A
+     * cast trigger — prowess, "whenever you cast", heroic, storm, cascade —
+     * and any response go above the spell and resolve first; each writes its
+     * own halves and is removed, and the spell's bracket is still there when
+     * the spell resolves.
+     *
+     * <p>A cast made <b>while something is resolving</b> waits beside the
+     * stack instead of going on top. Forge freezes the stack while an ability
+     * resolves and parks what is added to it until the resolution ends; a
+     * spell a {@code Play} effect casts goes onto it anyway — cascade,
+     * discover, madness, Tetsuo's cast mode and every other "you may cast"
+     * are that effect — and so does a copy marked {@code IgnoreFreeze}. Its
+     * {@code GameEventSpellAbilityCast} is published in the middle of the
+     * resolution; the resolution then finishes its remaining clauses and
+     * publishes {@code GameEventSpellResolved}, and the cast spell resolves
+     * afterwards. So the resolving item stays the top: what it does after the
+     * cast is its own. When it resolves, what waited goes on top in the order
+     * it was cast, where Forge put it, below anything the end of the
+     * resolution then adds — a parked trigger, a parked copy. The board a
+     * waiting cast pairs with is still the one taken at its cast.
+     */
+    private static final class StackRecords {
+        /** Bottom first: the last is the top. */
+        private final List<OpenResolution> items = new ArrayList<>();
+        /** Cast while something was resolving, oldest first. */
+        private final List<OpenResolution> waiting = new ArrayList<>();
+
+        void push(OpenResolution item) {
+            items.add(item);
+        }
+
+        void waitForResolution(OpenResolution cast) {
+            waiting.add(cast);
+        }
+
+        /** The top item's bracket, or null when no item is on the stack. */
+        OpenResolution top() {
+            return items.isEmpty() ? null : items.get(items.size() - 1);
+        }
+
+        /** The bracket of {@code abilityId}, no longer on the stack, or null. */
+        OpenResolution remove(int abilityId) {
+            for (int i = items.size() - 1; i >= 0; i--) {
+                if (items.get(i).is(abilityId)) {
+                    return items.remove(i);
+                }
+            }
+            for (int i = waiting.size() - 1; i >= 0; i--) {
+                if (waiting.get(i).is(abilityId)) {
+                    return waiting.remove(i);
+                }
+            }
+            return null;
+        }
+
+        /** A resolution has ended: what was cast during it goes on top. */
+        void releaseWaiting() {
+            items.addAll(waiting);
+            waiting.clear();
+        }
+
+        /** Remove the bracket of every item the stack no longer holds. */
+        void removeAbsent(Set<Integer> onStack) {
+            items.removeIf(item -> !onStack.contains(item.ability.getId()));
+            waiting.removeIf(item -> !onStack.contains(item.ability.getId()));
+        }
+
+        /** Whether {@code item} is still one of the stack's brackets. */
+        boolean holds(OpenResolution item) {
+            return items.contains(item) || waiting.contains(item);
+        }
+    }
 
     /**
      * One effect half that has finished resolving and is not written yet.
      *
      * <p>Everything but the events is fixed at the resolution — the id, the
      * timestamp, the key and the board, which is the one taken before the
-     * resolution as it always was. The events can still grow, by the deaths
+     * resolution. The events can still grow, by the deaths
      * the resolution's own effects cause; see {@link HeldResolution}.
      *
      * @param touched the entity refs this half's own events name as subjects,
@@ -130,23 +355,15 @@ public final class BusBracketCollector {
             String timestamp,
             ProvenanceKey.Resolved keys,
             String state,
-            List<EffectEvent> events,
-            Set<String> seen,
+            EventBuffer events,
             Set<String> touched) {
 
         static HeldHalf of(
                 String recordId, ProvenanceKey.Resolved keys, String state,
                 List<EffectEvent> events) {
-            List<EffectEvent> own = new ArrayList<>(events);
-            Set<String> seen = new LinkedHashSet<>();
-            for (EffectEvent event : own) {
-                if (IDEMPOTENT_EVENTS.contains(event.type())) {
-                    seen.add(event.toJson());
-                }
-            }
             return new HeldHalf(
-                    recordId, RecordShardWriter.timestamp(), keys, state, own, seen,
-                    touchedBy(own));
+                    recordId, RecordShardWriter.timestamp(), keys, state,
+                    EventBuffer.copyOf(events), touchedBy(events));
         }
     }
 
@@ -158,35 +375,21 @@ public final class BusBracketCollector {
      * and returns, and the creature a Lightning Bolt left with lethal damage
      * dies at the next priority, inside {@code GameAction.checkStateEffects} —
      * after {@code GameEventPlayerPriority}, so not even that event is a
-     * boundary. Written at the resolved event, as it used to be, the effect
-     * half held the damage and never the death: across twelve real shards,
-     * none of 515 lethal-looking resolution damage events had its death in
-     * the same record, while combat records, whose bracket stays open until
-     * the step ends, held it 61% of the time.
+     * boundary. Written at the resolved event, the effect half would hold the
+     * damage and never the death, which a combat record, whose bracket stays
+     * open until the step ends, does hold.
      *
      * <p>So the halves are held from the resolution until the next real
-     * action begins — a bracket opening for a cast or a trigger, another
-     * resolution ending, a combat bracket opening, a step or phase boundary,
-     * a land played, the end of the game — and written then, exactly once.
+     * action begins ({@link #onNextAction}) — a bracket opening for a cast or
+     * a trigger, another resolution ending, a combat bracket opening, a step
+     * or phase boundary, a land played, the end of the game — and written
+     * then, exactly once.
      *
      * @param root the resolved ability, which the deaths are stamped against
      */
     private record HeldResolution(
             SpellAbility root, String actor, String linkId, List<HeldHalf> halves) {
     }
-
-    /** The resolution waiting for its consequences, or null when none is. */
-    private HeldResolution held;
-
-    /**
-     * The match's random seat, as a player id, or null when it has none.
-     *
-     * <p>Every record this collector writes is stamped {@code random_seat}
-     * against it at the write (FR-030). Set after the game is created and
-     * before the first event, because the seat is decided per match and the
-     * collector per game.
-     */
-    private String randomSeatPlayerId;
 
     /**
      * Casts whose outcome is not known yet, oldest first.
@@ -196,90 +399,107 @@ public final class BusBracketCollector {
      * the newest end. Nothing here has been written yet — see
      * {@link PendingActivation} for why the record has to wait.
      */
-    private final List<PendingActivation> pendingActivations = new ArrayList<>();
+    private static final class PendingActivations {
+        private final List<PendingActivation> casts = new ArrayList<>();
 
-    /** Combat damage accumulates into its own bracket, closed at the phase end. */
-    private final List<EffectEvent> combatEvents = new ArrayList<>();
-    private final Set<String> combatEventKeys = new LinkedHashSet<>();
-    /** The step's combat, read when its bracket opens rather than at flush. */
-    private CombatShape combatShape = CombatShape.empty();
+        void add(PendingActivation cast) {
+            casts.add(cast);
+        }
+
+        boolean isEmpty() {
+            return casts.isEmpty();
+        }
+
+        /** The held cast for an ability id, newest first. */
+        Optional<PendingActivation> find(int abilityId) {
+            for (int i = casts.size() - 1; i >= 0; i--) {
+                if (casts.get(i).abilityId() == abilityId) {
+                    return Optional.of(casts.get(i));
+                }
+            }
+            return Optional.empty();
+        }
+
+        /** The held cast for an ability id, no longer held. */
+        Optional<PendingActivation> settle(int abilityId) {
+            Optional<PendingActivation> found = find(abilityId);
+            found.ifPresent(casts::remove);
+            return found;
+        }
+
+        /** Every held cast the stack no longer holds, oldest first, no longer held. */
+        List<PendingActivation> removeAbsent(Set<Integer> onStack) {
+            List<PendingActivation> removed = new ArrayList<>();
+            for (Iterator<PendingActivation> it = casts.iterator(); it.hasNext();) {
+                PendingActivation cast = it.next();
+                if (!onStack.contains(cast.abilityId())) {
+                    it.remove();
+                    removed.add(cast);
+                }
+            }
+            return removed;
+        }
+
+        /** Every held cast, oldest first, none of them held any longer. */
+        List<PendingActivation> removeAll() {
+            List<PendingActivation> all = List.copyOf(casts);
+            casts.clear();
+            return all;
+        }
+    }
+
     /**
-     * Computed characteristics, so a stats-changed event can say what changed.
+     * One damage step's combat, from the first event dealt in it until the
+     * step ends or something uses the stack.
      *
-     * <p>Lives for the game rather than the bracket: a pump in one bracket and
-     * its wearing off in another are both differences from what was there
-     * before, and a per-bracket baseline would report the second as nothing.
+     * <p>The structure is read when the bracket opens rather than at the
+     * flush, because the flush happens at the phase boundary — after the
+     * damage has been dealt and the creatures it killed have left. Read there,
+     * an attacker that traded with its blocker is in neither list, and the
+     * record describes a combat nobody fought. Read here it matches the
+     * snapshot beside it, which is taken in the same call.
      */
-    private final StatDiffer stats = new StatDiffer();
+    private static final class CombatBracket {
+        private final String state;
+        private final CombatShape shape;
+        private final EventBuffer events = new EventBuffer();
+
+        private CombatBracket(String state, Combat combat) {
+            this.state = state;
+            // Nothing has died yet, so this is the moment the attackers and
+            // blockers are all still in combat. The assignment is Forge's copy of
+            // this step's, taken before any replacement, so it reads the same
+            // whenever in the step it is read.
+            this.shape = CombatShape.of(combat);
+            shape.addAssignment(combat);
+        }
+
+        void file(EffectEvent event) {
+            events.file(event);
+        }
+
+        String payload() {
+            return EffectRecord.combatPayload(shape.fields(), events.events());
+        }
+    }
+
     /**
-     * Assignments already written, for the length of one combat.
-     *
-     * <p>Forge's assignment table is never cleared between the first-strike and
-     * regular steps, so without this the regular step's record repeats first
-     * strike's. Cleared when the combat ends, not when a step does.
+     * @param onCombatRecord told the id of each {@code combat} record as it is
+     *                       written. A damage-step probe forks before the step
+     *                       and cannot know what it mirrors until the real
+     *                       record exists, so the pairing is handed over
+     *                       rather than reconstructed. Reconstructing it from
+     *                       board state would not work: two combats in one
+     *                       turn can look identical, and a wrong pairing makes
+     *                       the difference between them meaningless.
      */
-    private final Set<String> assignmentsSeen = new LinkedHashSet<>();
-    private final Set<String> combatParticipants = new LinkedHashSet<>();
-    private String combatSubstep;
-    private String combatState;
-
-    private long recordsWritten;
-
-    /**
-     * Whether the controller turned something down while this bracket was open.
-     *
-     * <p>Scoped to the bracket rather than matched against the declined
-     * ability's id, because Forge resolves a copy of the ability it was handed
-     * and an id comparison would silently never match — the same reason
-     * {@link EventAttribution} counts a clause upward from the pointer instead
-     * of downward from the root. What keeps the flag from over-claiming is the
-     * second half of the test in {@link #endBracket}: a resolution that
-     * produced any outcome at all is {@code resolved} however many optional
-     * clauses inside it were declined.
-     */
-    private boolean bracketDeclined;
-
-    /** Casts still on the stack when the game ended, over the whole game. */
-    private long abandonedActivations;
-
-    /** Told each combat record's id, for a probe that mirrors it. */
-    private java.util.function.Consumer<String> onCombatRecord;
-
-    public BusBracketCollector(
-            Game game, RecordShardWriter writer, String gameId) {
-        this.game = game;
-        this.writer = writer;
-        this.gameId = gameId;
+    BusBracketCollector(
+            Game game, CollectorContext context,
+            java.util.function.Consumer<String> onCombatRecord) {
+        super(game);
+        this.context = context;
         this.snapshots = new SnapshotBuilder(game);
-        this.mode = AttributionMode.detect();
-        // Installed here and dropped at GameEventGameFinished, because this
-        // collector has no other lifecycle: it is subscribed to the bus for
-        // exactly one game and the bus tells it when that game is over. On an
-        // unpatched checkout install() finds no hook and nothing changes.
-        PatchHooks.install(
-                PLAYER_CONTROLLER_AI, CONFIRM_LISTENER, confirmHandler());
-    }
-
-    /**
-     * Be told the id of each {@code combat} record as it is written.
-     *
-     * <p>A damage-step probe forks before the step and cannot know what it
-     * mirrors until the real record exists, so the pairing is handed over here
-     * rather than reconstructed. Reconstructing it from board state would not
-     * work: two combats in one turn can look identical, and a wrong pairing
-     * makes the difference between them meaningless.
-     */
-    public void onCombatRecord(java.util.function.Consumer<String> listener) {
-        this.onCombatRecord = listener;
-    }
-
-    public long recordsWritten() {
-        return recordsWritten;
-    }
-
-    /** Name the match's random seat, so every record can say whether it acted. */
-    public void setRandomSeatPlayerId(String playerId) {
-        this.randomSeatPlayerId = playerId;
+        this.onCombatRecord = onCombatRecord;
     }
 
     // ── brackets ────────────────────────────────────────────────────────
@@ -291,10 +511,9 @@ public final class BusBracketCollector {
      * they are unreadable a moment later — but the record cannot be written yet,
      * because {@code outcome} is a field of the cost half and the answer to it
      * does not exist until the spell resolves or leaves the stack without
-     * resolving. Writing it here is why every one of the corpus's 4,989
-     * activation records said the literal {@code resolved}, and why 6.1% of
-     * link halves had no partner: a fizzled spell issued a {@code link_id} whose
-     * effect half never came.
+     * resolving. Written here, every activation would read {@code resolved},
+     * and a fizzled spell would issue a {@code link_id} whose effect half never
+     * comes.
      */
     @Subscribe
     public void onCast(GameEventSpellAbilityCast event) {
@@ -314,22 +533,99 @@ public final class BusBracketCollector {
      *
      * <p>Split from {@link #onCast} at the one line that reads the stack, so the
      * rules that decide what a cost record eventually says can be exercised
-     * against a real ability without a game in progress — which is exactly what
-     * they were missing while the outcome was a literal.
+     * against a real ability without a game in progress.
      */
     void beginBracket(SpellAbility ability) {
         // A cast, an activation or a trigger reaching the stack is the next
         // action: whatever the held resolution killed has died by now.
-        flushHeldResolution();
-        openBracket(ability);
-        if (ability == null) {
+        onNextAction();
+        // And whatever the combat damage killed: state-based actions run
+        // before anything goes on the stack.
+        closeCombatWindow();
+        if (ability != null) {
+            writeOffEarlierCast(ability.getId());
+        }
+        OpenResolution cast = ability == null ? null : new OpenResolution(
+                ability, ProvenanceResolver.resolve(ability), actorOf(ability),
+                snapshots.ofResolving(ability));
+        if (game.getStack().isResolving()) {
+            // Cast by the resolving ability itself, which keeps the bracket
+            // until it ends (StackRecords).
+            followResolution();
+            if (cast != null) {
+                stack.waitForResolution(cast);
+            }
+        } else {
+            openBracket(cast);
+            // What the card's move onto the stack set off is this cast's.
+            if (cast != null && preCast != null && preCast.isFor(ability.getHostCard())) {
+                preCast.fileInto(cast);
+            }
+            // Any other card still on its way was given up: one cast at a time.
+            abandonCastsUnderWay();
+        }
+        preCast = null;
+        if (cast == null) {
             return;
         }
-        pendingActivations.add(new PendingActivation(
-                ability.getId(), writer.nextRecordId(),
+        pending.add(new PendingActivation(
+                ability.getId(), context.nextRecordId(),
                 RecordShardWriter.timestamp(), EffectRecord.costsJson(ability),
-                actorOf(ability), keysOf(ability), openBracketState,
-                gameId + ".link." + ability.getId(), targetCount(ability)));
+                cast.actor, cast.keys, cast.state.render(),
+                context.gameId() + ".link." + ability.getId(), targetCount(ability)));
+    }
+
+    /**
+     * A cast of an ability whose earlier cast is still held, written off as
+     * any removal is.
+     *
+     * <p>Defensive: no real game reaches it. One ability is on the stack at
+     * most once — an activation and a trigger are each a fresh object, a copy
+     * has an id of its own — and a card that leaves the stack is rebuilt by
+     * {@code CardCopyService.copyCard} with fresh spell ability ids, so a
+     * card cast again always casts a new id. Were an id ever reused while its
+     * earlier cast was held, that cast would otherwise be settled by the
+     * later one's resolution.
+     */
+    private void writeOffEarlierCast(int abilityId) {
+        pending.settle(abilityId).ifPresent(
+                earlier -> emitActivation(earlier, ActivationOutcome.COUNTERED, false));
+        OpenResolution gone = stack.remove(abilityId);
+        if (gone != null && open == gone) {
+            open = null;
+        }
+    }
+
+    /**
+     * While the stack resolves, the bracket the bus files into is the
+     * resolving item's: the top of {@link StackRecords}, since what is cast
+     * during a resolution waits beside the stack rather than going on top.
+     *
+     * <p>Forge publishes nothing when a resolution starts, so this is asked
+     * wherever one first shows — an event filed, a mode beginning, a refusal,
+     * a cast made by it — and its resolution's end finds its bracket by id
+     * however little it showed.
+     *
+     * <p>The stack still reads as resolving after a resolution has been
+     * published: {@code MagicStack.resolveStack} publishes
+     * {@code GameEventSpellResolved} first, then runs the static check and
+     * {@code finishResolving}, which moves the card off the stack — to the
+     * graveyard, to exile, out of existence for a copy — before it stops
+     * resolving. That window is the resolved item's, which has no bracket any
+     * more, and not the item below it: while the resolved item is still on
+     * the stack ({@link #finishing}), nothing is opened.
+     */
+    private void followResolution() {
+        if (!game.getStack().isResolving() || stack.top() == null || open == stack.top()) {
+            return;
+        }
+        if (finishing != null) {
+            if (idsOnStack().contains(finishing)) {
+                return;
+            }
+            finishing = null;
+        }
+        open = stack.top();
     }
 
     /**
@@ -368,67 +664,83 @@ public final class BusBracketCollector {
         // Another resolution has run since the held one ended, so the held
         // one's state-based check is over: what dies after this is this
         // resolution's doing, or a mix nobody can untangle.
-        flushHeldResolution();
-        // The bracket is a single slot, so a spell cast in response to another
-        // takes it over: when the outer one finally resolves the events that
-        // belong to it were never gathered. The cost half is still stamped with
-        // its real outcome; what it must not do is issue a link to an effect
-        // half nobody is going to write.
-        boolean bracketIsThisAbility = resolving != null && resolving.getId() == abilityId;
-        boolean declined = bracketIsThisAbility && !fizzled && wasDeclined();
-        boolean writesEffectHalf = bracketIsThisAbility && !fizzled && !declined;
+        onNextAction();
+        // Found by id wherever it is: on top as a rule, and anywhere for an
+        // item resolved by hand. An item this collector never saw cast has
+        // none, and its cost half, if any, is still stamped with its real
+        // outcome without a link to a half nobody is going to write.
+        OpenResolution resolved = stack.remove(abilityId);
+        boolean declined = resolved != null && !fizzled && wasDeclined(resolved);
+        boolean writesEffectHalf = resolved != null && !fizzled && !declined;
 
         String link = settleActivation(
                 abilityId,
-                fizzled
-                        ? EffectRecord.OUTCOME_FIZZLED
-                        : declined
-                                ? EffectRecord.OUTCOME_DECLINED
-                                : outcomeOf(heldTargetsAtCast(abilityId),
-                                        bracketIsThisAbility ? resolving : null),
+                settledOutcome(abilityId, fizzled, declined, resolved),
                 writesEffectHalf);
 
-        if (bracketIsThisAbility) {
+        if (resolved != null) {
             // The last mode's half closes with the resolution, since no next
             // mode's first clause comes to close it.
-            closeOpenMode();
+            resolved.modes.close(resolved.events);
         }
+        if (writesEffectHalf) {
+            holdEffectHalves(resolved, link);
+        }
+        // What the resolution cast goes on top, and until the next item
+        // resolves or something is cast, nothing is open: what follows is
+        // the resolution's aftermath.
+        stack.releaseWaiting();
+        open = null;
+        orphans.clear();
+        finishing = abilityId;
+        preCast = null;
+    }
 
-        // The effect halves are held rather than written: the deaths this
-        // resolution causes have not happened yet. See HeldResolution.
-        if (writesEffectHalf && modeHalves.isEmpty()) {
-            held = new HeldResolution(resolving, resolvingActor, link, List.of(HeldHalf.of(
-                    writer.nextRecordId(), resolvingKeys,
+    /** What became of a cast that has left the stack through a resolution. */
+    private ActivationOutcome settledOutcome(
+            int abilityId, boolean fizzled, boolean declined, OpenResolution resolved) {
+        if (fizzled) {
+            return ActivationOutcome.FIZZLED;
+        }
+        if (declined) {
+            return ActivationOutcome.DECLINED;
+        }
+        return outcomeOf(
+                pending.find(abilityId).map(PendingActivation::targetsAtCast).orElse(0),
+                resolved == null ? null : resolved.ability);
+    }
+
+    /**
+     * Hold a resolution's effect halves, under the cost half's link.
+     *
+     * <p>Held rather than written: the deaths this resolution causes have not
+     * happened yet. See {@link HeldResolution}.
+     */
+    private void holdEffectHalves(OpenResolution resolved, String link) {
+        if (resolved.modes.isEmpty()) {
+            held = new HeldResolution(resolved.ability, resolved.actor, link, List.of(HeldHalf.of(
+                    context.nextRecordId(), resolved.keys,
                     // Modes, X and the named card are set while the ability
                     // resolves, so the block that carries them is re-read here
-                    // and spliced into the board captured at the cast.
-                    SnapshotBuilder.spliceRefs(
-                            openBracketState, snapshots.refsJson(resolving)),
-                    bracketEvents)));
-        } else if (writesEffectHalf) {
-            // A modal resolution on a patched worker: one effect half per
-            // chosen mode, each through the mode's own option line, every one
-            // of them under the cost half's link (FR-029a, FR-029d). The
-            // events a mode produced are its own and nothing else's; a mode
-            // that fizzled on its own carries an empty list under its key,
-            // which is what the schema says of any resolution that did
-            // nothing observable.
-            String refs = snapshots.refsJson(resolving);
-            List<HeldHalf> halves = new ArrayList<>();
-            for (ModeHalf half : modeHalves) {
-                halves.add(HeldHalf.of(
-                        writer.nextRecordId(), modeKeys(half.option),
-                        SnapshotBuilder.spliceRefs(half.state, refs), half.events));
-            }
-            held = new HeldResolution(resolving, resolvingActor, link, List.copyOf(halves));
+                    // and paired with the board captured at the cast.
+                    resolved.state.withRefs(snapshots.refsJson(resolved.ability)).render(),
+                    resolved.events.events())));
+            return;
         }
-
-        if (bracketIsThisAbility) {
-            closeBracket();
-        } else if (resolving == null) {
-            bracketEvents.clear();
-            bracketEventKeys.clear();
+        // A modal resolution on a patched worker: one effect half per chosen
+        // mode, each through the mode's own option line, every one of them
+        // under the cost half's link (FR-029a, FR-029d). The events a mode
+        // produced are its own and nothing else's; a mode that fizzled on its
+        // own carries an empty list under its key, which is what the schema
+        // says of any resolution that did nothing observable.
+        String refs = snapshots.refsJson(resolved.ability);
+        List<HeldHalf> halves = new ArrayList<>();
+        for (ModeHalf half : resolved.modes.complete()) {
+            halves.add(HeldHalf.of(
+                    context.nextRecordId(), resolved.keys.withOption(half.option),
+                    half.state.withRefs(refs).render(), half.events));
         }
+        held = new HeldResolution(resolved.ability, resolved.actor, link, List.copyOf(halves));
     }
 
     /**
@@ -439,21 +751,21 @@ public final class BusBracketCollector {
      */
     @Subscribe
     public void onPhase(GameEventTurnPhase event) {
-        flushHeldResolution();
-        flushCombat();
+        onStepBoundary();
         // An effect that empties the stack -- ending the turn, ending combat --
         // resolves nothing afterwards, so a phase boundary is the last chance
         // to notice what it swept away.
         reconcilePending();
     }
 
+    /**
+     * The end of combat writes the combat bracket without reopening the
+     * window: the phase change that follows it does that.
+     */
     @Subscribe
     public void onCombatEnded(GameEventCombatEnded event) {
-        flushHeldResolution();
+        onNextAction();
         flushCombat();
-        // The next combat's assignment table starts empty, so what this one
-        // wrote must stop suppressing entries in it.
-        assignmentsSeen.clear();
     }
 
     /**
@@ -464,158 +776,94 @@ public final class BusBracketCollector {
      * record — it arrives rather than leaves — because a land is followed by
      * another state-based check, and what that one kills is the land's doing
      * (a static it brought), not the held resolution's.
+     *
+     * <p>No cast is under way across it either: a card a failed play left in
+     * the stack zone is a cast given up from here ({@link #castUnderWay}).
      */
     @Subscribe
     public void onLandPlayed(GameEventLandPlayed event) {
-        flushHeldResolution();
+        onNextAction();
+        abandonCastsUnderWay();
+    }
+
+    // ── the two boundaries ──────────────────────────────────────────────
+
+    /**
+     * A new action has begun, so the held resolution's state-based
+     * consequences are over: write its effect halves, if one is held.
+     *
+     * <p>Package-private so a test that ends a resolution by hand can close
+     * the window the way the next action in a real game would.
+     */
+    void onNextAction() {
+        if (held == null) {
+            return;
+        }
+        HeldResolution writing = held;
+        held = null;
+        for (HeldHalf half : writing.halves()) {
+            context.emit(context.newResolution(
+                    Moment.RESOLUTION, half.recordId(), half.timestamp())
+                    .actor(writing.actor())
+                    .ability(half.keys())
+                    .linkId(writing.linkId())
+                    .state(half.state())
+                    .payload(EffectRecord.eventsPayload(half.events().events())));
+        }
+    }
+
+    /**
+     * A step or phase has ended: the step's combat record is written and the
+     * next damage step starts with its window open again.
+     */
+    private void onStepBoundary() {
+        onNextAction();
+        flushCombat();
+        combatWindowClosed = false;
+        // No cast is under way across a step boundary either.
+        abandonCastsUnderWay();
+    }
+
+    /**
+     * Something is going on the stack. In a damage step that ends the
+     * combat's share of the step: the record is written now, and what
+     * resolves for the rest of the step is not the combat's.
+     */
+    private void closeCombatWindow() {
+        if (inCombatDamageStep()) {
+            flushCombat();
+            combatWindowClosed = true;
+        }
     }
 
     // ── outcome events ──────────────────────────────────────────────────
 
+    @Override
+    boolean cardDamageIsCombat() {
+        return inCombatDamage();
+    }
+
     /**
-     * One damage, and the permanent that dealt it.
+     * Combat damage joins the step's bracket; any other damage the open one.
      *
-     * <p>The cause comes off the event rather than off the bracket, because in
-     * a damage step there is no bracket: nothing is resolving, and the
-     * attacking creature is the only answer to "what caused this". It is also
-     * what makes two attackers each dealing 1 damage to the same blocker two
-     * distinguishable events instead of one line rendered twice — 2,193 of the
-     * smoke corpus's 3,780 duplicated events are exactly that pair.
+     * <p>Routed by the caller's flag rather than by {@link #inCombatDamage},
+     * because a player damage carries Forge's own combat flag and a card
+     * damage has only the step to go by.
      */
-    @Subscribe
-    public void onCardDamaged(GameEventCardDamaged event) {
-        String subject = "E" + event.card().getId();
-        EffectEvent damage = EventAttribution.stamp(
-                BusEvents.cardDamaged(event, isCombatDamage()), resolving,
-                BusEvents.causeOf(event));
-        if (isCombatDamage()) {
-            openCombatBracket();
-            combatParticipants.add(subject);
-            combatEvents.add(damage);
+    @Override
+    void fileDamage(EffectEvent damage, String namedCause, boolean combat) {
+        if (combat) {
+            EventAttribution.stamp(damage, resolving(), namedCause);
+            fileCombat(damage);
         } else {
-            bracketEvents.add(damage);
+            route(damage, namedCause, causeNow(), false);
         }
     }
 
-    @Subscribe
-    public void onPlayerDamaged(GameEventPlayerDamaged event) {
-        String subject = "P" + event.target().getId();
-        EffectEvent damage = EventAttribution.stamp(
-                BusEvents.playerDamaged(event), resolving,
-                BusEvents.causeOf(event));
-        if (event.combat()) {
-            openCombatBracket();
-            combatParticipants.add(subject);
-            combatEvents.add(damage);
-        } else {
-            bracketEvents.add(damage);
-        }
-    }
-
-    @Subscribe
-    public void onLifeChanged(GameEventPlayerLivesChanged event) {
-        record(BusEvents.lifeChanged(event));
-    }
-
-    @Subscribe
-    public void onPoisoned(GameEventPlayerPoisoned event) {
-        record(BusEvents.poisoned(event), BusEvents.causeOf(event));
-    }
-
-    @Subscribe
-    public void onCounters(GameEventCardCounters event) {
-        record(BusEvents.counters(event));
-    }
-
-    /** Energy, and any other player counter the vocabulary learns to name. */
-    @Subscribe
-    public void onPlayerCounters(GameEventPlayerCounters event) {
-        EffectEvent counter = BusEvents.playerCounter(event);
-        if (counter != null) {
-            record(counter);
-        }
-    }
-
-    @Subscribe
-    public void onRadiation(GameEventPlayerRadiation event) {
-        record(BusEvents.radiation(event), BusEvents.causeOf(event));
-    }
-
-    @Subscribe
-    public void onSpeed(GameEventSpeedChanged event) {
-        record(BusEvents.speed(event));
-    }
-
-    @Subscribe
-    public void onDayTime(GameEventDayTimeChanged event) {
-        record(BusEvents.dayTime(event));
-    }
-
-    /**
-     * A regeneration shield doing its job. No named cause: see {@link
-     * BusEvents#regenerated}.
-     */
-    @Subscribe
-    public void onRegenerated(GameEventCardRegenerated event) {
-        record(BusEvents.regenerated(event));
-    }
-
-    /** A library shuffled. No named cause: see {@link BusEvents#libraryShuffled}. */
-    @Subscribe
-    public void onShuffle(GameEventShuffle event) {
-        record(BusEvents.libraryShuffled(event));
-    }
-
-    /**
-     * The game ended. No named cause, the same as {@link #onRegenerated}/
-     * {@link #onShuffle}: see {@link BusEvents#gameOutcome}. Null on a draw
-     * or when the winning name resolves to no player in this game -- checked
-     * here, the same as every other {@code BusEvents} factory that can
-     * return null (see {@link #onAttachment}, {@link #onPlayerCounters}).
-     */
-    @Subscribe
-    public void onGameOutcome(GameEventGameOutcome event) {
-        EffectEvent outcome = BusEvents.gameOutcome(event, game);
-        if (outcome != null) {
-            record(outcome);
-        }
-    }
-
-    @Subscribe
-    public void onTapped(GameEventCardTapped event) {
-        record(BusEvents.tapped(event));
-    }
-
-    /**
-     * A card moving, and the draw, discard or mill it may also be.
-     *
-     * <p>The workhorse outcome, and it is read here rather than off
-     * {@code GameEventZone} because only this event is a <b>move</b>: the
-     * per-zone-list notification fires once for the zone left, once for the zone
-     * reached and once more for the stack, which is where the 13.68% of events
-     * that repeated another event in the same record came from, and it cannot
-     * say where a card came from at all.
-     *
-     * <p>Draws, discards and mills have no event of their own: each is a card
-     * moving between two zones and which of the three it is depends on the pair.
-     * The head counts all three per player and none of those counters had ever
-     * fired.
-     */
-    @Subscribe
-    public void onCardChangeZone(GameEventCardChangeZone event) {
-        EffectEvent moved = BusEvents.cardMoved(event);
-        if (moved != null && !holdAsConsequence(event, moved)) {
+    @Override
+    void fileMove(GameEventCardChangeZone event, EffectEvent moved) {
+        if (!holdAsConsequence(event, moved)) {
             record(moved);
-        }
-        EffectEvent named = BusEvents.libraryMovement(event);
-        if (named != null) {
-            record(named);
-        }
-        if (event.card() != null && event.from() != null
-                && event.from().zoneType() == ZoneType.Battlefield) {
-            // Off the battlefield a card's computed characteristics stop
-            // meaning anything, and one that returns is a new object.
-            stats.forget(event.card().getId());
         }
     }
 
@@ -668,9 +916,7 @@ public final class BusBracketCollector {
      *         case it goes nowhere else
      */
     private boolean holdAsConsequence(GameEventCardChangeZone event, EffectEvent moved) {
-        if (held == null || event.from() == null
-                || event.from().zoneType() != ZoneType.Battlefield
-                || !game.getTracker().isFrozen()) {
+        if (held == null || !isStateBasedLeave(event)) {
             return false;
         }
         List<Set<String>> touched = new ArrayList<>();
@@ -678,9 +924,8 @@ public final class BusBracketCollector {
             touched.add(half.touched());
         }
         HeldHalf into = held.halves().get(
-                halfForDeath(touched, "E" + event.card().getId()));
-        fileEvent(EventAttribution.stamp(moved, held.root(), null, null),
-                into.events(), into.seen());
+                halfForDeath(touched, Refs.of(event.card())));
+        into.events().file(EventAttribution.stampAt(moved, held.root(), null, null));
         return true;
     }
 
@@ -692,7 +937,7 @@ public final class BusBracketCollector {
         Set<String> touched = new LinkedHashSet<>();
         for (EffectEvent event : events) {
             for (String subject : event.subjects()) {
-                if (subject.startsWith("E")) {
+                if (Refs.isEntity(subject)) {
                     touched.add(subject);
                 }
             }
@@ -720,108 +965,18 @@ public final class BusBracketCollector {
         return touchedPerHalf.size() - 1;
     }
 
-    /**
-     * Write the held resolution's effect halves, if one is held.
-     *
-     * <p>Package-private so a test that ends a resolution by hand can close
-     * the window the way the next action in a real game would.
-     */
-    void flushHeldResolution() {
-        if (held == null) {
-            return;
-        }
-        HeldResolution writing = held;
-        held = null;
-        for (HeldHalf half : writing.halves()) {
-            emit(new EffectRecord(
-                    half.recordId(), writer.runId(), half.timestamp(),
-                    gameId, EffectRecord.KIND_RESOLUTION, mode)
-                    .moment(EffectRecord.MOMENT_RESOLUTION)
-                    .actor(writing.actor())
-                    .ability(half.keys())
-                    .linkId(writing.linkId())
-                    .state(half.state())
-                    .payload(EffectRecord.eventsPayload(half.events())));
-        }
-    }
-
-    /**
-     * The engine says a card's stats moved; this says what moved.
-     *
-     * <p>The bus publishes one event for a pump, an anthem recompute, an
-     * animation and a colour change alike, and it names only the card. Without
-     * the difference, the whole "gets +2/+2 and gains flying" family — most of
-     * what a limited deck does — resolved into an empty event list.
-     */
-    @Subscribe
-    public void onStatsChanged(GameEventCardStatsChanged event) {
-        if (event.cards() == null) {
-            return;
-        }
-        for (CardView view : event.cards()) {
-            if (view == null) {
-                continue;
-            }
-            Card card = cardById(view.getId());
-            if (card != null) {
-                for (EffectEvent changed : stats.diff(card)) {
-                    record(changed);
-                }
-            }
-        }
-    }
-
-    @Subscribe
-    public void onAttachment(GameEventCardAttachment event) {
-        EffectEvent attached = BusEvents.attachment(event);
-        if (attached != null) {
-            record(attached);
-        }
-    }
-
-    @Subscribe
-    public void onScry(GameEventScry event) {
-        for (EffectEvent looked : BusEvents.scry(event)) {
-            record(looked);
-        }
-    }
-
-    @Subscribe
-    public void onSurveil(GameEventSurveil event) {
-        for (EffectEvent looked : BusEvents.surveil(event)) {
-            record(looked);
-        }
-    }
-
-    /**
-     * The battlefield card an id names, or null.
-     *
-     * <p>The bus hands out views rather than cards, and a view carries the id
-     * and not the object. The battlefield is small enough that a scan costs
-     * less than an index kept in step with every zone change.
-     */
-    private Card cardById(int id) {
-        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
-            if (card.getId() == id) {
-                return card;
-            }
-        }
-        return null;
-    }
-
     // ── plumbing ────────────────────────────────────────────────────────
 
     /**
-     * Route an event into whichever bracket is open.
+     * Route an event into whichever bracket it is a consequence of.
      *
      * <p>State-based-action deaths arrive with no ability resolving, after the
      * bracket that caused them has closed. The ones it caused never reach
      * here: {@link #holdAsConsequence} files them into its held effect half.
-     * The rest land in the emptied bracket like any other event that arrives
-     * with nothing resolving.
+     * The rest are routed by {@link #causeNow} like any other event.
      */
     private void record(EffectEvent event) {
-        record(event, null);
+        fileOutcome(event, null);
     }
 
     /**
@@ -830,26 +985,15 @@ public final class BusBracketCollector {
      * @param namedCause the ref the engine named, which outranks the bracket's,
      *                   or null to take the bracket's
      */
-    private void record(EffectEvent event, String namedCause) {
-        // Stamped here rather than where the event is built: which clause
-        // produced it, how long it lasts and — absent a name off the event
-        // itself — what caused it are properties of the bracket it landed in,
-        // and only this side knows that.
-        EventAttribution.stamp(event, resolving, namedCause);
-        if (isCombatDamage()) {
-            openCombatBracket();
-            if (fileEvent(event, combatEvents, combatEventKeys)) {
-                combatParticipants.addAll(event.subjects());
-            }
-        } else {
-            fileEvent(event, bracketEvents, bracketEventKeys);
-        }
+    @Override
+    void fileOutcome(EffectEvent event, String namedCause) {
+        route(event, namedCause, causeNow(), true);
     }
 
     /**
      * An event an effect API described rather than the bus announced.
      *
-     * <p>Package-private because {@code PatchedCollectors} owns the clause hook
+     * <p>Package-private because {@link ClauseOutcomeRouter} owns the clause hook
      * and this collector owns the open bracket: the event belongs to whatever
      * resolution is in flight, which only this class knows.
      */
@@ -860,99 +1004,344 @@ public final class BusBracketCollector {
     }
 
     /**
-     * Outcomes a second identical report of cannot mean a second occurrence.
-     *
-     * <p>These describe a transition into a state a thing is either in or not:
-     * a card is on the battlefield, a permanent is tapped, an aura is attached.
-     * Told twice in one record, the second telling is the engine publishing the
-     * same change again — nothing in the record can distinguish it from the
-     * first, and nothing downstream can use it.
-     *
-     * <p>Everything else is deliberately absent, because for a quantitative
-     * outcome the repeat <b>is</b> the information: two creatures each dealing
-     * one damage to the same blocker render two identical {@code damage_dealt}
-     * events, and collapsing them would turn two damage into one.
-     *
-     * <p><b>{@code REGENERATED} does not actually fit the "in-or-out state"
-     * reasoning above, unlike its neighbours here.</b> {@code destroyed} and
-     * {@code sacrificed} are one-shot by construction — the object changes
-     * zones and stops being the same object — and {@code tapped} has a real
-     * re-fire guard ({@code Card.tap} returns false when already tapped).
-     * Regeneration has neither: {@code RegenerationEffect.resolve()} is a
-     * shield being <i>consumed</i>, not the ability granting one, and shields
-     * are granted separately, one independent command-zone
-     * {@code ReplacementEffect} per activation ({@code
-     * RegenerateEffect.createRegenerationEffect}) — two activations on one
-     * creature make two shields, each able to fire its own event. The engine
-     * itself treats repeated regeneration as a real, distinguishable fact:
-     * {@code Card.regeneratedThisTurn} is an incrementing counter, exposed to
-     * card scripts as {@code RegeneratedThisTurn} X-math. So this dedup
-     * <i>can</i>, in principle, drop a genuine second occurrence rather than
-     * only a duplicate publication of the first.
-     *
-     * <p>It stays anyway, for reasons that hold regardless of that fact
-     * rather than because a repeat is impossible: a combat bracket is one per
-     * damage step — first strike and the regular step are different brackets,
-     * flushed at the phase boundary ({@link #onPhase}) — so the textbook
-     * "regenerate through first strike, then again in the regular step" lands
-     * in two brackets and is never compared. And a second destroy check
-     * driven by a separately-resolving ability changes {@code attributed_to}
-     * (stamped in {@link #record(EffectEvent, String)}), which breaks the
-     * rendered-line equality {@link #fileEvent} dedups on. Nobody has
-     * constructed, or ruled out, a same-bracket same-attribution double from
-     * reasoning about the code alone — that is an open question static
-     * analysis cannot settle, and one a corpus run now can, since this event
-     * did not fire at all before this task: look for brackets that contain a
-     * {@code regenerated} event and check whether any single card carries two.
+     * What an event published now is a consequence of, read off the engine
+     * at the moment it is filed, which decides the record it joins.
      */
-    private static final Set<String> IDEMPOTENT_EVENTS = Set.of(
-            EffectEvent.ZONE_CHANGE, EffectEvent.TAPPED, EffectEvent.UNTAPPED,
-            EffectEvent.ATTACHED, EffectEvent.UNATTACHED, EffectEvent.PHASED,
-            EffectEvent.FACE_CHANGE, EffectEvent.DESTROYED,
-            EffectEvent.SACRIFICED, EffectEvent.REGENERATED);
+    private enum Cause {
+        /**
+         * An ability is resolving: the resolving item's bracket, or no
+         * bracket while Forge finishes one whose resolution has been
+         * published ({@link #followResolution}).
+         */
+        RESOLUTION,
+        /**
+         * A cost is being paid — for something being cast or activated, or,
+         * while an ability resolves, for a spell it casts
+         * ({@link #payingForACast}). The paid ability's cost half records
+         * it; the event goes nowhere.
+         */
+        PAYMENT,
+        /**
+         * A cast is under way and not yet announced ({@link #castUnderWay}):
+         * the static check its card's move onto the stack set off ({@code
+         * GameAction.changeZone} runs one before the cast is pushed), and the
+         * one {@code MagicStack.push} runs after the push and before the cast
+         * event. The cast's own consequence, held for its bracket until its
+         * cast event opens it ({@link PreCast}).
+         */
+        CAST,
+        /**
+         * A player's action at priority other than a cast: a special action
+         * — unmorph, foretell, plot, which {@code MagicStack.add} resolves
+         * with no push and no cast event — a mana ability activated outside
+         * any payment, or an activation being announced. Every one goes
+         * through {@code ComputerUtil.handlePlayingSpellAbility}, which names
+         * it to the stack. Nobody's record: the event goes nowhere, and the
+         * action ends the last cast's consequences, so the state-based check
+         * after it is nobody's either ({@link #onAnyEvent}).
+         */
+        ACTION,
+        /**
+         * What follows a cast until the next action: the state-based check
+         * after it, and the rest of {@code MagicStack.add} after the cast is
+         * published. The open bracket's — the last cast's, while no action
+         * or resolution has ended its consequences — or the orphans'; in a
+         * combat damage step before anything used the stack, the combat's. A
+         * land played and a turn-based action fall here too, and find no
+         * bracket open: neither happens with anything on the stack.
+         */
+        CONSEQUENCE
+    }
 
     /**
-     * Add an event to a bracket unless it repeats one already there.
+     * The {@link Cause} of an event published now.
      *
-     * @return whether it was added
+     * <p>Read off the engine's own state, in this order: the stack resolving;
+     * {@code game.costPaymentStack}, which {@code CostPayment} keeps for every
+     * part being paid; a cast under way; the ability {@code
+     * MagicStack.freezeStack} names as the action in progress ({@link
+     * StackActions}). What is left — a state-based check, which freezes the
+     * stack naming no action, or nothing at all — is a consequence of what
+     * came before.
      */
-    static boolean fileEvent(
-            EffectEvent event, List<EffectEvent> into, Set<String> seen) {
-        if (!IDEMPOTENT_EVENTS.contains(event.type())) {
-            into.add(event);
-            return true;
+    private Cause causeNow() {
+        if (game.getStack().isResolving()) {
+            followResolution();
+            return payingForACast(resolving()) ? Cause.PAYMENT : Cause.RESOLUTION;
         }
-        // Compared as the rendered line, so two events are the same when what
-        // the record says about them is the same -- subjects, params, duration
-        // and the clause they were attributed to, all of it.
-        if (!seen.add(event.toJson())) {
-            return false;
+        if (game.costPaymentStack.peek() != null) {
+            return Cause.PAYMENT;
         }
-        into.add(event);
-        return true;
+        SpellAbility acting = StackActions.inProgress(game.getStack());
+        if (castUnderWay(acting) != null) {
+            return Cause.CAST;
+        }
+        if (acting != null) {
+            return isOpenCast(acting) ? Cause.CONSEQUENCE : Cause.ACTION;
+        }
+        return Cause.CONSEQUENCE;
     }
 
-    private void openBracket(SpellAbility ability) {
-        this.resolving = ability;
-        this.bracketDeclined = false;
-        this.resolvingKeys = keysOf(ability);
-        this.resolvingActor = actorOf(ability);
-        this.openBracketState = snapshots.toJson(ability, referencedOf(ability));
-        this.bracketEvents.clear();
-        this.bracketEventKeys.clear();
+    /** Whether what has this cause belongs with the open bracket, if one is open. */
+    private static boolean fromOpenBracket(Cause cause) {
+        return cause == Cause.RESOLUTION || cause == Cause.CONSEQUENCE;
     }
 
-    private void closeBracket() {
-        this.resolving = null;
-        this.bracketDeclined = false;
-        this.resolvingKeys =
-                new ProvenanceKey.Resolved(null, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
-        this.resolvingActor = null;
-        this.openBracketState = null;
-        this.bracketEvents.clear();
-        this.bracketEventKeys.clear();
-        this.modeHalves.clear();
-        this.openMode = null;
+    /**
+     * File an event where its cause puts it.
+     *
+     * <p>Stamped here rather than where the event is built: which clause
+     * produced it, how long it lasts and — absent a name off the event
+     * itself — what caused it are properties of the bracket it landed in,
+     * and only this side knows that.
+     *
+     * @param mayBeCombat whether a consequence in a combat damage step joins
+     *                    the combat's record: any outcome does, while a damage
+     *                    the bus says is not combat damage goes to the open
+     *                    bracket ({@link #fileDamage})
+     */
+    private void route(EffectEvent event, String namedCause, Cause cause, boolean mayBeCombat) {
+        if (cause != Cause.CAST && cause != Cause.PAYMENT) {
+            // The cast under way has been announced or abandoned: what its
+            // window held is taken or dropped.
+            preCast = null;
+        }
+        switch (cause) {
+            case PAYMENT -> {
+                if (!game.getStack().isResolving()) {
+                    open = null;
+                }
+            }
+            case CAST -> {
+                Card card = castUnderWay(StackActions.inProgress(game.getStack()));
+                if (preCast == null || !preCast.isFor(card)) {
+                    preCast = new PreCast(card.getId());
+                }
+                preCast.hold(event, namedCause);
+            }
+            case ACTION -> open = null;
+            case CONSEQUENCE -> {
+                EventAttribution.stamp(event, resolving(), namedCause);
+                if (mayBeCombat && inCombatDamage()) {
+                    fileCombat(event);
+                } else {
+                    openEvents().file(event);
+                }
+            }
+            case RESOLUTION ->
+                    openEvents().file(EventAttribution.stamp(event, resolving(), namedCause));
+        }
+    }
+
+    /**
+     * Any event at all: an action at priority that has begun ends the last
+     * cast's consequences even when it files nothing of its own, so the
+     * state-based check after it is not the waiting spell's.
+     */
+    @Subscribe
+    public void onAnyEvent(GameEvent event) {
+        if (open != null && !game.getStack().isResolving() && causeNow() == Cause.ACTION) {
+            open = null;
+        }
+    }
+
+    /**
+     * A priority: no cast is under way across one. A card still in the stack
+     * zone with no stack item is a cast given up — a copy that failed its
+     * targeting — and no longer counts as being cast.
+     */
+    @Subscribe
+    public void onPriority(GameEventPlayerPriority event) {
+        abandonCastsUnderWay();
+    }
+
+    @Override
+    void onStackArrival(int cardId) {
+        // One cast is under way at a time: a new card on its way means any
+        // other still in the zone with no stack item was given up.
+        abandonCastsUnderWayBut(cardId);
+        // A card keeps its id across zones: a mark from an earlier attempt
+        // is not this one's.
+        abandoned.remove(cardId);
+        arrived.add(cardId);
+    }
+
+    /**
+     * The card of the cast under way, or null when none is.
+     *
+     * <p>A cast is under way from the moment its card is in the stack zone to
+     * its cast event: before the card's arrival is published; after it, while
+     * no action names anything else — the play path chooses targets before
+     * {@code freezeStack} names the cast — and while the action in progress
+     * is that card's cast; and from the push to the cast event, while the
+     * stack's top is the action in progress and not yet announced.
+     *
+     * <p>A card in the stack zone that no stack item holds is otherwise a cast
+     * given up — {@code ComputerUtil.handlePlayingSpellAbility} returns on a
+     * failed charm choice, target check or payment without moving it back —
+     * and it stops counting until it leaves the zone, so that what follows
+     * routes as if it were not there. Given up is read at the first sign the
+     * attempt is over: another action in progress, another card's arrival,
+     * a cast event, a priority, a land played, a step boundary
+     * ({@link #abandoned}).
+     *
+     * @param acting the action in progress, or null
+     */
+    private Card castUnderWay(SpellAbility acting) {
+        Set<Integer> held = new LinkedHashSet<>();
+        for (var instance : game.getStack()) {
+            SpellAbility sa = instance == null ? null : instance.getSpellAbility();
+            if (sa != null && sa.getHostCard() != null) {
+                held.add(sa.getHostCard().getId());
+            }
+        }
+        List<Card> zone = new ArrayList<>(game.getCardsIn(ZoneType.Stack));
+        Set<Integer> inZone = new LinkedHashSet<>();
+        zone.forEach(card -> inZone.add(card.getId()));
+        arrived.retainAll(inZone);
+        abandoned.retainAll(inZone);
+        // Pushed and not yet announced: MagicStack.push's own static check.
+        var top = game.getStack().peek();
+        SpellAbility pushed = top == null ? null : top.getSpellAbility();
+        if (acting != null && pushed != null && pushed.getHostCard() != null
+                && pending.find(pushed.getId()).isEmpty()
+                && (pushed == acting || pushed.getOriginalAbility() == acting)) {
+            return pushed.getHostCard();
+        }
+        // On its way, its arrival not yet published: the newest move.
+        for (Card card : zone) {
+            int id = card.getId();
+            if (!held.contains(id) && !abandoned.contains(id) && !arrived.contains(id)) {
+                return card;
+            }
+        }
+        // Arrived: under way until its targets are chosen and the action
+        // names it, and for as long as it does. Any other action means it
+        // was given up.
+        for (Card card : zone) {
+            int id = card.getId();
+            if (held.contains(id) || abandoned.contains(id)) {
+                continue;
+            }
+            if (acting == null || isCastOf(acting, card)) {
+                return card;
+            }
+            abandoned.add(id);
+        }
+        return null;
+    }
+
+    /** Whether the action in progress is casting {@code card}. */
+    private static boolean isCastOf(SpellAbility acting, Card card) {
+        return acting != null && acting.getHostCard() != null
+                && acting.getHostCard().getId() == card.getId();
+    }
+
+    /** Every card in the stack zone that no stack item holds is a cast given up. */
+    private void abandonCastsUnderWay() {
+        abandonCastsUnderWayBut(-1);
+    }
+
+    /**
+     * The same, but for the card {@code keep}, whose cast is the one now
+     * under way, and what its window has held so far.
+     */
+    private void abandonCastsUnderWayBut(int keep) {
+        Set<Integer> held = new LinkedHashSet<>();
+        for (var instance : game.getStack()) {
+            SpellAbility sa = instance == null ? null : instance.getSpellAbility();
+            if (sa != null && sa.getHostCard() != null) {
+                held.add(sa.getHostCard().getId());
+            }
+        }
+        for (Card card : game.getCardsIn(ZoneType.Stack)) {
+            if (!held.contains(card.getId()) && card.getId() != keep) {
+                abandoned.add(card.getId());
+            }
+        }
+        if (preCast != null && !preCast.isFor(keep)) {
+            preCast = null;
+        }
+    }
+
+    /**
+     * Whether the action in progress is the open bracket's own cast, the rest
+     * of whose {@code MagicStack.add} runs after the cast is published. An
+     * activation is pushed as a copy of the ability the action names.
+     */
+    private boolean isOpenCast(SpellAbility acting) {
+        return open != null
+                && (open.ability == acting || open.ability.getOriginalAbility() == acting);
+    }
+
+    /**
+     * What a card on its way onto the stack set off before its cast was
+     * announced, held for that cast's bracket.
+     *
+     * <p>Held raw and stamped when the cast opens, against the cast's own
+     * ability: when they were published there was no bracket to stamp them
+     * against. Dropped if the cast is abandoned and no cast event follows.
+     */
+    private static final class PreCast {
+        private record Held(EffectEvent event, String namedCause) {
+        }
+
+        private final int cardId;
+        private final List<Held> events = new ArrayList<>();
+
+        private PreCast(int cardId) {
+            this.cardId = cardId;
+        }
+
+        boolean isFor(Card card) {
+            return card != null && isFor(card.getId());
+        }
+
+        boolean isFor(int id) {
+            return id == cardId;
+        }
+
+        void hold(EffectEvent event, String namedCause) {
+            events.add(new Held(event, namedCause));
+        }
+
+        /** File what was held into the cast's bracket, stamped against its ability. */
+        void fileInto(OpenResolution cast) {
+            for (Held held : events) {
+                cast.events.file(EventAttribution.stampAt(
+                        held.event(), cast.ability, null, held.namedCause()));
+            }
+        }
+    }
+
+    /** The ability the open bracket attributes to, or null when none is open. */
+    private SpellAbility resolving() {
+        return open == null ? null : open.ability;
+    }
+
+    /** Where an event filed now goes: the open bracket's buffer, or the orphans. */
+    private EventBuffer openEvents() {
+        return open == null ? orphans : open.events;
+    }
+
+    /**
+     * A cast has gone on top of the stack: its bracket opens. The item it
+     * went above keeps its own whole, with what it gathered since its cast —
+     * the state-based check its cast set off, a creature it left without
+     * toughness — which is that cast's consequence.
+     *
+     * @param cast the cast's bracket, or null for a cast whose stack top held
+     *             no ability, after which no bracket is open
+     */
+    private void openBracket(OpenResolution cast) {
+        // Nothing is cast before Forge has finished the last resolution, and
+        // the id it watched may be cast again from here on.
+        finishing = null;
+        orphans.clear();
+        if (cast != null) {
+            stack.push(cast);
+        }
+        open = cast;
     }
 
     // ── the modes of a modal resolution ─────────────────────────────────
@@ -965,50 +1354,24 @@ public final class BusBracketCollector {
      * a degraded one never reaches here and writes the one root half it
      * always wrote, with every mode's events in it (FR-029e). The clause's
      * host is checked against the open bracket's because the hook is a JVM
-     * static that sees every resolution in the process, and the bracket is
-     * one slot: a mode of some other charm — a copy resolving on a fork, a
-     * nested resolution this slot does not hold — must not cut this one.
+     * static that sees every resolution in the process: a mode of some other
+     * charm — a copy resolving on a fork — must not cut this one. Nor does a
+     * clause of a player's action at priority ({@link Cause#ACTION}): a mana
+     * ability's or a special action's, which {@code MagicStack.add} resolves
+     * in place.
      *
      * <p>Events filed before the first mode's clause, between the cast and
      * the resolution, fall into the first mode's half rather than vanishing:
-     * {@link #bracketEvents} is not cleared when the first mode opens.
+     * the bracket's buffer is not cleared when the first mode opens.
      *
      * @param option the mode's {@code Choices$} position, or null for a mode
      *               {@link CharmModes} could not place
      */
     void beginMode(SpellAbility clause, Integer option) {
-        if (resolving == null || clause == null
-                || clause.getHostCard() != resolving.getHostCard()) {
+        if (!fromOpenBracket(causeNow()) || open == null || !open.hosts(clause)) {
             return;
         }
-        closeOpenMode();
-        openMode = new ModeHalf(
-                option, snapshots.toJson(resolving, referencedOf(resolving)));
-    }
-
-    /** Move the bracket's events into the open mode's half and file it. */
-    private void closeOpenMode() {
-        if (openMode == null) {
-            return;
-        }
-        openMode.events.addAll(bracketEvents);
-        bracketEvents.clear();
-        bracketEventKeys.clear();
-        modeHalves.add(openMode);
-        openMode = null;
-    }
-
-    /** The resolving line's key with the mode's option, or the root key. */
-    private ProvenanceKey.Resolved modeKeys(Integer option) {
-        if (option == null || resolvingKeys.key() == null) {
-            return resolvingKeys;
-        }
-        return new ProvenanceKey.Resolved(resolvingKeys.key().withOption(option), null);
-    }
-
-    /** How many mode halves the open resolution has closed so far, for a test. */
-    int modeHalvesOpen() {
-        return modeHalves.size() + (openMode == null ? 0 : 1);
+        open.modes.begin(option, snapshots.ofResolving(open.ability), open.events);
     }
 
     private static String actorOf(SpellAbility ability) {
@@ -1041,54 +1404,34 @@ public final class BusBracketCollector {
             int targetsAtCast) {
     }
 
-    /** Take the held cast for an ability id, newest first, or null. */
-    private PendingActivation takePending(int abilityId) {
-        for (int i = pendingActivations.size() - 1; i >= 0; i--) {
-            if (pendingActivations.get(i).abilityId() == abilityId) {
-                return pendingActivations.remove(i);
-            }
-        }
-        return null;
-    }
-
-    /** How many targets the held cast for an ability had when it was cast. */
-    private int heldTargetsAtCast(int abilityId) {
-        for (int i = pendingActivations.size() - 1; i >= 0; i--) {
-            if (pendingActivations.get(i).abilityId() == abilityId) {
-                return pendingActivations.get(i).targetsAtCast();
-            }
-        }
-        return 0;
-    }
-
     /**
      * Write a held cost half now that its outcome is known.
      *
      * <p>{@code linked} is separate from the outcome because they answer
      * different questions: the outcome says what became of the spell, and
      * {@code link_id} promises that an effect half carrying the same id exists.
-     * A resolution this collector could not describe -- the outer half of a
-     * nested pair -- is a {@code resolved} activation with no link, which is
-     * honest; issuing the link anyway is what left 306 halves dangling.
+     * A resolution this collector holds no bracket for -- an item whose
+     * bracket was written off before it resolved -- is a {@code resolved}
+     * activation with no link, which is honest; issuing the link anyway would
+     * leave it dangling.
      *
      * @return the link the effect half may claim, or null when there is to be
      *         no effect half or nothing was held for this ability
      */
-    String settleActivation(int abilityId, String outcome, boolean linked) {
-        PendingActivation activation = takePending(abilityId);
-        if (activation == null) {
+    String settleActivation(int abilityId, ActivationOutcome outcome, boolean linked) {
+        Optional<PendingActivation> found = pending.settle(abilityId);
+        if (found.isEmpty()) {
             return null;
         }
+        PendingActivation activation = found.get();
         emitActivation(activation, outcome, linked);
         return linked ? activation.linkId() : null;
     }
 
     private void emitActivation(
-            PendingActivation activation, String outcome, boolean linked) {
-        emit(new EffectRecord(
-                activation.recordId(), writer.runId(), activation.timestamp(),
-                gameId, EffectRecord.KIND_RESOLUTION, mode)
-                .moment(EffectRecord.MOMENT_ACTIVATION)
+            PendingActivation activation, ActivationOutcome outcome, boolean linked) {
+        context.emit(context.newResolution(
+                Moment.ACTIVATION, activation.recordId(), activation.timestamp())
                 .actor(activation.actor())
                 .ability(activation.ability())
                 .linkId(linked ? activation.linkId() : null)
@@ -1112,14 +1455,14 @@ public final class BusBracketCollector {
      * is the {@code CantFizzle} case (Gilded Drake), where the spell still does
      * what it does: that is {@code resolved} too.
      */
-    static String outcomeOf(int targetsAtCast, SpellAbility resolved) {
+    static ActivationOutcome outcomeOf(int targetsAtCast, SpellAbility resolved) {
         if (resolved == null) {
-            return EffectRecord.OUTCOME_RESOLVED;
+            return ActivationOutcome.RESOLVED;
         }
         int surviving = targetCount(resolved);
         return surviving > 0 && surviving < targetsAtCast
-                ? EffectRecord.OUTCOME_PARTIALLY_FIZZLED
-                : EffectRecord.OUTCOME_RESOLVED;
+                ? ActivationOutcome.PARTIALLY_FIZZLED
+                : ActivationOutcome.RESOLVED;
     }
 
     private static int targetCount(SpellAbility ability) {
@@ -1144,7 +1487,7 @@ public final class BusBracketCollector {
      * cost was paid and no effect followed.
      */
     private void reconcilePending() {
-        if (pendingActivations.isEmpty()) {
+        if (pending.isEmpty()) {
             return;
         }
         writeOffRemoved(idsOnStack());
@@ -1169,30 +1512,16 @@ public final class BusBracketCollector {
      * @return how many held casts were written off
      */
     int writeOffRemoved(Set<Integer> onStack) {
-        int removed = 0;
-        for (Iterator<PendingActivation> held = pendingActivations.iterator();
-                held.hasNext();) {
-            PendingActivation activation = held.next();
-            if (!onStack.contains(activation.abilityId())) {
-                held.remove();
-                emitActivation(activation, EffectRecord.OUTCOME_COUNTERED, false);
-                removed++;
-            }
+        List<PendingActivation> removed = pending.removeAbsent(onStack);
+        for (PendingActivation activation : removed) {
+            emitActivation(activation, ActivationOutcome.COUNTERED, false);
         }
-        return removed;
-    }
-
-    /**
-     * Casts still waiting for an outcome, for a test that has to see the hold.
-     *
-     * <p>At the end of a game whatever is left here is dropped: a spell on the
-     * stack when the last player lost neither resolved nor was removed, and
-     * {@code outcome} has no member for it. Writing one of the five would be a
-     * claim about a game that stopped, so the count is reported instead — by
-     * {@link #abandonedActivations()}, which is the running total of them.
-     */
-    long unresolvedActivations() {
-        return pendingActivations.size();
+        // Their brackets go with them: nothing they gathered is anyone's.
+        stack.removeAbsent(onStack);
+        if (open != null && !stack.holds(open)) {
+            open = null;
+        }
+        return removed.size();
     }
 
     // ── the end of the game ─────────────────────────────────────────────
@@ -1200,23 +1529,23 @@ public final class BusBracketCollector {
     /**
      * The last thing that happens to a game, and the last chance to write.
      *
-     * <p>Nothing subscribed this event, and three channels were being lost at it.
+     * <p>Three channels have nowhere else to be written.
      *
      * <p>The <b>combat bracket</b> is closed at a phase boundary, and a game
      * that ends in combat damage never reaches one:
      * {@code PhaseHandler.mainLoopStep} returns the moment
      * {@code checkStateBasedEffects} says the game is over, so neither
      * {@code GameEventTurnPhase} nor {@code GameEventCombatEnded} follows the
-     * lethal damage step. The record for the combat that decided the game was
-     * therefore the one combat record no game had.
+     * lethal damage step, and without this the combat that decided the game
+     * would never be written.
      *
-     * <p>The <b>resolution bracket's own leftovers</b> (task-11 fix round 1,
-     * C1) are closed and cleared by the killing ability's own {@link
+     * <p>The <b>resolution bracket's own leftovers</b> are closed and
+     * cleared by the killing ability's own {@link
      * #endBracket} the moment it resolves -- before the state-based check that
      * discovers the game is over ever runs (CR 704.3, next main-loop
      * iteration). A bus event filed after that point, with no bracket open
      * (the ordinary case for {@code player_won}: burn, drain, decking out,
-     * anything that is not a combat-damage kill), had nowhere left to be
+     * anything that is not a combat-damage kill), has nowhere left to be
      * flushed to. See {@link #flushOrphanedEvents}.
      *
      * <p>The <b>held casts</b> split in two, and only one half is writable.
@@ -1242,106 +1571,92 @@ public final class BusBracketCollector {
         // First, because it is the oldest: the resolution it describes ended
         // before anything the two below hold. The winner is not one of its
         // consequences -- player_won is not a permanent leaving the
-        // battlefield -- so it stays where flushOrphanedEvents has always put
-        // it, in a record of its own after this one.
-        flushHeldResolution();
+        // battlefield -- so it stays where flushOrphanedEvents puts it, in a
+        // record of its own after this one.
+        onNextAction();
         flushCombat();
         flushOrphanedEvents();
         writeOffRemoved(onStack);
-        long abandoned = pendingActivations.size();
-        if (abandoned > 0) {
+        List<PendingActivation> abandoned = pending.removeAll();
+        if (!abandoned.isEmpty()) {
             StringJoiner names = new StringJoiner(", ");
-            for (PendingActivation activation : pendingActivations) {
+            for (PendingActivation activation : abandoned) {
                 names.add(activation.linkId());
             }
             System.err.println(
-                    "effect records: " + gameId + " ended with " + abandoned
+                    "effect records: " + context.gameId() + " ended with " + abandoned.size()
                             + " cast(s) still on the stack, dropped because"
                             + " outcome has no member for a game that stopped: "
                             + names);
         }
-        pendingActivations.clear();
-        abandonedActivations += abandoned;
-        // The listener is static and this collector lives for one game, so the
-        // game ending is where it has to go.
-        PatchHooks.uninstall(PLAYER_CONTROLLER_AI, CONFIRM_LISTENER);
-        return abandoned;
-    }
-
-    /** How many casts this game abandoned on the stack, over the whole game. */
-    long abandonedActivations() {
-        return abandonedActivations;
+        return abandoned.size();
     }
 
     // ── an offer the controller turned down ─────────────────────────────
 
-    /** The patched class that answers for the AI, and the setter it exposes. */
-    private static final String PLAYER_CONTROLLER_AI = "forge.ai.PlayerControllerAi";
-    private static final String CONFIRM_LISTENER = "setEffectRecordConfirmListener";
-
     /**
      * Notice that the controller said no to something.
      *
-     * <p>{@code declined} is the one outcome nothing ever wrote, and there is
-     * no bus event for it: an optional effect nobody took produces no zone
-     * change, no damage and no life total to notice, which is precisely why the
-     * schema wanted it — the counterfactual "it was offered and refused" is
-     * otherwise indistinguishable from "it was never offered".
+     * <p>There is no bus event for {@code declined}: an optional effect nobody
+     * took produces no zone change, no damage and no life total to notice,
+     * which is why the schema has the outcome — "it was offered and refused"
+     * is otherwise indistinguishable from "it was never offered".
      *
      * <p>Only the refusal is kept. The hook is called with both answers, the
      * way the trigger-condition hook is, but an accepted offer is already
      * described by the events it produced.
      *
-     * <p>Package-visible so a test can drive it through a proxy of its own. The
-     * method name and the argument positions are the whole contract with the
-     * patch — {@link PatchHooks} looks both up by string — and a typo in either
+     * <p>Package-visible because {@link GameRecording} installs it, and so a
+     * test can drive it through a proxy of its own. The method name and the
+     * argument positions are the whole contract with the patch —
+     * {@link PatchHooks} looks both up by string — and a typo in either
      * degrades this channel silently.
      */
     InvocationHandler confirmHandler() {
-        return (proxy, method, args) -> {
-            if (!"onConfirm".equals(method.getName()) || args == null
-                    || args.length < 2) {
-                return null;
-            }
-            // final-fix-3.md item 2: this hook is a JVM static like the other
-            // five that had no game check, and PlayerControllerAi.confirmAction
+        return PatchHooks.CONFIRM_LISTENER.listener((callback, args) -> {
+            // This hook is a JVM static, and PlayerControllerAi.confirmAction
             // is exactly what a fork's own forced resolution asks when it
             // pays a cost or resolves an optional clause (GameSimulator builds
             // its own PlayerControllerAi over the forked Game, but the static
             // listener it calls is this game's). args[0] is declared
-            // SpellAbility on Forge's side; a value this cannot identify is
-            // left alone rather than newly dropped.
-            if (Boolean.FALSE.equals(args[1])
-                    && (!(args[0] instanceof SpellAbility sa) || belongsToLiveGame(sa))) {
+            // SpellAbility on Forge's side; a value this cannot identify
+            // still counts as this game's refusal.
+            SpellAbility offered = args.get(0, SpellAbility.class);
+            if (Boolean.FALSE.equals(args.get(1))
+                    && (offered == null || belongsToLiveGame(offered))) {
                 noteDeclined();
             }
-            return null;
-        };
+        });
     }
 
     /**
-     * As {@code PatchedCollectors#belongsToLiveGame(CardTraitBase)}, kept as
-     * this class's own copy rather than shared: each collector class in this
-     * package already keeps its own small per-{@code SpellAbility} helpers
-     * ({@code keysOf}, {@code referencedOf}) rather than a shared utility, and
-     * this one needs only the {@code SpellAbility} shape {@link
-     * #confirmHandler()} calls it with, not the wider {@code CardTraitBase}
-     * {@code PatchedCollectors} also needs for its rewrite/trigger hooks.
+     * As {@link LiveGame#owns(forge.game.CardTraitBase)}, kept as this class's
+     * own copy rather than shared: this one needs only the
+     * {@code SpellAbility} shape {@link #confirmHandler()} calls it with, not
+     * the wider {@code CardTraitBase} {@code LiveGame} also takes for the
+     * rewrite and trigger hooks.
      */
     private boolean belongsToLiveGame(SpellAbility ability) {
         Card host = ability.getHostCard();
         return host != null && host.getGame() == game;
     }
 
-    /** Record a refusal against the open bracket, if there is one. */
+    /**
+     * Record a refusal against the open bracket, if there is one and the
+     * refusal is a consequence of it ({@link Cause#RESOLUTION} or {@link
+     * Cause#CONSEQUENCE}). One made paying for something else is that other
+     * ability's; one made announcing a cast, or in an action at priority, is
+     * no resolution's.
+     */
     void noteDeclined() {
-        if (resolving != null) {
-            bracketDeclined = true;
+        // The cause first: reading it opens the resolving item's bracket.
+        if (fromOpenBracket(causeNow()) && open != null) {
+            open.declined = true;
         }
     }
 
     /**
-     * Whether the open bracket is a refusal rather than a resolution.
+     * Whether a resolution is a refusal rather than a resolution.
      *
      * <p>Both halves are required. A refusal alone is not enough: a line whose
      * mandatory clause drew a card and whose optional clause was declined did
@@ -1350,95 +1665,42 @@ public final class BusBracketCollector {
      * this collector can observe. Together they are the shape the schema
      * describes: offered, turned down, and nothing happened.
      */
-    private boolean wasDeclined() {
-        if (!bracketDeclined || !bracketEvents.isEmpty()) {
-            return false;
-        }
+    private static boolean wasDeclined(OpenResolution resolved) {
         // The events of an earlier mode have already moved into its half.
-        for (ModeHalf half : modeHalves) {
-            if (!half.events.isEmpty()) {
-                return false;
-            }
-        }
-        return true;
+        return resolved.declined && resolved.events.isEmpty() && !resolved.modes.anyEvents();
     }
 
-    /**
-     * The acting line, or the reason there is none.
-     *
-     * <p>Resolved rather than keyed, because a record whose {@code ability} is
-     * empty and silent cannot be told apart from one the resolver failed on,
-     * and this collector writes most of the corpus's resolution records.
-     */
-    private static ProvenanceKey.Resolved keysOf(SpellAbility ability) {
-        if (ability == null) {
-            return new ProvenanceKey.Resolved(null, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
-        }
-        return ProvenanceKey.resolve(ability);
-    }
-
-    private static List<Card> referencedOf(SpellAbility ability) {
-        List<Card> referenced = new ArrayList<>();
-        if (ability == null) {
-            return referenced;
-        }
-        if (ability.getHostCard() != null) {
-            referenced.add(ability.getHostCard());
-        }
-        if (ability.getTargets() != null) {
-            for (Object target : ability.getTargets()) {
-                if (target instanceof Card card) {
-                    referenced.add(card);
-                }
-            }
-        }
-        return referenced;
-    }
+    // ── combat ──────────────────────────────────────────────────────────
 
     /**
      * Whether the game is in either combat damage step.
      *
      * <p>Both names are tested: Forge's first-strike step is {@code
      * COMBAT_FIRST_STRIKE_DAMAGE}, which does not contain {@code
-     * COMBAT_DAMAGE}, and a test on that substring alone sent the step's
+     * COMBAT_DAMAGE}, so a test on that substring alone would send the step's
      * creature damage, life changes and deaths to the ordinary bracket.
      */
-    private boolean isCombatDamage() {
-        var phase = game.getPhaseHandler();
-        if (phase == null || phase.getPhase() == null) {
-            return false;
-        }
-        String step = phase.getPhase().toString();
-        return step.contains("COMBAT_DAMAGE") || step.contains("FIRST_STRIKE_DAMAGE");
+    private boolean inCombatDamageStep() {
+        return DamageStep.of(game.getPhaseHandler()) != null;
     }
 
     /**
-     * Start a damage step's bracket, and capture the combat it is about.
-     *
-     * <p>The structure is read here rather than at the flush, because the flush
-     * happens at the phase boundary — after the damage has been dealt and the
-     * creatures it killed have left. Read there, an attacker that traded with
-     * its blocker is in neither list, and the record describes a combat nobody
-     * fought. Read here it matches the snapshot beside it, which is taken in
-     * the same call.
+     * Whether an event now is the combat's: dealt in a damage step, before
+     * anything has used the stack in it ({@link #combatWindowClosed}).
      */
-    private void openCombatBracket() {
-        if (combatState != null) {
-            return;
+    private boolean inCombatDamage() {
+        return !combatWindowClosed && inCombatDamageStep();
+    }
+
+    /** File an event into the damage step's bracket, opening it first if need be. */
+    private void fileCombat(EffectEvent event) {
+        if (combat == null) {
+            // Combat damage is the next action. Ordinarily the step boundary
+            // before it has written the held resolution already.
+            onNextAction();
+            combat = new CombatBracket(snapshots.ofBoard().render(), game.getCombat());
         }
-        // Combat damage is the next action. Ordinarily the step boundary
-        // before it has written the held resolution already.
-        flushHeldResolution();
-        var phase = game.getPhaseHandler();
-        combatSubstep = phase != null && phase.getPhase() != null
-                && phase.getPhase().toString().contains("FIRST_STRIKE")
-                ? "first_strike" : "regular";
-        combatState = snapshots.toJson(null, List.of());
-        // The damage has been assigned by now -- the first damage event is what
-        // opened this bracket -- but nothing has died yet, so this is the one
-        // moment both halves of the shape are readable.
-        combatShape = CombatShape.of(game.getCombat());
-        combatShape.addAssignment(game.getCombat(), assignmentsSeen);
+        combat.file(event);
     }
 
     /**
@@ -1449,121 +1711,60 @@ public final class BusBracketCollector {
      * happened to be first.
      */
     private void flushCombat() {
-        if (combatState == null) {
+        if (combat == null) {
             return;
         }
         var phase = game.getPhaseHandler();
         String actor = phase == null || phase.getPlayerTurn() == null
                 ? null : SnapshotBuilder.playerId(phase.getPlayerTurn());
-        String recordId = writer.nextRecordId();
-        emit(new EffectRecord(
-                recordId, writer.runId(), RecordShardWriter.timestamp(),
-                gameId, EffectRecord.KIND_COMBAT, mode)
+        EffectRecord record = context.newRecord(RecordKind.COMBAT)
                 .actor(actor)
-                .state(combatState)
-                .payload(combatPayload()));
+                .state(combat.state)
+                .payload(combat.payload());
+        context.emit(record);
         // A damage-step probe forked before this step and has been holding its
         // branch since: it needs this record's id to say which combat it
         // mirrors, and the id does not exist until the record is written.
-        if (onCombatRecord != null) {
-            onCombatRecord.accept(recordId);
-        }
-        combatEvents.clear();
-        combatEventKeys.clear();
-        combatParticipants.clear();
-        combatShape = CombatShape.empty();
-        combatState = null;
-        combatSubstep = null;
+        onCombatRecord.accept(record.recordId());
+        combat = null;
     }
 
     /**
-     * Write a leftover resolution-bracket buffer as its own record, the same
-     * rescue {@link #flushCombat} already gives the combat bracket -- and
-     * needed for exactly the same reason: something can end the game between
-     * the last bracket close and the next one that never comes.
+     * Write a leftover resolution-bracket buffer as its own record, the rescue
+     * {@link #flushCombat} gives the combat bracket, for the same reason:
+     * something can end the game between the last bracket close and the next
+     * one, which never comes.
      *
      * <p>Reachable by the most ordinary kind of win. {@code MagicStack} fires
-     * {@code GameEventSpellResolved} immediately after a resolving ability's
-     * own effect returns, with no game-over check between, so {@link
-     * #endBracket} runs -- holding that ability's own effect half and clearing
-     * the bracket -- before {@code checkStateBasedEffects} ever asks whether
-     * anyone lost (CR 704.3, checked at the start of the next main-loop
-     * iteration). A
-     * burn spell that leaves its target at 0 life closes its own bracket first
-     * and only then is the game discovered to be over: {@code
-     * GameEventGameOutcome} fires with no bracket open, {@link #record} has
-     * nowhere to put it but the now-empty {@link #bracketEvents}, and no
-     * further ability ever resolves to trigger the {@link #endBracket} that
-     * would otherwise have flushed it. Without this, {@code player_won} (and
-     * anything else the bus files outside combat with no bracket open) was
-     * silently dropped for every non-combat kill -- a burn spell, a drain, a
-     * mill-out, a scripted "you lose the game" -- which is most of them.
+     * {@code GameEventSpellResolved} as soon as a resolving ability's effect
+     * returns, so {@link #endBracket} closes the bracket before {@code
+     * checkStateBasedEffects} asks whether anyone lost (CR 704.3, at the start
+     * of the next main-loop iteration). The {@code GameEventGameOutcome} of a
+     * burn spell, a drain, a mill-out or a scripted "you lose the game" then
+     * lands in {@link #orphans}, with no bracket open, and no later
+     * resolution comes to flush it: without this, {@code player_won} is lost
+     * for every non-combat kill.
      *
-     * <p>{@code ability} is absent, the same as {@link #flushCombat}'s own
-     * combat record and for the same reason, not a narrower one: {@link
-     * #resolvingKeys} is already this collector's own "nothing resolving"
-     * default here ({@code closeBracket} set it, and nothing since has
-     * touched it), so this writes the same honest answer {@code endBracket}
-     * would write for a bracket that closed with nothing resolving -- a game
-     * outcome genuinely has no acting line, which is a fact about the record,
-     * not a lookup that failed. {@code state} cannot reuse {@link
-     * #openBracketState} (also cleared by {@code closeBracket}), so it is
-     * read fresh, the same null-ability snapshot {@link #openCombatBracket}
-     * takes for its own record.
+     * <p>{@code ability} is absent, as on {@link #flushCombat}'s record: with
+     * no resolution open there is no acting line. {@code state} is read fresh,
+     * as {@link #fileCombat} reads it, since the board captured at a cast went
+     * with the resolution that closed.
      *
-     * <p><b>{@code resolving == null} is required, not incidental</b> (task-11
-     * fix round 2, item 1). {@link #bracketEvents} is non-empty at {@code
-     * finishGame()} in two reachable shapes, and only one of them means
-     * "nothing was resolving": {@code openBracket(X)} runs at <em>cast</em>
-     * time, not at resolution, so {@code resolving} stays {@code X} for as
-     * long as {@code X} sits on the stack -- and {@code
-     * checkStateBasedEffects} runs at the top of every main-loop iteration,
-     * the same CR 704.3 mechanism this method's own rescue depends on, so a
-     * cast whose own cost payment ends the game (life paid to 0) can leave
-     * {@code X} still {@code resolving}, still on the stack, and never
-     * resolved. Writing this method's record in that shape would name
-     * {@code X} as the resolving ability in the <em>same</em> {@code
-     * finishGame()} call that {@link #writeOffRemoved} separately and
-     * correctly counts {@code X} as abandoned and never resolved -- two
-     * contradictory claims about one ability, and worse than attributing to
-     * nothing, because it names a real ability that demonstrably did not
-     * resolve. Chosen over keeping the events under some other attribution:
-     * whatever {@code X} was doing when the game cut it off is exactly as
-     * unfinished as {@code X} itself, so counted-and-dropped (the treatment
-     * {@code pendingActivations} already gets) is the honest answer, not a
-     * partial one salvaged under a different name.
+     * <p>Only the orphans are written, never an open bracket's events. A cast
+     * whose own cost payment ends the game (life paid to 0) leaves its bracket
+     * open on an ability {@code X} that is still on the stack and never
+     * resolved, and the win lands in it. A record here would name {@code X}
+     * as resolving in the same {@code finishGame()} call that counts {@code
+     * X} as abandoned. Its events are as unfinished as {@code X}, so they are
+     * dropped with it.
      */
     private void flushOrphanedEvents() {
-        if (resolving != null || bracketEvents.isEmpty()) {
+        if (orphans.isEmpty()) {
             return;
         }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
-                gameId, EffectRecord.KIND_RESOLUTION, mode)
-                .moment(EffectRecord.MOMENT_RESOLUTION)
-                .actor(resolvingActor)
-                .ability(resolvingKeys)
-                .state(snapshots.toJson(null, List.of()))
-                .payload(EffectRecord.eventsPayload(bracketEvents)));
-        bracketEvents.clear();
-        bracketEventKeys.clear();
-    }
-
-    private String combatPayload() {
-        StringJoiner events = new StringJoiner(",", "[", "]");
-        for (EffectEvent event : combatEvents) {
-            events.add(event.toJson());
-        }
-        return "{" + combatShape.fields() + ",\"events\":" + events + "}";
-    }
-
-    private void emit(EffectRecord record) {
-        // Stamped at the write rather than where the record was built: a held
-        // cost half has its actor long before this, and the seat is fixed for
-        // the whole game, so the answer is the same at either moment.
-        record.randomSeat(
-                randomSeatPlayerId != null && randomSeatPlayerId.equals(record.actorPlayer()));
-        writer.write(record.toJson());
-        recordsWritten++;
+        context.emit(context.newResolution(Moment.RESOLUTION)
+                .ability(ProvenanceKey.Resolved.UNKNOWN)
+                .state(snapshots.ofBoard().render())
+                .payload(EffectRecord.eventsPayload(orphans.drain())));
     }
 }

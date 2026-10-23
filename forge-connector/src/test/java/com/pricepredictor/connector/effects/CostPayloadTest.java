@@ -18,10 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What an activation record says was paid.
  *
- * <p>Every one of these channels was empty on all 940,973 activation records of
- * the first corpus, and the reason was the same for all of them: the collector
- * read {@code getPayCosts()}, which is the cost the card <b>asks</b> for and not
- * the payment. Two engine facts make that unreadable — cost adjustment pays a
+ * <p>Not {@code getPayCosts()}, which is the cost the card <b>asks</b> for and
+ * not the payment, and on which every one of these channels reads empty. Two
+ * engine facts make that unreadable — cost adjustment pays a
  * copy of the parts, and the payment clears the copies' lists before the cast
  * event fires — so these tests are written against the places the payment
  * actually survives: the paid hash, the paying-mana list and the life counter on
@@ -196,24 +195,11 @@ class CostPayloadTest {
     @Test
     void everyOutcomeRoundTripsThroughTheDeferredForm() {
         String costs = costs(null);
-        for (String outcome : List.of(
-                EffectRecord.OUTCOME_RESOLVED, EffectRecord.OUTCOME_FIZZLED,
-                EffectRecord.OUTCOME_PARTIALLY_FIZZLED, EffectRecord.OUTCOME_DECLINED,
-                EffectRecord.OUTCOME_COUNTERED)) {
+        for (ActivationOutcome outcome : ActivationOutcome.values()) {
             String payload = EffectRecord.costPayload(costs, outcome);
-            assertTrue(payload.contains("\"outcome\":\"" + outcome + "\""), payload);
+            assertTrue(payload.contains("\"outcome\":\"" + outcome.wireName() + "\""), payload);
             assertTrue(payload.startsWith("{\"costs\":{"), payload);
         }
-    }
-
-    @Test
-    void theTwoFormsAgreeWhenBothHalvesAreReadAtOnce() {
-        SpellAbility sa = ability("AB$ GainLife | Cost$ T | Defined$ You | LifeAmount$ 1");
-
-        assertEquals(
-                EffectRecord.costPayload(
-                        EffectRecord.costsJson(sa), EffectRecord.OUTCOME_RESOLVED),
-                EffectRecord.costPayload(sa, EffectRecord.OUTCOME_RESOLVED));
     }
 
     /** No ability to read still renders every channel, empty. */

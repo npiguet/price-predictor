@@ -1,0 +1,13 @@
+measure,first pilot,second pilot
+random seat: share of matches,0.125,0.25
+random seat: share of its decisions taken at random,0.25,0.5
+games,833,2698
+games with a random seat,80,573
+records,321792,812800
+real attack declarations,10950,
+real block declarations,15296,
+what-if block queries collected,70010,0
+real AI blocks against the random seat's attacks,361,3491
+"of those, against a random attack (expected)",90,1750
+real resolutions that dealt damage,1249,
+"of those, the damaged creature dies in the record",684,

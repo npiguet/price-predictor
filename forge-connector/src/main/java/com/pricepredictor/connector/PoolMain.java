@@ -3,13 +3,10 @@ package com.pricepredictor.connector;
 import forge.util.MyRandom;
 
 import java.io.BufferedWriter;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
-import java.util.StringJoiner;
 
 /**
  * CLI entry point for sealed pool generation.
@@ -20,6 +17,7 @@ import java.util.StringJoiner;
  *       [--set &lt;SET_CODE&gt;]
  *       --size &lt;N&gt;
  *       --pools-path &lt;PATH&gt;
+ *       [--exclude-cards &lt;FILE&gt;]
  * </pre>
  *
  * <p>When {@code --set} is omitted, each pool is generated from a randomly
@@ -32,119 +30,88 @@ import java.util.StringJoiner;
 public class PoolMain {
 
     public static void main(String[] args) {
-        String setCode = null;
-        int poolCount = 10000;
-        String poolsPath = "./output/sealed/pools/";
-        String excludePath = null;
+        ToolMain.Args cli = ToolMain.args(
+                args, "--set", "--size", "--pools-path", "--exclude-cards");
+        String setCode = cli.get("--set");
+        String poolsPath = cli.get("--pools-path", "./output/sealed/pools/");
+        String excludePath = cli.get("--exclude-cards");
 
-        for (int i = 0; i < args.length; i++) {
-            switch (args[i]) {
-                case "--set" -> {
-                    if (i + 1 < args.length) setCode = args[++i];
-                }
-                case "--size" -> {
-                    if (i + 1 < args.length) {
-                        try {
-                            poolCount = Integer.parseInt(args[++i]);
-                        } catch (NumberFormatException e) {
-                            System.err.println("Error: --size must be an integer");
-                            System.exit(1);
-                        }
-                    }
-                }
-                case "--pools-path" -> {
-                    if (i + 1 < args.length) poolsPath = args[++i];
-                }
-                case "--exclude-cards" -> {
-                    if (i + 1 < args.length) excludePath = args[++i];
-                }
-            }
-        }
-
-        try {
+        ToolMain.run(() -> {
+            int poolCount = cli.intValue("--size", 10000);
             ForgeEnvironmentInitializer.initialize();
+            writePools(setCode, poolCount, Path.of(poolsPath), excludePath);
+        });
+    }
 
-            // A depleted run: the named cards never enter a booster, so no
-            // training game holds one and none has to be discarded later.
-            Set<String> excluded = Set.of();
-            if (excludePath != null) {
-                excluded = Set.copyOf(Files.readAllLines(Path.of(excludePath)).stream()
-                        .map(String::trim)
-                        .filter(line -> !line.isEmpty())
-                        .toList());
-                System.out.println("Depleting pools of " + excluded.size() + " cards from "
-                        + excludePath);
-            }
-
-            PoolGenerator generator = new PoolGenerator();
-            Path outputDir = Path.of(poolsPath);
-            Files.createDirectories(outputDir);
-            Path outputFile = outputDir.resolve("pools.txt");
-
-            List<String> eligibleSets = null;
-            Random random = null;
-            if (setCode == null) {
-                eligibleSets = MatchGenerator.computeEligibleSets();
-                if (eligibleSets.isEmpty()) {
-                    System.err.println("Error: no eligible sealed-legal sets found");
-                    System.exit(1);
-                }
-                random = MyRandom.getRandom();
-                System.out.println("Generating " + poolCount
-                        + " sealed pools from random sets ("
-                        + eligibleSets.size() + " eligible)...");
-            } else {
-                System.out.println("Generating " + poolCount + " " + setCode + " sealed pools...");
-            }
-
-            try (BufferedWriter writer = Files.newBufferedWriter(outputFile)) {
-                int written = 0;
-                while (written < poolCount) {
-                    int batch;
-                    String poolSetCode;
-                    if (setCode != null) {
-                        batch = Math.min(1000, poolCount - written);
-                        poolSetCode = setCode;
-                    } else {
-                        // Random set per pool — generate one at a time.
-                        batch = 1;
-                        poolSetCode = eligibleSets.get(random.nextInt(eligibleSets.size()));
-                    }
-
-                    List<List<String>> pools = generator.generate(poolSetCode, batch, excluded);
-                    for (List<String> pool : pools) {
-                        StringJoiner joiner = new StringJoiner("|");
-                        for (String name : pool) {
-                            joiner.add(name);
-                        }
-                        writer.write(poolSetCode);
-                        writer.write(";");
-                        writer.write(joiner.toString());
-                        writer.newLine();
-                        written++;
-                    }
-
-                    if (written % 1000 == 0) {
-                        System.out.println("Generated " + written + "/" + poolCount + " pools");
-                        System.out.flush();
-                    }
-                }
-            }
-
-            System.out.println("Done");
-            System.out.println("Done: " + poolCount + " pools written to " + outputFile);
-            System.exit(0);
-
-        } catch (IllegalArgumentException e) {
-            System.err.println("Error: " + e.getMessage());
-            System.exit(1);
-        } catch (IOException e) {
-            System.err.println("Error writing pools file: " + e.getMessage());
-            System.exit(1);
-        } catch (Exception e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace(System.err);
-            System.exit(1);
+    /**
+     * Write {@code poolCount} pools to {@code pools.txt} under {@code outputDir}.
+     *
+     * @param requestedSet the set every pool is opened from, as given — an
+     *                     alias is written under its edition's own code — or
+     *                     null for a random set per pool
+     */
+    static void writePools(
+            String requestedSet, int poolCount, Path outputDir, String excludePath)
+            throws java.io.IOException {
+        String setCode = BoosterTemplates.canonicalCode(requestedSet);
+        // A depleted run: the named cards never enter a booster, so no
+        // training game holds one and none has to be discarded later.
+        HoldoutCards excluded = HoldoutCards.NONE;
+        if (excludePath != null) {
+            excluded = HoldoutCards.load(Path.of(excludePath));
+            System.out.println("Depleting pools of " + excluded.size() + " cards from "
+                    + excludePath);
         }
+
+        PoolGenerator generator = new PoolGenerator();
+        Files.createDirectories(outputDir);
+        Path outputFile = outputDir.resolve("pools.txt");
+
+        List<String> eligibleSets = null;
+        Random random = null;
+        if (setCode == null) {
+            eligibleSets = MatchGenerator.computeEligibleSets();
+            if (eligibleSets.isEmpty()) {
+                throw new IllegalStateException("no eligible sealed-legal sets found");
+            }
+            random = MyRandom.getRandom();
+            System.out.println("Generating " + poolCount
+                    + " sealed pools from random sets ("
+                    + eligibleSets.size() + " eligible)...");
+        } else {
+            System.out.println("Generating " + poolCount + " " + setCode + " sealed pools...");
+        }
+
+        try (BufferedWriter writer = Files.newBufferedWriter(outputFile)) {
+            int written = 0;
+            while (written < poolCount) {
+                int batch;
+                String poolSetCode;
+                if (setCode != null) {
+                    batch = Math.min(1000, poolCount - written);
+                    poolSetCode = setCode;
+                } else {
+                    // Random set per pool — generate one at a time.
+                    batch = 1;
+                    poolSetCode = eligibleSets.get(random.nextInt(eligibleSets.size()));
+                }
+
+                List<List<String>> pools = generator.generate(poolSetCode, batch, excluded);
+                for (List<String> pool : pools) {
+                    writer.write(poolSetCode);
+                    writer.write(CardNameList.FIELD_SEPARATOR);
+                    writer.write(CardNameList.format(pool));
+                    writer.newLine();
+                    written++;
+                }
+
+                if (written % 1000 == 0) {
+                    System.out.println("Generated " + written + "/" + poolCount + " pools");
+                    System.out.flush();
+                }
+            }
+        }
+
+        System.out.println("Done: " + poolCount + " pools written to " + outputFile);
     }
 }

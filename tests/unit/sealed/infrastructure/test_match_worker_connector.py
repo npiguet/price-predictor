@@ -336,9 +336,9 @@ class TestMatchWorkerConnectorEffectRecords:
     def test_the_lifetime_token_is_never_supplied_by_the_launcher(
         self, tmp_path, stub_classpath
     ):
-        # -Deffect.worker.lifetime exists so a test can pin the token. A
-        # launcher setting it would pin one value for every restart of the
-        # slot, which is the defect the token was added to fix.
+        # The worker mints its own lifetime token. A launcher passing one
+        # would pin one value for every restart of the slot, which is the
+        # defect the token was added to fix.
         with patch("subprocess.Popen") as mock_popen:
             cmd = self._cmd(
                 tmp_path,

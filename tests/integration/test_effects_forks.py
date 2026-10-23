@@ -19,8 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.evaluate_effect_model import pair_forks
 from effects.domain.collection_caps import CollectionCaps
+from effects.domain.records import EffectRecord
 from effects.infrastructure.record_io import read_records
 from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
@@ -31,13 +31,23 @@ _COLLECTION_SECONDS = 240
 _POLL_SECONDS = 5
 
 
+def pair_forks(records: list[EffectRecord]) -> list[tuple[EffectRecord, EffectRecord]]:
+    """Each fork record joined to the real record its ``mirror_of`` names."""
+    by_id = {record.record_id: record for record in records}
+    return [
+        (by_id[record.mirror_of], record)
+        for record in records
+        if record.fork and record.mirror_of and record.mirror_of in by_id
+    ]
+
+
 def _run(
     records_dir: Path, interventions: int = 0, probe_keywords: str = "",
 ) -> list:
     try:
         resolve_connector_jar()
     except FileNotFoundError:
-        pytest.skip("forge-connector JAR not built (mvn package -DskipTests)")
+        pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
 
     process = MatchWorkerConnector().start(
         None,

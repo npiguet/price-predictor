@@ -13,18 +13,12 @@ from collections import Counter
 
 import pytest
 
-from effects.application.train_effect_model import (
-    DEFAULT_KIND_MIX,
-    RARITY_CAP,
-    UNIFORM_CLASSES,
-    batches_without_replacement,
-    effective_games,
-    parse_kind_mix,
-    rarity_weights,
-    sample_weights,
-    sampling_class,
+from effects.domain.records import (
+    Moment,
+    PlayabilitySubkind,
+    RecordKind,
 )
-from effects.domain.effect_model import (
+from effects.domain.sampling import (
     CLASS_COMBAT,
     CLASS_CONTINUOUS,
     CLASS_PLAYABILITY_DECISION,
@@ -33,94 +27,43 @@ from effects.domain.effect_model import (
     CLASS_RESOLUTION_EFFECT,
     CLASS_REWRITE,
     CLASS_TRIGGER,
+    DEFAULT_KIND_MIX,
+    RARITY_CAP,
     SAMPLING_CLASSES,
+    UNIFORM_CLASSES,
+    batches_without_replacement,
+    effective_games,
+    parse_kind_mix,
+    rarity_weights,
+    sample_weights,
+    sampling_class,
 )
-from effects.domain.event_schema import Event, EventType
-from effects.domain.records import (
-    ActivationPayload,
-    CombatPayload,
-    ContinuousPayload,
-    Costs,
-    EffectRecord,
-    Moment,
-    PlayabilityAttackersPayload,
-    PlayabilityDecisionPayload,
-    PlayabilitySubkind,
-    RecordKind,
-    ResolutionOutcome,
-    ResolutionPayload,
-    RewritePayload,
-    TriggerPayload,
-)
-from effects.domain.state_snapshot import GlobalState, StateSnapshot
-
-_SNAPSHOT = StateSnapshot(
-    global_=GlobalState(
-        turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-    ),
-    players=(),
-    entities=(),
-)
-_EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
-
-
-def _record(kind: RecordKind, game_id: str = "g1", **overrides) -> EffectRecord:
-    payloads = {
-        RecordKind.COMBAT: CombatPayload(),
-        RecordKind.CONTINUOUS: ContinuousPayload(),
-        RecordKind.TRIGGER: TriggerPayload(event=_EVENT, fired=True),
-        RecordKind.REWRITE: RewritePayload(incoming=_EVENT, outgoing=_EVENT),
-    }
-    defaults: dict = {
-        "record_id": f"{game_id}.1", "run_id": "run", "timestamp": "t",
-        "game_id": game_id, "kind": kind, "actor_player": "P0",
-        "state": _SNAPSHOT,
-    }
-    if kind is RecordKind.RESOLUTION:
-        moment = overrides.pop("moment", Moment.RESOLUTION)
-        defaults["moment"] = moment
-        defaults["payload"] = (
-            ResolutionPayload() if moment is Moment.RESOLUTION
-            else ActivationPayload(
-                costs=Costs(), outcome=ResolutionOutcome.RESOLVED,
-            )
-        )
-    elif kind is RecordKind.PLAYABILITY:
-        subkind = overrides.pop("subkind", PlayabilitySubkind.DECISION)
-        defaults["subkind"] = subkind
-        defaults["payload"] = (
-            PlayabilityDecisionPayload()
-            if subkind is PlayabilitySubkind.DECISION
-            else PlayabilityAttackersPayload()
-        )
-    else:
-        defaults["payload"] = payloads[kind]
-    defaults.update(overrides)
-    return EffectRecord(**defaults)
+from effects.domain.split import CorpusSplit
+from tests.unit.effects.builders import make_record
 
 
 class TestSamplingClass:
     def test_the_two_resolution_moments_are_different_classes(self):
-        assert sampling_class(_record(RecordKind.RESOLUTION)) == (
+        assert sampling_class(make_record(RecordKind.RESOLUTION)) == (
             CLASS_RESOLUTION_EFFECT
         )
         assert sampling_class(
-            _record(RecordKind.RESOLUTION, moment=Moment.ACTIVATION)
+            make_record(RecordKind.RESOLUTION, moment=Moment.ACTIVATION)
         ) == CLASS_RESOLUTION_COST
 
     def test_the_two_playability_families_are_different_classes(self):
-        assert sampling_class(_record(RecordKind.PLAYABILITY)) == (
+        assert sampling_class(make_record(RecordKind.PLAYABILITY)) == (
             CLASS_PLAYABILITY_DECISION
         )
-        assert sampling_class(_record(
+        assert sampling_class(make_record(
             RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.ATTACKERS,
         )) == CLASS_PLAYABILITY_LEGALITY
 
     def test_the_remaining_kinds_map_one_to_one(self):
-        assert sampling_class(_record(RecordKind.COMBAT)) == CLASS_COMBAT
-        assert sampling_class(_record(RecordKind.CONTINUOUS)) == CLASS_CONTINUOUS
-        assert sampling_class(_record(RecordKind.TRIGGER)) == CLASS_TRIGGER
-        assert sampling_class(_record(RecordKind.REWRITE)) == CLASS_REWRITE
+        assert sampling_class(make_record(RecordKind.COMBAT)) == CLASS_COMBAT
+        assert sampling_class(make_record(RecordKind.CONTINUOUS)) == CLASS_CONTINUOUS
+        assert sampling_class(make_record(RecordKind.TRIGGER)) == CLASS_TRIGGER
+        assert sampling_class(make_record(RecordKind.REWRITE)) == CLASS_REWRITE
 
     def test_every_class_is_reachable(self):
         assert set(SAMPLING_CLASSES) == set(DEFAULT_KIND_MIX)
@@ -174,13 +117,13 @@ class TestRarityWeighting:
     def test_effective_games_counts_distinct_games_not_records(self):
         """One long game producing many records is still one game."""
         records = [
-            _record(RecordKind.COMBAT, game_id="g1", record_id=f"g1.{i}")
+            make_record(RecordKind.COMBAT, game_id="g1", record_id=f"g1.{i}")
             for i in range(50)
-        ] + [_record(RecordKind.COMBAT, game_id="g2")]
+        ] + [make_record(RecordKind.COMBAT, game_id="g2")]
         assert effective_games(records, lambda r: "bolt") == {"bolt": 2}
 
     def test_a_record_with_no_text_is_not_counted(self):
-        records = [_record(RecordKind.COMBAT)]
+        records = [make_record(RecordKind.COMBAT)]
         assert effective_games(records, lambda r: None) == {}
 
 
@@ -190,17 +133,17 @@ class TestUniformClasses:
 
     def test_a_record_with_no_acting_text_weighs_one(self):
         records = [
-            _record(RecordKind.COMBAT, game_id=f"g{i}", record_id=f"g{i}.1")
+            make_record(RecordKind.COMBAT, game_id=f"g{i}", record_id=f"g{i}.1")
             for i in range(5)
         ]
         assert sample_weights(records, lambda r: None) == [1.0] * 5
 
     def test_records_with_text_are_weighted_by_rarity(self):
         common = [
-            _record(RecordKind.RESOLUTION, game_id=f"g{i}", record_id=f"g{i}.1")
+            make_record(RecordKind.RESOLUTION, game_id=f"g{i}", record_id=f"g{i}.1")
             for i in range(4)
         ]
-        rare = [_record(RecordKind.RESOLUTION, game_id="g9", record_id="g9.1")]
+        rare = [make_record(RecordKind.RESOLUTION, game_id="g9", record_id="g9.1")]
         texts = {r.record_id: "common" for r in common} | {"g9.1": "rare"}
         weights = sample_weights(
             [*common, *rare], lambda r: texts[r.record_id],
@@ -209,7 +152,7 @@ class TestUniformClasses:
 
     def test_a_decision_records_examples_key_on_the_candidates_text(self):
         """One record, one example per candidate, each keyed on its own text."""
-        record = _record(RecordKind.PLAYABILITY)
+        record = make_record(RecordKind.PLAYABILITY)
         assert sampling_class(record) == CLASS_PLAYABILITY_DECISION
         assert CLASS_PLAYABILITY_DECISION not in UNIFORM_CLASSES
 
@@ -220,8 +163,8 @@ class TestSampleWeightsRarityTable:
 
     def test_sample_weights_prefer_a_supplied_corpus_wide_rarity_table(self):
         records = [
-            _record(RecordKind.COMBAT, game_id="g1", record_id="r1"),
-            _record(RecordKind.COMBAT, game_id="g1", record_id="r2"),
+            make_record(RecordKind.COMBAT, game_id="g1", record_id="r1"),
+            make_record(RecordKind.COMBAT, game_id="g1", record_id="r2"),
         ]
         texts = {"r1": "t", "r2": "u"}
         # The resident shard shows one game of each; corpus-wide ``t`` was in
@@ -235,30 +178,27 @@ class TestSampleWeightsRarityTable:
 
     def test_a_text_the_table_does_not_name_falls_back_to_the_shard(self):
         """A shard collected after the dataset was built still weights sanely."""
-        records = [_record(RecordKind.COMBAT, game_id="g1", record_id="r1")]
+        records = [make_record(RecordKind.COMBAT, game_id="g1", record_id="r1")]
         assert sample_weights(records, lambda r: "new", rarity={"t": 100}) == (
             sample_weights(records, lambda r: "new")
         )
 
 
 class TestWeightsKeyByAbilityText:
-    """``TrainingLoop._weighted`` must key rarity by ability text, not record id.
+    """``StepPreparer._weighted`` must key rarity by ability text, not record id.
 
     A ``record_id`` is unique per record, so keying on it gives
     ``effective_games`` a count of exactly 1 for every key and every record in
     a pool the same weight — rarity weighting silently does nothing.
     """
 
-    def test_a_single_game_ability_outweighs_a_many_game_one(self):
-        from effects.application.train_effect_model import (
-            HeldOutCards,
-            TrainEffectModelConfig,
-        )
-        from effects.application.training_loop import TrainingLoop
+    def test_a_single_game_ability_outweighs_a_many_game_one(self, tmp_path):
+        from effects.application.ability_text import KeyResolver
         from effects.domain.provenance import ProvenanceKey, SidecarLine
         from tests.unit.effects.application.test_ability_text import (
             FakeSidecarCache,
         )
+        from tests.unit.effects.builders import make_preparer
 
         common_key = ProvenanceKey("cardsfolder/c/common.txt", 0, "keyword", 0)
         rare_key = ProvenanceKey("cardsfolder/r/rare.txt", 0, "keyword", 0)
@@ -274,21 +214,18 @@ class TestWeightsKeyByAbilityText:
         })
         # Carried by fifty games...
         common_records = [
-            _record(RecordKind.RESOLUTION, game_id=f"g{i}", ability=(common_key,))
+            make_record(RecordKind.RESOLUTION, game_id=f"g{i}", ability=(common_key,))
             for i in range(50)
         ]
         # ...against one carried by a single game.
         rare_records = [
-            _record(RecordKind.RESOLUTION, game_id="g-rare", ability=(rare_key,)),
+            make_record(RecordKind.RESOLUTION, game_id="g-rare", ability=(rare_key,)),
         ]
-        loop = TrainingLoop(
-            TrainEffectModelConfig(),
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, training_shards=[], validation_samples={},
-            holdout_permille=20, holdout_max_carriers=8,
-        )
+        preparer = make_preparer(tmp_path)
+        preparer.rarity = None
+        preparer.resolver = KeyResolver(sidecars, preparer.surface)
 
-        weights = loop._weighted([*common_records, *rare_records], sidecars)
+        weights = preparer._weighted([*common_records, *rare_records])
 
         assert weights[-1] > weights[0]
 
@@ -298,16 +235,12 @@ class TestProvenanceRecordsTheCorpus:
     split, so ``evaluate-effect-model`` can refuse one rebuilt since."""
 
     def test_a_corpus_runs_provenance_records_the_manifest_digest(self):
-        from effects.application.train_effect_model import (
-            HeldOutCards,
-            TrainEffectModelConfig,
-        )
+        from effects.application.train_effect_model import TrainEffectModelConfig
         from effects.application.training_loop import TrainingLoop
 
         loop = TrainingLoop(
             TrainEffectModelConfig(corpus="output/effects/corpus"),
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, training_shards=[], validation_samples={},
+            split=CorpusSplit(), training_shards=[], validation_samples={},
             holdout_permille=20, holdout_max_carriers=8,
             corpus_digest="abc123",
         )
@@ -319,16 +252,12 @@ class TestProvenanceRecordsTheCorpus:
 
     def test_a_run_without_a_digest_records_no_corpus(self):
         """Nothing is pinned until a manifest has been read."""
-        from effects.application.train_effect_model import (
-            HeldOutCards,
-            TrainEffectModelConfig,
-        )
+        from effects.application.train_effect_model import TrainEffectModelConfig
         from effects.application.training_loop import TrainingLoop
 
         loop = TrainingLoop(
             TrainEffectModelConfig(),
-            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, training_shards=[], validation_samples={},
+            split=CorpusSplit(), training_shards=[], validation_samples={},
             holdout_permille=20, holdout_max_carriers=8,
         )
 
@@ -343,7 +272,7 @@ class TestBatchesWithoutReplacement:
 
     def _records(self, n):
         return [
-            _record(RecordKind.RESOLUTION, record_id=f"r{i}", game_id=f"g{i % 4}")
+            make_record(RecordKind.RESOLUTION, record_id=f"r{i}", game_id=f"g{i % 4}")
             for i in range(n)
         ]
 
@@ -420,14 +349,14 @@ class TestRarityWeightsWithinAClass:
         assert max(weights.values()) <= RARITY_CAP * p99_weight + 1e-12
 
     def test_weights_are_normalized_within_each_class(self):
-        from effects.application.train_effect_model import sampling_class
+        from effects.domain.sampling import sampling_class
 
         resolutions = [
-            _record(RecordKind.RESOLUTION, game_id=f"g{i}", record_id=f"r{i}")
+            make_record(RecordKind.RESOLUTION, game_id=f"g{i}", record_id=f"r{i}")
             for i in range(6)
         ]
         combats = [
-            _record(RecordKind.COMBAT, game_id=f"c{i}", record_id=f"c{i}")
+            make_record(RecordKind.COMBAT, game_id=f"c{i}", record_id=f"c{i}")
             for i in range(3)
         ]
         texts = {f"r{i}": ("rare" if i == 0 else "common") for i in range(6)}

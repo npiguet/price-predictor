@@ -14,7 +14,9 @@ One goal is set: gen-3 rebalances its training examples rule by rule, so that no
 ability counts as rare in what the model trains on. Three sections below are its means. The rules
 index counts how many records show each rule of the game. Adaptive sampling draws more of the
 records a weak output field needs. The turn-rule section balances each condition between met and
-unmet. Beyond the schema and that goal, nothing here is decided yet.
+unmet. The rare-wording section shows that a rule's cells have to reach down to the kind of ability
+that exercises it, since an activated ping is rare where a damage spell is not. Beyond the schema and
+that goal, nothing here is decided yet.
 
 A few terms recur. A record is one observed game event: an ability resolving, a combat, a trigger, a
 legality decision. A resolution record comes in two halves joined by a link, the cost half and the
@@ -83,6 +85,30 @@ lacks `params.cause`, and damage to a creature reports `combat: false`. Observed
 correctly. The source can be recovered from the payload's `assignment_choices`. Because the source
 is missing, several attackers' identical hits produce byte-identical events, which inflates the
 validator's "repeats an event" check. Gen-1 and gen-2 shards both carry the gap.
+
+### The Forge hooks and collectors recorded planned events as real ones, and several outcomes reached the wrong record
+
+Gen-3's hooks and collectors fix all nine defects the gen-2 record describes ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#nine-collector-defects-shaped-gen-2s-labels-and-gen-3-collects-without-them)). The fixes are commits on the `effect-record-hooks` branch of `../forge` and in the connector. They change what a record says, so they are in place before gen-3's first collection.
+
+**Block and attack legality are asked by Forge's declare steps, before anyone declares.** The hook lists every creature the player controls as a candidate, and the combat holds no blocks yet when it is asked. A creature planned for one block can no longer read as forbidden for another. A tapped or "can't block" creature is always listed as forbidden. The answer is the same whatever controls the seat, so the random seat no longer writes legality records of its own, and the AI's internal legality queries are no longer hooked. Every legality record is therefore a real declaration, one per defender or attacker per combat. `--legality-rate`, which sampled the AI's what-if queries, now has nothing to sample; removing the flag is left to the gen-3 collection work.
+
+**A reveal from a library during a resolution names the players whose libraries it came from.** A scry already names the player who scried in the same way. A reveal from a hand, a graveyard or any other zone names nobody. So does a reveal made while paying a cost, which happens before the spell it pays for resolves. A clash names both clashing players.
+
+**Each kind of object an effect makes gets its own note, and a token's note carries its keywords.** Bestial Menace now records a Snake, a Wolf and an Elephant. The collector writes a token's script id and keywords with the code that writes every token on the board, so the created-objects field's keyword flags have something to learn from.
+
+**Prevented damage names the creature or player it would have been dealt to.**
+
+**A note that names no subject marks nothing affected.** Coin flips, token creation, copies, votes and ventures no longer mark the acting card as affected.
+
+**A combat record carries its own damage step's assignment, as the players made it.** Forge copies the assignment the moment it is complete, before prevention or redirection rewrites the damage, and holds it until the next step's assignment replaces it. The collector writes that copy whole. A double striker therefore shows its assignment in both steps, a prevented hit still shows the damage assigned, and the observed record and its probe fork read the same thing.
+
+**A combat record stops where the stack starts.** The first ability or spell to go on the stack in a damage step writes the step's combat record, and nothing after it joins one. A combat-damage trigger's draw, token or discard is written in the trigger's own resolution record, and damage a spell deals in the window is not combat damage.
+
+**Trigger records describe only events that happen.** The engine's query of which triggers an event would fire no longer notifies the hook, so the AI's questions about taps it is planning write nothing. A static trigger is also evaluated once per event rather than once when its event is collected and again when it runs.
+
+**A prevention that prevented nothing writes no note.** A shield whose amount is used up no longer records a prevention of 0.
+
+**Two bits of the `library_events` field are still never set.** The target mapping writes the `scry` bit for both scry and surveil, and nothing writes the `surveil` or `tutor` bit. The mapping is in `src/effects/domain/effect_targets.py` and is left to the gen-3 target work.
 
 ### Some records cannot be joined to the text of the ability that acted
 
@@ -161,30 +187,36 @@ the seat would choose among the Forge AI's better options with some temperature.
 stay plausible but differ from the AI's, without throwing creatures away. It depends on whether
 Forge's AI exposes a ranking of its options, which has not been checked.
 
-### Two sampling rules over-represent some questions
-
-**What-if legality queries are sampled before they are de-duplicated.** A what-if query is the AI
-asking whether an attack or block would be legal without committing to it. `--legality-rate` draws
-each query before identical snapshots are merged, so a question the AI asks K times survives with
-probability 1 − (1 − r)^K. Blocker what-ifs outnumber real block decisions about five to one.
+### The held-out coverage round over-represents some texts, and what-if legality sampling has nothing left to sample
 
 **The held-out coverage round covers more than the held-out texts.** `collect-coverage
 --only-cards` targets every text carried only by held-out cards. That set is larger than the
 held-out texts themselves.
 
-### The observed-mana probe counts every mana event as one mana
+**What-if legality queries no longer reach the corpus.** A what-if query is the AI asking whether
+an attack or block would be legal without committing to it. In gen-2, `--legality-rate` drew each
+query before identical snapshots were merged, so a question the AI asked K times survived with
+probability 1 − (1 − r)^K, and blocker what-ifs outnumbered real block decisions about five to one.
+Gen-3's legality hook is asked by Forge's declare steps rather than by the AI, so every legality
+record is a real declaration and there is nothing left to sample
+([the Forge hooks](#the-forge-hooks-and-collectors-recorded-planned-events-as-real-ones-and-several-outcomes-reached-the-wrong-record)).
 
-**The knowledge probes' observed-mana target reads a field the collector never writes.**
-`labels.mana_observed` sums each `mana_produced` event's `params.amount`. The collector writes
-`params.mana_by_color` instead, a map from colour to count, so every event counts as one mana
-whatever it produced. On gen-2's first arm the target scored no rung at all, so no gen-2 conclusion
-rests on it.
+### The observed-mana probe counts the mana each event names
 
-**Two questions about what the collector writes have to be settled before the fix.** A dual land's
-event reads `{"W": 1, "R": 1}`, which may be one mana of either colour or the collector listing
-both of the land's colours. Thousands of gen-2's events carry an empty map. The probe can count
-mana correctly only once both are understood, and either may turn out to be a collector defect
-rather than a probe one.
+**The knowledge probes' observed-mana target sums each event's `mana_by_color`.** In gen-2 it read
+`params.amount`, a field the collector never writes, so every event counted as one mana whatever it
+produced ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#the-observed-mana-probe-label-counted-mana-events-rather-than-mana)).
+
+**The collector's map is the mana actually produced, not the colours a land could make.** The
+collector counts the colour letters of the mana string Forge reports once the mana is in the pool,
+after replacement effects (`PatchedCollectors.manaByColor`). Every multi-colour map in a sample of
+gen-2 events came from a source that makes two or more mana at once, such as Orzhov Basilica's
+`{W: 1, B: 1}`.
+
+**An event whose map is empty counts as unreadable.** It adds nothing to the target, and a record
+whose mana events are all empty gets no label. The collector writes no map at all when it cannot
+read the mana, so the empty maps seen in gen-2's events are not yet explained, and gen-3's first
+pilot should count them.
 
 ### Training could draw more of the records a weak output field needs, from the whole corpus
 
@@ -299,6 +331,39 @@ other outputs get the threshold or one pass at full loss is left to this stage.
 meaning of clearly wrong: a probability for binary and categorical outputs, a tolerance for counts
 and deltas. A base weight comes on top. Two arms with different thresholds differ in what each
 output effectively trained on, which makes them harder to compare.
+
+### A rare wording of a common effect needs examples of its own, and field weighting cannot see it
+
+**Gen-2's arms doubt that an activated ping's target is affected, because training holds few such
+pings.** Prodigal Sorcerer's "{T}: deal 1 damage to any target" and its relatives resolve about 70
+times in gen-2's whole training corpus, about 45 of them at a creature. "Any target" damage spells
+resolve about seven times as often. On arm `e64-lethality`, run B64's last epoch and arm
+`e256-lethality`, the gate at the pinged creature sits near an even chance; the gate is the model's
+predicted chance that a card is affected at all. Reading the same records with "target creature" in
+place of "any target" lifts it above nine in ten. The model therefore knows the effect and has not
+tied this wording to its target. The last epochs of runs B128 and B256 learn it, so whether a
+checkpoint does is the luck of its fit ([the gen-2
+record](2026-09-18-effect-model-gen2-improvements-design.md#where-the-model-doubts-that-a-hit-creature-is-affected-the-text-leaves-the-victim-open-or-is-rare-in-training)).
+
+**Field weighting does not reach it.** The gate removes about three quarters of its constant
+prediction's loss over the whole corpus and stays level after epoch 20, so a controller watching
+each field's loss has no reason to raise it. The weak spot is one wording in
+one situation, an activated "any target" ability whose target is a creature, and the field's loss
+averages it away. Three parts of gen-3 could supply it:
+
+- **Per-rule rebalancing, with cells that cross a rule with the kind of ability exercising it.** Rule
+  115, targets, crossed with activated abilities would give these pings a quota of their own.
+- **Retargeting copies.** Gen-2's lethality copies already copy most qualifying pings, but each copy
+  keeps its record's board and target, so the gate sees the same 45 boards over and over. A copy that
+  hands the ping to another creature on the board, and labels the new target's damage and death by
+  the rule, would show the gate new boards from the same records.
+- **Collection aimed at the wording.** A coverage round over cards with an activated "any target"
+  damage ability would add creature targets beyond what the AI's own choices supply.
+
+**The measure is gen-2's toughness sweep.** Its activated damage records should give the same gate
+read with "any target" and with "target creature". Probes that pick training records should also drop
+repeated rows: the curated corpus writes a rare text's records several times, and gen-2's boundary
+chart counted three Suffocating Blast resolutions as twelve of its 40 rows.
 
 ### The Comprehensive Rules could index what the corpus covers, rule by rule
 
@@ -461,8 +526,8 @@ game-disjoint loss points the same way as the probes in the two 128-wide runs on
 
 | gen-2 run, best epoch → last epoch | card-disjoint loss | game-disjoint loss | probe mean, card-disjoint records | probe mean, game-disjoint records | "affected" probe, card-disjoint records |
 |---|---|---|---|---|---|
-| run A | 3.519 → 3.759 | 2.906 → 2.913 | 0.953 → 0.951 | 0.958 → 0.960 | 0.979 → 0.981 |
-| run B | 3.506 → 3.643 | 2.880 → 2.942 | 0.956 → 0.956 | 0.963 → 0.963 | 0.978 → 0.980 |
+| run A64 | 3.519 → 3.759 | 2.906 → 2.913 | 0.953 → 0.951 | 0.958 → 0.960 | 0.979 → 0.981 |
+| run B64 | 3.506 → 3.643 | 2.880 → 2.942 | 0.956 → 0.956 | 0.963 → 0.963 | 0.978 → 0.980 |
 | run A128 | 3.708 → 3.802 | 2.908 → 2.864 | 0.944 → 0.949 | 0.944 → 0.957 | 0.980 → 0.976 |
 | run B128 | 3.634 → 3.689 | 2.860 → 2.846 | 0.945 → 0.948 | 0.952 → 0.955 | 0.981 → 0.982 |
 
@@ -499,7 +564,7 @@ where gate 1 also lives. A run keeping one checkpoint for both weighs the two sc
   without measuring the questions that matter more directly than the probes do. Calibration stays
   a reported number, because the in-game head's probabilities are used as probabilities.
 - **A fixed schedule that keeps the last epoch.** It would end every run with a tenth of the
-  learning rate and keep the last epoch, as gen-2's runs B and B128 suggest works. It avoids a
+  learning rate and keep the last epoch, as gen-2's runs B64 and B128 suggest works. It avoids a
   poor measure instead of replacing it with a better one.
 
 ### The training loss puts every output field on one scale, with amount distributions that fit
@@ -539,9 +604,13 @@ supply them. The combat copies proposed below are one case.
 
 **The AI writes only candidates that already passed `canPlay`.** `AiController.canPlayAndPayFor` returns before the hook for a candidate that fails it, so every `can_play = false` in the corpus comes from the random seat.
 
+**On the AI seat, gen-1 and gen-2 `has_legal_target` and `affordable` record the AI's choices rather than the rules.** `has_legal_target` reads whether the AI had set targets on the candidate. The AI sets targets only when its evaluation gets that far and finds a target it wants. A candidate the AI put off until later is therefore written with no legal target. A candidate evaluated earlier can keep that evaluation's targets and is written with one. `affordable` comes from `ComputerUtilCost.canPayCost`, which applies the AI's cost preferences on top of the rules. It refuses a planeswalker's last loyalty and a Ward cost the AI dislikes, and it draws from the shared random stream to decide. The random seat uses the same cost check. It counts target candidates rather than reading chosen targets, but it walks a charm's leftover chain of chosen modes instead of the modes the charm offers. Verdict-head results and probes on gen-1 and gen-2 records inherit all of these errors.
+
+**Gen-3 computes all three verdict bits in the collector, from the rules alone, for both seats.** The AI's hook passes only the candidate, before the AI evaluates it and ahead of its `canPlay` filter. The collector's `PlayabilityVerdict` checks mana and additional costs without the AI's cost preferences. It counts each targeting clause's candidates against the clause's minimum. It judges a charm by how many of its offered modes have reachable targets. The random seat filters its own plays on the same verdict.
+
 **Split second on the stack reaches the model only as the stack card's ability text.** The card slots' keyword flags have no `split_second`, and the knowledge probes found the trunk reads little of other cards' text.
 
-**The fix is in the collector, and Forge's own answer is the label.** Each candidate carries a fourth verdict bit, `timing`, holding `canCastTiming`, recorded at the AI's hook and at the random seat alike. Recomputing the rule in Python from the snapshot would miss what Forge already applies:
+**The fix is in the collector, and Forge's own answer is the label.** Each candidate carries a fourth verdict bit, `timing`, holding `canCastTiming`, computed by `PlayabilityVerdict` for the AI seat and the random seat alike. Recomputing the rule in Python from the snapshot would miss what Forge already applies:
 
 - flash granted by a static, such as Leyline of Anticipation or Vedalken Orrery;
 - a static that holds opponents to sorcery timing, such as Teferi, Time Raveler;
@@ -592,13 +661,44 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 
 **The model can read part of the answer off the board.** Gen-2's input gives each card a thermometer of toughness minus marked damage, so a blocker the attacker already damaged shows whether that damage is lethal. A combat record then asks about a board on which half the step has happened, and how much of the outcome leaks depends on which damage Forge dealt first.
 
-**The fix is to take the snapshot at the start of the damage step.** The damage-step probe forks already copy the game at the phase event, before any damage, so the observed record can take its snapshot at the same moment. The assignment and the combat shape are read at the first damage event, as now, because Forge has assigned the damage by then.
+**The fix is to take the snapshot at the start of the damage step.** The damage-step probe forks already copy the game at the phase event, before any damage, so the observed record can take its snapshot at the same moment. The combat shape is read at the first damage event, as now, because no creature has left combat by then. The assignment can be read at any point of the step, because Forge holds each step's assignment as it was made.
 
 ### The board input should say which attacker each blocker blocks
 
 **A card slot says that a creature is blocking, not which attacker it blocks.** The snapshot records the pairing in each creature's combat status, `blocking` and `blocked_by`, but the card features keep only a blocking bit and a count of blockers. With two blocked attackers on the board, the model cannot tell which blocker deals damage to which attacker, so a combat's deaths depend on a pairing it has to guess. Gen-2's combat grid reads only combats with one blocked attacker for this reason.
 
+**The gap reaches abilities as well as combat damage.** Skewer Slinger deals 1 damage to the creature it blocks or is blocked by. Both of gen-2's probe records for it have several creatures in combat, and run B256's last epoch gives the damaged creature a gate of 0.13 and 0.02 ([the gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#where-the-model-doubts-that-a-hit-creature-is-affected-the-text-leaves-the-victim-open-or-is-rare-in-training)).
+
 **The pairing belongs in the trunk's input.** Two forms would carry it: each card slot gains the board position of the attacker it blocks, or the trunk's attention gains a bias between a blocker and its attacker, as it could between an aura and the permanent it enchants. Either needs no new collection, since the snapshot already holds the pairing.
+
+### The keyword flags should say what a creature has protection from
+
+**Gen-2's keyword flags collapse every protection into one flag.** The overlay maps `protection_from_red`, `protection_from_blue` and every other protection onto a single `protection` slot. A printed protection line still reaches the model through its text in `e`. A granted one, such as Gods Willing's "gains protection from the color of your choice", reaches it only through the flag, and the flag cannot say which colour. Gen-2's evasion grid shows the cost directly: its two protection rows, protection from the blocker's colour and protection from another colour, give the model identical inputs and so identical predictions, where the rule forbids the first block and allows the second.
+
+**Protection is not always from a colour.** Forge's card scripts print protection on 196 cards. Colours are most of it, and the rest is a long tail, several of its qualities on a single card.
+
+| protection from | printed protection lines |
+|---|---:|
+| a colour | 153 |
+| a creature type, such as Goblins, Dragons or Vampires | 23 |
+| a card type, such as artifacts, creatures or instants | 21 |
+| multicolored, monocolored, or each colour | 9 |
+| a condition, such as mana value 3 or less or a counter | 4 |
+| a creature subset, such as legendary creatures or Gods | 3 |
+| everything | 1 |
+
+**Gen-3 gives each granted protection its quality.** Two forms would carry it:
+
+- **Fixed flags for the common qualities and one open slot.** One flag per colour, per card type, for multicolored and monocolored, and for everything, plus an "other" flag for a creature type or a condition. Cheap, but the open slot cannot say which creature type.
+- **Every granted keyword encoded as a line.** The overlay's granted keywords pass through the encoder as their expanded definition, "protection from Goblins", the way a printed keyword line already does. Any quality then reaches the trunk as text, including ones no flag anticipates, at the cost of an encoder pass per granted keyword.
+
+**The rare qualities need built examples, or the flags carry nothing the model learned.** A creature with protection from everything appears on one card, and protection from most creature types on two or three. Self-play shows them in a handful of games at best. Rule 702.16 says what protection does: damage from a source with the quality is prevented, and the creature cannot be enchanted or equipped, blocked or targeted by such a source. Three sources could supply the examples, and per-rule rebalancing decides how many each quality gets:
+
+- **Rule-labelled copies.** A copy of a real record grants a creature a protection quality and relabels the four outcomes by the rule, as the lethality copies relabel a death: the damage prevented, the block or target made illegal, the Aura put into the graveyard.
+- **Variant scripts.** `collect-variants` already swaps selectors from a whitelist. A protection keyword's quality is such a selector, so variants of real cards with another quality are played for real.
+- **Interventional forks.** A fork grants protection mid-game and plays the turn out, so the outcomes come from Forge rather than from a rule written beside it.
+
+Gen-2's evasion grid becomes the measure: its protection rows extend to the other qualities, from a creature type to everything.
 
 ### Combat could get lethality copies of its own, as damage spells have in gen-2
 
@@ -613,6 +713,84 @@ The acting-player bits stay. Every row but the owner rows is an input-layout cha
 - How many copies, and how they share an epoch with the field-weighted sampling.
 
 The combat grid measures the result on blocks from the validation strata, which copies never touch.
+
+### The withheld keyword reaches training as its definition, so gen-3's zero-shot slice is the first that tests reading one
+
+**Every gen-2 arm deleted cascade from its input rather than expanding it.** `--withhold-keyword` is meant to keep the keyword's token out of training and replace each occurrence with its reminder text. The batcher removed the token before keyword expansion ran, and the flag that should have forced the expansion was never read. A cascade keyword line therefore reached the encoder as its `[CLS]` token alone. Evaluation builds its batches the same way, so the model never read cascade in any form.
+
+**Gen-2's zero-shot slice measured a keyword with no text, not a keyword read through its definition.** The slice compares the effect head's per-field results on records where cascade acts or sits on the board with the same fields for keywords that trained. With cascade's line empty, those records differ from the others by a missing ability rather than by an unfamiliar one. The slice says nothing about how a new set's keyword would be read, and it is not a baseline for gen-3's.
+
+**Gen-3 runs force-expand the withheld keyword wherever it appears.** One tokenizer method expands the withheld keyword as it would a keyword unknown to the vocabulary. It then drops the keyword's token everywhere, including inside the reminder text of another keyword that names it, such as reach's mention of flying. Training, evaluation and `encode-abilities` all tokenize through it. The cache row of the withheld keyword is therefore its definition read by the trained encoder. Gen-2's cache encoded cascade's line from a token training never updated ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#cascades-line-in-every-gen-2-cache-was-encoded-from-a-token-training-never-updated)). A run without `--withhold-keyword` takes exactly the draws it took before.
+
+### The corpus build, the targets and the probes were reviewed, and gen-3 trains without the defects found
+
+A review of `src/effects` and the probe scripts after the gen-2 runs found fifteen defects that shaped gen-2's results ([gen-2 record](2026-09-18-effect-model-gen2-improvements-design.md#sixteen-defects-in-the-corpus-build-the-training-labels-the-evaluator-and-the-probes-shaped-gen-2s-results-and-gen-3-is-built-without-them)) and thirteen more on paths gen-2 never ran. All of them are fixed on master before gen-3's first collection. Several fixes change what a field means or how the loss weighs it, so no gen-3 number is comparable with gen-2's on those fields.
+
+#### What the model trains on
+
+**An output field is scored only where its record says something about it.** Each field is supervised where the affected gate fires and the field is present. A field is present when the record writes it, or when the field has a silent value and the record's class supervises it. The silent values are the ones whose absence means nothing happened: zone stayed, no damage, no counters, no P/T change, no type, colour or keyword gained or lost, no control or attachment change, and no change to a player's life, cards, library, poison or mana. `tap_state`, both durations, the legality bits and `min_blockers` have no silent value and train only where an event or a decision payload sets them. Player slots are never scored on permanent fields, nor permanents on player fields. Continuous records now also supervise P/T, keyword, type and colour changes. The constant-prediction floor reads the same presence, so explained deviance measures the same thing the loss trains.
+
+**`target_legal` now has nothing to learn from.** A decision payload lists a spell's legal targets and never its illegal ones, so with presence the field sees only positives and its floor is undefined. Target legality is learned through the affected gate, which a decision record raises exactly on its legal targets, and the probe ladder already reads it there. Gen-3 either drops the field or has the collector record the entities a target restriction excluded.
+
+**A trigger record supervises only whether the trigger fired.** It produces no per-entity targets. The triggering event stays in its input as the pending-event overlay.
+
+**The value head reads static boosts and tells placing counters from removing them.** `AddPower$` and `AddToughness$` are read, and a value that is not a literal number is masked. Counter removal has a target of its own, `counters_removed`, because one chain can both put and remove counters. Moving or adding-or-removing counters masks both targets. Where a script omits an amount, the value is Forge's own default: a draw draws one card, and putting or removing counters moves one.
+
+**A masked number is masked in the numeric input too.** The masked-language-model term zeroes the numeric value and its flag wherever it masks a token.
+
+**Count targets are clamped at zero.** Healing subtracts from `damage_taken`, and a negative count made the Poisson loss unbounded below.
+
+**Every head's loss is reduced the same way.** Each row's loss is summed over its targets and then averaged over rows: a record for the effect, created-objects and verdict heads, a text for the value, API and masked-language-model heads. Before, the API-key term was averaged over its 1,245 key columns, which made it about a thousandth of the API-type term under the same weight. With the sum, the API-key term over 1,245 key columns made up close to a third of the initial loss at gen-2's API weight. The default API weight is therefore 0.003, which puts the weighted key term between the value and masked-language-model terms. At that weight the API-type term carries almost nothing. Separate weights for types and keys belong to the loss redesign ([one scale for every field](#the-training-loss-puts-every-output-field-on-one-scale-with-amount-distributions-that-fit)).
+
+| term, one 32-record batch at initialisation | weighted, API weight 0.05 | weighted, API weight 0.003 |
+|---|---:|---:|
+| per-entity fields | 67.0 | 67.0 |
+| created objects | 30.7 | 30.7 |
+| API keys | 44.5 | 2.7 |
+| masked-language model | 6.6 | 6.6 |
+| value head | 1.0 | 1.0 |
+| verdict head | 0.8 | 0.8 |
+| API types | 0.3 | 0.02 |
+
+#### The corpus build
+
+**The training plan counts only records the build will train on.** The survey routes each game once, at the end of its shard: held out, else drawn for game-disjoint, else training. Only training games' records size the class, family and text quotas, and the write pass applies the same routing. Rarity keeps counting the whole corpus. The manifest records each class's target beside its delivered count and warns when a class falls short. A seven-shard smoke build delivered 99.8–102.7% of every class's target.
+
+**A held-out text's game cap counts only resolutions.** A held-out game is admitted to the card-disjoint stratum only for the held-out texts it resolves, so every admitted game gives gate 1 a record.
+
+**The holdout covers token and variant scripts.** A token script carrying a held-out text counts as a carrier and is held out by its script file. `collect-variants` drops any variant that prints a held-out text or template. `build-corpus` drops a training record acting through a held-out text, and counts the drops as their own stratum.
+
+**Training shards are dealt by game.** Repacking assigns each game to a shard by a seeded hash of its `game_id` and shuffles each shard, so a shard mixes games from every run and source.
+
+**Three build faults that gen-2 never hit are fixed.** An unjoinable key on a decision's candidate is refused rather than crashing the plan. A curated shard keeps the generation of the raw records it came from. A build that fails partway leaves no manifest whose digest still matches the checkpoints.
+
+#### Encoding and the baselines
+
+**The `no-state` baseline keeps the acting ability.** It zeroes every ability vector on the board except `[ACT]`'s, all card and player features, and every `[GLOBAL]` input except the record-kind, moment and subkind flags.
+
+**The identity baseline gives each text its own row.** Its table is indexed exactly by text, built from the sidecars, with one shared row for texts it never saw. The 2^17-row hash table it replaces put more than a quarter of the texts in a row with another.
+
+**The prose surface works.** Value and API targets are read from the line's script rather than its prose. Lethality copies edit the prose amount and shift the role spans with it. Role spans reach the encoder on the prose surface.
+
+**Training records its seed on the checkpoint, and gradient accumulation counts its steps within the epoch.**
+
+#### Evaluation and probes
+
+**Gate 2 reads every field through the affected gate.** A count or amount is read as the gate's probability times the field's value, and a category as the gate's probability times the class's. Gate 2, the sweeps and the zone probes share this reading. The probe ladder's `damage_taken` target still reads the amount alone, because every one of its items took damage.
+
+**Gate 2 counts records from the curated corpus and leaves out the forks.** It reads the curated game-disjoint stratum and skips probe forks and interventional records. Its 200-record threshold counts distinct records. Agreement is averaged over each record's carriers, because each carrier is its own perturbation.
+
+**Gate 1 takes its seen texts from the curated training stratum.** It streams the card-disjoint stratum and keeps only resolution records of unseen texts. A checkpoint without a curated corpus skips gate 1 and says why.
+
+**The checkpoint names the corpus, sidecars and variant tree that every probe and grid reads.** A probe set frozen against another corpus is refused.
+
+**A probe line is held out only when every card carrying it is held out.** A text printed only on held-out cards never trained, even when the text itself is not held out.
+
+**The embedding probes count each record once.** The profiles de-duplicate the training stratum's copies by `record_id`.
+
+**Three unbuilt checks are reported as not implemented.** The evaluator no longer says the corpus lacks the forks they need.
+
+**`scorer-smoke-test` refuses a scratch directory that already holds vectors.** A rerun in the same directory no longer splices `e` in a second time.
 
 ## Part 2: the steps taken
 

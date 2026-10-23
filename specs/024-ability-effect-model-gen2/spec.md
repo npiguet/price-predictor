@@ -433,7 +433,8 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
    increase under each of the three replacements of `e`, each applied to every slot, to `[ACT]`
    alone, and to the card slots alone.
 8. **Given** two or more scorecards, **When** `compare.py` runs, **Then** it sets them side by side
-   per family and per rung and ranks checkpoints on rung 1 minus rung 1w, per probe type.
+   per family and per rung and ranks checkpoints on rung 1 minus rung 1w, per probe type and per
+   score, AUC and R² apart.
 
 ---
 
@@ -735,7 +736,10 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   records carry `random_seat` is a gen-2 shard, and its `playability` records' `actor_player` has
   the FR-030a meaning; a shard without it is a gen-1 shard. `build-corpus`, `train-effect-model`,
   `evaluate-effect-model` and the knowledge probes MUST refuse, before reading records, a records
-  set that holds both gen-1 and gen-2 shards.
+  set that holds both gen-1 and gen-2 shards. A curated shard MUST keep its source's generation:
+  `build-corpus` MUST write `random_seat` only on a record whose source line carried it (a record
+  read from a gen-1 line holds `random_seat = None`, which reads as on-policy), so the guard reads a
+  curated corpus as the generation it was built from.
 - **FR-034**: `CLAUDE.md`'s effect-record shard format paragraph and
   `specs/023-ability-effect-model/contracts/record-schema.md` MUST list both fields, the widened
   `link_id` of FR-029d, the `option` key component of FR-005a and the redefined `actor_player` of
@@ -771,13 +775,21 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - **FR-040**: A template MUST be eligible when at most `--holdout-max-carriers` cards carry a text
   with that template. An eligible template MUST be held out when `crc32` of the template modulo
   1000 is below `--holdout-permille`. Every text with a held-out template is a held-out text, and
-  every card carrying one is a held-out card.
+  every card carrying one is a held-out card. Token scripts MUST count as carriers under either
+  unit, toward the carrier ceiling too, and a token script carrying a held-out text MUST be held out
+  by its script file, so a game holding that token is a held-out game; `holdout-cards`,
+  `build-corpus` and the trainer's recompute MUST all read the converted token tree for it.
 - **FR-041**: `holdout-cards`, `build-corpus` and `train-effect-model` MUST share the rule through
   one implementation, selected by `--holdout-unit template|text`. The default is `template` for
   `holdout-cards` and `build-corpus`, and the manifest's recorded unit for `train-effect-model`,
   which MUST refuse a given unit that differs from the manifest's. `train-effect-model` MUST
   recompute the holdout under that unit and refuse to train when its held-out texts differ from the
-  manifest's. `text` MUST reproduce feature 023's rule exactly.
+  manifest's. `text` MUST reproduce feature 023's rule exactly. The selected holdout MUST keep its
+  held-out units and their unit, so `HeldOutCards.holds_text` tests any script text against them —
+  its template under `template`. `collect-variants` MUST use it, under the holdout `build-corpus`
+  chooses, to delete before decking every variant whose lines print a held-out text or template
+  (023 FR-057), and `build-corpus` to drop a training game's record acting through one (023
+  FR-137).
 - **FR-042**: Manifests and checkpoints MUST record the holdout unit. A manifest or checkpoint that
   records none MUST be read as `text`.
 - **FR-043**: `holdout-cards` MUST report the held-out templates, texts and cards, and the share of
@@ -814,7 +826,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - **FR-048**: A record whose acting line is a keyword line MUST belong to that keyword's family,
   whatever its kind.
 - **FR-049**: Training records MUST be selected per class, from the class budget the class mixture
-  sets as in feature 023, in four steps. A text with `n` distinct records in a cell can supply at
+  sets as in feature 023, in four steps. Every quota and copy plan below MUST be sized on the
+  records of training games only, as the survey routes them (023 FR-139a), so the plan never counts
+  a record the write pass routes to a validation stratum or drops. A text with `n` distinct records in a cell can supply at
   most `min(--reuse-cap × n, --text-cap)` written records there, repeats included, and a cell's
   capacity is the sum of that over its texts.
   1. The class budget is split equally across the class's families. A family whose capacity is
@@ -858,8 +872,11 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   per class, on-policy and off-policy (`random_seat`) record counts; per legality subkind,
   real-decision and what-if counts; the games admitted to the game-disjoint stratum under the
   keyword threshold; the held-out texts with no gate-one resolution record, and those recorded in
-  fewer than five games; the holdout unit; surveyed legality records per single mode
-  (`legality_mode_counts`), which every reader placing legality records in families uses.
+  fewer than five games, both counted from resolution records; the holdout unit; surveyed legality
+  records per single mode (`legality_mode_counts`), which every reader placing legality records in
+  families uses; each class's training target (`class_targets`); a `planned` count on every family
+  row beside `share` and `written`; and the `dropped-held-out-text` stratum's count (023 FR-137).
+  The run MUST warn on a class delivered more than 1% short of its target (023 FR-145).
 
 #### Training (root spec § 9)
 
@@ -877,9 +894,17 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   `e` receives noise from one place only.
 - **FR-058**: A training-only value head MUST read `e` alone and predict values parsed from the
   line's script, summed over its segments: damage dealt, power change, toughness change, counters
-  placed, cards drawn, and mana cost by colour and generic, by count regression; whether the cost
-  taps and whether it sacrifices, as binary targets. A target MUST be masked where the script states
-  no fixed value. Its loss weight MUST be `--value-weight` (default 0.05).
+  placed, counters removed, cards drawn, and mana cost by colour and generic, by count regression;
+  whether the cost taps and whether it sacrifices, as binary targets. The targets MUST be read from
+  the line's sidecar `script_text` on both encoding surfaces, as the script-API targets are, since
+  prose carries no `$` parameter. Power change MUST sum `NumAtt$` and `AddPower$`, toughness change
+  `NumDef$` and `AddToughness$`. `cards_drawn` MUST read `NumCards$` on `Draw`; `counters_placed`
+  `CounterNum$` on `PutCounter` and `PutCounterAll`; `counters_removed` `CounterNum$` on
+  `RemoveCounter` and `RemoveCounterAll`. Where the amount key is absent, Forge's default MUST
+  apply: 1 for `Draw`, `PutCounter`, `PutCounterAll` and `RemoveCounter`; `RemoveCounterAll` has
+  none and MUST be masked. `MoveCounter`, `AddOrRemoveCounter` and `ReplaceCounter` MUST mask both
+  counter targets. A target MUST be masked where the script states no fixed value, a non-literal
+  value included. Its loss weight MUST be `--value-weight` (default 0.05).
 - **FR-058a**: The cost targets MUST be read from the line's `Cost$` only. A card's mana cost covers
   the whole card and MUST NOT be pushed into any one line: no line's encoding text gains the face's
   `ManaCost`, and on a spell line the mana-cost targets MUST be masked even where its `Cost$`
@@ -890,7 +915,7 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   forty binary targets under the amount's mask, trained with binary cross-entropy inside the value
   loss beside the amount's count or signed loss, averaged over the forty so each amount's block
   weighs as one binary target. A magnitude above 40 sets all forty; a stated zero
-  sets none.
+  sets none. The division by 40 sits inside the row, under the one reduction of 023 FR-081a.
 - **FR-059**: The value head MUST be filtered out at save time, like the MLM and script-API heads.
 - **FR-060**: The encoder MUST have no paired-encoding loss and no pairing head.
 - **FR-060a**: Training MUST apply the verdict-head and created-objects-head losses the base spec
@@ -900,13 +925,14 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   acting line; Java writes one candidate per record, so the candidate is the payload's first. The
   `decision` record's verdict bits are its targets, beside its per-entity target-legality bits.
 - **FR-060b**: Training MUST apply the MLM loss over masked tokens (`--mlm-weight`, default 0.1;
-  `--mlm-mask-prob`, default 0.15) and the script-API loss from `e` (`--api-weight`, default 0.05),
+  `--mlm-mask-prob`, default 0.15) and the script-API loss from `e` (`--api-weight`, default 0.003),
   as feature 023's FR-063 defines them: the script-API head predicts the line's `script_api_type`
   and its parameter-key set, the keys of every segment of its `script_text`. The MLM head MUST be
   sized from `--encoder-d-model`. Both heads stay training-only and are filtered at save time.
 - **FR-060c**: Every count and signed-delta magnitude MUST be scored at no more than 40, its sign
   kept: in the per-entity field losses, the created-objects counts, the constant-predictor floor
-  and the evaluation's Poisson deviance. The value head's script-stated amounts are not capped.
+  and the evaluation's Poisson deviance. A per-entity count field MUST also be scored from zero,
+  never below (`damage_taken` nets healing). The value head's script-stated amounts are not capped.
 - **FR-061**: `--encoder-layers` (default 4) and `--encoder-d-model` (default 256) MUST replace the
   hardcoded encoder constants. The checkpoint MUST record both, and every command that loads a
   checkpoint MUST build the encoder from them. A checkpoint that records neither MUST load at 4
@@ -953,7 +979,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   toughness uniformly from 1 to 8 (base toughness absorbing the change, marked damage cleared),
   edit a literal amount in the acting text (`NumDmg$`, `NumDef$`, a symmetric `NumAtt$`, and the
   description's `N damage` or `-N/-N`) under the key `counterfactual/<amount>/<script_file>`,
-  staged on the batcher with the real line, or set `refs.x` for a paid X, and relabel every hit
+  staged on the batcher with the real line — on the prose surface the converted prose's amount,
+  with its role spans shifted by any change in length, and the value head reading the edited
+  script — or set `refs.x` for a paid X, and relabel every hit
   creature (`damage_taken` or `toughness_delta`, `power_delta` when symmetric, `zone_outcome`
   `died` or absent) and every hit player (`life_delta`). Its draws MUST come from the step's
   generator before the build's, so K = 0 trains bit for bit as before; `training_settings` MUST
@@ -1016,7 +1044,8 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   `--sealed-encoder-checkpoint` (default `models/sealed/encoder/latest.pt`), into the required
   `--scratch-dir`, and run `python -m sealed train-scorer` Phase A against that directory as a
   subprocess. It MUST NOT write under `output/cardsfolder/`, and MUST NOT import from
-  `sealed.application`.
+  `sealed.application`. It MUST refuse a `--scratch-dir` whose card tree already holds encoded
+  vectors rather than clear it.
 
 #### Embedding probes (root spec § 11.1)
 
@@ -1025,20 +1054,31 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   read the `taxonomy` cache MUST be omitted when that cache is absent.
 - **FR-073**: `pca_directions.py` MUST report the participation ratio, (Σλ)² / Σλ², over the
   eigenvalues λ of the cache's covariance.
+- **FR-073a**: `effect_profiles.py` MUST profile each curated record once: a record the training
+  stratum repeats up to `--reuse-cap` times under one `record_id` MUST be merged by `record_id`,
+  across shards, before any count or weight is taken.
 
 #### Knowledge probes (root spec § 11.2)
 
-- **FR-074**: `scripts/effect_knowledge_probes/` MUST hold the suite, with modules `labels`,
-  `ladder`, `sweeps`, `ablation`, `compare` and `run`, reusing the embedding probes' loaders.
+- **FR-074**: `scripts/effect_knowledge_probes/` MUST be an importable package holding the suite,
+  with modules `common`, `labels`, `ladder`, `sweeps`, `ablation`, `board_edits` (the record edits
+  every grid and sweep makes), `record_walk` (the shard walk one-off probes select records by),
+  `probe_set` (the frozen set and its loader), `scorecard`, `compare` and `run`. The entry scripts
+  are still run by path.
 - **FR-075**: `run --checkpoint PATH` MUST load any checkpoint, gen-1 included, and resolve its
-  vocabulary, cache and width of `e`.
+  vocabulary, cache and width of `e`. `common.probe_context(checkpoint)` MUST resolve the curated
+  corpus, the sidecar roots and the variant tree from the checkpoint and its manifest, an explicit
+  argument overriding each, and MUST refuse a checkpoint naming no curated corpus and a corpus
+  rebuilt since the checkpoint trained on it. Loading a probe set MUST refuse one frozen against
+  another corpus's digest.
 - **FR-076**: `run --freeze-probe-set` MUST enumerate, once per curated corpus, the probe items
   keyed by provenance, their labels, the probe games from both validation strata, and the
   board-sweep records, and write them with a content digest. Every run against that corpus MUST
   read the frozen set and record its digest in the scorecard.
 - **FR-077**: Probe records MUST come from both validation strata of the checkpoint's corpus, and
   every board-dependent result MUST be reported per stratum. Line-level probes MUST read every
-  line of the checkpoint's cache and report held-out and trained lines separately.
+  line of the checkpoint's cache and report held-out and trained lines separately. A line MUST
+  count as held out only when every card carrying it is a held-out card.
 - **FR-077a**: Every amount label (counts and signed deltas, line-level and board-dependent) MUST be
   capped at a magnitude of `MAGNITUDE_CAP` (40), its sign kept, as the model's targets are
   (FR-060c).
@@ -1048,14 +1088,19 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - **FR-079**: The probe families MUST be: magnitudes and thresholds; mana production; mana usage;
   timing and non-mana costs; interactions; side; evasion and blocking; target legality; duration
   and repeatability; state dependence. Each family's targets and label sources MUST follow the
-  probes record's family table and its section on assembled labels.
+  probes record's family table and its section on assembled labels. The observed-mana label MUST
+  sum the counts of each `mana_produced` event's `mana_by_color`; an empty map is mana the collector
+  could not read and counts for nothing, and a record whose every such event is empty MUST get no
+  label.
 - **FR-080**: For a board-dependent target, the ladder's rungs MUST be: 0, the trunk's raw input
   features with every `e` zeroed; 1, rung 0 plus the acting line's `e` and, for an entity target,
   that entity's pooled `e`; 1w, rung 1 with each `e` replaced by a fixed random vector per text of
   the same width; 1o, rung 0 plus the parsed script values the target depends on; 2, the trunk's
   output at `[ACT]` or at the target entity's `[CARD]` slot; 3, the model's own prediction. A line
   property that does not depend on the board MUST read `e`, its width control, and the trunk's
-  output at `[ACT]`.
+  output at `[ACT]`. Rung 3 MUST read every field head through `HeadReading`, gated by the affected
+  probability, except `damage_taken`, which MUST read the amount alone (conditional), since every
+  one of its items took damage.
 - **FR-081**: Rungs 0 to 2 MUST each fit a linear probe and a two-layer MLP, with hyperparameters
   fixed in code for every checkpoint. Both scores MUST be reported at every rung: AUC for yes/no
   targets, R² for amounts.
@@ -1093,7 +1138,8 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   modifying the model. `--method-c` MUST train a shallow trunk, one transformer layer or none, on
   frozen `e`; it is off by default.
 - **FR-087**: `compare SCORECARD ...` MUST set scorecards side by side per family and per rung, and
-  rank checkpoints on rung 1 minus rung 1w, per probe type.
+  rank checkpoints on rung 1 minus rung 1w, per probe type and per score: AUC gains and R² gains
+  MUST be ranked apart, never averaged together.
 - **FR-088**: Output MUST go to `output/effects/reports/knowledge-probes-<checkpoint>-<date>/`:
   tables and one JSON scorecard per checkpoint, recording the probe set's digest.
 - **FR-089**: Unit tests MUST cover the share and its minimum-gap rule, the label extractors, the
@@ -1106,7 +1152,7 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   its declared surface from `price_predictor` and `sealed`, and nothing from `sealed.application`.
   The knowledge-probe and embedding-probe scripts sit outside `src/` and may import from `effects`.
 - **FR-091**: Gates 2 and 3 and the baseline variants MUST stay available and unchanged, apart from
-  gate 2's two rows of FR-069a. Gen-2's evaluation does not train the baselines.
+  gate 2's two rows of FR-069a and the masks and identity table 023 FR-094 defines. Gen-2's evaluation does not train the baselines.
 - **FR-091a**: `evaluate-effect-model` MUST exit 0 whatever the gates' verdicts. A failed gate 1 or
   gate 3 MUST be printed as `GATES FAILED: <gates>` in place of `SHIPS`, so a sweep arm runs its
   probes after any verdict. Errors (hash, split or corpus mismatch, a missing file, a bad flag)

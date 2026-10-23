@@ -125,8 +125,7 @@ class GeneratedDecksIndexTest {
 
         for (int i = 0; i < 100; i++) {
             GeneratedDecksIndex.GeneratedDeck pick = index.randomDeckFromSet(
-                    "MH3", List.of(), rng);
-            assertNotNull(pick);
+                    "MH3", List.of(), rng).orElseThrow();
             assertEquals("MH3", pick.setCode());
         }
     }
@@ -145,8 +144,7 @@ class GeneratedDecksIndexTest {
 
         for (int i = 0; i < 50; i++) {
             GeneratedDecksIndex.GeneratedDeck b = index.randomDeckFromSet(
-                    "MH3", a.cardNames(), rng);
-            assertNotNull(b);
+                    "MH3", a.cardNames(), rng).orElseThrow();
             assertNotEquals(a.cardNames(), b.cardNames(),
                     "Exclude target must never be returned (content equality)");
         }
@@ -167,7 +165,7 @@ class GeneratedDecksIndexTest {
 
         // Pick any deck and confirm asking for a non-mirror returns null.
         GeneratedDecksIndex.GeneratedDeck a = index.randomDeck(new Random(0));
-        assertNull(index.randomDeckFromSet("MH3", a.cardNames(), new Random(1)));
+        assertTrue(index.randomDeckFromSet("MH3", a.cardNames(), new Random(1)).isEmpty());
     }
 
     @Test
@@ -178,26 +176,26 @@ class GeneratedDecksIndexTest {
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
         // Different order, same multiset.
-        assertNull(index.randomDeckFromSet("MH3", List.of("C", "B", "A"), new Random(0)));
+        assertTrue(index.randomDeckFromSet("MH3", List.of("C", "B", "A"), new Random(0)).isEmpty());
     }
 
     @Test
-    void randomDeckFromSetReturnsNullWhenSetAbsent(@TempDir Path tmp) throws IOException {
+    void randomDeckFromSetIsEmptyWhenSetAbsent(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "mh3", 40)));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
 
-        assertNull(index.randomDeckFromSet("XYZ", List.of(), new Random(0)));
+        assertTrue(index.randomDeckFromSet("XYZ", List.of(), new Random(0)).isEmpty());
     }
 
     @Test
-    void randomDeckFromSetReturnsNullWhenOnlyExcludeMatches(@TempDir Path tmp) throws IOException {
+    void randomDeckFromSetIsEmptyWhenOnlyExcludeMatches(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "only", 40)));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
         GeneratedDecksIndex.GeneratedDeck only = index.randomDeck(new Random(0));
 
-        assertNull(index.randomDeckFromSet("MH3", only.cardNames(), new Random(0)));
+        assertTrue(index.randomDeckFromSet("MH3", only.cardNames(), new Random(0)).isEmpty());
     }
 
     // ── randomAnyDeckFromSet ─────────────────────────────────────────────────
@@ -207,7 +205,7 @@ class GeneratedDecksIndexTest {
             @TempDir Path tmp) throws IOException {
         // Every deck of this set is content-identical, exactly the tail state
         // of a coverage round with one live card left: randomDeckFromSet
-        // would return null here (see randomDeckFromSetExcludesContentEven
+        // would return empty here (see randomDeckFromSetExcludesContentEven
         // AcrossDifferentDeckObjects above); randomAnyDeckFromSet must not.
         String shared = deckLine("coverage", "MH3", "shared", 40);
         Path file = writeDecks(tmp, List.of(shared, shared));
@@ -215,23 +213,22 @@ class GeneratedDecksIndexTest {
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
         GeneratedDecksIndex.GeneratedDeck a = index.randomDeck(new Random(0));
 
-        assertNull(index.randomDeckFromSet("MH3", a.cardNames(), new Random(1)),
+        assertTrue(index.randomDeckFromSet("MH3", a.cardNames(), new Random(1)).isEmpty(),
                 "sanity: this fixture really is the all-mirror case");
         for (int i = 0; i < 20; i++) {
             GeneratedDecksIndex.GeneratedDeck pick =
-                    index.randomAnyDeckFromSet("MH3", new Random(i));
-            assertNotNull(pick);
+                    index.randomAnyDeckFromSet("MH3", new Random(i)).orElseThrow();
             assertEquals(a.cardNames(), pick.cardNames());
         }
     }
 
     @Test
-    void randomAnyDeckFromSetReturnsNullWhenSetAbsent(@TempDir Path tmp) throws IOException {
+    void randomAnyDeckFromSetIsEmptyWhenSetAbsent(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "mh3", 40)));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
 
-        assertNull(index.randomAnyDeckFromSet("XYZ", new Random(0)));
+        assertTrue(index.randomAnyDeckFromSet("XYZ", new Random(0)).isEmpty());
     }
 
     @Test
@@ -247,8 +244,8 @@ class GeneratedDecksIndexTest {
 
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < 100; i++) {
-            GeneratedDecksIndex.GeneratedDeck pick = index.randomAnyDeckFromSet("MH3", rng);
-            assertNotNull(pick);
+            GeneratedDecksIndex.GeneratedDeck pick =
+                    index.randomAnyDeckFromSet("MH3", rng).orElseThrow();
             assertEquals("MH3", pick.setCode());
             seen.add(pick.label() + pick.cardNames());
         }

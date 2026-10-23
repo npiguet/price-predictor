@@ -39,9 +39,4 @@ public record MatchGenerationResult(
                             + matchResult.games().length() + ")");
         }
     }
-
-    /** An ordinary two-AI match, whose rows both writers take. */
-    public MatchGenerationResult(MatchResult matchResult, List<CardsPlayedRow> cardsPlayedRows) {
-        this(matchResult, cardsPlayedRows, false);
-    }
 }

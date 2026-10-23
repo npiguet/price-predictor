@@ -38,10 +38,9 @@ public final class HauntKeyword {
         }
         // Fallback: extract SpellDescription from the SVar content string
         if (effectDesc == null) {
-            String original = ki.getOriginal(); // "Haunt:SvarName"
-            if (original.contains(":")) {
-                String svarName = original.substring(original.indexOf(':') + 1);
-                effectDesc = parseSpellDesc(card.getSVar(svarName));
+            String svarName = new KeywordSpec(ki.getOriginal()).rest(1); // "Haunt:SvarName"
+            if (svarName != null) {
+                effectDesc = SpellAbilityUtils.svarParam(card.getSVar(svarName), "SpellDescription");
             }
         }
 
@@ -51,7 +50,7 @@ public final class HauntKeyword {
         if (!isCreature && effectDesc != null) {
             String normalized = AbilityDescription.normalize(effectDesc);
             if (normalized != null) {
-                result.add(new SpellEffect(AbilityDescription.applyCasing(normalized), List.of()));
+                result.add(new SpellEffect(normalized, List.of()));
             }
         }
 
@@ -65,16 +64,17 @@ public final class HauntKeyword {
             if (tDesc.contains("ABILITY")) {
                 SpellAbility overrideSa = t.getOverridingAbility();
                 if (overrideSa != null && overrideSa.getApi() == ApiType.Charm) {
-                    // Haunt SVar is a Charm — synthesize "choose one —" header
-                    String charmHeader = CharmAbility.synthesizeCharmHeader(overrideSa);
-                    if (charmHeader == null) charmHeader = "choose one";
-                    tDesc = tDesc.replace("ABILITY", charmHeader);
-                    String normalized2 = AbilityDescription.normalize(tDesc);
-                    if (normalized2 == null || normalized2.isEmpty()) continue;
+                    // Haunt SVar is a Charm — synthesize "choose one —" header.
+                    // No owner: the triggers are deduplicated by description, so
+                    // the surviving line's options must belong to every trigger
+                    // that shares it (Orzhov Pontiff).
+                    CharmAbility.Expanded expanded =
+                            CharmAbility.expandPlaceholder(tDesc, overrideSa, null);
+                    String normalized2 = expanded.description();
+                    if (normalized2 == null) continue;
                     if (!emitted.add(normalized2)) continue;
-                    AbilityType type2 = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-                    List<Ability> options = CharmAbility.optionsFrom(overrideSa);
-                    result.add(new TextAbility(type2, AbilityDescription.applyCasing(normalized2), 0, options));
+                    result.add(new TextAbility(AbilityType.forTrigger(t),
+                            normalized2, 0, expanded.options()));
                     continue;
                 } else if (effectDesc != null) {
                     tDesc = tDesc.replace("ABILITY", effectDesc);
@@ -82,25 +82,12 @@ public final class HauntKeyword {
             }
 
             String normalized = AbilityDescription.normalize(tDesc);
-            if (normalized == null || normalized.isEmpty()) continue;
+            if (normalized == null) continue;
             if (!emitted.add(normalized)) continue; // skip duplicates
 
-            AbilityType type = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-            result.add(new TextAbility(type, AbilityDescription.applyCasing(normalized)));
+            result.add(new TextAbility(AbilityType.forTrigger(t), normalized));
         }
 
         return result;
-    }
-
-    /** Extract SpellDescription value from a raw SVar string like "DB$ Foo | SpellDescription$ Bar | …". */
-    static String parseSpellDesc(String svarContent) {
-        if (svarContent == null || svarContent.isEmpty()) return null;
-        for (String part : svarContent.split(" \\| ")) {
-            String trimmed = part.trim();
-            if (trimmed.startsWith("SpellDescription$")) {
-                return trimmed.substring("SpellDescription$".length()).trim();
-            }
-        }
-        return null;
     }
 }

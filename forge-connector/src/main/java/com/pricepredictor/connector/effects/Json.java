@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.StringJoiner;
 
 /**
@@ -43,15 +44,6 @@ public final class Json {
         return sb.append('"').toString();
     }
 
-    /** A JSON array of already-rendered element fragments. */
-    public static String array(Collection<String> rendered) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (String element : rendered) {
-            joiner.add(element);
-        }
-        return joiner.toString();
-    }
-
     /** A JSON array of strings. */
     public static String stringArray(Collection<String> values) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
@@ -59,5 +51,80 @@ public final class Json {
             joiner.add(string(value));
         }
         return joiner.toString();
+    }
+
+    /**
+     * Any value as JSON: null as JSON {@code null}, a boolean or number bare,
+     * a map as an object in its own iteration order, an iterable as an array,
+     * and anything else as the string literal of its {@code String.valueOf}.
+     *
+     * <p>Dedup hashes the rendered bytes, so this one spelling is what makes
+     * two reports of the same value the same event.
+     */
+    public static String value(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof Boolean || value instanceof Number) {
+            return String.valueOf(value);
+        }
+        if (value instanceof Map<?, ?> map) {
+            StringJoiner joiner = new StringJoiner(",", "{", "}");
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                joiner.add(string(String.valueOf(entry.getKey())) + ":" + value(entry.getValue()));
+            }
+            return joiner.toString();
+        }
+        if (value instanceof Iterable<?> items) {
+            StringJoiner joiner = new StringJoiner(",", "[", "]");
+            for (Object item : items) {
+                joiner.add(value(item));
+            }
+            return joiner.toString();
+        }
+        return string(String.valueOf(value));
+    }
+
+    /** An empty object, for fields added one at a time. */
+    static ObjectWriter object() {
+        return new ObjectWriter();
+    }
+
+    /**
+     * A JSON object whose fields render in the order they are added.
+     *
+     * <p>The order is part of the record contract, so the writer never sorts
+     * and never drops a field: a null passed to {@link #value} is written as
+     * JSON {@code null}.
+     */
+    static final class ObjectWriter {
+
+        private final StringJoiner fields = new StringJoiner(",", "{", "}");
+
+        private ObjectWriter() {
+        }
+
+        /** A field whose value is already rendered JSON. */
+        ObjectWriter raw(String name, String json) {
+            fields.add(string(name) + ":" + json);
+            return this;
+        }
+
+        /** A field rendered by {@link Json#value}. */
+        ObjectWriter value(String name, Object value) {
+            return raw(name, Json.value(value));
+        }
+
+        /** Every entry of an ordered map, as {@link #value} fields. */
+        ObjectWriter values(Map<String, ?> entries) {
+            for (Map.Entry<String, ?> entry : entries.entrySet()) {
+                value(entry.getKey(), entry.getValue());
+            }
+            return this;
+        }
+
+        String render() {
+            return fields.toString();
+        }
     }
 }

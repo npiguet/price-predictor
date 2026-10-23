@@ -1,17 +1,13 @@
 package com.pricepredictor.connector;
 
-import forge.deck.CardPool;
 import forge.deck.Deck;
-import forge.deck.DeckSection;
-import forge.item.PaperCard;
-import forge.model.FModel;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Reads a validation matches file, plays each match, and writes outcomes.
@@ -50,20 +46,13 @@ public class ValidationMatchPlayer {
                 ParsedMatch parsed = parseLine(line);
 
                 // Both sides are pre-built decks
-                Deck deckA = buildDeckFromNames(parsed.deckANames());
-                Deck deckB = buildDeckFromNames(parsed.deckBNames());
+                Deck deckA = DeckMaterializer.materialize(parsed.deckANames(),
+                        DeckMaterializer.UnresolvedPolicy.FAIL, UNRESOLVED_DECK);
+                Deck deckB = DeckMaterializer.materialize(parsed.deckBNames(),
+                        DeckMaterializer.UnresolvedPolicy.FAIL, UNRESOLVED_DECK);
 
                 GamePlayer.PlayedMatch played = gamePlayer.playMatch(deckA, deckB);
-                int winsA = 0;
-                int winsB = 0;
-                for (GamePlayer.GameOutcome g : played.games()) {
-                    if ("A".equals(g.winner())) {
-                        winsA++;
-                    } else {
-                        winsB++;
-                    }
-                }
-                appendOutcome(outcomesFile, winsA, winsB);
+                appendOutcome(outcomesFile, played.winsA(), played.winsB());
 
                 if ((i + 1) % 5 == 0) {
                     System.out.println("Validation: " + (i + 1) + "/" + lines.size() + " matches completed");
@@ -76,41 +65,37 @@ public class ValidationMatchPlayer {
         }
     }
 
-    private Deck buildDeckFromNames(List<String> cardNames) {
-        Deck deck = new Deck();
-        CardPool main = deck.getOrCreate(DeckSection.Main);
-        for (String name : cardNames) {
-            PaperCard card = FModel.getMagicDb().getCommonCards().getCard(name);
-            if (card != null) {
-                main.add(card);
-            }
-        }
-        return deck;
-    }
+    /**
+     * Why a validation deck with a name Forge cannot resolve is refused. The
+     * evaluation compares two builders' decks; a short one would score the
+     * builder on a deck it never built. Refusing lands in the catch below,
+     * whose {@code 0;0} filler counts no games for either side.
+     */
+    static final String UNRESOLVED_DECK =
+            "A validation match scores the deck a builder chose, so playing it short "
+                    + "would score a deck that builder never built.";
 
-    // ── Static helpers (package-visible for testing) ────────────────
+    private record ParsedMatch(List<String> deckANames, List<String> deckBNames) {}
 
-    record ParsedMatch(List<String> deckANames, List<String> deckBNames) {}
-
-    static ParsedMatch parseLine(String line) {
+    private static ParsedMatch parseLine(String line) {
         String[] parts = line.split(";", 2);
-        List<String> deckA = Arrays.asList(parts[0].split("\\|", -1));
-        List<String> deckB = Arrays.asList(parts[1].split("\\|", -1));
-        return new ParsedMatch(deckA, deckB);
+        return new ParsedMatch(CardNameList.parse(parts[0]), CardNameList.parse(parts[1]));
     }
 
-    static void appendOutcome(Path outcomesFile, int winsA, int winsB) throws IOException {
+    private static void appendOutcome(Path outcomesFile, int winsA, int winsB) throws IOException {
         String line = winsA + ";" + winsB + "\n";
         Files.writeString(outcomesFile, line,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
     }
 
-    static long countCompletedMatches(Path outcomesFile) {
+    /**
+     * An unreadable outcomes file must not read as "nothing completed": the worker would
+     * replay every match and append duplicate rows, breaking the positional pairing.
+     */
+    private static long countCompletedMatches(Path outcomesFile) throws IOException {
         if (!Files.exists(outcomesFile)) return 0;
-        try {
-            return Files.lines(outcomesFile).filter(l -> !l.isBlank()).count();
-        } catch (IOException e) {
-            return 0;
+        try (Stream<String> lines = Files.lines(outcomesFile)) {
+            return lines.filter(l -> !l.isBlank()).count();
         }
     }
 }

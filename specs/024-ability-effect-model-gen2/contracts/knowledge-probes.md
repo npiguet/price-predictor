@@ -8,16 +8,35 @@ labels from [`../../../experiments/2026-09-19-effect-knowledge-probes-design.md`
 
 ```text
 scripts/effect_knowledge_probes/
-├── common.py     # checkpoint/vocab/cache/sidecar loading, reusing effects.* and the embedding probes' idioms
-├── labels.py     # the ten families' label extractors (FR-079)
-├── ladder.py     # rungs, linear and MLP probes, folds, share and its CI (FR-080–083)
-├── sweeps.py     # the four board sweeps (FR-084)
-├── ablation.py   # method B replacements and scopes (FR-085)
-├── compare.py    # side-by-side scorecards (FR-087)
-└── run.py        # entry point; --freeze-probe-set (FR-076)
+├── __init__.py       # makes the suite a package; its modules import one another by name
+├── common.py         # checkpoint/vocab/cache/sidecar loading; probe_context(checkpoint) (FR-075)
+├── labels.py         # the ten families' label extractors (FR-079)
+├── ladder.py         # rungs, linear and MLP probes, folds, share and its CI (FR-080–083)
+├── sweeps.py         # the four board sweeps (FR-084)
+├── ablation.py       # method B replacements and scopes (FR-085)
+├── board.py          # the board-abilities ablation subsets (FR-085b)
+├── board_edits.py    # BoardEdit: one-field edits to a record's board, chained, never in place
+├── record_walk.py    # shard-order record selection by predicate, capped per game
+├── probe_set.py      # the frozen probe set, its digest, load_probe_set (FR-076)
+├── scorecard.py      # the typed scorecard run.py writes and compare.py reads (FR-088)
+├── compare.py        # side-by-side scorecards (FR-087)
+└── run.py            # entry point; --freeze-probe-set (FR-076)
 ```
 
-No module does work at import time. Each is loadable by path for tests.
+The one-off probes (`ladder_check.py`, `damage_grid.py`, `combat_grid.py`, `evasion_grid.py`,
+`colour_pips.py`, `target_restrictions.py`, `zone_effects.py`) sit beside them. `sweeps` and every
+one-off probe but `ladder_check.py` select or edit records through `record_walk` and `board_edits`.
+
+No module does work at import time. The suite is an importable package; the entry scripts are run by
+path and put `scripts/` on `sys.path` before importing it.
+
+## Inputs
+
+`common.probe_context(checkpoint)` resolves one checkpoint's probing inputs, an explicit argument
+overriding each: the curated corpus the checkpoint recorded, its manifest and digest, the sidecar
+trees the checkpoint recorded (else `output/cardsfolder/`, `output/tokenscripts/`), and the variant
+tree the manifest recorded. It refuses a checkpoint naming no curated corpus, and a corpus rebuilt
+since the checkpoint trained on it.
 
 ## Probe set
 
@@ -26,7 +45,9 @@ No module does work at import time. Each is loadable by path for tests.
   interaction join rate.
 - File: `output/effects/reports/knowledge-probes-set-<corpus digest[:12]>.json`, with `digest`
   = sha256 of its canonical JSON (sorted keys, no whitespace) excluding `digest`.
-- Every probing run reads it and records `digest` in the scorecard.
+- Every probing run reads it through `load_probe_set`, which refuses a set frozen against another
+  corpus's digest or one that no longer matches its own `digest`, and records `digest` in the
+  scorecard.
 
 ## Rungs
 
@@ -37,11 +58,16 @@ No module does work at import time. Each is loadable by path for tests.
 | 1w | rung 1 with each `e` → fixed random vector per text, same width, seed 42 | linear, MLP |
 | 1o | rung 0 + the parsed script values the target depends on | linear, MLP |
 | 2 | trunk output at `[ACT]` or the target's `[CARD]` slot | linear, MLP |
-| 3 | the model's own prediction | none |
+| 3 | the model's own prediction, read through `HeadReading` gated by the affected probability; `damage_taken` alone reads the amount ungated (conditional), since every one of its items took damage | none |
 
 Board-independent line properties use `e`, its width control, and trunk output at `[ACT]`.
 Scores: AUC for yes/no targets, R² for amounts. Board-dependent results are reported per stratum.
-Line-level results are reported for held-out and trained lines separately.
+Line-level results are reported for held-out and trained lines separately. A line is held out only
+when every card carrying it is a held-out card.
+
+The observed-mana label sums the counts of each `mana_produced` event's `mana_by_color`. An empty
+map is mana the collector could not read and counts for nothing; a record whose every such event is
+empty gets no label.
 
 ## Share
 

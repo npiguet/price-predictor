@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,31 +21,19 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(ForgeExtension.class)
 class MatchGeneratorCardsPlayedIntegrationTest {
 
-    private static final String TEST_RUN_ID = "test-run-id";
+    /**
+     * {@link MatchGeneratorTest#sharedMatch}. Nothing here counts its rows:
+     * one row per played game is {@link MatchGenerationResult}'s own invariant.
+     */
+    private static MatchGenerationResult result;
 
-    private static final Set<String> BASIC_LANDS = Set.of(
-            "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
-            "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
-            "Snow-Covered Mountain", "Snow-Covered Forest");
-
-    @Test
-    void returnsOneRowPerPlayedGame() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
-
-        MatchGenerationResult result = generator.generateMatch();
-
-        assertNotNull(result.matchResult());
-        assertNotNull(result.cardsPlayedRows());
-        assertEquals(result.matchResult().games().length(),
-                result.cardsPlayedRows().size(),
-                "row count must equal played-game count");
+    @BeforeAll
+    static void playOneMatch() {
+        result = MatchGeneratorTest.sharedMatch();
     }
 
     @Test
     void rowsCarryParentMetadata() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
-
-        MatchGenerationResult result = generator.generateMatch();
         MatchResult parent = result.matchResult();
 
         for (int i = 0; i < result.cardsPlayedRows().size(); i++) {
@@ -53,18 +42,15 @@ class MatchGeneratorCardsPlayedIntegrationTest {
             assertEquals(parent.setCode(), row.setCode());
             assertEquals(parent.methodA(), row.methodA());
             assertEquals(parent.methodB(), row.methodB());
-            assertEquals(parent.games().charAt(i), row.winner(),
+            assertEquals(String.valueOf(parent.games().charAt(i)), row.winner().toString(),
                     "winner at index " + i + " must align with parent games string");
-            assertEquals(parent.play().charAt(i), row.starter(),
+            assertEquals(String.valueOf(parent.play().charAt(i)), row.starter().toString(),
                     "starter at index " + i + " must align with parent play string");
         }
     }
 
     @Test
     void basicLandsAbsentFromAllListColumns() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
-        MatchGenerationResult result = generator.generateMatch();
-
         for (CardsPlayedRow row : result.cardsPlayedRows()) {
             assertNoBasicsIn(row.cardsPlayedA(), "cards_played_A");
             assertNoBasicsIn(row.cardsPlayedB(), "cards_played_B");
@@ -75,8 +61,6 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
     @Test
     void unionEqualsDistinctNonBasicsAndIsDisjoint() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
-        MatchGenerationResult result = generator.generateMatch();
         MatchResult parent = result.matchResult();
 
         Set<String> distinctA = distinctNonBasic(parent.deckA());
@@ -102,7 +86,7 @@ class MatchGeneratorCardsPlayedIntegrationTest {
 
     private static void assertNoBasicsIn(List<String> names, String column) {
         for (String name : names) {
-            assertFalse(BASIC_LANDS.contains(name),
+            assertFalse(BasicLands.isBasic(name),
                     column + " must not contain basic land: " + name);
         }
     }
@@ -125,7 +109,7 @@ class MatchGeneratorCardsPlayedIntegrationTest {
     private static Set<String> distinctNonBasic(List<String> deck) {
         Set<String> distinct = new LinkedHashSet<>();
         for (String name : deck) {
-            if (!BASIC_LANDS.contains(name)) {
+            if (!BasicLands.isBasic(name)) {
                 distinct.add(name);
             }
         }

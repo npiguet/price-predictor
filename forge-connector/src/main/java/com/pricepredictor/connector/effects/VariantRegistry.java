@@ -1,10 +1,12 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.ScriptFiles;
+import com.pricepredictor.connector.ScriptHeader;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -14,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>A provenance key names the converted tree its script came from, and the
  * runtime has no other way to tell a variant from a printed card: a variant is
  * an ordinary non-token {@code Card} once Forge has loaded it, so
- * {@link ProvenanceKey} would key it under {@code cardsfolder/} and the Python
+ * {@link ScriptLocator} would key it under {@code cardsfolder/} and the Python
  * reader would look for a sidecar that does not exist there. Registering the
  * names at staging time is what makes the key say {@code variant-scripts/}.
  *
@@ -35,11 +37,9 @@ public final class VariantRegistry {
         if (!Files.isDirectory(source)) {
             return;
         }
-        try (var scripts = Files.walk(source)) {
-            for (Path script : scripts.filter(Files::isRegularFile).toList()) {
-                if (script.toString().endsWith(".txt")) {
-                    register(nameOf(script));
-                }
+        try {
+            for (Path script : ScriptFiles.under(source)) {
+                register(nameOf(script));
             }
         } catch (IOException e) {
             System.err.println(
@@ -49,7 +49,7 @@ public final class VariantRegistry {
         }
     }
 
-    public static void register(String cardName) {
+    private static void register(String cardName) {
         if (cardName != null && !cardName.isEmpty()) {
             NAMES.add(cardName);
         }
@@ -59,24 +59,10 @@ public final class VariantRegistry {
         return cardName != null && NAMES.contains(cardName);
     }
 
-    public static int size() {
-        return NAMES.size();
-    }
-
-    /** Test seam: the registry is JVM-wide static state. */
-    public static void clear() {
-        NAMES.clear();
-    }
-
     /** The {@code Name:} a Forge source script declares, or null. */
     private static String nameOf(Path script) {
         try {
-            List<String> lines = Files.readAllLines(script);
-            for (String line : lines) {
-                if (line.startsWith("Name:")) {
-                    return line.substring("Name:".length()).trim();
-                }
-            }
+            return ScriptHeader.of(Files.readAllLines(script)).name();
         } catch (IOException | RuntimeException e) {
             // A script that cannot be read cannot be staged either, so the
             // registry simply does not learn its name.

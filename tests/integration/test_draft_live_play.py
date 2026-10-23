@@ -38,7 +38,7 @@ def test_model_piloted_draft_is_labeled_and_recorded(tmp_path: Path) -> None:
     try:
         resolve_connector_jar()
     except FileNotFoundError:
-        pytest.skip("forge-connector JAR not built (mvn package -DskipTests)")
+        pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
     _require(_AGENT.exists(), f"missing {_AGENT}")
     _require(_SCORER.exists(), f"missing {_SCORER}")
     _require(_PICKER.exists(), f"missing {_PICKER}")

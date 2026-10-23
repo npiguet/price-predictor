@@ -36,7 +36,7 @@ def test_generate_two_drafts_end_to_end(tmp_path: Path) -> None:
     try:
         resolve_connector_jar()
     except FileNotFoundError:
-        pytest.skip("forge-connector JAR not built (mvn package -DskipTests)")
+        pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
     _require(_SCORER.exists(), f"missing {_SCORER}")
     _require(_PICKER.exists(), f"missing {_PICKER}")
     _require(_CARDS.is_dir(), f"missing {_CARDS}")

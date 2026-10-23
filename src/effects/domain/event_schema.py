@@ -13,13 +13,9 @@ smaller than Forge's own effect-API list (``EFFECT_APIS`` in
 :mod:`effects.domain.forge_effect_apis`, a test asserts the size relationship
 rather than a count copied here to go stale).
 
-:data:`EFFECT_API_EVENTS` maps every one of those APIs -- keyed by its
-``ApiType`` enum member name, the name Forge looks an effect up by at runtime,
-not the effect class that implements it -- to the types it can produce, and
-:data:`EXCLUDED_EFFECT_APIS` records the ones that produce none, each with its
-reason. ``test_event_schema_completeness`` asserts the two together cover the
-checked-in API list, so a Forge upgrade that adds an effect API fails the fast
-suite rather than silently going unrecorded.
+:data:`EFFECT_API_EVENTS` maps those APIs -- keyed by the ``ApiType`` enum
+member name, the name Forge looks an effect up by at runtime, not the effect
+class that implements it -- to the types each can produce.
 """
 
 from __future__ import annotations
@@ -195,8 +191,8 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     # The six Replace* APIs are exactly the getOverridingAbility() of a
     # replacement effect, so this and the `rewrite` record for the same
     # replacement are two views of ONE engine event, one call frame apart: the
-    # `rewrite` record is written from inside observeReplacement, wrapping the
-    # same executeReplacement call this row's ability runs from. They are not
+    # `rewrite` record is written from inside ReplacementObserver.observe,
+    # wrapping the same executeReplacement call this row's ability runs from. They are not
     # independent evidence of the same replacement -- a reader that treats a
     # `replacement_applied` row and its sibling `rewrite` row as two
     # confirming signals will double-count it. (`rewrite` is not written
@@ -646,75 +642,3 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "Vote": (EventType.VOTE_TAKEN,),
     "ExchangeZone": (EventType.ZONE_CHANGE,),  # was ZoneExchange
 }
-
-# APIs that produce no event of their own. Each reason is one of three kinds:
-# script plumbing that only dispatches other abilities, a variant-format
-# mechanic the sealed and draft corpora can never contain, or a UI-only action.
-EXCLUDED_EFFECT_APIS: dict[str, str] = {
-    # ── script plumbing: the dispatched sub-ability carries the outcome ──
-    "BlankLine": "formatting no-op in a card script; changes no game state",
-    "Branch": "control flow; the branch's chosen sub-ability produces the events",
-    "Charm": (
-        "modal selection; the chosen option line is the record's acting ability "
-        "and its own sub-ability produces the events (FR-017)"
-    ),
-    "Cleanup": "removes the effect's own bookkeeping when its duration ends",  # was CleanUp
-    "CompanionChoose": (
-        "wraps the pregame companion-selection prompt in a no-op ability "
-        "(SpellAbility.EmptySa, whose resolve() is empty) purely so the choice "
-        "has an sa to record against; the choice has no in-game effect of its own"
-    ),
-    "InternalLegendaryRule": (
-        "wraps the legend-rule which-one-to-keep prompt in the same no-op "
-        "EmptySa as CompanionChoose; the state-based action moves the rest to "
-        "the graveyard on its own path, not through this ability's resolution"
-    ),
-    # DetachedCardEffect is dropped, not excluded under its old name: it
-    # extends Card, not SpellAbilityEffect, and has no ApiType member at all --
-    # `sa.getApi()` can never be this class regardless of formatting.
-    "Repeat": "control flow; the repeated sub-ability produces the events",
-    "RepeatEach": "control flow; the repeated sub-ability produces the events",
-    "StoreSVar": "writes a script variable; changes no game state",
-    "Subgame": (
-        "runs a nested game (Shahrazad); the subgame's own records would need "
-        "their own game_id, and no sealed- or draft-legal card has it"
-    ),
-    # ── variant formats this corpus cannot contain ──
-    "Abandon": "Archenemy scheme; not reachable in sealed or draft",
-    "AdvanceCrank": "Unstable contraption; not reachable in sealed or draft",
-    "AssembleContraption": "Unstable contraption; not reachable in sealed or draft",
-    "ChaosEnsues": "Planechase; not reachable in sealed or draft",
-    "ChooseSector": "Unfinity attraction; not reachable in sealed or draft",
-    "ClaimThePrize": "Unfinity attraction; not reachable in sealed or draft",
-    "Draft": "in-game drafting (Conspiracy); not reachable in sealed or draft",
-    "OpenAttraction": "Unfinity attraction; not reachable in sealed or draft",
-    "Planeswalk": "Planechase; not reachable in sealed or draft",
-    "RollPlanarDice": "Planechase; not reachable in sealed or draft",
-    "RunChaos": "Planechase; not reachable in sealed or draft",
-    "SetInMotion": "Archenemy scheme; not reachable in sealed or draft",
-    "ControlPlayer": (
-        "controls another player's turn (Mindslaver); the controlled player's "
-        "own actions are recorded under their own acting ability"
-    ),
-    # CountersNoteEffect is dropped, not excluded under its old name: its
-    # ApiType entry is commented out in Forge (`//NoteCounters (...)`), so it
-    # is not a live member -- the class survives only as a helper other
-    # effects (ChangeZoneEffect, EffectEffect) call directly.
-}
-
-
-def event_types_for(api: str) -> tuple[EventType, ...]:
-    """The outcomes a Forge effect API can produce.
-
-    Raises for an API that is neither mapped nor excluded — a Forge upgrade
-    added an effect and the vocabulary has not caught up.
-    """
-    if api in EFFECT_API_EVENTS:
-        return EFFECT_API_EVENTS[api]
-    if api in EXCLUDED_EFFECT_APIS:
-        return ()
-    raise KeyError(
-        f"Forge effect API {api!r} is neither mapped in EFFECT_API_EVENTS nor "
-        "listed in EXCLUDED_EFFECT_APIS; regenerate forge_effect_apis.py and "
-        "extend the vocabulary"
-    )

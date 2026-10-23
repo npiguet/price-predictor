@@ -46,46 +46,29 @@ class MatchResultWriterTest {
     }
 
     @Test
-    void lineHasTenSemicolonSeparatedFields(@TempDir Path tmp) throws IOException {
+    void aLineIsTenFieldsInTheDocumentedOrder(@TempDir Path tmp) throws IOException {
         Path file = tmp.resolve("outcomes.txt");
         MatchResultWriter writer = new MatchResultWriter(file);
+        List<String> deckA = new ArrayList<>(List.of(
+                "Lightning Bolt", "Snapcaster Mage", "Force of Will"));
+        while (deckA.size() < 40) {
+            deckA.add("Island");
+        }
+        List<String> deckB = deck40("B");
 
-        writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB"));
+        writer.write(sampleResult(deckA, deckB, "ABA", "BAB"));
 
         String line = Files.readAllLines(file).get(0);
         String[] parts = line.split(";", -1);
         assertEquals(10, parts.length, "Expected 10 semicolon-separated fields");
-    }
-
-    @Test
-    void deckEncodedWithPipeSeparator(@TempDir Path tmp) throws IOException {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
-
-        List<String> deckA = deck40("Card");
-        writer.write(sampleResult(deckA, deck40("B"), "AA", "BA"));
-
-        String line = Files.readAllLines(file).get(0);
-        String deckAEncoded = line.split(";", -1)[5];
-        String[] cardNames = deckAEncoded.split("\\|", -1);
-        assertEquals(40, cardNames.length, "Expected 40 pipe-separated card names");
-    }
-
-    @Test
-    void fieldsAppearInExpectedOrder(@TempDir Path tmp) throws IOException {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
-
-        writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB"));
-
-        String line = Files.readAllLines(file).get(0);
-        String[] parts = line.split(";", -1);
         assertEquals(DateTimeFormatter.ISO_INSTANT.format(TS), parts[0]);
         assertEquals(RUN_ID, parts[1]);
         assertEquals("RVR", parts[2]);
         assertEquals("forge-best", parts[3]);
         assertEquals("gen-2", parts[4]);
-        // parts[5] = deckA, parts[6] = deckB
+        // Names keep their spaces, order and duplicates; only the pipe separates them.
+        assertEquals(String.join("|", deckA), parts[5]);
+        assertEquals(String.join("|", deckB), parts[6]);
         assertEquals("ABA", parts[7]);
         assertEquals("BAB", parts[8]);
         assertEquals("47", parts[9]);
@@ -94,42 +77,16 @@ class MatchResultWriterTest {
     @Test
     void appendsToExistingFile(@TempDir Path tmp) throws IOException {
         Path file = tmp.resolve("outcomes.txt");
+        Files.writeString(file, "an earlier run's line" + System.lineSeparator());
         MatchResultWriter writer = new MatchResultWriter(file);
 
         writer.write(sampleResult(deck40("A"), deck40("B"), "AA", "BA"));
-        writer.write(sampleResult(deck40("C"), deck40("D"), "BB", "AB"));
-        writer.write(sampleResult(deck40("E"), deck40("F"), "ABA", "BAB"));
 
-        assertEquals(3, Files.readAllLines(file).size());
-    }
-
-    @Test
-    void twoGameSweepAccepted(@TempDir Path tmp) {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
-
-        assertDoesNotThrow(() ->
-                writer.write(sampleResult(deck40("A"), deck40("B"), "AA", "BA")));
-    }
-
-    @Test
-    void threeGameMatchAccepted(@TempDir Path tmp) {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
-
-        assertDoesNotThrow(() ->
-                writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB")));
-    }
-
-    @Test
-    void winsAandWinsBDerivedFromGamesString() {
-        MatchResult r = sampleResult(deck40("A"), deck40("B"), "ABA", "BAB");
-        assertEquals(2, r.winsA());
-        assertEquals(1, r.winsB());
-
-        MatchResult sweep = sampleResult(deck40("A"), deck40("B"), "BB", "AA");
-        assertEquals(0, sweep.winsA());
-        assertEquals(2, sweep.winsB());
+        List<String> lines = Files.readAllLines(file);
+        assertEquals(2, lines.size());
+        assertEquals("an earlier run's line", lines.get(0));
+        assertTrue(lines.get(1).startsWith(DateTimeFormatter.ISO_INSTANT.format(TS) + ";"),
+                lines.get(1));
     }
 
     @Test
@@ -176,28 +133,5 @@ class MatchResultWriterTest {
                 TS, RUN_ID, "RVR", "forge-best", "gen-2",
                 deck40("A"), deck40("B"), "AA", "BA", -1
         ));
-    }
-
-    @Test
-    void cardNamesPreservedExactly(@TempDir Path tmp) throws IOException {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
-
-        List<String> deckA = new ArrayList<>();
-        deckA.add("Lightning Bolt");
-        deckA.add("Snapcaster Mage");
-        deckA.add("Force of Will");
-        while (deckA.size() < 40) {
-            deckA.add("Island");
-        }
-
-        writer.write(sampleResult(deckA, deck40("B"), "AA", "BA"));
-
-        String line = Files.readAllLines(file).get(0);
-        String deckAEncoded = line.split(";", -1)[5];
-        String[] names = deckAEncoded.split("\\|", -1);
-        assertEquals("Lightning Bolt", names[0]);
-        assertEquals("Snapcaster Mage", names[1]);
-        assertEquals("Force of Will", names[2]);
     }
 }

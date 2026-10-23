@@ -15,9 +15,9 @@ class CastabilityRenderTest {
 
     @Test
     void rendersOneVerdictPerNameAsAJsonObjectInOrder() {
-        Map<String, String> verdicts = new LinkedHashMap<>();
-        verdicts.put("Lightning Bolt", CastabilityMain.CASTABLE);
-        verdicts.put("Forest", CastabilityMain.UNCASTABLE);
+        Map<String, CastabilityMain.Verdict> verdicts = new LinkedHashMap<>();
+        verdicts.put("Lightning Bolt", CastabilityMain.Verdict.CASTABLE);
+        verdicts.put("Forest", CastabilityMain.Verdict.UNCASTABLE);
 
         assertEquals("{\"Lightning Bolt\":\"castable\",\"Forest\":\"uncastable\"}",
                 CastabilityMain.render(verdicts));
@@ -32,6 +32,6 @@ class CastabilityRenderTest {
     void escapesQuotesInsideACardName() {
         assertEquals("{\"Kongming, \\\"Sleeping Dragon\\\"\":\"castable\"}",
                 CastabilityMain.render(
-                        Map.of("Kongming, \"Sleeping Dragon\"", CastabilityMain.CASTABLE)));
+                        Map.of("Kongming, \"Sleeping Dragon\"", CastabilityMain.Verdict.CASTABLE)));
     }
 }

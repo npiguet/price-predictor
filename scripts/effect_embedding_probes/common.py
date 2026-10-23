@@ -35,12 +35,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from effects.infrastructure import default_paths
+
 ROOT = Path(__file__).resolve().parents[2]
-REPORTS = ROOT / "output" / "effects" / "reports"
-DEFAULT_CHECKPOINT = ROOT / "models" / "effects" / "effect-model" / "latest.pt"
-DEFAULT_ABILITIES = ROOT / "output" / "effects" / "abilities"
-DEFAULT_CARDS_FOLDERS = (ROOT / "output" / "cardsfolder", ROOT / "output" / "tokenscripts")
-VARIANT_TREE = ROOT / "output" / "effects" / "variant-scripts"
+REPORTS = ROOT / default_paths.DEFAULT_REPORTS_DIR
+DEFAULT_CHECKPOINT = ROOT / default_paths.DEFAULT_CHECKPOINT
+DEFAULT_ABILITIES = ROOT / default_paths.DEFAULT_ABILITIES_ROOT
+DEFAULT_CARDS_FOLDERS = tuple(ROOT / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
+VARIANT_TREE = ROOT / default_paths.DEFAULT_VARIANT_SCRIPTS
 TREES = ("cardsfolder", "tokenscripts")
 SEED = 42
 
@@ -209,10 +211,10 @@ def paths_for(
 
 def resolve_paths(args: argparse.Namespace) -> ProbePaths:
     """Load ``--checkpoint`` and resolve the run's paths from it."""
-    from effects.infrastructure.effect_model_store import EffectModelStore
+    from effects.infrastructure.effect_model_store import load_effect_checkpoint
 
     checkpoint = Path(args.checkpoint)
-    loaded = EffectModelStore(checkpoint.parent).load(checkpoint)
+    loaded = load_effect_checkpoint(checkpoint)
     paths = paths_for(
         checkpoint, args.abilities_root, loaded.provenance,
         recorded_folders=getattr(loaded, "cards_folders", ()),

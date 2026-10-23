@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.StringJoiner;
 
@@ -24,8 +25,8 @@ import java.util.StringJoiner;
  * redefine a field, which is what lets a stage-one corpus stay trainable
  * alongside stage-four records.
  *
- * <p>{@link #rewritePayload} is the one place that widening has been exercised,
- * and it obeys the rule rather than bending it: {@code incoming} keeps exactly
+ * <p>{@link #rewritePayload} is where that widening happens, and it obeys the
+ * rule rather than bending it: {@code incoming} keeps exactly
  * the meaning it had, {@code outgoing} gains {@code null} the way a field gains
  * a sentinel, and {@code result} and {@code replaced_by} are new keys. No
  * already-collected record is reinterpreted — an old line that carries no
@@ -34,42 +35,18 @@ import java.util.StringJoiner;
  */
 public final class EffectRecord {
 
-    public static final String KIND_RESOLUTION = "resolution";
-    public static final String KIND_REWRITE = "rewrite";
-    public static final String KIND_CONTINUOUS = "continuous";
-    public static final String KIND_COMBAT = "combat";
-    public static final String KIND_TRIGGER = "trigger";
-    public static final String KIND_PLAYABILITY = "playability";
-
-    public static final String MOMENT_ACTIVATION = "activation";
-    public static final String MOMENT_RESOLUTION = "resolution";
-
-    public static final String OUTCOME_RESOLVED = "resolved";
-    public static final String OUTCOME_FIZZLED = "fizzled";
-    public static final String OUTCOME_PARTIALLY_FIZZLED = "partially_fizzled";
-    public static final String OUTCOME_DECLINED = "declined";
-    public static final String OUTCOME_COUNTERED = "countered";
-
-    public static final String REWRITE_REPLACED = "replaced";
-    public static final String REWRITE_NOT_REPLACED = "not_replaced";
-    public static final String REWRITE_PREVENTED = "prevented";
-    public static final String REWRITE_UPDATED = "updated";
-    public static final String REWRITE_SKIPPED = "skipped";
-
     private final String recordId;
     private final String runId;
     private final String timestamp;
     private final String gameId;
-    private final String kind;
+    private final RecordKind kind;
+    private final Moment moment;
+    private final PlayabilitySubkind subkind;
     private final String mode;
-    private String moment;
-    private String subkind;
     private String linkId;
     private String mirrorOf;
-    private String variantOf;
     private boolean interventional;
     private boolean fork;
-    private boolean synthetic;
     /**
      * Whether {@code actor_player} is the match's random seat (FR-030).
      *
@@ -84,34 +61,64 @@ public final class EffectRecord {
      * Real decision or what-if query, on the two legality subkinds only
      * (FR-031): {@code false} is a declaration the engine acted on, {@code
      * true} an answer the AI computed while weighing a combat and discarded.
-     * Null everywhere else, and absent from the JSON then.
+     * The collector reports legality at the declaration itself and so writes
+     * only {@code false}; {@code true} is read from shards collected inside
+     * the AI. Null everywhere else, and absent from the JSON then.
      */
     private Boolean whatIf;
     private String actorPlayer;
     private List<ProvenanceKey> ability;
-    private String abilityUnresolved;
+    private UnresolvedReason abilityUnresolved;
     private String stateJson = "{}";
     private String payloadJson = "{}";
 
+    /**
+     * A record of one of the four kinds that take neither a moment nor a
+     * subkind.
+     *
+     * <p>The other two are made by {@link #resolution} and {@link #playability}:
+     * a resolution record needs its moment and a playability record its
+     * subkind, and taking them at construction is what makes a record missing
+     * one impossible to build rather than merely wrong.
+     */
     public EffectRecord(
             String recordId, String runId, String timestamp, String gameId,
-            String kind, AttributionMode mode) {
+            RecordKind kind, AttributionMode mode) {
+        this(recordId, runId, timestamp, gameId, kind, null, null, mode);
+        if (kind == RecordKind.RESOLUTION || kind == RecordKind.PLAYABILITY) {
+            throw new IllegalArgumentException(
+                    "a " + kind.wireName() + " record is made with its moment or subkind");
+        }
+    }
+
+    private EffectRecord(
+            String recordId, String runId, String timestamp, String gameId,
+            RecordKind kind, Moment moment, PlayabilitySubkind subkind,
+            AttributionMode mode) {
         this.recordId = recordId;
         this.runId = runId;
         this.timestamp = timestamp;
         this.gameId = gameId;
-        this.kind = kind;
-        this.mode = mode.wireValue();
+        this.kind = Objects.requireNonNull(kind, "kind");
+        this.moment = moment;
+        this.subkind = subkind;
+        this.mode = mode.wireName();
     }
 
-    public EffectRecord moment(String value) {
-        this.moment = value;
-        return this;
+    /** A {@code resolution} record: one half of a resolution pair. */
+    public static EffectRecord resolution(
+            String recordId, String runId, String timestamp, String gameId,
+            Moment moment, AttributionMode mode) {
+        return new EffectRecord(recordId, runId, timestamp, gameId, RecordKind.RESOLUTION,
+                Objects.requireNonNull(moment, "moment"), null, mode);
     }
 
-    public EffectRecord subkind(String value) {
-        this.subkind = value;
-        return this;
+    /** A {@code playability} record: one rules verdict. */
+    public static EffectRecord playability(
+            String recordId, String runId, String timestamp, String gameId,
+            PlayabilitySubkind subkind, AttributionMode mode) {
+        return new EffectRecord(recordId, runId, timestamp, gameId, RecordKind.PLAYABILITY,
+                null, Objects.requireNonNull(subkind, "subkind"), mode);
     }
 
     /**
@@ -132,11 +139,6 @@ public final class EffectRecord {
         return this;
     }
 
-    public EffectRecord variantOf(String value) {
-        this.variantOf = value;
-        return this;
-    }
-
     public EffectRecord interventional(boolean value) {
         this.interventional = value;
         return this;
@@ -144,11 +146,6 @@ public final class EffectRecord {
 
     public EffectRecord fork(boolean value) {
         this.fork = value;
-        return this;
-    }
-
-    public EffectRecord synthetic(boolean value) {
-        this.synthetic = value;
         return this;
     }
 
@@ -178,19 +175,6 @@ public final class EffectRecord {
     }
 
     /**
-     * The acting line. Absent for {@code combat} and {@code playability}, where
-     * no single line acts; several keys where the rendered line merged several
-     * traits.
-     *
-     * <p>Prefer {@link #ability(ProvenanceKey.Resolved)} wherever a key was
-     * actually looked for: this form cannot say why an empty list is empty.
-     */
-    public EffectRecord ability(List<ProvenanceKey> keys) {
-        this.ability = keys == null ? null : new ArrayList<>(keys);
-        return this;
-    }
-
-    /**
      * The acting line, or the reason there is none — both set from one answer.
      *
      * <p>The two fields are written together and only together, because they
@@ -198,8 +182,7 @@ public final class EffectRecord {
      * would be unreadable: a reason beside a named line is a contradiction, and
      * an empty list with no reason is the ambiguity this field exists to
      * remove. An empty {@code ability} alone conflates "the Monarch has no
-     * printed line in any tree, correctly" with "the resolver regressed", and
-     * that is what hid a broken resolver for a whole collection run.
+     * printed line in any tree, correctly" with "the resolver regressed".
      *
      * <p>A null answer is treated as {@code unknown_kind} rather than as no
      * lookup at all: a caller reaching this method did look, so the record owes
@@ -212,9 +195,8 @@ public final class EffectRecord {
             return this;
         }
         this.ability = List.of();
-        String reason = resolved == null ? null : resolved.reason();
-        this.abilityUnresolved = reason == null
-                ? ProvenanceKey.UNRESOLVED_UNKNOWN_KIND : reason;
+        UnresolvedReason reason = resolved == null ? null : resolved.reason();
+        this.abilityUnresolved = reason == null ? UnresolvedReason.UNKNOWN_KIND : reason;
         return this;
     }
 
@@ -253,16 +235,18 @@ public final class EffectRecord {
                 + ",\"run_id\":" + Json.string(runId)
                 + ",\"timestamp\":" + Json.string(timestamp)
                 + ",\"game_id\":" + Json.string(gameId)
-                + ",\"kind\":" + Json.string(kind)
-                + ",\"moment\":" + Json.string(moment)
-                + ",\"subkind\":" + Json.string(subkind)
+                + ",\"kind\":" + Json.string(kind.wireName())
+                + ",\"moment\":" + Json.string(moment == null ? null : moment.wireName())
+                + ",\"subkind\":" + Json.string(subkind == null ? null : subkind.wireName())
                 + ",\"link_id\":" + Json.string(linkId)
                 + ",\"mirror_of\":" + Json.string(mirrorOf)
-                + ",\"variant_of\":" + Json.string(variantOf)
+                // Frozen schema fields no collector sets: a reader still
+                // expects them on every record.
+                + ",\"variant_of\":null"
                 + ",\"mode\":" + Json.string(mode)
                 + ",\"interventional\":" + interventional
                 + ",\"fork\":" + fork
-                + ",\"synthetic\":" + synthetic
+                + ",\"synthetic\":false"
                 // Right after synthetic on every record, and what_if right
                 // after it on the two subkinds alone: the order is part of the
                 // contract (record-schema-delta.md), and the reader names a
@@ -271,53 +255,71 @@ public final class EffectRecord {
                 + (whatIf == null ? "" : ",\"what_if\":" + whatIf)
                 + ",\"actor_player\":" + Json.string(actorPlayer)
                 + ",\"ability\":" + abilityJson()
-                + ",\"ability_unresolved\":" + Json.string(abilityUnresolved)
+                + ",\"ability_unresolved\":"
+                + Json.string(abilityUnresolved == null ? null : abilityUnresolved.wireName())
                 + ",\"state\":" + stateJson
                 + ",\"payload\":" + payloadJson + "}";
     }
 
-    /** Why {@link #abilityJson()} is empty, or null where it names a line. */
-    String abilityUnresolved() {
-        return abilityUnresolved;
-    }
-
     String abilityJson() {
-        if (ability == null) {
-            return "null";
-        }
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (ProvenanceKey key : ability) {
-            joiner.add(key.toJson());
-        }
-        return joiner.toString();
+        return ability == null ? "null" : ProvenanceKey.toJsonArray(ability);
     }
 
-    /** ``{"events": [...]}`` — a resolution effect half or a combat step. */
+    /** ``{"events": [...]}`` — a resolution effect half. */
     public static String eventsPayload(List<EffectEvent> events) {
+        return "{\"events\":" + eventArray(events) + "}";
+    }
+
+    /**
+     * ``{<combat fields>, "events": [...]}`` — an observed damage step, its
+     * combat as {@link CombatShape#fields} hands it over.
+     */
+    static String combatPayload(Map<String, Object> combatFields, List<EffectEvent> events) {
+        return Json.object()
+                .values(combatFields)
+                .raw("events", eventArray(events))
+                .render();
+    }
+
+    /**
+     * A damage-step probe's combat payload, which also names what it
+     * perturbed: the keyword it stripped and the creature it stripped it from.
+     */
+    static String probePayload(
+            Map<String, Object> combatFields, List<EffectEvent> events,
+            String keyword, String carrier) {
+        return Json.object()
+                .values(combatFields)
+                .raw("events", eventArray(events))
+                .raw("probed_keyword", Json.string(keyword))
+                .raw("probed_entity", Json.string(carrier))
+                .render();
+    }
+
+    private static String eventArray(List<EffectEvent> events) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
         for (EffectEvent event : events) {
             joiner.add(event.toJson());
         }
-        return "{\"events\":" + joiner + "}";
+        return joiner.toString();
     }
 
     /**
      * ``{"incoming": ..., "outgoing": ...|null, "result": ..., "replaced_by": []}``
      *
-     * <p>The pair alone could not express what a replacement does. Forge hardly
+     * <p>The pair alone cannot express what a replacement does. Forge hardly
      * ever edits an event's parameter map: {@code ReplacementHandler} substitutes
      * by running the {@code ReplaceWith$} ability and returning a
      * {@code ReplacementResult}, and its {@code Prevented}, {@code Skipped} and
      * {@code NotReplaced} branches return without touching the map at all. So
      * "enters tapped", "if it would die, exile it instead" and "prevent that
-     * damage" all arrived here as two byte-identical halves, and the channel
-     * held 34 records in 1.88M against a 7% share of the training mixture.
+     * damage" would all arrive here as two byte-identical halves.
      *
      * <p>{@code outgoing} is {@code null} — never a copy of {@code incoming} —
      * when the map was not edited in place. A record whose two halves read the
-     * same is what made this channel unreadable; null says "not rewritten"
-     * outright, and the corpus validator judges an identity pair at zero rather
-     * than letting it parse quietly.
+     * same says nothing; null says "not rewritten" outright, and the corpus
+     * validator judges an identity pair at zero rather than letting it parse
+     * quietly.
      *
      * @param incoming    the event as the replacement received it
      * @param outgoing    the rewritten event, or null where nothing was rewritten
@@ -329,12 +331,7 @@ public final class EffectRecord {
     public static String rewritePayload(
             EffectEvent incoming, EffectEvent outgoing, String result,
             List<ProvenanceKey> replacedBy) {
-        StringJoiner keys = new StringJoiner(",", "[", "]");
-        if (replacedBy != null) {
-            for (ProvenanceKey key : replacedBy) {
-                keys.add(key.toJson());
-            }
-        }
+        String keys = ProvenanceKey.toJsonArray(replacedBy == null ? List.of() : replacedBy);
         return "{\"incoming\":" + incoming.toJson()
                 + ",\"outgoing\":" + (outgoing == null ? "null" : outgoing.toJson())
                 + ",\"result\":" + Json.string(result)
@@ -380,17 +377,6 @@ public final class EffectRecord {
     /**
      * ``{"costs": {...}, "outcome": "..."}`` — a resolution cost half.
      *
-     * <p>Convenience for the common case where both halves are read at the same
-     * instant. A collector that defers the record until the outcome is known
-     * reads {@link #costsJson} at the cast and calls the two-string form later.
-     */
-    public static String costPayload(SpellAbility ability, String outcome) {
-        return costPayload(costsJson(ability), outcome);
-    }
-
-    /**
-     * The same payload from a costs object read earlier.
-     *
      * <p>The two halves become knowable at different moments: what was paid is
      * only readable while the cast event is being published, and whether the
      * spell resolved, fizzled or was countered is only readable later. Holding
@@ -398,9 +384,9 @@ public final class EffectRecord {
      * keeping a reference to a {@link SpellAbility} whose paid lists the next
      * activation will overwrite.
      */
-    public static String costPayload(String costsJson, String outcome) {
+    public static String costPayload(String costsJson, ActivationOutcome outcome) {
         return "{\"costs\":" + costsJson
-                + ",\"outcome\":" + Json.string(outcome) + "}";
+                + ",\"outcome\":" + Json.string(outcome.wireName()) + "}";
     }
 
     /** What a cost payload says when there is no ability to read. */
@@ -417,10 +403,9 @@ public final class EffectRecord {
      * clears the paying mana), so a deferred record must hold this string
      * rather than the ability.
      *
-     * <p>Deliberately not read off {@code getPayCosts()}, which is what the
-     * first collected corpus did and why {@code tapped}, {@code sacrificed},
-     * {@code discarded} and {@code exiled} were empty on all 940,973 activation
-     * records. Two independent reasons, both in the engine:
+     * <p>Deliberately not read off {@code getPayCosts()}, where {@code tapped},
+     * {@code sacrificed}, {@code discarded} and {@code exiled} always read
+     * empty, for two independent reasons, both in the engine:
      * {@code CostAdjustment.adjust} pays a {@code cost.copy()}, so the parts
      * hanging off the ability are never the ones that were paid; and
      * {@code CostPayment} calls {@code resetLists()} on every list part the
@@ -430,8 +415,8 @@ public final class EffectRecord {
      *
      * <p>Mana is counted one entry per {@link Mana} actually spent, so a hybrid
      * paid as blue counts under {@code U} and under nothing else — where the
-     * printed cost the corpus used to read counted it under both halves, and
-     * ignored reductions and X entirely.
+     * printed cost would count it under both halves, and ignore reductions and
+     * X entirely.
      */
     public static String costsJson(SpellAbility ability) {
         if (ability == null) {

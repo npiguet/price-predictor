@@ -1,39 +1,29 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.PatchedCollectors;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
+import com.pricepredictor.connector.effects.CollectionCaps;
+import com.pricepredictor.connector.effects.GameRecording;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import com.pricepredictor.connector.effects.SnapshotBuilder;
-import forge.StaticData;
+import com.pricepredictor.connector.effects.TestBoard;
 import forge.ai.LobbyPlayerAi;
 import forge.ai.simulation.GameCopier;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.combat.Combat;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
-import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -61,15 +51,9 @@ class RandomSeatControllerTest {
 
     /** A game whose seat A is the random seat, in {@code phase} on A's turn. */
     private static Game gameWithRandomSeatA(PhaseType phase, double probability, long seed) {
-        Deck deck = new Deck();
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(deck).setPlayer(
-                        new RandomSeatLobbyPlayer("a", probability, new Random(seed))),
-                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("b", null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Game game = new Game(players, rules, new Match(rules, players, "RandomSeatControllerTest"));
-        game.getPhaseHandler().devModeSet(phase, game.getPlayers().get(0));
-        return game;
+        return TestBoard.twoPlayerGame(phase,
+                new RandomSeatLobbyPlayer("a", probability, new Random(seed)),
+                new LobbyPlayerAi("b", null));
     }
 
     private static RandomSeatController seatOf(Game game) {
@@ -78,29 +62,23 @@ class RandomSeatControllerTest {
         return seat;
     }
 
-    private static Card inPlay(Game game, Player owner, String name) {
-        Card card = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(name), owner, game);
-        game.getAction().moveToPlay(card, owner, null, null);
-        card.setSickness(false);
-        return card;
+    /**
+     * Seat A holding Pacifism, whose one legal target is A's own creature.
+     *
+     * <p>The AI never enchants its own creature with it, so on this board a
+     * Pacifism chosen is a random draw's choice and anything else is the AI's.
+     */
+    private static Card pacifismWithOnlyAnOwnTarget(Game game, Player a) {
+        TestBoard.inPlay(game, a, "Plains");
+        TestBoard.inPlay(game, a, "Plains");
+        TestBoard.inPlay(game, a, "Grizzly Bears");
+        return TestBoard.inHand(game, a, "Pacifism");
     }
 
-    private static Card inHand(Game game, Player owner, String name) {
-        Card card = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard(name), owner, game);
-        return game.getAction().moveTo(ZoneType.Hand, card, null, null);
-    }
-
-    private List<String> readShard(Path path) throws IOException {
-        if (!Files.exists(path)) {
-            return List.of();
-        }
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
+    /** Whether {@code chosen} plays a card named {@code name}. */
+    private static boolean plays(List<SpellAbility> chosen, String name) {
+        return chosen != null && chosen.stream()
+                .anyMatch(sa -> name.equals(sa.getHostCard().getName()));
     }
 
     // ── the play decision ───────────────────────────────────────────────
@@ -110,22 +88,23 @@ class RandomSeatControllerTest {
     void aSeatWithOnlyManaAbilitiesPlayablePasses() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
         assertNull(seat.chooseSpellAbilityToPlay(), "nothing but mana to play: pass");
     }
 
-    /** Scenario 3 and the one-option edge case: the single playable spell is taken. */
+    /**
+     * Scenario 3 and the one-option edge case: the single playable spell is
+     * taken, though it is one the AI would pass on.
+     */
     @Test
     void aSingleLegalOptionIsTaken() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        Card bears = inHand(game, a, "Grizzly Bears");
+        Card pacifism = pacifismWithOnlyAnOwnTarget(game, a);
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
@@ -133,8 +112,7 @@ class RandomSeatControllerTest {
 
         assertNotNull(chosen, "a random draw never passes while anything is playable");
         assertEquals(1, chosen.size());
-        assertEquals(bears, chosen.get(0).getHostCard());
-        assertTrue(seat.lastDrawWasRandom());
+        assertEquals(pacifism, chosen.get(0).getHostCard());
     }
 
     /**
@@ -145,9 +123,9 @@ class RandomSeatControllerTest {
     void aRandomlyDrawnSpellIsCastOntoTheStack() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        inHand(game, a, "Grizzly Bears");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inPlay(game, a, "Forest");
+        TestBoard.inHand(game, a, "Grizzly Bears");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
@@ -166,16 +144,14 @@ class RandomSeatControllerTest {
     void landFirstThenTheDraw() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        Card land = inHand(game, a, "Forest");
-        inHand(game, a, "Grizzly Bears");
+        pacifismWithOnlyAnOwnTarget(game, a);
+        Card land = TestBoard.inHand(game, a, "Plains");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
+        // A draw never picks a land, so a land played is the AI deciding.
         List<SpellAbility> first = seat.chooseSpellAbilityToPlay();
-        assertFalse(seat.lastDrawWasRandom(), "no draw while a land drop is open");
-        assertNotNull(first, "the AI plays the land");
+        assertNotNull(first, "no draw while a land drop is open: the AI plays the land");
         assertTrue(first.get(0).isLandAbility(), first.toString());
         assertEquals(land, first.get(0).getHostCard());
 
@@ -183,9 +159,7 @@ class RandomSeatControllerTest {
         assertEquals(1, a.getLandsPlayedThisTurn());
 
         List<SpellAbility> second = seat.chooseSpellAbilityToPlay();
-        assertTrue(seat.lastDrawWasRandom(), "the drop is used: the draw is made");
-        assertNotNull(second);
-        assertEquals("Grizzly Bears", second.get(0).getHostCard().getName());
+        assertTrue(plays(second, "Pacifism"), "the drop is used: the draw is made, " + second);
     }
 
     /** Scenario 2's other branch: a draw that fails leaves the decision to the AI. */
@@ -193,15 +167,13 @@ class RandomSeatControllerTest {
     void aFailedDrawLeavesThePlayToTheAi() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 0.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        inHand(game, a, "Grizzly Bears");
+        pacifismWithOnlyAnOwnTarget(game, a);
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
         for (int i = 0; i < 20; i++) {
-            seat.chooseSpellAbilityToPlay();
-            assertFalse(seat.lastDrawWasRandom(), "P = 0 never draws");
+            List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
+            assertFalse(plays(chosen, "Pacifism"), "P = 0 never draws: " + chosen);
         }
     }
 
@@ -220,10 +192,10 @@ class RandomSeatControllerTest {
             Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
             Player a = game.getPlayers().get(0);
             for (int i = 0; i < 5; i++) {
-                inPlay(game, a, "Mountain");
+                TestBoard.inPlay(game, a, "Mountain");
             }
-            inHand(game, a, "Fiery Intervention");
-            inHand(game, a, "Shock");
+            TestBoard.inHand(game, a, "Fiery Intervention");
+            TestBoard.inHand(game, a, "Shock");
             RandomSeatController seat = seatOf(game);
             seat.attach(game, null);
 
@@ -237,26 +209,21 @@ class RandomSeatControllerTest {
     }
 
     /**
-     * And when nothing remains the seat passes: the abandoned play returns
-     * false, the engine asks again, and the answer is a pass rather than
-     * another draw over the same impossible candidate.
+     * A charm none of whose modes can be chosen is no candidate at all, so
+     * the seat passes rather than drawing a play it would have to abandon.
      */
     @Test
-    void whenEveryCandidateIsAbandonedTheSeatPasses() {
+    void aCharmWithNoChoosableModeIsNotACandidate() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
         for (int i = 0; i < 5; i++) {
-            inPlay(game, a, "Mountain");
+            TestBoard.inPlay(game, a, "Mountain");
         }
-        inHand(game, a, "Fiery Intervention");
+        TestBoard.inHand(game, a, "Fiery Intervention");
         RandomSeatController seat = seatOf(game);
         seat.attach(game, null);
 
-        List<SpellAbility> chosen = seat.chooseSpellAbilityToPlay();
-        assertNotNull(chosen, "the charm passes the candidate filter");
-        assertFalse(seat.playChosenSpellAbility(chosen.get(0)));
-        assertTrue(game.getStack().isEmpty());
-        assertNull(seat.chooseSpellAbilityToPlay(), "nothing left to draw: pass");
+        assertNull(seat.chooseSpellAbilityToPlay(), "no creature, no artifact: nothing to draw, pass");
     }
 
     /**
@@ -272,9 +239,9 @@ class RandomSeatControllerTest {
             Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, seed);
             Player a = game.getPlayers().get(0);
             for (int i = 0; i < 4; i++) {
-                inPlay(game, a, "Mountain");
+                TestBoard.inPlay(game, a, "Mountain");
             }
-            inHand(game, a, "Fiery Confluence");
+            TestBoard.inHand(game, a, "Fiery Confluence");
             RandomSeatController seat = seatOf(game);
             seat.attach(game, null);
 
@@ -317,9 +284,7 @@ class RandomSeatControllerTest {
     void aForkOfTheGameDoesNotActAtRandom() {
         Game game = gameWithRandomSeatA(PhaseType.MAIN2, 1.0, 1L);
         Player a = game.getPlayers().get(0);
-        inPlay(game, a, "Forest");
-        inPlay(game, a, "Forest");
-        inHand(game, a, "Grizzly Bears");
+        pacifismWithOnlyAnOwnTarget(game, a);
         seatOf(game).attach(game, null);
 
         Game fork = new GameCopier(game).makeCopy();
@@ -327,34 +292,38 @@ class RandomSeatControllerTest {
         assertNotNull(forked, "the fork keeps the lobby-player subclass");
         assertFalse(forked.isLive());
 
-        forked.chooseSpellAbilityToPlay();
-        assertFalse(forked.lastDrawWasRandom(), "a fork's seat defers to the AI");
+        List<SpellAbility> chosen = forked.chooseSpellAbilityToPlay();
+        assertFalse(plays(chosen, "Pacifism"), "a fork's seat defers to the AI: " + chosen);
     }
 
     // ── attacks and blocks ──────────────────────────────────────────────
 
     /**
-     * Scenario 2 and 16: with nothing restricting attacks, each creature
-     * attacks in close to half the draws, and each declaration writes an
-     * {@code attackers} record stamped a real decision by the seat itself.
+     * Scenario 2: with nothing restricting attacks, each creature attacks in
+     * close to half the draws. The seat writes no {@code attackers} record of
+     * its own: the engine reports legality from the turn-based declaration,
+     * before any controller declares, and that report covers this seat as it
+     * covers every other.
      */
     @Test
-    void eachCreatureAttacksInAboutHalfTheDrawsAndTheDeclarationIsRecorded() throws IOException {
+    void eachCreatureAttacksInAboutHalfTheDrawsAndTheSeatWritesNoLegalityRecord() {
         Game game = gameWithRandomSeatA(PhaseType.COMBAT_DECLARE_ATTACKERS, 1.0, 7L);
         Player a = game.getPlayers().get(0);
         Player b = game.getPlayers().get(1);
         List<Card> creatures = List.of(
-                inPlay(game, a, "Grizzly Bears"), inPlay(game, a, "Runeclaw Bear"),
-                inPlay(game, a, "Hill Giant"), inPlay(game, a, "Grizzly Bears"));
+                TestBoard.inPlay(game, a, "Grizzly Bears"),
+                TestBoard.inPlay(game, a, "Runeclaw Bear"),
+                TestBoard.inPlay(game, a, "Hill Giant"),
+                TestBoard.inPlay(game, a, "Grizzly Bears"));
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         RandomSeatController seat = seatOf(game);
         int draws = 400;
         int[] attacks = new int[creatures.size()];
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(a));
-            seat.attach(game, collectors);
+        try (GameRecording recording = new GameRecording(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
+                SnapshotBuilder.playerId(a))) {
+            seat.attach(game, recording.playability());
             for (int draw = 0; draw < draws; draw++) {
                 Combat combat = new Combat(a);
                 game.getPhaseHandler().setCombat(combat);
@@ -375,40 +344,36 @@ class RandomSeatControllerTest {
             assertTrue(share > 0.4 && share < 0.6,
                     creatures.get(i) + " attacked in " + share + " of the draws");
         }
-        List<String> records = readShard(path).stream()
-                .filter(l -> l.contains("\"subkind\":\"attackers\"")).toList();
-        assertFalse(records.isEmpty(), "the seat writes its own attackers record");
-        for (String record : records) {
-            assertTrue(record.contains("\"what_if\":false"), record);
-            assertTrue(record.contains("\"random_seat\":true"), record);
-            assertTrue(record.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(a) + "\""),
-                    record);
-        }
+        // Nothing at all: the seat's declarations write no record of any kind.
+        assertFalse(Files.exists(path),
+                "the engine's declaration hook records attacks, not the seat");
     }
 
     /**
-     * Scenario 17: the random seat's own block declaration, whichever way it
-     * draws, writes {@code blockers} records naming the seat as the deciding
-     * player and stamped {@code random_seat}; the blocks it declares are legal.
+     * Scenario 17: the random seat draws both a block and no block, and the
+     * blocks it declares are its own creatures'. As with attacks, the seat
+     * writes no {@code blockers} record of its own.
      */
     @Test
-    void aBlockDeclarationNamesTheBlockingSeat() throws IOException {
+    void aBlockDeclarationDrawsBothWaysAndTheSeatWritesNoLegalityRecord() {
         Game game = gameWithRandomSeatA(PhaseType.COMBAT_DECLARE_BLOCKERS, 1.0, 3L);
         Player a = game.getPlayers().get(0);
         Player b = game.getPlayers().get(1);
         // B's turn: B attacks A with one creature, A has two it could block with.
         game.getPhaseHandler().devModeSet(PhaseType.COMBAT_DECLARE_BLOCKERS, b);
-        Card attacker = inPlay(game, b, "Hill Giant");
-        List<Card> blockers = List.of(inPlay(game, a, "Grizzly Bears"), inPlay(game, a, "Runeclaw Bear"));
+        Card attacker = TestBoard.inPlay(game, b, "Hill Giant");
+        List<Card> blockers = List.of(
+                TestBoard.inPlay(game, a, "Grizzly Bears"),
+                TestBoard.inPlay(game, a, "Runeclaw Bear"));
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         RandomSeatController seat = seatOf(game);
         boolean blockedOnce = false;
         boolean heldBackOnce = false;
-        try (PatchedCollectors collectors = new PatchedCollectors(
-                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
-            collectors.setRandomSeatPlayerId(SnapshotBuilder.playerId(a));
-            seat.attach(game, collectors);
+        try (GameRecording recording = new GameRecording(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L,
+                SnapshotBuilder.playerId(a))) {
+            seat.attach(game, recording.playability());
             for (int draw = 0; draw < 100; draw++) {
                 Combat combat = new Combat(b);
                 combat.addAttacker(attacker, a);
@@ -426,15 +391,8 @@ class RandomSeatControllerTest {
         }
 
         assertTrue(blockedOnce && heldBackOnce, "no block and a block are both drawn");
-        List<String> records = readShard(path).stream()
-                .filter(l -> l.contains("\"subkind\":\"blockers\"")).toList();
-        assertFalse(records.isEmpty());
-        for (String record : records) {
-            assertTrue(record.contains("\"what_if\":false"), record);
-            assertTrue(record.contains("\"random_seat\":true"), record);
-            assertTrue(record.contains("\"actor_player\":\"" + SnapshotBuilder.playerId(a) + "\""),
-                    record);
-        }
+        assertFalse(Files.exists(path),
+                "the engine's declaration hook records blocks, not the seat");
     }
 
     // ── the match-level draw ────────────────────────────────────────────
@@ -443,16 +401,17 @@ class RandomSeatControllerTest {
     @Test
     void closeToOneMatchInEightSeatsARandomPlayerOnEitherSide() {
         CollectionCaps caps = new CollectionCaps(
-                1, 0.1, 2, 2, List.of(), 0.1, 0.125, 0.5);
+                1, 0.1, 2, 2, List.of(), 0.125, 0.5);
         Random random = new Random(11L);
         int draws = 40_000;
         int a = 0;
         int b = 0;
         for (int i = 0; i < draws; i++) {
-            switch (GamePlayer.drawRandomSeat(caps, random)) {
-                case A -> a++;
-                case B -> b++;
-                default -> { }
+            Optional<Side> seat = GamePlayer.drawRandomSeat(caps, random);
+            if (seat.equals(Optional.of(Side.A))) {
+                a++;
+            } else if (seat.equals(Optional.of(Side.B))) {
+                b++;
             }
         }
         double share = (a + b) / (double) draws;
@@ -464,7 +423,7 @@ class RandomSeatControllerTest {
     void aShareOfZeroSeatsNobody() {
         Random random = new Random(1L);
         for (int i = 0; i < 1000; i++) {
-            assertEquals(GamePlayer.RandomSeat.NONE,
+            assertEquals(Optional.empty(),
                     GamePlayer.drawRandomSeat(CollectionCaps.defaults(), random));
         }
     }

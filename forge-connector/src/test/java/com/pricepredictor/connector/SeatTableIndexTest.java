@@ -1,14 +1,16 @@
 package com.pricepredictor.connector;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,9 +24,31 @@ class SeatTableIndexTest {
 
     // ── Line parsing ────────────────────────────────────────────────
 
+    @TempDir
+    Path tempDir;
+
+    /** A seat table file holding {@code lines}. */
+    private Path table(String... lines) throws IOException {
+        Path table = tempDir.resolve("seats.txt");
+        Files.writeString(table, String.join("\n", lines) + "\n");
+        return table;
+    }
+
+    /**
+     * The seat {@code line} loads as, read the way the worker reads it: from a
+     * table, beside a second seat of the same pod labelled apart from it, so
+     * that the pod's one pairing holds it.
+     */
+    private SeatTableIndex.SeatEntry loaded(String line) throws IOException {
+        SeatTableIndex.Pairing pairing = SeatTableIndex.load(
+                        table(line, "d1;BLB;other;deck;Forest"), false)
+                .randomPairing().orElseThrow();
+        return pairing.a().label().equals("other") ? pairing.b() : pairing.a();
+    }
+
     @Test
-    void parsesTheFiveFields() {
-        SeatTableIndex.SeatEntry e = SeatTableIndex.parseLine("d1;BLB;gen4;deck;A|B|C");
+    void parsesTheFiveFields() throws IOException {
+        SeatTableIndex.SeatEntry e = loaded("d1;BLB;gen4;deck;A|B|C");
 
         assertEquals("d1", e.draftId());
         assertEquals("BLB", e.setCode());
@@ -34,31 +58,34 @@ class SeatTableIndexTest {
     }
 
     @Test
-    void cardNamesMayContainCommasAndApostrophes() {
-        SeatTableIndex.SeatEntry e =
-                SeatTableIndex.parseLine("d1;BLB;gen4;deck;Ach! Hans, Run!|Yawgmoth's Will");
+    void cardNamesMayContainCommasAndApostrophes() throws IOException {
+        SeatTableIndex.SeatEntry e = loaded("d1;BLB;gen4;deck;Ach! Hans, Run!|Yawgmoth's Will");
 
         assertEquals(List.of("Ach! Hans, Run!", "Yawgmoth's Will"), e.cardNames());
     }
 
     @Test
-    void poolKindIsRecognised() {
-        SeatTableIndex.SeatEntry e =
-                SeatTableIndex.parseLine("d1;BLB;forge-native;pool;A|B");
-
-        assertTrue(e.isPool());
+    void poolKindIsRecognised() throws IOException {
+        assertTrue(loaded("d1;BLB;forge-native;pool;A|B").isPool());
     }
 
     @Test
-    void deckKindIsNotAPool() {
-        assertFalse(SeatTableIndex.parseLine("d1;BLB;gen4;deck;A").isPool());
+    void deckKindIsNotAPool() throws IOException {
+        assertFalse(loaded("d1;BLB;gen4;deck;A").isPool());
     }
 
     @Test
-    void aShortLineIsRejected() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> SeatTableIndex.parseLine("d1;BLB;gen4;deck"));
+    void aShortLineIsRejected() throws IOException {
+        Path table = table("d1;BLB;gen4;deck");
+        assertThrows(IllegalArgumentException.class, () -> SeatTableIndex.load(table, false));
+    }
+
+    @Test
+    void blankLinesAreNotSeats() throws IOException {
+        SeatTableIndex index = SeatTableIndex.load(
+                table("d1;BLB;gen4;deck;A", "", "   ", "d1;BLB;gen1;deck;B"), false);
+
+        assertEquals(2, index.seatCount());
     }
 
     // ── Pod grouping ────────────────────────────────────────────────
@@ -87,7 +114,7 @@ class SeatTableIndexTest {
                 List.of(seat("d1", "gen4"), seat("d1", "gen4")), false);
 
         assertEquals(0, index.eligiblePodCount());
-        assertNull(index.randomPairing(false));
+        assertTrue(index.randomPairing().isEmpty());
     }
 
     @Test
@@ -96,7 +123,7 @@ class SeatTableIndexTest {
                 List.of(seat("d1", "gen4"), seat("d1", "gen4")), true);
 
         assertEquals(1, index.eligiblePodCount());
-        assertNotNull(index.randomPairing(true));
+        assertTrue(index.randomPairing().isPresent());
     }
 
     // ── Pair drawing ────────────────────────────────────────────────
@@ -111,7 +138,7 @@ class SeatTableIndexTest {
                 new Random(7));
 
         for (int i = 0; i < 200; i++) {
-            SeatTableIndex.Pairing p = index.randomPairing(false);
+            SeatTableIndex.Pairing p = index.randomPairing().orElseThrow();
             assertEquals(p.a().draftId(), p.b().draftId());
         }
     }
@@ -124,7 +151,7 @@ class SeatTableIndexTest {
                 new Random(11));
 
         for (int i = 0; i < 200; i++) {
-            SeatTableIndex.Pairing p = index.randomPairing(false);
+            SeatTableIndex.Pairing p = index.randomPairing().orElseThrow();
             assertFalse(p.a() == p.b());
         }
     }
@@ -138,7 +165,7 @@ class SeatTableIndexTest {
                 new Random(3));
 
         for (int i = 0; i < 300; i++) {
-            SeatTableIndex.Pairing p = index.randomPairing(false);
+            SeatTableIndex.Pairing p = index.randomPairing().orElseThrow();
             assertFalse(p.a().label().equals(p.b().label()));
         }
     }
@@ -152,7 +179,7 @@ class SeatTableIndexTest {
 
         boolean sawMirror = false;
         for (int i = 0; i < 300 && !sawMirror; i++) {
-            SeatTableIndex.Pairing p = index.randomPairing(true);
+            SeatTableIndex.Pairing p = index.randomPairing().orElseThrow();
             sawMirror = p.a().label().equals(p.b().label());
         }
         assertTrue(sawMirror, "a mirror pair should be reachable when included");
@@ -160,6 +187,6 @@ class SeatTableIndexTest {
 
     @Test
     void anEmptyTableYieldsNoPairing() {
-        assertNull(new SeatTableIndex(List.of(), false).randomPairing(false));
+        assertTrue(new SeatTableIndex(List.of(), false).randomPairing().isEmpty());
     }
 }

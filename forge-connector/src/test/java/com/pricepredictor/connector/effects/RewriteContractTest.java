@@ -1,15 +1,8 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
-import forge.StaticData;
-import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
-import forge.game.card.CardFactory;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
 import forge.game.spellability.SpellAbility;
@@ -20,19 +13,19 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.zip.GZIPInputStream;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import static com.pricepredictor.connector.effects.TestCollectors.recording;
+import static com.pricepredictor.connector.effects.TestCollectors.replacementOfMode;
+import static com.pricepredictor.connector.effects.TestCollectors.unwired;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -46,14 +39,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * argument order is a runtime contract with no compiler behind it. A swap or an
  * insertion on the Forge side would not fail a build; it would fail a corpus,
  * silently, eight hours in. These tests are what stands in for the compiler:
- * they call the handler through a stand-in interface that is a literal copy of
- * Forge's declaration, and they check that copy against the real one.
+ * they call the handler through {@link HookShapes.Replacement}, a literal copy
+ * of Forge's declaration that {@code PatchHooksTest} checks against the real
+ * one.
  *
- * <p>{@link PatchedCollectorTest} covers what a rewrite record says about its
- * acting line and its event. What is here is the shape the contract fixed: one
- * record per replacement including the negatives, {@code outgoing} null exactly
- * where nothing was rewritten in place, and {@code replaced_by} keyed where an
- * ability stood in for the event.
+ * <p>Beside that, the shape the contract fixes: one record per replacement
+ * including the negatives, {@code outgoing} null exactly where nothing was
+ * rewritten in place, and {@code replaced_by} keyed where an ability stood in
+ * for the event; and what a record says about its acting line and its event.
  */
 @ExtendWith(ForgeExtension.class)
 class RewriteContractTest {
@@ -61,70 +54,8 @@ class RewriteContractTest {
     @TempDir
     Path tempDir;
 
-    /**
-     * Forge's listener, copied argument for argument.
-     *
-     * <p>Copied rather than referenced on purpose: the connector compiles
-     * against stock Forge, where this interface does not exist at all, and a
-     * test that imported it would stop the whole module building on an
-     * unpatched checkout. {@link #theStandInIsForgesOwnDeclaration} is what
-     * keeps the copy true.
-     */
-    public interface ListenerShape {
-        void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
-                Map<AbilityKey, Object> after, ReplacementResult result,
-                SpellAbility replacedBy);
-    }
-
-    /** The same listener before the result and the substituted ability. */
-    public interface OldListenerShape {
-        void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
-                Map<AbilityKey, Object> after);
-    }
-
     private static Method onReplacement(Class<?> shape) {
-        for (Method method : shape.getMethods()) {
-            if (method.getName().equals("onReplacement")) {
-                return method;
-            }
-        }
-        throw new AssertionError(shape + " declares no onReplacement");
-    }
-
-    // ── the argument order, pinned ──────────────────────────────────────
-
-    /**
-     * The stand-in above is what Forge declares, position by position.
-     *
-     * <p>The one test here that a Forge-side signature drift fails. Both arities
-     * are accepted because the connector must run against either — a jar built
-     * before the widening still hands over three arguments — but the prefix is
-     * not negotiable: {@code effect}, {@code before} and {@code after} keep
-     * their positions and their types in both, which is the whole reason the
-     * widening could be made without reinstalling anything.
-     *
-     * <p>Reflective, so an unpatched checkout skips the assertion rather than
-     * failing it. That is the same degradation every hook lookup makes, and the
-     * integration test's mode assertion is what says whether it happened.
-     */
-    @Test
-    void theStandInIsForgesOwnDeclaration() {
-        PatchHooks.Lookup setter = PatchHooks.find(
-                PatchHooks.REPLACEMENT_HANDLER, "setEffectRecordListener");
-        if (!setter.present()) {
-            return;
-        }
-        Class<?> declared = setter.method().getParameterTypes()[0];
-        Class<?>[] theirs = onReplacement(declared).getParameterTypes();
-        Class<?>[] ours = onReplacement(ListenerShape.class).getParameterTypes();
-
-        assertTrue(theirs.length == 3 || theirs.length == 5,
-                "the listener takes three arguments or five, not "
-                        + theirs.length + "; an argument added anywhere but the "
-                        + "end moves the ones the handler reads by position");
-        for (int i = 0; i < theirs.length; i++) {
-            assertEquals(ours[i], theirs[i], "argument " + i + " of onReplacement");
-        }
+        return HookShapes.method(shape, "onReplacement");
     }
 
     // ── one record per replacement, whatever the result ─────────────────
@@ -132,31 +63,20 @@ class RewriteContractTest {
     /**
      * Each of the five results reaches the payload in its wire spelling.
      *
-     * <p>Including {@code NotReplaced}, which is this channel's negative and
-     * used to be indistinguishable from the four others: they all left the
-     * parameter map untouched, so all five arrived as an identity pair and the
-     * collector dropped them. That was 87% of the candidates and left 34
-     * records in 1.88M against a 7% share of the mixture.
+     * <p>Including {@code NotReplaced}, which is this channel's negative: all
+     * five can leave the parameter map untouched and arrive as an identity
+     * pair, so the result is the only thing that tells them apart.
      */
     @ParameterizedTest
     @EnumSource(ReplacementResult.class)
     void everyResultIsWrittenInItsWireSpelling(ReplacementResult result) {
         Card card = TestCards.build("Mountain");
-        String json = recording().rewriteRecord(
-                new PatchedCollectorTest.FakeTrait("Moved"),
+        String json = recording(tempDir).rewrites().record(
+                replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card), result, null).toJson();
 
         assertTrue(json.contains("\"result\":\"" + WIRE.get(result) + "\""),
                 "the lower snake case of " + result + ": " + json);
-    }
-
-    /** And it is snake case, which {@code NotReplaced} is the only test of. */
-    @Test
-    void theTwoWordResultIsSnakeCased() {
-        assertEquals("not_replaced",
-                EffectRecord.rewriteResult(ReplacementResult.NotReplaced));
-        assertEquals("replaced",
-                EffectRecord.rewriteResult(ReplacementResult.Replaced));
     }
 
     /**
@@ -170,8 +90,8 @@ class RewriteContractTest {
     @Test
     void aReplacementWithNoAnswerSaysSoRatherThanGuessing() {
         Card card = TestCards.build("Mountain");
-        String json = recording().rewriteRecord(
-                new PatchedCollectorTest.FakeTrait("Moved"),
+        String json = recording(tempDir).rewrites().record(
+                replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card), null, null).toJson();
 
         assertTrue(json.contains("\"result\":null"), json);
@@ -203,8 +123,8 @@ class RewriteContractTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("DamageAmount", 1);
 
-        String json = recording().rewriteRecord(
-                new PatchedCollectorTest.FakeTrait("DamageDone"), before, after,
+        String json = recording(tempDir).rewrites().record(
+                replacementOfMode("DamageDone"), before, after,
                 ReplacementResult.Updated, null).toJson();
 
         assertFalse(json.contains("\"outgoing\":null"),
@@ -232,7 +152,7 @@ class RewriteContractTest {
         Map<String, Object> params = Map.of(
                 "Card", rest, "Destination", ZoneType.Graveyard);
 
-        String json = recording().rewriteRecord(
+        String json = recording(tempDir).rewrites().record(
                 replacement, params, params, ReplacementResult.Replaced, ran).toJson();
 
         assertTrue(json.contains("\"outgoing\":null"), json);
@@ -249,8 +169,8 @@ class RewriteContractTest {
     @Test
     void nothingRunningInsteadIsAnEmptyListNotANull() {
         Card card = TestCards.build("Mountain");
-        String json = recording().rewriteRecord(
-                new PatchedCollectorTest.FakeTrait("Untap"),
+        String json = recording(tempDir).rewrites().record(
+                replacementOfMode("Untap"),
                 Map.of("Card", card), Map.of("Card", card),
                 ReplacementResult.Prevented, null).toJson();
 
@@ -268,8 +188,8 @@ class RewriteContractTest {
     @Test
     void aSubstitutedAbilityThatIsNotATraitCostsOnlyTheField() {
         Card card = TestCards.build("Mountain");
-        String json = recording().rewriteRecord(
-                new PatchedCollectorTest.FakeTrait("Moved"),
+        String json = recording(tempDir).rewrites().record(
+                replacementOfMode("Moved"),
                 Map.of("Card", card), Map.of("Card", card),
                 ReplacementResult.Replaced, "not an ability").toJson();
 
@@ -302,7 +222,7 @@ class RewriteContractTest {
 
         String line = oneRecordFrom(new Object[]{
                 replacement, before, after, ReplacementResult.Prevented, ran},
-                ListenerShape.class);
+                HookShapes.Replacement.class);
 
         assertTrue(line.contains("\"to_zone\":\"graveyard\""), line);
         assertTrue(line.contains("\"to_zone\":\"exile\""), line);
@@ -326,7 +246,7 @@ class RewriteContractTest {
         params.put(AbilityKey.Card, card);
 
         String line = oneRecordFrom(
-                new Object[]{null, params, params}, OldListenerShape.class);
+                new Object[]{null, params, params}, HookShapes.OlderReplacement.class);
 
         assertTrue(line.contains("\"result\":null"), line);
         assertTrue(line.contains("\"replaced_by\":[]"), line);
@@ -336,9 +256,9 @@ class RewriteContractTest {
     /**
      * A replacement that declined is a written record, not a dropped one.
      *
-     * <p>Through the handler rather than the builder, because dropping was the
-     * handler's decision to make and this is the assertion that it no longer
-     * makes it.
+     * <p>Through the handler rather than the builder, because dropping would
+     * be the handler's decision to make and this is the assertion that it does
+     * not make it.
      */
     @Test
     void aDeclinedReplacementReachesTheShard() throws Throwable {
@@ -348,101 +268,221 @@ class RewriteContractTest {
 
         String line = oneRecordFrom(new Object[]{
                 null, params, params, ReplacementResult.NotReplaced, null},
-                ListenerShape.class);
+                HookShapes.Replacement.class);
 
         assertTrue(line.contains("\"kind\":\"rewrite\""), line);
         assertTrue(line.contains("\"result\":\"not_replaced\""), line);
     }
 
-    // ── final-fix-3.md item 2: another game's replacement ───────────────
+    // ── another game's replacement ──────────────────────────────────────
 
     /**
-     * final-fix-3.md item 2: a replacement reported for an effect belonging
+     * A replacement reported for an effect belonging
      * to a DIFFERENT {@code Game} -- exactly {@code
      * ForkCollector.forceResolution}'s shape, since a forced ability's own
      * replacements run through {@code GameSimulator.resolveStack}'s real
-     * resolution pipeline -- must not reach the live shard. This hook had no
-     * game check at all before this fix (unlike the clause/outcome hooks,
-     * which F2 already protected); {@code rewriteHandler} is a plain JVM
-     * static exactly like the other five this brief's item 2 covers.
+     * resolution pipeline -- must not reach the live shard.
+     * {@code RewriteChannel.handler} is a plain JVM static exactly like the
+     * clause, outcome, trigger, playability and mana hooks.
      *
      * <p>Companion to {@code ClauseContractTest
      * .aClauseFromAnotherGameDoesNotReachThisGamesBracket} and {@code
-     * PatchedCollectorTest.anOutcomeFromAnotherGameDoesNotReachThisGamesBracket}.
+     * OutcomeHandlerTest.anOutcomeFromAnotherGameDoesNotReachThisGamesBracket}.
      */
     @Test
     void aReplacementFromAnotherGameDoesNotReachTheShard() throws Throwable {
-        GameRules forkRules = new GameRules(GameType.Constructed);
-        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
-        Card forkHost = CardFactory.getCard(
-                StaticData.instance().getCommonCards().getCard("Rest in Peace"),
-                null, TestCards.nextCardId(), fork);
+        Card forkHost = TestBoard.cardInAnotherGame("Rest in Peace");
         ReplacementEffect forkReplacement =
                 forkHost.getCurrentState().getReplacementEffects().iterator().next();
         Map<String, Object> params = Map.of(
                 "Card", forkHost, "Destination", ZoneType.Graveyard);
 
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                CollectionCaps.defaults(), 1L)) {
-            InvocationHandler handler = collector.rewriteHandler();
-            handler.invoke(null, onReplacement(ListenerShape.class), new Object[]{
-                    forkReplacement, params, params, ReplacementResult.Replaced, null});
-        } finally {
-            writer.close();
-        }
+        Path shard = ShardRun.shardOf(tempDir, TestCards.game(), (bracket, collector) ->
+                collector.rewrites().handler().invoke(null, onReplacement(HookShapes.Replacement.class),
+                        new Object[]{
+                                forkReplacement, params, params, ReplacementResult.Replaced, null}));
 
-        List<String> lines = readShard(path);
-        assertEquals(List.of(), lines,
-                "a fork's own replacement must not land in the live game's shard: " + lines);
+        assertFalse(Files.exists(shard),
+                "a fork's own replacement must not land in the live game's shard");
+    }
+
+    // ── what a rewrite record says ──────────────────────────────────────
+
+    /**
+     * A rewrite record names its replacement effect, on the one hook every
+     * replacement passes through.
+     *
+     * <p>And a record that names its line carries no reason for an empty one.
+     * The two fields are one statement in two halves: a reason beside a named
+     * line is a contradiction the Python reader refuses outright, so the
+     * collector may never write both.
+     */
+    @Test
+    void aRewriteRecordNamesItsReplacementEffect() {
+        // Rest in Peace rather than Paralyze: its replacement redirects a move,
+        // so this is the in-place rewrite the pair was always able to express,
+        // and every other field on the record can be read beside it.
+        Card rest = TestCards.build("Rest in Peace");
+        ReplacementEffect replacement =
+                rest.getCurrentState().getReplacementEffects().iterator().next();
+
+        String json = recording(tempDir).rewrites().record(
+                replacement,
+                Map.of("Card", rest, "Destination", ZoneType.Graveyard),
+                Map.of("Card", rest, "Destination", ZoneType.Exile),
+                ReplacementResult.Replaced, null).toJson();
+
+        assertTrue(json.contains("\"kind\":\"rewrite\""), json);
+        assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
+        assertTrue(json.contains("cardsfolder/r/rest_in_peace.txt"), json);
+        assertTrue(json.contains("\"ability_unresolved\":null"), json);
+        assertTrue(json.contains(
+                "\"source\":\"" + SnapshotBuilder.entityId(rest) + "\""), json);
+        assertTrue(json.contains("\"incoming\":{\"type\":\"zone_change\""), json);
+    }
+
+    /**
+     * A prevention that changes no parameter is a record, not a loss, and its
+     * mode is spelled the replacement side's way.
+     *
+     * <p>Paralyze's "doesn't untap" is the shape the whole contract is for: the
+     * engine skips the event rather than rewriting a value, so both halves read
+     * alike. The result is what makes the row readable without an outgoing —
+     * {@code skipped}
+     * says outright what an identity pair could only imply — so the record is
+     * written, and its outgoing is null rather than a copy of its incoming.
+     *
+     * <p>{@code ReplacementType} names {@code Untap} where {@code TriggerType}
+     * names {@code Untaps}, so without its own entry in the mode table an untap
+     * replacement would take the generic type, carry nothing but its own name,
+     * and could not differ from itself however much it changed. Paralyze's is
+     * that mode, and its incoming half is typed rather than generic.
+     */
+    @Test
+    void aPreventionThatRewritesNothingIsStillARecord() {
+        Card paralyze = TestCards.build("Paralyze");
+        ReplacementEffect prevention =
+                paralyze.getCurrentState().getReplacementEffects().iterator().next();
+        assertEquals("Untap", String.valueOf(prevention.getMode()));
+
+        EffectRecord record = recording(tempDir).rewrites().record(
+                prevention, Map.of("Card", paralyze), Map.of("Card", paralyze),
+                ReplacementResult.Skipped, null);
+
+        assertNotNull(record, "a skipped replacement is this channel's negative");
+        String json = record.toJson();
+        assertTrue(json.contains("\"result\":\"skipped\""), json);
+        assertTrue(json.contains("\"outgoing\":null"),
+                "null, never a copy of incoming: " + json);
+        assertTrue(json.contains("\"replaced_by\":[]"),
+                "a skip returns above the ability that would have run: " + json);
+        assertTrue(json.contains("\"mode\":\"Untap\""), json);
+    }
+
+    /**
+     * A replacement that halved a draw is a rewrite, not an identity pair.
+     *
+     * <p>The mode table was written from the trigger vocabulary, so 31 of
+     * Forge's 42 {@code ReplacementType}s rendered as the generic outcome
+     * carrying only their mode -- and an event with no value in it cannot
+     * differ from itself. Every rewrite of a draw, a mill, a token count or a
+     * life total was therefore dropped as an identity pair by construction,
+     * whatever the replacement actually did.
+     */
+    @Test
+    void aRewrittenQuantityOnTheReplacementSideIsNoLongerAnIdentityPair() {
+        Card card = TestCards.build("Mountain");
+        Map<String, Object> before = new LinkedHashMap<>(Map.of(
+                "Affected", card, "Number", 3));
+        Map<String, Object> after = new LinkedHashMap<>(before);
+        after.put("Number", 1);
+
+        EffectRecord record = recording(tempDir).rewrites().record(
+                replacementOfMode("DrawCards"), before, after,
+                ReplacementResult.Updated, null);
+
+        assertNotNull(record, "a replacement that halved a draw is a real rewrite");
+        String json = record.toJson();
+        assertTrue(json.contains("\"type\":\"card_drawn\""), json);
+        assertTrue(json.contains("\"count\":3"), json);
+        assertTrue(json.contains("\"count\":1"), json);
+    }
+
+    /**
+     * The live path feeds the worker's tally: every replacement is a record,
+     * the one that declined included, and only one that edited a parameter in
+     * place counts as a rewrite.
+     *
+     * <p>Read off the summary the collector prints when it closes, which is the
+     * number an operator reads. The tally is the worker's, so every test in
+     * this JVM has already added to it, and it prints only every tenth game:
+     * each step closes games until a summary prints and compares it with the
+     * one before.
+     */
+    @Test
+    void anUpdatedRewriteCountsTowardTheTallyAndADeclinedOneDoesNot() throws Throwable {
+        Card card = TestCards.build("Mountain");
+        Map<String, Object> before = new LinkedHashMap<>(Map.of(
+                "Origin", ZoneType.Battlefield, "Destination", ZoneType.Graveyard,
+                "Card", card));
+        Map<String, Object> after = new LinkedHashMap<>(before);
+        after.put("Destination", ZoneType.Exile);
+
+        // A first record, so the tally has something to print at all.
+        Tally start = tallyAfter(before, before, ReplacementResult.NotReplaced);
+        Tally updated = tallyAfter(before, after, ReplacementResult.Updated);
+        Tally declined = tallyAfter(before, before, ReplacementResult.NotReplaced);
+
+        assertEquals(start.records() + 1, updated.records());
+        assertEquals(start.rewritten() + 1, updated.rewritten(),
+                "a destination moved in place is a rewrite");
+        assertEquals(updated.records() + 1, declined.records(),
+                "a replacement that declined is still a record");
+        assertEquals(updated.rewritten(), declined.rewritten(),
+                "a replacement that declined rewrote nothing");
+    }
+
+    /** The headline counts of one printed tally summary. */
+    private record Tally(long records, long rewritten) {
+    }
+
+    private static final Pattern HEADLINE =
+            Pattern.compile("(\\d+) records, (\\d+) rewrote a parameter in place");
+
+    /** A summary prints on the worker's first game and every tenth after it. */
+    private static final int GAMES_PER_SUMMARY = 10;
+
+    /**
+     * One game whose only replacement is the one described, then as many
+     * games without one as it takes the tally to print, and what it printed.
+     */
+    private Tally tallyAfter(Map<String, Object> before, Map<String, Object> after,
+            ReplacementResult result) throws Throwable {
+        Channels game = recording(tempDir);
+        game.rewrites().record(replacementOfMode("Moved"), before, after, result, null);
+        String printed = StdStreams.captureStdout(game::close);
+        for (int games = 1; printed.isEmpty() && games < GAMES_PER_SUMMARY; games++) {
+            printed = StdStreams.captureStdout(() -> unwired(CollectionCaps.defaults()).close());
+        }
+        Matcher headline = HEADLINE.matcher(printed);
+        assertTrue(headline.find(), "no tally summary in " + GAMES_PER_SUMMARY + " games: " + printed);
+        return new Tally(Long.parseLong(headline.group(1)), Long.parseLong(headline.group(2)));
     }
 
     // ── plumbing ────────────────────────────────────────────────────────
 
-    private PatchedCollectors recording() {
-        return new PatchedCollectors(
-                TestCards.game(),
-                new RecordShardWriter(tempDir, "run", 0, "l1"),
-                "run.0-l1.0", CollectionCaps.defaults(), 1L);
-    }
-
     /**
      * Everything the handler wrote for one notification, as the shard line.
      *
-     * <p>Driven through {@link PatchedCollectors#rewriteHandler} with a
+     * <p>Driven through {@link RewriteChannel#handler} with a
      * synthesized argument array, which is as close to the engine's own call as
      * this side can get without a patched jar to proxy over.
      */
     private String oneRecordFrom(Object[] args, Class<?> shape) throws Throwable {
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
-        Path path = writer.path();
-        try (PatchedCollectors collector = new PatchedCollectors(
-                TestCards.game(), writer, "run.0-l1.0",
-                CollectionCaps.defaults(), 1L)) {
-            InvocationHandler handler = collector.rewriteHandler();
-            handler.invoke(null, onReplacement(shape), args);
-        } finally {
-            writer.close();
-        }
-        List<String> lines = readShard(path);
+        List<String> lines = ShardRun.records(tempDir, TestCards.game(), (bracket, collector) ->
+                collector.rewrites().handler().invoke(null, onReplacement(shape), args));
         assertEquals(1, lines.size(), "one replacement writes one record");
         assertNotNull(lines.get(0));
         return lines.get(0);
-    }
-
-    private static List<String> readShard(Path path) throws Exception {
-        // A collector that never delivered a single record never opens the
-        // shard file at all (RecordShardWriter creates it lazily), which
-        // aReplacementFromAnotherGameDoesNotReachTheShard hits exactly.
-        if (!Files.exists(path)) {
-            return List.of();
-        }
-        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
-                var reader = new BufferedReader(
-                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
-            return reader.lines().toList();
-        }
     }
 }

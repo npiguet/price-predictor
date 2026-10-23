@@ -1,36 +1,42 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
+import forge.game.card.Card;
+import forge.game.phase.PhaseType;
+import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The two snapshot properties that a running game cannot check for you.
+ * The snapshot properties that a running game cannot check for you.
  *
- * <p>Both defects these pin were invisible in a fourteen-million-record corpus:
- * a tier vector chosen per call site, which made {@code state.tiers} a perfect
- * proxy for a collection flag the schema bars from being a model input; and the
- * key ordering a resolution-time refs splice depends on, which degrades to the
- * un-spliced state rather than to an error when it stops holding.
+ * <p>The tier vector is the one a corpus cannot show to be wrong: chosen per
+ * call site, it would make {@code state.tiers} a perfect proxy for a
+ * collection flag the schema bars from being a model input. Beside it, the
+ * state's block order and the
+ * resolution-time refs reading that replaces the cast-time block and nothing
+ * else.
  *
- * <p>Neither needs a game: the tier vector is a constant of the builder, and
- * the state's block order is decided by string assembly.
+ * <p>None of those needs a game: the tier vector is a constant, and the
+ * blocks are assembled from already-rendered parts. The referenced tier,
+ * pinned last, does: a target is a card in some zone.
  */
 class SnapshotBuilderTest {
 
     // ── one depth for every record ──────────────────────────────────────
 
     /**
-     * The regression guard for the tier-4-means-interventional leak: a depth a
-     * caller could choose is how {@code state.tiers} became a proxy for which
-     * collector wrote a record, so the builder takes no depth at all.
+     * A depth a caller could choose would make {@code state.tiers} a proxy for
+     * which collector wrote a record, so the builder takes no depth at all.
      */
     @Test
     void noConstructionChoosesATierDepth() {
@@ -43,11 +49,12 @@ class SnapshotBuilderTest {
 
     /**
      * Every snapshot declares all four tiers, so an empty hand or stack reads as
-     * empty rather than as uncollected.
+     * empty rather than as uncollected. The literal is the contract:
+     * Python's {@code InclusionTier} and {@code record_io} mirror it.
      */
     @Test
     void everySnapshotDeclaresAllFourTiers() {
-        assertEquals("[1,2,3,4]", SnapshotBuilder.TIERS_JSON);
+        assertEquals("[1,2,3,4]", Snapshot.TIERS_JSON);
     }
 
     // ── refs ────────────────────────────────────────────────────────────
@@ -67,89 +74,70 @@ class SnapshotBuilderTest {
                 new SnapshotBuilder(null).refsJson(null));
     }
 
-    /**
-     * The refs block is re-rendered at resolution by a collector in another
-     * class, so it has to be reachable from there.
-     */
-    @Test
-    void refsCanBeReRenderedFromOutsideTheBuilder() throws Exception {
-        Method refs = SnapshotBuilder.class.getMethod(
-                "refsJson", forge.game.spellability.SpellAbility.class);
-        assertTrue(Modifier.isPublic(refs.getModifiers()));
-    }
-
-    // ── the block order a resolution-time splice depends on ─────────────
+    // ── the state's blocks ──────────────────────────────────────────────
 
     @Test
     void theStateBlocksKeepTheOrderTheSchemaFixes() {
         assertEquals(
                 "{\"global\":G,\"players\":P,\"entities\":E,\"refs\":R,"
-                        + "\"pending_event\":V,\"tiers\":T}",
-                SnapshotBuilder.stateJson("G", "P", "E", "R", "V", "T"));
+                        + "\"pending_event\":V,\"tiers\":[1,2,3,4]}",
+                new Snapshot("G", "P", "E", "R", "V").render());
     }
 
     /**
-     * Refs sit immediately before the pending event, with nothing between them.
-     *
-     * <p>This is what lets a collector re-read refs at resolution — when the
-     * chosen colour and the named card exist — and splice them into a state
-     * captured before the ability resolved. The splice falls back to the
-     * un-spliced state when it cannot find both markers, so a reorder would show
-     * up as refs quietly staying empty rather than as a failure. Performing the
-     * splice here is the only way that stays loud.
+     * A resolution-time refs reading replaces the cast-time block and leaves
+     * the board it was captured with alone: re-reading the board at resolution
+     * would describe what the ability had already changed.
      */
     @Test
-    void refsCanBeSplicedWithoutTouchingAnyOtherBlock() {
-        String castTime = SnapshotBuilder.stateJson(
-                "G", "P", "E", "{\"choices\":{}}", "null", "[1,2,3]");
-        String resolved = "{\"choices\":{\"chosen_color\":\"U\"}}";
-
-        int open = castTime.indexOf(SnapshotBuilder.REFS_KEY);
-        int close = castTime.indexOf(SnapshotBuilder.AFTER_REFS_KEY);
-        assertTrue(open >= 0 && close > open, "both splice markers present");
-
-        String spliced = castTime.substring(0, open)
-                + SnapshotBuilder.REFS_KEY + resolved
-                + castTime.substring(close);
-
-        assertEquals(
-                SnapshotBuilder.stateJson("G", "P", "E", resolved, "null",
-                        "[1,2,3]"),
-                spliced);
-    }
-
-    /**
-     * And the splice itself is one method, not one per collector.
-     *
-     * <p>Two collectors doing the same substring arithmetic by hand is how the
-     * two readings drift, and this one degrades silently rather than failing --
-     * so the arithmetic is stated once and asserted here.
-     */
-    @Test
-    void spliceRefsReplacesOnlyTheRefsBlock() {
-        String castTime = SnapshotBuilder.stateJson(
-                "G", "P", "E", "{\"choices\":{}}", "null", "[1,2,3]");
+    void laterRefsReplaceOnlyTheRefsBlock() {
+        Snapshot castTime = new Snapshot("G", "P", "E", "{\"choices\":{}}", "null");
         String resolved = "{\"choices\":{\"chosen_color\":\"U\"}}";
 
         assertEquals(
-                SnapshotBuilder.stateJson("G", "P", "E", resolved, "null", "[1,2,3]"),
-                SnapshotBuilder.spliceRefs(castTime, resolved));
+                new Snapshot("G", "P", "E", resolved, "null"),
+                castTime.withRefs(resolved));
+        assertEquals("{\"choices\":{}}", castTime.refs(),
+                "the cast-time snapshot is a value; a later reading makes a new one");
     }
 
+    // ── the referenced tier ─────────────────────────────────────────────
+
     /**
-     * A state without both markers comes back untouched.
+     * What an ability's snapshot carries whatever zone it sits in: its host
+     * and the cards it targets.
      *
-     * <p>The splice widens a record; a caller left with the cast-time refs has
-     * less than it wanted, while one handed a mangled state has a record that
-     * cannot be read at all.
+     * <p>One list for the bracket collector and the fork collector alike: a
+     * target this list leaves out and no other tier sweeps, such as an exiled
+     * card, is in no tier at all, and the record names a target its state
+     * does not hold.
      */
-    @Test
-    void aStateWithoutBothMarkersIsReturnedUnchanged() {
-        assertEquals("{\"global\":G}",
-                SnapshotBuilder.spliceRefs("{\"global\":G}", "{}"));
-        assertEquals("{\"refs\":{}}",
-                SnapshotBuilder.spliceRefs("{\"refs\":{}}", "{}"));
-        assertEquals(null, SnapshotBuilder.spliceRefs(null, "{}"));
-        assertEquals("s", SnapshotBuilder.spliceRefs("s", null));
+    @Nested
+    @ExtendWith(ForgeExtension.class)
+    class ReferencedTier {
+
+        @Test
+        void anAbilitysTargetsAreReferencedWhereverTheySit() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            Card host = board.hand("Pull from Eternity", board.you);
+            SpellAbility pull = board.spell(host, board.you);
+            Card exiled = board.game.getAction().moveTo(
+                    ZoneType.Exile, board.card("Grizzly Bears", board.opponent), null, null);
+            pull.getTargets().add(exiled);
+            pull.getTargets().add(board.opponent);
+
+            String state = new SnapshotBuilder(board.game).ofResolving(pull).render();
+
+            assertTrue(state.contains("{\"id\":\"" + SnapshotBuilder.entityId(exiled)
+                    + "\",\"name\":\"Grizzly Bears\",\"zone\":\"exile\""), state);
+        }
+
+        @Test
+        void noAbilityReferencesNothing() {
+            CharacterizationBoard board = CharacterizationBoard.empty(PhaseType.MAIN1);
+            SnapshotBuilder snapshots = new SnapshotBuilder(board.game);
+
+            assertEquals(snapshots.ofBoard().render(), snapshots.ofResolving(null).render());
+        }
     }
 }

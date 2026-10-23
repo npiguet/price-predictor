@@ -1,16 +1,24 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
-import forge.game.ability.AbilityFactory;
+import forge.game.Game;
+import forge.game.card.Card;
+import forge.game.card.CounterEnumType;
+import forge.game.combat.Combat;
+import forge.game.event.GameEventTurnPhase;
+import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,13 +43,24 @@ class ForkCollectorTest {
     private static CollectionCaps caps(
             int interventions, int probes, List<String> keywords) {
         return new CollectionCaps(
-                2000, 0.1, interventions, probes, keywords, 0.1);
+                2000, 0.1, interventions, probes, keywords, 0.0, 0.0);
     }
 
+    private RecordShardWriter writer;
+
     private ForkCollector collector(CollectionCaps caps) {
-        return new ForkCollector(
-                null, new RecordShardWriter(tempDir, "run", 0, "l1"), "run.0-l1.0",
-                caps, 42L);
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        return new ForkCollector(null, TestCollectors.context(writer, "run.0-l1.0"), caps, 42L);
+    }
+
+    /**
+     * The collector's shard, closed so every record it wrote is on disk. The
+     * writer creates the file with its first record, so a collector that
+     * wrote nothing leaves none.
+     */
+    private Path closedShard() {
+        writer.close();
+        return writer.path();
     }
 
     /**
@@ -52,9 +71,8 @@ class ForkCollectorTest {
      * it came from any other turn disagrees with it.
      */
     private ForkCollector collectorOverAGame(CollectionCaps caps) {
-        return new ForkCollector(
-                TestCards.game(), new RecordShardWriter(tempDir, "run", 0, "l1"),
-                "run.0-l1.0", caps, 42L);
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        return new ForkCollector(TestCards.game(), TestCollectors.context(writer, "run.0-l1.0"), caps, 42L);
     }
 
     // ── the per-game budget ─────────────────────────────────────────────
@@ -71,11 +89,6 @@ class ForkCollectorTest {
     }
 
     // ── the fixed per-resolution cap ────────────────────────────────────
-
-    @Test
-    void atMostTwoForksMayTargetOneRealResolution() {
-        assertEquals(2, ForkCollector.MAX_FORKS_PER_RESOLUTION);
-    }
 
     @Test
     void thePerResolutionCapIsIndependentOfTheFlag() {
@@ -96,42 +109,13 @@ class ForkCollectorTest {
         ForkCollector collector = collector(caps(1, 2, List.of()));
         assertFalse(collector.intervene(null, 1));
         assertFalse(collector.mayIntervene(1));
-        assertEquals(1, collector.discardedForks());
     }
 
     @Test
     void aFailedForkWritesNoRecord() {
         ForkCollector collector = collector(caps(2, 2, List.of()));
         collector.intervene(null, 1);
-        assertEquals(0L, collector.recordsWritten());
-    }
-
-    /**
-     * The intervention resolves the ability rather than only forking.
-     *
-     * <p>The failure this guards against is a collector that copies the game,
-     * score-checks it, snapshots it, and writes a record saying an ability was
-     * forced without saying what it did — which is what this class did before
-     * the resolution was written, and which looks like a working collector.
-     *
-     * <p>Only the wiring is checkable here, because forking needs a live game;
-     * {@code tests/integration/test_effects_forks.py} asserts against a real
-     * one that the records carry events.
-     */
-    @Test
-    void interveningResolvesRatherThanOnlyCopying() throws Exception {
-        var method = ForkCollector.class.getDeclaredMethod(
-                "forceResolution",
-                forge.game.Game.class,
-                forge.game.spellability.SpellAbility.class,
-                forge.game.player.Player.class,
-                SnapshotBuilder.class);
-        assertTrue(method != null, "no resolution step on the intervention path");
-        // Returns the events it observed, so an empty payload can only mean the
-        // ability genuinely did nothing observable -- carried beside where each
-        // chosen mode began, which is what splits a modal one per mode (FR-029f).
-        var events = method.getReturnType().getDeclaredMethod("events");
-        assertEquals(List.class, events.getReturnType());
+        assertFalse(Files.exists(closedShard()));
     }
 
     // ── the probe switch ────────────────────────────────────────────────
@@ -153,117 +137,30 @@ class ForkCollectorTest {
 
     @Test
     void theProbeBudgetIsSpentByTakingProbes() {
+        // Spent even by a fork that fails: a null game makes every copy fail.
         ForkCollector collector = collector(caps(2, 1, List.of("wither")));
-        assertTrue(collector.recordProbeBranch(
-                "wither", "run.0.1", "{}", "{}", "P0"));
+        assertNull(collector.probe("wither", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
         assertFalse(collector.mayProbe("wither"));
     }
 
     @Test
-    void aProbeBranchIsRecordedAsAnOrdinaryCombatRecord() {
-        ForkCollector collector = collector(caps(2, 2, List.of("wither")));
-        assertTrue(collector.recordProbeBranch(
-                "wither", "run.0.1", "{}", "{}", "P0"));
-        assertEquals(1L, collector.recordsWritten());
-    }
-
-    @Test
-    void aProbeForAnUnnamedKeywordWritesNothing() {
-        ForkCollector collector = collector(caps(2, 2, List.of("wither")));
-        assertFalse(collector.recordProbeBranch(
-                "lifelink", "run.0.1", "{}", "{}", "P0"));
-        assertEquals(0L, collector.recordsWritten());
-    }
-
-
-    // ── an intervention chooses before it resolves ──────────────────────
-
-    /**
-     * A line with a target and nowhere to point it is abandoned.
-     *
-     * <p>The feature spec says an intervention resolves "with chosen targets and
-     * modes" and the first implementation chose neither: it set the activating
-     * player, pushed the ability and resolved it. A "deal 5 damage to target
-     * player" that resolves with no target does nothing, which is why none of
-     * the 88 sampled interventional records had a target and why the empty ones
-     * were Lava Axe, Disintegrate, Drain Life, Mind Control and their like.
-     *
-     * <p>Abandoning is the point: an empty-because-untargeted record and an
-     * empty-because-the-effect-did-nothing record are the same bytes, and a
-     * counterfactual nobody can read is worse than one never written.
-     */
-    @Test
-    void aTargetedLineWithNothingToTargetIsAbandoned() {
-        SpellAbility bolt = AbilityFactory.getAbility(
-                "AB$ DealDamage | Cost$ R | ValidTgts$ Creature | TgtPrompt$ x"
-                        + " | NumDmg$ 3",
-                TestCards.build("Fountain of Youth"));
-        // A game with nothing in it: every candidate list comes back empty,
-        // which is the shape of a board where the spell has no legal target.
-        bolt.setActivatingPlayer(new Player("nobody", TestCards.game(), 99));
-
-        assertFalse(collector(caps(2, 2, List.of())).chooseTargets(bolt));
-    }
-
-    /** A line that targets nothing needs nothing chosen. */
-    @Test
-    void aLineThatTargetsNothingIsReadyToResolve() {
-        SpellAbility gain = AbilityFactory.getAbility(
-                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
-                TestCards.build("Fountain of Youth"));
-
-        assertTrue(collector(caps(2, 2, List.of())).chooseTargets(gain));
-    }
-
-    /**
-     * An X the fork never paid is announced rather than left null.
-     *
-     * <p>A null X resolves as an X of zero, which is the same silence a missing
-     * target produces.
-     */
-    @Test
-    void anXSpellAnnouncesSomethingRatherThanNothing() {
-        SpellAbility drain = AbilityFactory.getAbility(
-                "AB$ LoseLife | Cost$ X B | Defined$ Player.Opponent | LifeAmount$ X",
-                TestCards.build("Fountain of Youth"));
-        assertTrue(drain.costHasX(), "the script has to have an X to announce");
-
-        collector(caps(2, 2, List.of())).announceX(drain);
-
-        assertEquals(1, drain.getXManaCostPaid());
-    }
-
-    @Test
-    void anAbilityWithNoXIsLeftAlone() {
-        SpellAbility gain = AbilityFactory.getAbility(
-                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
-                TestCards.build("Fountain of Youth"));
-
-        collector(caps(2, 2, List.of())).announceX(gain);
-
-        assertNull(gain.getXManaCostPaid());
+    void aProbeForAnUnnamedKeywordSpendsNothing() {
+        ForkCollector collector = collector(caps(2, 1, List.of("wither")));
+        assertNull(collector.probe("lifelink", TestCards.build("Grizzly Bears"), DamageStep.REGULAR));
+        assertTrue(collector.mayProbe("wither"));
+        assertFalse(Files.exists(closedShard()));
     }
 
     // ── the held branch knows which step it came from ───────────────────
 
     /**
-     * A branch carries the damage step it forked from.
-     *
-     * <p>Without it the branch is completed against whichever combat record
-     * comes next, and in the first corpus that was systematically the wrong one:
-     * every first-strike-step fork was empty, its step wrote no real record, and
-     * the branch was written against the regular step's.
+     * The damage-step names are a contract with Python: {@code COMBAT_SUBSTEPS}
+     * in {@code effect_head_input.py} spells them the same way.
      */
     @Test
-    void aHeldBranchNamesItsDamageStep() {
-        ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                ForkCollector.SUBSTEP_FIRST_STRIKE);
-
-        assertEquals("first_strike", held.substep());
-        // Spelled as the bracket collector spells it, because the two classes
-        // have to agree about which step they are describing.
-        assertEquals("regular", ForkCollector.SUBSTEP_REGULAR);
+    void theDamageStepsAreNamedAsPythonSpellsThem() {
+        assertEquals("first_strike", DamageStep.FIRST_STRIKE.wireName());
+        assertEquals("regular", DamageStep.REGULAR.wireName());
     }
 
     // ── the held branch knows *when* it came from ───────────────────────
@@ -272,17 +169,14 @@ class ForkCollectorTest {
      * A branch and the record it mirrors describe the same turn, or neither is
      * written.
      *
-     * <p>The substep alone was not enough. A branch whose own damage step wrote
-     * no combat record kept waiting for the next record of that substep, which
-     * in the smoke corpus arrived up to <b>eight turns</b> later: 55 of 1,069
-     * probe records mirrored a record from a different turn, and every mirrored
-     * pair whose turns disagreed was one of those. Because the branch's own
-     * snapshot is honest — the copier carries the turn across, and not one of
-     * the 1,788 interventional forks ever named a stale one — relabelling it
-     * would make the state block lie, so the branch is dropped instead.
+     * <p>The substep alone is not enough. A branch whose own damage step wrote
+     * no combat record keeps waiting for the next record of that substep,
+     * which can arrive turns later. Because the branch's own snapshot is
+     * honest — the copier carries the turn across — relabelling it would make
+     * the state block lie, so the branch is dropped instead.
      *
-     * <p>Dropped counts as a discarded fork: the simulation was spent either
-     * way, and the counter is what makes the loss visible in a run's summary.
+     * <p>Dropped still spends the fork's budget: the simulation was spent
+     * either way.
      */
     @Test
     void aBranchFromAnEarlierTurnIsNotWrittenAgainstThisOnesRecord() {
@@ -290,17 +184,16 @@ class ForkCollectorTest {
 
         assertFalse(collector.writeHeldProbe(branch(7), "run.0-l1.9"),
                 "a branch seven turns older than its mirror is not a pair");
-        assertEquals(0L, collector.recordsWritten());
-        assertEquals(1, collector.discardedForks());
+        assertFalse(Files.exists(closedShard()));
     }
 
     /** A branch from the turn the record was written on is written. */
     @Test
-    void aBranchFromThisTurnIsWritten() {
+    void aBranchFromThisTurnIsWritten() throws IOException {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
 
         assertTrue(collector.writeHeldProbe(branch(0), "run.0-l1.9"));
-        assertEquals(1L, collector.recordsWritten());
+        assertEquals(1, ShardRun.readShard(closedShard()).size());
     }
 
     /**
@@ -314,8 +207,8 @@ class ForkCollectorTest {
     void aBranchWithNoTurnIsPairedAsBefore() {
         ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
         ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                ForkCollector.SUBSTEP_REGULAR);
+                "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null).fields(),
+                DamageStep.REGULAR, ForkCollector.TURN_UNKNOWN);
 
         assertEquals(ForkCollector.TURN_UNKNOWN, held.turn());
         assertTrue(collector.writeHeldProbe(held, "run.0-l1.9"));
@@ -324,20 +217,417 @@ class ForkCollectorTest {
     /** A branch from a named turn, otherwise like every other hand-built one. */
     private static ForkCollector.HeldProbe branch(int turn) {
         return new ForkCollector.HeldProbe(
-                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
-                ForkCollector.SUBSTEP_REGULAR, turn);
+                "trample", "E1", "{}", List.of(), "P0", CombatShape.of(null).fields(),
+                DamageStep.REGULAR, turn);
     }
 
-    // ── the seeded source ───────────────────────────────────────────────
+    // ── a probe branch reads damage as the observed record does ─────────
 
+    /**
+     * A probe branch's combat damage carries the combat flag and the named
+     * cause the observed combat record carries.
+     *
+     * <p>Gate 2 reads the branch against the record it mirrors, so the two
+     * must render one damage the same way. The blocker's damage to the
+     * attacker is the same in both branches — the stripped keyword is the
+     * attacker's trample — so its rendered event must match verbatim.
+     */
     @Test
-    void bothBranchesDrawFromOneSeededSource() {
-        // A difference between the branches has to be the keyword, not the
-        // draw, so the source is seeded per fork rather than per branch.
-        ForkCollector first = collector(caps(2, 2, List.of()));
-        ForkCollector second = collector(caps(2, 2, List.of()));
-        assertEquals(
-                first.seededRandom().nextInt(1000),
-                second.seededRandom().nextInt(1000));
+    void aProbeBranchsCombatDamageReadsAsTheObservedRecordReadsIt() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.COMBAT_DAMAGE);
+        Player attacking = game.getPlayers().get(0);
+        Player defending = game.getPlayers().get(1);
+        Card dreadmaw = TestBoard.onBattlefield(game, attacking, "Colossal Dreadmaw");
+        Card bears = TestBoard.onBattlefield(game, defending, "Grizzly Bears");
+        Combat combat = new Combat(attacking);
+        combat.addAttacker(dreadmaw, defending);
+        combat.addBlocker(dreadmaw, bears);
+        // What the declare-blockers step leaves behind.
+        combat.setBlocked(dreadmaw, true);
+        combat.orderBlockersForDamageAssignment();
+        combat.orderAttackersForDamageAssignment();
+        game.getPhaseHandler().setCombat(combat);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        ForkCollector.HeldProbe held;
+        try {
+            ForkCollector forks = new ForkCollector(
+                    game, TestCollectors.context(writer, "run.0-l1.0"),
+                    caps(0, 1, List.of("trample")), 1L);
+            held = forks.probe("Trample", dreadmaw, DamageStep.REGULAR);
+            assertNotNull(held, "the probe fork was discarded");
+
+            BusBracketCollector observed = TestCollectors.bracket(game, writer, "run.0-l1.0");
+            game.subscribeToEvents(observed);
+            assertTrue(combat.assignCombatDamage(false), "the live step assigned no damage");
+            combat.dealAssignedDamage();
+            observed.finishGame(Set.of());
+        } finally {
+            writer.close();
+        }
+
+        String record = ShardRun.readShard(writer.path()).stream()
+                .filter(r -> r.contains("\"kind\":\"combat\"")).findFirst().orElseThrow();
+        String onTheBears = damageTo(held.events(), bears).toJson();
+        assertTrue(onTheBears.contains("\"combat\":true"), onTheBears);
+        assertTrue(onTheBears.contains("\"cause\":\"E" + dreadmaw.getId() + "\""), onTheBears);
+        String onTheDreadmaw = damageTo(held.events(), dreadmaw).toJson();
+        assertTrue(record.contains(onTheDreadmaw),
+                "the branch renders " + onTheDreadmaw + " and the observed record " + record);
+        // The stripped keyword is the branch's input, not something its step did.
+        assertTrue(held.events().stream()
+                        .noneMatch(e -> EffectEvent.KEYWORD_CHANGE.equals(e.type())),
+                held.events().stream().map(EffectEvent::toJson).toList().toString());
+    }
+
+    // ── a forced resolution's state is the board it acted on ────────────
+
+    /**
+     * A forced targeted spell's record names the target it resolved at, as
+     * an observed resolution record does.
+     *
+     * <p>The fork draws its targets itself, so a state rendered before that
+     * draw holds an ability with no target: Disfigure resolving at the one
+     * creature on the board, recorded as aimed at nothing.
+     */
+    @Test
+    void aForcedTargetedSpellsRecordNamesItsTarget() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card bears = TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        // In hand, where the fork's copier can find it.
+        Card disfigure = TestBoard.inHand(game, caster, "Disfigure");
+        SpellAbility spell = disfigure.getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps(1, 0, List.of()), 1L, spell);
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
+
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        String target = "\"E" + bears.getId() + "\"";
+        assertTrue(records.get(0).contains("\"refs\":{\"targets\":[" + target + "]"),
+                records.get(0));
+    }
+
+    /**
+     * A forced X spell's record carries the X it resolved with.
+     *
+     * <p>The fork announces X itself, from its own seeded source, between one
+     * and what the caster's lands could pay, so the seed fixes the value:
+     * Blaze with five Mountains, which could pay X up to four, and a seed that
+     * draws neither bound.
+     */
+    @Test
+    void aForcedXSpellsRecordCarriesItsX() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        for (int i = 0; i < 5; i++) {
+            TestBoard.inPlay(game, caster, "Mountain");
+        }
+        Card blaze = TestBoard.inHand(game, caster, "Blaze");
+        SpellAbility spell = blaze.getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        ShardRun.Fork fork = ShardRun.forked(tempDir, game, caps(1, 0, List.of()), 9L, spell);
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
+
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        assertTrue(records.get(0).contains("\"modes\":[],\"x\":3,"), records.get(0));
+    }
+
+    // ── a forced resolution's state is read where an observed one's is ──
+
+    /**
+     * A forced resolution's state is the board an observed resolution of
+     * the same spell records: the spell on the stack, its card in the stack
+     * zone rather than in hand, and priority with its caster. The two boards
+     * are built alike and one casts Pyroclasm while the other forks and
+     * forces it. Pyroclasm has no target, and the observed cast here pays
+     * no cost, so nothing separates the two states.
+     */
+    @Test
+    void aForcedResolutionsStateIsTheObservedResolutionsState() throws Throwable {
+        Game observedGame = pyroclasmBoard();
+        SpellAbility cast = pyroclasmIn(observedGame);
+        List<String> observed = ShardRun.observed(tempDir.resolve("observed"), observedGame,
+                bracket -> {
+                    observedGame.getStack().addAndUnfreeze(cast);
+                    observedGame.getStack().resolveStack();
+                    observedGame.getAction().checkStateEffects(false);
+                    observedGame.fireEvent(new GameEventTurnPhase(
+                            observedGame.getPlayers().get(0), PhaseType.MAIN2, ""));
+                });
+        String observedHalf = observed.stream()
+                .filter(r -> r.contains("\"moment\":\"resolution\""))
+                .findFirst().orElseThrow(() -> new AssertionError(observed.toString()));
+
+        Game forkedGame = pyroclasmBoard();
+        ShardRun.Fork fork = ShardRun.forked(tempDir.resolve("forked"), forkedGame,
+                caps(1, 0, List.of()), 1L, pyroclasmIn(forkedGame));
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
+        List<String> forced = fork.records();
+        assertEquals(1, forced.size(), forced.toString());
+
+        assertTrue(stateOf(forced.get(0)).contains("\"stack_size\":1,"), forced.get(0));
+        assertEquals(stateOf(observedHalf), stateOf(forced.get(0)));
+    }
+
+    // ── a forced record holds what live attributes to the forced line ───
+
+    /**
+     * A trigger the forced spell's resolution causes is not the spell's: live
+     * gives it a bracket and a record of its own. Attended Knight's enters
+     * trigger makes a Soldier, and the forced record holds the Knight's own
+     * arrival and nothing of the token.
+     */
+    @Test
+    void aForcedSpellsRecordLeavesOutTheTriggerItCaused() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card knight = TestBoard.inHand(game, caster, "Attended Knight");
+        SpellAbility spell = knight.getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        String payload = forcedPayload(game, spell, 1L);
+
+        assertEquals(List.of(EffectEvent.ZONE_CHANGE), eventTypes(payload), payload);
+        assertTrue(payload.contains("\"subjects\":[\"E" + knight.getId() + "\"],"
+                + "\"params\":{\"from_zone\":\"stack\",\"to_zone\":\"battlefield\""), payload);
+    }
+
+    /**
+     * A cast trigger resolves above the forced spell, before it, and is not
+     * the spell's either: Monastery Swiftspear's prowess pump is not in the
+     * forced Pyroclasm's record, though the damage it took is.
+     */
+    @Test
+    void aForcedSpellsRecordLeavesOutItsCastTrigger() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card swiftspear = TestBoard.inPlay(game, caster, "Monastery Swiftspear");
+        SpellAbility spell = TestBoard.inHand(game, caster, "Pyroclasm").getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        String payload = forcedPayload(game, spell, 1L);
+
+        assertTrue(payload.contains("\"type\":\"damage_dealt\",\"subjects\":[\"E"
+                + swiftspear.getId() + "\"]"), payload);
+        assertFalse(payload.contains(EffectEvent.PT_CHANGE), payload);
+        assertFalse(payload.contains(EffectEvent.KEYWORD_CHANGE), payload);
+    }
+
+    /**
+     * After the forced spell has resolved only the deaths of the state-based
+     * check that follows join its record, as live holds them. Pyroclasm goes
+     * to the graveyard once it has resolved, and Tarmogoyf grows for the
+     * sorcery there: that stat change is Tarmogoyf's own static at work, not
+     * Pyroclasm's effect. The deaths of the damaged Tarmogoyf and bears in
+     * the check that follows are Pyroclasm's.
+     */
+    @Test
+    void afterTheResolutionOnlyTheFollowingChecksDeathsJoin() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card goyf = TestBoard.inPlay(game, game.getPlayers().get(1), "Tarmogoyf");
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        SpellAbility spell = TestBoard.inHand(game, caster, "Pyroclasm").getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        String payload = forcedPayload(game, spell, 1L);
+
+        assertFalse(payload.contains(EffectEvent.PT_CHANGE), payload);
+        for (Card died : List.of(goyf, bears)) {
+            assertTrue(payload.contains("\"subjects\":[\"E" + died.getId() + "\"],\"params\":"
+                    + "{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""), payload);
+        }
+    }
+
+    /**
+     * A death in the state-based check between the cast and the resolution
+     * is the forced spell's, as live files it into the spell's bracket. Maro
+     * counts its caster's hand, and casting Pyroclasm, the hand's one card,
+     * leaves it 0/0 before Pyroclasm resolves.
+     */
+    @Test
+    void aDeathInTheCheckBeforeTheResolutionIsTheForcedSpells() throws Throwable {
+        Game observedGame = maroBoard();
+        String observed = observedEffectPayload(observedGame, firstSpellInHand(observedGame));
+
+        Game forkedGame = maroBoard();
+        String forced = forcedPayload(forkedGame, firstSpellInHand(forkedGame), 1L);
+
+        assertTrue(forced.contains("\"subjects\":[\"E1\"],\"params\":"
+                + "{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""), forced);
+        assertEquals(observed, forced);
+    }
+
+    /**
+     * A cast trigger above the forced spell owns what it does, and the
+     * deaths of the check after it: Earthshaker deals 2 to each creature
+     * without flying when an Arcane spell is cast, and the opposing bears it
+     * kills are nowhere in the forced Lava Spike's record.
+     */
+    @Test
+    void aCastTriggersDamageAndDeathsAreNotTheForcedSpells() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        TestBoard.inPlay(game, caster, "Earthshaker");
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, caster, "Lava Spike");
+
+        String payload = forcedPayload(game, firstSpellInHand(game), 1L);
+
+        assertTrue(payload.contains("\"type\":\"damage_dealt\",\"subjects\":[\"P"), payload);
+        assertFalse(payload.contains("\"E" + bears.getId() + "\""), payload);
+    }
+
+    /**
+     * Nothing in the aftermath of an item above the forced spell is the
+     * spell's, though the spell is the top of the stack again: it has not
+     * begun to resolve, and live sends that aftermath to no record.
+     * Managorger Hydra's cast trigger puts a +1/+1 counter on a Hydra that
+     * carries a -1/-1 counter, above a forced Lava Spike, and the state-based
+     * check after the trigger removes the pair: an outcome of that check
+     * that is no death, and not Lava Spike's.
+     */
+    @Test
+    void theAftermathOfACastTriggerIsNotTheForcedSpells() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        // The anthem keeps the 1/1 Hydra alive under its -1/-1 counter.
+        TestBoard.inPlay(game, caster, "Glorious Anthem");
+        Card hydra = TestBoard.inPlay(game, caster, "Managorger Hydra");
+        hydra.addCounterInternal(CounterEnumType.M1M1, 1, caster, false, null, null);
+        TestBoard.inHand(game, caster, "Lava Spike");
+
+        String payload = forcedPayload(game, firstSpellInHand(game), 1L);
+
+        assertTrue(payload.contains("\"type\":\"damage_dealt\",\"subjects\":[\"P"), payload);
+        assertFalse(payload.contains("\"E" + hydra.getId() + "\""), payload);
+    }
+
+    /**
+     * A death the forced Kavu's enters trigger causes is the trigger's, as
+     * live files it: the Kavu's held window is closed by the time it
+     * happens. The forced Kavu's record equals the observed Kavu's.
+     */
+    @Test
+    void aDeathTheForcedKavusTriggerCausesIsNotTheKavus() throws Throwable {
+        Game observedGame = kavuBoard();
+        String observed = observedEffectPayload(observedGame, firstSpellInHand(observedGame));
+
+        Game forkedGame = kavuBoard();
+        String forced = forcedPayload(forkedGame, firstSpellInHand(forkedGame), 1L);
+
+        assertEquals(List.of(EffectEvent.ZONE_CHANGE), eventTypes(forced), forced);
+        assertEquals(observed, forced);
+    }
+
+    /** Maro for the caster, whose hand is Pyroclasm alone, and the other seat's bears. */
+    private static Game maroBoard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.inPlay(game, game.getPlayers().get(0), "Maro");
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, game.getPlayers().get(0), "Pyroclasm");
+        return game;
+    }
+
+    /** Two creatures for the other seat and Flametongue Kavu in the caster's hand. */
+    private static Game kavuBoard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Llanowar Elves");
+        TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, game.getPlayers().get(0), "Flametongue Kavu");
+        return game;
+    }
+
+    private static SpellAbility firstSpellInHand(Game game) {
+        Player caster = game.getPlayers().get(0);
+        SpellAbility spell = caster.getCardsIn(ZoneType.Hand).get(0).getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+        return spell;
+    }
+
+    /**
+     * The first effect half an observed cast of {@code spell} writes, played
+     * the way a game plays it: the check before priority, the resolution,
+     * the check after it, and the triggers until the stack is empty.
+     */
+    private String observedEffectPayload(Game game, SpellAbility spell) throws Throwable {
+        List<String> records = ShardRun.observed(tempDir.resolve("observed"), game, bracket -> {
+            // A live collector has watched the board form, as the fork's sink
+            // primes it: the stat change the cast's move to the stack makes
+            // has a reading to differ from on both sides.
+            bracket.primeBattlefield();
+            game.getStack().addAndUnfreeze(spell);
+            game.getAction().checkStateEffects(false);
+            while (!game.getStack().isEmpty()) {
+                game.getStack().resolveStack();
+                game.getAction().checkStateEffects(false);
+                game.getStack().addAllTriggeredAbilitiesToStack();
+            }
+            game.fireEvent(new GameEventTurnPhase(game.getPlayers().get(0), PhaseType.MAIN2, ""));
+        });
+        String half = records.stream()
+                .filter(r -> r.contains("\"moment\":\"resolution\""))
+                .findFirst().orElseThrow(() -> new AssertionError(records.toString()));
+        return half.substring(half.indexOf(",\"payload\":"));
+    }
+
+    /** The one forced record's payload. */
+    private String forcedPayload(Game game, SpellAbility spell, long seed) throws IOException {
+        ShardRun.Fork fork = ShardRun.forked(
+                tempDir.resolve("fork-" + seed), game, caps(1, 0, List.of()), seed, spell);
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        String record = records.get(0);
+        return record.substring(record.indexOf(",\"payload\":"));
+    }
+
+    /** The event types a payload lists, in order. */
+    private static List<String> eventTypes(String payload) {
+        List<String> types = new java.util.ArrayList<>();
+        String marker = "{\"type\":\"";
+        for (int at = payload.indexOf(marker); at >= 0; at = payload.indexOf(marker, at + 1)) {
+            int from = at + marker.length();
+            types.add(payload.substring(from, payload.indexOf('"', from)));
+        }
+        return types;
+    }
+
+    /** A Mountain for its caster, Grizzly Bears for the other seat, and Pyroclasm in hand. */
+    private static Game pyroclasmBoard() {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        TestBoard.inPlay(game, game.getPlayers().get(0), "Mountain");
+        TestBoard.onBattlefield(game, game.getPlayers().get(1), "Grizzly Bears");
+        TestBoard.inHand(game, game.getPlayers().get(0), "Pyroclasm");
+        return game;
+    }
+
+    private static SpellAbility pyroclasmIn(Game game) {
+        Player caster = game.getPlayers().get(0);
+        SpellAbility spell = caster.getCardsIn(ZoneType.Hand).get(0).getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+        return spell;
+    }
+
+    /** A record's {@code state} object, as written. */
+    private static String stateOf(String record) {
+        int from = record.indexOf("\"state\":");
+        int to = record.indexOf(",\"payload\":");
+        assertTrue(from >= 0 && to > from, record);
+        return record.substring(from, to);
+    }
+
+    private static EffectEvent damageTo(List<EffectEvent> events, Card card) {
+        return events.stream()
+                .filter(e -> EffectEvent.DAMAGE_DEALT.equals(e.type())
+                        && e.subjects().contains("E" + card.getId()))
+                .findFirst().orElseThrow(() -> new AssertionError(
+                        "no damage to " + card + " in "
+                                + events.stream().map(EffectEvent::toJson).toList()));
     }
 }

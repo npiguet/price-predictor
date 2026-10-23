@@ -1,11 +1,7 @@
 package com.pricepredictor.connector;
 
-import java.io.BufferedWriter;
-import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 
 /**
  * Appends one line per completed match to a scratch progress file.
@@ -18,29 +14,17 @@ import java.nio.file.StandardOpenOption;
  * ({@link MatchResultWriter}, {@link CardsPlayedWriter}): a counter must not
  * ride the same gate that keeps a coverage or variant round out of
  * {@code match-outcomes.txt} / {@code cards-played.txt}, or the round it
- * exists to bound could never end (that was Task 4's original defect — see
- * {@code MatchWorkerMain#recordMatch}).
+ * exists to bound could never end (see {@code MatchWorkerMain#recordMatch}).
  *
- * <p>Mirrors {@link CardsPlayedWriter}'s open-write-close-per-call pattern —
- * each call opens the file, writes one line, and closes it, so writes are
- * flushed at line granularity and concurrent workers can all append to the
- * one shared progress file without corrupting a line.
+ * <p>Appending is a {@link LineAppender}'s, so concurrent workers can all
+ * append to the one shared progress file without corrupting a line.
  */
 public class ProgressWriter {
 
-    private final Path outputFile;
+    private final LineAppender appender;
 
     public ProgressWriter(Path outputFile) {
-        this.outputFile = outputFile;
-        Path parent = outputFile.getParent();
-        if (parent != null) {
-            try {
-                Files.createDirectories(parent);
-            } catch (IOException e) {
-                throw new UncheckedIOException(
-                        "Failed to create parent directory for " + outputFile, e);
-            }
-        }
+        this.appender = new LineAppender(outputFile);
     }
 
     /**
@@ -49,14 +33,6 @@ public class ProgressWriter {
      * @throws UncheckedIOException if the file cannot be written.
      */
     public void write() {
-        try (BufferedWriter writer = Files.newBufferedWriter(outputFile,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.APPEND)) {
-            writer.write("1");
-            writer.newLine();
-        } catch (IOException e) {
-            throw new UncheckedIOException(
-                    "Failed to write progress line to " + outputFile, e);
-        }
+        appender.append("1");
     }
 }

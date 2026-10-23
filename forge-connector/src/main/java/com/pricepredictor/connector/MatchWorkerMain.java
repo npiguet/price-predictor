@@ -1,15 +1,12 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.CollectionCaps;
 import com.pricepredictor.connector.effects.AttributionMode;
 import com.pricepredictor.connector.effects.PatchHooks;
-import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.RecordShardWriter;
-import forge.util.MyRandom;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
-import java.util.function.IntPredicate;
 
 /**
  * Match worker entry point.
@@ -45,9 +42,6 @@ import java.util.function.IntPredicate;
  *       {@link MatchGenerator#rollIsFileSample()}.</li>
  *   <li>{@code -Dmatch.best.of=<N>} — number of games per match (default 7). Must be a
  *       positive odd integer; any size is valid (Bo1, Bo3, Bo7, Bo17, …).</li>
- *   <li>{@code -Deffect.worker.lifetime=<token>} — pins the per-JVM token that makes
- *       record and game ids unique across worker restarts. Minted from the clock
- *       when absent, which is the normal case; only a test should set it.</li>
  *   <li>{@code -Deffect.random.seat.share=<F>} and
  *       {@code -Deffect.random.seat.probability=<P>} — in a share {@code F} of
  *       matches, one seat chosen per match is a {@link RandomSeatController}
@@ -71,6 +65,18 @@ public class MatchWorkerMain {
 
     static final int DEFAULT_BEST_OF = 7;
     static final int DEFAULT_SIDE_B_WEIGHT = 4;
+
+    static final String OUTPUT_FILE = "output.file";
+    static final String EFFECT_RECORDS_DIR = "effect.records.dir";
+    static final String RUN_ID = "match.run.id";
+    static final String BEST_OF = "match.best.of";
+    static final String SIDE_A_DECKS_FILE = "side.a.decks.file";
+    static final String SIDE_B_DECKS_FILE = "side.b.decks.file";
+    static final String SIDE_B_DECKS_WEIGHT = "side.b.decks.weight";
+    static final String DECKS_ONLY = "sealed.decks.only";
+    static final String EFFECT_WORKER_INDEX = "effect.worker.index";
+    static final String PROGRESS_FILE = "sealed.progress.file";
+    static final String EFFECT_VARIANT_SCRIPTS = "effect.variant.scripts";
 
     /**
      * Validated worker configuration parsed from the JVM system properties.
@@ -118,51 +124,43 @@ public class MatchWorkerMain {
     /**
      * Read every JVM system property the worker depends on, validate it, and
      * package the result as a {@link WorkerConfig}. Exits the process with
-     * code {@code 2} on any malformed input.
+     * {@link WorkerProperties#BAD_CONFIG_EXIT} on any malformed input.
      */
     static WorkerConfig parseConfig() {
-        String outputFileProp = System.getProperty("output.file");
-        String effectRecordsProp = System.getProperty("effect.records.dir");
+        String outputFileProp = System.getProperty(OUTPUT_FILE);
+        String effectRecordsProp = System.getProperty(EFFECT_RECORDS_DIR);
         if (outputFileProp == null && effectRecordsProp == null) {
-            System.err.println(
-                    "Error: -Doutput.file is required unless -Deffect.records.dir"
+            throw WorkerProperties.badConfig(
+                    "-D" + OUTPUT_FILE + " is required unless -D" + EFFECT_RECORDS_DIR
                             + " is set (records-only mode)");
-            System.exit(2);
         }
 
-        String runId = System.getProperty("match.run.id");
-        if (runId == null || runId.isBlank()) {
-            System.err.println("Error: -Dmatch.run.id system property is required");
-            System.exit(2);
-        }
+        String runId = WorkerProperties.require(RUN_ID);
 
-        int bestOf = parseIntProp(
-                "match.best.of", DEFAULT_BEST_OF,
-                v -> v >= 1 && v % 2 == 1, "must be a positive odd integer");
+        int bestOf = WorkerProperties.bestOf(BEST_OF, DEFAULT_BEST_OF);
 
-        String sideAProp = System.getProperty("side.a.decks.file");
-        String sideBProp = System.getProperty("side.b.decks.file");
-        String sideBWeightProp = System.getProperty("side.b.decks.weight");
+        String sideAProp = System.getProperty(SIDE_A_DECKS_FILE);
+        String sideBProp = System.getProperty(SIDE_B_DECKS_FILE);
+        String sideBWeightProp = System.getProperty(SIDE_B_DECKS_WEIGHT);
 
         if (sideBProp == null && sideBWeightProp != null) {
-            System.err.println(
-                    "Error: -Dside.b.decks.weight is only valid with -Dside.b.decks.file");
-            System.exit(2);
+            throw WorkerProperties.badConfig(
+                    "-D" + SIDE_B_DECKS_WEIGHT + " is only valid with -D" + SIDE_B_DECKS_FILE);
         }
 
-        int sideBWeight = parseIntProp(
-                "side.b.decks.weight", DEFAULT_SIDE_B_WEIGHT,
+        int sideBWeight = WorkerProperties.intProperty(
+                SIDE_B_DECKS_WEIGHT, DEFAULT_SIDE_B_WEIGHT, WorkerProperties.OnMalformed.EXIT,
                 v -> v >= 1, "must be >= 1");
 
         // A coverage or variant deck belongs to no set, so the roll's
         // Forge-method branch would resolve its sentinel set code against
         // Forge's booster/edition tables and throw. This forces the roll to
         // the decks file every time. See MatchGenerator.rollIsFileSample().
-        boolean decksOnly = Boolean.parseBoolean(
-                System.getProperty("sealed.decks.only", "false"));
+        boolean decksOnly = WorkerProperties.flag(DECKS_ONLY);
 
-        int workerIndex = parseIntProp(
-                "effect.worker.index", 0, v -> v >= 0, "must be >= 0");
+        int workerIndex = WorkerProperties.intProperty(
+                EFFECT_WORKER_INDEX, 0, WorkerProperties.OnMalformed.EXIT,
+                v -> v >= 0, "must be >= 0");
 
         // The supervisor recycles the longest-running worker every status interval
         // and restarts anything that crashes, so one run is hundreds of JVM
@@ -170,24 +168,15 @@ public class MatchWorkerMain {
         // at zero with the JVM, so the shard token has to name the lifetime as well
         // as the slot; without it a run's record and game ids repeat once per
         // restart and unrelated games merge under one game_id. Minted here rather
-        // than required from the launcher so no spawn site can omit it; the
-        // property exists only so a test can pin the value.
-        String workerLifetime = System.getProperty("effect.worker.lifetime");
-        if (workerLifetime == null) {
-            workerLifetime = RecordShardWriter.mintLifetime();
-        } else if (!RecordShardWriter.isValidLifetime(workerLifetime)) {
-            System.err.println(
-                    "Error: -Deffect.worker.lifetime must match [0-9a-z]{1,16}, got: "
-                            + workerLifetime);
-            System.exit(2);
-        }
+        // than taken from the launcher so no spawn site can omit or repeat it.
+        String workerLifetime = RecordShardWriter.mintLifetime();
 
         // A counter, not a corpus: read independent of every other property
         // here, and never validated against output.file / effect.records.dir,
         // because a progress tally must be obtainable even in records-only
         // mode -- that independence is the whole point (see the class-level
         // Javadoc entry for this property).
-        String progressFileProp = System.getProperty("sealed.progress.file");
+        String progressFileProp = System.getProperty(PROGRESS_FILE);
 
         return new WorkerConfig(
                 outputFileProp == null ? null : Path.of(outputFileProp),
@@ -195,36 +184,6 @@ public class MatchWorkerMain {
                 effectRecordsProp == null ? null : Path.of(effectRecordsProp),
                 workerIndex, workerLifetime, decksOnly,
                 progressFileProp == null ? null : Path.of(progressFileProp));
-    }
-
-    /**
-     * Parse an integer JVM system property, validating against {@code isValid}.
-     * Returns {@code defaultValue} when the property is unset; calls
-     * {@link System#exit} with code {@code 2} on a parse error or constraint
-     * violation. Used for both {@code -Dmatch.best.of} and
-     * {@code -Dside.b.decks.weight}.
-     */
-    static int parseIntProp(
-            String name, int defaultValue, IntPredicate isValid, String constraintMsg) {
-        String prop = System.getProperty(name);
-        if (prop == null) {
-            return defaultValue;
-        }
-        int value;
-        try {
-            value = Integer.parseInt(prop);
-        } catch (NumberFormatException e) {
-            System.err.println(
-                    "Error: -D" + name + " must be an integer, got: " + prop);
-            System.exit(2);
-            return -1;  // unreachable
-        }
-        if (!isValid.test(value)) {
-            System.err.println(
-                    "Error: -D" + name + " " + constraintMsg + ", got: " + value);
-            System.exit(2);
-        }
-        return value;
     }
 
     private static void initializeForge(WorkerConfig config) {
@@ -236,7 +195,7 @@ public class MatchWorkerMain {
         // that one shared directory while the others walk it during
         // FModel.initialize is a race, and a worker that reads it half-written
         // has a card database missing the very variants its decks name.
-        String variantScripts = System.getProperty("effect.variant.scripts");
+        String variantScripts = System.getProperty(EFFECT_VARIANT_SCRIPTS);
         ForgeEnvironmentInitializer.initialize(
                 variantScripts == null ? null : Path.of(variantScripts), false);
         System.out.println("Forge initialized. Starting match generation.");
@@ -247,8 +206,8 @@ public class MatchWorkerMain {
         List<String> eligibleSets = MatchGenerator.computeEligibleSets();
         System.out.println("Eligible sets: " + eligibleSets.size());
 
-        GeneratedDecksIndex sideAIndex = loadIndex(config.sideADecksFile(), "side-A");
-        GeneratedDecksIndex sideBIndex = loadIndex(config.sideBDecksFile(), "side-B");
+        MatchGenerator.DeckSource sideA = loadDecks(config.sideADecksFile(), "side-A");
+        MatchGenerator.DeckSource sideB = loadDecks(config.sideBDecksFile(), "side-B");
 
         // In records-only mode neither sealed writer is constructed at all —
         // not constructed-and-unused, so there is no path by which a coverage
@@ -259,8 +218,8 @@ public class MatchWorkerMain {
                 ? null : new CardsPlayedWriter(cardsPlayedPath(config.outputFile()));
         // Never gated by recordsOnly(): a progress tally is not a corpus, and
         // gating it on the same guard that keeps records-only mode out of the
-        // sealed corpus is exactly the bug this property exists to fix (a
-        // records-only round's progress file would otherwise never grow).
+        // sealed corpus would leave a records-only round's progress file never
+        // growing.
         ProgressWriter progressWriter = config.progressFile() == null
                 ? null : new ProgressWriter(config.progressFile());
 
@@ -271,13 +230,13 @@ public class MatchWorkerMain {
                     config.workerLifetime());
             System.out.println(
                     "Effect records: " + effectRecords.path()
-                            + " [mode=" + AttributionMode.detect().wireValue() + "]");
+                            + " [mode=" + AttributionMode.detect().wireName() + "]");
             // The mode is one hook's answer, so a partly-applied patch still
             // reads "patched" while a channel this run meant to collect is
             // quietly empty. This is what names that.
             System.out.println(PatchHooks.report());
-            PatchedCollectors.CollectionCaps caps =
-                    PatchedCollectors.CollectionCaps.fromSystemProperties();
+            CollectionCaps caps =
+                    CollectionCaps.fromSystemProperties();
             if (caps.randomSeatEnabled()) {
                 // Named at startup the way the probe state is: a run whose
                 // random-seat matches wrote no sealed rows is a run someone
@@ -293,92 +252,44 @@ public class MatchWorkerMain {
             Runtime.getRuntime().addShutdownHook(new Thread(toFlush::close));
         }
 
-        // The public 7-arg constructor has no decksOnly parameter (it must
-        // keep working unchanged for `sealed match-outcomes`), so a decks-only
-        // run goes through the full constructor directly, supplying the same
-        // random source and exclusion set the shorter constructors default to.
-        MatchGenerator generator = new MatchGenerator(
-                eligibleSets, new DeckBuilder(),
-                new GamePlayer(config.bestOf(), effectRecords), config.runId(),
-                sideAIndex, sideBIndex, config.sideBWeight(),
-                MyRandom.getRandom(), MatchGenerator.excludedCardsFromProperties(),
-                config.decksOnly());
+        SilencedHookReport silencedHookReport = new SilencedHookReport();
+        MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
+                .gamePlayer(new GamePlayer(config.bestOf(), effectRecords))
+                .sideA(sideA)
+                .sideB(sideB, config.sideBWeight())
+                .excludedCards(HoldoutCards.fromSystemProperty())
+                .decksOnly(config.decksOnly())
+                .build();
 
-        long succeeded = generateMatches(
-                generator::generateMatch,
-                result -> recordMatch(result, writer, cardsPlayedWriter, progressWriter),
-                MAX_CONSECUTIVE_MATCH_FAILURES);
-
-        System.err.println("Worker giving up after " + MAX_CONSECUTIVE_MATCH_FAILURES
-                + " consecutive match failures with no success between them ("
-                + succeeded + " matches succeeded in this JVM). Exiting non-zero so "
-                + "the supervisor restarts the slot and the operator sees a failing "
-                + "worker rather than a run that never finishes.");
-        System.err.flush();
-        System.exit(1);
+        WorkerLoop.runUntilBroken(
+                () -> {
+                    recordMatch(generator.generateMatch(),
+                            writer, cardsPlayedWriter, progressWriter);
+                    silencedHookReport.afterMatch();
+                    return WorkerLoop.Outcome.COMPLETED;
+                },
+                new WorkerLoop.Progress(
+                        System.out, 10, "matches generated", "Error generating match"));
     }
 
     /**
-     * How many matches may fail in a row, with no success between them, before
-     * the worker gives up.
+     * Names, once per match boundary, each effect-record hook that has gone
+     * quiet since the last one.
      *
-     * <p>Ten. A worker whose every match throws fails in milliseconds, so ten
-     * attempts cost well under a second and the pool restarts the slot at
-     * once; a worker whose matches mostly succeed never reaches ten, because
-     * any success resets the count — a run of ten failures with not one
-     * success between them is not bad luck, it is a broken configuration.
-     *
-     * <p>The blanket {@code catch (Exception)} this bounds had no such limit:
-     * an error thrown on every match left the progress file flat, so
-     * {@code should_stop} never fired and {@code ForgeWorkerPool.run()}
-     * blocked forever with nothing to show for it. That is not hypothetical —
-     * it is exactly what the sentinel-set-code {@code NullPointerException}
-     * produced before {@code pickDeckB} learned to accept a mirror.
+     * <p>The engine contains a listener that throws, reports it once on
+     * stderr and stops listening to it, so a channel can empty mid-run while
+     * the worker goes on playing. That one stderr line scrolls away; this
+     * line repeats the channel's name where the match log is read.
      */
-    static final int MAX_CONSECUTIVE_MATCH_FAILURES = 10;
+    static final class SilencedHookReport {
+        private int reported;
 
-    /** One match's worth of work, as {@link MatchGenerator#generateMatch}. */
-    @FunctionalInterface
-    interface MatchSource {
-        MatchGenerationResult next() throws Exception;
-    }
-
-    /**
-     * Generate and record matches until {@code maxConsecutiveFailures} of them
-     * fail in a row with no success between them.
-     *
-     * <p>Factored out of {@link #runForever} so the budget is exercisable
-     * without Forge: the loop's only inputs are a source of matches and a sink
-     * for them, and both halves can throw.
-     *
-     * @return how many matches succeeded before the budget ran out. On a
-     *         healthy worker this never returns — the supervisor kills it.
-     */
-    static long generateMatches(
-            MatchSource source,
-            java.util.function.Consumer<MatchGenerationResult> record,
-            int maxConsecutiveFailures) {
-        long count = 0;
-        int consecutiveFailures = 0;
-        while (true) {
-            try {
-                MatchGenerationResult result = source.next();
-                record.accept(result);
-                count++;
-                consecutiveFailures = 0;
-                if (count % 10 == 0) {
-                    System.out.println("Worker: " + count + " matches generated");
-                    System.out.flush();
-                }
-            } catch (Exception e) {
-                // Non-fatal errors are still tolerated one at a time; fatal
-                // ones (OOM and friends) are Errors and propagate untouched.
-                System.err.println("Error generating match: " + e.getMessage());
-                e.printStackTrace(System.err);
-                consecutiveFailures++;
-                if (consecutiveFailures >= maxConsecutiveFailures) {
-                    return count;
-                }
+        void afterMatch() {
+            List<String> silenced = PatchHooks.silencedHooks();
+            if (silenced.size() > reported) {
+                System.err.println("effect-record hooks silenced after a listener failure, "
+                        + "their channels now empty: " + silenced);
+                reported = silenced.size();
             }
         }
     }
@@ -424,28 +335,23 @@ public class MatchWorkerMain {
      * (files.md), so we only need to swap the filename.
      */
     static Path cardsPlayedPath(Path matchOutcomesFile) {
-        Path parent = matchOutcomesFile.getParent();
-        if (parent == null) {
-            return Paths.get("cards-played.txt");
-        }
-        return parent.resolve("cards-played.txt");
+        return matchOutcomesFile.resolveSibling("cards-played.txt");
     }
 
-    private static GeneratedDecksIndex loadIndex(String pathProp, String label) {
+    /** Forge-built decks when no file is named; exits with {@link WorkerProperties#BAD_CONFIG_EXIT} on a file that does not load. */
+    private static MatchGenerator.DeckSource loadDecks(String pathProp, String label) {
         if (pathProp == null) {
-            return null;
+            return MatchGenerator.DeckSource.FORGE_BUILT;
         }
         Path path = Path.of(pathProp);
         System.out.println("Loading " + label + " decks from " + path);
         try {
             GeneratedDecksIndex index = GeneratedDecksIndex.load(path);
             System.out.println("Loaded " + index.size() + " " + label + " decks.");
-            return index;
+            return new MatchGenerator.DeckSource.FileSampled(index);
         } catch (Exception e) {
-            System.err.println(
-                    "Error loading " + label + " decks file: " + e.getMessage());
-            System.exit(2);
-            return null;  // unreachable
+            throw WorkerProperties.badConfig(
+                    "loading " + label + " decks file: " + e.getMessage());
         }
     }
 }

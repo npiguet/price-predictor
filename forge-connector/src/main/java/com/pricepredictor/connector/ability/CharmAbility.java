@@ -4,17 +4,21 @@ import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
 import forge.game.CardTraitBase;
+import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * Charm ability with nested OPTION sub-abilities. If the charm has no description,
  * the factory returns the choices as top-level OPTION abilities instead.
  */
 public record CharmAbility(String descriptionText, List<Ability> subAbilities) implements Ability {
+
+    private static final Pattern TRAILING_EM_DASH = Pattern.compile("\\s*\u2014\\s*$");
 
     public CharmAbility {
         Objects.requireNonNull(subAbilities);
@@ -31,7 +35,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         if (charmDesc != null && !charmDesc.isEmpty()) {
             charmDesc = AbilityDescription.stripReminderText(charmDesc);
             // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
-            charmDesc = charmDesc.replaceAll("\\s*\u2014\\s*$", "").trim();
+            charmDesc = TRAILING_EM_DASH.matcher(charmDesc).replaceAll("").trim();
         }
         if ((charmDesc == null || charmDesc.isEmpty()) && sa.hasParam("Pawprint")) {
             String total = sa.getParam("Pawprint");
@@ -53,40 +57,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
             charmDesc = synthesizeCharmHeader(sa);
         }
 
-        // Collect charm choices as sub-abilities
-        List<Ability> choiceSubs = new ArrayList<>();
-        var choices = sa.getAdditionalAbilityList("Choices");
-        if (choices != null) {
-            for (int modeIndex = 0; modeIndex < choices.size(); modeIndex++) {
-                var choice = choices.get(modeIndex);
-                String choiceDesc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
-                if (choiceDesc != null) {
-                    choiceDesc = AbilityDescription.stripReminderText(choiceDesc);
-                }
-                // Tiered charms (e.g. Vincent's Limit Break): the ability name lives in
-                // PrecostDesc on the choice SA.  Prepend it so the option text matches oracle.
-                String precostDesc = choice.getParam("PrecostDesc");
-                if (precostDesc != null && !precostDesc.isEmpty()) {
-                    choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                            ? precostDesc + " \u2014 " + choiceDesc
-                            : precostDesc;
-                }
-                String modeCost = choice.getParam("ModeCost");
-                if (modeCost != null && !modeCost.isEmpty()) {
-                    String costToken = manaCostSymbols(modeCost);
-                    choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                            ? costToken + " \u2014 " + choiceDesc
-                            : costToken;
-                }
-                String pawprint = choice.getParam("Pawprint");
-                if (pawprint != null) {
-                    choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))
-                            + " \u2014 " + choiceDesc;
-                }
-                choiceSubs.add(new OptionAbility(
-                        AbilityDescription.applyCasing(choiceDesc), modeIndex, sa, null));
-            }
-        }
+        List<Ability> choiceSubs = optionsFrom(sa, null);
 
         List<Ability> result = new ArrayList<>();
         if (charmDesc != null && !charmDesc.isEmpty()) {
@@ -141,7 +112,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
      * <p>Forge writes a cost space-separated — {@code ModeCost$ 3 W W} — and one
      * pair of braces around the whole of it produces {@code {3 W W}}, which the
      * tokenizer reads as a single symbol because braces delimit an atom. That
-     * put a distinct token in the vocabulary for every multi-shard mode cost,
+     * would put a distinct token in the vocabulary for every multi-shard mode cost,
      * each unrelated to the {@code {3}}, {@code {W}} the rest of the corpus
      * uses. One pair of braces per shard is what a card prints and what every
      * other cost in the converted text already looks like.
@@ -179,25 +150,83 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
      *
      * @param owner the trait that executes the charm, so each option can be
      *              attributed to that trait's line rather than to whichever
-     *              trigger last claimed a charm SVar two chapters share
+     *              trigger last claimed a charm SVar two chapters share; null
+     *              when one line stands for several triggers, so each option
+     *              belongs to whichever of them executes the charm
      */
     public static List<Ability> optionsFrom(SpellAbility sa, CardTraitBase owner) {
         List<Ability> options = new ArrayList<>();
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices == null) return options;
         for (int modeIndex = 0; modeIndex < choices.size(); modeIndex++) {
-            var choice = choices.get(modeIndex);
-            String desc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
-            if (desc != null) desc = AbilityDescription.stripReminderText(desc);
-            if (desc == null || desc.isEmpty()) continue;
+            String desc = optionText(choices.get(modeIndex));
+            if (desc == null) continue;
             options.add(new OptionAbility(
                     AbilityDescription.applyCasing(desc), modeIndex, sa, owner));
         }
         return options;
     }
 
-    /** {@link #optionsFrom(SpellAbility, CardTraitBase)} with the owner unknown. */
-    public static List<Ability> optionsFrom(SpellAbility sa) {
-        return optionsFrom(sa, null);
+    /**
+     * The text of one mode's {@code option} line, or null when the mode has
+     * none to print.
+     *
+     * <p>A mode's own description is prefixed by whatever the card prints ahead
+     * of it: a tiered charm's ability name ({@code PrecostDesc}, e.g. Vincent's
+     * Limit Break), its additional cost ({@code ModeCost}), and its pawprint
+     * cost. Both a modal spell and a triggered charm render modes through here,
+     * so the two cannot disagree on what a mode line says.
+     */
+    static String optionText(AbilitySub choice) {
+        String desc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
+        if (desc != null) desc = AbilityDescription.stripReminderText(desc);
+        desc = prefixed(choice.getParam("PrecostDesc"), desc);
+        String modeCost = choice.getParam("ModeCost");
+        if (modeCost != null && !modeCost.isEmpty()) {
+            desc = prefixed(manaCostSymbols(modeCost), desc);
+        }
+        int pawprints = parseSimpleInt(choice.getParam("Pawprint"));
+        if (pawprints > 0) {
+            desc = prefixed("{P}".repeat(pawprints), desc);
+        }
+        return desc == null || desc.isEmpty() ? null : desc;
+    }
+
+    /**
+     * {@code prefix — desc}, or whichever of the two is present on its own.
+     * A null or empty prefix leaves {@code desc} as it was.
+     */
+    static String prefixed(String prefix, String desc) {
+        if (prefix == null || prefix.isEmpty()) return desc;
+        if (desc == null || desc.isEmpty()) return prefix;
+        return prefix + " \u2014 " + desc;
+    }
+
+    /** A trait description with its charm spelled out: the header line and the mode lines. */
+    public record Expanded(String description, List<Ability> options) {
+    }
+
+    /**
+     * Spell out the {@code ABILITY} placeholder of a trait whose effect is a
+     * charm.
+     *
+     * <p>Forge writes {@code "When CARDNAME enters, ABILITY"} and fills the
+     * placeholder from the charm at runtime. Here it becomes the charm's
+     * "choose N" header — "choose one" when the count is an expression — and
+     * the modes become the trait's option lines.
+     *
+     * @param desc  the raw description holding the placeholder
+     * @param owner the trait that executes the charm, or null (see
+     *              {@link #optionsFrom(SpellAbility, CardTraitBase)})
+     * @return the normalized description, null if nothing is left of it, and
+     *         the option lines
+     */
+    public static Expanded expandPlaceholder(String desc, SpellAbility charm,
+                                             CardTraitBase owner) {
+        String header = synthesizeCharmHeader(charm);
+        if (header == null) header = "choose one";
+        return new Expanded(
+                AbilityDescription.normalize(desc.replace("ABILITY", header)),
+                optionsFrom(charm, owner));
     }
 }

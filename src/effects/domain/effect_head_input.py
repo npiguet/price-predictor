@@ -32,12 +32,13 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from functools import lru_cache
 
+from effects.domain.keyword_names import overlay_keyword
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     CombatPayload,
+    ContinuousPayload,
     EffectRecord,
     Moment,
-    PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
     PlayabilitySubkind,
     RecordKind,
@@ -120,16 +121,23 @@ PHASE_ALIASES: dict[str, str] = {
 COUNTER_ALIASES: dict[str, str] = {"+1/+1": "P1P1", "-1/-1": "M1M1"}
 #: Appended rather than inserted, so every earlier member keeps its slot.
 OVERLAY_KEYWORDS_GEN2: tuple[str, ...] = (*OVERLAY_KEYWORDS, "landwalk")
-_PROTECTION_FROM = "protection_from_"
+
+#: The largest magnitude a count or a signed delta is scored at. Above about
+#: forty an amount is the game state compounding — a counter doubling run to two
+#: million in one long game — not what the ability's text says, and one such
+#: target under the Poisson loss pulls a step a million times harder than an
+#: ordinary one. Every consumer of the magnitudes caps them here: the field
+#: losses, the constant-predictor floor and the evaluation's deviance. Defined
+#: here, torch-free, so the thermometer below and the gate metrics share it.
+MAGNITUDE_CAP = 40.0
 
 #: Positions of a thermometer code. Position k is set when the value is at
 #: least k, so the dot product of an amount's code with a one-hot of t is 1
 #: exactly when the amount is at least t — the comparison "this damage kills
-#: this creature" is one attention score. Forty, the magnitude cap every
-#: amount is scored at (``effect_model.MAGNITUDE_CAP``, which this module cannot
-#: import without a cycle): life often climbs past its starting twenty, and a
-#: larger value sets every position.
-THERMOMETER_STEPS = 40
+#: this creature" is one attention score. As many as the magnitude cap: life
+#: often climbs past its starting twenty, and a larger value sets every
+#: position.
+THERMOMETER_STEPS = int(MAGNITUDE_CAP)
 
 
 def thermometer(value: float) -> list[float]:
@@ -146,32 +154,17 @@ def _phase_in(phase: str | None, layout: str | None) -> str | None:
     return PHASE_ALIASES.get(phase.strip().lower(), phase)
 
 
-def _counter_name(name: str, layout: str | None) -> str:
-    if layout is EARLIER_LAYOUT:
-        return name
-    return COUNTER_ALIASES.get(name, name)
-
-
-def _keyword_in(keyword: str, layout: str | None) -> str:
-    if layout is not EARLIER_LAYOUT and keyword.startswith(_PROTECTION_FROM):
-        return "protection"
-    return keyword
-
-
 @lru_cache(maxsize=None)
 def _positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
     """``normalized member -> its slot``, built once per vocabulary.
 
-    The one-hots used to lower every member of the vocabulary on every call,
-    and the multi-hot lowered them twice — a vocabulary scan per feature,
-    twenty-seven of them for the overlay keywords alone, a million times over
-    a four-shard run. The vocabularies are checked-in constants, so the scan
-    is done once here and every call is a dict lookup per value present.
+    The vocabularies are checked-in constants, so normalizing them is done once
+    here and every feature is a dict lookup per value present, rather than a
+    scan of the vocabulary per feature — twenty-seven of them for the overlay
+    keywords alone, on every slot of every step.
 
-    First occurrence wins, which is what :func:`_one_hot` did when it returned
-    at its first match; no vocabulary has two members that lower to the same
-    string, and one that did would have meant different things to the two
-    helpers before this as well.
+    First occurrence wins; no vocabulary has two members that normalize to the
+    same string.
     """
     positions: dict[str, int] = {}
     for index, member in enumerate(vocabulary):
@@ -179,38 +172,29 @@ def _positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
     return positions
 
 
+def _spelling(value: str) -> str:
+    """A value in its vocabulary's spelling: lower case, underscores."""
+    return value.strip().lower().replace(" ", "_")
+
+
 def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
     """One-hot over ``vocabulary`` plus a trailing "other/absent" slot."""
     out = [0.0] * (len(vocabulary) + 1)
     if value is None:
         return out
-    index = _positions(vocabulary).get(
-        value.strip().lower().replace(" ", "_")
-    )
+    index = _positions(vocabulary).get(_spelling(value))
     out[-1 if index is None else index] = 1.0
     return out
 
 
-def _scalar(value: float) -> list[float]:
-    """A scalar as raw plus ``log1p``. Nothing is binned (FR-074).
+def _push_scalar(out: list[float], value: float) -> None:
+    """A scalar as raw plus ``log1p``, onto the caller's list. Nothing is binned (FR-074).
 
     ``log1p`` of a negative value is undefined, so the copy is signed:
     ``sign(v) * log1p(|v|)``, which keeps the transform monotone across zero.
-
-    The feature builders below call :func:`_push_scalar` instead, which is the
-    same two numbers without the throwaway list.
-    """
-    magnitude = math.log1p(abs(float(value)))
-    return [float(value), math.copysign(magnitude, value)]
-
-
-def _push_scalar(out: list[float], value: float) -> None:
-    """:func:`_scalar` straight onto the caller's list.
-
-    Every caller extends a list it already has, so the two-element list
-    ``_scalar`` returned was built and discarded immediately — twenty-eight
-    times per entity and nearly seven million times over a four-shard run,
-    which made the allocation, not the arithmetic, the cost of a scalar.
+    Appended rather than returned, because a two-element list per scalar —
+    twenty-eight per entity, millions per run — made the allocation, not the
+    arithmetic, the cost of a scalar.
     """
     raw = float(value)
     out.append(raw)
@@ -239,7 +223,7 @@ def _multi_hot(present, vocabulary: tuple[str, ...]) -> list[float]:
     seen: set[str] = set()
     other = 0
     for value in present:
-        normalized = value.strip().lower().replace(" ", "_")
+        normalized = _spelling(value)
         if normalized in seen:
             continue
         seen.add(normalized)
@@ -269,10 +253,6 @@ class Slot:
     #: through). A row index is not a vector of one element: the two are told
     #: apart by type, never by length.
     e: tuple[float, ...] | int | None = None
-    #: ``CARD`` slots: token ids of the entity's subtypes, mean-pooled by the
-    #: model. Subtypes are an open vocabulary (every set adds creature types),
-    #: so they enter through the shared token embedding rather than a one-hot.
-    subtype_tokens: tuple[int, ...] = ()
     entity_id: str | None = None
     player_id: str | None = None
     #: ``ABILITY`` slots read from a charm mode's ``option`` line (FR-063a).
@@ -286,18 +266,8 @@ class EffectHeadInput:
     """The full token surface for one record."""
 
     slots: tuple[Slot, ...]
-    record_kind: RecordKind
-    actor_player: str
-    #: Index into ``slots`` of the ``[ACT]`` token, always 1.
-    act_index: int = 1
     #: Slot indices of the per-entity head's targets: every CARD and PLAYER.
     entity_slots: tuple[int, ...] = field(default_factory=tuple)
-
-    def positions(self) -> tuple[int, ...]:
-        return tuple(slot.position for slot in self.slots)
-
-    def of_kind(self, kind: SlotKind) -> tuple[Slot, ...]:
-        return tuple(slot for slot in self.slots if slot.kind is kind)
 
 
 # ── feature builders ────────────────────────────────────────────────────
@@ -334,6 +304,15 @@ def global_features(
         _PLAYABILITY_SUBKINDS,
     )
     return tuple(out)
+
+
+#: Width of the record-kind flags that end every ``[GLOBAL]`` slot: the kind,
+#: moment and subkind one-hots, each with its trailing "other/absent" slot.
+#: The ``no-state`` baseline keeps exactly these (FR-094).
+KIND_FLAG_WIDTH = len(_RECORD_KINDS) + len(_MOMENTS) + len(_PLAYABILITY_SUBKINDS) + 3
+
+#: The ``[ACT]`` slot's index in every surface: ``[GLOBAL]`` is first, then it.
+ACT_SLOT = 1
 
 
 def act_features(record: EffectRecord) -> tuple[float, ...]:
@@ -422,46 +401,46 @@ def card_features(
     computed here rather than left to the trunk: subtracting is one more thing
     a transformer would have to learn before it could compare.
     """
-    state = record.state
     out: list[float] = []
+    _push_characteristics(out, entity)
+    _push_overlay(out, entity, record, masked_keywords=masked_keywords, layout=layout)
+    _push_stack_extras(out, entity)
+    out += _damage_assignment_features(entity, record)
+    out += _pending_event_features(entity, record)
+    if layout is not EARLIER_LAYOUT:
+        _push_comparable_amounts(out, entity)
+    return tuple(out)
 
-    # ── structured characteristics ──
+
+def _push_characteristics(out: list[float], entity: EntityState) -> None:
+    """Types, supertypes, colours, mana value and the P/T breakdown."""
     out += _multi_hot(entity.types, CARD_TYPES)
     out += _multi_hot(entity.supertypes, SUPERTYPES)
     out += _multi_hot(entity.colors, COLORS)
     _push_scalar(out, entity.mana_value)
     pt = entity.pt
-    if pt is not None:
-        for pair in (pt.base, pt.boosts, pt.counters):
-            _push_scalar(out, pair[0])
-            _push_scalar(out, pair[1])
-        out.append(1.0)
-    else:
+    if pt is None:
         out += _NO_PT
+        return
+    for pair in (pt.base, pt.boosts, pt.counters):
+        _push_scalar(out, pair[0])
+        _push_scalar(out, pair[1])
+    out.append(1.0)
 
-    # ── overlay ──
+
+def _push_overlay(
+    out: list[float], entity: EntityState, record: EffectRecord, *,
+    masked_keywords: frozenset[str], layout: str | None,
+) -> None:
+    """What the game has done to the card: zone, status, counters, combat,
+    temporary grants, and its relation to the acting player and the targets."""
+    state = record.state
     out += _one_hot(entity.zone, ZONES)
     out.append(1.0 if entity.tapped else 0.0)
     out.append(1.0 if entity.sick else 0.0)
     out.append(1.0 if entity.face_down else 0.0)
     _push_scalar(out, entity.damage)
-    counters = entity.counters
-    if counters:
-        if layout is not EARLIER_LAYOUT:
-            renamed: dict[str, int] = {}
-            for name, value in counters.items():
-                name = _counter_name(name, layout)
-                renamed[name] = renamed.get(name, 0) + value
-            counters = renamed
-        for counter in COUNTER_TYPES:
-            _push_scalar(out, counters.get(counter, 0))
-        _push_scalar(out, sum(
-            value for name, value in counters.items()
-            if name not in COUNTER_TYPES
-        ))
-    else:
-        # The common case by far, and every one of those scalars is zero.
-        out += _NO_COUNTERS
+    _push_counters(out, entity.counters, layout)
     combat = entity.combat
     out.append(1.0 if combat and combat.attacking else 0.0)
     out.append(1.0 if combat and combat.blocking else 0.0)
@@ -475,8 +454,7 @@ def card_features(
         out += _multi_hot(granted, OVERLAY_KEYWORDS)
     else:
         out += _multi_hot(
-            [_keyword_in(keyword, layout) for keyword in granted],
-            OVERLAY_KEYWORDS_GEN2,
+            [overlay_keyword(keyword) for keyword in granted], OVERLAY_KEYWORDS_GEN2,
         )
     _push_scalar(out, len(entity.granted_temporary.abilities))
     out.append(1.0 if state.controller_tag(
@@ -484,30 +462,45 @@ def card_features(
     out.append(1.0 if entity.id in state.refs.targets else 0.0)
     out.append(1.0 if entity.id == state.refs.source else 0.0)
 
-    # ── stack extras ──
+
+def _push_counters(out: list[float], counters, layout: str | None) -> None:
+    if not counters:
+        # The common case by far, and every one of those scalars is zero.
+        out += _NO_COUNTERS
+        return
+    if layout is not EARLIER_LAYOUT:
+        renamed: dict[str, int] = {}
+        for name, value in counters.items():
+            name = COUNTER_ALIASES.get(name, name)
+            renamed[name] = renamed.get(name, 0) + value
+        counters = renamed
+    for counter in COUNTER_TYPES:
+        _push_scalar(out, counters.get(counter, 0))
+    _push_scalar(out, sum(
+        value for name, value in counters.items() if name not in COUNTER_TYPES
+    ))
+
+
+def _push_stack_extras(out: list[float], entity: EntityState) -> None:
     extras = entity.stack_extras
     if extras is None:
         out += _NO_STACK_EXTRAS
-    else:
-        _push_scalar(out, len(extras.targets))
-        _push_scalar(out, sum(extras.per_target_amounts.values()))
-        _push_scalar(out, sum(extras.up_to_counts.values()))
+        return
+    _push_scalar(out, len(extras.targets))
+    _push_scalar(out, sum(extras.per_target_amounts.values()))
+    _push_scalar(out, sum(extras.up_to_counts.values()))
 
-    # ── per-kind overlays ──
-    out += _damage_assignment_features(entity, record)
-    out += _pending_event_features(entity, record)
 
-    # ── comparable amounts (gen-2 layout) ──
-    if layout is not EARLIER_LAYOUT:
-        if pt is None:
-            out += _NO_THERMOMETER * 3
-        else:
-            power = pt.base[0] + pt.boosts[0] + pt.counters[0]
-            toughness = pt.base[1] + pt.boosts[1] + pt.counters[1]
-            out += thermometer(power)
-            out += thermometer(toughness)
-            out += thermometer(toughness - entity.damage)
-    return tuple(out)
+def _push_comparable_amounts(out: list[float], entity: EntityState) -> None:
+    """The gen-2 layout's thermometers: total power, total toughness, and the
+    toughness left after marked damage."""
+    if entity.pt is None:
+        out += _NO_THERMOMETER * 3
+        return
+    power, toughness = entity.pt.total
+    out += thermometer(power)
+    out += thermometer(toughness)
+    out += thermometer(toughness - entity.damage)
 
 
 def _damage_assignment_features(
@@ -548,7 +541,6 @@ def build_effect_head_input(
     e_dim: int,
     has_line=None,
     candidate_index: int | None = None,
-    subtype_tokens_for=None,
     context_dropout: float = 0.0,
     rng: random.Random | None = None,
     masked_keywords: dict[str, frozenset[str]] | None = None,
@@ -577,7 +569,6 @@ def build_effect_head_input(
         candidate_index: a ``playability``/``decision`` record trains as one
             example per candidate; this selects which candidate's ``e`` sits in
             ``[ACT]``.
-        subtype_tokens_for: ``EntityState -> tuple[int, ...]``, optional.
         context_dropout: probability of dropping each *context* ability token
             during training. The acting entity's tokens are never dropped —
             dropping the ability under study would make the record unanswerable.
@@ -636,63 +627,66 @@ def build_effect_head_input(
 
     source_id = record.state.refs.source
     for entity in record.state.entities:
-        # Position ids restart here: an entity plus its abilities is one block,
-        # read the same way wherever the entity sits on the board.
-        position = 0
         gone = stripped.get(entity.id, frozenset())
         entity_slots.append(len(slots))
-        slots.append(Slot(
-            kind=SlotKind.CARD, position=position,
-            features=card_features(
-                entity, record,
-                masked_keywords=masked.get(entity.id, frozenset()) | gone,
-                layout=layout,
+        slots += _entity_block(
+            entity, record, e_for=e_for, zero=zero,
+            masked=masked.get(entity.id, frozenset()) | gone, layout=layout,
+            options_for=options_for,
+            keeps=lambda key, entity=entity, gone=gone: _keeps_ability(
+                key, has_line=has_line, gone=gone, keyword_of=keyword_of,
+                dropout=context_dropout if entity.id != source_id else 0.0, rng=rng,
             ),
-            subtype_tokens=(
-                subtype_tokens_for(entity) if subtype_tokens_for else ()
-            ),
-            entity_id=entity.id,
-        ))
-        position += 1
-        is_context = entity.id != source_id
-        for key in _ability_keys(entity):
-            if has_line is not None and not has_line(key):
-                continue
-            if gone and keyword_of is not None and keyword_of(key) in gone:
-                # Dropped rather than zeroed: a zero token would still tell the
-                # head this creature has an ability here, and gate 2 is asking
-                # what the board looks like without the keyword at all.
-                continue
-            if (
-                is_context
-                and context_dropout > 0.0
-                and rng.random() < context_dropout
-            ):
-                continue
-            resolved = e_for(key)
-            slots.append(Slot(
-                kind=SlotKind.ABILITY, position=position,
+        )
+
+    return EffectHeadInput(slots=tuple(slots), entity_slots=tuple(entity_slots))
+
+
+def _entity_block(
+    entity: EntityState, record: EffectRecord, *, e_for, zero, masked, layout,
+    options_for, keeps,
+) -> list[Slot]:
+    """One entity's ``CARD`` slot, then an ``ABILITY`` slot per ability it keeps,
+    each charm root followed by its mode lines.
+
+    Position ids restart at the block: an entity plus its abilities is read the
+    same way wherever the entity sits on the board.
+    """
+    block = [Slot(
+        kind=SlotKind.CARD, position=0,
+        features=card_features(entity, record, masked_keywords=masked, layout=layout),
+        entity_id=entity.id,
+    )]
+    for key in _ability_keys(entity):
+        if not keeps(key):
+            continue
+        modes = options_for(key) if options_for is not None else ()
+        for mode_key, option in ((key, False), *((mode, True) for mode in modes)):
+            resolved = e_for(mode_key)
+            block.append(Slot(
+                kind=SlotKind.ABILITY, position=len(block),
                 # Explicitly against None: row 0 is a valid matrix row and
                 # ``or`` would read it as a miss.
                 e=zero if resolved is None else resolved,
-                entity_id=entity.id,
+                entity_id=entity.id, option=option,
             ))
-            position += 1
-            for mode in (options_for(key) if options_for is not None else ()):
-                resolved = e_for(mode)
-                slots.append(Slot(
-                    kind=SlotKind.ABILITY, position=position,
-                    e=zero if resolved is None else resolved,
-                    entity_id=entity.id, option=True,
-                ))
-                position += 1
+    return block
 
-    return EffectHeadInput(
-        slots=tuple(slots),
-        record_kind=record.kind,
-        actor_player=record.actor_player,
-        entity_slots=tuple(entity_slots),
-    )
+
+def _keeps_ability(key, *, has_line, gone, keyword_of, dropout: float, rng) -> bool:
+    """Whether one of an entity's abilities gets a slot.
+
+    ``dropout`` is zero for the acting entity: dropping the ability under study
+    would make the record unanswerable.
+    """
+    if has_line is not None and not has_line(key):
+        return False
+    if gone and keyword_of is not None and keyword_of(key) in gone:
+        # Dropped rather than zeroed: a zero token would still tell the head
+        # this creature has an ability here, and gate 2 is asking what the
+        # board looks like without the keyword at all.
+        return False
+    return not (dropout > 0.0 and rng.random() < dropout)
 
 
 def _ability_keys(entity: EntityState) -> tuple[ProvenanceKey, ...]:
@@ -735,18 +729,6 @@ def _first_vector(keys, e_for, zero: tuple[float, ...]):
     return zero
 
 
-def anchored_attacker(record: EffectRecord) -> str | None:
-    """The attacker a ``blockers`` record is anchored to (FR-071).
-
-    It is carried by the source flag on that entity's ``[CARD]`` slot rather
-    than in ``[ACT]``, which is empty for this subkind. ``min_blockers`` is read
-    at this entity by the per-entity head.
-    """
-    if isinstance(record.payload, PlayabilityBlockersPayload):
-        return record.payload.anchor_attacker
-    return None
-
-
 def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]]:
     """Keywords a ``continuous`` record's own static contributed (FR-020).
 
@@ -755,8 +737,8 @@ def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]
     changed keywords, not the card's printed type line.
     """
     payload = record.payload
-    if record.kind is not RecordKind.CONTINUOUS or not hasattr(
-        payload, "contributions"
+    if record.kind is not RecordKind.CONTINUOUS or not isinstance(
+        payload, ContinuousPayload,
     ):
         return {}
     return {
@@ -764,3 +746,31 @@ def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]
         for contribution in payload.contributions
         if contribution.keywords
     }
+
+
+def feature_widths(records, *, layout: str | None = INPUT_LAYOUT) -> dict[SlotKind, int]:
+    """Each slot kind's width, measured from real records.
+
+    Measured rather than declared: the vocabularies the features are built from
+    live in this module, and a constant elsewhere would be a second place to
+    keep them in step. A player's and a card's width need a record that has one.
+    """
+    probe = records[0]
+    widths = {
+        SlotKind.GLOBAL: len(global_features(probe, layout=layout)),
+        SlotKind.ACT: len(act_features(probe)),
+        SlotKind.PLAYER: 0,
+        SlotKind.CARD: 0,
+    }
+    for record in records:
+        if record.state.players:
+            widths[SlotKind.PLAYER] = len(
+                player_features(record.state.players[0], record, layout=layout)
+            )
+        if record.state.entities:
+            widths[SlotKind.CARD] = len(
+                card_features(record.state.entities[0], record, layout=layout)
+            )
+        if widths[SlotKind.PLAYER] and widths[SlotKind.CARD]:
+            break
+    return widths

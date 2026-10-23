@@ -21,35 +21,15 @@ import java.util.List;
 public class ConvertMain {
 
     public static void main(String[] args) {
-        String cardsPath = "../forge/forge-gui/res/cardsfolder/";
-        String outputPath = "./output";
-        String tokensPath = null;
-        String tokensOutputPath = null;
+        ToolMain.Args cli = ToolMain.args(args,
+                "--cards-path", "--output-path", "--tokens-path", "--tokens-output-path");
+        String cardsPath = cli.get("--cards-path", "../forge/forge-gui/res/cardsfolder/");
+        String outputPath = cli.get("--output-path", "./output");
+        String tokensPath = cli.get("--tokens-path", defaultSibling(cardsPath, "tokenscripts"));
+        String tokensOutputPath = cli.get(
+                "--tokens-output-path", defaultSibling(outputPath, "tokenscripts"));
 
-        for (int i = 0; i < args.length; i++) {
-            switch (args[i]) {
-                case "--cards-path" -> {
-                    if (i + 1 < args.length) cardsPath = args[++i];
-                }
-                case "--output-path" -> {
-                    if (i + 1 < args.length) outputPath = args[++i];
-                }
-                case "--tokens-path" -> {
-                    if (i + 1 < args.length) tokensPath = args[++i];
-                }
-                case "--tokens-output-path" -> {
-                    if (i + 1 < args.length) tokensOutputPath = args[++i];
-                }
-            }
-        }
-        if (tokensPath == null) {
-            tokensPath = defaultSibling(cardsPath, "tokenscripts");
-        }
-        if (tokensOutputPath == null) {
-            tokensOutputPath = defaultSibling(outputPath, "tokenscripts");
-        }
-
-        try {
+        ToolMain.run(() -> {
             ForgeEnvironmentInitializer.initialize();
 
             BatchConverter batchConverter = new BatchConverter();
@@ -57,7 +37,7 @@ public class ConvertMain {
                     Path.of(cardsPath), Path.of(outputPath), SourceTree.CARDSFOLDER);
 
             System.out.println("Conversion complete:");
-            report("cardsfolder", cards);
+            cards.report(System.out, "cardsfolder");
             List<MissingSVarReport.Entry> missingSVars =
                     new ArrayList<>(cards.missingSVars());
 
@@ -66,7 +46,7 @@ public class ConvertMain {
                 BatchConverter.BatchResult tokens = batchConverter.convert(
                         tokensSource, Path.of(tokensOutputPath),
                         SourceTree.TOKENSCRIPTS);
-                report("tokenscripts", tokens);
+                tokens.report(System.out, "tokenscripts");
                 System.out.println("  Token output: " + tokensOutputPath);
                 missingSVars.addAll(tokens.missingSVars());
             } else {
@@ -84,26 +64,7 @@ public class ConvertMain {
                 System.err.print(block);
                 System.err.flush();
             }
-
-            System.exit(0);
-        } catch (Exception e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
-        }
-    }
-
-    private static void report(String tree, BatchConverter.BatchResult result) {
-        System.out.println("  [" + tree + "]");
-        System.out.println("  Total files:  " + result.totalFiles());
-        System.out.println("  Succeeded:    " + result.succeeded());
-        System.out.println("  Warnings:     " + result.warningCount());
-        if (!result.warnings().isEmpty()) {
-            System.out.println("\nWarnings:");
-            for (String warning : result.warnings()) {
-                System.out.println("  " + warning);
-            }
-        }
+        });
     }
 
     /** A sibling of {@code path} named {@code name} — the token tree's default. */

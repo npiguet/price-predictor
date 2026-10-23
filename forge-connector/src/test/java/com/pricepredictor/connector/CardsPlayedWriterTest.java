@@ -28,7 +28,7 @@ class CardsPlayedWriterTest {
         return new CardsPlayedRow(
                 TS, RUN_ID, "RVR", "forge-best", "gen-" + tag,
                 List.of("X"), List.of("Y"), List.of(), List.of(),
-                'A', 'B');
+                Side.A, Side.B);
     }
 
     @Test

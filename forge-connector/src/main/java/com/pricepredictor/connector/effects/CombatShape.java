@@ -6,11 +6,10 @@ import forge.game.combat.Combat;
 import forge.game.player.Player;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.StringJoiner;
 
 /**
  * A damage step's combat, as a record describes it.
@@ -39,12 +38,7 @@ final class CombatShape {
     private CombatShape() {
     }
 
-    /** An empty shape, for a record written outside combat. */
-    static CombatShape empty() {
-        return new CombatShape();
-    }
-
-    /** Who is attacking and who is blocking them, right now. */
+    /** Who is attacking and who is blocking them, right now; empty outside combat. */
     static CombatShape of(Combat combat) {
         CombatShape shape = new CombatShape();
         if (combat == null) {
@@ -63,29 +57,20 @@ final class CombatShape {
     }
 
     /**
-     * Add this step's share of the combat's damage assignment.
+     * Add this damage step's assignment.
      *
-     * <p>Called after the assignment has run, which is a different moment from
-     * {@link #of}: the attackers have to be read before the damage and the
-     * assignment only exists after it.
-     *
-     * <p>Forge accumulates the assignment over a whole combat and never clears
-     * it, so at the regular step the table still holds what first strike
-     * assigned. {@code alreadyWritten} carries what earlier steps of the same
-     * combat recorded, and grows as this reads. A double striker that assigns
-     * the same damage twice is counted once — the engine stores the latest
-     * value per pair, so "assigned again, identically" and "not assigned again"
-     * are the same table.
-     *
-     * @param alreadyWritten seen assignments for this combat, or null when the
-     *                       combat is a fork's and has no earlier step
+     * <p>Called once the assignment has run, which can be a different moment
+     * from {@link #of}: the assignment exists only after it. Forge keeps a copy
+     * of each step's assignment as the players made it, before prevention or
+     * redirection rewrote the damage, so a double striker's regular step
+     * carries its own assignment and a prevented hit still shows what was
+     * assigned. The observed record and its probe branch read the same thing.
      */
-    void addAssignment(Combat combat, Set<String> alreadyWritten) {
+    void addAssignment(Combat combat) {
         if (combat == null) {
             return;
         }
-        Object assigned = PatchHooks.read(combat, "getAssignedDamage");
-        if (!(assigned instanceof Table<?, ?, ?> table)) {
+        if (!(PatchHooks.ASSIGNED_DAMAGE.read(combat) instanceof Table<?, ?, ?> table)) {
             return;
         }
         for (Table.Cell<?, ?, ?> cell : table.cellSet()) {
@@ -98,10 +83,6 @@ final class CombatShape {
                 continue;
             }
             String from = SnapshotBuilder.entityId(source);
-            if (alreadyWritten != null
-                    && !alreadyWritten.add(from + ">" + target + "=" + amount)) {
-                continue;
-            }
             assignment
                     .computeIfAbsent(from, key -> new LinkedHashMap<>())
                     .put(target, amount);
@@ -119,34 +100,21 @@ final class CombatShape {
     }
 
     /**
-     * The three combat fields, without the surrounding braces.
+     * The three combat fields, in the order the payload writes them.
      *
-     * <p>Rendered as a fragment so a caller can add the fields only its own
-     * kind of record carries — the probe branch adds what it perturbed.
+     * <p>Handed over as fields rather than as a whole object so a caller can
+     * add the fields only its own kind of record carries — the probe branch
+     * adds what it perturbed.
+     *
+     * <p>A view, not a copy: the map is unmodifiable, but its values are this
+     * shape's own collections, so whoever renders it later sees them as they
+     * stand then, including an assignment added after this call.
      */
-    String fields() {
-        StringJoiner attackerJson = new StringJoiner(",", "[", "]");
-        for (String attacker : attackers) {
-            attackerJson.add(Json.string(attacker));
-        }
-        StringJoiner blockJson = new StringJoiner(",", "{", "}");
-        for (Map.Entry<String, List<String>> block : blocks.entrySet()) {
-            StringJoiner blockers = new StringJoiner(",", "[", "]");
-            for (String blocker : block.getValue()) {
-                blockers.add(Json.string(blocker));
-            }
-            blockJson.add(Json.string(block.getKey()) + ":" + blockers);
-        }
-        StringJoiner assignmentJson = new StringJoiner(",", "{", "}");
-        for (Map.Entry<String, Map<String, Integer>> from : assignment.entrySet()) {
-            StringJoiner targets = new StringJoiner(",", "{", "}");
-            for (Map.Entry<String, Integer> to : from.getValue().entrySet()) {
-                targets.add(Json.string(to.getKey()) + ":" + to.getValue());
-            }
-            assignmentJson.add(Json.string(from.getKey()) + ":" + targets);
-        }
-        return "\"attackers\":" + attackerJson
-                + ",\"blocks\":" + blockJson
-                + ",\"assignment_choices\":" + assignmentJson;
+    Map<String, Object> fields() {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("attackers", attackers);
+        fields.put("blocks", blocks);
+        fields.put("assignment_choices", assignment);
+        return Collections.unmodifiableMap(fields);
     }
 }

@@ -5,7 +5,8 @@ from __future__ import annotations
 import numpy as np
 
 from effects.application import evaluate_effect_model
-from effects.application.evaluate_effect_model import EvaluationReport, evaluate_gate_three
+from effects.application.geometry_checks import evaluate_gate_three
+from effects.domain.evaluation_report import EvaluationReport
 from effects.infrastructure.cli import build_parser
 
 

@@ -50,17 +50,17 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.infrastructure.record_io import (
-    ShardWriter,
     count_records,
     format_record_line,
     iter_shard_lines,
     iter_shards,
+    parse_record_line,
     read_records,
     read_shard,
     record_from_dict,
     record_to_dict,
-    shard_path,
 )
+from tests.unit.effects.builders import RawShardWriter
 
 _KEY = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "trigger", 0)
 _DONOR = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 1)
@@ -295,11 +295,6 @@ class TestForwardCompatibility:
         restored = record_from_dict(record_to_dict(record))
         assert restored.extra_fields == {}
 
-    def test_extra_fields_are_not_model_inputs(self):
-        data = record_to_dict(_record())
-        data["collector_build"] = "2027.1"
-        assert "extra_fields" not in record_from_dict(data).model_input_fields()
-
     def test_ability_unresolved_round_trips(self):
         record = _record(ability=(), ability_unresolved="engine_effect")
         assert record_from_dict(record_to_dict(record)) == record
@@ -314,12 +309,6 @@ class TestForwardCompatibility:
 
 
 class TestShardDirectory:
-    def test_a_shard_is_named_for_its_run_worker_and_lifetime(self, tmp_path):
-        assert (
-            shard_path(tmp_path, "run-uuid", 4, "L1").name
-            == "run-uuid.4-L1.jsonl"
-        )
-
     def test_two_lifetimes_of_one_worker_are_two_shards(self, tmp_path):
         """The counters restart with the JVM, so the shard has to restart too.
 
@@ -328,39 +317,32 @@ class TestShardDirectory:
         Sharing a file across them is what let a restart reissue ids the
         previous JVM had already used.
         """
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             writer.write(_record(record_id="run.0-L1.0"))
-        with ShardWriter(tmp_path, "run", 0, "L2") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L2") as writer:
             writer.write(_record(record_id="run.0-L2.0"))
         assert len(iter_shards(tmp_path)) == 2
         loaded = list(read_records(tmp_path))
         assert len({r.record_id for r in loaded}) == 2
         assert {r.worker for r in loaded} == {"0"}
-        assert {r.lifetime for r in loaded} == {"L1", "L2"}
-
-    def test_a_writer_creates_its_directory(self, tmp_path):
-        target = tmp_path / "records"
-        with ShardWriter(target, "run-uuid", 0, "L1") as writer:
-            writer.write(_record())
-        assert (target / "run-uuid.0-L1.jsonl").exists()
 
     def test_written_records_read_back(self, tmp_path):
         records = [_record(record_id=f"run.0.{i}") for i in range(3)]
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in records:
                 writer.write(record)
         assert list(read_records(tmp_path)) == records
 
     def test_a_writer_appends_rather_than_truncating(self, tmp_path):
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             writer.write(_record(record_id="run.0.1"))
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             writer.write(_record(record_id="run.0.2"))
         assert count_records(tmp_path) == 2
 
     def test_every_shard_in_the_directory_is_loaded(self, tmp_path):
         for worker in (0, 1, 2):
-            with ShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
+            with RawShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
                 writer.write(_record(record_id=f"run.{worker}.1"))
         assert {r.worker for r in read_records(tmp_path)} == {"0", "1", "2"}
 
@@ -483,6 +465,37 @@ class TestTheRewriteResult:
         assert record_from_dict(record_to_dict(record)).payload.result is result
 
 
+class TestEveryEventReadsOneCounterSpelling:
+    """``+1/+1`` becomes ``P1P1`` on read wherever an event sits, not only in a
+    resolution's event list: a rewrite's outgoing event is a target too, and a
+    raw spelling there falls through to ``counters_delta_other``."""
+
+    @staticmethod
+    def _counter_event() -> Event:
+        return Event(type=EventType.COUNTER_CHANGE, subjects=("E1",),
+                     params={"counter_type": "+1/+1", "delta": 1})
+
+    def test_a_rewrites_events(self):
+        record = _record(
+            kind=RecordKind.REWRITE, moment=None,
+            payload=RewritePayload(
+                incoming=self._counter_event(), outgoing=self._counter_event(),
+                result=RewriteResult.UPDATED,
+            ),
+        )
+        loaded = record_from_dict(record_to_dict(record))
+        assert loaded.payload.incoming.params["counter_type"] == "P1P1"
+        assert loaded.payload.outgoing.params["counter_type"] == "P1P1"
+
+    def test_a_triggers_event(self):
+        record = _record(
+            kind=RecordKind.TRIGGER, moment=None,
+            payload=TriggerPayload(event=self._counter_event(), fired=True),
+        )
+        loaded = record_from_dict(record_to_dict(record))
+        assert loaded.payload.event.params["counter_type"] == "P1P1"
+
+
 class TestARewriteShardCollectedBeforeTheResult:
     """Both shapes coexist: the corpus is append-only.
 
@@ -591,12 +604,12 @@ class TestCompressedShards:
 
     def test_an_uncompressed_shard_still_reads(self, tmp_path):
         """The corpus is append-only, so shards predating compression stay."""
-        with ShardWriter(tmp_path, "old", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "old", 0, "L1", compressed=False) as writer:
             writer.write(_record(record_id="old.0.1"))
         assert [r.record_id for r in read_records(tmp_path)] == ["old.0.1"]
 
     def test_both_spellings_load_together(self, tmp_path):
-        with ShardWriter(tmp_path, "old", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "old", 0, "L1", compressed=False) as writer:
             writer.write(_record(record_id="old.0.1"))
         self._write_members(
             tmp_path / "new.1.jsonl.gz", [[self._line("new.1.1")]],
@@ -606,7 +619,7 @@ class TestCompressedShards:
         }
 
     def test_counting_covers_both_spellings(self, tmp_path):
-        with ShardWriter(tmp_path, "old", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "old", 0, "L1", compressed=False) as writer:
             writer.write(_record(record_id="old.0.1"))
         self._write_members(
             tmp_path / "new.1.jsonl.gz",
@@ -624,13 +637,13 @@ class TestCompressedShards:
 
     def test_shards_are_read_in_name_order(self, tmp_path):
         for worker in (2, 0, 1):
-            with ShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
+            with RawShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
                 writer.write(_record(record_id=f"run.{worker}.1"))
         assert [r.worker for r in read_records(tmp_path)] == ["0", "1", "2"]
 
     def test_a_trailing_partial_line_is_skipped(self, tmp_path):
         """A JVM crash mid-write is expected, not exceptional."""
-        path = shard_path(tmp_path, "run", 0, "L1")
+        path = tmp_path / "run.0-L1.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         good = format_record_line(_record(record_id="run.0.1"))
         truncated = format_record_line(_record(record_id="run.0.2"))[:40]
@@ -639,7 +652,7 @@ class TestCompressedShards:
         assert [r.record_id for r in loaded] == ["run.0.1"]
 
     def test_a_partial_line_is_left_on_disk_rather_than_repaired(self, tmp_path):
-        path = shard_path(tmp_path, "run", 0, "L1")
+        path = tmp_path / "run.0-L1.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         content = format_record_line(_record())[:40]
         path.write_text(content, encoding="utf-8")
@@ -651,12 +664,12 @@ class TestCompressedShards:
 
     def test_non_jsonl_files_in_the_directory_are_ignored(self, tmp_path):
         (tmp_path / "notes.txt").write_text("not a shard", encoding="utf-8")
-        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
             writer.write(_record())
         assert count_records(tmp_path) == 1
 
     def test_blank_lines_are_ignored(self, tmp_path):
-        path = shard_path(tmp_path, "run", 0, "L1")
+        path = tmp_path / "run.0-L1.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
         line = format_record_line(_record())
         path.write_text(f"{line}\n\n{line}\n", encoding="utf-8")
@@ -752,9 +765,25 @@ class TestGen2EnvelopeFields:
         records = list(read_shard(_GEN1_FIXTURE))
         assert len(records) > 40
         for record in records:
-            assert record.random_seat is False
+            assert record.random_seat is None
+            assert not record.random_seat
             assert record.what_if is None
             assert record.extra_fields == {}
+
+    def test_a_rewritten_gen1_shard_stays_gen1(self, tmp_path):
+        """A curated shard is gen-1 or gen-2 as its source was (FR-033).
+
+        Written with ``random_seat`` on every record whatever the source held,
+        a dataset built from gen-1 shards read as gen-2, and the mixed-
+        generation guard on ``--corpus`` could never fire.
+        """
+        from effects.infrastructure.record_io import GEN_1, shard_generation, write_shard
+
+        rewritten = tmp_path / "curated.jsonl.gz"
+        write_shard(rewritten, read_shard(_GEN1_FIXTURE))
+        assert shard_generation(rewritten) == GEN_1
+        for line in iter_shard_lines(rewritten):
+            assert "random_seat" not in json.loads(line)
 
     def test_a_gen1_line_carries_neither_field(self):
         for line in iter_shard_lines(_GEN1_FIXTURE):
@@ -914,3 +943,69 @@ class TestInternedProvenanceKeys:
         data = record_to_dict(record)
         assert record_from_dict(data) == record
         assert record_from_dict(data) == record_from_dict(json.loads(json.dumps(data)))
+
+
+class TestTheWireFormIsPinned:
+    """The bytes a record serializes to, pinned against a digest.
+
+    A round trip alone cannot catch a codec change that alters encoder and
+    decoder together — a renamed key, a reordered field — and the corpus is
+    append-only, so a shard written under the changed form would no longer
+    read the way the shards beside it do. The digests were taken from the
+    serializer before its codecs were regrouped.
+    """
+
+    @staticmethod
+    def _digest(records) -> str:
+        import hashlib
+
+        digest = hashlib.sha256()
+        for record in records:
+            digest.update(format_record_line(record).encode("utf-8"))
+            digest.update(b"\n")
+        return digest.hexdigest()
+
+    def test_the_gen1_fixture_serializes_to_the_pinned_bytes(self):
+        """Without ``random_seat``, which a gen-1 line never carried."""
+        records = list(read_shard(_GEN1_FIXTURE))
+        assert len(records) == 53
+        assert self._digest(records) == (
+            "588245c598027912271025c937270892f62d31cfb9e8346c4d142ea00a5ea266"
+        )
+
+    def test_every_kind_serializes_to_the_pinned_bytes(self):
+        records = [_record(**ALL_KINDS[name]) for name in sorted(ALL_KINDS)]
+        assert self._digest(records) == (
+            "c8736a4d14319f0512573a25c3b307f355d52b16062e6c2c8768c667c1161a83"
+        )
+
+    def test_the_fixture_round_trips_through_its_own_wire_form(self):
+        for record in read_shard(_GEN1_FIXTURE):
+            line = format_record_line(record)
+            again = record_from_dict(parse_record_line(line))
+            assert again == record
+            assert format_record_line(again) == line
+
+
+class TestThePayloadCodecs:
+    """One codec per payload type, chosen by the record's ``(kind, discriminator)``."""
+
+    def test_every_payload_type_has_exactly_one_codec(self):
+        from effects.domain.records import PAYLOAD_TYPES
+        from effects.infrastructure.record_io import _PAYLOAD_CODECS
+
+        assert set(_PAYLOAD_CODECS) == set(PAYLOAD_TYPES.values())
+
+    @pytest.mark.parametrize("kind, discriminator", [
+        (RecordKind.RESOLUTION, None),
+        (RecordKind.PLAYABILITY, None),
+        (RecordKind.REWRITE, Moment.RESOLUTION),
+        (RecordKind.COMBAT, PlayabilitySubkind.BLOCKERS),
+    ])
+    def test_a_pair_no_payload_is_defined_for_is_refused(self, kind, discriminator):
+        # The decoder used to read anything it did not recognise as a
+        # blockers payload; an unknown pair is now refused by name.
+        from effects.infrastructure.record_io import _payload_from_json
+
+        with pytest.raises(ValueError, match="no payload is defined"):
+            _payload_from_json({"anchor_attacker": "E1"}, kind, discriminator)

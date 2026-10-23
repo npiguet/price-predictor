@@ -23,17 +23,27 @@ class RulesParserTest {
     private final RulesParser converter = new RulesParser();
 
     private MultiCard convert(String... lines) {
-        return converter.parseScript(Arrays.asList(lines), "test.txt");
+        return converter.parseScript(Arrays.asList(lines), "test.txt", null).card();
     }
 
     private MultiCard convertFromFile(String relativePath) {
         try {
             Path file = CARDS_FOLDER.resolve(relativePath);
             List<String> lines = Files.readAllLines(file);
-            return converter.parseScript(lines, file.getFileName().toString());
+            return converter.parseScript(lines, file.getFileName().toString(), null).card();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** The converted text BatchConverter writes for a card. */
+    private static String rendered(MultiCard card) {
+        return RenderedLine.join(card.renderLines());
+    }
+
+    /** The converted text of one face, as BatchConverter writes it. */
+    private static String rendered(CardFace face) {
+        return RenderedLine.join(face.renderLines(0));
     }
 
     private CardFace face(String relativePath) {
@@ -91,7 +101,7 @@ class RulesParserTest {
         var keywords = abilitiesOfType(face("s/serra_angel.txt"), AbilityType.STATIC);
         assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("flying")));
         assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("vigilance")));
-        assertFalse(keywords.get(0).formatLine().contains("["), "Static keywords should have no action number");
+        assertFalse(keywords.get(0).formatLine(null).contains("["), "Static keywords should have no action number");
     }
 
     @Test
@@ -113,37 +123,27 @@ class RulesParserTest {
                 "MayFlashCost should use reminder text: " + costs.get(0).descriptionText());
     }
 
-    @Test
-    void protectionKeywordIncludesColor() {
-        var statics = abilitiesOfType(face("a/animar_soul_of_elements.txt"), AbilityType.STATIC);
-        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from white")),
-                "expected 'protection from white' in: " + statics);
-        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from black")),
-                "expected 'protection from black' in: " + statics);
-    }
-
-    @Test
-    void protectionKeywordTypeUsesFromFormat() {
-        // K:Protection:Creature should emit "protection from creature", not the
-        // internal Forge filter syntax "protection:creature".
-        var statics = abilitiesOfType(face("b/beloved_chaplain.txt"), AbilityType.STATIC);
-        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from")),
-                "Protection should use 'protection from X' format, not 'protection:X': " + statics);
-    }
-
-    @Test
-    void protectionKeywordFilterExpressionUsesHumanReadableTarget() {
-        // K:Protection:Card.MultiColor:multicolored should emit
-        // "protection from multicolored", not "protection:card.multicolor:multicolored".
-        var statics = abilitiesOfType(face("e/enemy_of_the_guildpact.txt"), AbilityType.STATIC);
-        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from multicolored")),
-                "Filter-based protection should use human-readable target: " + statics);
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = ';', value = {
+            // K:Protection:Creature must read "protection from creature", not Forge's
+            // internal "protection:creature" filter syntax.
+            "a colour; a/animar_soul_of_elements.txt; protection from white|protection from black",
+            "a card type; b/beloved_chaplain.txt; protection from",
+            // K:Protection:Card.MultiColor:multicolored must not leak the filter expression.
+            "a filter expression; e/enemy_of_the_guildpact.txt; protection from multicolored",
+    })
+    void protectionKeywordReadsAsProtectionFromTheTarget(String ignoredCase, String file, String expectedTexts) {
+        var statics = abilitiesOfType(face(file), AbilityType.STATIC);
+        for (String expected : expectedTexts.split("\\|")) {
+            assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains(expected)),
+                    "expected '" + expected + "' in: " + statics);
+        }
     }
 
     @Test
     void activatedAbility() {
         CardFace card = face("l/llanowar_elves.txt");
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("activated[1]:"), output);
         assertTrue(output.contains("{T}"), output);
         assertTrue(output.contains("add {G}"), output);
@@ -153,7 +153,7 @@ class RulesParserTest {
     void triggeredAbility() {
         var triggered = abilitiesOfType(face("t/thragtusk.txt"), AbilityType.TRIGGERED);
         assertFalse(triggered.isEmpty());
-        String line = triggered.get(0).formatLine();
+        String line = triggered.get(0).formatLine(null);
         assertTrue(line.startsWith("triggered:"));
         assertTrue(line.contains("CARDNAME"));
         assertTrue(line.contains("gain 5 life"));
@@ -163,14 +163,14 @@ class RulesParserTest {
     void staticAbility() {
         var statics = abilitiesOfType(face("b/blood_moon.txt"), AbilityType.STATIC);
         assertEquals(1, statics.size());
-        assertTrue(statics.get(0).formatLine().contains("nonbasic lands are mountains"));
+        assertTrue(statics.get(0).formatLine(null).contains("nonbasic lands are mountains"));
     }
 
     @Test
     void replacementEffect() {
         var replacements = abilitiesOfType(face("r/rest_in_peace.txt"), AbilityType.REPLACEMENT);
         assertFalse(replacements.isEmpty());
-        assertTrue(replacements.stream().anyMatch(r -> r.formatLine().contains("exile it instead")));
+        assertTrue(replacements.stream().anyMatch(r -> r.formatLine(null).contains("exile it instead")));
     }
 
     @Test
@@ -196,10 +196,10 @@ class RulesParserTest {
 
     @Test
     void engineMetadataExcluded() {
-        String output = convert(
+        String output = rendered(convert(
                 "Name:Test Card", "ManaCost:1", "Types:Creature Human", "PT:1/1",
                 "AI:RemoveDeck:Random", "DeckHints:Ability$LifeGain",
-                "SVar:AnotherSVar:DB$ Something", "Oracle:").formatText();
+                "SVar:AnotherSVar:DB$ Something", "Oracle:"));
         assertFalse(output.contains("AI:"));
         assertFalse(output.contains("DeckHints"));
         assertFalse(output.contains("SVar"));
@@ -212,7 +212,7 @@ class RulesParserTest {
                 "K:Cycling:2", "A:AB$ GainLife | Cost$ T | LifeAmount$ 1 | SpellDescription$ Gain 1 life.",
                 "Oracle:").faces().get(0);
         // Verify sequential action numbers in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("[1]:"), "Should have action number 1: " + output);
         assertTrue(output.contains("[2]:"), "Should have action number 2: " + output);
         assertTrue(output.indexOf("[1]:") < output.indexOf("[2]:"),
@@ -221,7 +221,7 @@ class RulesParserTest {
 
     @Test
     void textCasingCorrect() {
-        String output = convertFromFile("l/llanowar_elves.txt").formatText();
+        String output = rendered(convertFromFile("l/llanowar_elves.txt"));
         assertTrue(output.contains("llanowar elves"));
         assertTrue(output.contains("{G}"));
         assertTrue(output.contains("{T}"));
@@ -248,14 +248,14 @@ class RulesParserTest {
     void noCostCardOmitsManaCostLine() {
         CardFace card = face("a/ancestral_vision.txt");
         assertNull(card.manaCost());
-        assertFalse(card.formatText().contains("mana cost:"));
+        assertFalse(rendered(card).contains("mana cost:"));
     }
 
     @Test
     void textPropertyIncluded() {
-        String output = convert(
+        String output = rendered(convert(
                 "Name:Test Card", "ManaCost:1", "Types:Creature Human", "PT:1/1",
-                "Text:This is flavor text.", "Oracle:").faces().get(0).formatText();
+                "Text:This is flavor text.", "Oracle:").faces().get(0));
         assertTrue(output.contains("text: this is flavor text."));
     }
 
@@ -267,11 +267,11 @@ class RulesParserTest {
         assertEquals("3", card.loyalty());
         var pw = abilitiesOfType(card, AbilityType.PLANESWALKER);
         assertEquals(3, pw.size());
-        assertTrue(pw.get(0).formatLine().contains("[+2]:"));
-        assertTrue(pw.get(1).formatLine().contains("[-1]:"));
-        assertTrue(pw.get(2).formatLine().contains("[-10]:"));
+        assertTrue(pw.get(0).formatLine(null).contains("[+2]:"));
+        assertTrue(pw.get(1).formatLine(null).contains("[-1]:"));
+        assertTrue(pw.get(2).formatLine(null).contains("[-10]:"));
         // Verify sequential action numbers in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("planeswalker[1]:"));
         assertTrue(output.contains("planeswalker[2]:"));
         assertTrue(output.contains("planeswalker[3]:"));
@@ -281,12 +281,12 @@ class RulesParserTest {
     void sagaChapterAbilities() {
         var chapters = abilitiesOfType(face("t/the_eldest_reborn.txt"), AbilityType.CHAPTER);
         assertEquals(3, chapters.size());
-        assertTrue(chapters.get(0).formatLine().startsWith("chapter:"));
-        assertTrue(chapters.get(0).formatLine().contains("I \u2014"));
-        assertTrue(chapters.get(1).formatLine().contains("II \u2014"));
-        assertTrue(chapters.get(2).formatLine().contains("III \u2014"));
-        assertTrue(chapters.get(0).formatLine().contains("sacrifices"));
-        assertFalse(chapters.get(0).formatLine().contains("["), "Chapters should have no action number");
+        assertTrue(chapters.get(0).formatLine(null).startsWith("chapter:"));
+        assertTrue(chapters.get(0).formatLine(null).contains("I \u2014"));
+        assertTrue(chapters.get(1).formatLine(null).contains("II \u2014"));
+        assertTrue(chapters.get(2).formatLine(null).contains("III \u2014"));
+        assertTrue(chapters.get(0).formatLine(null).contains("sacrifices"));
+        assertFalse(chapters.get(0).formatLine(null).contains("["), "Chapters should have no action number");
     }
 
     @Test
@@ -299,7 +299,7 @@ class RulesParserTest {
         assertEquals("invasion of kamigawa", front.name());
         assertEquals("4", front.defense());
         assertNull(front.powerToughness());
-        assertTrue(front.formatText().contains("defense: 4"));
+        assertTrue(rendered(front).contains("defense: 4"));
 
         CardFace back = result.faces().get(1);
         assertEquals("rooftop saboteurs", back.name());
@@ -321,9 +321,9 @@ class RulesParserTest {
         CardFace card = face("l/lightning_bolt.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size());
-        assertTrue(spells.get(0).formatLine().contains("CARDNAME deals 3 damage"));
+        assertTrue(spells.get(0).formatLine(null).contains("CARDNAME deals 3 damage"));
         // Verify action number in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("spell[1]:"));
         assertEquals(0, countOfType(card, AbilityType.ADDITIONAL_COST));
     }
@@ -332,12 +332,12 @@ class RulesParserTest {
     void spellWithAdditionalCost() {
         CardFace card = face("a/abandon_hope.txt");
 
-        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine();
+        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
         assertTrue(costLine.startsWith("additional cost:"));
         assertTrue(costLine.contains("discard X"));
         assertFalse(costLine.contains("as an additional cost to cast"));
 
-        assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine()
+        assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine(null)
                 .contains("look at target opponent's hand"));
     }
 
@@ -345,7 +345,7 @@ class RulesParserTest {
     void cleaveEmittedAsAlternateCost() {
         CardFace card = face("a/alchemists_gambit.txt");
 
-        String altLine = abilitiesOfType(card, AbilityType.ALTERNATE_COST).get(0).formatLine();
+        String altLine = abilitiesOfType(card, AbilityType.ALTERNATE_COST).get(0).formatLine(null);
         assertTrue(altLine.contains("cleave"));
         assertTrue(altLine.contains("{4}{U}{U}{R}"));
         assertFalse(altLine.matches(".*\\{R}\\d.*"), "No trailing digits after cost");
@@ -353,7 +353,7 @@ class RulesParserTest {
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertFalse(spells.isEmpty());
         // Verify sequential action numbering in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         for (int i = 0; i < spells.size(); i++) {
             assertTrue(output.contains("spell[" + (i + 1) + "]:"),
                     "Expected spell[" + (i + 1) + "] in output: " + output);
@@ -365,19 +365,19 @@ class RulesParserTest {
         CardFace card = face("a/abhorrent_oculus.txt");
         var costs = abilitiesOfType(card, AbilityType.ADDITIONAL_COST);
         assertEquals(1, costs.size());
-        assertTrue(costs.get(0).formatLine().contains("exile"));
+        assertTrue(costs.get(0).formatLine(null).contains("exile"));
     }
 
     @Test
     void additionalCostFromRaiseCostStatic() {
         CardFace card = face("a/aether_tide.txt");
 
-        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine();
+        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
         assertTrue(costLine.contains("discard X creature cards"));
         assertFalse(costLine.contains("as an additional cost to cast"));
         assertEquals(0, countOfType(card, AbilityType.STATIC), "RaiseCost should not appear as static");
 
-        assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine()
+        assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine(null)
                 .contains("return X target creatures"));
         assertCostsBeforeSpells(card);
     }
@@ -394,7 +394,7 @@ class RulesParserTest {
     void optionalAdditionalCost() {
         CardFace card = face("a/analyze_the_pollen.txt");
 
-        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine();
+        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
         assertTrue(costLine.contains("you may collect evidence 8"));
         assertFalse(costLine.contains("as an additional cost to cast"));
         assertEquals(0, countOfType(card, AbilityType.STATIC));
@@ -405,14 +405,14 @@ class RulesParserTest {
     void alternateAdditionalCost() {
         CardFace card = face("a/annihilating_glare.txt");
 
-        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine();
+        String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
         assertTrue(costLine.contains("sacrifice"));
         assertTrue(costLine.contains("or"));
         assertEquals(0, countOfType(card, AbilityType.STATIC)
                 + countOfType(card, AbilityType.ACTIVATED),
                 "AlternateAdditionalCost should not appear as keyword");
 
-        assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine()
+        assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine(null)
                 .contains("destroy target creature or planeswalker"));
         assertCostsBeforeSpells(card);
     }
@@ -426,12 +426,12 @@ class RulesParserTest {
         // Charm options are sub-abilities of the spell
         var options = spells.get(0).subAbilities();
         assertEquals(3, options.size());
-        assertTrue(options.get(0).formatLine().contains("{P} \u2014"));
-        assertTrue(options.get(0).formatLine().contains("create a 1/1"));
-        assertTrue(options.get(1).formatLine().contains("{P}{P} \u2014"));
-        assertTrue(options.get(1).formatLine().contains("exile target"));
-        assertTrue(options.get(2).formatLine().contains("{P}{P}{P} \u2014"));
-        assertTrue(options.get(2).formatLine().contains("return target"));
+        assertTrue(options.get(0).formatLine(null).contains("{P} \u2014"));
+        assertTrue(options.get(0).formatLine(null).contains("create a 1/1"));
+        assertTrue(options.get(1).formatLine(null).contains("{P}{P} \u2014"));
+        assertTrue(options.get(1).formatLine(null).contains("exile target"));
+        assertTrue(options.get(2).formatLine(null).contains("{P}{P}{P} \u2014"));
+        assertTrue(options.get(2).formatLine(null).contains("return target"));
     }
 
     @Test
@@ -442,7 +442,7 @@ class RulesParserTest {
         var levels = abilitiesOfType(card, AbilityType.LEVEL);
         assertEquals(3, levels.size());
         // Class levels use ordinal() for fixed numbering in formatted output
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("level[1]:"), "Level 1 in output: " + output);
         assertTrue(output.contains("level[2]:"), "Level 2 in output: " + output);
         assertTrue(output.contains("level[3]:"), "Level 3 in output: " + output);
@@ -462,7 +462,7 @@ class RulesParserTest {
         CardFace card = face("b/bard_class.txt");
         var levels = abilitiesOfType(card, AbilityType.LEVEL);
         assertEquals(3, levels.size());
-        String output = card.formatText();
+        String output = rendered(card);
         assertTrue(output.contains("level[1]:"), "Level 1 in output: " + output);
         assertTrue(levels.get(0).descriptionText().contains("legendary creatures"));
         assertNoRawEtbReplacementKeyword(card);
@@ -494,7 +494,7 @@ class RulesParserTest {
     @Test
     void doubleKickerIncludesBothCosts() {
         String costLine = abilitiesOfType(face("a/archangel_of_wrath.txt"),
-                AbilityType.ADDITIONAL_COST).get(0).formatLine();
+                AbilityType.ADDITIONAL_COST).get(0).formatLine(null);
         assertTrue(costLine.contains("kicker"));
         assertTrue(costLine.contains("{B}"));
         assertTrue(costLine.contains("{R}"));
@@ -618,7 +618,7 @@ class RulesParserTest {
         CardFace card = face("f/forest.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertEquals("{T}: add {G}", activated.get(0).descriptionText());
+        assertEquals("{T}: add {G}.", activated.get(0).descriptionText());
     }
 
     @Test
@@ -626,9 +626,26 @@ class RulesParserTest {
         CardFace card = face("b/bayou.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertTrue(activated.get(0).descriptionText().contains("{B}"));
-        assertTrue(activated.get(0).descriptionText().contains("or"));
-        assertTrue(activated.get(0).descriptionText().contains("{G}"));
+        assertEquals("{T}: add {B} or {G}.", activated.get(0).descriptionText());
+    }
+
+    @Test
+    void aTriomesManaLineReadsLikeAScriptedTriLand() {
+        // Ketria Triome's line is synthesized from its basic types; Arcane
+        // Sanctum's comes from its script. The two print the same sentence.
+        var triome = abilitiesOfType(face("k/ketria_triome.txt"), AbilityType.ACTIVATED);
+        assertTrue(triome.stream().anyMatch(a -> a.descriptionText().equals("{T}: add {U}, {R}, or {G}.")),
+                triome.toString());
+        var sanctum = abilitiesOfType(face("a/arcane_sanctum.txt"), AbilityType.ACTIVATED);
+        assertEquals("{T}: add {W}, {U}, or {B}.", sanctum.get(0).descriptionText());
+    }
+
+    @Test
+    void joinWithOrUsesTheSerialCommaFromThreeItems() {
+        assertEquals("a", RulesParser.joinWithOr(List.of("a")));
+        assertEquals("a or b", RulesParser.joinWithOr(List.of("a", "b")));
+        assertEquals("a, b, or c", RulesParser.joinWithOr(List.of("a", "b", "c")));
+        assertEquals("a, b, c, or d", RulesParser.joinWithOr(List.of("a", "b", "c", "d")));
     }
 
     @Test
@@ -640,7 +657,7 @@ class RulesParserTest {
         assertTrue(activated.get(0).descriptionText().contains("add {G}"));
     }
 
-    // --- Smoke tests: cards that previously caused errors ---
+    // --- Smoke tests: cards whose shapes are error-prone to parse ---
 
     @ParameterizedTest
     @CsvSource({
@@ -659,7 +676,7 @@ class RulesParserTest {
         CardFace card = face("a/aetherspouts.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size());
-        assertTrue(spells.get(0).formatLine().contains("each attacking creature"));
+        assertTrue(spells.get(0).formatLine(null).contains("each attacking creature"));
     }
 
     @Test
@@ -724,21 +741,58 @@ class RulesParserTest {
         // so choices become top-level OPTION abilities (no parent SPELL).
         var options = allOptions(face("w/what_must_be_done.txt"));
         assertEquals(2, options.size());
-        assertTrue(options.get(0).formatLine().contains("destroy all artifacts and creatures"));
-        assertTrue(options.get(1).formatLine().contains("release juno"));
-        assertTrue(options.get(1).formatLine().contains("return target historic permanent card"));
-        assertFalse(options.get(1).formatLine().contains("Artifacts, legendaries, and Sagas are historic"),
+        assertTrue(options.get(0).formatLine(null).contains("destroy all artifacts and creatures"));
+        assertTrue(options.get(1).formatLine(null).contains("release juno"));
+        assertTrue(options.get(1).formatLine(null).contains("return target historic permanent card"));
+        assertFalse(options.get(1).formatLine(null).contains("Artifacts, legendaries, and Sagas are historic"),
                 "Reminder text should be stripped");
     }
 
     @Test
-    void charmChoiceWithNoDescriptionAnywhere_throws() {
-        assertThrows(Exception.class, () -> convert(
+    void charmChoiceWithNoDescriptionAnywhereIsLeftOut() {
+        // A mode with nothing to print has no option line, rather than
+        // failing the whole card's conversion.
+        var options = allOptions(convert(
                 "Name:Bad Charm", "ManaCost:1 U", "Types:Sorcery",
                 "A:SP$ Charm | Choices$ DBNoop,DBDraw",
                 "SVar:DBNoop:DB$ Pump | Defined$ Self | NumAtt$ 0 | NumDef$ 0",
                 "SVar:DBDraw:DB$ Draw | NumCards$ 1 | SpellDescription$ Draw a card.",
-                "Oracle:"));
+                "Oracle:").faces().get(0));
+        assertEquals(1, options.size(), "Only the described mode prints: " + options);
+        assertEquals("draw a card.", options.get(0).descriptionText());
+    }
+
+    @Test
+    void pawprintModeWithNoDescriptionPrintsItsCostAlone() {
+        var options = allOptions(convert(
+                "Name:Paw Charm", "ManaCost:1 G", "Types:Sorcery",
+                "A:SP$ Charm | Pawprint$ 3 | Choices$ DBNoop,DBDraw",
+                "SVar:DBNoop:DB$ Pump | Defined$ Self | NumAtt$ 0 | NumDef$ 0 | Pawprint$ 2",
+                "SVar:DBDraw:DB$ Draw | NumCards$ 1 | Pawprint$ 1 | SpellDescription$ Draw a card.",
+                "Oracle:").faces().get(0));
+        assertEquals(2, options.size(), "Both modes print: " + options);
+        assertEquals("{P}{P}", options.get(0).descriptionText());
+        assertEquals("{P} \u2014 draw a card.", options.get(1).descriptionText());
+    }
+
+    @Test
+    void aTriggeredCharmPrefixesItsModesLikeAModalSpell() {
+        // A trigger's modes come through optionsFrom rather than
+        // fromSpellAbility, and print the same mode-cost prefix.
+        CardFace card = convert(
+                "Name:Costly Trigger", "ManaCost:2 W", "Types:Creature Human",
+                "PT:2/2",
+                "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield"
+                        + " | ValidCard$ Card.Self | Execute$ TrigCharm"
+                        + " | TriggerDescription$ When CARDNAME enters, ABILITY",
+                "SVar:TrigCharm:DB$ Charm | Choices$ DBDraw,DBGain",
+                "SVar:DBDraw:DB$ Draw | NumCards$ 1 | ModeCost$ 1 W | SpellDescription$ Draw a card.",
+                "SVar:DBGain:DB$ GainLife | LifeAmount$ 3 | SpellDescription$ Gain 3 life.",
+                "Oracle:").faces().get(0);
+        var options = allOptions(card);
+        assertEquals(2, options.size(), "Both modes print: " + card.abilities());
+        assertEquals("{1}{W} \u2014 draw a card.", options.get(0).descriptionText());
+        assertEquals("gain 3 life.", options.get(1).descriptionText());
     }
 
     @Test
@@ -752,8 +806,8 @@ class RulesParserTest {
                 "SVar:DBDirect:DB$ GainLife | LifeAmount$ 3 | SpellDescription$ Gain 3 life.",
                 "Oracle:").faces().get(0));
         assertEquals(2, options.size());
-        assertTrue(options.get(0).formatLine().contains("draw a card from the chain"));
-        assertTrue(options.get(1).formatLine().contains("gain 3 life"));
+        assertTrue(options.get(0).formatLine(null).contains("draw a card from the chain"));
+        assertTrue(options.get(1).formatLine(null).contains("gain 3 life"));
     }
 
     // --- Pattern 3: Draft-only cards must not duplicate lines as text: fallback ---
@@ -885,94 +939,45 @@ class RulesParserTest {
 
     // --- Pattern B: Visit / Attraction keyword ---
 
-    @Test
-    void visitAttractionEmitsFullTriggerDescription() {
-        // Storybook Ride is an Attraction with Visit keyword.
-        // Expected: 1 TRIGGERED whose description starts with "visit —" and contains the exile effect.
-        CardFace card = face("s/storybook_ride.txt");
+    /** Each visit attraction yields exactly one TRIGGERED, led by "visit —", with no SPELL children. */
+    private Ability assertSingleVisitTrigger(String file, String effectText) {
+        CardFace card = face(file);
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertFalse(triggered.isEmpty(), "Visit attraction should emit a TRIGGERED: " + card.abilities());
+        assertEquals(1, triggered.size(), file + " should have exactly 1 TRIGGERED: " + card.abilities());
         Ability visit = triggered.get(0);
-        assertTrue(visit.descriptionText().toLowerCase().contains("visit"),
-                "Visit triggered description should contain 'visit': " + visit.descriptionText());
-        assertTrue(visit.descriptionText().contains("exile the top"),
-                "Visit triggered description should contain the exile effect: " + visit.descriptionText());
-        assertFalse(visit.descriptionText().equalsIgnoreCase("visit:trigexile"),
-                "Visit should not be emitted as raw 'visit:trigexile': " + visit.descriptionText());
+        String desc = visit.descriptionText().toLowerCase();
+        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
+        assertTrue(desc.contains(effectText), "Description should contain oracle effect: " + desc);
+        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
+                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
+        return visit;
     }
 
     // --- Pattern 6: Visit duplicate suppression ---
 
-    @Test
-    void visitBumperCarsNoDuplicateLines() {
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            "Bumper Cars,   b/bumper_cars.txt,    must be blocked",
+            "Ferris Wheel,  f/ferris_wheel.txt,   phases out",
+            "Swinging Ship, s/swinging_ship.txt,  additional combat phase",
+    })
+    void visitWithDuplicatePrefixEmitsOneTrigger(String ignoredCase, String file, String effectText) {
         // SpellDescription starts with "Visit — " → Forge TrigDesc doubles it to "Visit — Visit — …"
-        // Expected: 1 TRIGGERED with single "visit —" prefix and no SPELL sub-abilities.
-        CardFace card = face("b/bumper_cars.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Bumper Cars should have exactly 1 TRIGGERED: " + card.abilities());
-        Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
-        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertFalse(desc.contains("visit — visit"), "Description must not double 'visit —': " + desc);
-        assertTrue(desc.contains("must be blocked"), "Description should contain oracle effect: " + desc);
-        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
-                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
+        Ability visit = assertSingleVisitTrigger(file, effectText);
+        assertFalse(visit.descriptionText().toLowerCase().contains("visit — visit"),
+                "Description must not double 'visit —': " + visit.descriptionText());
     }
 
-    @Test
-    void visitFerrisWheelNoDuplicateLines() {
-        CardFace card = face("f/ferris_wheel.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Ferris Wheel should have exactly 1 TRIGGERED: " + card.abilities());
-        Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
-        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertFalse(desc.contains("visit — visit"), "Description must not double 'visit —': " + desc);
-        assertTrue(desc.contains("phases out"), "Description should contain oracle effect: " + desc);
-        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
-                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
-    }
-
-    @Test
-    void visitSwingingShipNoDuplicateLines() {
-        CardFace card = face("s/swinging_ship.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Swinging Ship should have exactly 1 TRIGGERED: " + card.abilities());
-        Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
-        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertFalse(desc.contains("visit — visit"), "Description must not double 'visit —': " + desc);
-        assertTrue(desc.contains("additional combat phase"), "Description should contain oracle effect: " + desc);
-        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
-                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
-    }
-
-    @Test
-    void visitStorybookRideNoDuplicateSpellChildren() {
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            "Storybook Ride, s/storybook_ride.txt, exile the top",
+            "Trash Bin,      t/trash_bin.txt,      mill",
+    })
+    void visitWithDuplicateSpellChildrenEmitsOneTrigger(String ignoredCase, String file, String effectText) {
         // SpellDescription doesn't start with "Visit — " → no prefix doubling, but
         // SpellEffect.fromChain produces spurious spell[1]/spell[2] sub-abilities.
-        CardFace card = face("s/storybook_ride.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Storybook Ride should have exactly 1 TRIGGERED: " + card.abilities());
-        Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
-        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertTrue(desc.contains("exile the top"), "Description should contain oracle effect: " + desc);
-        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
-                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
-    }
-
-    @Test
-    void visitTrashBinNoDuplicateSpellChildren() {
-        CardFace card = face("t/trash_bin.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Trash Bin should have exactly 1 TRIGGERED: " + card.abilities());
-        Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
-        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertTrue(desc.contains("mill"), "Description should contain oracle effect: " + desc);
-        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
-                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
+        // The leading "visit —" also rules out the raw "visit:trigexile" key leaking through.
+        assertSingleVisitTrigger(file, effectText);
     }
 
     // --- Pattern C: Dice roll ResultSubAbilities ---
@@ -996,6 +1001,37 @@ class RulesParserTest {
                 "No outcome description should contain 'VERT': " + spells);
         assertTrue(spells.stream().anyMatch(a -> a.descriptionText().contains("|")),
                 "Outcome descriptions should use '|' separator: " + spells);
+    }
+
+    @Test
+    void aSpellsRollUnderARepeatPrintsItsOutcomes() {
+        // Strategy, Schmategy: SP → Repeat → RepeatSubAbility$ RollDice with
+        // six outcomes. The roll is reached through the repeat, not the
+        // sub-ability chain, and its outcomes still print.
+        var spells = abilitiesOfType(face("s/strategy_schmategy.txt"), AbilityType.SPELL);
+        assertEquals(7, spells.size(), "The roll plus six outcomes: " + spells);
+        assertTrue(spells.get(0).descriptionText().contains("roll a six-sided die"), spells.toString());
+        assertTrue(spells.get(1).descriptionText().contains("do nothing"), spells.toString());
+        assertTrue(spells.get(6).descriptionText().contains("repeat this process two more times"),
+                spells.toString());
+    }
+
+    @Test
+    void anActivatedRollUnderARepeatPrintsItsOutcomesAsOptions() {
+        // No printed card activates a roll under a repeat, so the script is
+        // synthetic; the walk is the one spells and triggers use.
+        Ability act = abilitiesOfType(convert(
+                "Name:Repeat Roller", "ManaCost:2", "Types:Artifact",
+                "A:AB$ Repeat | Cost$ T | RepeatSubAbility$ DBRoll | RepeatCount$ 2"
+                        + " | SpellDescription$ Roll a d6 twice.",
+                "SVar:DBRoll:DB$ RollDice | Sides$ 6 | ResultSubAbilities$ 1-3:DBDraw,4-6:DBGain",
+                "SVar:DBDraw:DB$ Draw | NumCards$ 1 | SpellDescription$ 1-3 VERT Draw a card.",
+                "SVar:DBGain:DB$ GainLife | LifeAmount$ 2 | SpellDescription$ 4-6 VERT Gain 2 life.",
+                "Oracle:").faces().get(0), AbilityType.ACTIVATED).get(0);
+        List<Ability> options = act.subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertEquals(List.of("1-3 | draw a card.", "4-6 | gain 2 life."),
+                options.stream().map(Ability::descriptionText).toList());
     }
 
     // --- Pattern 6: Activated dice-roll result sub-abilities as OPTION ---
@@ -1048,12 +1084,12 @@ class RulesParserTest {
     void repeatSubAbilityDescriptionIsIncluded() {
         // March of Souls: main SA destroys all creatures, then a RepeatEach SVar per player
         // creates spirit tokens. The spirit-token text lives in a RepeatSubAbility SVar and
-        // must be concatenated into the single spell line via collectChainText (formatBlock).
+        // must be rendered as part of the single spell's effect tree.
         CardFace card = face("m/march_of_souls.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly one SPELL: " + card.abilities());
-        // Use formatText (which calls formatBlock) to get the fully concatenated chain text.
-        String formatted = card.formatText();
+        // The rendered text (which calls formatBlock) holds the fully concatenated chain text.
+        String formatted = rendered(card);
         assertTrue(formatted.contains("destroy all creatures"),
                 "Output should contain 'destroy all creatures': " + formatted);
         assertTrue(formatted.contains("spirit"),
@@ -1070,7 +1106,7 @@ class RulesParserTest {
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size(),
                 "Arachnus Spinner should have 1 ACTIVATED ability: " + card.abilities());
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.toLowerCase().contains("search"),
                 "Activated ability text should include 'search': " + formatted);
     }
@@ -1104,7 +1140,7 @@ class RulesParserTest {
         // Vincent's Limit Break: Tiered charm with PrecostDesc$ on each choice SVar.
         // Option text must include the PrecostDesc name, not just the raw P/T string.
         CardFace card = face("v/vincents_limit_break.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.toLowerCase().contains("galian beast"),
                 "Tiered charm option should include 'Galian Beast': " + formatted);
         assertTrue(formatted.toLowerCase().contains("death gigas"),
@@ -1130,8 +1166,8 @@ class RulesParserTest {
 
     @Test
     void activatedAbilitySubChainConcatenatedNotSplit() {
-        // fleshformer: oracle=1 line but converter previously emitted 2 (root + sub-ability).
-        // After fix, sub-ability text must be concatenated into the root line.
+        // fleshformer: oracle=1 line, so the converter must emit 1, not 2 (root + sub-ability):
+        // the sub-ability text is concatenated into the root line.
         CardFace card = face("f/fleshformer.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size(), "fleshformer should have exactly 1 ACTIVATED: " + card.abilities());
@@ -1181,11 +1217,11 @@ class RulesParserTest {
 
     @Test
     void etbReplacementNoDuplicateSpellLine() {
-        // Sigarda's Splendor: has an ETBReplacement/ImmediateTrigger SVar that is
-        // processed both by the triggers/replacements loop and (incorrectly) by the
-        // spell loop.  After the fix, no ability text should appear twice.
+        // Sigarda's Splendor: has an ETBReplacement/ImmediateTrigger SVar that the
+        // triggers/replacements loop processes and the spell loop must not process
+        // again, so no ability text should appear twice.
         CardFace card = face("s/sigardas_splendor.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         // Collect all non-header values from formatted output
         long duplicateCount = java.util.Arrays.stream(formatted.split("\n"))
                 .filter(line -> line.contains(":"))
@@ -1231,7 +1267,7 @@ class RulesParserTest {
         // Ertai Resurrected trigger: MinCharmNum$ 0, no CharmNum — "choose up to one".
         // The charm is in a triggered sub-ability; check the full formatted text.
         CardFace card = face("e/ertai_resurrected.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("choose up to one"),
                 "Output should contain 'choose up to one': " + formatted);
     }
@@ -1301,46 +1337,30 @@ class RulesParserTest {
 
     // --- Pattern 1 extension: ABILITY placeholder via nested structures ---
 
-    @Test
-    void immediatelyTriggeredChooseTwoExpandsAbilityPlaceholder() {
-        // Caesar: ImmediateTrigger → Charm(CharmNum=2), TriggerDescription ends with "ABILITY"
-        CardFace card = face("c/caesar_legions_emperor.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertFalse(triggered.isEmpty());
-        Ability t = triggered.get(0);
-        assertFalse(t.descriptionText().contains("ABILITY"), "ABILITY must be replaced: " + t.descriptionText());
-        assertTrue(t.descriptionText().contains("choose two"), "Must say 'choose two': " + t.descriptionText());
-        List<Ability> options = t.subAbilities();
-        assertEquals(3, options.size(), "Must have 3 options: " + options);
-        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION));
-    }
-
-    @Test
-    void deeplyNestedImmediatelyTriggeredChooseOneExpandsAbilityPlaceholder() {
-        // Cemetery Desecrator: ChangeZone → SubAbility → ImmediateTrigger → Charm, TriggerDescription ends with "ABILITY"
-        CardFace card = face("c/cemetery_desecrator.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertFalse(triggered.isEmpty());
-        Ability t = triggered.get(0);
-        assertFalse(t.descriptionText().contains("ABILITY"), "ABILITY must be replaced: " + t.descriptionText());
-        assertTrue(t.descriptionText().contains("choose one"), "Must say 'choose one': " + t.descriptionText());
-        List<Ability> options = t.subAbilities();
-        assertEquals(2, options.size(), "Must have 2 options: " + options);
-        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION));
-    }
-
-    @Test
-    void immediatelyTriggeredChooseOneExpandsAbilityPlaceholder() {
-        // Hylda: ImmediateTrigger → Charm (default choose one), 3 choices
-        CardFace card = face("h/hylda_of_the_icy_crown.txt");
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            // Caesar: ImmediateTrigger → Charm(CharmNum=2)
+            "choose two,                  c/caesar_legions_emperor.txt,    '',                        choose two, 3",
+            // Cemetery Desecrator: ChangeZone → SubAbility → ImmediateTrigger → Charm
+            "nested choose one,           c/cemetery_desecrator.txt,       '',                        choose one, 2",
+            // Hylda: ImmediateTrigger → Charm (default choose one); her other trigger is not the charm
+            "choose one among triggers,   h/hylda_of_the_icy_crown.txt,    tap an untapped creature,  choose one, 3",
+    })
+    void immediatelyTriggeredCharmExpandsAbilityPlaceholder(
+            String ignoredCase, String file, String triggerText, String chooseText, int optionCount) {
+        // TriggerDescription ends with "ABILITY", which must be replaced by the charm's header.
+        CardFace card = face(file);
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertFalse(triggered.isEmpty());
         Ability t = triggered.stream()
-                .filter(a -> a.descriptionText().contains("tap an untapped creature"))
+                .filter(a -> a.descriptionText().contains(triggerText))
                 .findFirst().orElseThrow();
         assertFalse(t.descriptionText().contains("ABILITY"), "ABILITY must be replaced: " + t.descriptionText());
-        assertTrue(t.descriptionText().contains("choose one"), "Must say 'choose one': " + t.descriptionText());
-        assertEquals(3, t.subAbilities().size(), "Must have 3 options: " + t.subAbilities());
+        assertTrue(t.descriptionText().contains(chooseText),
+                "Must say '" + chooseText + "': " + t.descriptionText());
+        List<Ability> options = t.subAbilities();
+        assertEquals(optionCount, options.size(), "Must have " + optionCount + " options: " + options);
+        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION));
     }
 
     @Test
@@ -1398,77 +1418,12 @@ class RulesParserTest {
     // --- Pattern 2: cost-reduction clause on keyword activated abilities ---
 
     @Test
-    void equipReduceCostAppendsText() {
-        // Plate Armor: K:Equip:3:::ReduceCost$ Y:This ability costs {1} less…
-        CardFace card = face("p/plate_armor.txt");
-        Ability equip = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("equip"))
-                .findFirst().orElseThrow();
-        assertTrue(equip.descriptionText().contains("costs {1} less"),
-                "Must include cost reduction: " + equip.descriptionText());
-        assertTrue(equip.descriptionText().contains("each other equipment"),
-                "Must include count clause: " + equip.descriptionText());
-    }
-
-    @Test
-    void equipVariableReduceCostAppendsText() {
-        // Belt of Giant Strength: ReduceCost$ X:This ability costs {X} less…
-        CardFace card = face("b/belt_of_giant_strength.txt");
-        Ability equip = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("equip"))
-                .findFirst().orElseThrow();
-        assertTrue(equip.descriptionText().contains("costs {X} less"),
-                "Must include variable cost reduction: " + equip.descriptionText());
-        assertTrue(equip.descriptionText().contains("power of the creature"),
-                "Must include power clause: " + equip.descriptionText());
-    }
-
-    @Test
-    void adaptReduceCostAppendsText() {
-        // Pteramander: K:Adapt:4:7 U:X:instant and sorcery card in your graveyard
-        CardFace card = face("p/pteramander.txt");
-        Ability adapt = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("adapt"))
-                .findFirst().orElseThrow();
-        assertTrue(adapt.descriptionText().contains("costs {1} less"),
-                "Must include cost reduction: " + adapt.descriptionText());
-        assertTrue(adapt.descriptionText().contains("instant and sorcery card in your graveyard"),
-                "Must include count clause: " + adapt.descriptionText());
-    }
-
-    @Test
-    void adaptArtifactReduceCostAppendsText() {
-        // Etherium Pteramander: K:Adapt:4:6 B:X:other artifact you control
-        CardFace card = face("e/etherium_pteramander.txt");
-        Ability adapt = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("adapt"))
-                .findFirst().orElseThrow();
-        assertTrue(adapt.descriptionText().contains("costs {1} less"),
-                "Must include cost reduction: " + adapt.descriptionText());
-        assertTrue(adapt.descriptionText().contains("other artifact you control"),
-                "Must include count clause: " + adapt.descriptionText());
-    }
-
-    @Test
-    void monstrosityReduceCostAppendsText() {
-        // Grim Giganotosaurus: K:Monstrosity:10:10 B G:X:creature with power 4 or greater…
-        CardFace card = face("g/grim_giganotosaurus.txt");
-        Ability monstrosity = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("monstrosity"))
-                .findFirst().orElseThrow();
-        assertTrue(monstrosity.descriptionText().contains("costs {1} less"),
-                "Must include cost reduction: " + monstrosity.descriptionText());
-        assertTrue(monstrosity.descriptionText().contains("creature with power 4"),
-                "Must include count clause: " + monstrosity.descriptionText());
-    }
-
-    @Test
     void specializeFacesFollowTheStateEnumOrderTheCollectorsUse() {
-        // A specialize card's faces were emitted in the iteration order of
-        // CardRules' HashMap, which varies between JVM runs, while the
-        // collectors number faces in the EnumMap order of the live card's
-        // states (ProvenanceKey.faceOrder). The two must agree, or a record's
-        // face index resolves to another face's lines.
+        // CardRules holds a specialize card's parts in a HashMap, whose
+        // iteration order varies between JVM runs, while the collectors
+        // number faces in the EnumMap order of the live card's states
+        // (FaceOrder.faceOrder). The two must agree, or a record's face index
+        // resolves to another face's lines.
         MultiCard card = convertFromFile("a/alora_rogue_companion.txt");
         assertEquals(
                 List.of("alora, rogue companion", "alora, cheerful mastermind",
@@ -1478,121 +1433,58 @@ class RulesParserTest {
                 "faces must follow Original, then SpecializeW, U, B, R, G");
     }
 
-    @Test
-    void specializeReduceCostAppendsText() {
-        // Imoen, Trickster Friend: K:Specialize:5::This ability costs {3} less…:ReduceCost$ X
-        CardFace card = face("i/imoen_trickster_friend.txt");
-        Ability specialize = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("specialize"))
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            // K:Equip:3:::ReduceCost$ Y — a fixed reduction counted by other equipment
+            "Plate Armor equip,              p/plate_armor.txt,                    equip,         costs {1} less, each other equipment",
+            // ReduceCost$ X — a variable reduction
+            "Belt of Giant Strength equip,   b/belt_of_giant_strength.txt,         equip,         costs {X} less, power of the creature",
+            // K:Adapt:4:7 U:X
+            "Pteramander adapt,              p/pteramander.txt,                    adapt,         costs {1} less, instant and sorcery card in your graveyard",
+            // K:Adapt:4:6 B:X
+            "Etherium Pteramander adapt,     e/etherium_pteramander.txt,           adapt,         costs {1} less, other artifact you control",
+            // K:Monstrosity:10:10 B G:X
+            "Grim Giganotosaurus monstrosity, g/grim_giganotosaurus.txt,           monstrosity,   costs {1} less, creature with power 4",
+            // K:Specialize:5::This ability costs {3} less…:ReduceCost$ X
+            "Imoen specialize,               i/imoen_trickster_friend.txt,         specialize,    costs {3} less, instant and/or sorcery cards in your graveyard",
+    })
+    void keywordReduceCostAppendsText(
+            String ignoredCase, String file, String keyword, String reduction, String countClause) {
+        Ability ability = abilitiesOfType(face(file), AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains(keyword))
                 .findFirst().orElseThrow();
-        assertTrue(specialize.descriptionText().contains("costs {3} less"),
-                "Must include cost reduction: " + specialize.descriptionText());
-        assertTrue(specialize.descriptionText().contains("instant and/or sorcery cards in your graveyard"),
-                "Must include count clause: " + specialize.descriptionText());
+        assertTrue(ability.descriptionText().contains(reduction),
+                "Must include cost reduction: " + ability.descriptionText());
+        assertTrue(ability.descriptionText().contains(countClause),
+                "Must include count clause: " + ability.descriptionText());
     }
 
     // --- Pattern 3: Craft ability terse format ---
 
-    @Test
-    void craftWithIslandTypeAndCost() {
-        // Waterlogged Hulk: K:Craft:3 U ExileCtrlOrGrave<1/Island.Other>
-        CardFace card = face("w/waterlogged_hulk_watertight_gondola.txt");
-        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            // K:Craft:3 U ExileCtrlOrGrave<1/Island.Other>
+            "Waterlogged Hulk island,           w/waterlogged_hulk_watertight_gondola.txt,        craft with island,                    {3}{U}",
+            // K:Craft:2 W ExileCtrlOrGrave<1/Artifact.Other>
+            "Oteclan Landmark artifact,         o/oteclan_landmark_oteclan_levitator.txt,         craft with artifact,                  {2}{W}",
+            // K:Craft:4 B ExileCtrlOrGrave<1/Creature.Other>
+            "Tithing Blade creature,            t/tithing_blade_consuming_sepulcher.txt,          craft with creature,                  {4}{B}",
+            // K:Craft:3 R R ExileCtrlOrGrave<1/Artifact.Other>
+            "Dire Flail multicolour cost,       d/dire_flail_dire_blunderbuss.txt,                craft with artifact,                  {3}{R}{R}",
+            // K:Craft:5 XMin1 ExileCtrlOrGrave<X/Permanent.Other/permanent>
+            "Sunbird Standard variable count,   s/sunbird_standard_sunbird_effigy.txt,            craft with one or more,               {5}",
+            // K:Craft:4 ExileCtrlOrGrave<…>:a Dinosaur, a Merfolk, a Pirate, and a Vampire:the four
+            "Throne explicit multi-type text,   t/throne_of_the_grim_captain_the_grim_captain.txt, craft with a dinosaur,               {4}",
+            // K:Craft:6 ExileCtrlOrGrave<2/…>:two that share a card type:the two
+            "Eye of Ojer Taq type-share clause, e/eye_of_ojer_taq_apex_observatory.txt,           craft with two that share a card type, {6}",
+    })
+    void craftEmitsTheTerseFormat(String ignoredCase, String file, String craftText, String manaCost) {
+        Ability craft = abilitiesOfType(face(file), AbilityType.ACTIVATED).stream()
                 .filter(a -> a.descriptionText().contains("craft"))
                 .findFirst().orElseThrow();
-        assertTrue(craft.descriptionText().contains("craft with island"),
-                "Must include type 'island': " + craft.descriptionText());
-        assertTrue(craft.descriptionText().contains("{3}{U}"),
-                "Must include mana cost: " + craft.descriptionText());
-        assertFalse(craft.descriptionText().contains("exile"),
-                "Must not include verbose exile clause: " + craft.descriptionText());
-    }
-
-    @Test
-    void craftWithArtifactTypeAndCost() {
-        // Oteclan Landmark: K:Craft:2 W ExileCtrlOrGrave<1/Artifact.Other>
-        CardFace card = face("o/oteclan_landmark_oteclan_levitator.txt");
-        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("craft"))
-                .findFirst().orElseThrow();
-        assertTrue(craft.descriptionText().contains("craft with artifact"),
-                "Must include type 'artifact': " + craft.descriptionText());
-        assertTrue(craft.descriptionText().contains("{2}{W}"),
-                "Must include mana cost: " + craft.descriptionText());
-        assertFalse(craft.descriptionText().contains("exile"),
-                "Must not include verbose exile clause: " + craft.descriptionText());
-    }
-
-    @Test
-    void craftWithCreatureTypeAndCost() {
-        // Tithing Blade: K:Craft:4 B ExileCtrlOrGrave<1/Creature.Other>
-        CardFace card = face("t/tithing_blade_consuming_sepulcher.txt");
-        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("craft"))
-                .findFirst().orElseThrow();
-        assertTrue(craft.descriptionText().contains("craft with creature"),
-                "Must include type 'creature': " + craft.descriptionText());
-        assertTrue(craft.descriptionText().contains("{4}{B}"),
-                "Must include mana cost: " + craft.descriptionText());
-        assertFalse(craft.descriptionText().contains("exile"),
-                "Must not include verbose exile clause: " + craft.descriptionText());
-    }
-
-    @Test
-    void craftWithArtifactMulticolorCost() {
-        // Dire Flail: K:Craft:3 R R ExileCtrlOrGrave<1/Artifact.Other>
-        CardFace card = face("d/dire_flail_dire_blunderbuss.txt");
-        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("craft"))
-                .findFirst().orElseThrow();
-        assertTrue(craft.descriptionText().contains("craft with artifact"),
-                "Must include type 'artifact': " + craft.descriptionText());
-        assertTrue(craft.descriptionText().contains("{3}{R}{R}"),
-                "Must include mana cost: " + craft.descriptionText());
-        assertFalse(craft.descriptionText().contains("exile"),
-                "Must not include verbose exile clause: " + craft.descriptionText());
-    }
-
-    @Test
-    void craftWithVariableCountOneOrMore() {
-        // Sunbird Standard: K:Craft:5 XMin1 ExileCtrlOrGrave<X/Permanent.Other/permanent>
-        CardFace card = face("s/sunbird_standard_sunbird_effigy.txt");
-        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("craft"))
-                .findFirst().orElseThrow();
-        assertTrue(craft.descriptionText().contains("craft with one or more"),
-                "Must include 'one or more': " + craft.descriptionText());
-        assertTrue(craft.descriptionText().contains("{5}"),
-                "Must include mana cost: " + craft.descriptionText());
-        assertFalse(craft.descriptionText().contains("exile"),
-                "Must not include verbose exile clause: " + craft.descriptionText());
-    }
-
-    @Test
-    void craftWithExplicitMultiTypeDescription() {
-        // Throne of the Grim Captain: K:Craft:4 ExileCtrlOrGrave<…>:a Dinosaur, a Merfolk, a Pirate, and a Vampire:the four
-        CardFace card = face("t/throne_of_the_grim_captain_the_grim_captain.txt");
-        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("craft"))
-                .findFirst().orElseThrow();
-        assertTrue(craft.descriptionText().contains("craft with a dinosaur"),
-                "Must include explicit type description: " + craft.descriptionText());
-        assertTrue(craft.descriptionText().contains("{4}"),
-                "Must include mana cost: " + craft.descriptionText());
-        assertFalse(craft.descriptionText().contains("exile"),
-                "Must not include verbose exile clause: " + craft.descriptionText());
-    }
-
-    @Test
-    void craftWithTypeShareConstraintDescription() {
-        // Eye of Ojer Taq: K:Craft:6 ExileCtrlOrGrave<2/…>:two that share a card type:the two
-        CardFace card = face("e/eye_of_ojer_taq_apex_observatory.txt");
-        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
-                .filter(a -> a.descriptionText().contains("craft"))
-                .findFirst().orElseThrow();
-        assertTrue(craft.descriptionText().contains("craft with two that share a card type"),
-                "Must include constraint description: " + craft.descriptionText());
-        assertTrue(craft.descriptionText().contains("{6}"),
+        assertTrue(craft.descriptionText().contains(craftText),
+                "Must include '" + craftText + "': " + craft.descriptionText());
+        assertTrue(craft.descriptionText().contains(manaCost),
                 "Must include mana cost: " + craft.descriptionText());
         assertFalse(craft.descriptionText().contains("exile"),
                 "Must not include verbose exile clause: " + craft.descriptionText());
@@ -1682,7 +1574,7 @@ class RulesParserTest {
         CardFace card = face("d/delirium.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         // "prevent" must appear exactly once (from SpellDescription, not from replacement SVar)
         int first = formatted.indexOf("prevent");
         assertTrue(first >= 0, "Must contain 'prevent': " + formatted);
@@ -1714,8 +1606,8 @@ class RulesParserTest {
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have 1 SPELL: " + card.abilities());
         // The single SPELL ability has a nested sub-ability chain representing all 3 effects.
-        // collectChainText must produce all 3 repetitions (not deduplicated away).
-        String formatted = card.formatText();
+        // Rendering must produce all 3 repetitions (not deduplicated away).
+        String formatted = rendered(card);
         // Count occurrences of "+3/+3" — must appear 3 times
         int count = 0, idx = 0;
         while ((idx = formatted.indexOf("+3/+3", idx)) >= 0) { count++; idx++; }
@@ -1743,7 +1635,7 @@ class RulesParserTest {
         CardFace card = face("m/mage_hunters_onslaught.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertFalse(spells.isEmpty(), "Should have SPELL: " + card.abilities());
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("destroy target creature or planeswalker"),
                 "Must contain first effect: " + formatted);
         assertTrue(formatted.contains("whenever a creature blocks"),
@@ -1755,7 +1647,7 @@ class RulesParserTest {
         // Reckless Blaze: DB$ Effect with Triggers$ DiesTrig.
         // TriggerDescription must appear in the output (oracle=1 single paragraph).
         CardFace card = face("r/reckless_blaze.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("deals 5 damage to each creature"),
                 "Must contain main effect: " + formatted);
         assertTrue(formatted.contains("dies this turn"),
@@ -1767,7 +1659,7 @@ class RulesParserTest {
         // Dazzling Reflection: DB$ Effect with ReplacementEffects$ Dazzle.
         // Dazzle's Description$ must appear in the output.
         CardFace card = face("d/dazzling_reflection.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("you gain life equal to target creature"),
                 "Must contain main effect: " + formatted);
         assertTrue(formatted.contains("prevent that damage"),
@@ -1779,7 +1671,7 @@ class RulesParserTest {
         // Transgress the Mind: ExileCard SVar has StackDescription but no SpellDescription.
         // Must concatenate the StackDescription text into the spell line.
         CardFace card = face("t/transgress_the_mind.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("target player reveals their hand"),
                 "Must contain root spell description: " + formatted);
         assertTrue(formatted.contains("mana value 3 or greater"),
@@ -1794,7 +1686,7 @@ class RulesParserTest {
         // ActivatedAbilityEntry calls fromChain(sub) without parentDesc so parentDesc=null;
         // the effectsource guard must fire before the parentDesc null check.
         CardFace card = face("s/stuffy_doll_avatar.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertFalse(formatted.contains("effectsource"),
                 "EFFECTSOURCE placeholder must not appear in output: " + formatted);
     }
@@ -1806,7 +1698,7 @@ class RulesParserTest {
         // Sarah's Wings: NoDamage SVar has SpellDescription$ = "(Players with flying can't...)"
         // which is entirely reminder text. collectEffectDescriptions must not run on it.
         CardFace card = face("s/sarahs_wings.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         assertTrue(formatted.contains("flying"),
                 "Must contain flying grant: " + formatted);
         assertFalse(formatted.contains("prevent all damage"),
@@ -1820,7 +1712,7 @@ class RulesParserTest {
         // Eye for an Eye: SelflessDamage.Description$ says "this card deals that much damage"
         // while SpellDescription says "CARDNAME deals that much damage" — same meaning.
         CardFace card = face("e/eye_for_an_eye.txt");
-        String formatted = card.formatText();
+        String formatted = rendered(card);
         long count = formatted.lines()
                 .filter(l -> l.contains("deals that much damage to that source"))
                 .count();

@@ -2,16 +2,12 @@ package com.pricepredictor.connector;
 
 import com.esotericsoftware.minlog.Log;
 import com.pricepredictor.connector.effects.MissingSVarReport;
-import com.pricepredictor.connector.effects.ProvenanceRecorder;
 import com.pricepredictor.connector.effects.ProvenanceSidecar;
-import com.pricepredictor.connector.effects.SourceTree;
 
 import java.io.IOException;
-import java.nio.file.FileVisitResult;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,16 +24,9 @@ public class BatchConverter {
     private final RulesParser converter = new RulesParser();
 
     /**
-     * Convert all .txt card scripts in cardsPath, writing output to outputPath
-     * with mirrored directory structure. Sidecars are written for the
-     * {@code cardsfolder} tree.
-     */
-    public BatchResult convert(Path cardsPath, Path outputPath) throws IOException {
-        return convert(cardsPath, outputPath, SourceTree.CARDSFOLDER);
-    }
-
-    /**
-     * Convert a source tree, writing a provenance sidecar beside each card.
+     * Convert every .txt card script under a source tree, writing the converted
+     * text with mirrored directory structure and a provenance sidecar beside
+     * each card.
      *
      * @param tree which converted source tree this is; it prefixes every
      *             provenance key's script path, because one filename occurs in
@@ -70,18 +59,7 @@ public class BatchConverter {
         int succeeded = 0;
         List<String> warnings = new ArrayList<>();
 
-        List<Path> scriptFiles = new ArrayList<>();
-        Files.walkFileTree(cardsPath, new SimpleFileVisitor<>() {
-            @Override
-            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (file.toString().endsWith(".txt")) {
-                    scriptFiles.add(file);
-                }
-                return FileVisitResult.CONTINUE;
-            }
-        });
-
-        for (Path scriptFile : scriptFiles) {
+        for (Path scriptFile : ScriptFiles.under(cardsPath)) {
             totalFiles++;
             try {
                 List<String> lines = Files.readAllLines(scriptFile);
@@ -96,10 +74,8 @@ public class BatchConverter {
                         converter.parseScript(lines, filename, scriptKeyPath);
                 MultiCard result = parsed.card();
 
-                List<Ability> owners = new ArrayList<>();
-                List<Integer> faceOfLine = new ArrayList<>();
-                List<String> renderedLines = result.renderLines(owners, faceOfLine);
-                String output = String.join("\n", renderedLines);
+                List<RenderedLine> renderedLines = result.renderLines();
+                String output = RenderedLine.join(renderedLines);
 
                 Path outputFile = outputPath.resolve(relativePath);
                 Files.createDirectories(outputFile.getParent());
@@ -108,8 +84,8 @@ public class BatchConverter {
                 }
 
                 ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                        result.faces().get(0).name(), scriptKeyPath, result,
-                        renderedLines, owners, faceOfLine, parsed.recorders());
+                        result.faces().get(0).name(), scriptKeyPath,
+                        renderedLines, parsed.recorders());
                 Files.writeString(sidecarPathFor(outputFile), sidecar.toJson());
                 succeeded++;
             } catch (Throwable t) {
@@ -148,12 +124,22 @@ public class BatchConverter {
     public record BatchResult(int totalFiles, int succeeded, List<String> warnings,
                               List<MissingSVarReport.Entry> missingSVars) {
 
-        public BatchResult(int totalFiles, int succeeded, List<String> warnings) {
-            this(totalFiles, succeeded, warnings, List.of());
-        }
-
         public int warningCount() {
             return warnings.size();
+        }
+
+        /** Print the counts for {@code tree}, then each warning under a header. */
+        public void report(PrintStream out, String tree) {
+            out.println("  [" + tree + "]");
+            out.println("  Total files:  " + totalFiles);
+            out.println("  Succeeded:    " + succeeded);
+            out.println("  Warnings:     " + warningCount());
+            if (!warnings.isEmpty()) {
+                out.println("\nWarnings:");
+                for (String warning : warnings) {
+                    out.println("  " + warning);
+                }
+            }
         }
     }
 }

@@ -169,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
     arm_log = run_dir / "arm.log"
     with arm_log.open("a", encoding="utf-8") as out:
-        out.write(header([sys.executable, "-u", *sys.argv]))
+        out.write(header([sys.executable, "-u", __file__, *argv]))
     first = STEPS.index(args.from_step)
     for step, command, log in plan(args, train_args):
         if STEPS.index(step) < first:

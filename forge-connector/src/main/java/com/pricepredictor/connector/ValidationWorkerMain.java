@@ -18,19 +18,16 @@ import java.nio.file.Path;
  */
 public class ValidationWorkerMain {
 
-    public static void main(String[] args) {
-        String matchesFileProp = System.getProperty("matches.file");
-        if (matchesFileProp == null) {
-            System.err.println("Error: -Dmatches.file system property is required");
-            System.exit(2);
-        }
+    /**
+     * Exit code when the matches or outcomes file cannot be read or written.
+     * The supervisor checks only for non-zero, so it need not differ from
+     * {@link WorkerProperties#BAD_CONFIG_EXIT}.
+     */
+    static final int IO_FAILURE_EXIT = 2;
 
-        int bestOf = 3;
-        try {
-            bestOf = Integer.parseInt(System.getProperty("best.of", "3"));
-        } catch (NumberFormatException e) {
-            System.err.println("Warning: invalid -Dbest.of value, using 3");
-        }
+    public static void main(String[] args) {
+        String matchesFileProp = WorkerProperties.require("matches.file");
+        int bestOf = WorkerProperties.bestOf("best.of", 3);
 
         Path matchesFile = Path.of(matchesFileProp);
         Path outcomesFile = Path.of(matchesFileProp + "-outcomes.txt");
@@ -47,7 +44,7 @@ public class ValidationWorkerMain {
         } catch (IOException e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace(System.err);
-            System.exit(2);
+            throw ToolMain.exit(IO_FAILURE_EXIT);
         }
     }
 }

@@ -5,6 +5,7 @@ import com.pricepredictor.connector.BatchConverter;
 import com.pricepredictor.connector.ForgeEnvironmentInitializer;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.MultiCard;
+import com.pricepredictor.connector.RenderedLine;
 import com.pricepredictor.connector.RulesParser;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
@@ -45,8 +46,7 @@ class ProvenanceSidecarTest {
     Path tempDir;
 
     private record Converted(MultiCard card, List<String> lines,
-                             List<Ability> owners, List<Integer> faceOfLine,
-                             ProvenanceSidecar sidecar) {
+                             List<Ability> owners, ProvenanceSidecar sidecar) {
     }
 
     private Converted convert(String relativePath) {
@@ -71,13 +71,13 @@ class ProvenanceSidecarTest {
                                     String fileName) {
         RulesParser.ParsedCard parsed =
                 parser.parseScript(source, fileName, scriptFile);
-        List<Ability> owners = new ArrayList<>();
-        List<Integer> faceOfLine = new ArrayList<>();
-        List<String> lines = parsed.card().renderLines(owners, faceOfLine);
+        List<RenderedLine> rendered = parsed.card().renderLines();
         ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                parsed.card().faces().get(0).name(), scriptFile, parsed.card(),
-                lines, owners, faceOfLine, parsed.recorders());
-        return new Converted(parsed.card(), lines, owners, faceOfLine, sidecar);
+                parsed.card().faces().get(0).name(), scriptFile,
+                rendered, parsed.recorders());
+        return new Converted(parsed.card(),
+                rendered.stream().map(RenderedLine::text).toList(),
+                rendered.stream().map(RenderedLine::owner).toList(), sidecar);
     }
 
     // ── the text must not change ────────────────────────────────────────
@@ -105,9 +105,9 @@ class ProvenanceSidecarTest {
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
-            String withoutRecording = parser
-                    .parseScript(source, file.getFileName().toString())
-                    .formatText();
+            String withoutRecording = RenderedLine.join(parser
+                    .parseScript(source, file.getFileName().toString(), null)
+                    .card().renderLines());
             String withRecording = String.join("\n", convert(relativePath).lines());
             assertEquals(withoutRecording, withRecording,
                     "recording provenance changed the converted text of "
@@ -118,7 +118,7 @@ class ProvenanceSidecarTest {
     @Test
     void renderedLinesJoinBackToTheFormattedText() {
         Converted converted = convert("s/serra_angel.txt");
-        assertEquals(converted.card().formatText(),
+        assertEquals(RenderedLine.join(converted.card().renderLines()),
                 String.join("\n", converted.lines()));
     }
 
@@ -161,7 +161,7 @@ class ProvenanceSidecarTest {
         Converted converted = convert("s/serra_angel.txt");
         boolean sawKeywordKey = converted.sidecar().lines().stream()
                 .flatMap(line -> line.provenance().stream())
-                .anyMatch(key -> ProvenanceKey.KIND_KEYWORD.equals(key.traitKind()));
+                .anyMatch(key -> TraitKind.KEYWORD.equals(key.traitKind()));
         assertTrue(sawKeywordKey, "Serra Angel's flying and vigilance key to keywords");
     }
 
@@ -221,7 +221,7 @@ class ProvenanceSidecarTest {
         assertEquals(1, mana.size(), mountain.lines().toString());
         List<ProvenanceKey> keys = mana.get(0).provenance();
         assertEquals(1, keys.size(), keys.toString());
-        assertEquals(ProvenanceKey.KIND_SPELL, keys.get(0).traitKind());
+        assertEquals(TraitKind.SPELL, keys.get(0).traitKind());
         assertTrue(keys.get(0).indexWithinKind() >= 1, keys.toString());
         assertEquals(1, mountain.sidecar().droppedKeys().size(),
                 mountain.sidecar().droppedKeys().toString());
@@ -264,8 +264,8 @@ class ProvenanceSidecarTest {
         // own; its text is the keyword line.
         Converted marshal = convert("m/mogg_war_marshal.txt");
         List<ProvenanceKey> keys = claimedBy(marshal, "triggered", "echo");
-        assertTrue(keys.stream().anyMatch(k -> k.traitKind().equals(ProvenanceKey.KIND_KEYWORD)), keys.toString());
-        assertTrue(keys.stream().anyMatch(k -> k.traitKind().equals(ProvenanceKey.KIND_TRIGGER)), keys.toString());
+        assertTrue(keys.stream().anyMatch(k -> k.traitKind().equals(TraitKind.KEYWORD)), keys.toString());
+        assertTrue(keys.stream().anyMatch(k -> k.traitKind().equals(TraitKind.TRIGGER)), keys.toString());
     }
 
     @Test
@@ -273,7 +273,7 @@ class ProvenanceSidecarTest {
         Converted marshal = convert("m/mogg_war_marshal.txt");
         List<ProvenanceKey> dropped = marshal.sidecar().droppedKeys();
         assertEquals(1, dropped.size(), dropped.toString());
-        assertEquals(ProvenanceKey.KIND_SPELL, dropped.get(0).traitKind());
+        assertEquals(TraitKind.SPELL, dropped.get(0).traitKind());
         assertEquals(0, dropped.get(0).indexWithinKind());
     }
 
@@ -281,7 +281,7 @@ class ProvenanceSidecarTest {
     void anEntersOrAttacksPairIsClaimedByTheRenderedLine() {
         Converted tidalmage = convert("s/stadium_tidalmage.txt");
         List<ProvenanceKey> keys = claimedBy(tidalmage, "triggered", "enters or attacks");
-        assertEquals(2, keys.stream().filter(k -> k.traitKind().equals(ProvenanceKey.KIND_TRIGGER)).count(), keys.toString());
+        assertEquals(2, keys.stream().filter(k -> k.traitKind().equals(TraitKind.TRIGGER)).count(), keys.toString());
     }
 
     @Test
@@ -294,11 +294,11 @@ class ProvenanceSidecarTest {
                 .filter(line -> line.lineKind().equals("level"))
                 .flatMap(line -> line.provenance().stream())
                 .toList();
-        assertTrue(levelKeys.stream().anyMatch(k -> k.traitKind().equals(ProvenanceKey.KIND_TRIGGER)), levelKeys.toString());
-        assertTrue(levelKeys.stream().anyMatch(k -> k.traitKind().equals(ProvenanceKey.KIND_STATIC)), levelKeys.toString());
+        assertTrue(levelKeys.stream().anyMatch(k -> k.traitKind().equals(TraitKind.TRIGGER)), levelKeys.toString());
+        assertTrue(levelKeys.stream().anyMatch(k -> k.traitKind().equals(TraitKind.STATIC)), levelKeys.toString());
         for (ProvenanceKey dropped : talent.sidecar().droppedKeys()) {
-            assertFalse(dropped.traitKind().equals(ProvenanceKey.KIND_TRIGGER)
-                    || dropped.traitKind().equals(ProvenanceKey.KIND_STATIC),
+            assertFalse(dropped.traitKind().equals(TraitKind.TRIGGER)
+                    || dropped.traitKind().equals(TraitKind.STATIC),
                     dropped + " has text on a level line and must not be dropped");
         }
     }
@@ -311,10 +311,10 @@ class ProvenanceSidecarTest {
         Converted bard = convert("b/bard_class.txt");
         List<ProvenanceKey> levelOne = claimedBy(bard, "level", "additional +1/+1 counter");
         assertTrue(levelOne.stream().anyMatch(
-                        k -> k.traitKind().equals(ProvenanceKey.KIND_REPLACEMENT)),
+                        k -> k.traitKind().equals(TraitKind.REPLACEMENT)),
                 levelOne.toString());
         for (ProvenanceKey dropped : bard.sidecar().droppedKeys()) {
-            assertFalse(dropped.traitKind().equals(ProvenanceKey.KIND_REPLACEMENT),
+            assertFalse(dropped.traitKind().equals(TraitKind.REPLACEMENT),
                     dropped + " prints the level 1 line and must not be dropped");
         }
     }
@@ -341,10 +341,10 @@ class ProvenanceSidecarTest {
                 "test_class_duplicate.txt");
         List<ProvenanceKey> keys = claimedBy(card, "level", "draw a card");
         assertTrue(keys.stream().anyMatch(
-                        k -> k.traitKind().equals(ProvenanceKey.KIND_TRIGGER)),
+                        k -> k.traitKind().equals(TraitKind.TRIGGER)),
                 card.lines() + " " + keys);
         for (ProvenanceKey dropped : card.sidecar().droppedKeys()) {
-            assertFalse(dropped.traitKind().equals(ProvenanceKey.KIND_TRIGGER),
+            assertFalse(dropped.traitKind().equals(TraitKind.TRIGGER),
                     dropped + " has its text on the level line and must not be dropped");
         }
     }
@@ -408,7 +408,7 @@ class ProvenanceSidecarTest {
      * disagreement.
      *
      * <p>The runtime resolver keys a flashback or cycling ability to
-     * {@code keyword@N} through {@link ProvenanceKey#keywordIndex}. If the
+     * {@code keyword@N} through {@link FaceOrder#keywordIndex}. If the
      * converter numbers the same keywords by any other rule, every such record
      * names a key that is in neither {@code lines} nor {@code dropped_keys},
      * which is the sidecar contract's fail-loudly case — a whole collection run
@@ -430,7 +430,7 @@ class ProvenanceSidecarTest {
         Map<String, Integer> sharedOrdinal = new LinkedHashMap<>();
         for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
             sharedOrdinal.put(keyword.getOriginal(),
-                    ProvenanceKey.keywordIndex(state, keyword));
+                    FaceOrder.keywordIndex(state, keyword));
         }
         assertEquals(5, sharedOrdinal.size(),
                 "Blast from the Past prints five keywords");
@@ -443,14 +443,14 @@ class ProvenanceSidecarTest {
             Integer expected = sharedOrdinal.get(line.script().scriptText());
             if (expected == null) continue;
             for (ProvenanceKey key : line.provenance()) {
-                if (!ProvenanceKey.KIND_KEYWORD.equals(key.traitKind())) continue;
+                if (!TraitKind.KEYWORD.equals(key.traitKind())) continue;
                 compared++;
                 assertEquals(expected, key.indexWithinKind(),
                         "the sidecar numbered \"" + line.script().scriptText()
                                 + "\" as keyword@" + key.indexWithinKind()
-                                + " but ProvenanceKey.keywordIndex says keyword@"
+                                + " but FaceOrder.keywordIndex says keyword@"
                                 + expected + ". RulesParser.parseFace must compute"
-                                + " the ordinal with ProvenanceKey.keywordIndex("
+                                + " the ordinal with FaceOrder.keywordIndex("
                                 + "card.getCurrentState(), ki) rather than with a"
                                 + " running counter over card.getKeywords(), or"
                                 + " every keyword record in the next corpus names"

@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Value object capturing the outcome of one sealed best-of-3 match, including
+ * Value object capturing the outcome of one sealed best-of-N match, including
  * the metadata needed to slice the training corpus later (run ID, set code,
  * deck-build methods, per-game winner/play-first sequences, duration).
  *
@@ -17,7 +17,8 @@ import java.util.List;
  * @param deckA            All 40 cards in deck A (including basic lands, duplicates repeat).
  * @param deckB            All 40 cards in deck B.
  * @param games            Per-game winner sequence, e.g. {@code "ABB"} means A won game 1,
- *                         B won games 2 and 3. Length is 2 or 3.
+ *                         B won games 2 and 3. Between {@code ceil(N/2)} and {@code N}
+ *                         long for a best-of-N match.
  * @param play             Per-game play-first sequence, same length as {@code games}, e.g.
  *                         {@code "BAB"} means B was on the play in games 1 and 3.
  * @param durationSeconds  Wall-clock seconds spent playing the match.
@@ -62,13 +63,15 @@ public record MatchResult(
         }
     }
 
-    /** Count of games won by deck A, derived from {@link #games}. */
-    public int winsA() {
-        return (int) games.chars().filter(c -> c == 'A').count();
-    }
-
-    /** Count of games won by deck B, derived from {@link #games}. */
-    public int winsB() {
-        return (int) games.chars().filter(c -> c == 'B').count();
+    /**
+     * Format this result as one line of {@code match-outcomes.txt}: ten
+     * semicolon-separated fields,
+     * {@code timestamp;run_id;set_code;method_A;method_B;deck_A;deck_B;games;play;duration_s},
+     * the two decks as pipe-separated card names.
+     */
+    public String toLine() {
+        return CorpusLine.of(timestamp, runId, setCode, methodA, methodB,
+                CardNameList.format(deckA), CardNameList.format(deckB),
+                games, play, String.valueOf(durationSeconds));
     }
 }

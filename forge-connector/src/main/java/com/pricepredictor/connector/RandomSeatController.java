@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
-import com.pricepredictor.connector.effects.PatchedCollectors;
+import com.pricepredictor.connector.effects.PlayabilityChannel;
+import com.pricepredictor.connector.effects.PlayabilityVerdict;
 import com.pricepredictor.connector.effects.RandomChoices;
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilAbility;
@@ -24,6 +25,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.function.BiPredicate;
+import java.util.function.BooleanSupplier;
 
 /**
  * The random seat: a Forge AI that, with probability {@code P} at each of
@@ -51,11 +54,13 @@ import java.util.Random;
  * this seat is never attached, so every override there defers to
  * {@code super}.
  *
- * <p>When a draw succeeds the AI's decision code does not run, so the hooks
- * that would have written the {@code decision}, {@code attackers} and
- * {@code blockers} records never fire; the seat writes them itself through
- * {@link PatchedCollectors}' public emitters, from the lists it drew from
- * (FR-022d), stamping its own declarations {@code what_if = false}.
+ * <p>When a draw succeeds the AI's decision code does not run, so the hook
+ * that would have written the {@code decision} records never fires; the seat
+ * writes them itself through {@link PlayabilityChannel}'s public emitter, from
+ * the candidates it drew from (FR-022d). The {@code attackers} and
+ * {@code blockers} records need no such help: the engine reports combat
+ * legality from the turn-based declaration itself, before any controller
+ * declares, so the seat's declarations are recorded like every other.
  */
 public final class RandomSeatController extends PlayerControllerAi {
 
@@ -66,7 +71,7 @@ public final class RandomSeatController extends PlayerControllerAi {
     /** The game this seat plays for real, or null for a fork's clone. */
     private Game liveGame;
     /** Where the seat's own records go, or null when the run collects none. */
-    private PatchedCollectors collectors;
+    private PlayabilityChannel decisions;
 
     /** The play the last successful draw picked, until it is played. */
     private SpellAbility randomlyDrawn;
@@ -86,18 +91,18 @@ public final class RandomSeatController extends PlayerControllerAi {
 
     /**
      * Make this seat live for {@code game}, writing its own records to
-     * {@code collectors}.
+     * {@code decisions}.
      *
      * <p>Called by {@link GamePlayer} after {@code match.createGame()}, which
      * is the first moment both exist. A controller never attached — the one
      * a fork clones — stays an ordinary AI.
      *
-     * @param collectors null when the run writes no effect records; the seat
-     *                   still plays at random, it just reports nothing
+     * @param decisions null when the run writes no effect records; the seat
+     *                  still plays at random, it just reports nothing
      */
-    public void attach(Game game, PatchedCollectors collectors) {
+    public void attach(Game game, PlayabilityChannel decisions) {
         this.liveGame = game;
-        this.collectors = collectors;
+        this.decisions = decisions;
     }
 
     /** Whether this controller is the live seat rather than a fork's copy. */
@@ -107,11 +112,6 @@ public final class RandomSeatController extends PlayerControllerAi {
 
     private boolean draw() {
         return random.nextDouble() < probability;
-    }
-
-    /** Whether the last play decision was a random draw, for a test of the gate. */
-    boolean lastDrawWasRandom() {
-        return randomlyDrawn != null;
     }
 
     // ── the play decision ───────────────────────────────────────────────
@@ -178,10 +178,10 @@ public final class RandomSeatController extends PlayerControllerAi {
     }
 
     /**
-     * What the rules let this seat play now: the AI's own filter — can play,
-     * timing, affordable — over everything but lands and mana abilities
-     * (FR-022a), each candidate reported as a {@code decision} record through
-     * the hook's own emitter (FR-022d).
+     * What the rules let this seat play now: the {@link PlayabilityVerdict}
+     * plus timing over everything but lands and mana abilities (FR-022a),
+     * each candidate reported as a {@code decision} record through the hook's
+     * own emitter (FR-022d), with the verdict the AI seat's records carry.
      */
     private List<SpellAbility> playableCandidates() {
         Game game = player.getGame();
@@ -192,44 +192,25 @@ public final class RandomSeatController extends PlayerControllerAi {
             if (sa.isLandAbility() || sa.isManaAbility()) {
                 continue;
             }
-            boolean canPlay;
+            PlayabilityVerdict verdict;
             boolean timing;
-            boolean affordable;
-            boolean hasTarget;
             try {
                 sa.setActivatingPlayer(player);
-                canPlay = sa.canPlay();
+                verdict = PlayabilityVerdict.of(sa);
                 timing = sa.canCastTiming(player);
-                affordable = ComputerUtilCost.canPayCost(sa, player, false);
-                hasTarget = hasLegalTargets(sa);
             } catch (RuntimeException e) {
                 // A script whose restriction throws on this board is one the
                 // AI would have skipped the same way; it is not playable.
                 continue;
             }
-            if (collectors != null) {
-                collectors.recordCandidate(player, sa, canPlay, affordable, hasTarget);
+            if (decisions != null) {
+                decisions.recordCandidate(player, sa, () -> verdict);
             }
-            if (canPlay && timing && affordable && hasTarget) {
+            if (verdict.canPlay() && timing && verdict.affordable() && verdict.hasLegalTarget()) {
                 playable.add(sa);
             }
         }
         return playable;
-    }
-
-    /**
-     * Whether every targeting clause of the chain can reach its minimum.
-     * A charm's modes are not in the chain yet and are checked when drawn.
-     */
-    private static boolean hasLegalTargets(SpellAbility ability) {
-        for (SpellAbility clause = ability; clause != null; clause = clause.getSubAbility()) {
-            if (clause.usesTargeting()
-                    && clause.getTargetRestrictions().getNumCandidates(clause)
-                            < clause.getMinTargets()) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -403,6 +384,71 @@ public final class RandomSeatController extends PlayerControllerAi {
         return super.chooseTargetsFor(currentAbility);
     }
 
+    // ── combat declarations ─────────────────────────────────────────────
+
+    /**
+     * For each of {@code keys}, the creatures that may legally be declared
+     * against it, both in the order given.
+     *
+     * <p>Read once per declaration rather than per draw: legality does not
+     * change between redraws.
+     */
+    private static <K> Map<K, List<Card>> legalBy(
+            Iterable<? extends K> keys, Iterable<Card> creatures,
+            BiPredicate<K, Card> legal) {
+        Map<K, List<Card>> legalBy = new LinkedHashMap<>();
+        for (K key : keys) {
+            List<Card> declarable = new ArrayList<>();
+            for (Card creature : creatures) {
+                if (legal.test(key, creature)) {
+                    declarable.add(creature);
+                }
+            }
+            legalBy.put(key, declarable);
+        }
+        return legalBy;
+    }
+
+    /**
+     * What one creature may be declared against: every key of {@code legalBy}
+     * whose list holds it, in the map's order.
+     *
+     * <p>The order is part of the draw: a seeded run picks the same option
+     * only while the options are listed the same way.
+     */
+    private static <K> List<K> optionsFor(Card creature, Map<K, List<Card>> legalBy) {
+        List<K> options = new ArrayList<>();
+        legalBy.forEach((key, legal) -> {
+            if (legal.contains(creature)) {
+                options.add(key);
+            }
+        });
+        return options;
+    }
+
+    /**
+     * Draw a combat declaration until the engine accepts one, at most
+     * {@link RandomChoices#MAX_DRAWS} times, and hand a seat that never drew
+     * an acceptable one back to the AI with nothing declared.
+     *
+     * @param clear    withdraw everything the seat has declared so far
+     * @param drawOnce declare one random draw
+     * @param accepted whether the engine accepts the declaration as it stands
+     * @param fallBack declare as the AI would
+     */
+    private static void drawUntilAccepted(
+            Runnable clear, Runnable drawOnce, BooleanSupplier accepted, Runnable fallBack) {
+        for (int attempt = 0; attempt < RandomChoices.MAX_DRAWS; attempt++) {
+            clear.run();
+            drawOnce.run();
+            if (accepted.getAsBoolean()) {
+                return;
+            }
+        }
+        clear.run();
+        fallBack.run();
+    }
+
     // ── attacks ─────────────────────────────────────────────────────────
 
     /**
@@ -411,9 +457,7 @@ public final class RandomSeatController extends PlayerControllerAi {
      *
      * <p>The engine validates the whole declaration — requirements, maximums,
      * "can't attack alone" — and a declaration it rejects is redrawn; after
-     * {@link RandomChoices#MAX_DRAWS} the AI declares. On success an
-     * {@code attackers} record per defender says who could have attacked
-     * and who was legal against it, stamped a real decision (FR-022d).
+     * {@link RandomChoices#MAX_DRAWS} the AI declares.
      */
     @Override
     public void declareAttackers(Player attacker, Combat combat) {
@@ -422,40 +466,23 @@ public final class RandomSeatController extends PlayerControllerAi {
             return;
         }
         CardCollection mine = player.getCreaturesInPlay();
-        Map<GameEntity, List<Card>> legalByDefender = new LinkedHashMap<>();
-        for (GameEntity defender : combat.getDefenders()) {
-            List<Card> legal = new ArrayList<>();
-            for (Card creature : mine) {
-                if (CombatUtil.canAttack(creature, defender)) {
-                    legal.add(creature);
-                }
-            }
-            legalByDefender.put(defender, legal);
-        }
-        if (collectors != null) {
-            legalByDefender.forEach((defender, legal) ->
-                    collectors.recordAttackers(player, defender, mine, legal, false));
-        }
-        for (int attempt = 0; attempt < RandomChoices.MAX_DRAWS; attempt++) {
-            combat.clearAttackers();
-            for (Card creature : mine) {
-                List<GameEntity> options = new ArrayList<>();
-                legalByDefender.forEach((defender, legal) -> {
-                    if (legal.contains(creature)) {
-                        options.add(defender);
+        Map<GameEntity, List<Card>> legalByDefender = legalBy(
+                combat.getDefenders(), mine,
+                (defender, creature) -> CombatUtil.canAttack(creature, defender));
+        drawUntilAccepted(
+                combat::clearAttackers,
+                () -> {
+                    for (Card creature : mine) {
+                        List<GameEntity> options = optionsFor(creature, legalByDefender);
+                        if (!options.isEmpty() && random.nextBoolean()) {
+                            combat.addAttacker(
+                                    creature, options.get(random.nextInt(options.size())));
+                        }
                     }
-                });
-                if (!options.isEmpty() && random.nextBoolean()) {
-                    combat.addAttacker(creature, options.get(random.nextInt(options.size())));
-                }
-            }
-            removeUnpayableAttackers(combat);
-            if (CombatUtil.validateAttackers(combat)) {
-                return;
-            }
-        }
-        combat.clearAttackers();
-        super.declareAttackers(attacker, combat);
+                    removeUnpayableAttackers(combat);
+                },
+                () -> CombatUtil.validateAttackers(combat),
+                () -> super.declareAttackers(attacker, combat));
     }
 
     /**
@@ -490,9 +517,7 @@ public final class RandomSeatController extends PlayerControllerAi {
      *
      * <p>{@code CombatUtil.validateBlocks} is the engine's own check and the
      * engine never calls it, so the seat calls it before returning; a
-     * declaration it rejects is redrawn, then left to the AI. On success a
-     * {@code blockers} record per attacker says who could have blocked it
-     * and how many it takes, stamped a real decision (FR-022d).
+     * declaration it rejects is redrawn, then left to the AI.
      */
     @Override
     public void declareBlockers(Player defender, Combat combat) {
@@ -510,42 +535,24 @@ public final class RandomSeatController extends PlayerControllerAi {
         for (GameEntity defended : combat.getDefendersControlledBy(player)) {
             attackers.addAll(combat.getAttackersOf(defended));
         }
-        Map<Card, List<Card>> legalByAttacker = new LinkedHashMap<>();
-        for (Card attacker : attackers) {
-            List<Card> legal = new ArrayList<>();
-            for (Card blocker : candidates) {
-                if (CombatUtil.canBlock(attacker, blocker, combat)) {
-                    legal.add(blocker);
-                }
-            }
-            legalByAttacker.put(attacker, legal);
-        }
-        if (collectors != null) {
-            legalByAttacker.forEach((attacker, legal) -> collectors.recordBlockers(
-                    player, attacker, candidates, legal,
-                    CombatUtil.getMinNumBlockersForAttacker(attacker, player), false));
-        }
-        for (int attempt = 0; attempt < RandomChoices.MAX_DRAWS; attempt++) {
-            clearBlocks(combat);
-            for (Card blocker : candidates) {
-                List<Card> options = new ArrayList<>();
-                options.add(null);
-                legalByAttacker.forEach((attacker, legal) -> {
-                    if (legal.contains(blocker)) {
-                        options.add(attacker);
+        Map<Card, List<Card>> legalByAttacker = legalBy(
+                attackers, candidates,
+                (attacker, blocker) -> CombatUtil.canBlock(attacker, blocker, combat));
+        drawUntilAccepted(
+                () -> clearBlocks(combat),
+                () -> {
+                    for (Card blocker : candidates) {
+                        List<Card> options = new ArrayList<>();
+                        options.add(null);
+                        options.addAll(optionsFor(blocker, legalByAttacker));
+                        Card attacker = options.get(random.nextInt(options.size()));
+                        if (attacker != null) {
+                            combat.addBlocker(attacker, blocker);
+                        }
                     }
-                });
-                Card attacker = options.get(random.nextInt(options.size()));
-                if (attacker != null) {
-                    combat.addBlocker(attacker, blocker);
-                }
-            }
-            if (CombatUtil.validateBlocks(combat, player) == null) {
-                return;
-            }
-        }
-        clearBlocks(combat);
-        super.declareBlockers(defender, combat);
+                },
+                () -> CombatUtil.validateBlocks(combat, player) == null,
+                () -> super.declareBlockers(defender, combat));
     }
 
     private void clearBlocks(Combat combat) {

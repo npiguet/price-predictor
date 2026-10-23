@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 
 /**
@@ -33,7 +34,22 @@ public class GeneratedDecksIndex {
      * @param setCode   MTG set code (the second {@code ';'}-delimited field)
      * @param cardNames 40 card names (the pipe-separated tail)
      */
-    public record GeneratedDeck(String label, String setCode, List<String> cardNames) {}
+    public record GeneratedDeck(String label, String setCode, List<String> cardNames) {
+
+        /**
+         * One {@code LABEL;SET_CODE;Card1|...} line.
+         *
+         * @throws IOException when the line lacks either separator
+         */
+        static GeneratedDeck parse(String line) throws IOException {
+            String[] fields = line.split(CardNameList.FIELD_SEPARATOR, 3);
+            if (fields.length < 3) {
+                throw new IOException(
+                        "Malformed generated-decks line (need 'LABEL;SET_CODE;Cards'): " + line);
+            }
+            return new GeneratedDeck(fields[0], fields[1], CardNameList.parse(fields[2]));
+        }
+    }
 
     private final List<GeneratedDeck> allDecks;
     private final Map<String, List<GeneratedDeck>> decksBySet;
@@ -64,16 +80,7 @@ public class GeneratedDecksIndex {
         List<GeneratedDeck> decks = new ArrayList<>();
         for (String line : Files.readAllLines(file)) {
             if (line.isBlank()) continue;
-            int firstSep = line.indexOf(';');
-            int secondSep = firstSep < 0 ? -1 : line.indexOf(';', firstSep + 1);
-            if (firstSep < 0 || secondSep < 0) {
-                throw new IOException(
-                        "Malformed generated-decks line (need 'LABEL;SET_CODE;Cards'): " + line);
-            }
-            String label = line.substring(0, firstSep);
-            String setCode = line.substring(firstSep + 1, secondSep);
-            String[] names = line.substring(secondSep + 1).split("\\|", -1);
-            decks.add(new GeneratedDeck(label, setCode, List.of(names)));
+            decks.add(GeneratedDeck.parse(line));
         }
         if (decks.isEmpty()) {
             throw new IOException("Generated-decks file is empty: " + file);
@@ -92,8 +99,8 @@ public class GeneratedDecksIndex {
 
     /**
      * Pick a random deck from the given set whose card list is not a
-     * permutation of {@code excludeCards}. Returns {@code null} if no
-     * matching deck exists. The exclusion uses content equality (multiset
+     * permutation of {@code excludeCards}, or empty if no matching deck
+     * exists. The exclusion uses content equality (multiset
      * over card names) rather than reference equality, so a deck loaded
      * from this index is treated as a mirror of {@code excludeCards} even
      * if it was sampled from a different index instance with the same
@@ -105,11 +112,11 @@ public class GeneratedDecksIndex {
      *                     order-insensitive
      * @param random       Source of randomness
      */
-    public GeneratedDeck randomDeckFromSet(
+    public Optional<GeneratedDeck> randomDeckFromSet(
             String setCode, List<String> excludeCards, Random random) {
         List<GeneratedDeck> candidates = decksBySet.get(setCode);
         if (candidates == null || candidates.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         List<String> excludeSorted = new ArrayList<>(excludeCards);
         Collections.sort(excludeSorted);
@@ -123,14 +130,14 @@ public class GeneratedDecksIndex {
             }
         }
         if (nonMirror.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
-        return nonMirror.get(random.nextInt(nonMirror.size()));
+        return Optional.of(nonMirror.get(random.nextInt(nonMirror.size())));
     }
 
     /**
      * Pick any random deck from the given set, without excluding mirrors of
-     * anything. Returns {@code null} if the set has no candidates at all.
+     * anything, or empty if the set has no candidates at all.
      *
      * <p>Exists for {@link MatchGenerator#pickDeckB}'s {@code decksOnly}
      * fallback: a decks-only round has no Forge-legal deck-building path (its
@@ -140,11 +147,11 @@ public class GeneratedDecksIndex {
      * Forge. A mirror match still puts every card in the round's decks into
      * a game, which is all a coverage or variant round requires.
      */
-    public GeneratedDeck randomAnyDeckFromSet(String setCode, Random random) {
+    public Optional<GeneratedDeck> randomAnyDeckFromSet(String setCode, Random random) {
         List<GeneratedDeck> candidates = decksBySet.get(setCode);
         if (candidates == null || candidates.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
-        return candidates.get(random.nextInt(candidates.size()));
+        return Optional.of(candidates.get(random.nextInt(candidates.size())));
     }
 }

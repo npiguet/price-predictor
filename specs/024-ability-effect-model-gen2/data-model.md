@@ -21,7 +21,7 @@ ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?)
 - JSON: an extra `"option"` member of the key object, written only when set. Additive under
   compatibility rule 1.
 - Equality and hashing include `option`, so a mode key never matches its root key.
-- Produced by: `RulesParser`/`ProvenanceRecorder` for sidecar `option` lines; `ProvenanceKey.resolve`
+- Produced by: `RulesParser`/`ProvenanceRecorder` for sidecar `option` lines; `ProvenanceResolver.resolve`
   for a cloned mode at resolution; `RandomChoices`/`ForkCollector` for fork modes.
 
 ### SidecarLine (extended)
@@ -153,14 +153,15 @@ New fields, each omitted when equal to the gen-1 default so gen-1 digests are un
 
 ### ValueTargets (new)
 
-Per encoding text, from `script_text` alone:
+Per encoding text, from its sidecar line's `script_text` alone, on both encoding surfaces:
 
 | Target | Loss | Source | Masked when |
 |---|---|---|---|
 | damage | count | `NumDmg$` summed over segments | any segment states a non-literal |
-| power change, toughness change | count (signed via the existing direction/magnitude split) | `NumAtt$`, `NumDef$`, `PowerBonus$`, `ToughnessBonus$` | same |
-| counters placed | count | `CounterNum$` | same |
-| cards drawn | count | `NumCards$` on `Draw` segments | same |
+| power change, toughness change | count (signed via the existing direction/magnitude split) | `NumAtt$` and `AddPower$`; `NumDef$` and `AddToughness$` | same |
+| counters placed | count | `CounterNum$` on `PutCounter` and `PutCounterAll` segments, 1 where absent | same; or any `MoveCounter`, `AddOrRemoveCounter` or `ReplaceCounter` segment |
+| counters removed | count | `CounterNum$` on `RemoveCounter` (1 where absent) and `RemoveCounterAll` (no default) segments | same; a `RemoveCounterAll` with no `CounterNum$`; or any `MoveCounter`, `AddOrRemoveCounter` or `ReplaceCounter` segment |
+| cards drawn | count | `NumCards$` on `Draw` segments, 1 where absent | same |
 | mana cost W, U, B, R, G, C, generic | count | root `Cost$` via `ManaCost.parse` | spell line; no `Cost$`; non-literal X |
 | cost taps | binary | `T` shard in root `Cost$` | no `Cost$` |
 | cost sacrifices | binary | `Sac<` shard in root `Cost$` | no `Cost$` |

@@ -1,14 +1,10 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
-import forge.ai.LobbyPlayerAi;
-import forge.deck.Deck;
 import forge.game.Game;
-import forge.game.GameRules;
-import forge.game.GameType;
-import forge.game.Match;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
+import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameOutcome;
@@ -17,7 +13,8 @@ import forge.game.event.GameEventPlayerRadiation;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.player.Player;
-import forge.game.player.RegisteredPlayer;
+import forge.game.zone.Zone;
+import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -30,13 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * Four bus events Forge already fires, read the way the schema names them.
  *
- * <p>Energy is the one that mattered: it is a player counter, so it arrives on
- * {@code GameEventPlayerCounters} rather than an event of its own, and nothing
- * had ever subscribed to that event — the reason a corpus of ten million
- * records held no energy at all and an Aether Hub resolution reads as an
- * ability that does nothing. Radiation, speed and day/night are each on a
- * dedicated event and were in exactly the same state: declared in the
- * vocabulary, reachable on the bus, and never read.
+ * <p>Energy is the subtle one: it is a player counter, so it arrives on
+ * {@code GameEventPlayerCounters} rather than an event of its own, and
+ * without a subscriber there an Aether Hub resolution reads as an ability
+ * that does nothing. Radiation, speed and day/night are each on a dedicated
+ * event: declared in the vocabulary, reachable on the bus, and read here.
  */
 @ExtendWith(ForgeExtension.class)
 class BusEventsTest {
@@ -45,9 +40,7 @@ class BusEventsTest {
 
     /**
      * Energy is a player counter, so it arrives on the counters event and not on
-     * one of its own. Nothing subscribed to that event, which is why a corpus of
-     * ten million records contains no energy at all and Aether Hub reads as an
-     * ability that does nothing.
+     * one of its own. Unread, Aether Hub reads as an ability that does nothing.
      */
     @Test
     void anEnergyCounterBecomesAnEnergyChangeEvent() {
@@ -121,10 +114,10 @@ class BusEventsTest {
     }
 
     /**
-     * Regeneration and shuffle, the two types the mode table's own dead and
-     * misfiled entries left unreachable — {@code "Regenerated"} matches no
-     * real Forge trigger or replacement mode, and reading the bus instead is
-     * what makes the type reachable at all.
+     * Regeneration and shuffle, two types the run-parameter mode table cannot
+     * reach — no Forge trigger or replacement mode is the regeneration
+     * itself, and reading the bus instead is what makes the type reachable at
+     * all.
      */
     @Test
     void aRegeneratedCardNamesTheCard() {
@@ -147,19 +140,6 @@ class BusEventsTest {
     // ── player_won: name resolved back to the real Player, not carried as-is ──
 
     /**
-     * A real two-player game, each seat a distinct lobby name -- the shape
-     * {@code GamePlayer.registeredPlayers} itself builds, minus the deck.
-     */
-    private static Game twoPlayerGame(String nameA, String nameB) {
-        List<RegisteredPlayer> players = List.of(
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi(nameA, null)),
-                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi(nameB, null)));
-        GameRules rules = new GameRules(GameType.Constructed);
-        Match match = new Match(rules, players, "bus-events-test");
-        return new Game(players, rules, match);
-    }
-
-    /**
      * {@code computeWinningPlayerName} returns null when {@code
      * GameOutcome.getWinningLobbyPlayer()} does -- a draw -- and a {@code
      * player_won} with no winner would be a false record.
@@ -174,12 +154,13 @@ class BusEventsTest {
     /**
      * The winner is a NAME on the event, and every other subject on this
      * branch is a ref -- resolved back to the real {@link Player} by matching
-     * {@code getLobbyPlayer().getName()}, the same defect shape Task 7 shipped
-     * once already ({@code damage_prevented.source}).
+     * {@code getLobbyPlayer().getName()}; a name left unresolved would break
+     * the ref convention the way an unresolved {@code damage_prevented.source}
+     * would.
      */
     @Test
     void theWinnerResolvesToTheMatchingPlayersRef() {
-        Game game = twoPlayerGame("p1", "p2");
+        Game game = TestBoard.twoPlayerGame("p1", "p2");
         Player p1 = game.getPlayers().stream()
                 .filter(p -> "p1".equals(p.getLobbyPlayer().getName()))
                 .findFirst().orElseThrow();
@@ -195,7 +176,7 @@ class BusEventsTest {
     /** A winning name this game cannot resolve to any seat produces nothing. */
     @Test
     void aWinningNameNoSeatMatchesProducesNoEvent() {
-        Game game = twoPlayerGame("p1", "p2");
+        Game game = TestBoard.twoPlayerGame("p1", "p2");
         GameEventGameOutcome event = new GameEventGameOutcome(
                 4, List.of("nobody has won"), "a name nobody at this table has", "");
 
@@ -209,7 +190,7 @@ class BusEventsTest {
      */
     @Test
     void aSharedLobbyNameResolvesToTheFirstMatchingSeat() {
-        Game game = twoPlayerGame("same", "same");
+        Game game = TestBoard.twoPlayerGame("same", "same");
         Player first = game.getPlayers().get(0);
         GameEventGameOutcome event = new GameEventGameOutcome(
                 4, List.of("same has won"), "same", "");
@@ -217,5 +198,20 @@ class BusEventsTest {
         EffectEvent built = BusEvents.gameOutcome(event, game);
 
         assertEquals(List.of(SnapshotBuilder.playerId(first)), built.subjects());
+    }
+
+    /**
+     * A card put onto the stack is a cast, not an outcome of one.
+     *
+     * <p>It has a record already -- the activation half, with what was paid. As a
+     * zone_change it lands in whichever bracket is open, so an opponent's
+     * response reads as something the resolving ability did.
+     */
+    @Test
+    void aMoveOntoTheStackIsNotRecordedAsAnOutcome() {
+        assertNull(BusEvents.cardMoved(new GameEventCardChangeZone(
+                TestCards.build("Lightning Bolt"),
+                new Zone(ZoneType.Hand, TestCards.game()),
+                new Zone(ZoneType.Stack, TestCards.game()))));
     }
 }

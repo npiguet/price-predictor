@@ -124,8 +124,8 @@ Everything cheaper comes first, and the probe half of this story may never be bu
 gate 2 decides per keyword whether it is needed.
 
 **Independent Test**: Run collection with `--interventions-per-game` set and confirm interventional
-records appear with the fork's own state, paired to their real counterparts by `mirror_of`. Then run
-`evaluate-effect-model` and read the matched real-vs-fork agreement check.
+records appear with the fork's own state, paired to their real counterparts by `mirror_of`. The
+matched real-vs-fork agreement check that would read them is not implemented (FR-111).
 
 **Acceptance Scenarios**:
 
@@ -143,7 +143,8 @@ records appear with the fork's own state, paired to their real counterparts by `
 5. **Given** a real resolution and its forks in one game, **When** the corpus is read, **Then** at most
    two forks name that resolution in `mirror_of`.
 6. **Given** a trained checkpoint, **When** `evaluate-effect-model` runs on a corpus containing
-   mirrored pairs, **Then** it reports matched real-vs-fork prediction agreement.
+   mirrored pairs, **Then** it reports matched real-vs-fork prediction agreement as `NOT_IMPLEMENTED`
+   (`[todo]`), naming what the check would measure.
 
 ---
 
@@ -210,8 +211,9 @@ loss.
   which is signal rather than a gap.
 - Copy-spell effects (Fork, Reverberate) carry only a copied flag with no original-ability
   back-reference, and resolve through the stack object's source card.
-- Batch memory exceeds the 8 GB GPU budget under live context re-encoding. `--context-cache` switches
-  to the stop-gradient momentum cache.
+- Batch memory exceeds the 8 GB GPU budget under live context re-encoding. A step's texts
+  are encoded in length-sorted groups (`encode_by_length`), each padded to its own longest; the
+  trainer has no momentum cache.
 
 ## Requirements *(mandatory)*
 
@@ -453,7 +455,10 @@ loss.
 - **FR-057**: Variant records MUST carry `synthetic = true` and `variant_of`. No variant MUST be
   generated from a card carrying a held-out text: a perturbation yields a text that is not itself
   held out, so the variant would reach training and teach the held-out card's mechanics under an edit
-  the split cannot detect.
+  the split cannot detect. Once the variants' sidecars exist, `collect-variants` MUST also delete,
+  before decking, every variant whose lines print a held-out text — or, under `--holdout-unit
+  template`, a held-out template — tested by `HeldOutCards.holds_text` under the holdout
+  `build-corpus` chooses (024 FR-041).
 - **FR-058**: `--variant-volume` (default 0.2) MUST cap variant records as a fraction of the real
   records already in `--effect-records`.
 - **FR-059**: Variant matches MUST write effect records only, never `match-outcomes.txt` or
@@ -478,7 +483,10 @@ loss.
   side.
 - **FR-063**: Training-only heads MUST be an MLM head over masked tokens (`--mlm-weight`,
   `--mlm-mask-prob`) and a script-API classification head from `e` predicting the trait's API type plus
-  its parameter-key set (`--api-weight`). The paired-encoding loss MUST run over lines that have
+  its parameter-key set (`--api-weight`, default 0.003), its targets read from the line's sidecar
+  `script_text` on both surfaces. At an MLM-masked position the numeric value and its number flag
+  MUST be zeroed along with the token, since the encoder adds the number embedding beside the
+  token's. The paired-encoding loss MUST run over lines that have
   both surfaces; synthetic variants have only the script surface and contribute no pairing term.
 - **FR-064**: `python -m effects build-vocab` MUST write `models/effects/vocab.txt` by default, scan
   converted cards, converted token scripts, and the keyword-definition file, and seed `[PAD]`,
@@ -491,7 +499,10 @@ loss.
 - **FR-067**: The script tokenizer MUST split compound selectors compositionally.
 - **FR-068**: Numbers MUST use a monotone numeric embedding — a shared learned base vector plus
   log1p(n) times a learned direction.
-- **FR-069**: Prose tokens MUST add a role embedding looked up from the sidecar's role spans.
+- **FR-069**: Prose tokens MUST add a role embedding looked up from the sidecar's role spans. The
+  spans MUST be passed to the encoder wherever a text is encoded on the prose surface and is the
+  line's converted prose (`encoding_role_spans`); a script text, a variant's script included,
+  carries none.
 - **FR-070**: Keyword-expansion dropout MUST replace a keyword token with its definition at
   probability `--keyword-expand-p`, always expand keywords unknown to the vocabulary, instantiate
   parameterized templates with the instance's own values (a keyword referenced without an instance,
@@ -519,7 +530,10 @@ loss.
 - **FR-075**: Context ability tokens MUST be dropped at probability `--context-dropout` during
   training.
 - **FR-076**: The saved artifact MUST keep the three output heads defined in the root spec's
-  § Output heads, and MUST filter out the MLM, script-API, and pairing heads at save time.
+  § Output heads, and MUST filter out the MLM, script-API, and pairing heads at save time. Loading
+  MUST be strict: a model state missing any key other than the training-only heads' and
+  `option_kind_embedding`'s, or carrying an unexpected key, MUST be refused rather than run at random
+  initial weights, and the loaded encoder and model MUST be returned in evaluation mode.
 - **FR-077**: The per-entity head MUST be one shared head mapped over every `[CARD]` and
   `[PLAYER]` output — an affected/unaffected gate, then conditional field groups:
   - permanents and stack entities: zone outcome (categorical: stayed, died, exiled, to hand, library
@@ -546,8 +560,29 @@ loss.
   deviance MUST be computed over the magnitudes.
 - **FR-081**: Loss MUST be normalized per record over entity count; the affected gate trains on every
   entity — players included, since the per-entity head is mapped over `[PLAYER]` outputs too — and
-  conditional fields only where the gate's target fires. Count losses MUST use the full Poisson
-  negative log-likelihood, Stirling term included, so every loss term is nonnegative at its optimum.
+  a conditional field only where the gate's target fires **and** the field is present
+  (`EntityFieldTargets`, `effect_head_layout.py`). A field MUST be present on an entity where the
+  record writes it (an event, or a payload's legality mark), or where it has a silent value, the
+  record's sampling class supervises it, and the entity is of the field's `FieldScope` (player or
+  permanent); a field the record declares unknown MUST be absent whatever its silent value. Silent
+  values: zone outcome = stayed; damage, counters and P/T change = 0; types, colours and keywords
+  gained/lost = none; control and attached-to change = 0; player life, cards drawn/discarded/milled,
+  library events, poison and mana = 0. `tap_state`, `pt_duration`, `type_color_duration`, the
+  legality bits and `min_blockers` MUST have no silent value and train only where an event or the
+  payload sets them. The effectful classes (`resolution-effect`, `resolution-cost`, `rewrite`,
+  `combat`) MUST supervise every non-legality field; `continuous` MUST also supervise the P/T,
+  keyword, type and colour fields and their durations, and a `=` in a contribution's `types` or
+  `colors` MUST mark the matching `*_lost` field unknown. A `trigger` record MUST derive no
+  per-entity targets: its events are what caused it, and it supervises only the verdict head's
+  fired bit (the affected gate still trains on its entities, as negatives). The constant-predictor
+  floor (FR-127c) MUST use the same presence. Count losses MUST use the full Poisson
+  negative log-likelihood, Stirling term included, so every loss term is nonnegative at its optimum,
+  on targets clamped to [0, 40].
+- **FR-081a**: Every head's loss MUST reduce one way (`effect_losses.per_row`): summed over a row's
+  targets, then averaged over the batch's rows, every row counting, including one with nothing to
+  score. A row is a record for the per-entity, created-objects and verdict heads, and an encoded text
+  for the value, script-API and MLM heads. The value head's at-least block (024 FR-058b) keeps its
+  division by 40 inside the row.
 - **FR-082**: The sparse field group — keywords gained/lost, control change, attached-to, the duration
   on every delta that carries one, type/color delta, and counters delta by type — MUST enable at the
   first step of `--curriculum-epoch` (default 3). Every other field trains from step zero, as do all
@@ -563,19 +598,22 @@ loss.
   `validation/samples/card-disjoint.jsonl.gz` and `validation/samples/game-disjoint.jsonl.gz` (the
   trainer's per-epoch validation set, drawing its card-disjoint resolution classes from
   `validation/gate-one/`), and `manifest.json`. Each shard directory MUST hold shards in the corpus
-  shard format (FR-027), so every existing reader loads them unchanged, and MUST be repacked so that
-  each shard holds **at least** `--shard-records` (default 2000) records and closes at the first game
-  boundary thereafter; the final shard of a stratum MAY be shorter, and a game MUST never be split
-  across shards. `--shard-records 0` keeps one output shard per source shard.
-- **FR-136**: Training records MUST be selected per record and both validation strata per **game**.
-  Whole-game selection is what keeps intra-game joins intact: `evaluate-effect-model` resolves a probe
-  record's `mirror_of` to a `record_id` in the same stratum, and a stratum holding one half of a pair
-  scores nothing and reports the keyword as under-sampled rather than as broken (FR-105).
+  shard format (FR-027), so every existing reader loads them unchanged, and MUST be repacked into
+  `ceil(records / --shard-records)` shards (default 2000), so each holds about that many records:
+  whole games MUST be dealt to shards by a hash of `game_id` seeded by `--seed`, so a game never
+  spans two shards and each shard holds games from across the stratum, and each shard's records MUST
+  be shuffled under `--seed` before it is written. `--shard-records 0` keeps one output shard per
+  source shard, unshuffled. The trainer's whole-shard draw (FR-126) is unchanged.
+- **FR-136**: Training records MUST be selected per record and both validation strata per **game**,
+  the unit the split is decided in. No evaluator resolves `mirror_of` within a stratum.
 - **FR-137**: The split MUST be decided once, by the FR-088 rule under the same
   `--holdout-permille` and `--holdout-max-carriers`, against the corpus as it stands at build time. A
-  game with a record naming a held-out card MUST go to the card-disjoint stratum;
-  `--game-disjoint-games` (default 1000) of the remaining games MUST go to the game-disjoint stratum;
-  the rest are training candidates.
+  game with a record naming a held-out card (a held-out token script included, FR-088) MUST go to the
+  card-disjoint stratum; `--game-disjoint-games` (default 1000) of the remaining games MUST go to the
+  game-disjoint stratum; the rest are training candidates. A record of a training game acting through
+  a held-out text — a token or variant script printing it, or its template under `--holdout-unit
+  template` — MUST NOT be written; both passes route it away through one held-out test and the
+  manifest counts it under the `dropped-held-out-text` stratum. The rest of its game trains.
 - **FR-138**: The training corpus MUST hold at most `--text-cap` (default 200) records per unique
   ability text, dropping the excess at random under `--seed`. The cap MUST be a ceiling and never a
   floor: a text below it keeps every record it has, so the tail `collect-coverage` exists to fill
@@ -584,7 +622,14 @@ loss.
   (FR-085), defaulting to the training mixture. A class the raw corpus cannot supply at its share MUST
   be written in full and its shortfall recorded in the manifest, never silently under-filled. What a
   class can supply MUST be measured against the corpus-wide per-text cap rather than per shard, and
-  the manifest MUST record the proportions actually delivered beside the requested ones.
+  the manifest MUST record each class's target (`class_targets`) and the proportions actually
+  delivered beside the requested ones.
+- **FR-139a**: The survey MUST route each game once, at the end of its shard (`GameRouting`): held
+  out, else the game-disjoint draw, else training; the write pass MUST apply the game sets the survey
+  built rather than decide again. Only the records of training games MUST size the class, family and
+  text quotas and the copy plans. The rarity table (FR-141), the legality mode counts and the
+  held-out texts' game counts stay whole-corpus. A game found in more than one shard MUST be counted
+  and warned about.
 - **FR-140**: `--training-records`, when non-zero, MUST subsample the capped result within each class
   to that total. It defaults to zero, meaning no ceiling beyond `--text-cap`.
 - **FR-141**: The manifest MUST record effective games per unique ability text counted over the whole
@@ -597,21 +642,25 @@ loss.
 - **FR-142**: The card-disjoint stratum MUST hold at most `--card-disjoint-text-cap` (default 50)
   games per held-out ability text, so each held-out text weighs comparably in gate 1's per-stratum
   averages (FR-103) and in best-checkpoint selection (FR-092). Games are the selection unit (FR-136),
-  so the cap governs which games are admitted rather than which records survive within one: a
-  held-out game MUST be admitted only while every held-out text it carries is under the cap, and a
-  held-out game carrying no held-out text MUST be dropped rather than trained on. Texts the holdout
-  does not name MUST NOT be tallied against the cap.
+  so the cap governs which games are admitted rather than which records survive within one. A game
+  MUST count toward a held-out text only through a **resolution** record acting through it, the
+  only kind gate 1 scores. A held-out game MUST be admitted only while every held-out text it
+  resolves is under the cap, and a held-out game resolving no held-out text MUST be dropped rather
+  than trained on. Texts the holdout does not name MUST NOT be tallied against the cap.
 - **FR-143**: The dataset MUST be a function of the raw corpus, the flags and `--seed` alone. The
   manifest MUST record all three, plus the source shard names and byte sizes, the per-class and
   per-stratum counts, and the unique-ability-text count of each output.
 - **FR-144**: A raw corpus that has grown MUST be rebuilt whole rather than extended in place, since
   the split and the rarity table are corpus-wide quantities. A build MUST clear the three output
   directories before writing them, so no shard of an earlier build survives into a dataset the
-  manifest does not describe. `--verify` MUST report the difference between an existing manifest's
+  manifest does not describe. Before clearing them it MUST move `manifest.json` to
+  `manifest.previous.json`, and it MUST write the new manifest atomically, last, deleting the one set
+  aside, so a build that fails mid-write leaves no manifest whose digest matches cleared strata. `--verify` MUST report the difference between an existing manifest's
   source list and the corpus on disk, and write nothing.
 - **FR-145**: The run MUST report, per class and per stratum, the records read, the records kept and
   the records the cap dropped, the unique ability texts each output holds, and the delivered class
-  proportions against the requested ones. The text counts are what say whether curation preserved the
+  proportions against the requested ones, and MUST warn on a class delivered more than 1% short of
+  its target. The text counts are what say whether curation preserved the
   tail, which no record count can show.
 - **FR-145a**: `build-corpus` MUST refuse to write a dataset gate 1 cannot be scored on, reporting the
   condition and exiting non-zero. An empty holdout MUST be refused before the survey pass, naming each
@@ -619,12 +668,10 @@ loss.
   after it and before anything is written.
 - **FR-146**: `--corpus DIR` MUST be the trainer's only input and MUST be required: `train-effect-model`
   reads a curated dataset rather than a raw shard corpus, taking the split, the holdout rule and the
-  rarity table from its manifest rather than computing any of them. `--records-dir`, `--reserved-shards`,
-  `--holdout-permille` and `--holdout-max-carriers` are no longer flags of the trainer's — each named a
-  decision the manifest now carries instead. `--split-from` MAY still be passed on a variant run, but
-  only for compatibility with an older invocation: it inherits nothing beyond what the manifest already
-  fixes, and the split it would otherwise compute is never read. The curated corpus is still read one
-  training shard at a time, never whole.
+  rarity table from its manifest rather than computing any of them. The trainer MUST NOT take
+  `--records-dir`, `--reserved-shards`, `--holdout-permille`, `--holdout-max-carriers` or
+  `--split-from`, each naming a decision the manifest carries, nor `--context-cache` or
+  `--cache-refresh` (FR-084). The curated corpus is read one training shard at a time, never whole.
 - **FR-147**: A checkpoint trained with `--corpus` MUST record the manifest's path and digest
   alongside its split (FR-090), and `evaluate-effect-model` MUST fail fast when the dataset it reads
   hashes differently. A rebuilt dataset is a different split, so scoring the gates against it would
@@ -634,8 +681,9 @@ loss.
   key the sidecar lists as dropped, or one naming an unconverted script), a key outside every
   `(face, trait_kind)` range the sidecar declared keeping the record, because it is a trait Forge
   attached to a live card rather than a contentless one; any record carrying more than
-  `--max-events-per-record` events (default 64); and a record of any kind with an acting key
-  inside a declared range and in neither of the sidecar's lists (`unjoinable-key`) — in both
+  `--max-events-per-record` events (default 64); and a record of any kind with an acting key — a
+  `decision` record's candidate key included — inside a declared range and in neither of the
+  sidecar's lists (`unjoinable-key`) — in both
   passes, and MUST record the count per reason in the manifest as `quality_dropped`. It MUST
   record, as `no_acting_text_scripts`, the `no-acting-text` refused count per acting script file,
   and log the largest; it MUST log the scripts with the most `unjoinable-key` refusals. The build
@@ -664,7 +712,7 @@ loss.
   and MUST warn when a directory routes more than none and fewer than 5% of its games.
 - **FR-150**: The collector MUST resolve a token host with no `PaperToken` through its image key
   against the token database before falling back to a `cardsfolder` path
-  (`ProvenanceKey.tokenScriptStemOf`; verified by `CopiedTokenProvenanceTest`).
+  (`ScriptLocator.tokenScriptStemOf`; verified by `CopiedTokenProvenanceTest`).
 - **FR-151**: `build-corpus` MUST remap a provenance key whose script file the converted card tree
   does not hold and whose filename stem names a token script to `tokenscripts/<stem>.txt`, resolving
   the stem by name, then by the carrying entity's colours, core types, supertypes, subtypes and P/T,
@@ -701,10 +749,10 @@ loss.
 - **FR-083**: `python -m effects train-effect-model` MUST train both transformers jointly, end to end,
   from random initialization.
 - **FR-084**: Batches MUST mix several games, group each game's records together, and encode each
-  unique ability text once; `--context-cache` MUST switch context gradient to a stop-gradient momentum
-  cache refreshed every `--cache-refresh` batches. The cache is specified but not implemented: the
-  trainer's batcher has none, so `--context-cache` is accepted, warned about at startup and otherwise
-  ignored, and context abilities are re-encoded live.
+  unique ability text once. Context abilities MUST be re-encoded live; the trainer has no
+  `--context-cache` or `--cache-refresh` flag. `--grad-accum` MUST count micro-steps within the
+  epoch, so a partial accumulation left at an epoch's end is dropped rather than shifting every
+  later epoch's optimizer boundary.
 - **FR-085**: The per-batch sampling mixture MUST default to the root spec's eight-class shares and be
   renormalized over the classes present in the corpus. Fields whose record kinds are absent from the
   corpus MUST contribute no loss, so a three-class corpus trains the same heads without them.
@@ -723,7 +771,9 @@ loss.
   it; an eligible text is held out when `crc32` of its normalized script text modulo 1000 is below
   `--holdout-permille` (default 20). Membership MUST depend on the text's own bytes alone, so adding
   cards never reassigns an existing text. A card is held-out when any of its lines carries a held-out
-  text. Training MUST exclude every game with a record naming a held-out card — decided once, by
+  text. Token scripts MUST count as carriers, toward `--holdout-max-carriers` too, and a token script
+  carrying a held-out text MUST be held out by its script file, so a record naming it names a held-out
+  card. Training MUST exclude every game with a record naming a held-out card — decided once, by
   `build-corpus`, over the whole raw corpus, rather than computed live by the trainer. Game-disjoint
   validation MUST be the fixed sample `validation/samples/game-disjoint.jsonl.gz`, which `build-corpus`
   draws once from the game-disjoint stratum (FR-135) and the trainer reads whole.
@@ -747,10 +797,8 @@ loss.
   choosing.
 - **FR-091**: A variant run MUST see the same games as the full run it baselines. Training both against
   the same `--corpus` is how that requirement is met: the manifest enumerates the split, so two runs
-  reading one curated dataset train on the same games by construction (FR-146). `--split-from PATH` is
-  a compatibility spelling accepted on a variant run — it inherits nothing, neither the split nor the
-  vocabulary nor the keyword-definition paths are read from the path, and the trainer MUST warn at
-  startup when it is passed.
+  reading one curated dataset train on the same games by construction (FR-146). The trainer has no
+  `--split-from` flag.
 - **FR-092**: Inference commands MUST hash the vocabulary and keyword-definition files they actually
   use and fail fast on a mismatch with the checkpoint's recorded hashes.
 - **FR-093**: Checkpoints MUST be saved under `--model-output`, defaulting to
@@ -758,10 +806,15 @@ loss.
   otherwise, as `{timestamp}.pt` plus `latest.pt`, so a variant run never overwrites the shipping
   checkpoint.
 - **FR-094**: Four evaluation-baseline variants MUST train on the identical pipeline via `--variant`,
-  each defined as: `identity` — a free embedding per unique text replaces the encoder; `state-only` —
-  all `e` inputs zeroed; `no-state` — every input zeroed except `[ACT]` and the record-kind flag, with
-  the entity ability `e` tokens zeroed too (this is the average-effect control); `taxonomy` — `e`
-  replaced by an embedding of the sidecar's API type and parameter keys.
+  each defined as: `identity` — a free embedding per text replaces the encoder, indexing texts
+  exactly: one row per text the run's sidecars encode to, plus one shared row for every other text
+  (a counterfactual copy's, say), the texts saved in the checkpoint beside the table so the model
+  runner rebuilds it row for row; `state-only` — every `e` zeroed, `[ACT]`'s included; `no-state` —
+  the context abilities' `e` zeroed and `[ACT]`'s kept, every card and player feature zeroed, and
+  every `[GLOBAL]` input zeroed except the record-kind, moment and subkind one-hots (this is the
+  average-effect control); `taxonomy` — `e` replaced by an embedding of the sidecar's API type and
+  parameter keys. The masks MUST zero inputs rather than drop slots, so the per-entity targets keep
+  their shape.
 - **FR-095**: The trainer MUST expose the root spec's flag table with its stated defaults, and MUST
   hardcode the stated constants (encoder d_model 256 / 4 layers / 4 heads; effect-head trunk d_model
   256 / 6 layers / 4 heads; `ff_dim` 4 × d_model; dropout 0.1; AdamW; lr 1e-4 constant after warmup;
@@ -782,6 +835,8 @@ loss.
 - **FR-097**: `--vocab-path` and `--keyword-definitions` MUST default, on every inference command,
   to the paths the loaded checkpoint recorded from its training run, and an explicit value MUST
   override that default while still being hash-checked.
+- **FR-097a**: `evaluate-effect-model --variant-scripts` MUST default to the variant tree the corpus
+  manifest records, when the evaluated corpus records one.
 
 #### Embedding cache
 
@@ -836,9 +891,10 @@ loss.
   linear-decodability battery; the
   pooled-`e` scorer smoke test; the `taxonomy` comparison; the average-effect control (the `no-state`
   variant); and the probe-diff re-check.
-- **FR-111**: Checks whose records do not yet exist MUST be skipped rather than failing: matched
-  real-vs-fork agreement and the probe-diff re-check need forks, and the
-  role-polarity probe needs mana records and so the engine patch. Every other check runs against any
+- **FR-111**: Three FR-110 checks are not implemented: matched real-vs-fork agreement, the probe-diff
+  re-check and the role-polarity probe. Each MUST be reported on every run with status
+  `NOT_IMPLEMENTED`, printed `[todo]`, naming what it would measure, and never as skipped: the
+  corpus holds the fork, probe and mana records they would read. Every other check runs against any
   corpus.
 - **FR-112**: The ward canary MUST compare ward's `e` against a checked-in list of functional-twin
   ability lines in `src/effects/domain/ward_twins.py`, passing when ward is closer in cosine distance
@@ -868,19 +924,36 @@ loss.
   the in-distribution memorization ceiling; the average-effect control, comparing the `no-state`
   variant on the decodability battery, the scorer smoke test, the ward canary, and scaling
   calibration; and the probe-diff re-check, gate 2's canary re-run over real-and-fork combat pairs
-  joined by `mirror_of`, for probed keywords only.
+  joined by `mirror_of`, for probed keywords only. The role-polarity probe and the probe-diff
+  re-check are not implemented (FR-111).
 - **FR-117**: The trainer MUST support withholding one implemented keyword's token from training so
-  the zero-shot keyword check can run; that keyword's occurrences are always expanded.
+  the zero-shot keyword check can run. One tokenizer path, `AbilityTokenizer.encoding_tokens`, MUST
+  force-expand the withheld keyword wherever it occurs and then drop its token everywhere it is
+  left, inside other keywords' expansions included. Training, validation, evaluation and
+  `encode-abilities` MUST all encode through it, `encode-abilities` reading the keyword from the
+  checkpoint's provenance, so no encoding ever reads the withheld token.
 - **FR-118**: Gate 1 (identity baseline) MUST require all three of: ≥ 0.05 absolute affected-gate F1
   improvement, ≥ 0.05 absolute zone-outcome accuracy improvement on affected entities, and ≥ 5%
   relative reduction in mean Poisson deviance over count-valued fields — on the card-disjoint split's
-  unique-text stratum over resolution records. It MUST block shipping the model or cache.
+  unique-text stratum over resolution records. It MUST block shipping the model or cache. The
+  stratum MUST be read from the curated corpus the checkpoint records: the texts "seen in training"
+  are every text a record of its `training/` stratum acts with, and the candidates are the
+  card-disjoint stratum's resolution records, streamed. A checkpoint recording no curated corpus
+  MUST report gate 1 as skipped with that reason, since a raw game outside the recorded validation
+  sets is not necessarily a training game.
 - **FR-119**: Gate 2 (damage-step keyword canary) MUST run per keyword over first strike, double
   strike, deathtouch, lifelink, trample, indestructible, wither, and infect; require at least 200
-  qualifying records; pass when the affected fields move in the keyword's rules direction in ≥ 70% of
-  them; and route a failing or under-sampled keyword to the damage-step probe. It MUST block nothing.
-- **FR-120**: A qualifying record for gate 2 MUST be a combat record from the game-disjoint validation
-  split in which the keyword's presence changes the damage-step outcome.
+  qualifying records, counted as distinct `record_id`s; pass when the affected fields move in the
+  keyword's rules direction in ≥ 70% of the observations, one per (qualifying record, carrier), since
+  each carrier is its own perturbation; and route a failing or under-sampled keyword to the
+  damage-step probe. It MUST block nothing. Each field MUST be read through `HeadReading`: the
+  gate's probability times the expected value for counts and signed deltas, and times the class
+  probability for categoricals.
+- **FR-120**: A qualifying record for gate 2 MUST be a real combat record from the game-disjoint
+  validation split in which the keyword's presence changes the damage-step outcome; a fork or an
+  interventional record MUST never qualify. A checkpoint trained on a curated corpus MUST read the
+  records from its `validation/game-disjoint`; the raw corpus is read only for a checkpoint with
+  none.
 - **FR-121**: Gate 2's perturbation MUST be model-side, not a game fork: remove the keyword from the
   carrying participant's model input — its ability token where the keyword is printed or
   attachment-granted, and the overlay's temporarily-granted-keywords channel where it is not. Gate 2
@@ -911,7 +984,7 @@ loss.
   the epochs before it planned.
 - **FR-126a**: `--seed` MUST seed weight initialization, batch planning and the shard draw. Omitted,
   it MUST be drawn from the OS rather than defaulting to a fixed value, and the drawn value MUST be
-  logged at startup and recorded on the checkpoint, so runs differ by default and any one of them
+  logged at startup and recorded in the checkpoint's training settings (`seed`), so runs differ by default and any one of them
   repeats by passing its seed back.
 - **FR-127**: Per-epoch validation MUST run on records captured once from the reserved shards, capped
   per stratum, and MUST reuse those same records every epoch — an early-stopping rule reading a
