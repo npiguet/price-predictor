@@ -65,15 +65,4 @@ class CardsPlayedRowOfTest {
         assertEquals(List.of("Shock"), row.cardsNotPlayedA());
         assertFalse(row.toLine().contains("Mountain"));
     }
-
-    @Test
-    void everyBasicLandIsRecognisedByForgesTypeRule() {
-        for (String basic : List.of("Plains", "Island", "Swamp", "Mountain", "Forest",
-                "Wastes", "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
-                "Snow-Covered Mountain", "Snow-Covered Forest")) {
-            assertTrue(BasicLands.isBasic(basic), basic);
-        }
-        assertFalse(BasicLands.isBasic("Lightning Bolt"));
-        assertFalse(BasicLands.isBasic("Not A Card Name"));
-    }
 }

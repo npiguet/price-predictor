@@ -67,8 +67,9 @@ public class VariantSidecarMain {
      * every deck of 23 nonlands holds at least one and the round collects
      * nearly nothing while every worker dies on it.
      *
-     * <p>The lookup is the one {@code DeckMaterializer.resolve} uses, so
-     * a name on this list is a name that will resolve there.
+     * <p>The lookup is {@link DeckMaterializer#lookUp}, the one
+     * {@code DeckMaterializer.resolve} uses, so a name on this list is a name
+     * that will resolve there.
      *
      * @return how many of the variant scripts Forge accepted
      */
@@ -79,8 +80,7 @@ public class VariantSidecarMain {
             if (name == null) {
                 continue;
             }
-            if (forge.model.FModel.getMagicDb().getCommonCards()
-                    .getCard(name) != null) {
+            if (DeckMaterializer.lookUp(name).isPresent()) {
                 accepted.add(name);
             }
         }

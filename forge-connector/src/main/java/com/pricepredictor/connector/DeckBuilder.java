@@ -3,7 +3,6 @@ package com.pricepredictor.connector;
 import forge.StaticData;
 import forge.card.CardDb;
 import forge.card.CardEdition;
-import forge.card.CardType;
 import forge.card.MagicColor;
 import forge.card.mana.ManaCost;
 import forge.card.mana.ManaCostShard;
@@ -122,11 +121,11 @@ public class DeckBuilder {
         static NonBasics of(List<PaperCard> cards) {
             NonBasics split = new NonBasics(new ArrayList<>(), new ArrayList<>());
             for (PaperCard card : cards) {
-                CardType type = card.getRules().getMainPart().getType();
-                if (type.isBasicLand()) {
+                if (BasicLands.isBasic(card)) {
                     continue;
                 }
-                (type.isLand() ? split.lands : split.spells).add(card);
+                boolean land = card.getRules().getMainPart().getType().isLand();
+                (land ? split.lands : split.spells).add(card);
             }
             return split;
         }
