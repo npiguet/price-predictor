@@ -74,12 +74,9 @@ public final class CardFilenames {
     }
 
     /**
-     * The tree-prefixed script path a provenance key names, e.g.
+     * The script a provenance key names, e.g.
      * {@code cardsfolder/a/ajanis_pridemate.txt}, for a stem that is already a
      * filename.
-     *
-     * <p>Written with forward slashes on every platform, because the string
-     * itself is the key both sides compare.
      *
      * <p>Token scripts are filed by what the token <em>is</em> — colours, power,
      * toughness, type, abilities — not by its name:
@@ -92,15 +89,14 @@ public final class CardFilenames {
      * convention it keeps for nearly every card. Derivation answers for the rest —
      * a stem the tree does not hold at all still has to name something.
      */
-    public static String scriptFileForStem(String tree, String stem) {
+    public static ScriptFile scriptFileForStem(String tree, String stem) {
+        String filename = stem + ".txt";
         if (SourceTree.isFlat(tree)) {
-            return tree + "/" + stem + ".txt";
+            return new ScriptFile(tree, filename);
         }
-        String directory = SourceTree.directoryOf(tree, stem);
-        if (directory == null) {
-            directory = derivedDirectory(stem);
-        }
-        return tree + "/" + directory + "/" + stem + ".txt";
+        String directory = SourceTree.directoryOf(tree, stem)
+                .orElseGet(() -> derivedDirectory(stem));
+        return new ScriptFile(tree, directory + "/" + filename);
     }
 
     /**
@@ -133,7 +129,8 @@ public final class CardFilenames {
         return sanitize(cardName);
     }
 
-    public static String scriptFile(String tree, String cardName) {
+    /** The script a card name is filed under, by way of {@link #stemOf}. */
+    public static ScriptFile scriptFile(String tree, String cardName) {
         return scriptFileForStem(tree, stemOf(cardName));
     }
 }

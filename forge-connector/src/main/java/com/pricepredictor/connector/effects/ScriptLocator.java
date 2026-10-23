@@ -7,6 +7,8 @@ import forge.game.card.Card;
 import forge.item.IPaperCard;
 import forge.item.PaperToken;
 
+import java.util.Optional;
+
 /**
  * The converted script path a live card's traits belong to: the
  * {@code script_file} of every provenance key the collectors write.
@@ -59,32 +61,47 @@ final class ScriptLocator {
      * known limitation (see the token-access audit note).
      */
     static String scriptFileOf(Card host) {
-        if (VariantRegistry.isVariant(host.getName())) {
-            return CardFilenames.scriptFile(
-                    SourceTree.VARIANT_SCRIPTS, host.getName());
-        }
-        String stem = tokenScriptStemOf(host);
-        if (stem != null) {
-            return CardFilenames.scriptFileForStem(SourceTree.TOKENSCRIPTS, stem);
-        }
-        CardRules rules = host.getRules();
-        if (rules != null) {
-            String read = SourceTree.relativePathIn(
-                    SourceTree.CARDSFOLDER, rules.getPath());
-            if (read != null) {
-                return SourceTree.CARDSFOLDER + "/" + read;
-            }
-            String normalized = rules.getNormalizedName();
-            if (normalized != null && !normalized.isEmpty()) {
-                return CardFilenames.scriptFileForStem(
-                        SourceTree.CARDSFOLDER, normalized);
-            }
-        }
-        return CardFilenames.scriptFile(SourceTree.CARDSFOLDER, host.getName());
+        return variantScriptOf(host)
+                .or(() -> tokenScriptStem(host).map(
+                        stem -> CardFilenames.scriptFileForStem(SourceTree.TOKENSCRIPTS, stem)))
+                .or(() -> readScriptOf(host.getRules()))
+                .or(() -> normalizedStemOf(host.getRules()).map(
+                        stem -> CardFilenames.scriptFileForStem(SourceTree.CARDSFOLDER, stem)))
+                .orElseGet(() -> CardFilenames.scriptFile(SourceTree.CARDSFOLDER, host.getName()))
+                .key();
+    }
+
+    /** A staged variant's script, named from its card name: nothing else knows it. */
+    private static Optional<ScriptFile> variantScriptOf(Card host) {
+        return VariantRegistry.isVariant(host.getName())
+                ? Optional.of(CardFilenames.scriptFile(SourceTree.VARIANT_SCRIPTS, host.getName()))
+                : Optional.empty();
+    }
+
+    /** The card-tree file the card reader actually opened, when it says so. */
+    private static Optional<ScriptFile> readScriptOf(CardRules rules) {
+        return Optional.ofNullable(rules)
+                .flatMap(r -> SourceTree.relativePathIn(SourceTree.CARDSFOLDER, r.getPath()))
+                .map(relative -> new ScriptFile(SourceTree.CARDSFOLDER, relative));
+    }
+
+    /** The stem of the file Forge read the card from, when it recorded one. */
+    private static Optional<String> normalizedStemOf(CardRules rules) {
+        return Optional.ofNullable(rules)
+                .map(CardRules::getNormalizedName)
+                .filter(normalized -> !normalized.isEmpty());
     }
 
     /**
-     * A token's script-file stem, or null when the card did not come from a
+     * {@link #tokenScriptStem}, or null — for a caller that reports a token's
+     * script id and falls back to its printed name.
+     */
+    static String tokenScriptStemOf(Card host) {
+        return tokenScriptStem(host).orElse(null);
+    }
+
+    /**
+     * A token's script-file stem, or empty when the card did not come from a
      * token script — including a token copy of a printed card.
      *
      * <p>Two sources, tried in order. A {@link PaperToken} is the token as
@@ -95,9 +112,9 @@ final class ScriptLocator {
      * {@code t:<stem>[|edition|…]}. The stem read either way is checked
      * against the token database, so a key that names no script (a token copy
      * of a printed card carries the printed card's image key, which is not a
-     * token key) yields null rather than a fabricated path.
+     * token key) yields nothing rather than a fabricated path.
      */
-    static String tokenScriptStemOf(Card host) {
+    static Optional<String> tokenScriptStem(Card host) {
         try {
             IPaperCard paper = host.getPaperCard();
             String image = null;
@@ -107,16 +124,16 @@ final class ScriptLocator {
                 image = ImageKeys.getTokenImageName(host.getImageKey());
             }
             if (image == null || image.isEmpty()) {
-                return null;
+                return Optional.empty();
             }
             int bar = image.indexOf('|');
             String stem = (bar < 0 ? image : image.substring(0, bar)).replace(' ', '_');
             if (stem.isEmpty() || !StaticData.instance().getAllTokens().containsRule(stem)) {
-                return null;
+                return Optional.empty();
             }
-            return stem;
+            return Optional.of(stem);
         } catch (RuntimeException e) {
-            return null;
+            return Optional.empty();
         }
     }
 }
