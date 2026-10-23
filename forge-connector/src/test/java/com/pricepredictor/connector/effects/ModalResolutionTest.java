@@ -354,6 +354,8 @@ class ModalResolutionTest {
      * enters trigger too, on the same host card. Those modes belong to the
      * trigger's line, not the spell's: split under the spell's key they would
      * name {@code spell[0]} with an option, a key no sidecar line carries.
+     * Nor do its events join the spell's record: live gives the trigger a
+     * record of its own.
      */
     @Test
     void aForkedSpellIsNotSplitByItsOwnTriggersModes() throws IOException {
@@ -376,8 +378,9 @@ class ModalResolutionTest {
         String record = records.get(0);
         assertTrue(record.contains("\"trait_kind\":\"spell\""), record);
         assertFalse(record.contains("\"option\""), record);
-        assertEquals(2, record.split("\"zone_change\"", -1).length - 1,
-                "the trigger's Treasure still rides in the spell's half: " + record);
+        assertEquals(1, record.split("\"zone_change\"", -1).length - 1,
+                "the spell's own arrival, and not the trigger's Treasure: " + record);
+        assertFalse(record.contains("token_created"), record);
     }
 
     /** A mode of some other resolution cannot cut the open bracket. */

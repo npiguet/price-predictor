@@ -373,6 +373,98 @@ class ForkCollectorTest {
         assertEquals(stateOf(observedHalf), stateOf(forced.get(0)));
     }
 
+    // ── a forced record holds what live attributes to the forced line ───
+
+    /**
+     * A trigger the forced spell's resolution causes is not the spell's: live
+     * gives it a bracket and a record of its own. Attended Knight's enters
+     * trigger makes a Soldier, and the forced record holds the Knight's own
+     * arrival and nothing of the token.
+     */
+    @Test
+    void aForcedSpellsRecordLeavesOutTheTriggerItCaused() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card knight = TestBoard.inHand(game, caster, "Attended Knight");
+        SpellAbility spell = knight.getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        String payload = forcedPayload(game, spell, 1L);
+
+        assertEquals(List.of(EffectEvent.ZONE_CHANGE), eventTypes(payload), payload);
+        assertTrue(payload.contains("\"subjects\":[\"E" + knight.getId() + "\"],"
+                + "\"params\":{\"from_zone\":\"stack\",\"to_zone\":\"battlefield\""), payload);
+    }
+
+    /**
+     * A cast trigger resolves above the forced spell, before it, and is not
+     * the spell's either: Monastery Swiftspear's prowess pump is not in the
+     * forced Pyroclasm's record, though the damage it took is.
+     */
+    @Test
+    void aForcedSpellsRecordLeavesOutItsCastTrigger() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card swiftspear = TestBoard.inPlay(game, caster, "Monastery Swiftspear");
+        SpellAbility spell = TestBoard.inHand(game, caster, "Pyroclasm").getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        String payload = forcedPayload(game, spell, 1L);
+
+        assertTrue(payload.contains("\"type\":\"damage_dealt\",\"subjects\":[\"E"
+                + swiftspear.getId() + "\"]"), payload);
+        assertFalse(payload.contains(EffectEvent.PT_CHANGE), payload);
+        assertFalse(payload.contains(EffectEvent.KEYWORD_CHANGE), payload);
+    }
+
+    /**
+     * After the forced spell has resolved only the deaths of the state-based
+     * check that follows join its record, as live holds them. Pyroclasm goes
+     * to the graveyard once it has resolved, and Tarmogoyf grows for the
+     * sorcery there: that stat change is Tarmogoyf's own static at work, not
+     * Pyroclasm's effect. The deaths of the damaged Tarmogoyf and bears in
+     * the check that follows are Pyroclasm's.
+     */
+    @Test
+    void afterTheResolutionOnlyTheFollowingChecksDeathsJoin() throws IOException {
+        Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
+        Player caster = game.getPlayers().get(0);
+        Card goyf = TestBoard.inPlay(game, game.getPlayers().get(1), "Tarmogoyf");
+        Card bears = TestBoard.inPlay(game, game.getPlayers().get(1), "Grizzly Bears");
+        SpellAbility spell = TestBoard.inHand(game, caster, "Pyroclasm").getFirstSpellAbility();
+        spell.setActivatingPlayer(caster);
+
+        String payload = forcedPayload(game, spell, 1L);
+
+        assertFalse(payload.contains(EffectEvent.PT_CHANGE), payload);
+        for (Card died : List.of(goyf, bears)) {
+            assertTrue(payload.contains("\"subjects\":[\"E" + died.getId() + "\"],\"params\":"
+                    + "{\"from_zone\":\"battlefield\",\"to_zone\":\"graveyard\""), payload);
+        }
+    }
+
+    /** The one forced record's payload. */
+    private String forcedPayload(Game game, SpellAbility spell, long seed) throws IOException {
+        ShardRun.Fork fork = ShardRun.forked(
+                tempDir.resolve("fork-" + seed), game, caps(1, 0, List.of()), seed, spell);
+        assertTrue(fork.wrote(), "the forced resolution observed nothing");
+        List<String> records = fork.records();
+        assertEquals(1, records.size(), records.toString());
+        String record = records.get(0);
+        return record.substring(record.indexOf(",\"payload\":"));
+    }
+
+    /** The event types a payload lists, in order. */
+    private static List<String> eventTypes(String payload) {
+        List<String> types = new java.util.ArrayList<>();
+        String marker = "{\"type\":\"";
+        for (int at = payload.indexOf(marker); at >= 0; at = payload.indexOf(marker, at + 1)) {
+            int from = at + marker.length();
+            types.add(payload.substring(from, payload.indexOf('"', from)));
+        }
+        return types;
+    }
+
     /** A Mountain for its caster, Grizzly Bears for the other seat, and Pyroclasm in hand. */
     private static Game pyroclasmBoard() {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);

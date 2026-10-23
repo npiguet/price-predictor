@@ -502,8 +502,11 @@ public final class ForkCollector {
      * tapped as a cost. And nothing was paid into the ability, so a
      * resolution that reads what was paid reads nothing.
      *
-     * <p>Resolution drains the whole stack, so a trigger the effect put there
-     * is part of what the effect did.
+     * <p>Resolution drains the whole stack: the cast's own triggers above the
+     * forced ability, and the triggers its effect causes after it. Neither is
+     * the forced ability's record live, where each has a bracket of its own,
+     * so the sink files only the forced ability's own resolution and the
+     * deaths of the check that follows it ({@link ForkEventSink}).
      *
      * <p>The modes, targets and X are drawn at random from the legal options,
      * out of the fork's own seeded source, rather than through the AI. That
