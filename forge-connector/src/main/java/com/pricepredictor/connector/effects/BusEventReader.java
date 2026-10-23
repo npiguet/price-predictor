@@ -22,6 +22,8 @@ import forge.game.event.GameEventScry;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSurveil;
+import forge.game.spellability.SpellAbility;
+import forge.game.zone.CostPaymentStack;
 import forge.game.zone.ZoneType;
 
 /**
@@ -98,6 +100,36 @@ abstract class BusEventReader {
         return event.from() != null
                 && event.from().zoneType() == ZoneType.Battlefield
                 && game != null && game.getTracker().isFrozen();
+    }
+
+    /**
+     * Whether a player is paying, now, for a spell that {@code resolving}
+     * casts — the mana and tapped lands of a madness cast, the sacrifice,
+     * discard or life of a cascaded spell's additional cost.
+     *
+     * <p>That payment is the cast spell's cost, which its own cost half
+     * records, and not the resolving ability's effect. Read off {@code
+     * game.costPaymentStack}, which {@code CostPayment} keeps for every part
+     * being paid, so a mana ability activated to pay is recognised by the
+     * spell beneath it. Only a spell cast from a {@code Play} effect reaches
+     * the stack in the middle of a resolution; the resolving ability's own
+     * payments — an optional cost, an unless cost, which Forge pays through
+     * the resolving ability or an empty one — are its effect and stay. One
+     * reading for the bracket collector and the fork sink alike, so an
+     * observed cascade and a forced one leave the same payment out.
+     */
+    final boolean payingForACast(SpellAbility resolving) {
+        if (game == null) {
+            return false;
+        }
+        for (CostPaymentStack.Entry entry : game.costPaymentStack) {
+            var paid = entry.payment() == null ? null : entry.payment().getAbility();
+            if (paid != null && paid.isSpell() && paid.isCastFromPlayEffect()
+                    && paid != resolving) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -222,6 +254,19 @@ abstract class BusEventReader {
             // statics and the counters it entered with have already reached.
             stats.prime(cardById(event.card().getId()));
         }
+        if (event.to() != null && event.to().zoneType() == ZoneType.Stack) {
+            onStackArrival(event.card().getId());
+        }
+    }
+
+    /**
+     * A card has arrived in the stack zone. Published after the static check
+     * its move set off, so what that check did has already been filed.
+     *
+     * <p>A no-op here: only the bracket collector follows a cast from the
+     * card's arrival to its cast event.
+     */
+    void onStackArrival(int cardId) {
     }
 
     /**

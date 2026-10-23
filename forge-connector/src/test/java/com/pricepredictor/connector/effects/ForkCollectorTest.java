@@ -557,6 +557,10 @@ class ForkCollectorTest {
      */
     private String observedEffectPayload(Game game, SpellAbility spell) throws Throwable {
         List<String> records = ShardRun.observed(tempDir.resolve("observed"), game, bracket -> {
+            // A live collector has watched the board form, as the fork's sink
+            // primes it: the stat change the cast's move to the stack makes
+            // has a reading to differ from on both sides.
+            bracket.primeBattlefield();
             game.getStack().addAndUnfreeze(spell);
             game.getAction().checkStateEffects(false);
             while (!game.getStack().isEmpty()) {

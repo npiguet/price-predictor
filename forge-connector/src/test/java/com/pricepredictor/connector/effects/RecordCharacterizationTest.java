@@ -371,13 +371,21 @@ class RecordCharacterizationTest {
                     recordId -> { });
             board.game.subscribeToEvents(bracket);
             bracket.beginBracket(charm);
-            board.game.fireEvent(new GameEventCardDamaged(
-                    elves.getView(), confluence.getView(), 1,
-                    GameEventCardDamaged.DamageType.Normal));
-            board.game.fireEvent(new GameEventPlayerDamaged(
-                    opponent.getView(), confluence.getView(), 2, false, false));
-            board.game.fireEvent(new GameEventPlayerLivesChanged(opponent, 20, 18));
-            bracket.endBracket(charm.getId(), false);
+            // The charm's resolution, as MagicStack.resolveStack marks it:
+            // the card is in the stack zone though no stack item was pushed,
+            // which with nothing resolving reads as a cast under way.
+            board.game.getStack().setResolving(true);
+            try {
+                board.game.fireEvent(new GameEventCardDamaged(
+                        elves.getView(), confluence.getView(), 1,
+                        GameEventCardDamaged.DamageType.Normal));
+                board.game.fireEvent(new GameEventPlayerDamaged(
+                        opponent.getView(), confluence.getView(), 2, false, false));
+                board.game.fireEvent(new GameEventPlayerLivesChanged(opponent, 20, 18));
+                bracket.endBracket(charm.getId(), false);
+            } finally {
+                board.game.getStack().setResolving(false);
+            }
             bracket.onNextAction();
         } finally {
             writer.close();

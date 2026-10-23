@@ -540,6 +540,12 @@ public final class ForkCollector {
             fork.copyLastState();
             ForcedCast cast = new ForcedCast(fork, snapshots);
             fork.subscribeToEvents(cast);
+            // Listening from before the cast: what the card's move onto the
+            // stack and the push set off is the cast's own, as live gives it
+            // to the cast's bracket (ForkEventSink's PRE_CAST). Primed now, so
+            // a stat change the move makes has a reading to differ from.
+            ForkEventSink sink = ForkEventSink.forCast(fork, ability);
+            fork.subscribeToEvents(sink);
             fork.getStack().addAndUnfreeze(ability);
             SpellAbility onStack = cast.onStack();
             if (onStack == null) {
@@ -551,15 +557,11 @@ public final class ForkCollector {
                 // it or its targeting was refused, and nothing will resolve.
                 return null;
             }
-            // Listening from here, once the cast is over: the card's move to
-            // the stack and the cast's own bookkeeping happen before the live
-            // bracket opens, so they are no resolution's events. The ability
-            // on the stack is the sink's root, as the live bracket's root is
-            // the stack's: an event's attributed_to is read against the
-            // ability the bracket belongs to, and a fork's bracket is exactly
-            // this one forced resolution.
-            ForkEventSink sink = ForkEventSink.forIntervention(fork, onStack);
-            fork.subscribeToEvents(sink);
+            // The ability on the stack is the sink's root from here, as the
+            // live bracket's root is the stack's: an event's attributed_to is
+            // read against the ability the bracket belongs to, and a fork's
+            // bracket is exactly this one forced resolution.
+            sink.castAs(onStack);
             List<ModeBoundary> modes = new ArrayList<>();
             // A mode's first clause is the boundary between per-mode halves, and
             // the moment its snapshot is taken (FR-029b, FR-029f). Only this
