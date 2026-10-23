@@ -401,12 +401,13 @@ class BusBracketCollectorTest {
     }
 
     /**
-     * A draw reaches the collector and writes nothing -- no bracket, no shard
-     * growth. Bound to a game with real seats, as the winner's test is, so the
-     * draw is what names no winner rather than an empty table.
+     * A draw names no winner: the bracket it fires inside writes its two
+     * halves as ever, and its effect half carries no event at all. Bound to a
+     * game with real seats, as the winner's test is, so the draw is what
+     * names no winner rather than an empty table.
      */
     @Test
-    void aDrawnGameOutcomeWritesNothing() throws IOException {
+    void aDrawnGameOutcomeNamesNoWinner() throws IOException {
         BusBracketCollector collector = collector(TestBoard.twoPlayerGame("p1", "p2"));
         SpellAbility bolt = damageAbility();
 
@@ -415,8 +416,9 @@ class BusBracketCollectorTest {
         collector.endBracket(bolt.getId(), false);
         collector.onNextAction();
 
-        String effectHalf = written().get(1);
-        assertFalse(effectHalf.contains("player_won"), effectHalf);
+        List<String> records = written();
+        assertEquals(2, records.size(), records.toString());
+        assertEquals(List.of(), RecordLines.eventTypes(records.get(1)), records.get(1));
     }
 
     // ── the end of the game ─────────────────────────────────────────────

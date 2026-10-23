@@ -18,6 +18,7 @@ import java.util.Set;
 
 import static com.pricepredictor.connector.effects.RecordLines.count;
 import static com.pricepredictor.connector.effects.RecordLines.eventTypes;
+import static com.pricepredictor.connector.effects.RecordLines.eventsNaming;
 import static com.pricepredictor.connector.effects.RecordLines.linkOf;
 import static com.pricepredictor.connector.effects.RecordLines.optionOf;
 import static com.pricepredictor.connector.effects.RecordLines.parse;
@@ -201,7 +202,7 @@ class StateBasedDeathTest {
         assertEquals(1, halves.size(), records.toString());
         assertTrue(halves.get(0).contains(deathOf(bears)), halves.get(0));
         for (String record : records) {
-            assertFalse(record.contains("\"subjects\":[\"E" + mountain.getId() + "\"]"),
+            assertEquals(List.of(), eventsNaming(record, "E" + mountain.getId()),
                     "the land joined a record: " + record);
         }
     }
@@ -322,7 +323,8 @@ class StateBasedDeathTest {
         String effect = halves.get(0);
         assertTrue(effect.contains(deathOf(bears)), effect);
         assertTrue(effect.contains(deathOf(aura)), "the Aura fell off: " + effect);
-        assertFalse(effect.contains("\"type\":\"pt_change\",\"subjects\":[\"E" + bears.getId()),
+        assertFalse(eventsNaming(effect, "E" + bears.getId()).stream()
+                        .anyMatch(event -> "pt_change".equals(event.get("type"))),
                 "the static's shrink is not the spell's event: " + effect);
     }
 

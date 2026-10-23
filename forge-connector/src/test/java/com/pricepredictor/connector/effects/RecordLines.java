@@ -109,6 +109,18 @@ final class RecordLines {
         return events(record).stream().map(event -> (String) event.get("type")).toList();
     }
 
+    /**
+     * The record's events whose {@code subjects} name {@code ref}, in order:
+     * a check that no event acts on something holds whatever else the event
+     * carries and wherever the ref sits among its subjects.
+     */
+    static List<Map<String, Object>> eventsNaming(String record, String ref) {
+        return events(record).stream()
+                .filter(event -> event.get("subjects") instanceof List<?> subjects
+                        && subjects.contains(ref))
+                .toList();
+    }
+
     /** The records carrying an event of {@code type}, in the order written. */
     static List<String> withEventOfType(List<String> all, String type) {
         return all.stream().filter(record -> eventTypes(record).contains(type)).toList();

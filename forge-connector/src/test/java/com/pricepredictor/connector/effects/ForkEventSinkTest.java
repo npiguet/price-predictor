@@ -219,22 +219,6 @@ class ForkEventSinkTest {
     }
 
     /**
-     * A state transition the engine publishes twice is filed once, as the
-     * bracket collector files it, so a fork and an observed record of the
-     * same outcome carry the same events.
-     */
-    @Test
-    void aRepeatedTransitionIsFiledOnce() {
-        ForkEventSink sink = ForkEventSink.forCast(null, null);
-        Card bears = TestCards.build("Grizzly Bears");
-
-        sink.onTapped(new GameEventCardTapped(bears, true));
-        sink.onTapped(new GameEventCardTapped(bears, true));
-
-        assertEquals(List.of(EventType.TAPPED), types(sink));
-    }
-
-    /**
      * Repeats are recognised within one chosen mode, as the live bracket
      * recognises them within one mode's half: a transition repeated by the
      * next mode is that mode's own event and is kept. What is filed before
