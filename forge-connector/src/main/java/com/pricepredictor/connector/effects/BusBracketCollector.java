@@ -17,12 +17,9 @@ import forge.game.spellability.SpellAbility;
 
 import java.lang.reflect.InvocationHandler;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
-import java.util.StringJoiner;
 
 /**
  * Stage-one collection: the public event bus plus a bracket around resolution.
@@ -90,7 +87,8 @@ public final class BusBracketCollector extends BusEventReader {
     /** The resolution waiting for its consequences, or null when none is. */
     private HeldResolution held;
 
-    private final PendingActivations pending = new PendingActivations();
+    /** The cost halves held until their casts' outcomes are known. */
+    private final ActivationLedger ledger;
 
     /** The damage step's combat being gathered, or null outside one. */
     private CombatBracket combat;
@@ -289,63 +287,6 @@ public final class BusBracketCollector extends BusEventReader {
     }
 
     /**
-     * Casts whose outcome is not known yet, oldest first.
-     *
-     * <p>A list rather than a map because it is the stack: two spells can be
-     * waiting at once and the inner one resolves first, so a lookup runs from
-     * the newest end. Nothing here has been written yet — see
-     * {@link PendingActivation} for why the record has to wait.
-     */
-    private static final class PendingActivations {
-        private final List<PendingActivation> casts = new ArrayList<>();
-
-        void add(PendingActivation cast) {
-            casts.add(cast);
-        }
-
-        boolean isEmpty() {
-            return casts.isEmpty();
-        }
-
-        /** The held cast for an ability id, newest first. */
-        Optional<PendingActivation> find(int abilityId) {
-            for (int i = casts.size() - 1; i >= 0; i--) {
-                if (casts.get(i).abilityId() == abilityId) {
-                    return Optional.of(casts.get(i));
-                }
-            }
-            return Optional.empty();
-        }
-
-        /** The held cast for an ability id, no longer held. */
-        Optional<PendingActivation> settle(int abilityId) {
-            Optional<PendingActivation> found = find(abilityId);
-            found.ifPresent(casts::remove);
-            return found;
-        }
-
-        /** Every held cast the stack no longer holds, oldest first, no longer held. */
-        List<PendingActivation> removeAbsent(Set<Integer> onStack) {
-            List<PendingActivation> removed = new ArrayList<>();
-            for (Iterator<PendingActivation> it = casts.iterator(); it.hasNext();) {
-                PendingActivation cast = it.next();
-                if (!onStack.contains(cast.abilityId())) {
-                    it.remove();
-                    removed.add(cast);
-                }
-            }
-            return removed;
-        }
-
-        /** Every held cast, oldest first, none of them held any longer. */
-        List<PendingActivation> removeAll() {
-            List<PendingActivation> all = List.copyOf(casts);
-            casts.clear();
-            return all;
-        }
-    }
-
-    /**
      * One damage step's combat, from the first event dealt in it until the
      * step ends or something uses the stack.
      *
@@ -396,8 +337,8 @@ public final class BusBracketCollector extends BusEventReader {
         super(game);
         this.context = context;
         this.snapshots = new SnapshotBuilder(game);
-        this.castsUnderWay = new CastsUnderWay(
-                game, abilityId -> pending.find(abilityId).isPresent());
+        this.ledger = new ActivationLedger(context);
+        this.castsUnderWay = new CastsUnderWay(game, ledger::holds);
         this.onCombatRecord = onCombatRecord;
     }
 
@@ -465,28 +406,16 @@ public final class BusBracketCollector extends BusEventReader {
         if (cast == null) {
             return;
         }
-        pending.add(new PendingActivation(
-                ability.getId(), context.nextRecordId(),
-                RecordShardWriter.timestamp(), PaidCosts.of(ability),
-                cast.actor, cast.keys, cast.state.render(),
-                context.gameId() + ".link." + ability.getId(), targetCount(ability)));
+        ledger.hold(ability, cast.actor, cast.keys, cast.state.render());
     }
 
     /**
      * A cast of an ability whose earlier cast is still held, written off as
-     * any removal is.
-     *
-     * <p>Defensive: no real game reaches it. One ability is on the stack at
-     * most once — an activation and a trigger are each a fresh object, a copy
-     * has an id of its own — and a card that leaves the stack is rebuilt by
-     * {@code CardCopyService.copyCard} with fresh spell ability ids, so a
-     * card cast again always casts a new id. Were an id ever reused while its
-     * earlier cast was held, that cast would otherwise be settled by the
-     * later one's resolution.
+     * any removal is ({@link ActivationLedger#writeOffEarlierCast}), with the
+     * earlier cast's bracket.
      */
     private void writeOffEarlierCast(int abilityId) {
-        pending.settle(abilityId).ifPresent(
-                earlier -> emitActivation(earlier, ActivationOutcome.COUNTERED, false));
+        ledger.writeOffEarlierCast(abilityId);
         OpenResolution gone = stack.remove(abilityId);
         if (gone != null && open == gone) {
             open = null;
@@ -570,9 +499,10 @@ public final class BusBracketCollector extends BusEventReader {
         boolean declined = resolved != null && !fizzled && wasDeclined(resolved);
         boolean writesEffectHalf = resolved != null && !fizzled && !declined;
 
-        String link = settleActivation(
+        String link = ledger.settle(
                 abilityId,
-                settledOutcome(abilityId, fizzled, declined, resolved),
+                ledger.settledOutcome(
+                        abilityId, fizzled, declined, resolved == null ? null : resolved.ability),
                 writesEffectHalf);
 
         if (resolved != null) {
@@ -591,20 +521,6 @@ public final class BusBracketCollector extends BusEventReader {
         orphans.clear();
         finishing = abilityId;
         castsUnderWay.dropHeld();
-    }
-
-    /** What became of a cast that has left the stack through a resolution. */
-    private ActivationOutcome settledOutcome(
-            int abilityId, boolean fizzled, boolean declined, OpenResolution resolved) {
-        if (fizzled) {
-            return ActivationOutcome.FIZZLED;
-        }
-        if (declined) {
-            return ActivationOutcome.DECLINED;
-        }
-        return outcomeOf(
-                pending.find(abilityId).map(PendingActivation::targetsAtCast).orElse(0),
-                resolved == null ? null : resolved.ability);
     }
 
     /**
@@ -1094,112 +1010,19 @@ public final class BusBracketCollector extends BusEventReader {
                 : SnapshotBuilder.playerId(ability.getActivatingPlayer());
     }
 
-    /**
-     * A cast that has been observed but whose outcome is not settled.
-     *
-     * <p>Holds what was read rather than the {@link SpellAbility}, because
-     * what was paid lives on the ability object and its next activation clears
-     * it — the reason {@link PaidCosts#of} must be called at the cast and
-     * nowhere later. The record id and the timestamp are taken at
-     * the cast too, so a held record still says when the spell was cast rather
-     * than when it stopped being on the stack.
-     */
-    private record PendingActivation(
-            int abilityId,
-            String recordId,
-            String timestamp,
-            PaidCosts costs,
-            String actor,
-            ProvenanceKey.Resolved ability,
-            String state,
-            String linkId,
-            int targetsAtCast) {
-    }
-
-    /**
-     * Write a held cost half now that its outcome is known.
-     *
-     * <p>{@code linked} is separate from the outcome because they answer
-     * different questions: the outcome says what became of the spell, and
-     * {@code link_id} promises that an effect half carrying the same id exists.
-     * A resolution this collector holds no bracket for -- an item whose
-     * bracket was written off before it resolved -- is a {@code resolved}
-     * activation with no link, which is honest; issuing the link anyway would
-     * leave it dangling.
-     *
-     * @return the link the effect half may claim, or null when there is to be
-     *         no effect half or nothing was held for this ability
-     */
-    String settleActivation(int abilityId, ActivationOutcome outcome, boolean linked) {
-        Optional<PendingActivation> found = pending.settle(abilityId);
-        if (found.isEmpty()) {
-            return null;
-        }
-        PendingActivation activation = found.get();
-        emitActivation(activation, outcome, linked);
-        return linked ? activation.linkId() : null;
-    }
-
-    private void emitActivation(
-            PendingActivation activation, ActivationOutcome outcome, boolean linked) {
-        context.emit(context.newResolution(
-                Moment.ACTIVATION, activation.recordId(), activation.timestamp())
-                .actor(activation.actor())
-                .ability(activation.ability())
-                .linkId(linked ? activation.linkId() : null)
-                .state(activation.state())
-                .payload(EffectRecord.costPayload(activation.costs(), outcome)));
-    }
-
-    /**
-     * Whether a resolution lost some of its targets on the way.
-     *
-     * <p>{@code MagicStack.hasFizzled} strips the targets that became illegal
-     * from the ability before resolving it, and only then does the ability
-     * resolve — so comparing the count with the one read at the cast is the
-     * engine's own answer to "did part of this spell do nothing". Nothing else
-     * in the record distinguishes a Lightning Helix that hit from one whose
-     * creature had already died.
-     *
-     * <p>Only the root line's targets are compared. A partial fizzle confined to
-     * a sub-ability reads as {@code resolved}, which understates rather than
-     * invents. Losing <b>every</b> target without the engine calling it a fizzle
-     * is the {@code CantFizzle} case (Gilded Drake), where the spell still does
-     * what it does: that is {@code resolved} too.
-     */
+    /** As {@link ActivationLedger#outcomeOf}; kept here for the tests that pin it. */
     static ActivationOutcome outcomeOf(int targetsAtCast, SpellAbility resolved) {
-        if (resolved == null) {
-            return ActivationOutcome.RESOLVED;
-        }
-        int surviving = targetCount(resolved);
-        return surviving > 0 && surviving < targetsAtCast
-                ? ActivationOutcome.PARTIALLY_FIZZLED
-                : ActivationOutcome.RESOLVED;
-    }
-
-    private static int targetCount(SpellAbility ability) {
-        return ability == null || ability.getTargets() == null
-                ? 0 : ability.getTargets().size();
+        return ActivationLedger.outcomeOf(targetsAtCast, resolved);
     }
 
     /**
-     * Write off every held cast that has left the stack without resolving.
-     *
-     * <p>Counterspells, {@code CostExileFromStack}, a spell bounced off the
-     * stack and {@code MagicStack.clear} all take an entry away with no event
-     * this collector can tell apart from a resolution -- {@code finishResolving}
-     * publishes the same removal for a spell that resolved normally. So the
-     * question is asked of the stack itself, at every moment the stack can have
-     * changed: a held cast that is no longer on it and did not resolve was
-     * removed, and {@code countered} is what the schema calls that.
-     *
-     * <p>It is the nearest of the five outcomes rather than an exact one. A
-     * spell exiled off the stack by a cost was not countered in the rules sense;
-     * what the corpus needs to know, and what all of these share, is that the
-     * cost was paid and no effect followed.
+     * Write off every held cast that has left the stack without resolving
+     * ({@link ActivationLedger#writeOffRemoved}), asked of the stack itself at
+     * every moment it can have changed. With nothing held there is nothing to
+     * ask.
      */
     private void reconcilePending() {
-        if (pending.isEmpty()) {
+        if (ledger.isEmpty()) {
             return;
         }
         writeOffRemoved(idsOnStack());
@@ -1224,16 +1047,13 @@ public final class BusBracketCollector extends BusEventReader {
      * @return how many held casts were written off
      */
     int writeOffRemoved(Set<Integer> onStack) {
-        List<PendingActivation> removed = pending.removeAbsent(onStack);
-        for (PendingActivation activation : removed) {
-            emitActivation(activation, ActivationOutcome.COUNTERED, false);
-        }
+        int removed = ledger.writeOffRemoved(onStack);
         // Their brackets go with them: nothing they gathered is anyone's.
         stack.removeAbsent(onStack);
         if (open != null && !stack.holds(open)) {
             open = null;
         }
-        return removed.size();
+        return removed;
     }
 
     /**
@@ -1287,19 +1107,7 @@ public final class BusBracketCollector extends BusEventReader {
         flushCombat();
         flushOrphanedEvents();
         writeOffRemoved(onStack);
-        List<PendingActivation> abandoned = pending.removeAll();
-        if (!abandoned.isEmpty()) {
-            StringJoiner names = new StringJoiner(", ");
-            for (PendingActivation activation : abandoned) {
-                names.add(activation.linkId());
-            }
-            System.err.println(
-                    "effect records: " + context.gameId() + " ended with " + abandoned.size()
-                            + " cast(s) still on the stack, dropped because"
-                            + " outcome has no member for a game that stopped: "
-                            + names);
-        }
-        return abandoned.size();
+        return ledger.abandonAll();
     }
 
     /**
