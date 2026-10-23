@@ -250,10 +250,10 @@ class TestIdentity:
 
 #: The Java side of the contract. Read rather than mirrored in a constant,
 #: because a mirrored list is a third copy to drift.
-_JAVA_PROVENANCE_KEY = (
+_JAVA_UNRESOLVED_REASON = (
     Path(__file__).resolve().parents[4]
     / "forge-connector" / "src" / "main" / "java" / "com" / "pricepredictor"
-    / "connector" / "effects" / "ProvenanceKey.java"
+    / "connector" / "effects" / "UnresolvedReason.java"
 )
 
 
@@ -275,15 +275,15 @@ class TestTheUnresolvedVocabularyIsOneSet:
     """
 
     def _java_reasons(self) -> set[str]:
-        """Every ``UNRESOLVED_*`` literal the collector's key resolver names."""
-        source = _JAVA_PROVENANCE_KEY.read_text(encoding="utf-8")
+        """The wire name of every ``UnresolvedReason`` member the collector has."""
+        source = _JAVA_UNRESOLVED_REASON.read_text(encoding="utf-8")
         return set(re.findall(
-            r'UNRESOLVED_[A-Z_]+\s*=\s*"([a-z_]+)"', source,
+            r'^\s*[A-Z_]+\("([a-z_]+)"\)[,;]', source, re.MULTILINE,
         ))
 
     def test_the_collector_writes_no_reason_the_reader_rejects(self):
         java = self._java_reasons()
-        assert java, "no UNRESOLVED_* literals found; did the file move?"
+        assert java, "no UnresolvedReason members found; did the file move?"
         assert java <= UNRESOLVED_REASONS, (
             "the collector writes reasons the reader would reject: "
             f"{sorted(java - UNRESOLVED_REASONS)}"

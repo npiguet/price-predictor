@@ -1,8 +1,8 @@
 package com.pricepredictor.connector.effects;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.StringJoiner;
+import java.util.function.Function;
 
 /**
  * Minimal JSON writing for the sidecar and the record shards.
@@ -45,10 +45,18 @@ public final class Json {
     }
 
     /** A JSON array of strings. */
-    public static String stringArray(Collection<String> values) {
+    public static String stringArray(Iterable<String> values) {
+        return array(values, Json::string);
+    }
+
+    /**
+     * A JSON array of {@code items}, in iteration order, each rendered to
+     * JSON by {@code render}.
+     */
+    public static <T> String array(Iterable<T> items, Function<? super T, String> render) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (String value : values) {
-            joiner.add(string(value));
+        for (T item : items) {
+            joiner.add(render.apply(item));
         }
         return joiner.toString();
     }
@@ -76,17 +84,13 @@ public final class Json {
             return joiner.toString();
         }
         if (value instanceof Iterable<?> items) {
-            StringJoiner joiner = new StringJoiner(",", "[", "]");
-            for (Object item : items) {
-                joiner.add(value(item));
-            }
-            return joiner.toString();
+            return array(items, Json::value);
         }
         return string(String.valueOf(value));
     }
 
     /** An empty object, for fields added one at a time. */
-    static ObjectWriter object() {
+    public static ObjectWriter object() {
         return new ObjectWriter();
     }
 
@@ -97,7 +101,7 @@ public final class Json {
      * and never drops a field: a null passed to {@link #value} is written as
      * JSON {@code null}.
      */
-    static final class ObjectWriter {
+    public static final class ObjectWriter {
 
         private final StringJoiner fields = new StringJoiner(",", "{", "}");
 
@@ -105,25 +109,25 @@ public final class Json {
         }
 
         /** A field whose value is already rendered JSON. */
-        ObjectWriter raw(String name, String json) {
+        public ObjectWriter raw(String name, String json) {
             fields.add(string(name) + ":" + json);
             return this;
         }
 
         /** A field rendered by {@link Json#value}. */
-        ObjectWriter value(String name, Object value) {
+        public ObjectWriter value(String name, Object value) {
             return raw(name, Json.value(value));
         }
 
         /** Every entry of an ordered map, as {@link #value} fields. */
-        ObjectWriter values(Map<String, ?> entries) {
+        public ObjectWriter values(Map<String, ?> entries) {
             for (Map.Entry<String, ?> entry : entries.entrySet()) {
                 value(entry.getKey(), entry.getValue());
             }
             return this;
         }
 
-        String render() {
+        public String render() {
             return fields.toString();
         }
     }

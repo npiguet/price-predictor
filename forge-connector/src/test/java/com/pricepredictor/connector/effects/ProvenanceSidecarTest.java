@@ -17,14 +17,13 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -39,6 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProvenanceSidecarTest {
 
     private static final Path CARDS_FOLDER = ForgeEnvironmentInitializer.findCardsFolder();
+
+    /** The converter tests' small card tree: two valid cards and one malformed. */
+    private static final Path FIXTURE_CARDS = Path.of("src/test/resources/cardsfolder");
 
     private final RulesParser parser = new RulesParser();
 
@@ -69,15 +71,11 @@ class ProvenanceSidecarTest {
      */
     private Converted convertSource(List<String> source, String scriptFile,
                                     String fileName) {
-        RulesParser.ParsedCard parsed =
-                parser.parseScript(source, fileName, scriptFile);
-        List<RenderedLine> rendered = parsed.card().renderLines();
-        ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                parsed.card().faces().get(0).name(), scriptFile,
-                rendered, parsed.recorders());
-        return new Converted(parsed.card(),
-                rendered.stream().map(RenderedLine::text).toList(),
-                rendered.stream().map(RenderedLine::owner).toList(), sidecar);
+        ConvertedScript converted =
+                ConvertedScript.of(parser.parseScript(source, fileName, scriptFile), scriptFile);
+        return new Converted(converted.parsed().card(), converted.texts(),
+                converted.rendered().stream().map(RenderedLine::owner).toList(),
+                converted.sidecar());
     }
 
     // ── the text must not change ────────────────────────────────────────
@@ -91,14 +89,14 @@ class ProvenanceSidecarTest {
             "l/lightning_bolt.txt",
             "a/ajanis_pridemate.txt",
             "w/wall_of_omens.txt",
-            "c/counterspell.txt"
+            "c/counterspell.txt",
+            "a/archangel_avacyn_avacyn_the_purifier.txt"
     );
 
     @Test
     void convertedTextIsByteIdenticalToTheRecordingFreeRendering() {
         for (String relativePath : SAMPLE) {
             Path file = CARDS_FOLDER.resolve(relativePath);
-            if (!Files.exists(file)) continue;
             List<String> source;
             try {
                 source = Files.readAllLines(file);
@@ -149,7 +147,7 @@ class ProvenanceSidecarTest {
     void headerLinesBelongToNoAbilityAndAreNotIndexed() {
         Converted converted = convert("s/serra_angel.txt");
         assertTrue(converted.lines().get(0).startsWith("name: "));
-        assertNotNull(converted.owners().get(0) == null ? "ok" : null,
+        assertNull(converted.owners().get(0),
                 "the name line must belong to no ability");
         for (ProvenanceSidecar.Line line : converted.sidecar().lines()) {
             assertFalse(converted.lines().get(line.lineIndex()).startsWith("name: "));
@@ -176,27 +174,8 @@ class ProvenanceSidecarTest {
     }
 
     @Test
-    void aTraitThatProducedNoLineLandsInDroppedKeys() {
-        // A trait with no text of its own — the implicit spell every permanent
-        // has — produces no line. It is still live at runtime, so a record can
-        // still name it, and the join must resolve it to "no line" rather than
-        // failing. A trait whose text a line does carry is claimed by that
-        // line and never lands here.
-        List<ProvenanceKey> allDropped = new ArrayList<>();
-        for (String relativePath : SAMPLE) {
-            if (!Files.exists(CARDS_FOLDER.resolve(relativePath))) continue;
-            allDropped.addAll(convert(relativePath).sidecar().droppedKeys());
-        }
-        for (ProvenanceKey key : allDropped) {
-            assertNotNull(key.traitKind());
-            assertTrue(key.indexWithinKind() >= 0);
-        }
-    }
-
-    @Test
     void noKeyAppearsBothOnALineAndInDroppedKeys() {
         for (String relativePath : SAMPLE) {
-            if (!Files.exists(CARDS_FOLDER.resolve(relativePath))) continue;
             Converted converted = convert(relativePath);
             List<ProvenanceKey> claimed = converted.sidecar().lines().stream()
                     .flatMap(line -> line.provenance().stream()).toList();
@@ -379,7 +358,7 @@ class ProvenanceSidecarTest {
     @Test
     void aSidecarIsWrittenBesideEveryConvertedCard() throws IOException {
         new BatchConverter().convert(
-                Path.of("src/test/resources/cardsfolder"), tempDir,
+                FIXTURE_CARDS, tempDir,
                 SourceTree.CARDSFOLDER);
         assertTrue(Files.exists(tempDir.resolve("t/test_bear.provenance.json")));
         assertTrue(Files.exists(tempDir.resolve("t/test_flyer.provenance.json")));
@@ -388,7 +367,7 @@ class ProvenanceSidecarTest {
     @Test
     void aWrittenSidecarIsWellFormedJsonNamingItsCard() throws IOException {
         new BatchConverter().convert(
-                Path.of("src/test/resources/cardsfolder"), tempDir,
+                FIXTURE_CARDS, tempDir,
                 SourceTree.CARDSFOLDER);
         String json = Files.readString(tempDir.resolve("t/test_bear.provenance.json"));
         assertTrue(json.startsWith("{\"card\":"), json);
@@ -463,7 +442,7 @@ class ProvenanceSidecarTest {
     @Test
     void theTokenTreePrefixesItsKeysDifferently() throws IOException {
         new BatchConverter().convert(
-                Path.of("src/test/resources/cardsfolder"), tempDir,
+                FIXTURE_CARDS, tempDir,
                 SourceTree.TOKENSCRIPTS);
         String json = Files.readString(tempDir.resolve("t/test_bear.provenance.json"));
         assertTrue(json.contains("\"script_file\":\"tokenscripts/t/test_bear.txt\""),

@@ -30,6 +30,52 @@ final class SpellAbilityUtils {
     }
 
     /**
+     * The description {@code sa} declares for itself, its
+     * {@code SpellDescription$} or else its {@code TriggerDescription$}, or
+     * null when it declares neither.
+     */
+    static String declaredDescription(SpellAbility sa) {
+        String desc = sa.getParam("SpellDescription");
+        if (desc == null || desc.isEmpty()) {
+            desc = sa.getParam("TriggerDescription");
+        }
+        return desc == null || desc.isEmpty() ? null : desc;
+    }
+
+    /**
+     * {@code sa}'s {@code StackDescription$} when it is literal oracle text,
+     * or null.
+     *
+     * <p>Forge also puts things there that are not text to render: the
+     * {@code SpellDescription} keyword reference, the {@code None} no-display
+     * sentinel, and templates ({@code REP } substitutions, {@code {p:}}
+     * placeholders) it fills in only on the stack.
+     */
+    static String literalStackDescription(SpellAbility sa) {
+        String stack = sa.getParam("StackDescription");
+        if (stack == null || stack.isEmpty()
+                || stack.equals("SpellDescription")
+                || stack.equals("None")
+                || stack.contains("REP ")
+                || stack.contains("{p:")) {
+            return null;
+        }
+        return stack;
+    }
+
+    /**
+     * True when {@code sa} carries text of its own: a declared description or
+     * a literal stack description.
+     *
+     * <p>The one test of "described" both the effect tree and a trigger's
+     * transparent-execute check use, so a node the tree treats as transparent
+     * is never one the trigger treats as described, or the other way round.
+     */
+    static boolean hasOwnDescription(SpellAbility sa) {
+        return declaredDescription(sa) != null || literalStackDescription(sa) != null;
+    }
+
+    /**
      * The value of {@code key} in an SVar's {@code Key$ value | …} text, or
      * null when the text is null or has no such parameter.
      *

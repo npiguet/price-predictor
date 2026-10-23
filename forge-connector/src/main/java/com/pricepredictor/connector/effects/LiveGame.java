@@ -123,6 +123,29 @@ final class LiveGame {
     }
 
     /**
+     * A new record about a trait — a trigger or a replacement — about to
+     * handle an event, with everything but its payload set.
+     *
+     * <p>The actor is the host's controller ({@link #controllerOf}), the acting
+     * line is the trait's own, and the state is {@link SnapshotBuilder#ofTrait}.
+     * Shared so the trigger and rewrite channels describe a trait the same way;
+     * the payload and the dedup that follows differ per channel and stay there.
+     *
+     * @param trait   the trait as the hook handed it over; anything that is not
+     *                a {@link CardTraitBase} names no line and no host
+     * @param pending the event as the trait received it
+     */
+    EffectRecord traitRecord(
+            CollectorContext context, RecordKind kind, Object trait, EffectEvent pending) {
+        CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
+        Card source = acting == null ? null : acting.getHostCard();
+        return context.newRecord(kind)
+                .actor(controllerOf(source))
+                .ability(ProvenanceResolver.resolve(acting))
+                .state(snapshots.ofTrait(source, pending).render());
+    }
+
+    /**
      * The player whose line acted, falling back to the active player.
      *
      * <p>A triggered or replacement ability belongs to its host's controller,
@@ -132,10 +155,7 @@ final class LiveGame {
      * the host card's.
      */
     String controllerOf(Card source) {
-        if (source == null || source.getController() == null) {
-            return activePlayerId();
-        }
-        return SnapshotBuilder.playerId(source.getController());
+        return playerIdOrActive(source == null ? null : source.getController());
     }
 
     /** The deciding player's id, or the active player's where none is known. */

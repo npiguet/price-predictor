@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
-import java.lang.reflect.InvocationHandler;
 import java.util.List;
 
 /**
@@ -37,7 +36,7 @@ final class ManaChannel {
      * this hook's own game-identity test calls it with a synthesized argument
      * array.
      */
-    InvocationHandler handler() {
+    PatchHooks.Listener handler() {
         return PatchHooks.MANA_LISTENER.listener((callback, args) -> {
             SpellAbility ability = args.get(0, SpellAbility.class);
             String produced = String.valueOf(args.get(2));
@@ -53,10 +52,8 @@ final class ManaChannel {
             if (slot < 0) {
                 return;
             }
-            Player producer = args.get(1, Player.class);
-            String player = producer != null
-                    ? SnapshotBuilder.playerId(producer) : live.activePlayerId();
-            EffectEvent event = new EffectEvent(EffectEvent.MANA_PRODUCED)
+            String player = live.playerIdOrActive(args.get(1, Player.class));
+            EffectEvent event = new EffectEvent(EventType.MANA_PRODUCED)
                     .subject(player)
                     .param("mana_by_color", RunParamNormalizer.manaByColor(produced));
             // Held rather than written: which activation survives is not known

@@ -8,7 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Shared Forge initialization — used by all entry points (ConvertMain, PoolMain, MatchWorkerMain) and tests.
+ * Shared Forge initialization — called by every entry point that reads Forge's
+ * card database or plays games, and by tests.
  *
  * <p>Uses FModel.initialize() + GuiHeadless to set up the full Forge environment including
  * StaticData, AI subsystems, and the game rules engine. Auto-detects the Forge installation

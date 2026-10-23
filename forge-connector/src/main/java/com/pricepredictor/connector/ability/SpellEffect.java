@@ -45,78 +45,75 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
     private static List<Ability> fromChain(SpellAbility sa, String parentDesc) {
         if (sa == null) return List.of();
 
-        String rawDesc = sa.getParam("SpellDescription");
-        if (rawDesc == null || rawDesc.isEmpty()) {
-            rawDesc = sa.getParam("TriggerDescription");
+        String rawDesc = ownDescription(sa, parentDesc);
+        String stripped = rawDesc == null ? null : AbilityDescription.stripReminderText(rawDesc);
+        // The node's own line, or null when it is transparent. A raw description
+        // that strips to nothing still counts as one below: an all-reminder
+        // SpellDescription covers its DB$ Effect children (Sarah's Wings NoDamage).
+        String cased = stripped == null || stripped.isEmpty()
+                ? null : AbilityDescription.applyCasing(stripped);
+        // A described node's children compare against its own text; a
+        // transparent node's against the caller's.
+        String childParentDesc = cased != null ? cased : parentDesc;
+
+        List<Ability> children = new ArrayList<>(fromChain(sa.getSubAbility(), childParentDesc));
+        if (rawDesc == null) {
+            children.addAll(effectSVarChildren(sa, childParentDesc));
         }
-        // StackDescription fallback — only for literal oracle text strings,
-        // not the "SpellDescription" keyword reference, not "None" (no-display sentinel),
-        // and not Forge template strings.
-        if (rawDesc == null || rawDesc.isEmpty()) {
-            String stack = sa.getParam("StackDescription");
-            if (stack != null && !stack.isEmpty()
-                    && !stack.equals("SpellDescription")
-                    && !stack.equals("None")
-                    && !stack.contains("REP ")
-                    && !stack.contains("{p:")) {
-                // Reject if the StackDescription merely duplicates the parent's oracle text
-                // (Forge often copies the parent SpellDescription onto sub-ability StackDescription
-                // for stack-display purposes — e.g. Bifurcate's DBChangeZone).
-                String stackNorm = AbilityDescription.applyCasing(
-                        AbilityDescription.stripReminderText(stack));
-                if (!stackNorm.equals(parentDesc)) {
-                    rawDesc = stack;
-                }
-            }
-        }
-        // Track whether the SA had any raw description (even if it stripped entirely to reminder text).
-        // A SA with an all-reminder SpellDescription is still "described" — its DB$ Effect
-        // sub-ability children should not be promoted (e.g. Sarah's Wings NoDamage).
-        boolean hadRawDesc = rawDesc != null && !rawDesc.isEmpty();
-        String stripped = (rawDesc != null) ? AbilityDescription.stripReminderText(rawDesc) : null;
-        boolean hasDesc = stripped != null && !stripped.isEmpty();
+        children.addAll(repeatChildren(sa, childParentDesc, cased));
 
-        // Determine the effective parentDesc to propagate to children:
-        //   - if this SA has a description, its children inherit that description
-        //   - if this SA is transparent, children inherit the caller's parentDesc
-        String effectiveParentDesc = hasDesc ? AbilityDescription.applyCasing(stripped) : parentDesc;
+        return cased != null ? List.of(new SpellEffect(cased, children)) : children;
+    }
 
-        List<Ability> children = fromChain(sa.getSubAbility(), effectiveParentDesc);
+    /**
+     * The raw description {@code sa} renders as its own node, or null when it
+     * is transparent.
+     *
+     * <p>A declared description wins; failing one, a literal stack
+     * description, unless it only repeats {@code parentDesc}: Forge often
+     * copies the parent's SpellDescription onto a sub-ability's
+     * StackDescription for stack display (Bifurcate's DBChangeZone).
+     */
+    private static String ownDescription(SpellAbility sa, String parentDesc) {
+        String declared = SpellAbilityUtils.declaredDescription(sa);
+        if (declared != null) return declared;
+        String stack = SpellAbilityUtils.literalStackDescription(sa);
+        if (stack == null) return null;
+        String stackNorm = AbilityDescription.applyCasing(
+                AbilityDescription.stripReminderText(stack));
+        return stackNorm.equals(parentDesc) ? null : stack;
+    }
 
-        // For DB$ Effect with Triggers$ or ReplacementEffects$: collect descriptions
-        // from those SVars as additional child nodes. The Effect SA itself is transparent
-        // (no SpellDescription), so these get promoted up to the parent caller.
-        // Guard: skip when the SA had any SpellDescription (even if all reminder text) —
-        // that means its children are already covered by the parent's oracle description.
-        if (!hasDesc && !hadRawDesc && sa.getApi() == ApiType.Effect) {
-            List<Ability> effectChildren = collectEffectDescriptions(sa, effectiveParentDesc);
-            if (!effectChildren.isEmpty()) {
-                children = new ArrayList<>(children);
-                children.addAll(effectChildren);
-            }
-        }
+    /**
+     * The lines a transparent {@code DB$ Effect} creates through its
+     * {@code Triggers$} and {@code ReplacementEffects$} SVars, promoted to the
+     * caller like the rest of a transparent node's children. Empty for any
+     * other API.
+     */
+    private static List<Ability> effectSVarChildren(SpellAbility sa, String parentDesc) {
+        return sa.getApi() == ApiType.Effect
+                ? collectEffectDescriptions(sa, parentDesc) : List.of();
+    }
 
+    /**
+     * The nodes of {@code sa}'s {@code RepeatSubAbility} (RepeatEach, Repeat),
+     * which the {@code SubAbility} walk does not reach.
+     *
+     * <p>A node repeating {@code ownLine}, the line {@code sa} itself renders,
+     * is left out: some cards (Hoarder's Greed) copy the root SpellDescription
+     * onto the RepeatSubAbility SVar for stack display, and keeping it would
+     * emit the line twice.
+     */
+    private static List<Ability> repeatChildren(SpellAbility sa, String parentDesc,
+                                                String ownLine) {
         SpellAbility repeatSub = sa.getAdditionalAbility("RepeatSubAbility");
-        if (repeatSub != null) {
-            List<Ability> repeatChildren = fromChain(repeatSub, effectiveParentDesc);
-            if (!repeatChildren.isEmpty()) {
-                children = new ArrayList<>(children);
-                String parentCased = hasDesc ? AbilityDescription.applyCasing(stripped) : null;
-                for (Ability rc : repeatChildren) {
-                    // Skip repeat-sub children whose description duplicates the parent SA.
-                    // Some cards (e.g. Hoarder's Greed) copy the root SpellDescription onto
-                    // the RepeatSubAbility SVar for stack-display; including it would double-emit.
-                    if (parentCased != null && parentCased.equals(rc.descriptionText())) continue;
-                    children.add(rc);
-                }
-            }
+        if (repeatSub == null) return List.of();
+        List<Ability> result = new ArrayList<>();
+        for (Ability rc : fromChain(repeatSub, parentDesc)) {
+            if (ownLine != null && ownLine.equals(rc.descriptionText())) continue;
+            result.add(rc);
         }
-
-        if (hasDesc) {
-            return List.of(new SpellEffect(AbilityDescription.applyCasing(stripped), children));
-        } else {
-            return children;
-        }
+        return result;
     }
 
     /**

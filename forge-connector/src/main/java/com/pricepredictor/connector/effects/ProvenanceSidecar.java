@@ -6,10 +6,10 @@ import com.pricepredictor.connector.MultiCard;
 import com.pricepredictor.connector.RenderedLine;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
-import java.util.StringJoiner;
 
 /**
  * The {@code <name>.provenance.json} written beside each converted card.
@@ -36,34 +36,27 @@ public record ProvenanceSidecar(
             List<RoleSpans.Span> roleSpans
     ) {
         public String toJson() {
-            StringJoiner keys = new StringJoiner(",", "[", "]");
-            for (ProvenanceKey key : provenance) keys.add(key.toSidecarJson());
-            StringJoiner links = new StringJoiner(",", "[", "]");
-            for (TraitScript.SubAbilityLink link : script.subAbilityLinks()) {
-                links.add(link.toJson());
-            }
-            StringJoiner spans = new StringJoiner(",", "[", "]");
-            for (RoleSpans.Span span : roleSpans) spans.add(span.toJson());
-            return "{\"line_index\":" + lineIndex
-                    + ",\"line_kind\":" + Json.string(lineKind)
-                    + ",\"provenance\":" + keys
-                    + ",\"sub_ability_links\":" + links
-                    + ",\"script_api_type\":" + Json.string(script.apiType())
-                    + ",\"script_param_keys\":" + Json.stringArray(script.paramKeys())
-                    + ",\"script_text\":" + Json.string(script.scriptText())
-                    + ",\"role_spans\":" + spans + "}";
+            return Json.object()
+                    .value("line_index", lineIndex)
+                    .value("line_kind", lineKind)
+                    .raw("provenance", Json.array(provenance, ProvenanceKey::toSidecarJson))
+                    .raw("sub_ability_links",
+                            Json.array(script.subAbilityLinks(), TraitScript.SubAbilityLink::toJson))
+                    .value("script_api_type", script.apiType())
+                    .raw("script_param_keys", Json.stringArray(script.paramKeys()))
+                    .value("script_text", script.scriptText())
+                    .raw("role_spans", Json.array(roleSpans, RoleSpans.Span::toJson))
+                    .render();
         }
     }
 
     public String toJson() {
-        StringJoiner renderedLines = new StringJoiner(",", "[", "]");
-        for (Line line : lines) renderedLines.add(line.toJson());
-        StringJoiner dropped = new StringJoiner(",", "[", "]");
-        for (ProvenanceKey key : droppedKeys) dropped.add(key.toSidecarJson());
-        return "{\"card\":" + Json.string(card)
-                + ",\"script_file\":" + Json.string(scriptFile)
-                + ",\"lines\":" + renderedLines
-                + ",\"dropped_keys\":" + dropped + "}";
+        return Json.object()
+                .value("card", card)
+                .value("script_file", scriptFile)
+                .raw("lines", Json.array(lines, Line::toJson))
+                .raw("dropped_keys", Json.array(droppedKeys, ProvenanceKey::toSidecarJson))
+                .render();
     }
 
     /**
@@ -84,7 +77,10 @@ public record ProvenanceSidecar(
             recorder.claimModesUnderEveryRoot(owners);
         }
         List<Line> lines = new ArrayList<>();
-        Set<Ability> seen = new LinkedHashSet<>();
+        // By identity, as the recorders key abilities: the faces of a card
+        // render equal abilities (both faces' flying) as distinct objects,
+        // and an equality set would keep only the first face's.
+        Set<Ability> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         for (int i = 0; i < renderedLines.size(); i++) {
             Ability owner = renderedLines.get(i).owner();
             if (owner == null) continue;

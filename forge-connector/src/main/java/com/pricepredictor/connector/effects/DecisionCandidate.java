@@ -85,19 +85,26 @@ record DecisionCandidate(
 
     /** The record's payload: this one candidate. */
     String payloadJson() {
-        return "{\"candidates\":[{"
-                + "\"ability\":" + ProvenanceKey.toJsonArray(keys)
-                + ",\"verdict\":{\"can_play\":" + verdict.canPlay()
-                + ",\"affordable\":" + verdict.affordable()
-                + ",\"has_legal_target\":" + verdict.hasLegalTarget() + "}"
-                + ",\"legal_targets\":" + Json.stringArray(legalTargets)
-                + ",\"cost_after_adjustment\":"
-                + (manaCost == null
-                        ? "{}"
-                        : "{\"mana\":" + Json.string(manaCost) + "}")
+        Json.ObjectWriter cost = Json.object();
+        if (manaCost != null) {
+            cost.value("mana", manaCost);
+        }
+        String candidate = Json.object()
+                .raw("ability", ProvenanceKey.toJsonArray(keys))
+                .raw("verdict", Json.object()
+                        .value("can_play", verdict.canPlay())
+                        .value("affordable", verdict.affordable())
+                        .value("has_legal_target", verdict.hasLegalTarget())
+                        .render())
+                .raw("legal_targets", Json.stringArray(legalTargets))
+                .raw("cost_after_adjustment", cost.render())
                 // responsible_static needs a cantBeCastStatic hook that does
                 // not exist; the attacker and blocker subkinds carry theirs,
                 // this one does not.
-                + ",\"responsible_static\":[]}]}";
+                .raw("responsible_static", "[]")
+                .render();
+        return Json.object()
+                .raw("candidates", Json.array(List.of(candidate), json -> json))
+                .render();
     }
 }

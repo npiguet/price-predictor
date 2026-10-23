@@ -6,43 +6,26 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.pricepredictor.connector.MatchFixtures.RUN_ID;
+import static com.pricepredictor.connector.MatchFixtures.TS;
+import static com.pricepredictor.connector.MatchFixtures.deck40;
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * The match-outcome line and what a {@link MatchResult} accepts. Appending is
+ * {@link LineAppenderTest}'s.
+ */
 class MatchResultWriterTest {
-
-    private static final Instant TS = Instant.parse("2026-04-22T14:30:05Z");
-    private static final String RUN_ID = "a3f4b8c2-1234-4abc-9def-0123456789ab";
-
-    private static List<String> deck40(String prefix) {
-        List<String> cards = new ArrayList<>();
-        for (int i = 0; i < 40; i++) {
-            cards.add(prefix + "Card" + i);
-        }
-        return cards;
-    }
 
     private static MatchResult sampleResult(List<String> deckA, List<String> deckB, String games, String play) {
         return new MatchResult(
                 TS, RUN_ID, "RVR", "forge-best", "gen-2",
                 deckA, deckB, games, play, 47
         );
-    }
-
-    @Test
-    void writesOneLinePerResult(@TempDir Path tmp) throws IOException {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
-
-        writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB"));
-        writer.write(sampleResult(deck40("C"), deck40("D"), "BB", "AA"));
-
-        List<String> lines = Files.readAllLines(file);
-        assertEquals(2, lines.size());
     }
 
     @Test
@@ -58,8 +41,9 @@ class MatchResultWriterTest {
 
         writer.write(sampleResult(deckA, deckB, "ABA", "BAB"));
 
-        String line = Files.readAllLines(file).get(0);
-        String[] parts = line.split(";", -1);
+        List<String> lines = Files.readAllLines(file);
+        assertEquals(1, lines.size());
+        String[] parts = lines.get(0).split(";", -1);
         assertEquals(10, parts.length, "Expected 10 semicolon-separated fields");
         assertEquals(DateTimeFormatter.ISO_INSTANT.format(TS), parts[0]);
         assertEquals(RUN_ID, parts[1]);
@@ -74,19 +58,14 @@ class MatchResultWriterTest {
         assertEquals("47", parts[9]);
     }
 
+    /** The directory exists once the writer does, before its first match is written. */
     @Test
-    void appendsToExistingFile(@TempDir Path tmp) throws IOException {
-        Path file = tmp.resolve("outcomes.txt");
-        Files.writeString(file, "an earlier run's line" + System.lineSeparator());
-        MatchResultWriter writer = new MatchResultWriter(file);
+    void aWriterNeedsNoExistingDirectory(@TempDir Path tmp) {
+        Path file = tmp.resolve("draft").resolve("draft-games.txt");
 
-        writer.write(sampleResult(deck40("A"), deck40("B"), "AA", "BA"));
+        new MatchResultWriter(file);
 
-        List<String> lines = Files.readAllLines(file);
-        assertEquals(2, lines.size());
-        assertEquals("an earlier run's line", lines.get(0));
-        assertTrue(lines.get(1).startsWith(DateTimeFormatter.ISO_INSTANT.format(TS) + ";"),
-                lines.get(1));
+        assertTrue(Files.isDirectory(file.getParent()));
     }
 
     @Test
@@ -105,20 +84,17 @@ class MatchResultWriterTest {
     }
 
     @Test
-    void variedGameLengthsAccepted(@TempDir Path tmp) {
+    void variedGameLengthsAccepted() {
         // Match length is configurable via --best-of, so MatchResult must accept any
         // non-empty A/B string. Spot-check Bo3 (len 2-3), Bo5 (len 3-5), Bo7 (len 4-7),
         // and a large Bo9 example (len 5-9).
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
-
-        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "AA", "BA")));
-        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB")));
-        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "AABA", "BABA")));
-        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "ABABA", "BABAB")));
-        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "ABABAAB", "BABABAB")));
-        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "AAAAA", "BBBBB")));
-        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "ABABABABA", "BABABABAB")));
+        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "AA", "BA"));
+        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "ABA", "BAB"));
+        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "AABA", "BABA"));
+        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "ABABA", "BABAB"));
+        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "ABABAAB", "BABABAB"));
+        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "AAAAA", "BBBBB"));
+        assertDoesNotThrow(() -> sampleResult(deck40("A"), deck40("B"), "ABABABABA", "BABABABAB"));
     }
 
     @Test

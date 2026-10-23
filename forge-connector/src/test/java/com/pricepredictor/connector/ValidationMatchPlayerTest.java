@@ -60,6 +60,16 @@ class ValidationMatchPlayerTest {
     }
 
     @Test
+    void aBlankMatchLineDoesNotShiftWhereARestartResumes() throws IOException {
+        Path outcomes = tmp.resolve("outcomes.txt");
+        // Two of the three matches completed; the blank line is no match.
+        Files.writeString(outcomes, "2;0\n1;2\n");
+
+        assertEquals(List.of("2;0", "1;2", "0;0"),
+                outcomesAfter(List.of(UNPLAYABLE, "", UNPLAYABLE, UNPLAYABLE), outcomes));
+    }
+
+    @Test
     void aCompletedFileIsLeftAsItIs() throws IOException {
         Path outcomes = tmp.resolve("outcomes.txt");
         Files.writeString(outcomes, "2;0\n1;2\n");

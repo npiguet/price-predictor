@@ -23,6 +23,7 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -103,25 +104,21 @@ public class DraftWorkerMain {
 
         Random random = MyRandom.getRandom();
 
-        List<String> eligibleSets = null;
-        if (setCode == null) {
-            eligibleSets = MatchGenerator.computeEligibleSets();
-            if (eligibleSets.isEmpty()) {
-                System.err.println("Error: no eligible sealed-legal sets found");
-                throw ToolMain.exit(1);
-            }
+        SetChooser sets;
+        try {
+            sets = SetChooser.of(setCode, random);
+        } catch (IllegalStateException e) {
+            System.err.println("Error: " + e.getMessage());
+            throw ToolMain.exit(1);
         }
 
         // Shared context object for the AI seats (used only by conspiracy-card
         // hooks, which standard sets do not trigger).
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
 
-        final List<String> sets = eligibleSets;
         WorkerLoop.runUntilBroken(
                 () -> {
-                    String draftSet = (setCode != null)
-                            ? setCode
-                            : sets.get(random.nextInt(sets.size()));
+                    String draftSet = sets.next();
                     DraftResult result;
                     try {
                         result = generateDraft(
@@ -318,25 +315,16 @@ public class DraftWorkerMain {
 
         /** The transcript the supervisor reads, without the sentinel. */
         String toJson() {
-            StringBuilder sb = new StringBuilder(4096);
-            sb.append("{\"draft_id\":\"").append(draftId).append("\",\"boosters\":[");
-            for (int k = 0; k < picksByBooster.size(); k++) {
-                if (k > 0) {
-                    sb.append(',');
-                }
-                sb.append("{\"set_code\":").append(Json.string(setCode))
-                        .append(",\"picks\":").append(Json.stringArray(picksByBooster.get(k)))
-                        .append('}');
-            }
-            sb.append("],\"seats\":[");
-            for (int s = 0; s < agents.length; s++) {
-                if (s > 0) {
-                    sb.append(',');
-                }
-                sb.append("{\"agent\":").append(Json.string(agents[s])).append('}');
-            }
-            sb.append("]}");
-            return sb.toString();
+            return Json.object()
+                    .value("draft_id", draftId)
+                    .raw("boosters", Json.array(picksByBooster, picks -> Json.object()
+                            .value("set_code", setCode)
+                            .raw("picks", Json.stringArray(picks))
+                            .render()))
+                    .raw("seats", Json.array(Arrays.asList(agents), agent -> Json.object()
+                            .value("agent", agent)
+                            .render()))
+                    .render();
         }
     }
 

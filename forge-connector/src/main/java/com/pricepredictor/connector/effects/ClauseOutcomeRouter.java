@@ -4,14 +4,13 @@ import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.spellability.SpellAbility;
 
-import java.lang.reflect.InvocationHandler;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 /**
@@ -41,15 +40,15 @@ final class ClauseOutcomeRouter {
     /**
      * The events an effect API promises, taken from the clause that ran.
      *
-     * <p>The memo is kept per thread and not per collector: a clause can resolve
-     * another, and the engine runs games on more than one thread. Each memo is
-     * wrapped because a deque holds no null, and a clause with no memo still
-     * pushes one so that every pop meets its own push. A fork's clause pushes
-     * and pops its own memo exactly as a live one does, because the game
-     * check comes after the bookkeeping, so the check cannot desynchronize
-     * this deque.
+     * <p>Each clause's observation -- its rule and what that rule's memo took --
+     * is kept per thread and not per collector: a clause can resolve another,
+     * and the engine runs games on more than one thread. A clause whose API
+     * promises nothing, or whose memo threw, still pushes one so that every
+     * pop meets its own push. A fork's clause pushes and pops its own
+     * observation exactly as a live one does, because the game check comes
+     * after the bookkeeping, so the check cannot desynchronize this deque.
      */
-    private final ThreadLocal<Deque<Optional<Object>>> clauseMemos =
+    private final ThreadLocal<Deque<ApiEvents.ClauseObservation<?>>> clauseObservations =
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
@@ -63,7 +62,7 @@ final class ClauseOutcomeRouter {
      * {@code ClauseContractTest} calls this with a synthesized argument array
      * in the compiler's place.
      */
-    InvocationHandler clauseHandler() {
+    PatchHooks.Listener clauseHandler() {
         return clauseHandler(ApiEvents::ruleFor);
     }
 
@@ -71,7 +70,7 @@ final class ClauseOutcomeRouter {
      * The same, building each clause's event from the rules {@code rules}
      * names, so a test can stand a rule that throws in for one API.
      */
-    InvocationHandler clauseHandler(Function<ApiType, ApiEvents.Rule> rules) {
+    PatchHooks.Listener clauseHandler(Function<ApiType, ApiEvents.Rule<?>> rules) {
         return PatchHooks.CLAUSE_LISTENER.listener((callback, args) -> {
             SpellAbility clause = args.get(0, SpellAbility.class);
             if (clause == null) {
@@ -85,8 +84,8 @@ final class ClauseOutcomeRouter {
         });
     }
 
-    private void clauseResolving(SpellAbility clause, Function<ApiType, ApiEvents.Rule> rules) {
-        clauseMemos.get().push(Optional.ofNullable(ApiEvents.before(clause, rules)));
+    private void clauseResolving(SpellAbility clause, Function<ApiType, ApiEvents.Rule<?>> rules) {
+        clauseObservations.get().push(ApiEvents.observe(clause, rules));
         // A chosen mode's first clause is where a modal resolution is
         // cut into per-mode halves (FR-029a): the live bracket opens
         // the next half here, and a fork running on this thread marks
@@ -104,16 +103,18 @@ final class ClauseOutcomeRouter {
     }
 
     private void clauseResolved(
-            SpellAbility clause, boolean threw, Function<ApiType, ApiEvents.Rule> rules) {
-        Deque<Optional<Object>> memos = clauseMemos.get();
-        Object memo = memos.isEmpty() ? null : memos.pop().orElse(null);
+            SpellAbility clause, boolean threw, Function<ApiType, ApiEvents.Rule<?>> rules) {
+        Deque<ApiEvents.ClauseObservation<?>> observations = clauseObservations.get();
+        ApiEvents.ClauseObservation<?> observed = observations.isEmpty()
+                ? ApiEvents.unobserved(clause, rules)
+                : observations.pop();
         if (threw) {
             // A clause that threw did not finish, and an event claiming it
             // did would be a fact the game never contained.
             return;
         }
         if (live.owns(clause)) {
-            bracket.recordClauseEvent(ApiEvents.after(clause, memo, rules));
+            bracket.recordClauseEvent(observed.finish());
         }
     }
 
@@ -121,11 +122,11 @@ final class ClauseOutcomeRouter {
 
     /**
      * The outcome types an effect is allowed to name, built from the
-     * {@code EffectEvent} constants themselves rather than listed in prose.
+     * {@link EventType} members themselves rather than listed in prose.
      *
      * <p>{@code test_event_schema_completeness.py}'s
      * {@code _emitted_event_types()} is a <em>textual</em> scan for
-     * {@code EffectEvent.<NAME>} in this package's source, and a javadoc
+     * {@code EventType.<NAME>} in this package's source, and a javadoc
      * listing satisfies that scan exactly as well as this set does. Were the
      * types referenced only inside a comment, deleting an effect's {@code
      * note(...)} call, or misspelling the event name, would go unnoticed by
@@ -149,34 +150,32 @@ final class ClauseOutcomeRouter {
      * are noted by their effects too; the types an {@code ApiEvents.RULES}
      * entry emits never reach this set at all.
      */
-    private static final Set<String> KNOWN_OUTCOME_TYPES = Set.of(
-            EffectEvent.COIN_FLIPPED, EffectEvent.CLASH_RESOLVED, EffectEvent.VOTE_TAKEN,
-            EffectEvent.PILES_MADE, EffectEvent.DUNGEON_VENTURED, EffectEvent.SPELL_COPIED,
-            EffectEvent.PERMANENT_COPIED, EffectEvent.CARD_MADE, EffectEvent.RESTRICTION_CHANGE,
-            EffectEvent.CARD_REVEALED, EffectEvent.DAMAGE_PREVENTED, EffectEvent.SPELL_COUNTERED,
-            EffectEvent.TOKEN_CREATED, EffectEvent.DICE_ROLLED, EffectEvent.TURN_ENDED,
-            EffectEvent.TEXT_CHANGE);
+    private static final Set<EventType> KNOWN_OUTCOME_TYPES = EnumSet.of(
+            EventType.COIN_FLIPPED, EventType.CLASH_RESOLVED, EventType.VOTE_TAKEN,
+            EventType.PILES_MADE, EventType.DUNGEON_VENTURED, EventType.SPELL_COPIED,
+            EventType.PERMANENT_COPIED, EventType.CARD_MADE, EventType.RESTRICTION_CHANGE,
+            EventType.CARD_REVEALED, EventType.DAMAGE_PREVENTED, EventType.SPELL_COUNTERED,
+            EventType.TOKEN_CREATED, EventType.DICE_ROLLED, EventType.TURN_ENDED,
+            EventType.TEXT_CHANGE);
 
-    /** Set the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
-    private static final AtomicBoolean UNKNOWN_OUTCOME_TYPE_REPORTED = new AtomicBoolean();
+    /** Raised the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
+    private static final OnceWarning UNKNOWN_OUTCOME_TYPE = new OnceWarning();
 
     /**
      * Prints one line to stderr the first time {@link #outcomeHandler()}
      * receives a type outside {@link #KNOWN_OUTCOME_TYPES}, then stays quiet
      * for every one after it — the same latched-once treatment
-     * {@code ApiEvents.reportEmitterFailure} and
-     * {@code AbilityUtils.reportClauseListenerFailure} give their own hooks'
-     * failures, for the same reason: a deleted {@code note(...)} call or a
-     * misspelled event name must not go dark silently.
+     * {@code ApiEvents.reportEmitterFailure} and Forge's
+     * {@code EffectRecordHook.contain} give their own hooks' failures, for
+     * the same reason: a deleted {@code note(...)} call or a misspelled event
+     * name must not go dark silently.
      */
     private static void reportUnknownOutcomeType(String type) {
-        if (UNKNOWN_OUTCOME_TYPE_REPORTED.compareAndSet(false, true)) {
-            System.err.println("ClauseOutcomeRouter: outcomeHandler() received "
-                    + "an outcome type not in KNOWN_OUTCOME_TYPES (\"" + type
-                    + "\"); further unrecognized types will not be logged. A "
-                    + "renamed or deleted EffectRecordOutcomes.note(...) call "
-                    + "in Forge would produce exactly this.");
-        }
+        UNKNOWN_OUTCOME_TYPE.raise(() -> "ClauseOutcomeRouter: outcomeHandler() received "
+                + "an outcome type not in KNOWN_OUTCOME_TYPES (\"" + type
+                + "\"); further unrecognized types will not be logged. A "
+                + "renamed or deleted EffectRecordOutcomes.note(...) call "
+                + "in Forge would produce exactly this.");
     }
 
     /**
@@ -185,11 +184,12 @@ final class ClauseOutcomeRouter {
      * <p>Bound by argument position, because {@code PatchHooks} installs a
      * proxy rather than compiling against the interface: 0 is the ability, 1
      * the event type, 2 the parameters. The event type is a plain string the
-     * effect names for itself rather than an enum this side switches on --
-     * {@code EffectRecordOutcomes}'s own javadoc explains why: "the caller
-     * names the event type, which keeps the vocabulary in the collector that
-     * consumes it" -- checked against {@link #KNOWN_OUTCOME_TYPES}, the real
-     * vocabulary.
+     * effect names for itself rather than an enum the engine shares with this
+     * side -- {@code EffectRecordOutcomes}'s own javadoc explains why: "the
+     * event type names the outcome, and the collector that consumes it owns
+     * what each type means" -- read here through
+     * {@link EventType#fromWire} and checked against
+     * {@link #KNOWN_OUTCOME_TYPES}, the real vocabulary.
      *
      * <p>The event's subjects are exactly what the effect names under
      * {@code "subjects"}, and an outcome that names none has none. The acting
@@ -226,17 +226,19 @@ final class ClauseOutcomeRouter {
      * either, so this hook's own test calls it directly, the way
      * {@code ClauseContractTest} calls {@code clauseHandler}.
      */
-    InvocationHandler outcomeHandler() {
+    PatchHooks.Listener outcomeHandler() {
         return PatchHooks.OUTCOME_LISTENER.listener((callback, args) -> {
-            String type = args.get(1, String.class);
-            if (type == null) {
+            String wireName = args.get(1, String.class);
+            if (wireName == null) {
                 return;
             }
-            if (!KNOWN_OUTCOME_TYPES.contains(type)) {
-                reportUnknownOutcomeType(type);
+            Optional<EventType> type = EventType.fromWire(wireName)
+                    .filter(KNOWN_OUTCOME_TYPES::contains);
+            if (type.isEmpty()) {
+                reportUnknownOutcomeType(wireName);
                 return;
             }
-            EffectEvent event = new EffectEvent(type);
+            EffectEvent event = new EffectEvent(type.get());
             if (args.get(2) instanceof Map<?, ?> params) {
                 for (Map.Entry<?, ?> entry : params.entrySet()) {
                     if ("subjects".equals(entry.getKey())) {

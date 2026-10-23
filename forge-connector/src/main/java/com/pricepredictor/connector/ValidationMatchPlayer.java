@@ -5,7 +5,6 @@ import forge.deck.Deck;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -33,34 +32,38 @@ public class ValidationMatchPlayer {
      * @param outcomesFile path to the outcomes output file
      */
     public void processAll(Path matchesFile, Path outcomesFile) throws IOException {
-        List<String> lines = Files.readAllLines(matchesFile);
+        // Blank lines are no matches, and the resume count below counts only
+        // outcome lines, so the two are indexed over the same non-blank list:
+        // a blank line skipped in one and counted in the other would shift
+        // every later outcome onto the wrong match.
+        List<String> lines = Files.readAllLines(matchesFile).stream()
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .toList();
         long completed = countCompletedMatches(outcomesFile);
+        LineAppender outcomes = new LineAppender(outcomesFile);
 
         System.out.println("Validation: " + lines.size() + " matches, " + completed + " already completed");
 
         for (int i = (int) completed; i < lines.size(); i++) {
-            String line = lines.get(i).trim();
-            if (line.isEmpty()) continue;
-
             try {
-                ParsedMatch parsed = parseLine(line);
+                ParsedMatch parsed = parseLine(lines.get(i));
 
-                // Both sides are pre-built decks
                 Deck deckA = DeckMaterializer.materialize(parsed.deckANames(),
                         DeckMaterializer.UnresolvedPolicy.FAIL, UNRESOLVED_DECK);
                 Deck deckB = DeckMaterializer.materialize(parsed.deckBNames(),
                         DeckMaterializer.UnresolvedPolicy.FAIL, UNRESOLVED_DECK);
 
                 GamePlayer.PlayedMatch played = gamePlayer.playMatch(deckA, deckB);
-                appendOutcome(outcomesFile, played.winsA(), played.winsB());
+                outcomes.append(played.winsA() + ";" + played.winsB());
 
                 if ((i + 1) % 5 == 0) {
                     System.out.println("Validation: " + (i + 1) + "/" + lines.size() + " matches completed");
                 }
             } catch (Exception e) {
                 System.err.println("Error on match " + (i + 1) + ": " + e.getMessage());
-                // Write a 0;0 outcome to keep line count in sync
-                appendOutcome(outcomesFile, 0, 0);
+                // A 0;0 filler keeps the outcomes paired with the matches by position.
+                outcomes.append("0;0");
             }
         }
     }
@@ -80,12 +83,6 @@ public class ValidationMatchPlayer {
     private static ParsedMatch parseLine(String line) {
         String[] parts = line.split(";", 2);
         return new ParsedMatch(CardNameList.parse(parts[0]), CardNameList.parse(parts[1]));
-    }
-
-    private static void appendOutcome(Path outcomesFile, int winsA, int winsB) throws IOException {
-        String line = winsA + ";" + winsB + "\n";
-        Files.writeString(outcomesFile, line,
-                StandardOpenOption.CREATE, StandardOpenOption.APPEND);
     }
 
     /**

@@ -76,21 +76,21 @@ public class KeywordDefinitionMain {
      * how Forge formats the keyword's values into its template.
      */
     static String render() {
-        List<String> entries = new ArrayList<>();
+        Json.ObjectWriter definitions = Json.object();
         for (Keyword keyword : Keyword.values()) {
             if (keyword == Keyword.UNDEFINED) {
                 // Not a keyword: the catch-all Forge routes bespoke script
                 // lines through, with no name a card ever prints.
                 continue;
             }
-            entries.add(Json.string(keyword.toString()) + ":{"
-                    + "\"reminder_template\":"
-                    + Json.string(Strings.emptyToNull(expandPlurals(keyword.getReminderText())))
-                    + ",\"generated_script\":" + Json.string(generatedScript(keyword))
-                    + ",\"formatter\":" + Json.string(formatterOf(keyword))
-                    + "}");
+            definitions.raw(keyword.toString(), Json.object()
+                    .value("reminder_template",
+                            Strings.emptyToNull(expandPlurals(keyword.getReminderText())))
+                    .value("generated_script", generatedScript(keyword))
+                    .value("formatter", formatterOf(keyword))
+                    .render());
         }
-        return "{" + String.join(",", entries) + "}";
+        return definitions.render();
     }
 
     /**

@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.pricepredictor.connector.effects.RecordLines.onlyEvent;
+import static com.pricepredictor.connector.effects.RecordLines.params;
 import static com.pricepredictor.connector.effects.TestCollectors.recording;
 import static com.pricepredictor.connector.effects.TestCollectors.replacementOfMode;
 import static com.pricepredictor.connector.effects.TestCollectors.triggerOfMode;
@@ -131,16 +133,15 @@ class TriggerRecordTest {
     // ── what a run parameter map says ──────────────────────────────────
 
     /**
-     * The event a trigger record carries, as rendered JSON.
+     * The event a trigger record carries for {@code trait} seeing {@code
+     * runParams}, parsed.
      *
      * <p>Handed a replacement too where the mode under test is the
      * replacement side's spelling: the event is read off the trait's mode and
      * the parameters, whichever kind of trait carries the mode.
      */
-    private String eventJson(CardTraitBase trait, Map<String, Object> params) {
-        String json = recording(tempDir).triggers().record(trait, params, true).toJson();
-        int at = json.indexOf("\"payload\":{\"event\":");
-        return json.substring(at + 19, json.indexOf(",\"fired\"", at));
+    private Map<String, Object> eventOf(CardTraitBase trait, Map<String, Object> runParams) {
+        return onlyEvent(recording(tempDir).triggers().record(trait, runParams, true).toJson());
     }
 
     /**
@@ -152,14 +153,14 @@ class TriggerRecordTest {
      */
     @Test
     void aMoveNamesTheZonesItWentBetween() {
-        String json = eventJson(replacementOfMode("Moved"), Map.of(
+        Map<String, Object> event = eventOf(replacementOfMode("Moved"), Map.of(
                 "Origin", ZoneType.Hand,
                 "Destination", ZoneType.Graveyard,
                 "Card", TestCards.build("Mountain")));
 
-        assertTrue(json.contains("\"type\":\"zone_change\""), json);
-        assertTrue(json.contains("\"from_zone\":\"hand\""), json);
-        assertTrue(json.contains("\"to_zone\":\"graveyard\""), json);
+        assertEquals("zone_change", event.get("type"), event.toString());
+        assertEquals("hand", params(event).get("from_zone"), event.toString());
+        assertEquals("graveyard", params(event).get("to_zone"), event.toString());
     }
 
     /**
@@ -172,14 +173,11 @@ class TriggerRecordTest {
     @Test
     void oneCardNamedThreeWaysIsOneSubject() {
         Card card = TestCards.build("Mountain");
-        String json = eventJson(replacementOfMode("Moved"), Map.of(
+        Map<String, Object> event = eventOf(replacementOfMode("Moved"), Map.of(
                 "Card", card, "CardLKI", card, "Affected", card));
 
-        assertEquals(
-                "[\"" + SnapshotBuilder.entityId(card) + "\"]",
-                json.substring(json.indexOf("\"subjects\":") + 11,
-                        json.indexOf("]", json.indexOf("\"subjects\":")) + 1),
-                json);
+        assertEquals(List.of(SnapshotBuilder.entityId(card)), event.get("subjects"),
+                event.toString());
     }
 
     /**
@@ -192,51 +190,49 @@ class TriggerRecordTest {
     @Test
     void theCauseIsAnEntityRefRatherThanAListOfKeyNames() {
         Card cause = TestCards.build("Lightning Bolt");
-        String json = eventJson(replacementOfMode("Moved"), Map.of(
+        Map<String, Object> event = eventOf(replacementOfMode("Moved"), Map.of(
                 "Card", TestCards.build("Mountain"),
                 "Destination", ZoneType.Graveyard,
                 "Cause", cause));
 
-        assertTrue(json.contains(
-                "\"cause\":\"" + SnapshotBuilder.entityId(cause) + "\""), json);
-        assertFalse(json.contains("\"cause\":\"Card,"), json);
-        assertFalse(json.contains("Destination,"), json);
+        assertEquals(SnapshotBuilder.entityId(cause), params(event).get("cause"),
+                event.toString());
+        assertFalse(event.toString().contains("Destination,"), event.toString());
     }
 
     /** An unmapped mode carries its mode and says nothing it cannot support. */
     @Test
     void anUnmappedModeCarriesOnlyWhatItKnows() {
-        String json = eventJson(triggerOfMode("Exploited"), Map.of());
+        Map<String, Object> event = eventOf(triggerOfMode("Exploited"), Map.of());
 
-        assertTrue(json.contains("\"type\":\"state_flag_change\""), json);
-        assertTrue(json.contains("\"params\":{\"mode\":\"Exploited\"}"),
-                json);
+        assertEquals("state_flag_change", event.get("type"), event.toString());
+        assertEquals(Map.of("mode", "Exploited"), params(event), event.toString());
     }
 
     @Test
     void damageIsReadAsAnAmountACombatFlagAndASource() {
         Card source = TestCards.build("Lightning Bolt");
-        String json = eventJson(triggerOfMode("DamageDone"), Map.of(
+        Map<String, Object> event = eventOf(triggerOfMode("DamageDone"), Map.of(
                 "DamageAmount", 3,
                 "IsCombatDamage", Boolean.FALSE,
                 "DamageSource", source,
                 "Affected", TestCards.build("Mountain")));
 
-        assertTrue(json.contains("\"amount\":3"), json);
-        assertTrue(json.contains("\"combat\":false"), json);
-        assertTrue(json.contains(
-                "\"source\":\"" + SnapshotBuilder.entityId(source) + "\""), json);
+        assertEquals(3L, params(event).get("amount"), event.toString());
+        assertEquals(false, params(event).get("combat"), event.toString());
+        assertEquals(SnapshotBuilder.entityId(source), params(event).get("source"),
+                event.toString());
     }
 
     /** Prevention arrives through the damage keys and is not damage dealt. */
     @Test
     void preventedDamageIsNotRecordedAsDamageDealt() {
-        String json = eventJson(triggerOfMode("DamageDone"), Map.of(
+        Map<String, Object> event = eventOf(triggerOfMode("DamageDone"), Map.of(
                 "PreventedAmount", 2,
                 "Affected", TestCards.build("Mountain")));
 
-        assertTrue(json.contains("\"type\":\"damage_prevented\""), json);
-        assertTrue(json.contains("\"amount\":2"), json);
+        assertEquals("damage_prevented", event.get("type"), event.toString());
+        assertEquals(2L, params(event).get("amount"), event.toString());
     }
 
     /**
@@ -251,34 +247,29 @@ class TriggerRecordTest {
         com.google.common.collect.Multiset<CounterType> counters =
                 com.google.common.collect.LinkedHashMultiset.create();
         counters.add(CounterType.getType("P1P1"), 2);
-        String json = eventJson(triggerOfMode("CounterAdded"), Map.of(
+        Map<String, Object> event = eventOf(triggerOfMode("CounterAdded"), Map.of(
                 "CounterMap", Map.of(Optional.empty(), counters),
                 "Affected", TestCards.build("Mountain")));
 
-        assertTrue(json.contains("\"type\":\"counter_change\""), json);
+        assertEquals("counter_change", event.get("type"), event.toString());
         // Named the way the engine names it, which is the same spelling the
         // observed counter events carry -- a reader must not have to know which
         // collector wrote a record to know what "+1/+1" is called.
-        assertTrue(json.contains("\"counter_type\":\"+1/+1\""), json);
-        assertTrue(json.contains("\"delta\":2"), json);
+        assertEquals("+1/+1", params(event).get("counter_type"), event.toString());
+        assertEquals(2L, params(event).get("delta"), event.toString());
     }
 
     /** The replacement side's word for a life total is read as one. */
     @Test
     void theReplacementSpellingOfALifeAmountIsStillADelta() {
-        String json = eventJson(replacementOfMode("LifeReduced"), Map.of(
+        Map<String, Object> event = eventOf(replacementOfMode("LifeReduced"), Map.of(
                 "Affected", TestCards.build("Mountain"), "Amount", 4));
 
-        assertTrue(json.contains("\"type\":\"life_change\""), json);
-        assertTrue(json.contains("\"delta\":4"), json);
+        assertEquals("life_change", event.get("type"), event.toString());
+        assertEquals(4L, params(event).get("delta"), event.toString());
     }
 
     // ── the cause channel ───────────────────────────────────────────────
-
-    private static String eventOf(Channels collector, Trigger trigger,
-            Map<String, Object> runParams) {
-        return collector.triggers().record(trigger, runParams, true).toJson();
-    }
 
     /**
      * The cause channel has one spelling, and a missing cause writes nothing.
@@ -291,9 +282,9 @@ class TriggerRecordTest {
      */
     @Test
     void theCauseChannelHasOneSpellingAndAnHonestAbsence() {
-        assertTrue(new EffectEvent(EffectEvent.TAPPED).cause("E7").toJson()
+        assertTrue(new EffectEvent(EventType.TAPPED).cause("E7").toJson()
                 .contains("\"cause\":\"E7\""));
-        assertFalse(new EffectEvent(EffectEvent.TAPPED).cause(null).toJson()
+        assertFalse(new EffectEvent(EventType.TAPPED).cause(null).toJson()
                 .contains("cause"));
     }
 
@@ -310,12 +301,12 @@ class TriggerRecordTest {
         Card host = TestCards.build("Paralyze");
         Card source = TestCards.build("Sol Ring");
 
-        String json = eventOf(recording(tempDir), triggerOfMode("CounterAdded"),
+        Map<String, Object> event = eventOf(triggerOfMode("CounterAdded"),
                 Map.of("Card", host, "Source", source,
                         "CounterType", "P1P1", "CounterNum", 1));
 
-        assertTrue(json.contains(
-                "\"cause\":\"" + SnapshotBuilder.entityId(source) + "\""), json);
+        assertEquals(SnapshotBuilder.entityId(source), params(event).get("cause"),
+                event.toString());
     }
 
     /** A cause that is a spell is named by the card it is printed on. */
@@ -326,12 +317,12 @@ class TriggerRecordTest {
         SpellAbility cause = AbilityFactory.getAbility(
                 "DB$ Draw | Defined$ You | NumCards$ 1", caster);
 
-        String json = eventOf(recording(tempDir), triggerOfMode("ChangesZone"),
+        Map<String, Object> event = eventOf(triggerOfMode("ChangesZone"),
                 Map.of("Card", host, "Cause", cause,
                         "Origin", "Battlefield", "Destination", "Graveyard"));
 
-        assertTrue(json.contains(
-                "\"cause\":\"" + SnapshotBuilder.entityId(caster) + "\""), json);
+        assertEquals(SnapshotBuilder.entityId(caster), params(event).get("cause"),
+                event.toString());
     }
 
     /**
@@ -347,18 +338,18 @@ class TriggerRecordTest {
         Card named = TestCards.build("Sol Ring");
         Card softer = TestCards.build("Mox Pearl");
 
-        String json = eventOf(recording(tempDir), triggerOfMode("ChangesZone"),
+        Map<String, Object> event = eventOf(triggerOfMode("ChangesZone"),
                 Map.of("Card", host, "Cause", named, "Source", softer,
                         "Origin", "Battlefield", "Destination", "Graveyard"));
 
-        assertTrue(json.contains(
-                "\"cause\":\"" + SnapshotBuilder.entityId(named) + "\""), json);
+        assertEquals(SnapshotBuilder.entityId(named), params(event).get("cause"),
+                event.toString());
     }
 
     /**
      * Nothing caused an untap step, and the record says so by saying nothing.
      *
-     * <p>{@code Card.java:4864} runs the {@code Untaps} trigger on a map that
+     * <p>{@code Card.untap} runs the {@code Untaps} trigger on a map that
      * holds the card and no actor of any kind. Naming the host there would put
      * the permanent that untapped into a slot that means "what did this to it".
      */
@@ -366,10 +357,9 @@ class TriggerRecordTest {
     void anEventNothingCausedCarriesNoCause() {
         Card host = TestCards.build("Paralyze");
 
-        String json = eventOf(
-                recording(tempDir), triggerOfMode("Untaps"), Map.of("Card", host));
+        Map<String, Object> event = eventOf(triggerOfMode("Untaps"), Map.of("Card", host));
 
-        assertFalse(json.contains("\"cause\""), json);
+        assertFalse(event.toString().contains("cause"), event.toString());
     }
 
     // ── what an event says it was ───────────────────────────────────────
@@ -377,7 +367,7 @@ class TriggerRecordTest {
     /**
      * The cast spell is named by the only key the stack puts it under.
      *
-     * <p>{@code MagicStack.java:363} builds the {@code SpellCast} map from
+     * <p>{@code MagicStack.add} builds the {@code SpellCast} map from
      * {@code CardLKI}, {@code Activator} and {@code SpellAbility} and no
      * {@code Card} at all, so without it a {@code SpellCast} event names no
      * subject whatever. Last in the key order, because
@@ -390,11 +380,11 @@ class TriggerRecordTest {
         SpellAbility spell = AbilityFactory.getAbility(
                 "DB$ Draw | Defined$ You | NumCards$ 1", cast);
 
-        String json = eventOf(recording(tempDir), triggerOfMode("SpellCast"),
+        Map<String, Object> event = eventOf(triggerOfMode("SpellCast"),
                 Map.of("CardLKI", cast, "SpellAbility", spell));
 
-        assertTrue(json.contains(
-                "\"subjects\":[\"" + SnapshotBuilder.entityId(cast) + "\"]"), json);
+        assertEquals(List.of(SnapshotBuilder.entityId(cast)), event.get("subjects"),
+                event.toString());
     }
 
     /**
@@ -412,18 +402,18 @@ class TriggerRecordTest {
         Card attacker = TestCards.build("Sol Ring");
         Card defender = TestCards.build("Mox Pearl");
 
-        String json = eventOf(recording(tempDir), triggerOfMode("Attacks"),
+        Map<String, Object> event = eventOf(triggerOfMode("Attacks"),
                 Map.of("Attacker", attacker, "Attacked", defender));
 
-        assertTrue(json.contains("\"type\":\"attackers_declared\""), json);
-        assertTrue(json.contains(
-                "\"defender\":\"" + SnapshotBuilder.entityId(defender) + "\""), json);
+        assertEquals("attackers_declared", event.get("type"), event.toString());
+        assertEquals(SnapshotBuilder.entityId(defender), params(event).get("defender"),
+                event.toString());
     }
 
     /**
      * A mana trigger says which mana, in the slot the activation channel uses.
      *
-     * <p>{@code TapsForMana} was 534 events carrying only their mode. The
+     * <p>Without it a {@code TapsForMana} event carries only its mode. The
      * reading is the same {@code manaByColor} the mana-activation records use,
      * so a tapped land and a replaced mana production are comparable rows
      * rather than two spellings of one fact.
@@ -432,11 +422,11 @@ class TriggerRecordTest {
     void aManaTriggerSaysWhichManaWasProduced() {
         Card land = TestCards.build("Sol Ring");
 
-        String json = eventOf(recording(tempDir), triggerOfMode("TapsForMana"),
+        Map<String, Object> event = eventOf(triggerOfMode("TapsForMana"),
                 Map.of("Card", land, "Produced", "G G"));
 
-        assertTrue(json.contains("\"type\":\"mana_produced\""), json);
-        assertTrue(json.contains("\"mana_by_color\":{\"G\":2}"), json);
+        assertEquals("mana_produced", event.get("type"), event.toString());
+        assertEquals(Map.of("G", 2L), params(event).get("mana_by_color"), event.toString());
     }
 
     /** And a mana value it cannot read is absent rather than an empty object. */
@@ -444,10 +434,10 @@ class TriggerRecordTest {
     void anUnreadableManaValueLeavesTheSlotEmptyRatherThanClaimingNoMana() {
         Card land = TestCards.build("Sol Ring");
 
-        String json = eventOf(recording(tempDir), triggerOfMode("TapsForMana"),
+        Map<String, Object> event = eventOf(triggerOfMode("TapsForMana"),
                 Map.of("Card", land));
 
-        assertFalse(json.contains("mana_by_color"), json);
+        assertFalse(params(event).containsKey("mana_by_color"), event.toString());
     }
 
     /** Turning a card face up is a face change, and it says which face. */
@@ -455,11 +445,10 @@ class TriggerRecordTest {
     void turningACardFaceUpNamesTheFaceItTurnedTo() {
         Card card = TestCards.build("Sol Ring");
 
-        String json = eventOf(
-                recording(tempDir), triggerOfMode("TurnFaceUp"), Map.of("Card", card));
+        Map<String, Object> event = eventOf(triggerOfMode("TurnFaceUp"), Map.of("Card", card));
 
-        assertTrue(json.contains("\"type\":\"face_change\""), json);
-        assertTrue(json.contains("\"to_state\":\"face_up\""), json);
+        assertEquals("face_change", event.get("type"), event.toString());
+        assertEquals("face_up", params(event).get("to_state"), event.toString());
     }
 
     /**
@@ -480,16 +469,16 @@ class TriggerRecordTest {
         String attackerId = SnapshotBuilder.entityId(attacker);
         String blockerId = SnapshotBuilder.entityId(blocker);
 
-        String blocks = eventOf(recording(tempDir), triggerOfMode("Blocks"),
+        Map<String, Object> blocks = eventOf(triggerOfMode("Blocks"),
                 Map.of("Blocker", blocker, "Attackers", attacker));
-        assertTrue(blocks.contains("\"subjects\":[\"" + blockerId + "\"]"), blocks);
-        assertTrue(blocks.contains("\"blocked\":\"" + attackerId + "\""), blocks);
+        assertEquals(List.of(blockerId), blocks.get("subjects"), blocks.toString());
+        assertEquals(attackerId, params(blocks).get("blocked"), blocks.toString());
 
-        String blocked = eventOf(recording(tempDir),
+        Map<String, Object> blocked = eventOf(
                 triggerOfMode("AttackerBlockedByCreature"),
                 Map.of("Attacker", attacker, "Blocker", blocker));
-        assertTrue(blocked.contains("\"type\":\"became_blocked\""), blocked);
-        assertTrue(blocked.contains("\"subjects\":[\"" + attackerId + "\"]"), blocked);
-        assertTrue(blocked.contains("\"blockers\":[\"" + blockerId + "\"]"), blocked);
+        assertEquals("became_blocked", blocked.get("type"), blocked.toString());
+        assertEquals(List.of(attackerId), blocked.get("subjects"), blocked.toString());
+        assertEquals(List.of(blockerId), params(blocked).get("blockers"), blocked.toString());
     }
 }

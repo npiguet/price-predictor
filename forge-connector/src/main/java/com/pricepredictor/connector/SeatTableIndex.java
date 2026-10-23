@@ -17,7 +17,7 @@ import java.util.Random;
  * {@code draft_id;set_code;label;kind;Card1|Card2|...}. {@code kind} is
  * {@code deck} when the cards are a finished deck to play as given, or
  * {@code pool} when they are a seat's drafted pool, from which Forge's own
- * sealed builder produces the deck.
+ * drafted-pool builder ({@code BoosterDeckBuilder}) produces the deck.
  *
  * <p>Seats are grouped by {@code draft_id} into pods. A pairing is two distinct
  * seats of one pod, so pool and set quality are held constant within every
@@ -29,8 +29,43 @@ import java.util.Random;
  */
 public class SeatTableIndex {
 
-    public static final String KIND_DECK = "deck";
-    public static final String KIND_POOL = "pool";
+    /**
+     * How a seat's cards are to be read, as the seat table spells it.
+     *
+     * <p>The table's writer, {@code draft.domain.seat_table}, holds the other
+     * half of this vocabulary, so a spelling is changed on both sides or
+     * neither. A kind outside it is refused rather than read as a deck: a
+     * misspelt {@code pool} played as given would put an unbuilt pool in the
+     * tally under the seat's label.
+     */
+    public enum SeatKind {
+        /** A finished deck, played as given. */
+        DECK("deck"),
+        /** A drafted pool in pick order, built into a deck before play. */
+        POOL("pool");
+
+        private final String wireName;
+
+        SeatKind(String wireName) {
+            this.wireName = wireName;
+        }
+
+        /** The {@code kind} field a seat line carries. */
+        public String wireName() {
+            return wireName;
+        }
+
+        /** The kind {@code wireName} spells; throws on any other spelling. */
+        static SeatKind fromWireName(String wireName) {
+            for (SeatKind kind : values()) {
+                if (kind.wireName.equals(wireName)) {
+                    return kind;
+                }
+            }
+            throw new IllegalArgumentException(
+                    "seat kind must be 'deck' or 'pool', got '" + wireName + "'");
+        }
+    }
 
     /**
      * One parsed seat line.
@@ -38,18 +73,18 @@ public class SeatTableIndex {
      * @param draftId   Pod identifier; compared only for equality
      * @param setCode   MTG set code the pod drafted
      * @param label     Agent label; becomes {@code method_A} / {@code method_B}
-     * @param kind      {@link #KIND_DECK} or {@link #KIND_POOL}
+     * @param kind      How {@code cardNames} is to be read
      * @param cardNames A finished deck, or a drafted pool
      */
     public record SeatEntry(
             String draftId,
             String setCode,
             String label,
-            String kind,
+            SeatKind kind,
             List<String> cardNames) {
 
         public boolean isPool() {
-            return KIND_POOL.equals(kind);
+            return kind == SeatKind.POOL;
         }
     }
 
@@ -157,7 +192,13 @@ public class SeatTableIndex {
             throw new IllegalArgumentException(
                     "seat line needs 5 ';'-separated fields, got " + parts.length + ": " + line);
         }
+        SeatKind kind;
+        try {
+            kind = SeatKind.fromWireName(parts[3]);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(e.getMessage() + ": " + line, e);
+        }
         return new SeatEntry(
-                parts[0], parts[1], parts[2], parts[3], CardNameList.parse(parts[4]));
+                parts[0], parts[1], parts[2], kind, CardNameList.parse(parts[4]));
     }
 }

@@ -21,11 +21,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Four bus events Forge already fires, read the way the schema names them.
+ * Bus events Forge already fires, read the way the schema names them.
  *
  * <p>Energy is the subtle one: it is a player counter, so it arrives on
  * {@code GameEventPlayerCounters} rather than an event of its own, and
@@ -49,7 +51,7 @@ class BusEventsTest {
                         player, CounterEnumType.ENERGY, 0, 2));
 
         assertNotNull(event);
-        assertEquals(EffectEvent.ENERGY_CHANGE, event.type());
+        assertEquals(EventType.ENERGY_CHANGE, event.type());
         assertEquals(2, event.params().get("delta"));
         assertEquals(List.of("P" + player.getId()), event.subjects());
     }
@@ -101,7 +103,7 @@ class BusEventsTest {
     void daytimeBecomesADayNightEvent() {
         EffectEvent event = BusEvents.dayTime(new GameEventDayTimeChanged(false));
 
-        assertEquals(EffectEvent.DAY_NIGHT_CHANGED, event.type());
+        assertEquals(EventType.DAY_NIGHT_CHANGED, event.type());
         assertEquals("night", event.params().get("to"));
     }
 
@@ -125,7 +127,7 @@ class BusEventsTest {
 
         EffectEvent event = BusEvents.regenerated(new GameEventCardRegenerated(card));
 
-        assertEquals(EffectEvent.REGENERATED, event.type());
+        assertEquals(EventType.REGENERATED, event.type());
         assertEquals(List.of("E" + card.getId()), event.subjects());
     }
 
@@ -133,7 +135,7 @@ class BusEventsTest {
     void aShuffleNamesThePlayer() {
         EffectEvent event = BusEvents.libraryShuffled(new GameEventShuffle(player));
 
-        assertEquals(EffectEvent.LIBRARY_SHUFFLED, event.type());
+        assertEquals(EventType.LIBRARY_SHUFFLED, event.type());
         assertEquals(List.of("P" + player.getId()), event.subjects());
     }
 
@@ -169,7 +171,7 @@ class BusEventsTest {
 
         EffectEvent built = BusEvents.gameOutcome(event, game);
 
-        assertEquals(EffectEvent.PLAYER_WON, built.type());
+        assertEquals(EventType.PLAYER_WON, built.type());
         assertEquals(List.of(SnapshotBuilder.playerId(p1)), built.subjects());
     }
 
@@ -213,5 +215,50 @@ class BusEventsTest {
                 TestCards.build("Lightning Bolt"),
                 new Zone(ZoneType.Hand, TestCards.game()),
                 new Zone(ZoneType.Stack, TestCards.game()))));
+    }
+
+    // ── a completed move ────────────────────────────────────────────────
+
+    private static Zone zone(ZoneType type) {
+        return new Zone(type, TestCards.game());
+    }
+
+    /**
+     * A completed move says where the card came from as well as where it went.
+     *
+     * <p>{@code from_zone} is a documented parameter of the event type. The
+     * per-zone notification names one zone and not a move, so it is the
+     * completed move that carries both ends.
+     */
+    @Test
+    void aMoveNamesBothOfItsEnds() {
+        Card card = TestCards.build("Mountain");
+
+        EffectEvent moved = BusEvents.cardMoved(new GameEventCardChangeZone(
+                card, zone(ZoneType.Hand), zone(ZoneType.Battlefield)));
+
+        assertEquals(EventType.ZONE_CHANGE, moved.type());
+        String json = moved.toJson();
+        assertTrue(json.contains("\"from_zone\":\"hand\""), json);
+        assertTrue(json.contains("\"to_zone\":\"battlefield\""), json);
+        assertTrue(json.contains("\"E" + card.getId() + "\""), json);
+    }
+
+    /** A card entering the game from nowhere still names where it landed. */
+    @Test
+    void aCardArrivingFromNowhereStillNamesWhereItLanded() {
+        EffectEvent moved = BusEvents.cardMoved(new GameEventCardChangeZone(
+                TestCards.build("Mountain"), null, zone(ZoneType.Battlefield)));
+
+        String json = moved.toJson();
+        assertTrue(json.contains("\"to_zone\":\"battlefield\""), json);
+        assertFalse(json.contains("\"from_zone\""), json);
+    }
+
+    /** And a move with neither end is not a move this collector can describe. */
+    @Test
+    void aMoveWithNeitherEndIsNotRecorded() {
+        assertNull(BusEvents.cardMoved(
+                new GameEventCardChangeZone(TestCards.build("Mountain"), null, null)));
     }
 }

@@ -6,7 +6,8 @@ import com.pricepredictor.connector.AbilityType;
 import forge.game.replacement.ReplacementEffect;
 
 /**
- * Ability wrapping a Forge ReplacementEffect.
+ * The line of a Forge ReplacementEffect: its normalized {@code Description$}.
+ * A keyword's replacement renders as the keyword line instead, so it has none.
  */
 public record ReplacementAbilityEntry(String descriptionText) implements Ability {
 

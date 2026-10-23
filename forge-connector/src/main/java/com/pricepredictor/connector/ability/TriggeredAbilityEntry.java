@@ -12,8 +12,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Ability wrapping a Forge Trigger. Type is TRIGGERED, or REPLACEMENT if the trigger is static.
- * The execute SVar chain (if any) becomes child SpellEffect nodes via SpellEffect.fromChain().
+ * The line of a Forge Trigger, built from its {@code TriggerDescription$}. Type
+ * is TRIGGERED, or REPLACEMENT if the trigger is static.
+ *
+ * <p>The execute chain contributes text only where the description leaves it
+ * out: a charm or dice placeholder is expanded into option or outcome
+ * sub-lines, and a transparent execute's sub-ability descriptions are appended
+ * to the line itself rather than becoming children.
  */
 public record TriggeredAbilityEntry(AbilityType type, String descriptionText, List<Ability> subAbilities) implements Ability {
 
@@ -79,7 +84,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         // Guard: also skip ImmediateTrigger (processed separately) and ETBReplacement (registered
         // as replacement effects) to avoid duplicates (sigarda's_splendor concern).
         if (execute != null
-                && isTransparentSA(execute)
+                && !SpellAbilityUtils.hasOwnDescription(execute)
                 && execute.getApi() != ApiType.ImmediateTrigger
                 && !"ETBReplacement".equals(execute.getParam("Mode"))) {
             String extra = SpellAbilityUtils.chainText(execute);
@@ -88,20 +93,6 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
             }
         }
         return new TriggeredAbilityEntry(type, normalized, children);
-    }
-
-    /**
-     * Returns true when a SpellAbility has no description of its own (transparent).
-     * Transparent SAs are safe to walk: extra oracle text comes only from sub-abilities.
-     */
-    private static boolean isTransparentSA(SpellAbility sa) {
-        String spellDesc = sa.getParam("SpellDescription");
-        if (spellDesc != null && !spellDesc.isEmpty()) return false;
-        String trigDesc = sa.getParam("TriggerDescription");
-        if (trigDesc != null && !trigDesc.isEmpty()) return false;
-        String stackDesc = sa.getParam("StackDescription");
-        if (stackDesc != null && !stackDesc.isEmpty() && !stackDesc.equals("None")) return false;
-        return true;
     }
 
     /**

@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -61,11 +62,11 @@ final class EventBuffer {
      * contain a {@code regenerated} event and check whether any single card
      * carries two.
      */
-    static final Set<String> IDEMPOTENT_EVENTS = Set.of(
-            EffectEvent.ZONE_CHANGE, EffectEvent.TAPPED, EffectEvent.UNTAPPED,
-            EffectEvent.ATTACHED, EffectEvent.UNATTACHED, EffectEvent.PHASED,
-            EffectEvent.FACE_CHANGE, EffectEvent.DESTROYED,
-            EffectEvent.SACRIFICED, EffectEvent.REGENERATED);
+    static final Set<EventType> IDEMPOTENT_EVENTS = EnumSet.of(
+            EventType.ZONE_CHANGE, EventType.TAPPED, EventType.UNTAPPED,
+            EventType.ATTACHED, EventType.UNATTACHED, EventType.PHASED,
+            EventType.FACE_CHANGE, EventType.DESTROYED,
+            EventType.SACRIFICED, EventType.REGENERATED);
 
     private final List<EffectEvent> events = new ArrayList<>();
     /** The rendered lines of the state transitions filed so far. */
@@ -100,16 +101,6 @@ final class EventBuffer {
         }
         events.add(event);
         return true;
-    }
-
-    /**
-     * Add an event without checking it for a repeat, and without it making a
-     * later event a repeat: for an event whose repeat is judged in another
-     * buffer, as a forced resolution's state-based death is judged in the
-     * half it joins ({@code ForkCollector.splitByMode}).
-     */
-    void fileUnchecked(EffectEvent event) {
-        events.add(event);
     }
 
     /** The events filed so far, in order. */

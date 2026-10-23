@@ -15,7 +15,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.StringJoiner;
 
 /**
  * The coverage collector's castability consult.
@@ -130,11 +129,10 @@ public class CastabilityMain {
     }
 
     static String render(Map<String, Verdict> verdicts) {
-        StringJoiner joiner = new StringJoiner(",", "{", "}");
+        Json.ObjectWriter json = Json.object();
         for (Map.Entry<String, Verdict> entry : verdicts.entrySet()) {
-            joiner.add(Json.string(entry.getKey()) + ":"
-                    + Json.string(entry.getValue().wireName()));
+            json.value(entry.getKey(), entry.getValue().wireName());
         }
-        return joiner.toString();
+        return json.render();
     }
 }

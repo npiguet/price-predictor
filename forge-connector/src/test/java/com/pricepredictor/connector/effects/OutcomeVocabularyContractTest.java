@@ -66,7 +66,7 @@ class OutcomeVocabularyContractTest {
     }
 
     @Test
-    void everyEngineOutcomeTypeIsAnEffectEventType() throws IllegalAccessException {
+    void everyEngineOutcomeTypeIsAnEventType() throws IllegalAccessException {
         Class<?> engineOutcomes;
         try {
             engineOutcomes = Class.forName(PatchHooks.EFFECT_RECORD_OUTCOMES);
@@ -77,10 +77,12 @@ class OutcomeVocabularyContractTest {
 
         Set<String> engineTypes = stringConstants(engineOutcomes);
         Set<String> unknown = new TreeSet<>(engineTypes);
-        unknown.removeAll(stringConstants(EffectEvent.class));
+        for (EventType known : EventType.values()) {
+            unknown.remove(known.wireName());
+        }
 
         assertFalse(engineTypes.isEmpty(), "the engine declares its outcome type names");
-        assertTrue(unknown.isEmpty(), "outcome types EffectEvent does not know: " + unknown);
+        assertTrue(unknown.isEmpty(), "outcome types EventType does not know: " + unknown);
     }
 
     /**
@@ -117,7 +119,7 @@ class OutcomeVocabularyContractTest {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
             bracket.beginBracket(liveAbility);
             collectors.clauses().outcomeHandler().invoke(null, onOutcome(),
-                    new Object[]{liveAbility, EffectEvent.TEXT_CHANGE,
+                    new Object[]{liveAbility, EventType.TEXT_CHANGE.wireName(),
                             Map.of("subjects", List.of(card, player))});
             bracket.endBracket(liveAbility.getId(), false);
             bracket.onNextAction();

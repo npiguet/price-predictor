@@ -3,7 +3,6 @@ package com.pricepredictor.connector.effects;
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.Game;
 import forge.game.card.Card;
-import forge.game.event.GameEventTurnPhase;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
@@ -49,12 +48,12 @@ class FirstStatChangeTest {
         AtomicReference<Card> bears = new AtomicReference<>();
         List<String> records = ShardRun.observed(tempDir, game, bracket -> {
             bears.set(TestBoard.onBattlefield(game, caster, "Grizzly Bears"));
-            SpellAbility growth = spellOf(TestBoard.inHand(game, caster, "Giant Growth"), caster);
+            SpellAbility growth = TestBoard.spellOf(TestBoard.inHand(game, caster, "Giant Growth"), caster);
             growth.resetTargets();
             growth.getTargets().add(bears.get());
             game.getStack().add(growth);
             game.getStack().resolveStack();
-            game.fireEvent(new GameEventTurnPhase(caster, PhaseType.MAIN2, ""));
+            TestBoard.nextStep(game);
         });
 
         String shard = String.join("\n", records);
@@ -71,18 +70,12 @@ class FirstStatChangeTest {
         Game game = TestBoard.startedTwoPlayerGame(PhaseType.MAIN1);
         Player caster = game.getPlayers().get(0);
         Card bears = TestBoard.onBattlefield(game, caster, "Grizzly Bears");
-        SpellAbility growth = spellOf(TestBoard.inHand(game, caster, "Giant Growth"), caster);
+        SpellAbility growth = TestBoard.spellOf(TestBoard.inHand(game, caster, "Giant Growth"), caster);
         CollectionCaps caps = new CollectionCaps(2000, 0.1, 1, 0, List.of(), 0.0, 0.0);
 
         String shard = String.join("\n",
                 ShardRun.forked(tempDir, game, caps, 1L, growth).records());
         assertTrue(shard.contains("\"interventional\":true"), "no fork was written: " + shard);
         assertTrue(shard.contains(pumpOf(bears)), shard);
-    }
-
-    private static SpellAbility spellOf(Card card, Player owner) {
-        SpellAbility spell = card.getFirstSpellAbility();
-        spell.setActivatingPlayer(owner);
-        return spell;
     }
 }

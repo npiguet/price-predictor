@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.hash.Hashing;
 import forge.game.card.Card;
 import forge.game.staticability.StaticAbility;
 import forge.game.zone.ZoneType;
@@ -9,7 +10,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.StringJoiner;
 
 /**
  * One {@code continuous} record per static ability that is currently changing
@@ -87,14 +87,13 @@ final class ContinuousChannel {
         if (!allowContinuousRecord(String.valueOf(staticId), boardHash)) {
             return;
         }
-        StringJoiner rendered = new StringJoiner(",", "[", "]");
-        for (LayerContributions.Contribution contribution : contributions) {
-            rendered.add(contribution.toJson());
-        }
+        String rendered = Json.array(contributions, LayerContributions.Contribution::toJson);
         ProvenanceKey.Resolved acting = ProvenanceResolver.resolve(source);
         String state = live.snapshots().ofBoardWithout(staticId).render();
-        String payload = "{\"contributions\":" + rendered
-                + ",\"board_hash\":" + Json.string(boardHash) + "}";
+        String payload = Json.object()
+                .raw("contributions", rendered)
+                .value("board_hash", boardHash)
+                .render();
         // A second gate behind the per-board one, which cannot see this:
         // two *distinct* static ids -- a second copy of the same anthem,
         // two copies of one aura -- resolve to the same key, the same
@@ -116,6 +115,10 @@ final class ContinuousChannel {
      * <p>Names and computed power/toughness of everything in play. Two boards
      * that hash the same produce the same contributions, so the second record
      * would repeat the first exactly.
+     *
+     * <p>64-bit for the reason {@link RecordDedup} is: a collision coalesces
+     * a board the static has not been recorded on, silently dropping a record
+     * that was not a repeat.
      */
     private String boardHash() {
         StringBuilder shape = new StringBuilder();
@@ -124,7 +127,7 @@ final class ContinuousChannel {
                     .append(':').append(card.getNetPower())
                     .append('/').append(card.getNetToughness()).append(';');
         }
-        return Integer.toHexString(shape.toString().hashCode());
+        return Long.toHexString(Hashing.murmur3_128().hashUnencodedChars(shape).asLong());
     }
 
     /**

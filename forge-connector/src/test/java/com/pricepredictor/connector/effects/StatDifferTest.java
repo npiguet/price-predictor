@@ -38,7 +38,7 @@ class StatDifferTest {
         assertEquals(1, events.size());
         // Core, then super, then sub: the order the type line flattens in.
         EffectEvent event = events.get(0);
-        assertEquals(EffectEvent.TYPE_CHANGE, event.type());
+        assertEquals(EventType.TYPE_CHANGE, event.type());
         assertEquals(List.of(SnapshotBuilder.entityId(bears)), event.subjects());
         assertEquals(
                 Map.of("types_added", List.of("artifact", "legendary", "golem"),
@@ -58,7 +58,7 @@ class StatDifferTest {
 
         assertEquals(1, events.size());
         EffectEvent event = events.get(0);
-        assertEquals(EffectEvent.COLOR_CHANGE, event.type());
+        assertEquals(EventType.COLOR_CHANGE, event.type());
         assertEquals(List.of(SnapshotBuilder.entityId(bears)), event.subjects());
         assertEquals(
                 Map.of("colors", List.of("U", "R"), "colors_removed", List.of("G")),

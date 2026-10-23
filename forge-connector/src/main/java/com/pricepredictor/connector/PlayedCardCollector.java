@@ -18,11 +18,9 @@ import java.util.Map;
 
 /**
  * Per-game eventbus visitor that records every non-basic, non-token card
- * played by each side. Mirrors the working pattern in
- * {@code ../jumpstart-tierlist/.../JumpstartMatch.java#CardCollector}
- * (research.md Decision D-3).
+ * played by each side.
  *
- * <p>Listens to two events:
+ * <p>Listens to two events, because neither alone sees every played card:
  * <ol>
  *   <li>{@link GameEventCardChangeZone} filtered to
  *       {@code ZoneType.Battlefield} — catches permanents that resolved.</li>

@@ -3,7 +3,6 @@ package com.pricepredictor.connector;
 import forge.deck.Deck;
 import forge.item.PaperCard;
 
-import java.time.Instant;
 import java.util.List;
 
 /**
@@ -56,17 +55,14 @@ public class DraftGamePlayer {
 
         GamePlayer.PlayedMatch played = gamePlayer.playMatch(deckA, deckB);
 
-        MatchResult result = new MatchResult(
-                Instant.now(),
+        MatchResult result = MatchResult.of(
                 runId,
                 pairing.a().setCode(),
                 pairing.a().label(),
                 pairing.b().label(),
                 DeckMaterializer.names(deckA),
                 DeckMaterializer.names(deckB),
-                played.winnerSequence(),
-                played.playSequence(),
-                played.durationSeconds());
+                played);
 
         writer.write(result);
         return result;

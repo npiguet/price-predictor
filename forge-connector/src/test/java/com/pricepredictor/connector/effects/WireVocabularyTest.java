@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.replacement.ReplacementResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -75,5 +76,34 @@ class WireVocabularyTest {
     void eventDurations() {
         assertEquals(List.of("instant", "end_of_turn", "permanent"),
                 wireNames(EventDuration.values(), EventDuration::wireName));
+    }
+
+    /** {@code COMBAT_SUBSTEPS} in {@code effect_head_input.py}. */
+    @Test
+    void damageSteps() {
+        assertEquals(List.of("first_strike", "regular"),
+                wireNames(DamageStep.values(), DamageStep::wireName));
+    }
+
+    /**
+     * A rewrite record's {@code result}: Forge's {@code ReplacementResult} in
+     * lower snake case, which the readers bucket rewrites by.
+     */
+    @Test
+    void replacementResults() {
+        assertEquals(
+                List.of("replaced", "not_replaced", "prevented", "updated", "skipped"),
+                wireNames(ReplacementResult.values(), EffectRecord::rewriteResult));
+    }
+
+    /**
+     * The two {@code attributed_to} sentinels, {@code ATTRIBUTION_ROOT} and
+     * {@code ATTRIBUTION_UNRESOLVED} in {@code event_schema.py}; every other
+     * value is a clause index.
+     */
+    @Test
+    void attributionSentinels() {
+        assertEquals(List.of("root", "unresolved"),
+                List.of(EventAttribution.ROOT, EventAttribution.UNRESOLVED));
     }
 }

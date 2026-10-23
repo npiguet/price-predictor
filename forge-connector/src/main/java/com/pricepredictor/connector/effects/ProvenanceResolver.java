@@ -125,13 +125,11 @@ public final class ProvenanceResolver {
         CardTraitBase t = trait;
         UnresolvedReason reason = UnresolvedReason.UNINDEXABLE;
         for (int hop = 0; t != null && hop < MAX_HOPS && seen.add(t); hop++) {
-            // 1. Unwrap to something that could be a slice member.
             CardTraitBase unwrapped = unwrapped(t);
             if (unwrapped != t) {
                 t = unwrapped;
                 continue;
             }
-            // 2. The trigger or replacement that owns this ability.
             ProvenanceKey borne = ownerKey(t);
             if (borne != null) return new Resolved(borne, null);
             CardTraitBase next = runtimeOwner(t);
@@ -139,40 +137,33 @@ public final class ProvenanceResolver {
                 t = next;
                 continue;
             }
-            // 3. Granted: the donor's static, not the recipient's list.
             next = grantorOf(t);
             if (next != null) {
                 t = next;
                 continue;
             }
-            // 4. The trait where it stands.
             ProvenanceKey here = keyFor(t);
             if (here != null) return new Resolved(here, null);
-            // 5. A granted keyword's printed line is the donor's static.
             next = keywordGrantorOf(t);
             if (next != null) {
                 t = next;
                 continue;
             }
-            // 6. A trigger the engine spawned keys to the ability that spawned it.
             next = spawnerOf(t);
             if (next != null) {
                 t = next;
                 continue;
             }
-            // 7. The copy's original.
             next = originalOf(t);
             if (next != null) {
                 t = next;
                 continue;
             }
-            // 8. An effect card's printed line belongs to whatever made it.
             next = effectSourceOf(t);
             if (next != null) {
                 t = next;
                 continue;
             }
-            // 9. A trait a donor line granted out of one of its own SVars.
             ProvenanceKey granting = keyForGrantingLine(t);
             if (granting != null) return new Resolved(granting, null);
             reason = reasonFor(t);

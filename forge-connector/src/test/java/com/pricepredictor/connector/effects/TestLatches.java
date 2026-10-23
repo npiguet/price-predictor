@@ -5,9 +5,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Re-arms a report-once latch, so each test sees its own "did this print".
  *
- * <p>The latches are private statics that production sets once per JVM and
- * never clears, so a test reaches them reflectively rather than production
- * carrying a reset only tests would call.
+ * <p>The latches are private static {@link OnceWarning}s that production
+ * raises once per JVM and never clears, so a test reaches them reflectively
+ * rather than production carrying a reset only tests would call.
  */
 final class TestLatches {
 
@@ -18,7 +18,9 @@ final class TestLatches {
         try {
             var field = owner.getDeclaredField(latch);
             field.setAccessible(true);
-            ((AtomicBoolean) field.get(null)).set(false);
+            var raised = OnceWarning.class.getDeclaredField("raised");
+            raised.setAccessible(true);
+            ((AtomicBoolean) raised.get(field.get(null))).set(false);
         } catch (ReflectiveOperationException e) {
             throw new AssertionError(owner.getSimpleName() + " has no latch " + latch, e);
         }

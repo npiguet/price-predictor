@@ -2,7 +2,6 @@ package com.pricepredictor.connector.effects;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.StringJoiner;
 
 /**
  * Printed provenance of one runtime trait: which script file, which face, which
@@ -117,36 +116,33 @@ public record ProvenanceKey(
 
     /** Keys as the JSON array a record carries them in. */
     public static String toJsonArray(List<ProvenanceKey> keys) {
-        StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (ProvenanceKey key : keys) {
-            joiner.add(key.toJson());
-        }
-        return joiner.toString();
+        return Json.array(keys, ProvenanceKey::toJson);
     }
 
     /** The JSON object form used inside a record's {@code ability} array. */
     public String toJson() {
-        return "{\"script_file\":" + Json.string(scriptFile)
-                + ",\"face\":" + face
-                + ",\"trait_kind\":" + Json.string(traitKind.wireName())
-                + ",\"index_within_kind\":" + indexWithinKind
-                + optionJson() + "}";
+        return withFields(Json.object().value("script_file", scriptFile)).render();
     }
 
     /** The JSON object form used inside a sidecar, where the file is in the header. */
     public String toSidecarJson() {
-        return "{\"face\":" + face
-                + ",\"trait_kind\":" + Json.string(traitKind.wireName())
-                + ",\"index_within_kind\":" + indexWithinKind
-                + optionJson() + "}";
+        return withFields(Json.object()).render();
     }
 
     /**
-     * The {@code option} member, written only on a mode key: the Python reader
-     * spells the member the same way and omits it on a root key, so a gen-1
-     * sidecar and a gen-2 root key serialize byte for byte alike.
+     * The members both forms share, after whatever {@code json} already holds.
+     *
+     * <p>The {@code option} member is written only on a mode key: the Python
+     * reader spells the member the same way and omits it on a root key, so a
+     * gen-1 sidecar and a gen-2 root key serialize byte for byte alike.
      */
-    private String optionJson() {
-        return option == null ? "" : ",\"option\":" + option;
+    private Json.ObjectWriter withFields(Json.ObjectWriter json) {
+        json.value("face", face)
+                .value("trait_kind", traitKind.wireName())
+                .value("index_within_kind", indexWithinKind);
+        if (option != null) {
+            json.value("option", option);
+        }
+        return json;
     }
 }

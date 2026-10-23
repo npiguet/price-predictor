@@ -85,25 +85,11 @@ public final class PatchHooks {
 
         /**
          * A handler for this setter's listener, which hands {@code body} each
-         * of the {@link #callbacks} the engine makes.
-         *
-         * <p>Any other method the proxy is asked for, and a callback called
-         * with fewer arguments than its {@link Callback#arity}, answers null
-         * and does nothing, the way an absent hook would: a handler that
-         * threw instead would throw out of the engine's own call.
+         * of the {@link #callbacks} the engine makes, and which installs on
+         * this setter and no other.
          */
-        InvocationHandler listener(ListenerBody body) {
-            return (proxy, invoked, args) -> {
-                for (Callback callback : callbacks) {
-                    if (callback.methodName().equals(invoked.getName())) {
-                        if (args != null && args.length >= callback.arity()) {
-                            body.on(callback, new Args(args));
-                        }
-                        return null;
-                    }
-                }
-                return null;
-            };
+        Listener listener(ListenerBody body) {
+            return new Listener(this, body);
         }
 
         /** Call this static method, or answer null; see {@link PatchHooks#invokeStatic}. */
@@ -162,6 +148,46 @@ public final class PatchHooks {
 
         int arity() {
             return arity;
+        }
+    }
+
+    /**
+     * A handler built for one hook's listener, carrying that hook.
+     *
+     * <p>Carrying it is what lets a collector install the handler without
+     * naming the hook a second time. A handler built from one hook and
+     * installed on another hears none of the callbacks it dispatches on, and
+     * the channel behind it goes empty without a word; built and installed
+     * through the same {@link Hook}, the two cannot disagree.
+     *
+     * <p>Any other method the proxy is asked for, and a callback called with
+     * fewer arguments than its {@link Callback#arity}, answers null and does
+     * nothing, the way an absent hook would: a handler that threw instead
+     * would throw out of the engine's own call.
+     */
+    record Listener(Hook hook, ListenerBody body) implements InvocationHandler {
+
+        @Override
+        public Object invoke(Object proxy, Method invoked, Object[] args) {
+            for (Callback callback : hook.callbacks()) {
+                if (callback.methodName().equals(invoked.getName())) {
+                    if (args != null && args.length >= callback.arity()) {
+                        body.on(callback, new Args(args));
+                    }
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        /** Install this handler on its own hook, or do nothing; see {@link PatchHooks#install}. */
+        boolean install() {
+            return hook.install(this);
+        }
+
+        /** Remove whatever listener this handler's hook holds, or do nothing. */
+        void uninstall() {
+            hook.uninstall();
         }
     }
 

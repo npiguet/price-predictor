@@ -228,7 +228,7 @@ class RulesParserTest {
     }
 
     @Test
-    void variableXStaysUppercase() {
+    void applyCasingLowercasesTheTextButKeepsVariableXAndManaSymbols() {
         // Standalone X preserved
         assertEquals("-X: deal X damage", AbilityDescription.applyCasing("-X: Deal X damage"));
         assertEquals("+X/+0 until end of turn", AbilityDescription.applyCasing("+X/+0 until end of turn"));
@@ -573,10 +573,10 @@ class RulesParserTest {
                 firstNonCostIdx = i;
             }
         }
-        if (lastCostIdx >= 0 && firstNonCostIdx >= 0) {
-            assertTrue(lastCostIdx < firstNonCostIdx,
-                    "All cost lines should appear before non-cost lines: " + zeph.abilities());
-        }
+        assertTrue(lastCostIdx >= 0, "Zephyrim has cost lines: " + zeph.abilities());
+        assertTrue(firstNonCostIdx >= 0, "Zephyrim has non-cost lines: " + zeph.abilities());
+        assertTrue(lastCostIdx < firstNonCostIdx,
+                "All cost lines should appear before non-cost lines: " + zeph.abilities());
     }
 
     // --- Layout detection ---
@@ -715,11 +715,7 @@ class RulesParserTest {
         CardFace card = face("l/llanowar_elves.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        String desc = activated.get(0).descriptionText();
-        // Count occurrences of "add" — should appear exactly once
-        long addCount = desc.chars().mapToObj(i -> desc.substring(Math.max(0, desc.indexOf("add"))))
-                .count();
-        assertFalse(desc.matches(".*add.*add.*"), "Description should not contain duplicate text: " + desc);
+        assertOccursOnce(activated.get(0).descriptionText(), "add");
     }
 
     @Test
@@ -810,7 +806,7 @@ class RulesParserTest {
         assertTrue(options.get(1).formatLine(null).contains("gain 3 life"));
     }
 
-    // --- Pattern 3: Draft-only cards must not duplicate lines as text: fallback ---
+    // --- Draft-only cards ---
 
     @Test
     void draftOnlyCardNoDuplicateTextFallback() {
@@ -880,7 +876,7 @@ class RulesParserTest {
                 "Draft lines must precede triggered ability: " + card.abilities());
     }
 
-    // --- Pattern 1: ABILITY placeholder → choose-one charm expansion ---
+    // --- ABILITY placeholder → choose-one charm expansion ---
 
     @Test
     void chooseOneTriggerExpandsAbilityPlaceholder() {
@@ -902,7 +898,7 @@ class RulesParserTest {
                 "Option 2 must mention opponent losing counters: " + options);
     }
 
-    // --- Pattern A: Haunt keyword ---
+    // --- Haunt keyword ---
 
     @Test
     void hauntNonCreatureEmitsSpellEffectAndTriggers() {
@@ -937,7 +933,7 @@ class RulesParserTest {
                 "One TRIGGERED should be the haunted-dies trigger with effect: " + triggered);
     }
 
-    // --- Pattern B: Visit / Attraction keyword ---
+    // --- Visit / Attraction keyword ---
 
     /** Each visit attraction yields exactly one TRIGGERED, led by "visit —", with no SPELL children. */
     private Ability assertSingleVisitTrigger(String file, String effectText) {
@@ -953,7 +949,7 @@ class RulesParserTest {
         return visit;
     }
 
-    // --- Pattern 6: Visit duplicate suppression ---
+    // --- Visit duplicate suppression ---
 
     @ParameterizedTest(name = "{0}")
     @CsvSource({
@@ -980,7 +976,7 @@ class RulesParserTest {
         assertSingleVisitTrigger(file, effectText);
     }
 
-    // --- Pattern C: Dice roll ResultSubAbilities ---
+    // --- Dice roll ResultSubAbilities ---
 
     @Test
     void diceRollEmitsOutcomesWithVertReplaced() {
@@ -1034,7 +1030,7 @@ class RulesParserTest {
                 options.stream().map(Ability::descriptionText).toList());
     }
 
-    // --- Pattern 6: Activated dice-roll result sub-abilities as OPTION ---
+    // --- Activated dice-roll result sub-abilities as OPTION ---
 
     @Test
     void activatedDiceRollEmitsOutcomesAsOptions() {
@@ -1061,7 +1057,7 @@ class RulesParserTest {
                 "Should have '20 | ... library' option: " + options);
     }
 
-    // --- Pattern 4: Tribute "if tribute wasn't paid" trigger ---
+    // --- Tribute "if tribute wasn't paid" trigger ---
 
     @Test
     void tributeNotPaidTriggerIsIncluded() {
@@ -1078,7 +1074,7 @@ class RulesParserTest {
                 "One TRIGGERED should be the 'if tribute wasn't paid' effect: " + triggered);
     }
 
-    // --- Pattern 4: RepeatSubAbility chain walking ---
+    // --- RepeatSubAbility chain walking ---
 
     @Test
     void repeatSubAbilityDescriptionIsIncluded() {
@@ -1096,7 +1092,7 @@ class RulesParserTest {
                 "Output should contain spirit-token text from RepeatSubAbility: " + formatted);
     }
 
-    // --- Pattern 8a: Activated ability with description on SubAbility$ ---
+    // --- Activated ability with description on SubAbility$ ---
 
     @Test
     void activatedAbilityWithDescriptionOnSubAbility() {
@@ -1111,7 +1107,7 @@ class RulesParserTest {
                 "Activated ability text should include 'search': " + formatted);
     }
 
-    // --- Pattern 8b: Visit trigger with Charm overriding ability ---
+    // --- Visit trigger with Charm overriding ability ---
 
     @Test
     void visitCharmExpandsToOptionSubAbilities() {
@@ -1133,7 +1129,7 @@ class RulesParserTest {
                 "Should have a Balloon option: " + options);
     }
 
-    // --- Pattern 9a: Tiered charm — PrecostDesc prepended to option text ---
+    // --- Tiered charm — PrecostDesc prepended to option text ---
 
     @Test
     void tieredCharmIncludesPrecostDescInOptionText() {
@@ -1149,7 +1145,7 @@ class RulesParserTest {
                 "Tiered charm option should include 'Hellmasker': " + formatted);
     }
 
-    // --- Pattern 9b: MayEffectFromOpeningHand keyword ---
+    // --- MayEffectFromOpeningHand keyword ---
 
     @Test
     void mayEffectFromOpeningHandEmitsTriggeredAbility() {
@@ -1162,35 +1158,23 @@ class RulesParserTest {
                 "Should have a TRIGGERED ability containing 'may reveal': " + triggered);
     }
 
-    // --- Pattern J: Sub-ability text concatenated into activated line ---
+    // --- Sub-ability text concatenated into activated line ---
 
-    @Test
-    void activatedAbilitySubChainConcatenatedNotSplit() {
-        // fleshformer: oracle=1 line, so the converter must emit 1, not 2 (root + sub-ability):
-        // the sub-ability text is concatenated into the root line.
-        CardFace card = face("f/fleshformer.txt");
+    @ParameterizedTest
+    @CsvSource({"f/fleshformer.txt", "g/grinning_totem.txt"})
+    void activatedAbilitySubChainConcatenatedNotSplit(String file) {
+        // Oracle has one line, so the converter must emit 1 activated line, not 2
+        // (root + sub-ability): the sub-ability text is concatenated into the root line.
+        CardFace card = face(file);
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
-        assertEquals(1, activated.size(), "fleshformer should have exactly 1 ACTIVATED: " + card.abilities());
-        // No SPELL sub-abilities should exist (concatenated into root)
+        assertEquals(1, activated.size(), file + " should have exactly 1 ACTIVATED: " + card.abilities());
         long spellSubs = activated.get(0).subAbilities().stream()
                 .filter(a -> a.type() == AbilityType.SPELL).count();
         assertEquals(0, spellSubs,
                 "No SPELL sub-abilities should remain after concatenation: " + activated.get(0).subAbilities());
     }
 
-    @Test
-    void grinningSorcAbilityIsSingleLine() {
-        // grinning_totem: oracle=1 line; converter must not split into 2 spell lines.
-        CardFace card = face("g/grinning_totem.txt");
-        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
-        assertEquals(1, activated.size(), "grinning_totem should have exactly 1 ACTIVATED: " + card.abilities());
-        long spellSubs = activated.get(0).subAbilities().stream()
-                .filter(a -> a.type() == AbilityType.SPELL).count();
-        assertEquals(0, spellSubs,
-                "No SPELL sub-abilities after concatenation: " + activated.get(0).subAbilities());
-    }
-
-    // --- Pattern A: Triggered dice-roll ResultSubAbilities as OPTION ---
+    // --- Triggered dice-roll ResultSubAbilities as OPTION ---
 
     @Test
     void triggeredDiceRollEmitsOutcomesAsOptions() {
@@ -1209,11 +1193,11 @@ class RulesParserTest {
                 "Should have a TRIGGERED with OPTION sub-abilities: " + triggered);
         List<Ability> options = diceTriggered.subAbilities().stream()
                 .filter(a -> a.type() == AbilityType.OPTION).toList();
-        assertTrue(options.size() >= 2,
-                "Should have at least 2 OPTION sub-abilities for dice results: " + options);
+        assertEquals(3, options.size(),
+                "Should have one OPTION sub-ability per dice result range: " + options);
     }
 
-    // --- Pattern B: ETBReplacement / ImmediateTrigger no duplicates ---
+    // --- ETBReplacement / ImmediateTrigger no duplicates ---
 
     @Test
     void etbReplacementNoDuplicateSpellLine() {
@@ -1235,7 +1219,7 @@ class RulesParserTest {
                 "sigarda's_splendor should have no duplicate ability lines: " + formatted);
     }
 
-    // --- Pattern 7: CharmNum-based "choose N" header synthesis ---
+    // --- CharmNum-based "choose N" header synthesis ---
 
     @Test
     void chooseTwoCharmEmitsChooseTwoHeader() {
@@ -1272,7 +1256,7 @@ class RulesParserTest {
                 "Output should contain 'choose up to one': " + formatted);
     }
 
-    // --- Pattern F: Saga chapter content resolved from execute SVar ---
+    // --- Saga chapter content resolved from execute SVar ---
 
     @Test
     void sagaChapterWithHeaderOnlyTriggerDescriptionResolvesContent() {
@@ -1289,7 +1273,7 @@ class RulesParserTest {
         }), "At least one chapter should have effect text after em-dash: " + chapters);
     }
 
-    // --- Pattern E: Ward keyword classified as STATIC ---
+    // --- Ward keyword classified as STATIC ---
 
     @Test
     void wardKeywordClassifiedAsStatic() {
@@ -1303,7 +1287,7 @@ class RulesParserTest {
                 "Ward must NOT appear as TRIGGERED: " + card.abilities());
     }
 
-    // --- Pattern I: Missing spell effect after additional cost ---
+    // --- Spell effect after an additional cost ---
 
     @Test
     void sheoldredRestorationEmitsSpellEffect() {
@@ -1335,7 +1319,7 @@ class RulesParserTest {
                 "vincent's limit break options missing ModeCost: " + options);
     }
 
-    // --- Pattern 1 extension: ABILITY placeholder via nested structures ---
+    // --- ABILITY placeholder via nested structures ---
 
     @ParameterizedTest(name = "{0}")
     @CsvSource({
@@ -1365,7 +1349,8 @@ class RulesParserTest {
 
     @Test
     void hauntCharmExpandsAbilityPlaceholder() {
-        // Orzhov Pontiff: Haunt SVar is DB$ Charm, no SpellDescription → ABILITY stays unexpanded today
+        // Orzhov Pontiff: the Haunt SVar is a DB$ Charm with no SpellDescription, so the
+        // ABILITY placeholder expands to the charm's "choose one" header and its options.
         CardFace card = face("o/orzhov_pontiff.txt");
         // The haunted-dies triggered ability should mention "choose one", not "ABILITY"
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
@@ -1415,7 +1400,7 @@ class RulesParserTest {
         assertTrue(options.stream().anyMatch(o -> o.descriptionText().contains("20")));
     }
 
-    // --- Pattern 2: cost-reduction clause on keyword activated abilities ---
+    // --- Cost-reduction clause on keyword activated abilities ---
 
     @Test
     void specializeFacesFollowTheStateEnumOrderTheCollectorsUse() {
@@ -1459,7 +1444,7 @@ class RulesParserTest {
                 "Must include count clause: " + ability.descriptionText());
     }
 
-    // --- Pattern 3: Craft ability terse format ---
+    // --- Craft ability terse format ---
 
     @ParameterizedTest(name = "{0}")
     @CsvSource({
@@ -1490,7 +1475,7 @@ class RulesParserTest {
                 "Must not include verbose exile clause: " + craft.descriptionText());
     }
 
-    // --- Pattern 4: Missing secondary effects ---
+    // --- Secondary effects are not duplicated ---
 
     // Regression: delayed-trigger execute SVars must not bleed into the trigger description.
     // DelTrigBlocked/DelTrigBlocker have TriggerDescription$ which is already summarised
@@ -1501,12 +1486,7 @@ class RulesParserTest {
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertFalse(triggered.isEmpty(), "Should have TRIGGERED: " + card.abilities());
         for (Ability t : triggered) {
-            String desc = t.descriptionText();
-            // "1 damage" must appear exactly once — duplication would cause two occurrences.
-            int first = desc.indexOf("1 damage");
-            assertTrue(first >= 0, "Must contain '1 damage': " + desc);
-            assertEquals(-1, desc.indexOf("1 damage", first + 1),
-                    "Damage clause must not be duplicated: " + desc);
+            assertOccursOnce(t.descriptionText(), "1 damage");
         }
     }
 
@@ -1516,12 +1496,7 @@ class RulesParserTest {
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertFalse(triggered.isEmpty(), "Should have TRIGGERED: " + card.abilities());
         for (Ability t : triggered) {
-            String desc = t.descriptionText();
-            // "destroy" must appear exactly once — duplication would cause two occurrences.
-            int first = desc.indexOf("destroy");
-            assertTrue(first >= 0, "Must contain 'destroy': " + desc);
-            assertEquals(-1, desc.indexOf("destroy", first + 1),
-                    "Destroy clause must not be duplicated: " + desc);
+            assertOccursOnce(t.descriptionText(), "destroy");
         }
     }
 
@@ -1532,12 +1507,8 @@ class RulesParserTest {
         CardFace card = face("b/bifurcate.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
-        String desc = spells.get(0).descriptionText();
-        // "search" must appear exactly once (StackDescription duplication would cause two)
-        int first = desc.indexOf("search");
-        assertTrue(first >= 0, "Must contain 'search': " + desc);
-        assertEquals(-1, desc.indexOf("search", first + 1),
-                "search clause must not be duplicated: " + desc);
+        // A duplicated StackDescription would print the clause twice.
+        assertOccursOnce(spells.get(0).descriptionText(), "search");
     }
 
     // Regression: replacement-effect Description$ that exactly matches parent SpellDescription
@@ -1559,12 +1530,7 @@ class RulesParserTest {
         CardFace card = face("e/energy_arc.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
-        String desc = spells.get(0).descriptionText();
-        // "prevent" must appear exactly once
-        int first = desc.indexOf("prevent");
-        assertTrue(first >= 0, "Must contain 'prevent': " + desc);
-        assertEquals(-1, desc.indexOf("prevent", first + 1),
-                "prevent clause must not be duplicated: " + desc);
+        assertOccursOnce(spells.get(0).descriptionText(), "prevent");
     }
 
     // Regression: replacement-effect Description$ containing Forge placeholder EFFECTSOURCE
@@ -1574,12 +1540,8 @@ class RulesParserTest {
         CardFace card = face("d/delirium.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
-        String formatted = rendered(card);
-        // "prevent" must appear exactly once (from SpellDescription, not from replacement SVar)
-        int first = formatted.indexOf("prevent");
-        assertTrue(first >= 0, "Must contain 'prevent': " + formatted);
-        assertEquals(-1, formatted.indexOf("prevent", first + 1),
-                "prevent clause from EFFECTSOURCE replacement must not duplicate: " + formatted);
+        // Once, from the SpellDescription, and never again from the replacement SVar.
+        assertOccursOnce(rendered(card), "prevent");
     }
 
     // Regression: a trigger SVar referenced in DB$ Effect.Triggers$ that has TriggerZones$
@@ -1608,10 +1570,8 @@ class RulesParserTest {
         // The single SPELL ability has a nested sub-ability chain representing all 3 effects.
         // Rendering must produce all 3 repetitions (not deduplicated away).
         String formatted = rendered(card);
-        // Count occurrences of "+3/+3" — must appear 3 times
-        int count = 0, idx = 0;
-        while ((idx = formatted.indexOf("+3/+3", idx)) >= 0) { count++; idx++; }
-        assertEquals(3, count, "All 3 identical pump effects must be present: " + formatted);
+        assertEquals(3, occurrences(formatted, "+3/+3"),
+                "All 3 identical pump effects must be present: " + formatted);
     }
 
     @Test
@@ -1747,7 +1707,7 @@ class RulesParserTest {
                 "Each of the two hexproof keywords must produce its own static line: " + statics);
     }
 
-    // --- Pattern 8: Missing spell description / Pattern 9: NICKNAME / Pattern 10: Developer note ---
+    // --- Spells without a description, NICKNAME, developer notes ---
 
     @Test
     void crashingWaveAdditionalCostPresentNoSpellEffect() {
@@ -1787,20 +1747,28 @@ class RulesParserTest {
                     "NICKNAME must not remain in output: " + activated);
     }
 
-    @Test
-    void developerNoteStrippedFromTextField() {
+    @ParameterizedTest
+    @CsvSource({"c/celestine_cave_witch.txt", "g/goblin_polka_band.txt"})
+    void developerNoteStrippedFromTextField(String file) {
         // Text:[Developer's note: …] is not oracle content; must not be emitted.
-        var card = face("c/celestine_cave_witch.txt");
-        assertNull(card.text(), "Developer's note should produce null text field, got: " + card.text());
-    }
-
-    @Test
-    void goblinPolkaBandDeveloperNoteStripped() {
-        var card = face("g/goblin_polka_band.txt");
+        var card = face(file);
         assertNull(card.text(), "Developer's note should produce null text field, got: " + card.text());
     }
 
     // --- Helpers ---
+
+    private static int occurrences(String text, String needle) {
+        int found = 0;
+        for (int at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1)) {
+            found++;
+        }
+        return found;
+    }
+
+    /** {@code needle} appears in {@code text}, and only once: a duplicated clause would repeat it. */
+    private static void assertOccursOnce(String text, String needle) {
+        assertEquals(1, occurrences(text, needle), "'" + needle + "' must appear exactly once: " + text);
+    }
 
     private void assertCostsBeforeSpells(CardFace card) {
         var abilities = card.abilities();

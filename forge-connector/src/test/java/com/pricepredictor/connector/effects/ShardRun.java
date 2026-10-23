@@ -90,7 +90,14 @@ final class ShardRun {
     /** The same, for a match whose random seat is {@code randomSeatPlayerId}. */
     static List<String> recordsWithRandomSeat(
             Path dir, Game game, String randomSeatPlayerId, Body body) throws Throwable {
-        return readShard(shardOf(dir, game, CollectionCaps.defaults(), randomSeatPlayerId, body));
+        return records(dir, game, CollectionCaps.defaults(), randomSeatPlayerId, body);
+    }
+
+    /** The same, under caps of the test's choosing. */
+    static List<String> records(
+            Path dir, Game game, CollectionCaps caps, String randomSeatPlayerId, Body body)
+            throws Throwable {
+        return readShard(shardOf(dir, game, caps, randomSeatPlayerId, body));
     }
 
     private static Path shardOf(

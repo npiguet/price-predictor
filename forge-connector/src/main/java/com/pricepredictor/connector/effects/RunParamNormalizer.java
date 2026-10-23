@@ -91,7 +91,7 @@ final class RunParamNormalizer {
      * Forge reports it through the damage keys, and an event that says
      * {@code damage_dealt} with no amount is not what happened.
      */
-    private static String typeOf(String mode, Map<String, Object> byName) {
+    private static EventType typeOf(String mode, Map<String, Object> byName) {
         // Checked before the lookup rather than left to getOrDefault:
         // EVENT_BY_MODE is a Map.of, which throws on a null key instead of
         // answering the default. A trait whose getMode() is absent -- a hook
@@ -99,13 +99,13 @@ final class RunParamNormalizer {
         // would take that NPE inside a dynamic proxy, and the engine would
         // surface it as an UndeclaredThrowableException in the middle of
         // canRunTrigger.
-        String type = mode == null
-                ? EffectEvent.STATE_FLAG_CHANGE
-                : EVENT_BY_MODE.getOrDefault(mode, EffectEvent.STATE_FLAG_CHANGE);
-        if (EffectEvent.DAMAGE_DEALT.equals(type)
+        EventType type = mode == null
+                ? EventType.STATE_FLAG_CHANGE
+                : EVENT_BY_MODE.getOrDefault(mode, EventType.STATE_FLAG_CHANGE);
+        if (type == EventType.DAMAGE_DEALT
                 && !byName.containsKey("DamageAmount")
                 && byName.containsKey("PreventedAmount")) {
-            return EffectEvent.DAMAGE_PREVENTED;
+            return EventType.DAMAGE_PREVENTED;
         }
         return type;
     }
@@ -236,73 +236,73 @@ final class RunParamNormalizer {
     private static void normalizeParams(
             EffectEvent event, String mode, Map<String, Object> byName) {
         switch (event.type()) {
-            case EffectEvent.ZONE_CHANGE -> {
+            case ZONE_CHANGE -> {
                 event.param("from_zone", zoneName(byName.get("Origin")));
                 event.param("to_zone", zoneName(byName.get("Destination")));
             }
-            case EffectEvent.DAMAGE_DEALT -> {
+            case DAMAGE_DEALT -> {
                 event.param("amount", intOf(byName.get("DamageAmount")));
                 Boolean combat = boolOf(byName.get("IsCombatDamage"));
                 event.param("combat", combat != null
                         ? combat : boolOf(byName.get("IsCombat")));
                 event.param("source", subjectOf(byName.get("DamageSource")));
             }
-            case EffectEvent.DAMAGE_PREVENTED -> {
+            case DAMAGE_PREVENTED -> {
                 event.param("amount", intOf(byName.get("PreventedAmount")));
                 event.param("source", subjectOf(byName.get("DamageSource")));
             }
-            case EffectEvent.DESTROYED ->
+            case DESTROYED ->
                     event.param("regenerable", boolOf(byName.get("Regeneration")));
-            case EffectEvent.COUNTER_CHANGE -> counterParams(event, byName);
+            case COUNTER_CHANGE -> counterParams(event, byName);
             // "Amount" last: it is how the replacement side spells the same
             // quantity the trigger side calls LifeAmount, and without it a
             // life-total replacement carries no number to differ in.
-            case EffectEvent.LIFE_CHANGE -> event.param(
+            case LIFE_CHANGE -> event.param(
                     "delta",
                     firstInt(byName, "LifeAmount", "LifeGained", "Amount"));
-            case EffectEvent.CARD_DRAWN, EffectEvent.CARD_MILLED,
-                    EffectEvent.CARD_DISCARDED ->
+            case CARD_DRAWN, CARD_MILLED,
+                    CARD_DISCARDED ->
                     event.param("count", firstInt(byName, "Number", "Num"));
             // Scry and Surveil each spell their own count, and neither is
             // Number: read under the general names alone this type carried no
             // count at all.
-            case EffectEvent.CARD_LOOKED_AT -> {
+            case CARD_LOOKED_AT -> {
                 event.param("count", firstInt(
                         byName, "ScryNum", "SurveilNum", "Number", "Num"));
                 event.param("from_zone", zoneName(byName.get("Origin")));
             }
-            case EffectEvent.POISON_CHANGE -> event.param(
+            case POISON_CHANGE -> event.param(
                     "delta", firstInt(byName, "Amount", "Num", "Number"));
-            case EffectEvent.MANA_PRODUCED, EffectEvent.MANA_LOST ->
+            case MANA_PRODUCED, MANA_LOST ->
                     event.param("mana_by_color", manaOf(byName));
-            case EffectEvent.PHASED ->
+            case PHASED ->
                     // Two modes, one type, and the direction is the whole of
                     // the difference between them.
                     event.param("out", !"PhaseIn".equals(mode));
-            case EffectEvent.ATTACHED ->
+            case ATTACHED ->
                     event.param("attached_to", firstRef(
                             byName, "AttachTarget", "Attached", "Card"));
-            case EffectEvent.UNATTACHED ->
+            case UNATTACHED ->
                     event.param("detached_from", firstRef(
                             byName, "AttachTarget", "Attached", "Card"));
-            case EffectEvent.ATTACKERS_DECLARED ->
+            case ATTACKERS_DECLARED ->
                     // Attacked first: CombatUtil.checkDeclaredAttacker spells
                     // the entity this creature attacked that way and no other.
                     event.param("defender", firstRef(
                             byName, "Attacked", "Defender", "AttackedTarget",
                             "DefendingPlayer", "Defenders"));
-            case EffectEvent.BLOCKERS_DECLARED ->
+            case BLOCKERS_DECLARED ->
                     event.param("blocked", firstRef(
                             byName, "Attackers", "Attacker"));
-            case EffectEvent.BECAME_BLOCKED ->
+            case BECAME_BLOCKED ->
                     event.param("blockers", refList(byName, "Blockers", "Blocker"));
-            case EffectEvent.FACE_CHANGE ->
+            case FACE_CHANGE ->
                     event.param("to_state", faceState(mode));
-            case EffectEvent.PLAYER_LOST ->
+            case PLAYER_LOST ->
                     event.param("reason", textOf(byName.get("LoseReason")));
-            case EffectEvent.SPELL_COPIED ->
+            case SPELL_COPIED ->
                     event.param("count", firstInt(byName, "Number", "Num"));
-            case EffectEvent.TOKEN_CREATED -> event.param(
+            case TOKEN_CREATED -> event.param(
                     "count", firstInt(byName, "TokenNum", "Number", "Num"));
             default -> {
                 // Tapped, untapped, phased, spell_cast and the generic outcome
@@ -516,17 +516,17 @@ final class RunParamNormalizer {
      * Forge names engine hooks, so only some pairs are the same thing; the rest
      * carry their mode as a parameter and take the generic type.
      */
-    private static final Map<String, String> EVENT_BY_MODE = Map.ofEntries(
-            Map.entry("ChangesZone", EffectEvent.ZONE_CHANGE),
-            Map.entry("Moved", EffectEvent.ZONE_CHANGE),
-            Map.entry("Destroy", EffectEvent.DESTROYED),
-            Map.entry("Destroyed", EffectEvent.DESTROYED),
-            Map.entry("Sacrificed", EffectEvent.SACRIFICED),
-            Map.entry("DamageDone", EffectEvent.DAMAGE_DEALT),
-            Map.entry("DamageDealtOnce", EffectEvent.DAMAGE_DEALT),
-            Map.entry("DamageAll", EffectEvent.DAMAGE_DEALT),
-            Map.entry("Drawn", EffectEvent.CARD_DRAWN),
-            Map.entry("Draw", EffectEvent.CARD_DRAWN),
+    private static final Map<String, EventType> EVENT_BY_MODE = Map.ofEntries(
+            Map.entry("ChangesZone", EventType.ZONE_CHANGE),
+            Map.entry("Moved", EventType.ZONE_CHANGE),
+            Map.entry("Destroy", EventType.DESTROYED),
+            Map.entry("Destroyed", EventType.DESTROYED),
+            Map.entry("Sacrificed", EventType.SACRIFICED),
+            Map.entry("DamageDone", EventType.DAMAGE_DEALT),
+            Map.entry("DamageDealtOnce", EventType.DAMAGE_DEALT),
+            Map.entry("DamageAll", EventType.DAMAGE_DEALT),
+            Map.entry("Drawn", EventType.CARD_DRAWN),
+            Map.entry("Draw", EventType.CARD_DRAWN),
             // The replacement side's spelling of the same event. This table was
             // written from the trigger vocabulary, so 31 of Forge's 42
             // ReplacementTypes fell through to the generic outcome carrying
@@ -535,54 +535,54 @@ final class RunParamNormalizer {
             // dropped as an identity pair. Only the five whose quantity a
             // reading above already picks up are added here; the rest are what
             // the identity tally is instrumented to answer.
-            Map.entry("DrawCards", EffectEvent.CARD_DRAWN),
-            Map.entry("Discarded", EffectEvent.CARD_DISCARDED),
-            Map.entry("Milled", EffectEvent.CARD_MILLED),
-            Map.entry("Mill", EffectEvent.CARD_MILLED),
-            Map.entry("LifeGained", EffectEvent.LIFE_CHANGE),
-            Map.entry("LifeLost", EffectEvent.LIFE_CHANGE),
-            Map.entry("GainLife", EffectEvent.LIFE_CHANGE),
-            Map.entry("LoseLife", EffectEvent.LIFE_CHANGE),
-            Map.entry("LifeReduced", EffectEvent.LIFE_CHANGE),
-            Map.entry("PayLife", EffectEvent.LIFE_CHANGE),
-            Map.entry("Poisoned", EffectEvent.POISON_CHANGE),
-            Map.entry("CounterAdded", EffectEvent.COUNTER_CHANGE),
-            Map.entry("CounterAddedOnce", EffectEvent.COUNTER_CHANGE),
-            Map.entry("CounterRemoved", EffectEvent.COUNTER_CHANGE),
-            Map.entry("AddCounter", EffectEvent.COUNTER_CHANGE),
-            Map.entry("RemoveCounter", EffectEvent.COUNTER_CHANGE),
-            Map.entry("Taps", EffectEvent.TAPPED),
-            Map.entry("TapsForMana", EffectEvent.MANA_PRODUCED),
-            Map.entry("Untaps", EffectEvent.UNTAPPED),
-            Map.entry("Attached", EffectEvent.ATTACHED),
-            Map.entry("Unattach", EffectEvent.UNATTACHED),
-            Map.entry("SpellCast", EffectEvent.SPELL_CAST),
-            Map.entry("SpellAbilityCast", EffectEvent.SPELL_CAST),
-            Map.entry("Countered", EffectEvent.SPELL_COUNTERED),
-            Map.entry("TokenCreated", EffectEvent.TOKEN_CREATED),
-            Map.entry("CreateToken", EffectEvent.TOKEN_CREATED),
-            Map.entry("TokenCreatedOnce", EffectEvent.TOKEN_CREATED),
-            Map.entry("Attackers", EffectEvent.ATTACKERS_DECLARED),
-            Map.entry("AttackersDeclared", EffectEvent.ATTACKERS_DECLARED),
+            Map.entry("DrawCards", EventType.CARD_DRAWN),
+            Map.entry("Discarded", EventType.CARD_DISCARDED),
+            Map.entry("Milled", EventType.CARD_MILLED),
+            Map.entry("Mill", EventType.CARD_MILLED),
+            Map.entry("LifeGained", EventType.LIFE_CHANGE),
+            Map.entry("LifeLost", EventType.LIFE_CHANGE),
+            Map.entry("GainLife", EventType.LIFE_CHANGE),
+            Map.entry("LoseLife", EventType.LIFE_CHANGE),
+            Map.entry("LifeReduced", EventType.LIFE_CHANGE),
+            Map.entry("PayLife", EventType.LIFE_CHANGE),
+            Map.entry("Poisoned", EventType.POISON_CHANGE),
+            Map.entry("CounterAdded", EventType.COUNTER_CHANGE),
+            Map.entry("CounterAddedOnce", EventType.COUNTER_CHANGE),
+            Map.entry("CounterRemoved", EventType.COUNTER_CHANGE),
+            Map.entry("AddCounter", EventType.COUNTER_CHANGE),
+            Map.entry("RemoveCounter", EventType.COUNTER_CHANGE),
+            Map.entry("Taps", EventType.TAPPED),
+            Map.entry("TapsForMana", EventType.MANA_PRODUCED),
+            Map.entry("Untaps", EventType.UNTAPPED),
+            Map.entry("Attached", EventType.ATTACHED),
+            Map.entry("Unattach", EventType.UNATTACHED),
+            Map.entry("SpellCast", EventType.SPELL_CAST),
+            Map.entry("SpellAbilityCast", EventType.SPELL_CAST),
+            Map.entry("Countered", EventType.SPELL_COUNTERED),
+            Map.entry("TokenCreated", EventType.TOKEN_CREATED),
+            Map.entry("CreateToken", EventType.TOKEN_CREATED),
+            Map.entry("TokenCreatedOnce", EventType.TOKEN_CREATED),
+            Map.entry("Attackers", EventType.ATTACKERS_DECLARED),
+            Map.entry("AttackersDeclared", EventType.ATTACKERS_DECLARED),
             // Attacks is one creature being declared as an attacker, which is
             // exactly what attackers_declared names, and one of the heaviest
             // trait-derived modes. Under the generic type it would carry
             // nothing but its own name; as attackers_declared it carries the
             // defender.
-            Map.entry("Attacks", EffectEvent.ATTACKERS_DECLARED),
-            Map.entry("Blocks", EffectEvent.BLOCKERS_DECLARED),
+            Map.entry("Attacks", EventType.ATTACKERS_DECLARED),
+            Map.entry("Blocks", EventType.BLOCKERS_DECLARED),
             // Retargeted: the subject of an AttackerBlocked event is the
             // attacker, not the blocker, so blockers_declared would put the wrong
             // creature in the slot named "blocked". became_blocked is the type
             // whose subject is the attacker and whose param is the blockers.
-            Map.entry("AttackerBlocked", EffectEvent.BECAME_BLOCKED),
-            Map.entry("AttackerBlockedByCreature", EffectEvent.BECAME_BLOCKED),
-            Map.entry("TurnFaceUp", EffectEvent.FACE_CHANGE),
-            Map.entry("Shuffled", EffectEvent.LIBRARY_SHUFFLED),
-            Map.entry("Scry", EffectEvent.CARD_LOOKED_AT),
-            Map.entry("Surveil", EffectEvent.CARD_LOOKED_AT),
-            Map.entry("PhaseOut", EffectEvent.PHASED),
-            Map.entry("PhaseIn", EffectEvent.PHASED),
+            Map.entry("AttackerBlocked", EventType.BECAME_BLOCKED),
+            Map.entry("AttackerBlockedByCreature", EventType.BECAME_BLOCKED),
+            Map.entry("TurnFaceUp", EventType.FACE_CHANGE),
+            Map.entry("Shuffled", EventType.LIBRARY_SHUFFLED),
+            Map.entry("Scry", EventType.CARD_LOOKED_AT),
+            Map.entry("Surveil", EventType.CARD_LOOKED_AT),
+            Map.entry("PhaseOut", EventType.PHASED),
+            Map.entry("PhaseIn", EventType.PHASED),
             // ── the replacement side's own spellings ────────────────────
             // ReplacementType names its modes differently from TriggerType,
             // and the entries above follow the trigger vocabulary. A
@@ -590,18 +590,18 @@ final class RunParamNormalizer {
             // carries nothing but its mode -- and an event with no value in it
             // cannot differ from itself, so the record reads as a rewrite of
             // nothing however much the replacement changed.
-            Map.entry("Untap", EffectEvent.UNTAPPED),
-            Map.entry("Tap", EffectEvent.TAPPED),
-            Map.entry("DealtDamage", EffectEvent.DAMAGE_DEALT),
-            Map.entry("Counter", EffectEvent.SPELL_COUNTERED),
-            Map.entry("CopySpell", EffectEvent.SPELL_COPIED),
-            Map.entry("ProduceMana", EffectEvent.MANA_PRODUCED),
-            Map.entry("LoseMana", EffectEvent.MANA_LOST),
-            Map.entry("Transform", EffectEvent.FACE_CHANGE),
-            Map.entry("DeclareBlocker", EffectEvent.BLOCKERS_DECLARED),
-            Map.entry("RollDice", EffectEvent.DICE_ROLLED),
-            Map.entry("GameWin", EffectEvent.PLAYER_WON),
-            Map.entry("GameLoss", EffectEvent.PLAYER_LOST));
+            Map.entry("Untap", EventType.UNTAPPED),
+            Map.entry("Tap", EventType.TAPPED),
+            Map.entry("DealtDamage", EventType.DAMAGE_DEALT),
+            Map.entry("Counter", EventType.SPELL_COUNTERED),
+            Map.entry("CopySpell", EventType.SPELL_COPIED),
+            Map.entry("ProduceMana", EventType.MANA_PRODUCED),
+            Map.entry("LoseMana", EventType.MANA_LOST),
+            Map.entry("Transform", EventType.FACE_CHANGE),
+            Map.entry("DeclareBlocker", EventType.BLOCKERS_DECLARED),
+            Map.entry("RollDice", EventType.DICE_ROLLED),
+            Map.entry("GameWin", EventType.PLAYER_WON),
+            Map.entry("GameLoss", EventType.PLAYER_LOST));
 
     /**
      * Forge's produced-mana string as counts per colour letter.

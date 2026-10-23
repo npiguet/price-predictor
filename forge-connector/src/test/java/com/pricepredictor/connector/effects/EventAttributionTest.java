@@ -75,17 +75,6 @@ class EventAttributionTest {
     }
 
     /**
-     * The sentinels are spelled as Python's {@code ATTRIBUTION_ROOT} and
-     * {@code ATTRIBUTION_UNRESOLVED} in {@code event_schema.py} spell them; a
-     * corpus on disk carries these literals, so neither side may drift.
-     */
-    @Test
-    void theSentinelsAreSpelledAsPythonSpellsThem() {
-        assertEquals("root", EventAttribution.ROOT);
-        assertEquals("unresolved", EventAttribution.UNRESOLVED);
-    }
-
-    /**
      * A clause with no line above it names nothing a reader could join to.
      *
      * <p>Its index counts clauses of a chain this collector never saw, so the
@@ -121,7 +110,7 @@ class EventAttributionTest {
         AbilitySub second = (AbilitySub) root.getSubAbility().getSubAbility();
 
         String json = EventAttribution.stampAt(
-                new EffectEvent(EffectEvent.CARD_DRAWN).subject("P0"),
+                new EffectEvent(EventType.CARD_DRAWN).subject("P0"),
                 root, second, null).toJson();
 
         assertTrue(json.contains("\"attributed_to\":\"1\""), json);
@@ -143,9 +132,9 @@ class EventAttributionTest {
                         + " | SubAbility$ DBPump", host);
 
         assertEquals(EventDuration.PERMANENT,
-                EventAttribution.duration(root, root.getSubAbility(), EffectEvent.PT_CHANGE));
+                EventAttribution.duration(root, root.getSubAbility(), EventType.PT_CHANGE));
         assertEquals(EventDuration.INSTANT,
-                EventAttribution.duration(root, root, EffectEvent.LIFE_CHANGE));
+                EventAttribution.duration(root, root, EventType.LIFE_CHANGE));
     }
 
     /**
@@ -162,14 +151,14 @@ class EventAttributionTest {
                 "SP$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1", host);
 
         assertEquals(EventDuration.END_OF_TURN,
-                EventAttribution.duration(pump, pump, EffectEvent.PT_CHANGE));
+                EventAttribution.duration(pump, pump, EventType.PT_CHANGE));
         assertEquals(EventDuration.PERMANENT,
-                EventAttribution.duration(counter, counter, EffectEvent.PT_CHANGE));
+                EventAttribution.duration(counter, counter, EventType.PT_CHANGE));
         assertEquals(EventDuration.INSTANT,
-                EventAttribution.duration(pump, pump, EffectEvent.DAMAGE_DEALT));
+                EventAttribution.duration(pump, pump, EventType.DAMAGE_DEALT));
 
         String json = EventAttribution.stampAt(
-                new EffectEvent(EffectEvent.PT_CHANGE).subject("E1"), pump, pump, null).toJson();
+                new EffectEvent(EventType.PT_CHANGE).subject("E1"), pump, pump, null).toJson();
         assertTrue(json.contains("\"duration\":\"end_of_turn\""), json);
     }
 
@@ -184,7 +173,7 @@ class EventAttributionTest {
         assertNull(EventAttribution.cause(null, null));
 
         String json = EventAttribution.stamp(
-                new EffectEvent(EffectEvent.UNTAPPED).subject("E7"), null, null)
+                new EffectEvent(EventType.UNTAPPED).subject("E7"), null, null)
                 .toJson();
 
         assertFalse(json.contains("cause"), json);

@@ -193,6 +193,9 @@ public class RulesParser {
         return recorder;
     }
 
+    /** A basic-typed face's runtime mana ability, with the key it is recorded under. */
+    private record LandManaTrait(SpellAbility ability, ProvenanceKey key) {}
+
     /**
      * One face's parse: the face, where its provenance goes, and the ability
      * list each phase of {@link #parseFace} appends to.
@@ -216,8 +219,7 @@ public class RulesParser {
          * mana ability is a dropped key, and every activation record that names
          * it joins to nothing.
          */
-        final List<SpellAbility> landManaAbilities = new ArrayList<>();
-        final List<ProvenanceKey> landManaKeys = new ArrayList<>();
+        final List<LandManaTrait> landManaTraits = new ArrayList<>();
 
         FaceParse(Card card, ICardFace face, ProvenanceRecorder recorder,
                   int faceIndex, String scriptFile) {
@@ -361,10 +363,7 @@ public class RulesParser {
                 case KEYWORD_SPELL ->
                         p.recorder.attributeToKeyword(spellKey, sa, sa.getKeyword().getOriginal());
                 case OTHER_FACE, DUPLICATE_TRAIT -> { }
-                case LAND_MANA -> {
-                    p.landManaAbilities.add(sa);
-                    p.landManaKeys.add(spellKey);
-                }
+                case LAND_MANA -> p.landManaTraits.add(new LandManaTrait(sa, spellKey));
                 case CHARM, ALT_COST, ACTIVATED, SPELL, UNRENDERED -> {
                     int before = p.abilities.size();
                     renderSpell(route, sa, p.abilities);
@@ -480,8 +479,8 @@ public class RulesParser {
         if (p.landManaDescription == null) return;
         TextAbility landMana = new TextAbility(AbilityType.ACTIVATED, p.landManaDescription);
         p.abilities.add(landMana);
-        for (int i = 0; i < p.landManaAbilities.size(); i++) {
-            p.recorder.attribute(landMana, p.landManaKeys.get(i), p.landManaAbilities.get(i));
+        for (LandManaTrait trait : p.landManaTraits) {
+            p.recorder.attribute(landMana, trait.key(), trait.ability());
         }
     }
 

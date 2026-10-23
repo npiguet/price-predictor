@@ -214,21 +214,7 @@ class DeckBuilderTest {
     // ── Full buildDeck integration ─────────────────────────────────────────────
 
     @Test
-    void buildDeckAlwaysProduces40Cards() {
-        List<PaperCard> pool = realPool("RVR");
-        DeckBuilder builder = new DeckBuilder();
-
-        // Run several times to exercise different methods
-        for (int i = 0; i < 5; i++) {
-            DeckBuilder.BuiltDeck built = builder.buildDeck(new ArrayList<>(pool));
-            assertEquals(40, built.deck().getMain().countAll(),
-                    "buildDeck must always produce exactly 40 cards");
-            assertNotNull(built.method(), "buildDeck must report a method tag");
-        }
-    }
-
-    @Test
-    void buildDeckMethodTagMatchesTheRolledMethodAndEveryMethodOccurs() {
+    void buildDeckMakes40CardsAndItsMethodTagMatchesTheRolledMethodAndEveryMethodOccurs() {
         List<PaperCard> pool = realPool("RVR");
 
         // The builder's first draw is the method roll, so a mirror Random predicts the tag.
@@ -241,6 +227,8 @@ class DeckBuilderTest {
             DeckBuilder.BuiltDeck built =
                     new DeckBuilder(new Random(seed)).buildDeck(new ArrayList<>(pool));
             BuildMethod rolled = BuildMethod.forRoll(new Random(seed).nextDouble());
+            assertEquals(40, built.deck().getMain().countAll(),
+                    "buildDeck must always produce exactly 40 cards, seed " + seed);
             assertEquals(rolled, built.method(), "seed " + seed);
             if (rolled == BuildMethod.RANDOM) {
                 assertTrue(nonbasics(built.deck()).size() <= DeckBuilder.RANDOM_DECK_SPELLS,

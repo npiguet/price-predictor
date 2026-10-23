@@ -35,7 +35,7 @@ class CostPayloadTest {
 
     /** The costs object of a payload, without the outcome around it. */
     private static String costs(SpellAbility ability) {
-        return EffectRecord.costsJson(ability);
+        return PaidCosts.of(ability).toJson();
     }
 
     // ── the four card channels ──────────────────────────────────────────
@@ -188,13 +188,13 @@ class CostPayloadTest {
      * The costs and the outcome become knowable at different moments.
      *
      * <p>What was paid is only readable while the cast is being published; how
-     * the spell ended is only readable later. The two-string form is what lets
-     * one record carry both without holding a {@link SpellAbility} whose paid
-     * lists the next activation overwrites.
+     * the spell ended is only readable later. Holding the {@link PaidCosts} is
+     * what lets one record carry both without holding a {@link SpellAbility}
+     * whose paid lists the next activation overwrites.
      */
     @Test
     void everyOutcomeRoundTripsThroughTheDeferredForm() {
-        String costs = costs(null);
+        PaidCosts costs = PaidCosts.of(null);
         for (ActivationOutcome outcome : ActivationOutcome.values()) {
             String payload = EffectRecord.costPayload(costs, outcome);
             assertTrue(payload.contains("\"outcome\":\"" + outcome.wireName() + "\""), payload);

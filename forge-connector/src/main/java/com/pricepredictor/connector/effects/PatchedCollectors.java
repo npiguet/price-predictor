@@ -2,9 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import forge.game.Game;
 
-import java.lang.reflect.InvocationHandler;
 import java.util.List;
-import java.util.function.Supplier;
 
 /**
  * The channels the engine patch unlocks, for one game, and the hooks they
@@ -39,12 +37,14 @@ final class PatchedCollectors implements AutoCloseable {
     private final CollectorContext context;
     private final Channels channels;
 
-    /** A hook this collector installs a listener on. */
-    private record Listener(PatchHooks.Hook hook, Supplier<InvocationHandler> handler) {
-    }
-
-    /** Every listener this collector installs, in the order it installs them. */
-    private final List<Listener> listeners;
+    /**
+     * Every listener this collector installs, in the order it installs them.
+     *
+     * <p>Each carries the hook it was built from, so the hook is named once,
+     * where the channel builds its handler, and cannot be paired here with a
+     * handler built for another.
+     */
+    private final List<PatchHooks.Listener> listeners;
 
     /**
      * @param seed    seeds the game's sampling stream
@@ -56,15 +56,13 @@ final class PatchedCollectors implements AutoCloseable {
         this.context = context;
         this.channels = Channels.of(game, context, caps, seed, bracket);
         this.listeners = List.of(
-                new Listener(PatchHooks.REPLACEMENT_LISTENER, channels.rewrites()::handler),
-                new Listener(PatchHooks.TRIGGER_LISTENER, channels.triggers()::handler),
-                new Listener(PatchHooks.PLAYABILITY_LISTENER,
-                        channels.playability()::decisionHandler),
-                new Listener(PatchHooks.MANA_LISTENER, channels.mana()::handler),
-                new Listener(PatchHooks.COMBAT_LISTENER,
-                        channels.playability()::legalityHandler),
-                new Listener(PatchHooks.CLAUSE_LISTENER, channels.clauses()::clauseHandler),
-                new Listener(PatchHooks.OUTCOME_LISTENER, channels.clauses()::outcomeHandler));
+                channels.rewrites().handler(),
+                channels.triggers().handler(),
+                channels.playability().decisionHandler(),
+                channels.mana().handler(),
+                channels.playability().legalityHandler(),
+                channels.clauses().clauseHandler(),
+                channels.clauses().outcomeHandler());
     }
 
     /** The decision and legality channel, which the random seat also writes through. */
@@ -87,8 +85,8 @@ final class PatchedCollectors implements AutoCloseable {
             return 0;
         }
         int installed = 0;
-        for (Listener listener : listeners) {
-            if (listener.hook().install(listener.handler().get())) {
+        for (PatchHooks.Listener listener : listeners) {
+            if (listener.install()) {
                 installed++;
             }
         }
@@ -109,8 +107,8 @@ final class PatchedCollectors implements AutoCloseable {
             // at the end of the game.
             channels.close();
         } finally {
-            for (Listener listener : listeners) {
-                listener.hook().uninstall();
+            for (PatchHooks.Listener listener : listeners) {
+                listener.uninstall();
             }
         }
     }
