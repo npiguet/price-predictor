@@ -616,11 +616,6 @@ public final class BusBracketCollector extends BusEventReader {
         return ability == null ? null : Refs.ofNullable(ability.getActivatingPlayer());
     }
 
-    /** As {@link ActivationLedger#outcomeOf}; kept here for the tests that pin it. */
-    static ActivationOutcome outcomeOf(int targetsAtCast, SpellAbility resolved) {
-        return ActivationLedger.outcomeOf(targetsAtCast, resolved);
-    }
-
     /**
      * Write off every held cast that has left the stack without resolving
      * ({@link ActivationLedger#writeOffRemoved}), asked of the stack itself at

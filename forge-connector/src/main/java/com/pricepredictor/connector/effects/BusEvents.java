@@ -179,10 +179,9 @@ final class BusEvents {
      * ({@code RunParamNormalizer}), which has no entry for it: {@code
      * TriggerType} and {@code ReplacementType} spell regeneration's own
      * trigger and replacement modes differently, and no mode a hook reports
-     * is the regeneration itself. {@code RegenerationEffect.resolve()}
-     * (fire site: {@code
-     * RegenerationEffect.java:49}, the only one in the engine) publishes this
-     * once per card actually regenerated.
+     * is the regeneration itself. {@code RegenerationEffect.resolve()}, the
+     * only fire site in the engine, publishes this once per card actually
+     * regenerated.
      *
      * <p>Multiple subjects in principle — the record type wraps a collection —
      * though the one fire site always passes a single card; read generically
@@ -199,8 +198,8 @@ final class BusEvents {
     /**
      * A library shuffled, named by the player whose library it was.
      *
-     * <p>{@code Player.shuffle(SpellAbility)} fires this once (fire site:
-     * {@code Player.java:1627}, the only one in the engine), whatever scripted
+     * <p>{@code Player.shuffle(SpellAbility)}, the only fire site in the
+     * engine, fires this once, whatever scripted
      * the shuffle — a fetchland, a scripted "shuffle your library" effect, the
      * end-of-search shuffle after a tutor. No cause rides the event because
      * none is named: the record carries only the player, so unlike {@code

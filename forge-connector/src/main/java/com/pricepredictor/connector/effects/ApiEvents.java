@@ -857,9 +857,9 @@ final class ApiEvents {
     /**
      * Every memoized attacker whose defender assignment actually changed --
      * exactly the creatures {@code SpellAbilityEffect.addToCombat}'s
-     * {@code combat.removeFromCombat(c)} call (SpellAbilityEffect.java:762)
-     * ran for, since that call fires only immediately before re-adding the
-     * same creature against a new defender. A card that was never attacking
+     * {@code combat.removeFromCombat(c)} call ran for, since that call fires
+     * only immediately before re-adding the same creature against a new
+     * defender. A card that was never attacking
      * ({@code null} before) is skipped: nothing could have removed it.
      *
      * <p>So "removed from combat" for {@code ChangeCombatants} means a
@@ -939,7 +939,7 @@ final class ApiEvents {
     }
 
     /**
-     * {@code getCardsfromTargets(sa)} (SpellAbilityEffect.java:370), mirrored
+     * {@code SpellAbilityEffect.getCardsfromTargets(sa)}, mirrored
      * the way {@link #affectedCards} already mirrors {@code getTargetCards}.
      *
      * <p>The {@code getTargetSpells()} union below is NOT dead for today's
@@ -978,8 +978,8 @@ final class ApiEvents {
     /**
      * {@code AbilityUtils.getDefinedPlayers} for one {@code Defined$}/
      * {@code DefinedPlayer$} value, extended to the {@code " & "}-joined
-     * multi-value form {@code SpellAbilityEffect.getPlayers} also accepts
-     * ({@code SpellAbilityEffect.java:314}): {@code String[] def =
+     * multi-value form {@code SpellAbilityEffect.getPlayers} also accepts:
+     * {@code String[] def =
      * sa.getParamOrDefault(definedParam, "You").split(" & ")}, one lookup per
      * token, unioned. No card in the cardsfolder uses this today for either
      * {@code Defined$} on these three rules or {@code DefinedPlayer$} on
@@ -1002,8 +1002,7 @@ final class ApiEvents {
      * HealDamageEffect.resolve()} calls through {@code getTargetCards(sa)})
      * reads {@code sa.getTargets()} only when {@code sa.usesTargeting()}
      * is true, and otherwise falls back to a {@code " & "}-split {@code
-     * Defined$}, defaulted to {@code "Self"} ({@code
-     * SpellAbilityEffect.java:257,265}) -- the same default used here, not
+     * Defined$}, defaulted to {@code "Self"} -- the same default used here, not
      * a different one invented for this file.
      */
     private static List<Card> affectedCards(SpellAbility sa) {

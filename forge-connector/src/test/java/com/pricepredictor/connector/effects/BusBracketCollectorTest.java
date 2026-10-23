@@ -213,15 +213,15 @@ class BusBracketCollectorTest {
         bolt.getTargets().add(TestCards.build("Grizzly Bears"));
 
         assertEquals(ActivationOutcome.RESOLVED,
-                BusBracketCollector.outcomeOf(2, bolt));
+                ActivationLedger.outcomeOf(2, bolt));
 
         bolt.getTargets().remove(bolt.getTargets().get(0));
         assertEquals(ActivationOutcome.PARTIALLY_FIZZLED,
-                BusBracketCollector.outcomeOf(2, bolt));
+                ActivationLedger.outcomeOf(2, bolt));
 
         bolt.resetTargets();
         assertEquals(ActivationOutcome.RESOLVED,
-                BusBracketCollector.outcomeOf(2, bolt));
+                ActivationLedger.outcomeOf(2, bolt));
     }
 
     /** An untargeted spell never reads as partially fizzled. */
@@ -232,7 +232,7 @@ class BusBracketCollectorTest {
                 TestCards.build("Healing Salve"));
 
         assertEquals(ActivationOutcome.RESOLVED,
-                BusBracketCollector.outcomeOf(0, gain));
+                ActivationLedger.outcomeOf(0, gain));
     }
 
     private static Zone zone(ZoneType type) {
