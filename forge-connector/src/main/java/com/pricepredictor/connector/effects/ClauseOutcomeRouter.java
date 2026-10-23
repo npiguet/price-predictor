@@ -98,7 +98,7 @@ final class ClauseOutcomeRouter {
                 bracket.beginMode(clause, start.option());
             }
         } else {
-            ForkCollector.noteClauseResolving(clause);
+            Forks.noteClauseResolving(clause);
         }
     }
 

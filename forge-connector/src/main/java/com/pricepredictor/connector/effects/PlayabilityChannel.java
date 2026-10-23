@@ -61,7 +61,7 @@ public final class PlayabilityChannel {
     PatchHooks.Listener decisionHandler() {
         return PatchHooks.PLAYABILITY_LISTENER.listener((callback, args) -> {
             // Checked before the sampler draw below, not after -- a fork's own candidates are
-            // evaluated for playability too (ForkCollector.forceResolution's
+            // evaluated for playability too (InterventionFork.forceResolution's
             // chooseTargets, and GameSimulator's own AI decisions, both ask the
             // same AiController this hook is installed on), and letting one
             // consume from the shared `sampler` before being dropped would

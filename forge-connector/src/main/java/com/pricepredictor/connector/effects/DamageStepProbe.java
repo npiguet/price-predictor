@@ -61,13 +61,13 @@ final class DamageStepProbe {
             return null;
         }
         // The whole method is the fork, not just the damage it deals: see
-        // ForkCollector.FORK_RUNNING for what the narrower scope left uncovered.
-        return ForkCollector.asFork(() -> {
+        // Forks.FORK_RUNNING for what the narrower scope left uncovered.
+        return Forks.asFork(() -> {
             // Counted before the score check, like an intervention: a copy that
             // systematically fails must not retry until the game ends.
             budget.spendProbe();
 
-            Optional<ForkCollector.VerifiedFork> verified = ForkCollector.copyAndVerify(
+            Optional<Forks.VerifiedFork> verified = Forks.copyAndVerify(
                     game,
                     () -> game.getPhaseHandler() == null
                             ? null : game.getPhaseHandler().getPlayerTurn());
@@ -76,7 +76,7 @@ final class DamageStepProbe {
             }
             Game fork = verified.get().fork();
             Player perspective = verified.get().perspective();
-            Card forkCarrier = ForkCollector.mappedCard(verified.get().copier(), carrier);
+            Card forkCarrier = Forks.mappedCard(verified.get().copier(), carrier);
             if (forkCarrier == null || fork.getCombat() == null) {
                 return null;
             }

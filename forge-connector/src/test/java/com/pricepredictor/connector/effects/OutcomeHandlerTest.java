@@ -388,7 +388,7 @@ class OutcomeHandlerTest {
      * Pins the resolving-clause pointer branch directly. The combat-damage
      * test above leaves the pointer null by construction, and the probe test
      * below only exercises the flag, so without this one a single-signal
-     * {@code return !ForkCollector.isForkRunningOnThisThread();} would pass
+     * {@code return !Forks.isForkRunningOnThisThread();} would pass
      * every test in this class, as would dropping the {@link
      * LiveGame#owns(CardTraitBase)} delegate and returning {@code true}
      * whenever the pointer is merely non-null. This resolves a real ability -- through {@code
@@ -509,7 +509,7 @@ class OutcomeHandlerTest {
      * Combat.dealAssignedDamage} always passes a null cause, live or forked.
      * A probe's damage step is a turn-based action with no ability resolving
      * and nothing on the resolving-clause pointer, which is why {@link
-     * ForkCollector#isForkRunningOnThisThread()} exists. FORK_RUNNING
+     * Forks#isForkRunningOnThisThread()} exists. FORK_RUNNING
      * is set directly here, without needing a real combat to
      * fork. No live bracket is open, matching a probe's own
      * timing: like {@code intervene}, it does not run nested inside a live
@@ -518,7 +518,7 @@ class OutcomeHandlerTest {
     @Test
     void aNullAbilityOutcomeFromAProbesOwnCombatDoesNotReachTheLiveShard() throws Throwable {
         List<String> records = ShardRun.records(tempDir, TestCards.game(), (bracket, collectors) -> {
-            var forkRunning = ForkCollector.class.getDeclaredField("FORK_RUNNING");
+            var forkRunning = Forks.class.getDeclaredField("FORK_RUNNING");
             forkRunning.setAccessible(true);
             @SuppressWarnings("unchecked")
             ThreadLocal<Boolean> flag = (ThreadLocal<Boolean>) forkRunning.get(null);

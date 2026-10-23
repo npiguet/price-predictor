@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * forks of one board.
  */
 @ExtendWith(ForgeExtension.class)
-class ForkCollectorTest {
+class ForkRecordsTest {
 
     @TempDir
     Path tempDir;

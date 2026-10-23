@@ -61,13 +61,13 @@ final class InterventionFork {
             return false;
         }
         // The whole method is the fork, not just the forced resolution: see
-        // ForkCollector.FORK_RUNNING for what the narrower scope left uncovered.
-        return ForkCollector.asFork(() -> {
+        // Forks.FORK_RUNNING for what the narrower scope left uncovered.
+        return Forks.asFork(() -> {
             // Counted before the score check, so a discarded fork still spends its
             // budget.
             budget.spendIntervention(realResolutionId);
 
-            Optional<ForkCollector.VerifiedFork> verified = ForkCollector.copyAndVerify(
+            Optional<Forks.VerifiedFork> verified = Forks.copyAndVerify(
                     game,
                     () -> ability.getActivatingPlayer() != null
                             ? ability.getActivatingPlayer()
@@ -77,9 +77,9 @@ final class InterventionFork {
             }
             Game fork = verified.get().fork();
             Player perspective = verified.get().perspective();
-            SpellAbility forked = ForkCollector.findInFork(verified.get().copier(), ability);
+            SpellAbility forked = Forks.findInFork(verified.get().copier(), ability);
             Player actor = forked == null
-                    ? null : ForkCollector.mappedPlayer(verified.get().copier(), perspective);
+                    ? null : Forks.mappedPlayer(verified.get().copier(), perspective);
             if (forked == null || actor == null) {
                 return false;
             }
@@ -246,7 +246,7 @@ final class InterventionFork {
                     sink.beginMode(start.option(), snapshots.ofResolving(onStack));
                 }
             };
-            ForkCollector.listeningForClauses(modeStarts, () -> {
+            Forks.listeningForClauses(modeStarts, () -> {
                 GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
                 return null;
             });

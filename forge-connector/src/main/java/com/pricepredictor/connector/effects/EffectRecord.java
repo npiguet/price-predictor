@@ -272,22 +272,4 @@ public final class EffectRecord {
     String abilityJson() {
         return ability == null ? "null" : ProvenanceKey.toJsonArray(ability);
     }
-
-    /**
-     * {@link RecordPayloads#rewritePayload}, kept here for {@code RewriteChannel}
-     * until it calls {@link RecordPayloads} directly.
-     */
-    public static String rewritePayload(
-            EffectEvent incoming, EffectEvent outgoing, String result,
-            List<ProvenanceKey> replacedBy) {
-        return RecordPayloads.rewritePayload(incoming, outgoing, result, replacedBy);
-    }
-
-    /**
-     * {@link RecordPayloads#rewriteResult}, kept here for {@code RewriteChannel}
-     * until it calls {@link RecordPayloads} directly.
-     */
-    public static String rewriteResult(Object result) {
-        return RecordPayloads.rewriteResult(result);
-    }
 }

@@ -47,7 +47,7 @@ final class RewriteChannel {
     PatchHooks.Listener handler() {
         return PatchHooks.REPLACEMENT_LISTENER.listener((callback, args) -> {
             // A fork's own replacements resolve through this same JVM-static
-            // hook (ForkCollector.forceResolution
+            // hook (InterventionFork.forceResolution
             // runs the fork's forced ability through the real resolution
             // pipeline, which is where replacements apply). args[0] is
             // declared ReplacementEffect on Forge's side -- always a
@@ -110,12 +110,12 @@ final class RewriteChannel {
         // does not is that an ability ran at all, and the rarer case where the
         // overriding ability was granted from somewhere else.
         List<ProvenanceKey> ranKeys = ran == null ? List.of() : ProvenanceResolver.keysOf(ran);
-        String wireResult = EffectRecord.rewriteResult(result);
+        String wireResult = RecordPayloads.rewriteResult(result);
         JVM_REWRITES.record(
                 RunParamNormalizer.modeOf(trait), wireResult, outgoing != null,
                 !ranKeys.isEmpty(), before, after);
         return live.traitRecord(context, RecordKind.REWRITE, trait, incoming)
-                .payload(EffectRecord.rewritePayload(
+                .payload(RecordPayloads.rewritePayload(
                         incoming, outgoing, wireResult, ranKeys));
     }
 }
