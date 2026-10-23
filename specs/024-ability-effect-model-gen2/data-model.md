@@ -22,7 +22,7 @@ ProvenanceKey = (script_file, face, trait_kind, index_within_kind, option?)
   compatibility rule 1.
 - Equality and hashing include `option`, so a mode key never matches its root key.
 - Produced by: `RulesParser`/`ProvenanceRecorder` for sidecar `option` lines; `ProvenanceResolver.resolve`
-  for a cloned mode at resolution; `RandomChoices`/`ForkCollector` for fork modes.
+  for a cloned mode at resolution; `RandomChoices`/`InterventionFork` for fork modes.
 
 ### SidecarLine (extended)
 

@@ -64,7 +64,7 @@ both carry it.
 |---|---|
 | patched | one cost half (root key) + one effect half per chosen mode resolution (root key + `option`), shared `link_id`; each effect half's snapshot is taken at its mode's first clause; Pawprint and repeated modes give one half per resolution |
 | degraded | one cost half + one effect half (root key) with every mode's events |
-| fork (`ForkCollector`) | one effect half per chosen mode by the patched rule |
+| fork (`InterventionFork`) | one effect half per chosen mode by the patched rule |
 
 ## Sidecar line
 
