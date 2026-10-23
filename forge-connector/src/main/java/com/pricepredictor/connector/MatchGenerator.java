@@ -8,7 +8,6 @@ import forge.item.PaperCard;
 import forge.item.SealedTemplate;
 import forge.util.MyRandom;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -241,19 +240,8 @@ public class MatchGenerator {
 
         GamePlayer.PlayedMatch played = gamePlayer.playMatch(a.deck, b.deck);
 
-        Instant timestamp = Instant.now();
-        MatchResult matchResult = new MatchResult(
-                timestamp,
-                runId,
-                a.setCode,
-                a.method,
-                b.method,
-                a.cardNames,
-                b.cardNames,
-                played.winnerSequence(),
-                played.playSequence(),
-                played.durationSeconds()
-        );
+        MatchResult matchResult = MatchResult.of(
+                runId, a.setCode, a.method, b.method, a.cardNames, b.cardNames, played);
 
         List<CardsPlayedRow> rows = new ArrayList<>(played.games().size());
         for (GamePlayer.GameOutcome game : played.games()) {

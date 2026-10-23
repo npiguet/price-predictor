@@ -3,8 +3,10 @@ package com.pricepredictor.connector;
 import java.util.List;
 
 /**
- * A single ability on a card face. Implementations hold Forge data directly
- * and defer formatting to output time.
+ * A single ability on a card face. Implementations hold no Forge objects:
+ * each factory reads its trait while the card is parsed and stores the
+ * description already formatted, so rendering only adds the line prefix and
+ * action number.
  */
 public interface Ability {
     AbilityType type();

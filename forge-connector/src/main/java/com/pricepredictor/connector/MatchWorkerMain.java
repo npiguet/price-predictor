@@ -224,32 +224,7 @@ public class MatchWorkerMain {
                 ? null : new ProgressWriter(config.progressFile());
 
         CollectionCaps caps = CollectionCaps.fromSystemProperties();
-        RecordShardWriter effectRecords = null;
-        if (config.collectsEffectRecords()) {
-            effectRecords = new RecordShardWriter(
-                    config.effectRecordsDir(), config.runId(), config.workerIndex(),
-                    config.workerLifetime());
-            System.out.println(
-                    "Effect records: " + effectRecords.path()
-                            + " [mode=" + AttributionMode.detect().wireName() + "]");
-            // The mode is one hook's answer, so a partly-applied patch still
-            // reads "patched" while a channel this run meant to collect is
-            // quietly empty. This is what names that.
-            System.out.println(PatchHooks.report());
-            if (caps.randomSeatEnabled()) {
-                // Named at startup the way the probe state is: a run whose
-                // random-seat matches wrote no sealed rows is a run someone
-                // asked for, and the log is where that is checked.
-                System.out.println("Random seat: share=" + caps.randomSeatShare()
-                        + ", probability=" + caps.randomSeatProbability()
-                        + " (random-seat matches write effect records only)");
-            }
-            // The worker loops until the supervisor terminates it, so close()
-            // is never reached on the normal path. Without this the block in
-            // flight — up to a few hundred records — is lost on every stop.
-            final RecordShardWriter toFlush = effectRecords;
-            Runtime.getRuntime().addShutdownHook(new Thread(toFlush::close));
-        }
+        RecordShardWriter effectRecords = openEffectRecords(config, caps);
 
         SilencedHookReport silencedHookReport = new SilencedHookReport();
         MatchGenerator generator = MatchGenerator.builder(eligibleSets, config.runId())
@@ -269,6 +244,40 @@ public class MatchWorkerMain {
                 },
                 new WorkerLoop.Progress(
                         System.out, 10, "matches generated", "Error generating match"));
+    }
+
+    /**
+     * The shard this worker appends effect records to, announced on stdout
+     * with the collection state it runs under, or null when the run collects
+     * none.
+     */
+    private static RecordShardWriter openEffectRecords(WorkerConfig config, CollectionCaps caps) {
+        if (!config.collectsEffectRecords()) {
+            return null;
+        }
+        RecordShardWriter effectRecords = new RecordShardWriter(
+                config.effectRecordsDir(), config.runId(), config.workerIndex(),
+                config.workerLifetime());
+        System.out.println(
+                "Effect records: " + effectRecords.path()
+                        + " [mode=" + AttributionMode.detect().wireName() + "]");
+        // The mode is one hook's answer, so a partly-applied patch still
+        // reads "patched" while a channel this run meant to collect is
+        // quietly empty. This is what names that.
+        System.out.println(PatchHooks.report());
+        if (caps.randomSeatEnabled()) {
+            // Named at startup the way the probe state is: a run whose
+            // random-seat matches wrote no sealed rows is a run someone
+            // asked for, and the log is where that is checked.
+            System.out.println("Random seat: share=" + caps.randomSeatShare()
+                    + ", probability=" + caps.randomSeatProbability()
+                    + " (random-seat matches write effect records only)");
+        }
+        // The worker loops until the supervisor terminates it, so close()
+        // is never reached on the normal path. Without this the block in
+        // flight — up to a few hundred records — is lost on every stop.
+        Runtime.getRuntime().addShutdownHook(new Thread(effectRecords::close));
+        return effectRecords;
     }
 
     /**

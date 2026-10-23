@@ -5,6 +5,7 @@ import com.pricepredictor.connector.ability.OptionAbility;
 import forge.game.CardTraitBase;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -34,8 +35,36 @@ import java.util.Set;
  */
 public final class ProvenanceRecorder {
 
-    /** What one parsed ability came from. */
-    public record Source(List<ProvenanceKey> keys, TraitScript script) {
+    /**
+     * What one parsed ability came from: the script of the trait that first
+     * claimed it, and every key claiming it since.
+     *
+     * <p>A line merged from several traits carries several keys, so the join
+     * is many-to-one and never assumed one-to-one. Keys keep the order they
+     * were claimed in, which is the order the sidecar writes them.
+     */
+    public static final class Source {
+        private final Set<ProvenanceKey> keys = new LinkedHashSet<>();
+        private final TraitScript script;
+
+        private Source(ProvenanceKey first, TraitScript script) {
+            this.keys.add(first);
+            this.script = script;
+        }
+
+        /** The keys claiming this ability, in claim order; read-only. */
+        public Set<ProvenanceKey> keys() {
+            return Collections.unmodifiableSet(keys);
+        }
+
+        public TraitScript script() {
+            return script;
+        }
+
+        /** Claim this ability under {@code key} too; a key already held is not repeated. */
+        private void addKey(ProvenanceKey key) {
+            keys.add(key);
+        }
     }
 
     private final Map<Ability, Source> byAbility = new IdentityHashMap<>();
@@ -48,10 +77,6 @@ public final class ProvenanceRecorder {
     private final Map<String, List<Ability>> byKeyword = new LinkedHashMap<>();
     /** Where a chain's undefined SVars go; shared across every face of a run. */
     private final MissingSVarReport missingSVars;
-
-    public ProvenanceRecorder() {
-        this(new MissingSVarReport());
-    }
 
     public ProvenanceRecorder(MissingSVarReport missingSVars) {
         this.missingSVars = missingSVars;
@@ -110,13 +135,9 @@ public final class ProvenanceRecorder {
     private void claim(Ability ability, ProvenanceKey key, TraitScript script) {
         Source existing = byAbility.get(ability);
         if (existing == null) {
-            List<ProvenanceKey> keys = new ArrayList<>();
-            keys.add(key);
-            byAbility.put(ability, new Source(keys, script));
-        } else if (!existing.keys().contains(key)) {
-            // A line merged from several traits carries several keys, so
-            // the join is many-to-one and never assumed one-to-one.
-            existing.keys().add(key);
+            byAbility.put(ability, new Source(key, script));
+        } else {
+            existing.addKey(key);
         }
     }
 
@@ -180,7 +201,7 @@ public final class ProvenanceRecorder {
             return;
         }
         for (ProvenanceKey key : from.keys()) {
-            if (!into.keys().contains(key)) into.keys().add(key);
+            into.addKey(key);
         }
     }
 
@@ -214,14 +235,13 @@ public final class ProvenanceRecorder {
         }
     }
 
-    private void claimModesBelow(Ability parent, List<ProvenanceKey> rootKeys) {
+    private void claimModesBelow(Ability parent, Set<ProvenanceKey> rootKeys) {
         for (Ability sub : parent.subAbilities()) {
             Source mode = byAbility.get(sub);
             if (sub instanceof OptionAbility option && mode != null) {
                 for (ProvenanceKey key : rootKeys) {
                     if (key.option() != null) continue;
-                    ProvenanceKey modeKey = key.withOption(option.modeIndex());
-                    if (!mode.keys().contains(modeKey)) mode.keys().add(modeKey);
+                    mode.addKey(key.withOption(option.modeIndex()));
                 }
             } else if (mode == null) {
                 // A line of the charm's own rendering, between root and modes.
