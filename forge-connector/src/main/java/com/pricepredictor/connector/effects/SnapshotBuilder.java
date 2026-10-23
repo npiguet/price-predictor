@@ -25,9 +25,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.StringJoiner;
 
 /**
  * Builds a record's pre-event state snapshot.
@@ -60,13 +58,6 @@ import java.util.StringJoiner;
 public final class SnapshotBuilder {
 
     private static final char[] COLORS = {'W', 'U', 'B', 'R', 'G'};
-
-    /**
-     * The mana symbols a player's pool and untapped production are counted
-     * in: the five colours plus colourless, which a card's colours never
-     * include but a Sol Ring or a Wastes produces.
-     */
-    private static final char[] MANA_SYMBOLS = {'W', 'U', 'B', 'R', 'G', 'C'};
 
     private final Game game;
 
@@ -187,16 +178,11 @@ public final class SnapshotBuilder {
     private Snapshot snapshot(
             Iterable<Card> referenced, Long withoutStatic, SpellAbility acting, Card source,
             EffectEvent pending) {
-        StringJoiner entityJson = new StringJoiner(",", "[", "]");
-        for (Card card : collectEntities(referenced)) {
-            entityJson.add(entityToJson(card, Suppressed.of(card, withoutStatic)));
-        }
-        StringJoiner playerJson = new StringJoiner(",", "[", "]");
-        for (Player player : game.getPlayers()) {
-            playerJson.add(playerToJson(player));
-        }
+        String entities = Json.array(collectEntities(referenced),
+                card -> entityToJson(card, Suppressed.of(card, withoutStatic)));
+        String players = Json.array(game.getPlayers(), this::playerToJson);
         return new Snapshot(
-                globalToJson(), playerJson.toString(), entityJson.toString(),
+                globalToJson(), players, entities,
                 refsJson(acting, source), pending == null ? "null" : pending.toJson());
     }
 
@@ -223,14 +209,15 @@ public final class SnapshotBuilder {
         var phase = game.getPhaseHandler();
         Player active = phase.getPlayerTurn();
         Player priority = phase.getPriorityPlayer();
-        return "{\"turn\":" + phase.getTurn()
-                + ",\"phase\":" + Json.string(phaseName(phase.getPhase()))
-                + ",\"active\":" + Json.string(active == null ? null : playerId(active))
-                + ",\"priority\":"
-                + Json.string(priority == null ? null : playerId(priority))
-                + ",\"stack_size\":" + game.getStack().size()
-                + ",\"combat_substep\":" + Json.string(combatSubstep())
-                + ",\"emblems\":" + ProvenanceKey.toJsonArray(emblems()) + "}";
+        return Json.object()
+                .value("turn", phase.getTurn())
+                .value("phase", phaseName(phase.getPhase()))
+                .value("active", active == null ? null : playerId(active))
+                .value("priority", priority == null ? null : playerId(priority))
+                .value("stack_size", game.getStack().size())
+                .value("combat_substep", combatSubstep())
+                .raw("emblems", ProvenanceKey.toJsonArray(emblems()))
+                .render();
     }
 
     /**
@@ -260,8 +247,8 @@ public final class SnapshotBuilder {
      * <p>An ability that makes one mana of any colour counts once for each, so
      * the numbers are an upper bound rather than a sum that can be spent.
      */
-    private Map<Character, Integer> untappedProduction(Player player) {
-        Map<Character, Integer> production = new java.util.HashMap<>();
+    private ManaCounts untappedProduction(Player player) {
+        List<Byte> producible = new ArrayList<>();
         for (Card card : player.getCardsIn(ZoneType.Battlefield)) {
             if (card.isTapped()) {
                 continue;
@@ -271,14 +258,14 @@ public final class SnapshotBuilder {
                 if (part == null) {
                     continue;
                 }
-                for (char color : MANA_SYMBOLS) {
-                    if (part.canProduce(String.valueOf(color), ability)) {
-                        production.merge(color, 1, Integer::sum);
+                for (byte symbol : MagicColor.WUBRGC) {
+                    if (part.canProduce(ManaCounts.letter(symbol), ability)) {
+                        producible.add(symbol);
                     }
                 }
             }
         }
-        return production;
+        return ManaCounts.tally(producible);
     }
 
     /**
@@ -318,32 +305,24 @@ public final class SnapshotBuilder {
     }
 
     private String playerToJson(Player player) {
-        StringJoiner floating = new StringJoiner(",", "{", "}");
-        StringJoiner production = new StringJoiner(",", "{", "}");
-        Map<Character, Integer> untapped = untappedProduction(player);
-        for (char color : MANA_SYMBOLS) {
-            byte shard = MagicColor.fromName(String.valueOf(color));
-            floating.add(
-                    Json.string(String.valueOf(color)) + ":"
-                            + player.getManaPool().getAmountOfColor(shard));
-            production.add(Json.string(String.valueOf(color)) + ":"
-                    + untapped.getOrDefault(color, 0));
-        }
-        return "{\"id\":" + Json.string(playerId(player))
-                + ",\"life\":" + player.getLife()
-                + ",\"hand\":" + player.getCardsIn(ZoneType.Hand).size()
-                + ",\"library\":" + player.getCardsIn(ZoneType.Library).size()
-                + ",\"graveyard\":" + player.getCardsIn(ZoneType.Graveyard).size()
-                + ",\"poison\":" + player.getPoisonCounters()
-                + ",\"energy\":" + player.getCounters(
-                        CounterEnumType.ENERGY)
-                + ",\"this_turn\":{\"creatures_died\":"
-                + creaturesLost(player)
-                + ",\"spells_cast\":"
-                + player.getSpellsCastThisTurn()
-                + ",\"lands_played\":" + player.getLandsPlayedThisTurn() + "}"
-                + ",\"floating_mana\":" + floating
-                + ",\"untapped_production\":" + production + "}";
+        return Json.object()
+                .value("id", playerId(player))
+                .value("life", player.getLife())
+                .value("hand", player.getCardsIn(ZoneType.Hand).size())
+                .value("library", player.getCardsIn(ZoneType.Library).size())
+                .value("graveyard", player.getCardsIn(ZoneType.Graveyard).size())
+                .value("poison", player.getPoisonCounters())
+                .value("energy", player.getCounters(CounterEnumType.ENERGY))
+                .raw("this_turn", Json.object()
+                        .value("creatures_died", creaturesLost(player))
+                        .value("spells_cast", player.getSpellsCastThisTurn())
+                        .value("lands_played", player.getLandsPlayedThisTurn())
+                        .render())
+                // Every symbol, zeros included, in ManaCounts' fixed order.
+                .raw("floating_mana",
+                        ManaCounts.of(player.getManaPool()::getAmountOfColor).toJson())
+                .raw("untapped_production", untappedProduction(player).toJson())
+                .render();
     }
 
     /**
@@ -401,35 +380,34 @@ public final class SnapshotBuilder {
     private String entityToJson(Card card, Suppressed without) {
         Card attached = card.getAttachedTo();
         CardTypeView type = without == null ? card.getType() : without.type();
-        return "{\"id\":" + Json.string(entityId(card))
-                + ",\"name\":" + Json.string(card.getName())
-                + ",\"zone\":" + Json.string(zoneName(card))
-                + ",\"controller\":" + Json.string(
-                        card.getController() == null
-                                ? null : playerId(card.getController()))
-                + ",\"face\":" + faceOf(card)
-                + ",\"copy_source\":" + Json.string(copySourceOf(card))
-                + ",\"token_script_id\":"
-                + Json.string(tokenScriptIdOf(card))
-                + ",\"types\":" + typeNamesJson(type.getCoreTypes())
-                + ",\"subtypes\":" + typeNamesJson(type.getSubtypes())
-                + ",\"supertypes\":" + typeNamesJson(type.getSupertypes())
-                + ",\"colors\":" + Json.stringArray(
-                        colorLetters(without == null ? card.getColor() : without.colors()))
-                + ",\"mana_value\":" + card.getCMC()
-                + ",\"pt\":" + ptJson(card, without)
-                + ",\"tapped\":" + card.isTapped()
-                + ",\"sick\":" + card.isSick()
-                + ",\"damage\":" + card.getDamage()
-                + ",\"counters\":" + counterJson(card)
-                + ",\"combat\":" + combatJson(card)
-                + ",\"attached_to\":"
-                + Json.string(attached == null ? null : entityId(attached))
-                + ",\"face_down\":" + card.isFaceDown()
-                + ",\"granted_attached\":" + ProvenanceKey.toJsonArray(grantedAttached(card))
-                + ",\"granted_temporary\":" + grantedTemporaryJson(card, without)
-                + ",\"printed\":" + ProvenanceKey.toJsonArray(printedKeys(card))
-                + ",\"stack_extras\":" + stackExtrasJson(card) + "}";
+        return Json.object()
+                .value("id", entityId(card))
+                .value("name", card.getName())
+                .value("zone", zoneName(card))
+                .value("controller",
+                        card.getController() == null ? null : playerId(card.getController()))
+                .value("face", faceOf(card))
+                .value("copy_source", copySourceOf(card))
+                .value("token_script_id", tokenScriptIdOf(card))
+                .raw("types", typeNamesJson(type.getCoreTypes()))
+                .raw("subtypes", typeNamesJson(type.getSubtypes()))
+                .raw("supertypes", typeNamesJson(type.getSupertypes()))
+                .raw("colors", Json.stringArray(
+                        colorLetters(without == null ? card.getColor() : without.colors())))
+                .value("mana_value", card.getCMC())
+                .raw("pt", ptJson(card, without))
+                .value("tapped", card.isTapped())
+                .value("sick", card.isSick())
+                .value("damage", card.getDamage())
+                .raw("counters", counterJson(card))
+                .raw("combat", combatJson(card))
+                .value("attached_to", attached == null ? null : entityId(attached))
+                .value("face_down", card.isFaceDown())
+                .raw("granted_attached", ProvenanceKey.toJsonArray(grantedAttached(card)))
+                .raw("granted_temporary", grantedTemporaryJson(card, without))
+                .raw("printed", ProvenanceKey.toJsonArray(printedKeys(card)))
+                .raw("stack_extras", stackExtrasJson(card))
+                .render();
     }
 
     /**
@@ -473,21 +451,22 @@ public final class SnapshotBuilder {
             boostPower -= without.power();
             boostToughness -= without.toughness();
         }
-        return "{\"base\":[" + basePower + "," + baseToughness + "]"
-                + ",\"boosts\":[" + boostPower + "," + boostToughness + "]"
-                + ",\"counters\":[" + counterPower + "," + counterPower + "]}";
+        return Json.object()
+                .value("base", List.of(basePower, baseToughness))
+                .value("boosts", List.of(boostPower, boostToughness))
+                .value("counters", List.of(counterPower, counterPower))
+                .render();
     }
 
     private String counterJson(Card card) {
-        StringJoiner joiner = new StringJoiner(",", "{", "}");
+        Json.ObjectWriter counters = Json.object();
         for (com.google.common.collect.Multiset.Entry<CounterType> entry
                 : card.getCounters().entrySet()) {
-            joiner.add(
-                    Json.string(entry.getElement().getName().toUpperCase(
-                            java.util.Locale.ROOT))
-                            + ":" + entry.getCount());
+            counters.value(
+                    entry.getElement().getName().toUpperCase(java.util.Locale.ROOT),
+                    entry.getCount());
         }
-        return joiner.toString();
+        return counters.render();
     }
 
     private String combatJson(Card card) {
@@ -495,38 +474,41 @@ public final class SnapshotBuilder {
         if (combat == null || !combat.isAttacking(card) && !combat.isBlocking(card)) {
             return "null";
         }
-        StringJoiner blockedBy = new StringJoiner(",", "[", "]");
+        List<String> blockedBy = new ArrayList<>();
         if (combat.isAttacking(card)) {
             CardCollectionView blockers = combat.getBlockers(card);
             if (blockers != null) {
                 for (Card blocker : blockers) {
-                    blockedBy.add(Json.string(entityId(blocker)));
+                    blockedBy.add(entityId(blocker));
                 }
             }
         }
-        StringJoiner blocking = new StringJoiner(",", "[", "]");
+        List<String> blocking = new ArrayList<>();
         if (combat.isBlocking(card)) {
             // The other half of blocked_by. Without it a blocker's own entry
             // says only that it is somewhere in a combat, so the flag the head
             // reads for "is this creature blocking" would always be false — and the
             // blocking relationship is what trample and deathtouch act through.
             for (Card attacker : combat.getAttackersBlockedBy(card)) {
-                blocking.add(Json.string(entityId(attacker)));
+                blocking.add(entityId(attacker));
             }
         }
         Object defender = combat.isAttacking(card)
                 ? combat.getDefenderByAttacker(card) : null;
-        return "{\"attacking\":"
-                + Json.string(defender == null ? null : String.valueOf(defender))
-                + ",\"blocking\":" + blocking
-                + ",\"blocked_by\":" + blockedBy
-                + ",\"became_blocked\":" + combat.isBlocked(card) + "}";
+        return Json.object()
+                .value("attacking", defender == null ? null : String.valueOf(defender))
+                .raw("blocking", Json.stringArray(blocking))
+                .raw("blocked_by", Json.stringArray(blockedBy))
+                .value("became_blocked", combat.isBlocked(card))
+                .render();
     }
 
     private String grantedTemporaryJson(Card card, Suppressed without) {
-        return "{\"keywords\":" + Json.stringArray(keywordNames(
-                        without == null ? card.getKeywords() : without.keywords()))
-                + ",\"abilities\":" + ProvenanceKey.toJsonArray(grantedTemporaryAbilities(card)) + "}";
+        return Json.object()
+                .raw("keywords", Json.stringArray(keywordNames(
+                        without == null ? card.getKeywords() : without.keywords())))
+                .raw("abilities", ProvenanceKey.toJsonArray(grantedTemporaryAbilities(card)))
+                .render();
     }
 
     /**
@@ -602,8 +584,8 @@ public final class SnapshotBuilder {
         if (onStack == null || onStack.getTargets() == null) {
             return "null";
         }
-        StringJoiner targets = new StringJoiner(",", "[", "]");
-        StringJoiner amounts = new StringJoiner(",", "{", "}");
+        List<String> targets = new ArrayList<>();
+        Json.ObjectWriter amounts = Json.object();
         int chosen = 0;
         for (GameEntity target : onStack.getTargets().getTargetEntities()) {
             chosen++;
@@ -611,19 +593,21 @@ public final class SnapshotBuilder {
             if (id == null) {
                 continue;
             }
-            targets.add(Json.string(id));
+            targets.add(id);
             Integer divided = onStack.getDividedValue(target);
             if (divided != null) {
-                amounts.add(Json.string(id) + ":" + divided);
+                amounts.value(id, divided);
             }
         }
-        StringJoiner upTo = new StringJoiner(",", "{", "}");
+        Json.ObjectWriter upTo = Json.object();
         if (onStack.getTargetRestrictions() != null) {
-            upTo.add("\"chosen\":" + chosen);
+            upTo.value("chosen", chosen);
         }
-        return "{\"targets\":" + targets
-                + ",\"per_target_amounts\":" + amounts
-                + ",\"up_to_counts\":" + upTo + "}";
+        return Json.object()
+                .raw("targets", Json.stringArray(targets))
+                .raw("per_target_amounts", amounts.render())
+                .raw("up_to_counts", upTo.render())
+                .render();
     }
 
     /** Printed lines, as provenance keys into the card's own script. */
@@ -720,7 +704,7 @@ public final class SnapshotBuilder {
      *                       an acting ability still names its own host
      */
     private String refsJson(SpellAbility acting, Card sourceOverride) {
-        StringJoiner targets = new StringJoiner(",", "[", "]");
+        List<String> targets = new ArrayList<>();
         String source = sourceOverride == null ? null : entityId(sourceOverride);
         Integer x = null;
         if (acting != null) {
@@ -729,7 +713,7 @@ public final class SnapshotBuilder {
             }
             if (acting.getTargets() != null) {
                 for (var target : acting.getTargets()) {
-                    Refs.ofAny(target).ifPresent(ref -> targets.add(Json.string(ref)));
+                    Refs.ofAny(target).ifPresent(targets::add);
                 }
             }
             x = acting.getXManaCostPaid();
@@ -737,11 +721,13 @@ public final class SnapshotBuilder {
                 x = announcedX(acting);
             }
         }
-        return "{\"targets\":" + targets
-                + ",\"source\":" + Json.string(source)
-                + ",\"modes\":" + modesJson(acting)
-                + ",\"x\":" + (x == null ? "null" : x)
-                + ",\"choices\":" + choicesJson(acting) + "}";
+        return Json.object()
+                .raw("targets", Json.stringArray(targets))
+                .value("source", source)
+                .raw("modes", modesJson(acting))
+                .value("x", x)
+                .raw("choices", choicesJson(acting))
+                .render();
     }
 
     /**
@@ -785,16 +771,15 @@ public final class SnapshotBuilder {
      * either way.
      */
     private String modesJson(SpellAbility acting) {
-        StringJoiner modes = new StringJoiner(",", "[", "]");
+        List<String> modes = new ArrayList<>();
         if (acting != null && acting.getChosenList() != null) {
             // Forge keeps the chosen modes as the sub-abilities they select,
             // so the mode is named by the clause it turns on.
             for (var mode : acting.getChosenList()) {
-                modes.add(Json.string(
-                        mode.getApi() == null ? "?" : mode.getApi().name()));
+                modes.add(mode.getApi() == null ? "?" : mode.getApi().name());
             }
         }
-        return modes.toString();
+        return Json.stringArray(modes);
     }
 
     /**
@@ -805,9 +790,9 @@ public final class SnapshotBuilder {
      * {@code [ACT]} alongside the announced values.
      */
     private String choicesJson(SpellAbility acting) {
-        StringJoiner choices = new StringJoiner(",", "{", "}");
+        Json.ObjectWriter choices = Json.object();
         if (acting == null || acting.getHostCard() == null) {
-            return choices.toString();
+            return choices.render();
         }
         Card host = acting.getHostCard();
         addChoice(choices, "named_card", host.getNamedCard());
@@ -815,14 +800,14 @@ public final class SnapshotBuilder {
                 ? null : String.join("|", host.getChosenColors()));
         addChoice(choices, "chosen_type", host.getChosenType());
         if (host.hasChosenNumber()) {
-            choices.add("\"chosen_number\":" + host.getChosenNumber());
+            choices.value("chosen_number", host.getChosenNumber());
         }
-        return choices.toString();
+        return choices.render();
     }
 
-    private static void addChoice(StringJoiner into, String name, String value) {
+    private static void addChoice(Json.ObjectWriter into, String name, String value) {
         if (value != null && !value.isEmpty()) {
-            into.add(Json.string(name) + ":" + Json.string(value));
+            into.value(name, value);
         }
     }
 }
