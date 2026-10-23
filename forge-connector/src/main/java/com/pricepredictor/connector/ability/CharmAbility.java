@@ -10,6 +10,7 @@ import forge.game.spellability.SpellAbility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
@@ -31,42 +32,64 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
     }
 
     public static List<Ability> fromSpellAbility(SpellAbility sa) {
-        String charmDesc = sa.getParam("SpellDescription");
-        if (charmDesc != null && !charmDesc.isEmpty()) {
-            charmDesc = AbilityDescription.stripReminderText(charmDesc);
-            // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
-            charmDesc = TRAILING_EM_DASH.matcher(charmDesc).replaceAll("").trim();
-        }
-        if ((charmDesc == null || charmDesc.isEmpty()) && sa.hasParam("Pawprint")) {
-            String total = sa.getParam("Pawprint");
-            charmDesc = "Choose up to " + total + " {P} worth of modes.";
-            if ("True".equals(sa.getParam("CanRepeatModes"))) {
-                charmDesc += " You may choose the same mode more than once.";
-            }
-        }
-
-        if (charmDesc == null || charmDesc.isEmpty()) {
-            String additionalDesc = sa.getParam("AdditionalDescription");
-            if (additionalDesc != null && !additionalDesc.isEmpty()) {
-                charmDesc = AbilityDescription.stripReminderText(additionalDesc);
-            }
-        }
-
-        // Synthesize "choose N —" header from CharmNum/MinCharmNum when SpellDescription is absent.
-        if (charmDesc == null || charmDesc.isEmpty()) {
-            charmDesc = synthesizeCharmHeader(sa);
-        }
+        String charmDesc = firstNonEmpty(
+                () -> spellDescription(sa),
+                () -> pawprintHeader(sa),
+                () -> additionalDescription(sa),
+                // "choose N" from CharmNum/MinCharmNum when no description is written
+                () -> synthesizeCharmHeader(sa));
 
         List<Ability> choiceSubs = optionsFrom(sa, null);
 
         List<Ability> result = new ArrayList<>();
-        if (charmDesc != null && !charmDesc.isEmpty()) {
+        if (charmDesc != null) {
             result.add(new CharmAbility(AbilityDescription.applyCasing(charmDesc), choiceSubs));
         } else {
             // No charm description — add choices as top-level abilities
             result.addAll(choiceSubs);
         }
         return result;
+    }
+
+    /** The first candidate that yields a non-empty string, tried in order, or null. */
+    @SafeVarargs
+    private static String firstNonEmpty(Supplier<String>... candidates) {
+        for (Supplier<String> candidate : candidates) {
+            String text = candidate.get();
+            if (text != null && !text.isEmpty()) {
+                return text;
+            }
+        }
+        return null;
+    }
+
+    /** The charm's own {@code SpellDescription}, without reminder text or a trailing em-dash. */
+    private static String spellDescription(SpellAbility sa) {
+        String desc = sa.getParam("SpellDescription");
+        if (desc == null || desc.isEmpty()) {
+            return desc;
+        }
+        desc = AbilityDescription.stripReminderText(desc);
+        // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
+        return TRAILING_EM_DASH.matcher(desc).replaceAll("").trim();
+    }
+
+    /** A pawprint charm's header, built from its {@code Pawprint} total; null for any other charm. */
+    private static String pawprintHeader(SpellAbility sa) {
+        if (!sa.hasParam("Pawprint")) {
+            return null;
+        }
+        String header = "Choose up to " + sa.getParam("Pawprint") + " {P} worth of modes.";
+        if ("True".equals(sa.getParam("CanRepeatModes"))) {
+            header += " You may choose the same mode more than once.";
+        }
+        return header;
+    }
+
+    /** The charm's {@code AdditionalDescription}, without reminder text, or null. */
+    private static String additionalDescription(SpellAbility sa) {
+        String desc = sa.getParam("AdditionalDescription");
+        return desc == null || desc.isEmpty() ? null : AbilityDescription.stripReminderText(desc);
     }
 
     /**

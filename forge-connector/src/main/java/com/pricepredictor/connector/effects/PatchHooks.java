@@ -228,37 +228,6 @@ public final class PatchHooks {
         }
     }
 
-    /**
-     * Every hook the collectors need, and the specification of the patch.
-     *
-     * <p>This list is the patch's description. The patch itself is a branch in
-     * the sibling checkout — {@code effect-record-hooks} in {@code ../forge} —
-     * and this repo keeps no exported copy of it, which could disagree with the
-     * branch. What a branch cannot hold is *why* each hook exists and what
-     * breaks without it, so that lives here, next to the code that reads them.
-     *
-     * <p>Reconstructing a lapsed patch starts here: each entry names the class,
-     * the method, and the record channel it feeds.
-     *
-     * <p>One change in the patch is not listed, because it adds no method to
-     * probe for: {@code GameAction.destroy} puts the causing ability into the
-     * {@code Destroyed} trigger's run parameters, where it was in scope and
-     * being dropped. Its absence shows up as a destroy record that cannot name
-     * what destroyed the permanent, not as a missing hook.
-     *
-     * <p>Presence is not the whole contract for the {@code set*Listener} hooks,
-     * and {@code setEffectRecordListener} is where that first bit. Its listener
-     * grew from three arguments to five so a rewrite record could say which
-     * {@code ReplacementResult} happened and which ability stood in for the
-     * event; the setter's name did not change, so this list still reports the
-     * hook present against either shape. What tells them apart at runtime is the
-     * record: an older jar yields a {@code result} of null on every rewrite. The
-     * handlers therefore read the tail arguments through {@link Args#optional}
-     * rather than assuming them, because a partly-current patch must degrade the way an
-     * absent one does instead of throwing inside a dynamic proxy.
-     */
-    public static final List<Hook> REQUIRED;
-
     /** The resolving clause, and the hook mode detection probes. */
     static final Hook SUB_ABILITY = new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
             "per-clause attribution: an event's attributed_to; this is "
@@ -319,6 +288,42 @@ public final class PatchHooks {
             List.of(Callback.ON_OUTCOME));
 
     /**
+     * Every hook the collectors need, and the specification of the patch.
+     *
+     * <p>This list is the patch's description. The patch itself is a branch in
+     * the sibling checkout — {@code effect-record-hooks} in {@code ../forge} —
+     * and this repo keeps no exported copy of it, which could disagree with the
+     * branch. What a branch cannot hold is *why* each hook exists and what
+     * breaks without it, so that lives here, next to the code that reads them.
+     *
+     * <p>Reconstructing a lapsed patch starts here: each entry names the class,
+     * the method, and the record channel it feeds.
+     *
+     * <p>One change in the patch is not listed, because it adds no method to
+     * probe for: {@code GameAction.destroy} puts the causing ability into the
+     * {@code Destroyed} trigger's run parameters, where it was in scope and
+     * being dropped. Its absence shows up as a destroy record that cannot name
+     * what destroyed the permanent, not as a missing hook.
+     *
+     * <p>Presence is not the whole contract for the {@code set*Listener} hooks.
+     * A setter keeps its name when its listener gains arguments, so this list
+     * reports the hook present against a jar whose listener is shorter. That
+     * shows in the records instead: a rewrite record from a jar whose
+     * {@code setEffectRecordListener} listener does not pass the
+     * {@code ReplacementResult} carries a {@code result} of null on every
+     * rewrite. The handlers therefore read the tail arguments through
+     * {@link Args#optional} rather than assuming them, because a partly-current
+     * patch must degrade the way an absent one does instead of throwing inside
+     * a dynamic proxy.
+     */
+    public static final List<Hook> REQUIRED = List.of(
+            SUB_ABILITY, TRIGGER_LISTENER, REPLACEMENT_LISTENER, CLAUSE_LISTENER,
+            PLAYABILITY_LISTENER, COMBAT_LISTENER, CANT_ATTACK_STATIC,
+            CANT_BLOCK_BY_STATIC, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
+            CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
+            CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER);
+
+    /**
      * The components of the two layer records {@link #CHANGED_COLORS_BY_STATIC}
      * and {@link #CHANGED_NAMES} hand out.
      *
@@ -335,15 +340,6 @@ public final class PatchHooks {
             "a continuous contribution's colours");
     static final Hook NAME_CHANGE_NAME = new Hook(CARD + "$CardChangedName", "newName",
             "a continuous contribution's name");
-
-    static {
-        REQUIRED = List.of(
-                SUB_ABILITY, TRIGGER_LISTENER, REPLACEMENT_LISTENER, CLAUSE_LISTENER,
-                PLAYABILITY_LISTENER, COMBAT_LISTENER, CANT_ATTACK_STATIC,
-                CANT_BLOCK_BY_STATIC, MANA_LISTENER, CHANGED_TYPES_BY_STATIC,
-                CHANGED_COLORS_BY_STATIC, TYPE_WITHOUT, COLOR_WITHOUT, KEYWORDS_WITHOUT,
-                CHANGED_NAMES, ASSIGNED_DAMAGE, CONFIRM_LISTENER, OUTCOME_LISTENER);
-    }
 
     /**
      * The hooks whose listener has thrown in this JVM, which the engine has
@@ -399,6 +395,11 @@ public final class PatchHooks {
      * <p>The classpath is fixed for the life of the JVM, so an answer never
      * changes, and the sub-ability pointer is read through here for every
      * event the collectors stamp.
+     *
+     * <p>Keyed by name only, and kept apart from {@link #STATIC_OVERLOADS} on
+     * purpose: a listener setter's parameter type is an interface the patch
+     * declares, which this side never compiles against and so cannot name in
+     * a signature.
      */
     private static final Map<Named, Optional<Method>> LOOKUPS = new ConcurrentHashMap<>();
 
@@ -427,15 +428,7 @@ public final class PatchHooks {
 
     /** Read a no-argument static getter, or null when the hook is absent. */
     public static Object readStatic(String className, String methodName) {
-        Optional<Method> getter = find(className, methodName);
-        if (getter.isEmpty()) {
-            return null;
-        }
-        try {
-            return getter.get().invoke(null);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return null;
-        }
+        return invokeOrNull(find(className, methodName), null);
     }
 
     /**
@@ -461,25 +454,15 @@ public final class PatchHooks {
                 listenerType.getClassLoader(),
                 new Class<?>[]{listenerType},
                 handler);
-        try {
-            setter.get().invoke(null, proxy);
-            return true;
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return false;
-        }
+        return call(setter, null, proxy) != FAILED;
     }
 
-    /** Remove a listener the same way it was installed. */
+    /**
+     * Remove a listener the same way it was installed, or do nothing: there
+     * is nothing to undo on an unpatched checkout.
+     */
     public static void uninstall(String className, String setterName) {
-        Optional<Method> setter = find(className, setterName);
-        if (setter.isEmpty()) {
-            return;
-        }
-        try {
-            setter.get().invoke(null, new Object[]{null});
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // Nothing to undo on an unpatched checkout.
-        }
+        call(find(className, setterName), null, (Object) null);
     }
 
     /**
@@ -495,14 +478,7 @@ public final class PatchHooks {
         Optional<Method> method = STATIC_OVERLOADS.computeIfAbsent(
                 new Overload(className, methodName, List.of(parameterTypes)),
                 PatchHooks::staticOverload);
-        if (method.isEmpty()) {
-            return null;
-        }
-        try {
-            return method.get().invoke(null, args);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return null;
-        }
+        return invokeOrNull(method, null, args);
     }
 
     /** A static method's owner, name and exact parameter types. */
@@ -573,15 +549,7 @@ public final class PatchHooks {
         if (target == null) {
             return null;
         }
-        Optional<Method> method = instanceMethod(target.getClass(), methodName, NO_ARGUMENT);
-        if (method.isEmpty()) {
-            return null;
-        }
-        try {
-            return method.get().invoke(target);
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
-            return null;
-        }
+        return invokeOrNull(instanceMethod(target.getClass(), methodName, NO_ARGUMENT), target);
     }
 
     /** Call a one-{@code long}-argument method on an instance, or answer null. */
@@ -589,15 +557,43 @@ public final class PatchHooks {
         if (target == null) {
             return null;
         }
-        Optional<Method> method = instanceMethod(target.getClass(), methodName, ONE_LONG);
+        return invokeOrNull(
+                instanceMethod(target.getClass(), methodName, ONE_LONG), target, argument);
+    }
+
+    /**
+     * What {@link #call} answers for an absent method or a call that threw,
+     * kept distinct from null because null is also what a void setter answers
+     * on success.
+     */
+    private static final Object FAILED = new Object();
+
+    /**
+     * Invoke a looked-up method, or answer {@link #FAILED} when the lookup
+     * came back empty or the call threw.
+     *
+     * <p>Every reflective call into the patch goes through here, because a
+     * hook that is present but misbehaving must degrade the way an absent one
+     * does rather than throw out of a collector, or out of the engine's own
+     * call into a listener.
+     *
+     * @param receiver the instance, or null for a static method
+     */
+    private static Object call(Optional<Method> method, Object receiver, Object... args) {
         if (method.isEmpty()) {
-            return null;
+            return FAILED;
         }
         try {
-            return method.get().invoke(target, argument);
+            return method.get().invoke(receiver, args);
         } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
-            return null;
+            return FAILED;
         }
+    }
+
+    /** {@link #call}, answering null for an absent method or a failed call. */
+    private static Object invokeOrNull(Optional<Method> method, Object receiver, Object... args) {
+        Object result = call(method, receiver, args);
+        return result == FAILED ? null : result;
     }
 
     /** The sub-ability currently resolving, when the pointer hook is present. */
