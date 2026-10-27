@@ -250,3 +250,7 @@ Exploiting Forge rather than playing well is acceptable by the stated objective.
 ## Outcome / Result
 
 Not yet run. The stage-0 probes decide the plan and none has been executed: the pure-delegate parity check, the failed-action rate, the per-effect-type targeting census, the ceiling probe of Forge's full-simulation AI against reflex Forge, and the single-deviation and informative-group probes. Fill in each with its figure and the round budget it implies, then the imitation diagnostics, the stage 1b lookahead result, and the stage 2 and stage 3 win rates on the evaluation set.
+
+## Future plans
+
+Gen-2 targets chains of plays, where one spell sets up the next. Gen-1 can carry out a chain but its training rarely discovers one. Gen-2 plans a search teacher over short sequences of the agent's own plays, hidden cards re-dealt in every copy before it is searched, and policy-gradient deviations over a stretch of consecutive decisions within one turn. The full discussion is in [`2026-XX-XX-game-playing-agent-gen2-design.md`](2026-XX-XX-game-playing-agent-gen2-design.md).
