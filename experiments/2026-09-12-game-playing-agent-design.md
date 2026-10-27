@@ -129,6 +129,35 @@ The value function is therefore trained first, and selected on ranking rather th
 
 The drop-in evaluator is a bonus agent. Forge's full-simulation AI with the learned value head in place of its hand-coded evaluator needs no Python policy at play time. The evaluator is constructed inline at four sites in Forge, so this needs one small pluggability hook, one more inert commit in the `effect-record-hooks` series.
 
+## Two value-head training proposals are open and must be settled before stage 0 is built
+
+Two additions to the value head's training are proposed and not yet decided. Both change what the stage-0 recorder or the stage-3 round logger stores, so each is accepted or rejected before that code is written. Neither changes what the deployed value head sees: its input stays the deciding seat's visible projection.
+
+### The omniscient teacher: a value head that sees hidden cards trains the visible one
+
+The omniscient teacher is a second value head whose predictions become the visible head's training target. It reads the full state, including the opponent's hand and the top of both libraries. The omniscient head itself trains on game results. Much of what decides a game from a given state is the cards in hand and the next few draws, and it sees them, so its predictions are a far less noisy target than a 0/1 result. The visible head then trains with log-loss against the omniscient head's predicted probability instead of against the result. Log-loss is a proper scoring rule, so the visible head's optimum is the omniscient prediction averaged over everything the seat cannot see. When the omniscient head is correct, that average is the win probability given the visible state: the quantity the outcome-trained head estimates, from a lower-variance target. The technique is known as oracle guiding in Mahjong agents and as an asymmetric critic in reinforcement learning. The omniscient head never plays and never scores a candidate in search.
+
+Adopting the omniscient teacher changes three parts of the design.
+
+- The recorder keeps the hidden zones in the corpus. The current design drops the opponent's hand and the library cards at export, and the corpus validator asserts it. Under this proposal the filter moves from the export to the visible head's input, and the validator asserts the rule there. How many library cards the omniscient head sees is part of the decision, bounded by the 384-slot token budget.
+- The omniscient head's predictions are cross-fitted. Each state's target comes from a head trained on folds that exclude that state's game, because a head scoring its own training states hands the visible head a target that already contains the outcome.
+- The invariant of zero opponent-hand tokens in any value input applies to the deployed head only.
+
+The omniscient teacher is adopted if the distilled visible head beats the outcome-trained head on held-out outcome log-loss and on same-game pair-ranking accuracy. A biased omniscient head passes its bias to the visible head, and the held-out comparison against real outcomes is what catches it.
+
+### The sibling-pair loss: seeded games that differ by one decision train the head to rank
+
+The sibling-pair loss trains the value head on pairs of states one decision apart. It takes the Bradley–Terry form the deck scorer uses: the probability that the first state of a pair leads to the win is the logistic function of the difference of the two states' values. In the deck scorer a pair is the two decks of one match. Here a pair is two games of one seeded group. The two games share decks and shuffle seed, and they play identically until a deviated game leaves the group's all-argmax game. The pair is the state just after that decision resolves in each game, and the label is which of the two games the seat won. Search uses the value head to choose between exactly such sibling states, so the sibling-pair loss trains the comparison search makes, measured by the same-game ranking metric the head is already selected on.
+
+The sibling-pair loss has two limits. Only pairs whose games ended differently carry signal. After the divergence the opponent's random draws differ, so the shared seed removes the shuffle's noise only up to the deviated decision, and the label still carries the noise of the rest of the game. The sibling-pair loss is therefore an auxiliary term beside the outcome loss, not a replacement for it.
+
+Adopting the sibling-pair loss adds two pieces of logging.
+
+- The stage-3 round logger records, for each deviated game, its group, the index of the decision where it left the all-argmax game, and the state after that decision.
+- The stage-0 signal probe logs the same pairs. It deviates once per game to Forge's second-ranked candidate, and its games are the first data the loss is tested on.
+
+The sibling-pair loss enters only the value head. The policy-gradient target keeps the game result alone, so the rule against shaping the advantage from a value head is unaffected. The loss is kept if it raises same-game pair-ranking accuracy on held-out pairs without worsening held-out outcome log-loss.
+
 ## The effect model is an initialisation and an auxiliary loss, never a dependency
 
 No effect checkpoint exists and its three gates are unrun, so nothing on the critical path may wait for it. The agent uses three things from the effect design that exist today: the token layout, the trunk class, and the per-entity heads as auxiliary losses on effect records, joined to decision records by game id when both collectors run. The one-vector-per-ability-line cache interface is what lets the effect encoder be swapped in later without touching the agent.
@@ -189,6 +218,10 @@ The principle: measure whether one win/loss bit carries enough signal by replaci
 ### Advantage shaping from a frozen value head
 
 The principle: use the change in a frozen value head's prediction as a per-decision advantage, to give a dense signal over the 75-decision horizon. Rejected because it is not potential-based shaping and reproduces the stale-critic collapse of the draft agent's offline second generation; replaced by the game result with a per-round refitted baseline at most.
+
+### Pairwise training on both seats' views of one state
+
+The principle: score each seat's view of a state separately, its own hidden cards included, and train the difference of the two scores against the winner, as the deck scorer does with two decks. Rejected for two reasons. The first is that the pairwise form solves a problem positions do not have. A deck has no absolute label, since whether it wins depends on the opponent's deck, and the difference of two scores is what removes the opponent. A game state already contains both sides, so who won is an absolute label of the state, and the planned log-loss is already its likelihood. The second reason is that the two-view prediction reads both hands, while the deployed policy holds only its own, so the opponent's view cannot be computed at play time. Absorbed as the two open proposals: the omniscient teacher keeps the hidden cards for training only, and the sibling-pair loss moves the pairwise form to states one decision apart.
 
 ### Forge's policy verdict as a policy input
 
