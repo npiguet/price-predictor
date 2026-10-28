@@ -19,10 +19,9 @@ What it counts falls in two populations, kept apart on purpose:
   supply counted over held-out and game-disjoint games too planned training
   slots the write pass then routed away.
 
-Both passes read their shards through :func:`read_shard_remapped`, which
-repairs the old collector's token keys in the raw JSON before a record is built
-(FR-151), and through one :class:`WorkerContext`, so the refusal rule, the
-held-out test and a record's cell cannot drift apart between them.
+Both passes read their shards through one :class:`WorkerContext`, so the
+refusal rule, the held-out test and a record's cell cannot drift apart between
+them.
 """
 
 from __future__ import annotations
@@ -67,7 +66,6 @@ from effects.domain.records import (
 )
 from effects.domain.sampling import CLASS_PLAYABILITY_LEGALITY, sampling_class
 from effects.domain.split import HeldOutCards, record_names_held_out_card
-from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
 
 if TYPE_CHECKING:
     from effects.infrastructure.sidecar_io import SidecarCache
@@ -84,29 +82,6 @@ def game_hash(game_id: str) -> int:
     than the built-in ``hash()``, which is salted per process (FR-088a).
     """
     return zlib.crc32(game_id.encode("utf-8"))
-
-
-def read_shard_remapped(
-    path: Path, remapper: TokenKeyRemapper | None, counts: RemapCounts,
-) -> Iterator[EffectRecord]:
-    """Every complete record of one shard, its old token keys remapped first.
-
-    The remap works on the raw JSON before the record is built, so both
-    passes see the corrected keys and nothing downstream has to know they
-    were ever wrong: the survey's rarity entry, the per-text cap it sizes and
-    the written shard all name the token script. Reading through the record
-    and rewriting it afterwards would not do -- ``ProvenanceKey`` is frozen
-    and the remap needs the entity dicts the record drops.
-
-    ``remapper is None`` (``--no-remap-token-keys``) is a plain read, and
-    ``counts`` is then left alone.
-    """
-    from effects.infrastructure.record_io import iter_record_dicts, record_from_dict
-
-    for data in iter_record_dicts(path):
-        if remapper is not None:
-            remap_record_dict(data, remapper, counts)
-        yield record_from_dict(data)
 
 
 def selection_half(record: EffectRecord, klass: str) -> str:
@@ -172,9 +147,6 @@ class ReadConfig:
     max_events: int
     held_out: HeldOutCards
     seed: int
-    #: The old-token-key remap, or None when it is off (FR-151). A plain
-    #: object of dicts and frozensets, so it pickles with the rest.
-    remapper: TokenKeyRemapper | None = None
 
 
 class WorkerContext:
@@ -212,10 +184,10 @@ class WorkerContext:
             self._resolver = KeywordResolver(self.sidecars)
         return self._resolver
 
-    def records(self, relative: str, counts: RemapCounts) -> Iterator[EffectRecord]:
-        return read_shard_remapped(
-            Path(self.read.records_dir) / relative, self.read.remapper, counts,
-        )
+    def records(self, relative: str) -> Iterator[EffectRecord]:
+        from effects.infrastructure.record_io import read_shard
+
+        return read_shard(Path(self.read.records_dir) / relative)
 
     def refusal(self, record: EffectRecord) -> str | None:
         """The one refusal rule both passes apply, so they cannot drift apart."""
@@ -359,9 +331,6 @@ class ShardSurvey:
     mode_counts: Counter[str] = field(default_factory=Counter)
     #: Training-bound records per class acting through a held-out text.
     held_out_text_dropped: Counter[str] = field(default_factory=Counter)
-    #: Old token keys this shard's read rewrote, and the ones it refused to
-    #: guess at (FR-151).
-    remap: RemapCounts = field(default_factory=RemapCounts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,11 +352,6 @@ class Survey:
     #: in collection, and nothing else in the build would notice.
     games_by_source: dict[str, int] = field(default_factory=dict)
     held_out_games_by_source: dict[str, int] = field(default_factory=dict)
-    #: The whole corpus's remap counts, summed over **every record read** --
-    #: the write pass counts written records only, so its figures are a
-    #: subset of these; one exceeding the survey's means the corpus changed
-    #: between the two passes.
-    remap: RemapCounts = field(default_factory=RemapCounts)
     #: Games found in more than one shard. A game routes at the end of its
     #: shard, so a game split across two shards was planned from one shard's
     #: view of it: still placed correctly by the write pass, which reads the
@@ -450,7 +414,7 @@ def survey_shard_with(
     #: kept record, counted into the supply once its game's route is known.
     pending: list[tuple[str, str, Cell, Keys | None, int, bool]] = []
 
-    for record in context.records(relative, out.remap):
+    for record in context.records(relative):
         out.records += 1
         game = record.game_id
         # The keyword threshold and the held-out test are properties of the
@@ -522,7 +486,6 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
     refusals = RefusalTally()
     mode_counts: Counter[str] = Counter()
     held_out_text_dropped: Counter[str] = Counter()
-    remap = RemapCounts()
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
     split_games = 0
@@ -537,7 +500,6 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         refusals.merge(part.refusals)
         mode_counts.update(part.mode_counts)
         held_out_text_dropped.update(part.held_out_text_dropped)
-        remap.merge(part.remap)
         source = source_of(part.name)
         games_by_source[source] |= part.games.games
         held_by_source[source] |= part.games.held_out
@@ -553,7 +515,6 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         held_out_text_dropped=held_out_text_dropped,
         games_by_source={s: len(g) for s, g in games_by_source.items()},
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
-        remap=remap,
         split_games=split_games,
     )
 

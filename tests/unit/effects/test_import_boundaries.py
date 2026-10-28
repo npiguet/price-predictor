@@ -39,9 +39,7 @@ _ALLOWED: dict[str, set[str] | None] = {
     # Adjacent prior art, FR-058a).
     "price_predictor.domain.value_objects": {"ManaCost"},
     "sealed.domain.manabase": {"compute_basic_lands"},
-    "sealed.domain.card_embedding_layout": None,
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
-    "sealed.infrastructure.embedding_store": None,
     "sealed.infrastructure.match_worker_connector": {"MatchWorkerConnector"},
 }
 

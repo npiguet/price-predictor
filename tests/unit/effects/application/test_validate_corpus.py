@@ -23,7 +23,6 @@ from effects.application.validate_corpus import (
     FieldPresence,
     Finding,
     Thresholds,
-    event_type_coverage,
     read_window,
     validate_corpus,
 )
@@ -209,7 +208,7 @@ def _combat(record_id: str, **overrides):
 def _record_with_event(event_type: EventType, record_id: str = "r0", **overrides):
     """A minimal record whose only event is one of ``event_type``.
 
-    For :func:`event_type_coverage`, which cares only which types appear
+    For the event-type coverage check, which cares only which types appear
     anywhere in a record, not what kind of record carries them. No ``params``
     are set, so this is valid for any ``event_type`` regardless of what its
     schema row declares.
@@ -260,6 +259,10 @@ def _healthy() -> list[EffectRecord]:
 
 def _named(findings: list[Finding], fragment: str) -> Finding:
     return next(f for f in findings if fragment in f.name)
+
+
+def _event_types(records: list[EffectRecord]) -> Finding:
+    return _named(validate_corpus(records), "event types")
 
 
 def _broken(findings: list[Finding]) -> set[str]:
@@ -1833,7 +1836,7 @@ class TestEventTypeCoverage:
             _record_with_event(EventType.DAMAGE_DEALT, "r1"),
         ]
 
-        finding = event_type_coverage(records)
+        finding = _event_types(records)
 
         assert finding.watched is True
         assert "2/" in finding.measured
@@ -1845,14 +1848,14 @@ class TestEventTypeCoverage:
             _record_with_event(EventType.ZONE_CHANGE, "r1"),
         ]
 
-        finding = event_type_coverage(records)
+        finding = _event_types(records)
 
         assert "1/" in finding.measured
         assert "zone_change" not in finding.detail
 
     def test_it_never_fails_the_run(self):
         """Watched means never a verdict, however sparse the window is."""
-        finding = event_type_coverage([_record_with_event(EventType.ZONE_CHANGE)])
+        finding = _event_types([_record_with_event(EventType.ZONE_CHANGE)])
         assert finding.ok is True
 
     def test_the_full_vocabulary_reports_nothing_unseen(self):
@@ -1861,16 +1864,11 @@ class TestEventTypeCoverage:
             for index, event_type in enumerate(EventType)
         ]
 
-        finding = event_type_coverage(records)
+        finding = _event_types(records)
 
         assert finding.detail == ()
         total = len(list(EventType))
         assert f"{total}/{total}" in finding.measured
-
-    def test_registered_in_the_full_check_list(self):
-        """The full pass reports it too, not just the standalone entry point."""
-        finding = _named(validate_corpus(_healthy()), "event types")
-        assert finding.watched is True
 
 
 @pytest.mark.parametrize(

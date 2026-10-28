@@ -305,6 +305,24 @@ class ApiEventsTest {
     }
 
     /**
+     * A rule keyed by a name that is no {@code ApiType} member -- an effect
+     * class's stem, say, or a member Forge renamed -- matches nothing and
+     * fails silently, since {@code ruleFor} looks rules up by {@code name()}.
+     */
+    @Test
+    void everyRuleIsKeyedByAnApiTypeMember() {
+        Set<String> members = new TreeSet<>();
+        for (ApiType api : ApiType.values()) {
+            members.add(api.name());
+        }
+        Set<String> unknown = new TreeSet<>(ApiEvents.apiNames());
+        unknown.removeAll(members);
+
+        assertFalse(ApiEvents.apiNames().isEmpty());
+        assertEquals(Set.of(), unknown, "RULES keys that name no ApiType member");
+    }
+
+    /**
      * For every {@code RULES} entry the schema
      * declares as {@code choice_made} (fixture keys asserted equal to every
      * {@code ApiType} whose rule emits {@code choice_made}, read live off the

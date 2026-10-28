@@ -734,44 +734,6 @@ class TestQualifyingObservations:
         assert sorted(p.carrier.id for _row, p in found) == ["A", "B0"]
 
 
-def count_qualifying_all(records, rows, sidecars=None) -> dict[str, int]:
-    """Every row's qualifying ``(record, carrier)`` observations."""
-    resolver = KeywordResolver(sidecars)
-    counts = {row.keyword: 0 for row in rows}
-    for record in records:
-        for row, _participant in qualifying_observations(record, rows, resolver):
-            counts[row.keyword] += 1
-    return counts
-
-
-class TestCounting:
-    def test_it_counts_the_population_the_scorer_scores(self):
-        records = [_printed_board(), _overlay_board()]
-        counts = count_qualifying_all(
-            records, (KEYWORDS_BY_NAME["first_strike"],), _Sidecars(),
-        )
-        assert counts["first_strike"] == 2
-
-    def test_a_non_combat_record_is_never_counted(self):
-        from effects.domain.records import Moment, ResolutionPayload
-
-        record = _printed_board()
-        resolution = EffectRecord(
-            record_id="x", run_id="run", timestamp="t", game_id="g",
-            kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION,
-            actor_player="P0", payload=ResolutionPayload(),
-            state=record.state, ability=(_PUMP,),
-        )
-        counts = count_qualifying_all(
-            [resolution], (KEYWORDS_BY_NAME["first_strike"],), _Sidecars(),
-        )
-        assert counts["first_strike"] == 0
-
-    def test_without_sidecars_a_printed_keyword_is_invisible(self):
-        row = KEYWORDS_BY_NAME["first_strike"]
-        assert count_qualifying_all([_printed_board()], (row,), None)[row.keyword] == 0
-
-
 # ── the whole scorer, against a model that reacts to the strip ───────────
 
 
@@ -953,23 +915,18 @@ class TestGateTwoRecords:
 
         write_shard(directory / "shard-00001.jsonl.gz", records)
 
-    def test_a_curated_corpus_is_read_rather_than_the_raw_shards(self, tmp_path):
-        """The raw shards hold records the corpus repair dropped."""
-        import dataclasses
-
+    def test_it_reads_the_recorded_games_of_the_curated_game_disjoint_stratum(
+        self, tmp_path,
+    ):
         from effects.application.gate_two import gate_two_records
         from effects.infrastructure.corpus_store import CorpusStore
         from effects.infrastructure.effect_model_store import SplitProvenance
 
-        raw, corpus = tmp_path / "raw", tmp_path / "corpus"
-        curated = _printed_board(game="gd-1")
-        dropped = dataclasses.replace(curated, record_id="gd-1.9")
-        self._write(raw, curated, dropped)
-        self._write(CorpusStore(corpus).game_disjoint_dir, curated)
-        config = type("Config", (), {"records_dir": raw})()
+        corpus = tmp_path / "corpus"
+        recorded = _printed_board(game="gd-1")
+        other = _printed_board(game="gd-2")
+        self._write(CorpusStore(corpus).game_disjoint_dir, recorded, other)
         provenance = SplitProvenance(game_disjoint_games=("gd-1",))
 
-        read = list(gate_two_records(config, provenance, corpus_path=corpus))
-        assert [r.record_id for r in read] == [curated.record_id]
-        raw_read = list(gate_two_records(config, provenance, corpus_path=None))
-        assert len(raw_read) == 2
+        read = list(gate_two_records(provenance, corpus_path=corpus))
+        assert [r.record_id for r in read] == [recorded.record_id]

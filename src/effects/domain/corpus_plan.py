@@ -418,7 +418,7 @@ class GameRouting:
         if held_out:
             return GameRoute.HELD_OUT
         if in_game_disjoint_stratum(
-            game_id, False, keyword_combat, self.game_disjoint_share, self.keyword_share,
+            game_id, keyword_combat, self.game_disjoint_share, self.keyword_share,
         ):
             return GameRoute.GAME_DISJOINT
         return GameRoute.TRAINING

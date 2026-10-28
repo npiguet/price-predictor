@@ -324,7 +324,6 @@ class TestShardDirectory:
         assert len(iter_shards(tmp_path)) == 2
         loaded = list(read_records(tmp_path))
         assert len({r.record_id for r in loaded}) == 2
-        assert {r.worker for r in loaded} == {"0"}
 
     def test_written_records_read_back(self, tmp_path):
         records = [_record(record_id=f"run.0.{i}") for i in range(3)]
@@ -344,7 +343,9 @@ class TestShardDirectory:
         for worker in (0, 1, 2):
             with RawShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
                 writer.write(_record(record_id=f"run.{worker}.1"))
-        assert {r.worker for r in read_records(tmp_path)} == {"0", "1", "2"}
+        assert {r.record_id for r in read_records(tmp_path)} == {
+            "run.0.1", "run.1.1", "run.2.1",
+        }
 
 
 class TestTheProbedPerturbation:
@@ -639,7 +640,9 @@ class TestCompressedShards:
         for worker in (2, 0, 1):
             with RawShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
                 writer.write(_record(record_id=f"run.{worker}.1"))
-        assert [r.worker for r in read_records(tmp_path)] == ["0", "1", "2"]
+        assert [r.record_id for r in read_records(tmp_path)] == [
+            "run.0.1", "run.1.1", "run.2.1",
+        ]
 
     def test_a_trailing_partial_line_is_skipped(self, tmp_path):
         """A JVM crash mid-write is expected, not exceptional."""

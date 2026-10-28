@@ -228,7 +228,7 @@ class TestEvaluateEffectModel:
     def test_the_defaults_are_the_contracts(self):
         args = parse("evaluate-effect-model")
         assert args.checkpoint == Path("models/effects/effect-model/latest.pt")
-        assert args.records_dir == Path("output/effects/records/")
+        assert not hasattr(args, "records_dir")
         assert args.baseline_checkpoints is None
         assert not hasattr(args, "sealed_encoder_checkpoint")
 

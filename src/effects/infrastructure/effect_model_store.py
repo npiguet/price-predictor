@@ -140,12 +140,6 @@ class SplitProvenance:
             holdout_unit=data.get("holdout_unit", "text"),
         )
 
-    @property
-    def validation_games(self) -> frozenset[str]:
-        return frozenset(self.card_disjoint_games) | frozenset(
-            self.game_disjoint_games
-        )
-
     def describes_same_split(self, other: SplitProvenance) -> bool:
         return (
             self.held_out_cards == other.held_out_cards

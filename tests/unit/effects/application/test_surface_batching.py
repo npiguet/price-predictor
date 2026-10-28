@@ -446,7 +446,7 @@ def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
         surface="prose", e_dim=4, widths={}, device=torch.device("cpu"),
         withhold_keyword="Flying",
     )
-    (line,) = batcher.prepare_texts(["flying"])
+    (line,) = batcher.stage({"flying": None}).prepared
     ids = {word: index for index, word in enumerate(words)}
     # [CLS], then the reminder text in place of the bare token.
     assert line.token_ids[1:4] == [ids["cant"], ids["be"], ids["blocked"]]
@@ -478,7 +478,8 @@ def test_a_withheld_keywords_token_never_appears_even_inside_an_expansion():
         withhold_keyword="Flying", keyword_expand_p=1.0,
     )
     flying = words.index("flying")
-    for line in batcher.prepare_texts(["flying", "reach", "creatures with flying"]):
+    texts = {"flying": None, "reach": None, "creatures with flying": None}
+    for line in batcher.stage(texts).prepared:
         assert flying not in line.token_ids
 
 
@@ -537,10 +538,10 @@ def test_a_prose_text_is_encoded_with_its_lines_role_spans():
         sidecars=_Sidecars(), masks=BaselineMasks(), surface="prose", e_dim=4,
         widths={}, device=torch.device("cpu"),
     )
-    (encoded,) = batcher.prepare_texts([prose], {prose: line})
+    (encoded,) = batcher.stage({prose: line}).prepared
     assert encoded.role_ids[1] == role_index("cost")
     assert encoded.role_ids[-1] == role_index("effect")
     # The script surface's spans would index the wrong text; a script fallback
     # on the prose surface reads none.
-    (fallback,) = batcher.prepare_texts([line.script_text], {line.script_text: line})
+    (fallback,) = batcher.stage({line.script_text: line}).prepared
     assert set(fallback.role_ids) == {0}

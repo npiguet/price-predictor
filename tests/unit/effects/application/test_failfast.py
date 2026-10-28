@@ -297,11 +297,6 @@ class TestCorpusMismatch:
         with pytest.raises(CorpusMismatchError, match="rebuilt"):
             check_corpus(provenance, actual_digest="something-else")
 
-    def test_evaluate_accepts_a_checkpoint_that_read_no_curated_corpus(self):
-        from effects.application.evaluation_context import check_corpus
-
-        check_corpus(SplitProvenance(), actual_digest="anything")  # no raise
-
     def test_matching_digests_pass(self, tmp_path):
         from effects.application.evaluation_context import check_corpus
 
@@ -329,11 +324,8 @@ class TestCorpusMismatch:
 
 class TestCorpusPathResolution:
     """``--corpus`` on ``evaluate-effect-model`` defaults to what the
-    checkpoint recorded, an explicit value overriding it (FR-147). Unlike
-    ``resolve_inference_paths``, which hash-checks every resolved path
-    afterwards whether it came from the checkpoint or an override, an
-    override here is discarded — with a warning — when the checkpoint
-    recorded no digest to check it against."""
+    checkpoint recorded, an explicit value overriding it (FR-147), and a
+    checkpoint that recorded no corpus is refused."""
 
     _CHECKPOINT = Path("models/effects/effect-model/latest.pt")
 
@@ -357,50 +349,18 @@ class TestCorpusPathResolution:
             provenance, corpus=tmp_path, checkpoint=self._CHECKPOINT,
         ) == tmp_path
 
-    def test_returns_none_when_the_checkpoint_read_no_curated_corpus(self, tmp_path):
-        """No digest recorded means nothing to check, whatever --corpus says."""
-        from effects.application.evaluation_context import resolve_corpus_path
-
-        assert resolve_corpus_path(
-            SplitProvenance(), corpus=None, checkpoint=self._CHECKPOINT,
-        ) is None
-        assert resolve_corpus_path(
-            SplitProvenance(), corpus=tmp_path, checkpoint=self._CHECKPOINT,
-        ) is None
-
-    def test_an_override_on_a_legacy_checkpoint_warns_that_it_is_ignored(
-        self, tmp_path, caplog,
-    ):
-        """Silence here would be the flag-with-no-effect-and-no-signal
-        pattern this repo keeps paying for: refusing would be too strong (it
-        would break a batch-eval script passing --corpus uniformly across a
-        mix of curated and legacy checkpoints), and honouring it would be
-        meaningless (there is no digest to compare freshness against)."""
-        from effects.application.evaluation_context import resolve_corpus_path
-
-        with caplog.at_level("WARNING"):
-            resolve_corpus_path(
-                SplitProvenance(), corpus=tmp_path, checkpoint=self._CHECKPOINT,
-            )
-        assert str(self._CHECKPOINT) in caplog.text
-        assert "no curated corpus" in caplog.text
-
-    def test_a_curated_checkpoints_override_warns_about_nothing(
-        self, tmp_path, caplog,
-    ):
-        """A recorded digest means the override has something to check
-        against, isolating corpus_digest as the one thing that decides
-        whether the warning fires."""
-        from effects.application.evaluation_context import resolve_corpus_path
-
-        provenance = SplitProvenance(
-            corpus_path="output/effects/corpus", corpus_digest="abc123",
+    def test_a_checkpoint_that_recorded_no_corpus_is_refused(self, tmp_path):
+        """Nothing else says which games it trained on, --corpus or not."""
+        from effects.application.evaluation_context import (
+            CorpusMismatchError,
+            resolve_corpus_path,
         )
-        with caplog.at_level("WARNING"):
-            resolve_corpus_path(
-                provenance, corpus=tmp_path, checkpoint=self._CHECKPOINT,
-            )
-        assert caplog.text == ""
+
+        for corpus in (None, tmp_path):
+            with pytest.raises(CorpusMismatchError, match="records no curated corpus"):
+                resolve_corpus_path(
+                    SplitProvenance(), corpus=corpus, checkpoint=self._CHECKPOINT,
+                )
 
 
 class TestCorpusSurface:

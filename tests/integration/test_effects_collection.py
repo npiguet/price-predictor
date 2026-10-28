@@ -111,8 +111,9 @@ def test_collection_writes_records_under_one_attribution_mode(
     # the next lifetime of slot 0 from counting over these ids again.
     ids = [record.record_id for record in records]
     assert len(ids) == len(set(ids))
-    assert all(record.worker == "0" for record in records)
-    lifetimes = {record.record_id.split(".")[-2].partition("-")[2] for record in records}
+    slots = {record.record_id.split(".")[-2].partition("-") for record in records}
+    assert {worker for worker, _, _ in slots} == {"0"}
+    lifetimes = {lifetime for _, _, lifetime in slots}
     assert len(lifetimes) == 1, lifetimes
     assert lifetimes != {""}, "ids carry no lifetime segment"
 

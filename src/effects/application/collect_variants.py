@@ -181,18 +181,6 @@ def loadable_variants(
     return [variant for variant in generated if variant.name in accepted]
 
 
-def variant_growth(*, before: int, after: int) -> int:
-    """How many records the round added to the destination.
-
-    Both counts must come from the destination. ``--corpus-records`` lets the
-    volume cap be sized against a corpus the variants are not written into, and
-    subtracting that count from a count of the destination reports a run
-    against a 39M-record corpus writing to an empty directory as having
-    collected minus thirty-nine million records.
-    """
-    return after - before
-
-
 def perturb_script(
     source_lines: list[str], rng: random.Random,
 ) -> tuple[list[str], str] | None:
@@ -519,9 +507,7 @@ def _play_and_check_growth(
     # Forge's card database under the names the decks file spells, every deck
     # materializes as 17 basics, every game plays, every progress line is
     # appended, and the run exits 0 having collected nothing.
-    collected = variant_growth(
-        before=before, after=count_records(config.effect_records),
-    )
+    collected = count_records(config.effect_records) - before
     if supervisor.interrupted:
         logger.warning(
             "Interrupted after %d new effect records; the variant round did "

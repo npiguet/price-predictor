@@ -391,14 +391,7 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
     from effects.application.ability_text import KeyResolver
     from effects.domain.ability_encoder import surface_of
 
-    if context.corpus_path is None:
-        return CheckResult(
-            CheckName.GATE_1, CheckStatus.SKIPPED,
-            "the checkpoint records no curated corpus, so nothing says which "
-            "texts it trained on; gate 1 reads the corpus's training and "
-            "card-disjoint strata",
-        )
-    games = context.main.provenance.card_disjoint_games
+    games =context.main.provenance.card_disjoint_games
     if not games:
         return CheckResult(
             CheckName.GATE_1, CheckStatus.SKIPPED,

@@ -190,20 +190,10 @@ class CorpusManifest:
     #: resolution -- so these records are trained on. A rising share is a
     #: statement about the collector, not about the corpus.
     unattributed_records: int = field(default=0, metadata=_reads(int))
-    #: Provenance keys the build rewrote from the old collector's
-    #: ``cardsfolder/<name>.txt`` to the token script they meant (FR-151),
-    #: counted **on written records**: a record the build refused or dropped
-    #: takes its own remaps with it, so this is what the dataset carries
-    #: rather than what the raw shards held. 0 on a manifest built before the
-    #: remap existed, and on one built with ``--no-remap-token-keys``.
+    #: Legacy, with ``token_keys_ambiguous`` and ``forge_tokenscripts``: the
+    #: retired token-key remap's tallies (FR-151), kept because manifests on
+    #: disk carry them and the digest hashes them; always written empty now.
     token_keys_remapped: int = field(default=0, metadata=_reads(int))
-    #: Old token keys the remap refused to guess at, on written records, by
-    #: the old script's filename stem, largest 100 only. A stem here is a
-    #: token name whose scripts the entity's colours, types, supertypes and
-    #: P/T could not tell apart -- most often two same-stat scripts differing
-    #: only by a keyword, which a snapshot does not show at all. The records
-    #: are kept, keyed as they were collected, unless FR-148 refuses them for
-    #: acting through no text.
     token_keys_ambiguous: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
@@ -215,10 +205,7 @@ class CorpusManifest:
     no_acting_text_scripts: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
-    #: The raw Forge token scripts the remap read (``--forge-tokenscripts``),
-    #: or "" when the remap was off. Which scripts were on disk decides which
-    #: keys resolved, so two datasets built against different Forge checkouts
-    #: are different datasets.
+    #: Legacy, as ``token_keys_remapped``: kept for digest stability.
     forge_tokenscripts: str = field(default="", metadata=_reads(str))
     #: ``--game-disjoint-games``, the sampled-count rule gen-2 replaced with a
     #: per-game threshold (FR-044). No longer written; a manifest that carries

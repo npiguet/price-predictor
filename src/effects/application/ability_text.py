@@ -52,21 +52,6 @@ def text_for_key(key, sidecars, surface: str) -> str | None:
     return resolve_key(key, sidecars, surface)[0]
 
 
-def ability_text_of(
-    record: EffectRecord, sidecars, surface: str = "prose",
-) -> str | None:
-    """The acting line's text on ``surface``, or None where no line acts.
-
-    ``combat`` and the ``attackers``/``blockers`` subkinds have none, which is
-    what makes them sample uniformly rather than by rarity.
-    """
-    for key in acting_keys(record):
-        text = text_for_key(key, sidecars, surface)
-        if text is not None:
-            return text
-    return None
-
-
 def known_texts(roots: Mapping[str, Path], surface: str) -> list[str]:
     """Every distinct text a line under ``roots`` encodes as on ``surface``, sorted.
 
@@ -121,7 +106,11 @@ class KeyResolver:
         return self.resolve(key)[0]
 
     def acting_text(self, record: EffectRecord) -> str | None:
-        """:func:`ability_text_of`, through the memo."""
+        """The acting line's text, or None where no line acts.
+
+        ``combat`` and the ``attackers``/``blockers`` subkinds have none, which
+        is what makes them sample uniformly rather than by rarity.
+        """
         for key in acting_keys(record):
             text = self.text_of(key)
             if text is not None:

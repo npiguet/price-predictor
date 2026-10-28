@@ -20,8 +20,9 @@ from effects.application.evaluation_context import parse_baseline_checkpoint
 from effects.application.gate_one import GateOneMetrics, evaluate_gate_one
 from effects.application.gate_two import evaluate_gate_two, evaluate_keyword
 from effects.application.geometry_checks import (
-    evaluate_gate_three,
+    CacheGeometry,
     evaluate_ward_canary,
+    gate_three_verdict,
 )
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
@@ -272,14 +273,14 @@ class TestGateThree:
     def test_a_spread_space_passes(self):
         rng = np.random.default_rng(0)
         vectors = rng.normal(size=(400, 64))
-        result = evaluate_gate_three(vectors)
+        result = gate_three_verdict(CacheGeometry.of(vectors))
         assert result.status is CheckStatus.PASS
 
     def test_a_collapsed_space_fails(self):
         """Every ability on top of every other passes every average-case metric."""
         rng = np.random.default_rng(0)
         vectors = np.ones((400, 64)) + 0.001 * rng.normal(size=(400, 64))
-        result = evaluate_gate_three(vectors)
+        result = gate_three_verdict(CacheGeometry.of(vectors))
         assert result.status is CheckStatus.FAIL
         assert "collapsed" in result.detail
 
@@ -287,23 +288,23 @@ class TestGateThree:
         direction = np.zeros(64)
         direction[0] = 1.0
         vectors = np.outer(np.linspace(-1, 1, 400), direction)
-        result = evaluate_gate_three(vectors)
+        result = gate_three_verdict(CacheGeometry.of(vectors))
         assert result.status is CheckStatus.FAIL
         assert "principal component" in result.detail
 
     def test_it_blocks_shipping(self):
         vectors = np.ones((100, 8))
-        assert evaluate_gate_three(vectors).blocks
+        assert gate_three_verdict(CacheGeometry.of(vectors)).blocks
 
     def test_an_all_zero_space_fails(self):
         """The effect head once trained on an all-zero e: no variance at all is
         the most collapsed a space can be, not an unmeasurable one."""
-        result = evaluate_gate_three(np.zeros((100, 64)))
+        result = gate_three_verdict(CacheGeometry.of(np.zeros((100, 64))))
         assert result.status is CheckStatus.FAIL
         assert "principal component" in result.detail
 
     def test_too_few_vectors_to_measure_fails(self):
-        result = evaluate_gate_three(np.ones((1, 8)))
+        result = gate_three_verdict(CacheGeometry.of(np.ones((1, 8))))
         assert result.status is CheckStatus.FAIL
         assert "not measured" in result.detail
 
@@ -417,7 +418,7 @@ class TestReport:
 
     def test_a_blocking_gate_stops_it(self):
         report = EvaluationReport()
-        report.add(evaluate_gate_three(np.ones((50, 8))))
+        report.add(gate_three_verdict(CacheGeometry.of(np.ones((50, 8)))))
         assert not report.ships
         assert [c.name for c in report.blocking_failures] == ["gate-3"]
 
@@ -432,7 +433,7 @@ class TestReport:
 
     def test_the_render_names_every_check_and_the_verdict(self):
         report = EvaluationReport()
-        report.add(evaluate_gate_three(np.ones((50, 8))))
+        report.add(gate_three_verdict(CacheGeometry.of(np.ones((50, 8)))))
         rendered = report.render()
         assert "gate-3" in rendered
         assert "GATES FAILED: gate-3" in rendered
@@ -450,7 +451,7 @@ class TestReport:
 
     def test_a_failing_gate_prints_the_figure_that_held_too(self):
         report = EvaluationReport()
-        report.add(evaluate_gate_three(np.ones((50, 8))))
+        report.add(gate_three_verdict(CacheGeometry.of(np.ones((50, 8)))))
         rendered = report.render()
         assert "mean_pairwise_cosine=" in rendered
         assert "top_component_share=" in rendered

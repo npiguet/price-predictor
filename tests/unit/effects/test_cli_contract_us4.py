@@ -138,35 +138,10 @@ class TestSubcommandTable:
             "build-vocab", "extract-keyword-definitions", "collect-coverage",
             "build-corpus", "field-coverage", "validate-corpus",
             "collect-variants", "train-effect-model", "encode-abilities",
-            "evaluate-effect-model", "holdout-cards", "scorer-smoke-test",
+            "evaluate-effect-model", "holdout-cards",
         }
 
     def test_an_unknown_flag_is_rejected(self):
         with pytest.raises(SystemExit):
             parse("collect-variants", "--not-a-flag")
 
-
-class TestScorerSmokeTest:
-    """The cache it splices must be the one built from --checkpoint."""
-
-    def test_the_abilities_root_defaults_to_the_shipping_cache(self):
-        args = parse("scorer-smoke-test", "--scratch-dir", "scratch/")
-        assert args.abilities_root == Path("output/effects/abilities")
-        # The cache encode-abilities writes by default, not a lookalike path.
-        assert args.abilities_root == parse("encode-abilities").output_root
-
-    def test_the_abilities_root_reaches_the_config(self, monkeypatch):
-        import effects.application.scorer_smoke_test as smoke
-        from effects.infrastructure.cli import run_scorer_smoke_test
-
-        seen = {}
-
-        def fake_run(config):
-            seen["root"] = config.abilities_root
-            raise RuntimeError("stop")
-
-        monkeypatch.setattr(smoke, "run", fake_run)
-        args = parse("scorer-smoke-test", "--scratch-dir", "scratch/",
-                     "--abilities-root", "scratch/abilities")
-        run_scorer_smoke_test(args)
-        assert str(seen["root"]).replace("\\", "/") == "scratch/abilities"

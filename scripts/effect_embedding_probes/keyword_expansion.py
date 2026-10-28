@@ -342,7 +342,7 @@ def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one l
     for name, definition in definitions.items():
         token = keyword_token(name)
         template = definition.reminder_template or ""
-        expanded = tok._instantiate(template, None)  # noqa: SLF001
+        expanded = tok._instantiate(template)  # noqa: SLF001
         parts = tok.tokenize(expanded)
         def_rows.append({
             "keyword": name,

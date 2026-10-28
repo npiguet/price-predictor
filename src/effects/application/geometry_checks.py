@@ -1,7 +1,7 @@
 """The checks that read the ability cache rather than the model.
 
-Gate 3, the ward canary, nearest-neighbour inspection, UMAP, the decodability
-battery and the scorer smoke test all ask about the *geometry* of ``e`` rather
+Gate 3, the ward canary, nearest-neighbour inspection, UMAP and the
+decodability battery all ask about the *geometry* of ``e`` rather
 than about a prediction. They are grouped here because they share one input —
 the cache — and because a check on the geometry catches a failure the loss
 cannot: a collapsed space, where every ability sits on top of every other,
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-from effects.domain.ability_cache_layout import ARRAY_KEY, CACHE_SUFFIX
+from effects.domain.ability_cache_layout import ARRAY_KEY, CACHE_SUFFIX, pooled_card_vector
 from effects.domain.evaluation_report import (
     CheckName,
     CheckResult,
@@ -208,23 +208,11 @@ def load_cache(
                         normalize_prose(prose), {},
                     ).setdefault(text, set()).add(card)
             if matrix.size and relative.parts[:1] == ("cardsfolder",):
-                cached.by_card[sidecar.card] = pooled(matrix)
+                cached.by_card[sidecar.card] = pooled_card_vector(matrix)
     return cached
 
 
-def pooled(matrix: np.ndarray) -> np.ndarray:
-    """Mean and max over a card's ability rows, concatenated (FR-114)."""
-    from effects.domain.ability_cache_layout import pooled_card_vector
-
-    return pooled_card_vector(matrix)
-
-
 # ── gate 3: collapse canaries ───────────────────────────────────────────
-
-
-def evaluate_gate_three(vectors: np.ndarray, *, seed: int = 42) -> CheckResult:
-    """Two collapse canaries, both of which block shipping (FR-123)."""
-    return gate_three_verdict(CacheGeometry.of(vectors, seed=seed))
 
 
 def gate_three_verdict(geometry: CacheGeometry) -> CheckResult:
@@ -515,18 +503,13 @@ def check_decodability(
     )
     effects_matrix = np.stack([cached.by_card[name] for name in shared])
     effects_probes = fit_probes(table, effects_matrix, mode="honest")
-    return CheckResult(
-        CheckName.DECODABILITY, CheckStatus.REPORTED, _probe_summary("effects", effects_probes),
+    rendered = ", ".join(
+        f"{name} {probe.metrics.get('val_r2', float('nan')):.3f}"
+        for name, probe in effects_probes.probes.items()
     )
-
-
-def _probe_summary(label: str, probes) -> str:
-    scores = {
-        name: probe.metrics.get("val_r2", float("nan"))
-        for name, probe in probes.probes.items()
-    }
-    rendered = ", ".join(f"{name} {value:.3f}" for name, value in scores.items())
-    return f"{label}: {rendered}"
+    return CheckResult(
+        CheckName.DECODABILITY, CheckStatus.REPORTED, f"effects: {rendered}",
+    )
 
 
 # ── the average-effect control and the taxonomy comparison ──────────────
@@ -559,56 +542,3 @@ def check_baseline_geometry(
             f"{name}_cosine": baseline.mean_pairwise_cosine,
         },
     )
-
-
-# ── the scorer smoke test (FR-115) ──────────────────────────────────────
-
-
-def write_scorer_smoke_cache(
-    pooled_by_path: dict[str, np.ndarray],
-    scratch_cards: Path,
-    *,
-    e_width: int,
-) -> tuple[int, int]:
-    """Splice pooled ``e`` into every sealed vector of a scratch tree, in place.
-
-    ``scratch_cards`` is a scratch copy of the converted tree that
-    ``encode-cards`` has already written sealed vectors into; it is **never**
-    ``output/cardsfolder/``, which the sealed pipeline reads, so a run of this
-    check cannot change what the real scorer trains on. ``pooled_by_path``
-    keys each card's pooled ``e`` by its path under the tree
-    (``a/ajanis_pridemate``), the path its sealed vector sits at.
-
-    Concatenated rather than replacing, so the test asks "does this add
-    anything" rather than "is this better than nothing". Spliced in *before*
-    the trailing block of deterministic features, because the sealed layout
-    reads that block from the end (``card_embedding_layout``) and an
-    appended ``e`` would put mana-cost and land flags where the scorer reads
-    something else.
-
-    Every card gets the same width: one with no ability line, and so no
-    pooled ``e``, gets ``e_width`` zeros, because the scorer stacks the vectors
-    of a deck and a tree of mixed widths would not load. Returns
-    ``(written, without_e)``.
-    """
-    from sealed.domain.card_embedding_layout import FEATURE_COUNT
-    from sealed.infrastructure.embedding_store import EmbeddingStore
-
-    store = EmbeddingStore()
-    root = Path(scratch_cards)
-    written = without_e = 0
-    zeros = np.zeros(e_width, dtype=np.float32)
-    for path in sorted(root.rglob("*.npz")):
-        relative = (path.parent.relative_to(root) / path.stem).as_posix()
-        with np.load(path) as data:
-            sealed = data["embedding"]
-        pooled = pooled_by_path.get(relative)
-        if pooled is None:
-            pooled = zeros
-            without_e += 1
-        combined = np.concatenate([
-            sealed[:-FEATURE_COUNT], pooled.astype(np.float32), sealed[-FEATURE_COUNT:],
-        ]).astype(np.float32)
-        store.save(path, combined)
-        written += 1
-    return written, without_e

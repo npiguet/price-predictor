@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -29,8 +30,9 @@ import java.util.function.Function;
  *
  * <p>Keyed by API name rather than by {@code ApiType} member so a Forge rename
  * costs a missing event rather than a compile error, and so this file names no
- * member of an enum whose members move. The names are pinned by
- * {@code test_every_effect_api_maps_to_an_event} on the Python side.
+ * member of an enum whose members move. A name that is no {@code ApiType}
+ * member matches nothing, silently, so {@code ApiEventsTest} checks every key
+ * against the enum.
  *
  * <p>An API absent from this table emits nothing. That is the right default:
  * damage, counters, taps and zone changes already arrive on the bus, and a
@@ -256,6 +258,11 @@ final class ApiEvents {
         return api == null ? null : RULES.get(api.name());
     }
 
+    /** Every API name the table has a rule for. */
+    static Set<String> apiNames() {
+        return RULES.keySet();
+    }
+
     /** The table, one family of APIs at a time. */
     private static Map<String, Rule<?>> rules() {
         Map<String, Rule<?>> rules = new HashMap<>();
@@ -380,26 +387,19 @@ final class ApiEvents {
      * keyed by the CLASS stem matches nothing and fails silently.
      *
      * <p>{@code GenericChoice}, {@code ChooseDirection}, {@code ChooseEvenOdd}
-     * and {@code NameCard} are not optional extras needing a judgment call:
-     * all four are present in {@code event_schema.py}'s {@code
-     * EFFECT_API_EVENTS} (mapped to {@code CHOICE_MADE}) and absent from
-     * {@code EXCLUDED_EFFECT_APIS}, so the schema itself declares that these
-     * APIs produce {@code choice_made}. A rule that matches here and reads
-     * nothing back would be worse than one left out of this table entirely --
-     * it looks wired. Their {@link #choice} read branches are required, not
-     * optional.
+     * and {@code NameCard} are wired like the rest, so their {@link #choice}
+     * read branches are required, not optional: a rule that matches here and
+     * reads nothing back would be worse than one left out of this table
+     * entirely -- it looks wired.
      *
      * <p>{@code ChooseSector} is deliberately NOT wired here, though {@code
-     * ApiType} has it and {@code Card.getChosenSector()} is a real accessor:
-     * {@code event_schema.py}'s {@code EXCLUDED_EFFECT_APIS} carries {@code
-     * "ChooseSector": "Unfinity attraction; not reachable in sealed or
-     * draft"} with {@code ChooseSector} correspondingly absent from {@code
-     * EFFECT_API_EVENTS}. This corpus is collected from sealed and draft pools
-     * only, which never include Unfinity's silver-bordered attraction cards,
-     * so the clause this would read can never actually run here. Wiring it
-     * needs the schema changed first -- {@code
-     * everyChoiceMadeApiHasAReadableChoice} in {@code ApiEventsTest} fails the
-     * moment the two disagree, which is the point.
+     * ApiType} has it and {@code Card.getChosenSector()} is a real accessor.
+     * This corpus is collected from sealed and draft pools only, which never
+     * include Unfinity's silver-bordered attraction cards, so the clause this
+     * would read can never actually run here. Wiring it needs a {@link
+     * #choice} branch and a fixture in {@code
+     * everyChoiceMadeApiHasAReadableChoice}, which fails the moment the rule
+     * and the fixtures disagree.
      */
     private static void choiceRules(Map<String, Rule<?>> rules) {
         put(rules, new Rule<>(EventType.CHOICE_MADE, null, (sa, host, memo) -> choice(host)),
@@ -431,10 +431,8 @@ final class ApiEvents {
      * guarded by {@link Strings#emptyToNull}.
      *
      * <p>The direction, even/odd and mode readings are not optional extras,
-     * though few cards reach them: {@code event_schema.py}'s {@code
-     * EFFECT_API_EVENTS} maps all three (and {@code NameCard}) to {@code
-     * CHOICE_MADE} and excludes none of them, so the schema itself declares
-     * that these APIs produce {@code choice_made} -- a rule that matches and
+     * though few cards reach them: {@link #choiceRules} wires all three (and
+     * {@code NameCard}) to {@code CHOICE_MADE}, and a rule that matches and
      * then reads nothing back would be worse than one left out of {@code
      * RULES} entirely, because it looks wired. {@code
      * ChooseDirectionEffect.resolve()} always calls {@code
@@ -444,8 +442,8 @@ final class ApiEvents {
      * GenericChoice} only reaches its branch for the {@code SetChosenMode$
      * True} scripts (Tarkir's Sieges, Fallout's Hoover Dam, 15 real cards);
      * the rest resolve a chosen sub-ability directly and leave no scalar on
-     * the host to describe which one -- the schema still declares the API,
-     * so the branch is what makes the reachable subset of it reachable.
+     * the host to describe which one -- the rule still matches the API, so
+     * the branch is what makes the reachable subset of it reachable.
      *
      * <p>There is no {@code getChosenSector()} reading, for the reason there
      * is no {@code ChooseSector} rule ({@link #choiceRules}): nothing routes

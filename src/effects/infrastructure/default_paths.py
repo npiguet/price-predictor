@@ -32,21 +32,8 @@ DEFAULT_CORPUS_OUTPUT = "output/effects/corpus/"
 #: script Forge must be able to load.
 DEFAULT_FORGE_CARDS_PATH = "../forge/forge-gui/res/cardsfolder/"
 
-#: Forge's own token scripts, beside the card scripts `convert` reads. The
-#: remap needs the raw tree rather than `output/tokenscripts/`: it tells
-#: same-name token scripts apart by their Colors/Types/PT lines, which
-#: conversion does not preserve.
-DEFAULT_FORGE_TOKENSCRIPTS = "../forge/forge-gui/res/tokenscripts"
-
 #: Where the sealed pipeline's per-card winnability labels live by default;
 #: ``--win-rates`` names another table. The decodability battery skips when it
 #: is absent rather than failing: the labels are an operator's training data,
 #: not a repository artifact.
 DEFAULT_WIN_RATES = "output/sealed/cards-win-rates.txt"
-
-#: The sealed pipeline's own artifacts the scorer smoke test reads: the encoder
-#: whose vectors pooled ``e`` is concatenated with, and the match outcomes
-#: Phase A trains on. Restated here rather than imported, because ``effects``
-#: never imports ``sealed.application``.
-DEFAULT_SEALED_ENCODER = "models/sealed/encoder/latest.pt"
-DEFAULT_MATCH_OUTCOMES = "output/sealed/match-outcomes.txt"

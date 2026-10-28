@@ -590,11 +590,6 @@ class EffectRecord:
             and not self.interventional
         )
 
-    @property
-    def worker(self) -> str:
-        """The worker slot this record's ids were counted by."""
-        return self.record_id.split(".")[-2].split("-")[0]
-
 
 def events_of(record: EffectRecord) -> tuple[Event, ...]:
     """Every event a record's payload carries, whatever its kind.

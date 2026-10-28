@@ -144,16 +144,9 @@ def check_samples(counts: Mapping[str, int], *, size: int) -> None:
         )
 
 
-def report_write_pass(survey: Survey, written: WriteResult, *, remapped: bool) -> None:
-    """The write pass's refusals, remaps and attribution, checked and logged."""
+def report_write_pass(survey: Survey, written: WriteResult) -> None:
+    """The write pass's refusals and attribution, checked and logged."""
     check_refusals(written)
-    if remapped:
-        _report_remap(survey, written)
-    else:
-        logger.info(
-            "%-22s %9s — every key was written exactly as collected "
-            "(--no-remap-token-keys)", "token keys", "not remapped",
-        )
     kept_records = sum(written.training.read.values())
     logger.info(
         "%-22s %9d record(s) kept (%.1f%%) name no producing clause for at "
@@ -183,38 +176,6 @@ def report_write_pass(survey: Survey, written: WriteResult, *, remapped: bool) -
             "routed at the end of every shard it appears in, and its records "
             "may have been planned for training slots the write pass then "
             "routed elsewhere.", survey.split_games,
-        )
-
-
-def _report_remap(survey: Survey, written: WriteResult) -> None:
-    """Log what the remap did, and say so when the two passes disagree."""
-    remap = written.remap
-    top = remap.ambiguous.most_common(5)
-    logger.info(
-        "%-22s %9d remapped to tokenscripts/; %d left ambiguous over %d stem(s), "
-        "on written records%s",
-        "token keys", remap.remapped, sum(remap.ambiguous.values()),
-        len(remap.ambiguous),
-        (" — most: " + ", ".join(f"{stem} ({n})" for stem, n in top)) if top else "",
-    )
-    # The survey counts every record it read; the write pass counts only the
-    # records it wrote, so its figures are a subset of the survey's. Either
-    # one exceeding the survey's means the two passes did not read the same
-    # corpus -- and then the survey sized the caps for keys the write pass
-    # never saw.
-    ambiguous = sum(remap.ambiguous.values())
-    survey_ambiguous = sum(survey.remap.ambiguous.values())
-    logger.info(
-        "%-22s %9d remapped; %d left ambiguous — over every record read.",
-        "token keys (survey)", survey.remap.remapped, survey_ambiguous,
-    )
-    if remap.remapped > survey.remap.remapped or ambiguous > survey_ambiguous:
-        logger.warning(
-            "The survey remapped %d key(s) and left %d ambiguous over every "
-            "record it read, but the write pass counted %d and %d over the "
-            "records it wrote — a subset cannot be larger, so the corpus "
-            "changed between the passes.",
-            survey.remap.remapped, survey_ambiguous, remap.remapped, ambiguous,
         )
 
 
@@ -279,7 +240,7 @@ def _unique_texts(keys: Iterable[Keys], key_text: Mapping[Keys, str]) -> int:
 
 def build_manifest(
     config: BuildCorpusConfig, *, surface: str, held_out: HeldOutCards, survey: Survey,
-    decisions: Decisions, written: WriteResult, remapped: bool,
+    decisions: Decisions, written: WriteResult,
 ) -> CorpusManifest:
     """Everything the build decided and wrote, as the manifest records it."""
     from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
@@ -330,9 +291,8 @@ def build_manifest(
         shortfall=decisions.selection.shortfall,
         class_targets=dict(decisions.selection.targets),
         quality_dropped=dict(written.refusals.by_reason),
-        # The hundred worst scripts and stems, not all of them: every permanent
-        # carries the implicit spell the textless refusal is mostly about, a
-        # corpus can leave a long tail of one-off token ambiguities, and the
+        # The hundred worst scripts, not all of them: every permanent carries
+        # the implicit spell the textless refusal is mostly about, and the
         # manifest is read by people.
         no_acting_text_scripts=dict(written.refusals.textless_scripts.most_common(100)),
         games_by_source=survey.games_by_source,
@@ -341,9 +301,6 @@ def build_manifest(
         validation_sample=config.validation_sample,
         max_events_per_record=config.max_events,
         unattributed_records=written.unattributed,
-        token_keys_remapped=written.remap.remapped,
-        token_keys_ambiguous=dict(written.remap.ambiguous.most_common(100)),
-        forge_tokenscripts=str(config.forge_tokenscripts) if remapped else "",
         holdout_unit=config.holdout_unit,
         families=families,
         signatures=signatures,

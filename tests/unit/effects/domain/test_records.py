@@ -227,21 +227,6 @@ class TestCollectionMetadataStaysOutOfTheModel:
 
 
 class TestIdentity:
-    def test_record_id_carries_the_worker_slot_and_the_jvm_lifetime(
-        self, make_record,
-    ):
-        record = make_record(record_id="run-uuid.4-mk3p9x2q.10237")
-        assert record.worker == "4"
-
-    def test_a_pre_lifetime_id_still_reads_as_its_worker(self, make_record):
-        """The corpus is append-only, so shards written before the segment stay.
-
-        They report no lifetime rather than failing: the worker slot is still
-        in the id, and it is the only half those shards ever had.
-        """
-        record = make_record(record_id="run-uuid.4.10237")
-        assert record.worker == "4"
-
     def test_a_record_is_immutable_once_written(self, make_record):
         record = make_record()
         with pytest.raises(AttributeError):

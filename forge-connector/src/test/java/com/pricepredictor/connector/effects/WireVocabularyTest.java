@@ -64,7 +64,7 @@ class WireVocabularyTest {
                 wireNames(TraitKind.class));
     }
 
-    /** {@code ROLES} in {@code provenance.py}, in its order. */
+    /** {@code ROLE_ORDER} in {@code ability_encoder.py}, in its order. */
     @Test
     void spanRoles() {
         assertEquals(List.of("cost", "effect", "trigger-condition", "target-spec"),

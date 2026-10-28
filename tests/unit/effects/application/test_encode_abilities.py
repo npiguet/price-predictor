@@ -18,7 +18,6 @@ from effects.application.encode_abilities import (
     iter_sidecars,
     run,
     taxonomy_vector,
-    tree_of,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY, cache_path_for
 from effects.domain.ability_encoder import AbilityEncoderConfig
@@ -160,9 +159,6 @@ class TestTreeSubtrees:
         )
         assert card.parent.name == "s"
         assert token.parent.name == "tokenscripts"
-
-    def test_tree_of_reads_the_folder_name(self, tmp_path):
-        assert tree_of(tmp_path / "tokenscripts") == "tokenscripts"
 
     def test_a_missing_source_tree_is_refused_rather_than_skipped(self, corpus, tmp_path):
         """A relative default resolved from the wrong directory would otherwise
@@ -484,7 +480,7 @@ class TestTruncation:
                 surface="script", e_dim=4, widths={},
                 device=torch.device("cpu"), truncations=log,
             )
-            batcher.prepare_texts([long_text, "x x"])
+            batcher.stage({long_text: None, "x x": None})
         assert reported == [long_text]
 
     def test_a_text_is_reported_once_per_run(self):

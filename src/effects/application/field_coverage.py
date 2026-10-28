@@ -133,11 +133,6 @@ def field_coverage(records: Iterable[EffectRecord]) -> dict[str, FieldCoverage]:
     }
 
 
-def constant_fields(coverage: dict[str, FieldCoverage]) -> set[str]:
-    """Paths that never carried anything but their default."""
-    return {path for path, cov in coverage.items() if cov.constant}
-
-
 class _Tally:
     """One path's running counts.
 

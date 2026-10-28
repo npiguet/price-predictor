@@ -70,19 +70,6 @@ class EncodeSummary:
     cleaned: int = 0
 
 
-def tree_of(cards_folder: Path) -> str:
-    """The source-tree name a converted folder holds.
-
-    Read from the folder's own name, which mirrors the tree it was converted
-    from — the same string a provenance key's ``script_file`` is prefixed with.
-    A kept-aside copy (``output/gen1-cardsfolder``) still holds the
-    ``cardsfolder`` tree, so its cache lands where its keys look for it.
-    """
-    from effects.infrastructure.sidecar_io import tree_of_folder
-
-    return tree_of_folder(Path(cards_folder))
-
-
 def iter_sidecars(cards_folder: Path) -> list[Path]:
     return sorted(Path(cards_folder).rglob(f"*{SIDECAR_SUFFIX}"))
 

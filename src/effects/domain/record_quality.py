@@ -57,15 +57,6 @@ NO_ABILITY = "no-ability"
 EVENT_FLOOD = "event-flood"
 NO_ACTING_TEXT = "no-acting-text"
 UNJOINABLE_KEY = "unjoinable-key"
-QUALITY_REASONS: tuple[str, ...] = (
-    NO_ABILITY, EVENT_FLOOD, NO_ACTING_TEXT, UNJOINABLE_KEY,
-)
-
-#: The ``attributed_to`` sentinel the collector writes when the producing
-#: clause was sought and nothing on the chain claimed the event. Aliased from
-#: the schema rather than re-declared, so the watch statistic and the writer
-#: cannot drift apart on the spelling of the one string it turns on.
-UNRESOLVED = ATTRIBUTION_UNRESOLVED
 
 #: More events than this on one record is a game, not an ability. The
 #: heaviest legitimate resolutions in the first corpus (board wipes over
@@ -160,4 +151,4 @@ def has_unattributed_events(record: EffectRecord) -> bool:
     reading of the collector's attribution and a count taken over only the
     kinds some rule happened to reach would move whenever the rules did.
     """
-    return any(event.attributed_to == UNRESOLVED for event in events_of(record))
+    return any(event.attributed_to == ATTRIBUTION_UNRESOLVED for event in events_of(record))

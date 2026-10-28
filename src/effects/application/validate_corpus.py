@@ -430,57 +430,6 @@ def _all_events(record: EffectRecord) -> tuple[Event, ...]:
     return ()
 
 
-def event_type_coverage(records: Iterable[EffectRecord]) -> Finding:
-    """Which of the declared event types a corpus actually contains.
-
-    Watched, not judged: a short window legitimately misses rare types — the
-    remembered-result and choice families depend on which decks were drawn,
-    so their absence in one run is not a verdict on the collector — and a
-    floor nobody has calibrated would fail every smoke run. What this must
-    not do is stay silent: 29 of the vocabulary's types were unreachable for
-    the life of the project and no report ever said so before this check
-    existed.
-
-    This measures *fires*, a narrower and strictly harder question than the
-    static guard in ``test_event_schema_completeness.py`` answers. That guard
-    scans the connector's Java source for a reference to each type's
-    constant, so it catches a type nothing points at; it cannot catch a type
-    referenced from dead code that never actually runs, which is exactly what
-    ``damage_prevented`` and ``spell_copied`` were — both referenced in
-    ``PatchedCollectors.java`` while firing zero times across a 10.1M-record
-    corpus. A declared type this check never saw is one of those two gaps or a
-    type genuinely too rare for the window; the guard closes the first gap,
-    this closes the second, and telling one absence from the other is for
-    whoever reads the report.
-
-    A standalone one-pass entry point over ``records`` so a caller wanting
-    only this number does not pay for every other invariant's bookkeeping.
-    :class:`_EventTypes` accumulates the identical set during the full pass,
-    and both routes end at :func:`_event_type_coverage_finding` so "declared"
-    and "seen" are never computed two different ways.
-    """
-    seen: set[str] = set()
-    for record in records:
-        for event in _all_events(record):
-            seen.add(event.type.value)
-    return _event_type_coverage_finding(seen)
-
-
-def _event_type_coverage_finding(seen: set[str]) -> Finding:
-    declared = {member.value for member in EventType}
-    unseen = tuple(sorted(declared - seen))
-    return Finding(
-        name="declared event types are observed in the window",
-        ok=True,
-        watched=True,
-        measured=(
-            f"{len(seen)}/{len(declared)} declared event types appeared at "
-            "least once"
-        ),
-        detail=unseen,
-    )
-
-
 def _is_deferred_mana_record(record: EffectRecord) -> bool:
     """A resolution half the mana reservoir held back until the game ended.
 
@@ -1784,10 +1733,27 @@ class _ProbeForks:
 
 
 class _EventTypes:
-    """The check-list registration of :func:`event_type_coverage`.
+    """Which of the declared event types a corpus actually contains.
 
-    Collects the same set during the one pass every other check shares, so
-    registering it costs one more check and no second pass over the window.
+    Watched, not judged: a short window legitimately misses rare types — the
+    remembered-result and choice families depend on which decks were drawn,
+    so their absence in one run is not a verdict on the collector — and a
+    floor nobody has calibrated would fail every smoke run. What this must
+    not do is stay silent: 29 of the vocabulary's types were unreachable for
+    the life of the project and no report ever said so before this check
+    existed.
+
+    This measures *fires*, a narrower and strictly harder question than the
+    static guard in ``test_event_schema_completeness.py`` answers. That guard
+    scans the connector's Java source for a reference to each type's
+    constant, so it catches a type nothing points at; it cannot catch a type
+    referenced from dead code that never actually runs, which is exactly what
+    ``damage_prevented`` and ``spell_copied`` were — both referenced in
+    ``PatchedCollectors.java`` while firing zero times across a 10.1M-record
+    corpus. A declared type this check never saw is one of those two gaps or a
+    type genuinely too rare for the window; the guard closes the first gap,
+    this closes the second, and telling one absence from the other is for
+    whoever reads the report.
     """
 
     def __init__(self) -> None:
@@ -1798,7 +1764,18 @@ class _EventTypes:
         self.seen.update(event.type.value for event in _all_events(record))
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        yield _event_type_coverage_finding(self.seen)
+        declared = {member.value for member in EventType}
+        unseen = tuple(sorted(declared - self.seen))
+        yield Finding(
+            name="declared event types are observed in the window",
+            ok=True,
+            watched=True,
+            measured=(
+                f"{len(self.seen)}/{len(declared)} declared event types "
+                "appeared at least once"
+            ),
+            detail=unseen,
+        )
 
 
 def _checks(sidecars) -> tuple[_Check, ...]:

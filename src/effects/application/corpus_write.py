@@ -25,7 +25,6 @@ from effects.domain.record_quality import has_unattributed_events
 from effects.domain.records import EffectRecord, LegalityDecision, RecordKind, acting_keys
 from effects.domain.sampling import sampling_class
 from effects.domain.strata import OUTPUT_STRATA, Stratum
-from effects.domain.token_key_remap import RemapCounts
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,9 +138,6 @@ class WriteResult:
     strata: StratumTally = field(default_factory=StratumTally)
     training: TrainingTally = field(default_factory=TrainingTally)
     families: FamilyTally = field(default_factory=FamilyTally)
-    #: Old token keys rewritten, and the ones refused, **on written records**
-    #: (FR-151): a record this pass refuses or drops contributes neither.
-    remap: RemapCounts = field(default_factory=RemapCounts)
     #: Kept records whose events name no producing clause (FR-148). Watched
     #: rather than refused: a clause the collector could not find on the
     #: acting chain does not make the outcome another ability's.
@@ -152,7 +148,6 @@ class WriteResult:
         self.strata.merge(other.strata)
         self.training.merge(other.training)
         self.families.merge(other.families)
-        self.remap.merge(other.remap)
         self.unattributed += other.unattributed
 
 
@@ -199,15 +194,8 @@ def write_shard_with(plan: WritePlan, context: WorkerContext, relative: str) -> 
 
     out = WriteResult()
     outputs: dict[Stratum, list] = {stratum: [] for stratum in OUTPUT_STRATA}
-    # The remap's counts land here first and are folded into ``out.remap``
-    # only for a record that reaches an output, so the manifest's figure is
-    # what the written dataset carries rather than what the shards held
-    # (FR-151).
-    pending = RemapCounts()
-    for record in context.records(relative, pending):
-        if write_record(record, plan, context, out, outputs):
-            out.remap.merge(pending)
-        pending.reset()
+    for record in context.records(relative):
+        write_record(record, plan, context, out, outputs)
 
     name = output_name(relative)
     # Only where there is something to write: a source shard contributes to
@@ -221,13 +209,13 @@ def write_shard_with(plan: WritePlan, context: WorkerContext, relative: str) -> 
 def write_record(
     record: EffectRecord, plan: WritePlan, context: WorkerContext, out: WriteResult,
     outputs: dict[Stratum, list],
-) -> bool:
-    """Route one record to its outputs and tally it; whether anything was written."""
+) -> None:
+    """Route one record to its outputs and tally it."""
     klass = sampling_class(record)
     defect = context.refusal(record)
     if defect is not None:
         out.refusals.note(record, klass, defect)
-        return False
+        return
     out.training.read[klass] += 1
     if has_unattributed_events(record):
         out.unattributed += 1
@@ -237,7 +225,7 @@ def write_record(
     if stratum is Stratum.DROPPED_HELD_OUT:
         # Held out but not admitted to the stratum: dropped, never trained on.
         out.strata.note(stratum, None)
-        return False
+        return
     if stratum is not Stratum.TRAINING:
         outputs[stratum].append(record)
         out.strata.note(stratum, keys)
@@ -247,7 +235,7 @@ def write_record(
                 outputs[Stratum.GATE_ONE].append(record)
                 out.strata.note(Stratum.GATE_ONE, keys)
                 out.strata.gate_one_texts.add(text)
-        return True
+        return
 
     if context.held_out_text(keys) is not None:
         # A training game's record acting through a held-out text -- a token
@@ -255,7 +243,7 @@ def write_record(
         # held-out card, so the rest of it still trains; this record would
         # train on the very text the card-disjoint stratum measures.
         out.strata.note(Stratum.DROPPED_HELD_OUT_TEXT, None)
-        return False
+        return
     cell = context.cell_of(record, plan.mode_counts)
     copy_plan = plan.plans.get((cell, keys)) if keys else None
     if copy_plan is None:
@@ -263,14 +251,13 @@ def write_record(
     copies = copy_plan.copies(context.hash_of(record))
     if copies <= 0:
         out.training.dropped_by_cap[klass] += 1
-        return False
+        return
     outputs[Stratum.TRAINING].extend([record] * copies)
     out.strata.note(Stratum.TRAINING, keys, copies)
     out.training.kept[klass] += copies
     if keys:
         out.training.kept_keys.setdefault(klass, set()).add(keys)
     out.families.note(record, klass, cell, copies)
-    return True
 
 
 def run_write_pass(

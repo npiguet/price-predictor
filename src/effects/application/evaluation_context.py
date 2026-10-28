@@ -8,7 +8,6 @@ handed without importing the command that hands it to them.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -24,8 +23,6 @@ if TYPE_CHECKING:
     )
     from effects.infrastructure.model_runner import LoadedModel, Runnable
     from effects.infrastructure.sidecar_io import SidecarCache
-
-logger = logging.getLogger(__name__)
 
 
 # ── what every stage reads ──────────────────────────────────────────────
@@ -46,9 +43,9 @@ class EvaluationContext:
     main: EffectCheckpoint
     vocab_path: Path
     keyword_path: Path
-    corpus_path: Path | None = None
-    #: The curated dataset's manifest, read once; None for a raw-corpus run.
-    manifest: CorpusManifest | None = None
+    corpus_path: Path
+    #: The curated dataset's manifest, read once.
+    manifest: CorpusManifest
     _main_model: LoadedModel | None = field(default=None, repr=False)
     _sidecars: SidecarCache | None = field(default=None, repr=False)
 
@@ -93,9 +90,6 @@ class EvaluateEffectModelConfig:
         default_factory=lambda: Path(default_paths.DEFAULT_CHECKPOINT),
     )
     baseline_checkpoints: dict[str, Path] = field(default_factory=dict)
-    records_dir: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_RECORDS_DIR),
-    )
     cards_folders: tuple[Path, ...] = tuple(
         Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
     )
@@ -103,7 +97,7 @@ class EvaluateEffectModelConfig:
     vocab_path: Path | None = None
     keyword_definitions: Path | None = None
     #: A curated dataset directory (`build-corpus`); defaults to the one
-    #: `--checkpoint` recorded, if any (FR-147).
+    #: `--checkpoint` recorded (FR-147).
     corpus: Path | None = None
     abilities_root: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_ABILITIES_ROOT),
@@ -136,7 +130,7 @@ def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:
 
 
 class CorpusMismatchError(RuntimeError):
-    """The curated corpus was rebuilt since the checkpoint trained on it."""
+    """The checkpoint records no curated corpus, or it was rebuilt since."""
 
 
 def check_corpus(provenance: SplitProvenance, *, actual_digest: str) -> None:
@@ -146,8 +140,6 @@ def check_corpus(provenance: SplitProvenance, *, actual_digest: str) -> None:
     them partly on games the model trained on — the failure the recorded
     ``game_id`` sets exist to prevent, arriving through the corpus instead.
     """
-    if not provenance.corpus_digest:
-        return
     if provenance.corpus_digest != actual_digest:
         raise CorpusMismatchError(
             f"{provenance.corpus_path} has been rebuilt since this checkpoint "
@@ -159,28 +151,19 @@ def check_corpus(provenance: SplitProvenance, *, actual_digest: str) -> None:
 
 def resolve_corpus_path(
     provenance: SplitProvenance, *, corpus: Path | None, checkpoint: Path,
-) -> Path | None:
-    """Where to read the curated corpus ``check_corpus`` verifies, if anywhere.
+) -> Path:
+    """Where to read the curated corpus ``check_corpus`` verifies.
 
     Defaults to what the checkpoint recorded; an explicit ``--corpus``
-    overrides it. That much matches ``resolve_inference_paths``, but the two
-    diverge on a checkpoint with no recorded corpus: ``resolve_inference_paths``
-    always resolves a path and hash-checks it afterwards, override or not,
-    while here there is no digest to check an override against, so the
-    override is discarded rather than resolved. Refusing outright would be too
-    strong — it would break a batch-eval script that passes ``--corpus``
-    uniformly across a mix of curated and legacy checkpoints — and honouring
-    it would be meaningless, so a warning names the checkpoint and says why,
-    rather than the flag silently doing nothing.
+    overrides it. A checkpoint that records no corpus is refused: every gate
+    and breakdown reads the curated strata, and nothing else says which games
+    the checkpoint trained on.
     """
     if not provenance.corpus_digest:
-        if corpus is not None:
-            logger.warning(
-                "%s records no curated corpus, so --corpus %s has nothing "
-                "to check its digest against and is ignored.",
-                checkpoint, corpus,
-            )
-        return None
+        raise CorpusMismatchError(
+            f"{checkpoint} records no curated corpus, so nothing says which "
+            "games it trained on. Retrain it with train-effect-model --corpus."
+        )
     if corpus is not None:
         return Path(corpus)
     return Path(provenance.corpus_path)
@@ -190,7 +173,7 @@ def resolve_corpus_path(
 
 
 def with_corpus_defaults(
-    config: EvaluateEffectModelConfig, manifest: CorpusManifest | None,
+    config: EvaluateEffectModelConfig, manifest: CorpusManifest,
 ) -> EvaluateEffectModelConfig:
     """``config`` with what it left unset taken from the corpus's manifest.
 
@@ -198,16 +181,16 @@ def with_corpus_defaults(
     whose ability keys name that tree, so a run without it reads every variant
     ability as no text at all — the same records the trainer read as text.
     """
-    if config.variant_scripts is not None or manifest is None:
-        return config
-    if not manifest.variant_scripts:
+    if config.variant_scripts is not None or not manifest.variant_scripts:
         return config
     return replace(config, variant_scripts=Path(manifest.variant_scripts))
 
 
 def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     """The main checkpoint, hash-checked, with its corpus verified (FR-147)."""
+    from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.effect_model_store import load_for_inference
+    from effects.infrastructure.record_io import iter_shards, refuse_mixed_generations
 
     main_path = Path(config.checkpoint)
     main, vocab_path, keyword_path = load_for_inference(
@@ -217,17 +200,11 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     corpus_path = resolve_corpus_path(
         main.provenance, corpus=config.corpus, checkpoint=main_path,
     )
-    manifest = None
-    # No path means the checkpoint recorded no digest, so nothing to check.
-    if corpus_path is not None:
-        from effects.infrastructure.corpus_store import CorpusStore
-        from effects.infrastructure.record_io import iter_shards, refuse_mixed_generations
-
-        manifest = CorpusStore(corpus_path).load()
-        check_corpus(main.provenance, actual_digest=manifest.digest())
-        # Before any record is read (FR-033): the two generations read
-        # actor_player on playability records differently.
-        refuse_mixed_generations(iter_shards(Path(corpus_path)))
+    manifest = CorpusStore(corpus_path).load()
+    check_corpus(main.provenance, actual_digest=manifest.digest())
+    # Before any record is read (FR-033): the two generations read
+    # actor_player on playability records differently.
+    refuse_mixed_generations(iter_shards(Path(corpus_path)))
     return EvaluationContext(
         with_corpus_defaults(config, manifest), main, vocab_path, keyword_path,
         corpus_path=corpus_path, manifest=manifest,

@@ -50,7 +50,6 @@ from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOut
 from effects.domain.strata import OUTPUT_STRATA
 
 if TYPE_CHECKING:
-    from effects.domain.token_key_remap import TokenKeyRemapper
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -75,12 +74,6 @@ class BuildCorpusConfig:
     records_dir: Path
     output: Path = Path("output/effects/corpus")
     cards_folders: tuple[str, ...] = ("output/cardsfolder", "output/tokenscripts")
-    #: Forge's own raw token scripts, read to resolve the old collector's
-    #: token keys (FR-151). The *raw* tree, not the converted one: the remap
-    #: tells same-name scripts apart by their ``Colors:``, ``Types:`` and
-    #: ``PT:`` lines, which conversion does not preserve.
-    forge_tokenscripts: Path | None = Path("../forge/forge-gui/res/tokenscripts")
-    remap_token_keys: bool = True
     vocab_path: str = "models/effects/vocab.txt"
     variant_scripts: str | None = None
     holdout_permille: int = HOLDOUT_PERMILLE
@@ -356,12 +349,10 @@ def build(config: BuildCorpusConfig) -> int:
         sum(1 for script in held_out.script_files if script.startswith("tokenscripts/")),
         surface,
     )
-    remapper = _token_key_remapper(config, sources.folders, sources.card_files)
     _refuse_mixed_generations(Path(config.records_dir))
     read = ReadConfig(
         records_dir=str(config.records_dir), sidecar_roots=sources.root_paths,
         max_events=config.max_events, held_out=held_out, seed=config.seed,
-        remapper=remapper,
     )
     survey = _survey(config, read)
     decisions = _decide_or_refuse(config, survey, sources, surface, held_out)
@@ -382,13 +373,13 @@ def build(config: BuildCorpusConfig) -> int:
         )),
         workers=config.workers,
     )
-    report_write_pass(survey, written, remapped=remapper is not None)
+    report_write_pass(survey, written)
     _repack_outputs(store, written, shard_records=config.shard_records, seed=config.seed)
     _write_validation_samples(config, store, WorkerContext(read))
 
     manifest = build_manifest(
         config, surface=surface, held_out=held_out, survey=survey,
-        decisions=decisions, written=written, remapped=remapper is not None,
+        decisions=decisions, written=written,
     )
     store.save(manifest)
     log_report(manifest, survey, decisions, written)
@@ -413,19 +404,6 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
                 len(names), label, ", ".join(names[:5]),
                 ", …" if len(names) > 5 else "",
             )
-    # Drift stays shard-based, but which Forge token scripts were on disk
-    # decides which old token keys resolved (FR-151), so a dataset built
-    # against another token tree is a different dataset even when every
-    # shard matches.
-    built_against = manifest.forge_tokenscripts
-    if built_against and built_against != str(Path(config.forge_tokenscripts or "")):
-        logger.warning(
-            "This dataset's token keys were remapped against %s, and "
-            "--forge-tokenscripts now names %s. Which token scripts are on "
-            "disk decides which keys resolved, so the two trees build "
-            "different datasets from the same shards.",
-            built_against, config.forge_tokenscripts,
-        )
     if added or removed or resized:
         logger.warning("Rebuild with `python -m effects build-corpus`.")
         return 1
@@ -503,64 +481,6 @@ def _select_holdout(config: BuildCorpusConfig, sources: _Sources) -> HeldOutCard
             "tree has sidecars with script text."
         )
     return held_out
-
-
-def _token_key_remapper(
-    config: BuildCorpusConfig, folders: dict[str, Path], card_files: dict[str, str],
-) -> TokenKeyRemapper | None:
-    """The remap both passes read through, or None when it is turned off.
-
-    Built once in the main process and pickled into every worker with its
-    config: it is dicts and frozensets, and re-reading Forge's token scripts
-    per worker would cost more than the scan they serve.
-    """
-    if not config.remap_token_keys:
-        return None
-
-    from effects.domain.token_key_remap import TokenKeyRemapper
-    from effects.infrastructure.token_script_io import load_token_script_facts
-
-    forge_tokens = Path(config.forge_tokenscripts) if config.forge_tokenscripts else None
-    if forge_tokens is None or not forge_tokens.is_dir():
-        raise BuildCorpusError(
-            f"--forge-tokenscripts {forge_tokens} is not a directory. The old "
-            "collector keyed forked tokens to cardsfolder paths; remapping them "
-            "needs Forge's raw token scripts (their Colors/PT lines) to tell "
-            "same-name scripts apart. Point the flag at "
-            "<forge checkout>/forge-gui/res/tokenscripts/, or pass "
-            "--no-remap-token-keys to build without the remap."
-        )
-    token_dir = folders.get("tokenscripts")
-    # The *converted* token tree: the remap rewrites a key only to a script
-    # this corpus holds a sidecar for, so a token Forge scripts and the
-    # converter never wrote is left alone rather than pointed at nothing.
-    token_sidecars = (
-        frozenset(path.stem for path in Path(token_dir).glob("*.txt"))
-        if token_dir is not None and Path(token_dir).is_dir()
-        else frozenset()
-    )
-    remapper = TokenKeyRemapper(
-        load_token_script_facts(forge_tokens),
-        converted_card_files=frozenset(card_files.values()),
-        token_sidecars=token_sidecars,
-    )
-    logger.info(
-        "Token key remap: %d token name(s) over %d script(s); %d converted token "
-        "sidecar(s).",
-        len(remapper.facts_by_name),
-        sum(len(facts) for facts in remapper.facts_by_name.values()),
-        len(token_sidecars),
-    )
-    if not token_sidecars:
-        logger.warning(
-            "No converted token sidecar under %s, so the remap can resolve "
-            "nothing: every old token key will stay as it was collected. Pass "
-            "--cards-folder output/tokenscripts/ beside the card tree.",
-            # The folders actually looked in, not the `tokenscripts` entry that
-            # is missing from them: `None` names nothing an operator can check.
-            ", ".join(str(folder) for folder in config.cards_folders) or "(none)",
-        )
-    return remapper
 
 
 def _refuse_mixed_generations(records_dir: Path) -> None:

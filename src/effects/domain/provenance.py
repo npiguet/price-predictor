@@ -25,9 +25,6 @@ from enum import StrEnum
 # ``tokenscripts/ajanis_pridemate.txt`` on the other.
 SOURCE_TREES: tuple[str, ...] = ("cardsfolder", "tokenscripts", "variant-scripts")
 
-# Prose role tags spanning the converted text of one line.
-ROLES: tuple[str, ...] = ("cost", "effect", "trigger-condition", "target-spec")
-
 #: The fields every key's dict form carries; ``option`` is the one written only
 #: when set. What tells a key dict from any other mapping in a record's raw JSON.
 KEY_DICT_FIELDS: frozenset[str] = frozenset({

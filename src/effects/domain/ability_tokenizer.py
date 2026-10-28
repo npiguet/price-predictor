@@ -202,7 +202,6 @@ class AbilityTokenizer:
 
     MASK = "[MASK]"
     CLS = "[CLS]"
-    SEG = SEG
 
     #: Bound on :attr:`_tokenize_cache`. A training run tokenizes on the order
     #: of 30,000 unique texts, so this is a guard against something unbounded
@@ -321,7 +320,7 @@ class AbilityTokenizer:
         cached = self._tokenize_cache.get(key)
         if cached is not None:
             return list(cached)
-        tokens = self._merge_multi_word(self._split_with_offsets(text), text)
+        tokens = self._merge_multi_word(self._split_with_offsets(text))
         if role_spans:
             tokens = [
                 replace(token, role=self._role_at(token, role_spans))
@@ -400,7 +399,7 @@ class AbilityTokenizer:
 
     # ── multi-word entries and roles ────────────────────────────────────
 
-    def _merge_multi_word(self, tokens: list[Token], text: str) -> list[Token]:
+    def _merge_multi_word(self, tokens: list[Token]) -> list[Token]:
         """Join runs of words that spell a multi-word vocabulary entry."""
         if not self._multi_word_by_first:
             return tokens
@@ -519,7 +518,6 @@ class AbilityTokenizer:
         *,
         probability: float = 0.0,
         rng: random.Random | None = None,
-        instance_values: dict[str, list[str]] | None = None,
         forced: frozenset[str] = frozenset(),
     ) -> list[Token]:
         """Replace some keywords with their definitions.
@@ -531,26 +529,24 @@ class AbilityTokenizer:
         reminder template filled with the line's own values as Forge formats
         them (FR-013, FR-017). Any other line goes token by token: every
         expandable keyword unknown to the vocabulary is expanded, a known one
-        with probability ``probability`` (FR-014). ``instance_values`` supplies
-        already-formatted values for a keyword, by its token form; without
-        them a template's unfilled placeholders are removed. A keyword whose
+        with probability ``probability`` (FR-014), its template's placeholders
+        removed since a bare token carries no values. A keyword whose
         token form is in ``forced`` always expands, as an unknown one does:
         that is how ``--withhold-keyword`` shows the model a keyword's
         definition and never its token. An empty ``forced`` takes exactly the
         draws it always took.
         """
         rng = rng or random.Random()
-        values = instance_values or {}
         line = tokens[0].keyword_line if tokens else None
         if line is not None:
-            return self._expand_line(tokens, line, probability, rng, values, forced)
+            return self._expand_line(tokens, line, probability, rng, forced)
         out: list[Token] = []
         for token in tokens:
             if self.must_expand(token) or (
                 self.expandable(token)
                 and (token.text in forced or rng.random() < probability)
             ):
-                out.extend(self._expansion(token, values.get(token.text)))
+                out.extend(self._expansion(token))
             else:
                 out.append(token)
         return out
@@ -587,7 +583,6 @@ class AbilityTokenizer:
         line: KeywordLine,
         probability: float,
         rng: random.Random,
-        values: dict[str, list[str]],
         forced: frozenset[str] = frozenset(),
     ) -> list[Token]:
         if not self._line_expandable(line):
@@ -601,36 +596,31 @@ class AbilityTokenizer:
         form = keyword_token(line.name)
         if not (unknown or form in forced or rng.random() < probability):
             return list(tokens)
-        text = self.expansion_text(line.name, line.details, values.get(form))
+        text = self.expansion_text(line.name, line.details)
         return self._as_expansion(text, role=tokens[0].role, keyword=form)
 
-    def expansion_text(
-        self, name: str, details: str = "", values: list[str] | None = None,
-    ) -> str:
+    def expansion_text(self, name: str, details: str = "") -> str:
         """The reminder text one keyword instance expands to, specifiers removed.
 
         ``details`` are the line's instance values as written after its first
-        colon, formatted by the definition's ``formatter``; ``values`` are
-        already-formatted values and take precedence. Neither given, the
+        colon, formatted by the definition's ``formatter``; without them, the
         template's generic wording.
         """
         definition = self._definitions[name]
         template = self._definition_text(definition) or ""
-        if values:
-            return strip_specifiers(java_format(template, list(values)))
         return format_reminder(
             getattr(definition, "formatter", None), template, details,
         )
 
-    def _expansion(self, token: Token, values: list[str] | None) -> list[Token]:
+    def _expansion(self, token: Token) -> list[Token]:
         definition = self._definition_by_token[token.text]
-        text = self._instantiate(self._definition_text(definition), values)
+        text = self._instantiate(self._definition_text(definition))
         return self._as_expansion(text, role=token.role, keyword=token.text)
 
     def _as_expansion(
         self, text: str, *, role: str | None, keyword: str,
     ) -> list[Token]:
-        expanded = self._merge_multi_word(self._split_with_offsets(text), text)
+        expanded = self._merge_multi_word(self._split_with_offsets(text))
         return [
             replace(part, start=None, end=None, role=role,
                     expanded_from=keyword)
@@ -647,19 +637,18 @@ class AbilityTokenizer:
         return getattr(definition, "reminder_template", None)
 
     @staticmethod
-    def _instantiate(template: str | None, values: list[str] | None) -> str:
-        """Fill a template's placeholders in order, then strip what is left.
+    def _instantiate(template: str | None) -> str:
+        """A template with every placeholder removed: its generic wording.
 
         Forge writes parameterized reminder text with ``%s``, ``%d`` and their
         explicit-index forms — "Cycling %s, Discard this card: Draw a card.",
         "Target a %1$s as you cast this. This card enters attached to that
-        %1$s." An explicit index repeats its value at every use. Whatever no
-        value fills is removed, so no expansion carries a ``%`` token
-        (FR-017), leaving the template's generic wording.
+        %1$s." A bare keyword token carries no values to fill them with, so
+        each is removed and no expansion carries a ``%`` token (FR-017).
         """
         if not template:
             return ""
-        return strip_specifiers(java_format(template, list(values or ())))
+        return strip_specifiers(java_format(template, []))
 
 
 def camel_parts(word: str) -> list[tuple[int, int]]:

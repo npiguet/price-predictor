@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 SLOT_WIDTH_SAMPLE = 8
 
 #: Records read between two progress lines. The game-disjoint stratum streams
-#: from the raw corpus and runs for many minutes with nothing else to say.
+#: from disk and runs for many minutes with nothing else to say.
 PROGRESS_EVERY_RECORDS = 50_000
 
 #: Observations per forward pass: half of gate 1's record batch, because every
@@ -435,7 +435,7 @@ def evaluate_gate_two(verdicts: list[KeywordVerdict]) -> CheckResult:
 # ── the gate ────────────────────────────────────────────────────────────
 
 
-def gate_two_records(config, provenance, *, corpus_path: Path | None) -> Iterator:
+def gate_two_records(provenance, *, corpus_path: Path) -> Iterator:
     """The combat records of the checkpoint's **game-disjoint** games (FR-120).
 
     Game-disjoint rather than card-disjoint: the gate asks whether the model
@@ -443,27 +443,22 @@ def gate_two_records(config, provenance, *, corpus_path: Path | None) -> Iterato
     and holding out the carriers as well would empty six of the eight
     populations to answer a question gate 1 already answers.
 
-    From the curated corpus's ``validation/game-disjoint`` when the checkpoint
-    trained on one: the raw shards also hold the records curation refused or
-    repaired away. The raw corpus is read only for a checkpoint with no corpus.
+    From the curated corpus's ``validation/game-disjoint``, never the raw
+    shards, which also hold the records curation refused or repaired away.
 
     An iterator, not a list. The split is a thousand games and a parsed record
     costs about 45 KB, so the scorer reads it a chunk at a time.
     """
     from effects.domain.records import RecordKind
+    from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.record_io import read_records_matching
 
     games = frozenset(provenance.game_disjoint_games)
     if not games:
         return iter(())
-    if corpus_path is not None:
-        from effects.infrastructure.corpus_store import CorpusStore
-
-        directory = CorpusStore(corpus_path).game_disjoint_dir
-    else:
-        directory = Path(config.records_dir)
     return read_records_matching(
-        directory, game_ids=games, kinds={RecordKind.COMBAT.value},
+        CorpusStore(corpus_path).game_disjoint_dir,
+        game_ids=games, kinds={RecordKind.COMBAT.value},
     )
 
 

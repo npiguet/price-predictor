@@ -68,4 +68,3 @@ def test_an_explicit_variant_tree_or_none_recorded_is_kept():
     assert with_corpus_defaults(chosen, recorded).variant_scripts == Path("elsewhere")
     blank = SimpleNamespace(variant_scripts="")
     assert with_corpus_defaults(EvaluateEffectModelConfig(), blank).variant_scripts is None
-    assert with_corpus_defaults(EvaluateEffectModelConfig(), None).variant_scripts is None

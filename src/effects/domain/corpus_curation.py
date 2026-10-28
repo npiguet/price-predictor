@@ -249,21 +249,19 @@ def game_disjoint_draw(game_id: str) -> float:
 
 def in_game_disjoint_stratum(
     game_id: str,
-    names_held_out: bool,
     has_keyword_combat: bool,
     share: float,
     keyword_share: float,
 ) -> bool:
-    """Whether a game enters the game-disjoint validation stratum (FR-044–046).
+    """Whether a game not held out enters the game-disjoint stratum (FR-044–046).
 
     A pure function of the game, so a rebuild over a grown corpus places every
     game it placed before (SC-007): the stratum grows with the corpus rather
-    than being redrawn from it. A game naming a held-out card is card-disjoint
-    and never placed here. A game holding a qualifying combat for a listed
-    keyword is placed at the higher threshold, because those combats are what
-    gate 2 scores and a 1% sample of them is too few to score.
+    than being redrawn from it. A game naming a held-out card is card-disjoint,
+    and the caller routes it there before asking. A game holding a qualifying
+    combat for a listed keyword is placed at the higher threshold, because
+    those combats are what gate 2 scores and a 1% sample of them is too few to
+    score.
     """
-    if names_held_out:
-        return False
     threshold = keyword_share if has_keyword_combat else share
     return game_disjoint_draw(game_id) < threshold

@@ -89,7 +89,7 @@ def validate_alignment(matrix: np.ndarray, sidecar: ProvenanceSidecar) -> None:
 def pooled_card_vector(matrix: np.ndarray) -> np.ndarray:
     """Mean and max over a card's ability rows, concatenated (FR-114).
 
-    The pooled form the decodability battery and the scorer smoke test read. A
+    The pooled form the decodability battery reads. A
     card with no ability rows pools to zeros of the right width rather than
     raising: a vanilla creature has no ability lines and is still a card.
     """

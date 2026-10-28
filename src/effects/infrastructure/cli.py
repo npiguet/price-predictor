@@ -47,12 +47,9 @@ from effects.infrastructure.default_paths import (
     DEFAULT_CHECKPOINT,
     DEFAULT_CORPUS_OUTPUT,
     DEFAULT_FORGE_CARDS_PATH,
-    DEFAULT_FORGE_TOKENSCRIPTS,
     DEFAULT_KEYWORD_DEFINITIONS,
-    DEFAULT_MATCH_OUTCOMES,
     DEFAULT_RECORDS_DIR,
     DEFAULT_SCRIPT_VOCAB_PATH,
-    DEFAULT_SEALED_ENCODER,
     DEFAULT_VARIANT_SCRIPTS,
     DEFAULT_VOCAB_PATH,
     DEFAULT_WIN_RATES,
@@ -703,23 +700,6 @@ def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
             "The keyword table the tokenizer expands with; the build fails when "
             "a display-name match would expand a non-keyword line "
             f"(default: {DEFAULT_KEYWORD_DEFINITIONS})"
-        ),
-    )
-    parser.add_argument(
-        "--forge-tokenscripts", type=_optional_path, default=DEFAULT_FORGE_TOKENSCRIPTS,
-        help=(
-            "Forge's raw token scripts, read to remap the old collector's "
-            "token keys: a key naming a cardsfolder path no tree holds, whose "
-            "stem is a token's printed name, is rewritten to the token script "
-            f"it meant (default: {DEFAULT_FORGE_TOKENSCRIPTS})"
-        ),
-    )
-    parser.add_argument(
-        "--no-remap-token-keys", dest="remap_token_keys", action="store_false",
-        help=(
-            "Build without the token-key remap, keeping every key exactly as "
-            "collected. Records of a token's abilities then resolve to no "
-            "ability text at all, as they did before the remap existed"
         ),
     )
 
@@ -1534,7 +1514,6 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         type=_baseline_checkpoint, default=None, metavar="NAME=PATH",
         help="Baseline checkpoint to compare against; repeatable",
     )
-    parser.add_argument("--records-dir", type=Path, default=DEFAULT_RECORDS_DIR)
     _add_cards_folder(parser)
     _add_variant_scripts(parser, without=(
         "the tree the corpus's manifest records is read, if any"
@@ -1544,8 +1523,8 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         "--corpus", type=_optional_path, default=None,
         help=(
             "A curated dataset directory (build-corpus); defaults to the one "
-            "--checkpoint recorded, if any. Fails fast when it has been "
-            "rebuilt since training."
+            "--checkpoint recorded. Fails fast when it has been rebuilt since "
+            "training, or when the checkpoint records none."
         ),
     )
     parser.add_argument("--abilities-root", type=Path, default=DEFAULT_ABILITIES_ROOT)
@@ -1594,62 +1573,6 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     return 0
 
 
-# ── scorer-smoke-test ───────────────────────────────────────────────────
-
-
-def _scorer_smoke_test_parser(subparsers) -> None:
-    parser = subparsers.add_parser(
-        "scorer-smoke-test",
-        help=(
-            "Train the sealed scorer's Phase A on sealed vectors with pooled e "
-            "spliced in, entirely under --scratch-dir"
-        ),
-    )
-    parser.set_defaults(func=run_scorer_smoke_test)
-    parser.add_argument(
-        "--checkpoint", type=Path, default=DEFAULT_CHECKPOINT,
-        help="Effect model whose cache's pooled e is written",
-    )
-    parser.add_argument(
-        "--sealed-encoder-checkpoint", type=Path,
-        default=DEFAULT_SEALED_ENCODER,
-        help="Sealed encoder whose vectors pooled e is concatenated with",
-    )
-    parser.add_argument(
-        "--abilities-root", type=Path, default=DEFAULT_ABILITIES_ROOT,
-        help=(
-            "Ability cache whose pooled e is spliced in: the one encode-abilities "
-            f"wrote from --checkpoint (default: {DEFAULT_ABILITIES_ROOT})"
-        ),
-    )
-    parser.add_argument(
-        "--outcomes-path", type=Path, default=DEFAULT_MATCH_OUTCOMES,
-        help=f"Match outcomes Phase A trains on (default: {DEFAULT_MATCH_OUTCOMES})",
-    )
-    parser.add_argument(
-        "--scratch-dir", type=Path, required=True,
-        help="Where the vectors and the scorer checkpoint go; nothing is written elsewhere",
-    )
-
-
-def run_scorer_smoke_test(args: argparse.Namespace) -> int:
-    from effects.application.scorer_smoke_test import ScorerSmokeTestConfig
-    from effects.application.scorer_smoke_test import run as smoke_test
-
-    config = config_from_args(ScorerSmokeTestConfig, args)
-    try:
-        result = smoke_test(config)
-    except (FileNotFoundError, ValueError, RuntimeError) as exc:
-        logger.error("%s", exc)
-        return 2
-    print(
-        f"scorer smoke test: {result.cards_written} cards written "
-        f"({result.cards_without_e} without e); Phase A exited "
-        f"{result.scorer_exit_code}; scorer checkpoints under {config.scorer_dir}"
-    )
-    return result.scorer_exit_code
-
-
 # ── the table ───────────────────────────────────────────────────────────
 
 _SUBCOMMAND_BUILDERS = (
@@ -1664,7 +1587,6 @@ _SUBCOMMAND_BUILDERS = (
     _train_effect_model_parser,
     _encode_abilities_parser,
     _evaluate_effect_model_parser,
-    _scorer_smoke_test_parser,
 )
 
 

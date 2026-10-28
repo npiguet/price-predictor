@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from effects.application.holdout_cards import depletion_list
+from effects.application.holdout_cards import holdout_report
 
 
 def test_the_list_is_the_cards_the_trainer_holds_out() -> None:
@@ -30,9 +30,9 @@ def test_the_list_is_the_cards_the_trainer_holds_out() -> None:
     }
 
     for permille in (0, 250, 500, 750, 1000):
-        listed = depletion_list(
+        listed = holdout_report(
             card_files, texts_by_card, permille=permille, max_carriers=8,
-        )
+        ).names
         held = text_keyed_holdout(
             card_files, texts_by_card, permille=permille, max_carriers=8,
         )
@@ -50,9 +50,9 @@ def test_the_list_is_sorted_so_two_runs_produce_the_same_file() -> None:
         name: [f"SP$ Bespoke | Who$ {name}"] for name in card_files
     }
 
-    listed = depletion_list(
+    listed = holdout_report(
         card_files, texts_by_card, permille=1000, max_carriers=8,
-    )
+    ).names
 
     assert listed == sorted(listed)
     assert listed == ["alice", "mallory", "zed"], (
@@ -91,27 +91,23 @@ class TestTheFileSpeaksForgesSpelling:
     """
 
     def test_names_are_resolved_to_their_printed_spelling(self) -> None:
-        from effects.application.holdout_cards import depletion_list
-
-        listed = depletion_list(
+        listed = holdout_report(
             {"soul echo": "cardsfolder/s/soul_echo.txt"},
             {"soul echo": ["SP$ Bespoke | Weird$ True"]},
             permille=1000, max_carriers=8,
             canonical_names={"Soul Echo": "2004-10-01"},
-        )
+        ).names
 
         assert listed == ["Soul Echo"]
 
     def test_an_unresolvable_name_keeps_the_converted_spelling(self) -> None:
         """A token or a card MTGJSON has never heard of still gets depleted."""
-        from effects.application.holdout_cards import depletion_list
-
-        listed = depletion_list(
+        listed = holdout_report(
             {"nonesuch": "cardsfolder/n/nonesuch.txt"},
             {"nonesuch": ["SP$ Bespoke | Weird$ True"]},
             permille=1000, max_carriers=8,
             canonical_names={"Soul Echo": "2004-10-01"},
-        )
+        ).names
 
         assert listed == ["nonesuch"]
 
@@ -192,8 +188,6 @@ class TestTheTrainingCorpusFlag:
 
 
 def test_the_report_counts_templates_texts_cards_and_the_depleted_share():
-    from effects.application.holdout_cards import holdout_report
-
     card_files = {f"card {i}": f"cardsfolder/c/card_{i}.txt" for i in range(6)}
     texts_by_card = {
         "card 0": ["SP$ Bespoke | Weird$ 1"],
@@ -220,9 +214,9 @@ def test_number_only_variants_land_on_the_same_side_of_the_list():
         f"card {i}": [f"SP$ DealDamage | NumDmg$ {i % 4} | ValidTgts$ Kind{i // 4}"]
         for i in range(40)
     }
-    listed = set(depletion_list(
+    listed = set(holdout_report(
         card_files, texts_by_card, permille=500, max_carriers=8, unit="template",
-    ))
+    ).names)
     by_template: dict[str, set[bool]] = {}
     for card, texts in texts_by_card.items():
         by_template.setdefault(masked_template(texts[0]), set()).add(card in listed)
@@ -281,9 +275,9 @@ def test_token_carriers_move_the_list_as_they_move_the_split() -> None:
     texts_by_card = {"Searing Spear": ["SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any"]}
     token_texts = {"tokenscripts/goblin.txt": ["SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any"]}
 
-    listed = depletion_list(
+    listed = holdout_report(
         card_files, texts_by_card, permille=1000, max_carriers=1, token_texts=token_texts,
-    )
+    ).names
     held = text_keyed_holdout(
         card_files, texts_by_card, permille=1000, max_carriers=1, token_texts=token_texts,
     )

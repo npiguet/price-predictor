@@ -85,23 +85,6 @@ def holdout_report(
     )
 
 
-def depletion_list(
-    card_files: Mapping[str, str],
-    texts_by_card: Mapping[str, Iterable[str]],
-    *,
-    permille: int,
-    max_carriers: int,
-    unit: str = "text",
-    canonical_names: Mapping[str, object] | None = None,
-    token_texts: Mapping[str, Iterable[str]] | None = None,
-) -> list[str]:
-    """Every card carrying a held-out ability text, in printed case, sorted."""
-    return holdout_report(
-        card_files, texts_by_card, permille=permille, max_carriers=max_carriers,
-        unit=unit, canonical_names=canonical_names, token_texts=token_texts,
-    ).names
-
-
 def write_depletion_list(names: Iterable[str], out: Path) -> int:
     """Write one card name per line. Returns how many were written."""
     out = Path(out)

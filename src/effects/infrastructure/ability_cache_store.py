@@ -4,7 +4,7 @@ One ``.npz`` per source file, holding a ``(n_lines, e_dim)`` float32 array under
 the key ``e``, row-aligned with that source's sidecar. The tree layout mirrors
 the source tree, so a consumer that knows a provenance key's ``script_file``
 knows where its vectors are without an index; each reads the files its own way
-(``geometry_checks.load_cache``, the scorer smoke test, the probes).
+(``geometry_checks.load_cache``, the probes).
 """
 
 from __future__ import annotations

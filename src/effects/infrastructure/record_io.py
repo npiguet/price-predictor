@@ -906,10 +906,9 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
 def iter_record_dicts(path: Path) -> Iterator[dict]:
     """Every complete record of one shard, as the dict its line parses to.
 
-    The read every record reader shares, for a caller that has to see or edit
-    the raw JSON before a record is built from it: the token-key remap
-    rewrites keys a frozen ``ProvenanceKey`` cannot, and a generation check
-    needs only whether a field is present. Blank lines are skipped, and a
+    The read every record reader shares, for a caller that has to see the raw
+    JSON before a record is built from it: a generation check needs only
+    whether a field is present. Blank lines are skipped, and a
     trailing partial line never arrives, as :func:`iter_shard_lines` promises.
     """
     for line in iter_shard_lines(Path(path)):

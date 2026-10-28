@@ -79,50 +79,21 @@ def not_implemented(name: CheckName) -> CheckResult:
 
 # ── breakdowns (FR-064 – FR-068) ────────────────────────────────────────
 
-#: Records per stratum read from the raw corpus when the checkpoint names no
-#: curated dataset, whose fixed validation samples are otherwise the source.
-#: The curated samples are a few thousand records; reading every record of a
-#: thousand raw games would hold gigabytes for the same breakdown.
-BREAKDOWN_RAW_RECORDS = 4096
-
-
 def breakdown_records(context: EvaluationContext) -> dict[str, list]:
-    """Both validation strata, as the breakdowns score them.
+    """Both validation strata, as the curated dataset's fixed samples.
 
-    From the curated dataset's fixed samples when the checkpoint trained on
-    one: they are what best-checkpoint selection scored, and the card-disjoint
+    They are what best-checkpoint selection scored, and the card-disjoint
     sample is filled round-robin over held-out texts (FR-051), so every text
-    shows up in the per-text mean. Otherwise from the raw corpus: the games
-    the checkpoint recorded for each stratum, up to a bound.
+    shows up in the per-text mean.
     """
-    from effects.infrastructure.record_io import read_records_matching, read_shard
+    from effects.infrastructure.corpus_store import CorpusStore
+    from effects.infrastructure.record_io import read_shard
 
-    main = context.main
-    if context.corpus_path is not None:
-        from effects.infrastructure.corpus_store import CorpusStore
-
-        store = CorpusStore(context.corpus_path)
-        out = {}
-        for stratum in (CARD_DISJOINT, GAME_DISJOINT):
-            path = store.sample_path(stratum)
-            out[stratum] = list(read_shard(path)) if path.exists() else []
-        return out
-
-    games = {
-        CARD_DISJOINT: frozenset(main.provenance.card_disjoint_games),
-        GAME_DISJOINT: frozenset(main.provenance.game_disjoint_games),
-    }
-    out = {stratum: [] for stratum in games}
-    if not any(games.values()):
-        return out
-    wanted = games[CARD_DISJOINT] | games[GAME_DISJOINT]
-    records_dir = Path(context.config.records_dir)
-    for record in read_records_matching(records_dir, game_ids=wanted):
-        for stratum, members in games.items():
-            if record.game_id in members and len(out[stratum]) < BREAKDOWN_RAW_RECORDS:
-                out[stratum].append(record)
-        if all(len(rows) >= BREAKDOWN_RAW_RECORDS for rows in out.values()):
-            break
+    store = CorpusStore(context.corpus_path)
+    out = {}
+    for stratum in (CARD_DISJOINT, GAME_DISJOINT):
+        path = store.sample_path(stratum)
+        out[stratum] = list(read_shard(path)) if path.exists() else []
     return out
 
 
@@ -140,7 +111,7 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
         )]
     runnable = context.main_runnable(everything)
     manifest = context.manifest
-    mode_counts = (manifest.legality_mode_counts or None) if manifest else None
+    mode_counts = manifest.legality_mode_counts or None
     scored = {
         stratum: (
             score_records(
@@ -151,7 +122,7 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
         )
         for stratum, rows in strata.items()
     }
-    games_by_text: dict[str, float] = dict(manifest.rarity) if manifest else {}
+    games_by_text: dict[str, float] = dict(manifest.rarity)
     return breakdown_checks(
         scored, games_by_text=games_by_text,
         withheld_keyword=context.main.provenance.withheld_keyword,
@@ -185,9 +156,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 
     logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
     report.keyword_verdicts = run_gate_two(
-        gate_two_records(
-            context.config, context.main.provenance, corpus_path=context.corpus_path,
-        ),
+        gate_two_records(context.main.provenance, corpus_path=context.corpus_path),
         context.main_runnable,
     )
     report.add(evaluate_gate_two(report.keyword_verdicts))

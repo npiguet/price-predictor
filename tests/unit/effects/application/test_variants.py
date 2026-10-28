@@ -30,7 +30,6 @@ from effects.application.collect_variants import (
     loadable_variants,
     perturb_script,
     variant_budget,
-    variant_growth,
     volume_ceiling,
 )
 from effects.domain.records import (
@@ -317,17 +316,6 @@ class TestVolumeCap:
             effect_records=Path("output/effects/records"),
         )
         assert config.volume_source() == Path("output/effects/records")
-
-    def test_growth_is_measured_in_the_destination_not_the_volume_source(self):
-        """The two counts must come from the same directory.
-
-        `--corpus-records` let the volume cap be sized against a corpus the
-        variants are not written into. The growth check subtracted that count
-        from a count of the destination, so a run against a 39M-record corpus
-        writing to an empty directory reported "-39332737 new effect records".
-        """
-        assert variant_growth(before=12, after=20) == 8
-        assert variant_growth(before=0, after=0) == 0
 
     def test_the_record_count_stops_once_the_cap_cannot_bind(self):
         """Counting the corpus exactly is minutes of gzip for an inert number.

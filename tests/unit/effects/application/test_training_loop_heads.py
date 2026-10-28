@@ -39,7 +39,6 @@ from effects.domain.records import (
 )
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import read_shard
-from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.builders import make_preparer
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
@@ -48,14 +47,6 @@ _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 @pytest.fixture(scope="module")
 def records():
     return list(read_shard(_FIXTURES / "gen1-records.jsonl.gz"))
-
-
-@pytest.fixture(scope="module")
-def sidecars():
-    return SidecarCache({
-        "cardsfolder": _FIXTURES / "gen1-sidecars" / "cardsfolder",
-        "tokenscripts": _FIXTURES / "gen1-sidecars" / "tokenscripts",
-    })
 
 
 def _loop(monkeypatch, **config) -> TrainingLoop:
@@ -257,15 +248,13 @@ class TestEpochShares:
         combat = next(r for r in records if r.kind is RecordKind.COMBAT)
         assert labels[combat.record_id][0] == NO_TEXT_BUCKET
 
-    def test_a_texts_bucket_reads_the_corpus_wide_table(self, records, sidecars, tmp_path):
-        from effects.application.ability_text import ability_text_of
-
+    def test_a_texts_bucket_reads_the_corpus_wide_table(self, records, tmp_path):
         preparer = _fixture_preparer(tmp_path)
         record = next(
             r for r in records if r.moment is Moment.RESOLUTION
-            and ability_text_of(r, sidecars, preparer.surface) is not None
+            and preparer.resolver.acting_text(r) is not None
         )
-        preparer.rarity = {ability_text_of(record, sidecars, preparer.surface): 50}
+        preparer.rarity = {preparer.resolver.acting_text(record): 50}
         assert preparer._shard_labels([record])[record.record_id][0] == "20+"
 
     def test_shares_are_reported_in_bucket_order(self):

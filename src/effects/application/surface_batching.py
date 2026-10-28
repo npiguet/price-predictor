@@ -510,14 +510,6 @@ class SurfaceBatcher:
             keys_of=self._keys_of,
         )
 
-    def prepare_texts(
-        self, ordered: list[str], lines_of: Mapping[str, object] | None = None,
-    ) -> list[EncodedLine]:
-        """Each text as the encoder reads it (``TextStager.prepare_texts``)."""
-        return self.stager.prepare_texts(
-            ordered, lines_of, rng=self.rng, keys_of=self._keys_of,
-        )
-
     def encode_texts(
         self, texts: dict[str, object], encoder: AbilityEncoder,
     ) -> tuple[dict[str, int], torch.Tensor | None]:
