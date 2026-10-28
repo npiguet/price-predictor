@@ -122,28 +122,9 @@ constant (0). Reports each truncated line by provenance key.
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | repeatable; sidecar roots |
 | `--variant-scripts` | the tree the corpus manifest records | the perturbed-script tree |
 
-Report adds: per-text card-disjoint results by rarity bucket and family (also averaged over
+A checkpoint that records no curated corpus is refused (exit 2). Report adds: per-text card-disjoint results by rarity bucket and family (also averaged over
 families); per-family memorization gap; random-seat slice; real-decision legality slice; withheld
-keyword zero-shot, beside trained keywords; "gate 1 skipped" when no identity variant is given, or
-when the checkpoint records no curated corpus; `[todo]` lines for the three unbuilt FR-116 checks.
-
-## `python -m effects scorer-smoke-test` (new)
-
-| Flag | Default | Meaning |
-|---|---|---|
-| `--checkpoint` | `models/effects/effect-model/latest.pt` | effect model whose pooled `e` is written |
-| `--sealed-encoder-checkpoint` | `models/sealed/encoder/latest.pt` | sealed vectors to concatenate |
-| `--abilities-root` | `output/effects/abilities` | ability cache whose pooled `e` is spliced in; the one `encode-abilities` wrote from `--checkpoint` |
-| `--outcomes-path` | `output/sealed/match-outcomes.txt` | match outcomes Phase A trains on |
-| `--scratch-dir` | required | where the vectors and the scorer checkpoint go |
-
-Copies the converted `.txt` files under `--scratch-dir`, runs `python -m sealed encode-cards` there with
-`--sealed-encoder-checkpoint` and the `vocab.txt` beside it, inserts each card's pooled `e` before the
-trailing deterministic-feature block of its vector (zeros for a card with no ability line), and runs
-`python -m sealed train-scorer` Phase A (`--embedding-lr 0`) on that directory as a subprocess, with
-its checkpoint directory under `--scratch-dir`. Writes nothing under `output/cardsfolder/`. Imports
-nothing from `sealed.application`. Refuses a `--scratch-dir` whose card tree already holds encoded
-vectors, deleting nothing.
+keyword zero-shot, beside trained keywords; "gate 1 skipped" when no identity variant is given; `[todo]` lines for the three unbuilt FR-116 checks.
 
 ## `scripts/effect_embedding_probes/*.py` (existing)
 

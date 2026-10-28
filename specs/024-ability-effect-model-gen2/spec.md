@@ -357,15 +357,14 @@ The operator evaluates each arm. Beyond the base spec's gates, the report gives 
 results per text, broken down by rarity bucket and rule family. It also reports the memorization
 gap per family, a separate off-policy slice, a separate real-decision legality slice, and the
 zero-shot result for the withheld keyword. The embedding-probe scripts run against any checkpoint
-and cache. A new command runs the pooled-`e` scorer smoke test end to end.
+and cache.
 
 **Why this priority**: The arms are compared by hand, and these reports are most of what is
 compared. Nothing earlier depends on them.
 
 **Independent Test**: Run `evaluate-effect-model` on a gen-2 arm with no identity variant and read
 each new section and the "gate 1 skipped" line. Run each embedding-probe script with that arm's
-`--checkpoint` and `--abilities-root`. Run `scorer-smoke-test --scratch-dir` and check that
-nothing under `output/cardsfolder/` changed.
+`--checkpoint` and `--abilities-root`.
 
 **Acceptance Scenarios**:
 
@@ -385,10 +384,7 @@ nothing under `output/cardsfolder/` changed.
    reported as skipped.
 7. **Given** `--win-rates PATH`, **When** the decodability battery runs, **Then** it reads that
    file.
-8. **Given** `scorer-smoke-test`, **When** it runs, **Then** it writes the pooled `e` of
-   `--checkpoint` concatenated with the vectors of `--sealed-encoder-checkpoint` under
-   `--scratch-dir`, and runs `python -m sealed train-scorer` Phase A on that directory as a
-   subprocess.
+8. *(withdrawn: the `scorer-smoke-test` command is removed.)*
 9. **Given** any embedding-probe script and an arm's `--checkpoint` and `--abilities-root`,
    **When** it runs, **Then** it reads that checkpoint's vocabulary, cache and width of `e`, and
    omits its `taxonomy` columns if that cache is absent.
@@ -1039,13 +1035,7 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   without it, none. The other six rows MUST stay unchanged.
 - **FR-070**: It MUST accept `--win-rates PATH` (default `output/sealed/cards-win-rates.txt`) as the
   per-card win-rate file the decodability battery reads.
-- **FR-071**: `python -m effects scorer-smoke-test` MUST write the pooled `e` of `--checkpoint`
-  (default `models/effects/effect-model/latest.pt`), concatenated with the vectors of
-  `--sealed-encoder-checkpoint` (default `models/sealed/encoder/latest.pt`), into the required
-  `--scratch-dir`, and run `python -m sealed train-scorer` Phase A against that directory as a
-  subprocess. It MUST NOT write under `output/cardsfolder/`, and MUST NOT import from
-  `sealed.application`. It MUST refuse a `--scratch-dir` whose card tree already holds encoded
-  vectors rather than clear it.
+- **FR-071 (withdrawn)**: The `scorer-smoke-test` command is removed.
 
 #### Embedding probes (root spec § 11.1)
 
@@ -1229,7 +1219,7 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   gen-2 arm with no code change between them, and all gen-2 scorecards record one digest.
 - **SC-011**: A knowledge-probe run fits the 8 GB training GPU and takes at most two GPU hours per
   checkpoint.
-- **SC-012**: `scorer-smoke-test` leaves `output/cardsfolder/` unchanged.
+- **SC-012 (withdrawn)**: The `scorer-smoke-test` command is removed.
 
 ## Assumptions
 
@@ -1250,8 +1240,7 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   spec does not address either case; both rules keep `convert` terminating and total.
 - Arm comparison is done by hand from the scorecards, the evaluation reports and the
   embedding-probe output. No command picks a winner, and nothing in this feature gates on a result.
-- Consuming `e` in the scorer, picker, draft agent or game agent is out of scope. The scorer smoke
-  test is informational only.
+- Consuming `e` in the scorer, picker, draft agent or game agent is out of scope.
 - A card's mana cost is a card characteristic, not an ability's. The trunk reads what the snapshot
   entity carries of it, which is the mana value and the colours, not the pip composition, and relates it
   to the card's abilities through their sequence and positions. A permanent's implicit cast spell

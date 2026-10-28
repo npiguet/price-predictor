@@ -74,8 +74,8 @@ The unit of training. One observed game event or decision point.
 
 `{type, subjects (refs), params, duration, attributed_to}`. The type vocabulary is the union of Forge
 trigger types, bus events, and bracket diffs; the canonical member list and per-type field
-normalization live in `effects/domain/event_schema.py`, guarded by a checked-in completeness test that
-maps every Forge effect API class to a covered type or an explicit exclusion.
+normalization live in `effects/domain/event_schema.py`, guarded by a Java test (`ApiEventsTest`) that
+checks every `ApiEvents.RULES` key is an `ApiType` member name.
 
 `attributed_to` is tri-state: a sub-ability chain index (`"2"`), the sentinel `"root"` where the acting
 line's own clause acted, or the sentinel `"unresolved"` where a clause was sought and the pointer named
@@ -209,7 +209,6 @@ actually trained without, not one an operator remembers choosing.
 | An event attributed to an unmapped sub-ability link falls back to the root line | collector |
 | A trait deduplicated away maps to no line; its key is listed in the sidecar's `dropped_keys`, and a record naming it is kept with no line to join to | converter |
 | A record naming a provenance key in neither `lines` nor `dropped_keys` fails loudly (the sidecar does not describe the card the record was collected against) | training-time join |
-| The pooled-`e` scorer smoke test writes only into a scratch copy of the cards folder, never `output/cardsfolder/` | evaluator |
 | A fork whose copy-score check disagrees before perturbation is discarded, still counting against budget | collector |
 | Vocabulary or keyword-definition hash mismatch fails fast | every inference command |
 | A `--variant-checkpoint` whose split or hashes differ from `--checkpoint` fails fast | evaluator |

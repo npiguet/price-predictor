@@ -41,8 +41,7 @@ In scope
   (§ 8).
 - Training: rarity ceiling, epoch reporting, noise on `e`, the value head, and encoder
   size (§ 9).
-- Evaluation reporting, the zero-shot measurement, and the scorer smoke-test command (§
-  10).
+- Evaluation reporting and the zero-shot measurement (§ 10).
 - Probe tooling: the embedding-probe scripts and the knowledge-probe suite (§ 11).
 
 Reused unchanged
@@ -644,8 +643,8 @@ names, so a corpus built from records collected afterwards needs no repair.
 - The zero-shot keyword check: for the checkpoint's withheld keyword, per-field results on
   records where that keyword is on the acting line or carried by an entity, beside the
   same fields over records carrying trained keywords.
-- Gate 1 reports as skipped when no `--variant-checkpoint identity` is given, and when the
-  checkpoint records no curated corpus. Its unique-text stratum is the curated card-disjoint
+- Gate 1 reports as skipped when no `--variant-checkpoint identity` is given. A checkpoint
+  that records no curated corpus is refused (exit 2). Its unique-text stratum is the curated card-disjoint
   stratum's resolution records whose acting text no record of the curated `training/` stratum
   acts with.
 - Gate 2 reads the real combat records of the checkpoint's game-disjoint games, from the curated
@@ -665,12 +664,6 @@ names, so a corpus built from records collected afterwards needs no repair.
 
 `--win-rates PATH` (default `output/sealed/cards-win-rates.txt`) names the per-card
 win-rate file the decodability battery reads.
-
-`python -m effects scorer-smoke-test` runs the base spec's pooled-`e` scorer smoke test.
-It writes the pooled `e` of `--checkpoint`, concatenated with the vectors of
-`--sealed-encoder-checkpoint`, into `--scratch-dir`, and runs `python -m sealed
-train-scorer` Phase A against that directory as a subprocess. It never writes under
-`output/cardsfolder/`, and refuses a `--scratch-dir` whose card tree already holds encoded vectors.
 
 # 11. Probe tooling
 
@@ -808,13 +801,6 @@ python -m effects evaluate-effect-model
     [--win-rates PATH]                   default output/sealed/cards-win-rates.txt
     [--cards-folder DIR ...]             default output/cardsfolder/, output/tokenscripts/
     [--variant-scripts DIR]              default the tree the corpus manifest records
-
-python -m effects scorer-smoke-test
-    [--checkpoint PATH]                  default models/effects/effect-model/latest.pt
-    [--sealed-encoder-checkpoint PATH]   default models/sealed/encoder/latest.pt
-    [--abilities-root DIR]               default output/effects/abilities
-    [--outcomes-path PATH]               default output/sealed/match-outcomes.txt
-    --scratch-dir DIR
 
 python scripts/effect_knowledge_probes/run.py
     --checkpoint PATH

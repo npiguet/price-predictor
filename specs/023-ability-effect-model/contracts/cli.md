@@ -234,8 +234,6 @@ differing only in hyperparameters read the same records.
 | `--game-disjoint-games` | 1000 |
 | `--card-disjoint-text-cap` | 50 — max card-disjoint games per held-out ability text, a game counting toward a text only through a resolution record acting through it |
 | `--shard-records` | 2000 — target records per output shard; whole games are dealt to `ceil(records / N)` shards by a hash of `game_id` seeded by `--seed`, and each shard is shuffled under `--seed`. 0 keeps one output shard per source shard, unshuffled |
-| `--forge-tokenscripts` | `../forge/forge-gui/res/tokenscripts` — Forge's raw token scripts, read to remap the old collector's token keys (FR-151); the build refuses to start when the remap is on and this directory is missing |
-| `--no-remap-token-keys` | off — build without the token-key remap; every key is written exactly as collected |
 | `--seed` | 42 — selection, shard dealing and shuffle |
 | `--workers` | CPU count |
 | `--verify` | off — report drift against an existing manifest and write nothing |
@@ -338,16 +336,15 @@ otherwise, beside rather than replacing the shipping cache.
 |---|---|
 | `--checkpoint` | `models/effects/effect-model/latest.pt` |
 | `--variant-checkpoint NAME=PATH` | repeatable |
-| `--records-dir`, `--cards-folder` | the trainer's defaults |
+| `--cards-folder` | the trainer's default |
 | `--variant-scripts` | the tree the corpus manifest records |
 | `--vocab-path`, `--keyword-definitions` | the paths `--checkpoint` recorded |
-| `--corpus` | the dataset `--checkpoint` recorded, if any |
+| `--corpus` | the dataset `--checkpoint` recorded; a checkpoint that records none is refused (exit 2) |
 
 The zero-shot keyword check needs no flag: the withheld keyword is read from `--checkpoint`, which
 records it alongside the split.
 
-Gate 1 reads its stratum from the curated corpus `--checkpoint` records and reports as skipped when it
-records none. Matched real-vs-fork agreement, the probe-diff re-check and the role-polarity probe are
+Gate 1 reads its stratum from the curated corpus `--checkpoint` records. Matched real-vs-fork agreement, the probe-diff re-check and the role-polarity probe are
 not implemented and report `NOT_IMPLEMENTED` (`[todo]`) on every run (FR-111).
 
 **Splits are never a flag.** The held-out card list and `game_id` set come from `--checkpoint`. The
