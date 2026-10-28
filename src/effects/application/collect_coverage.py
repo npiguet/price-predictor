@@ -656,10 +656,7 @@ def count_text_shard(
     for record in read_shard(shard):
         for key in record.ability or ():
             if key not in text_by_key:
-                try:
-                    line = sidecars.line_for(key)
-                except KeyError:
-                    line = None
+                line = sidecars.line_or_none(key)
                 text = (
                     normalize_script_text(line.script_text)
                     if line is not None and line.script_text else None

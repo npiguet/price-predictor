@@ -428,6 +428,14 @@ class SidecarCache:
             )
             return None
 
+    def first_line(self, keys) -> SidecarLine | None:
+        """The first line any of ``keys`` names, under :meth:`line_or_none`."""
+        for key in keys:
+            line = self.line_or_none(key)
+            if line is not None:
+                return line
+        return None
+
     def prose_for(self, key: ProvenanceKey) -> str | None:
         """The converted prose of the line a key names.
 

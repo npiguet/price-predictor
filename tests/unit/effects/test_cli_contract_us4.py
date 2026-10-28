@@ -26,8 +26,11 @@ def parse(*argv: str):
 
 class TestCollectVariants:
     def test_the_defaults_are_the_contracts(self):
+        from effects.infrastructure.cli import resolve_training_corpus
+
         args = parse("collect-variants")
-        assert args.effect_records == Path("output/effects/records/")
+        records, _ = resolve_training_corpus(args)
+        assert records == Path("output/effects/records/")
         assert args.forge_cards_path == Path("../forge/forge-gui/res/cardsfolder/")
         assert args.variant_scripts == Path("output/effects/variant-scripts/")
         assert args.variant_volume == 0.2

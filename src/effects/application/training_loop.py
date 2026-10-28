@@ -1344,8 +1344,8 @@ class TrainingLoop:
         run.step += 1
 
     def _validate(
-        self, records, run: RunContext,
-        *, parts: dict[str, float] | None = None, fields=None,
+        self, records, run: RunContext, *, fields,
+        parts: dict[str, float] | None = None,
         collect: list[EntityTargetBatch] | None = None,
     ) -> float:
         """Mean loss over the stratum, batched the way training batches.
@@ -1396,7 +1396,7 @@ class TrainingLoop:
                     prepared, run, self._scoring, report_parts=parts is not None,
                 )
                 # Accumulated on the device; read once below.
-                total += computed.total
+                total += computed.shipped
                 batches += 1
                 means.add(computed.parts)
         run.encoder.train()

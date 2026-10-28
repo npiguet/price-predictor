@@ -84,18 +84,6 @@ def root_param(script_text: str | None, name: str) -> str | None:
     return None
 
 
-def _line(sidecars, keys: Iterable[ProvenanceKey]):
-    """The first sidecar line any of ``keys`` resolves to, or None."""
-    for key in keys:
-        try:
-            line = sidecars.line_for(key)
-        except KeyError:
-            line = None
-        if line is not None:
-            return line
-    return None
-
-
 def _keyword_family(line) -> str | None:
     if line is not None and line.script_api_type == KEYWORD_API_TYPE and line.script_text:
         return display_name_of(line.script_text)
@@ -111,7 +99,7 @@ def static_mode(keys: Iterable[ProvenanceKey], sidecars) -> str | None:
     ``CantBlockBy``, say) has no script of its own there, and answers with the
     keyword's display name, which is the family FR-048 gives it anyway.
     """
-    line = _line(sidecars, keys)
+    line = sidecars.first_line(keys)
     if line is None:
         return None
     keyword = _keyword_family(line)
@@ -152,7 +140,7 @@ def legality_modes(record: EffectRecord, sidecars) -> frozenset[str]:
     for entry in record.payload.forbidden:
         if not entry.responsible_static:
             continue
-        line = _line(sidecars, entry.responsible_static)
+        line = sidecars.first_line(entry.responsible_static)
         if line is None:
             continue
         keyword = _keyword_family(line)
@@ -221,7 +209,7 @@ def rule_family(
                 legality_modes(record, sidecars), legality_mode_counts,
             )
 
-    line = _line(sidecars, record.ability or ())
+    line = sidecars.first_line(record.ability or ())
     if line is None:
         return NO_TEXT
     keyword = _keyword_family(line)

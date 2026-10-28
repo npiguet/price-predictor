@@ -237,3 +237,30 @@ def test_a_field_whose_targets_never_vary_reads_not_applicable_end_to_end():
 
     assert floor["damage_taken"] == 0.0
     assert "damage_taken 0.007 (n/a)" in line
+
+
+def test_validation_scores_the_shipped_objective_not_the_backward_total():
+    """The training-only heads join backward, never the number validation prints.
+
+    Equal today only because a scoring step builds no training-only targets;
+    summing ``total`` would make the two diverge the day one does.
+    """
+    from types import SimpleNamespace
+
+    from effects.application.training_loop import StepLoss
+
+    loop = TrainingLoop(
+        TrainEffectModelConfig(corpus="unused", batch_size=2),
+        split=CorpusSplit(), training_shards=[], validation_samples={},
+        holdout_permille=20, holdout_max_carriers=8,
+        gate_one_records=0, rarity={}, corpus_digest="",
+    )
+    loop.preparer = SimpleNamespace(prepare_step=lambda *a, **k: SimpleNamespace())
+    loop._device_loss = lambda *a, **k: StepLoss(
+        total=torch.tensor(5.0), shipped=torch.tensor(1.0), parts={}, terms={},
+    )
+    module = SimpleNamespace(eval=lambda: None, train=lambda: None)
+    run = SimpleNamespace(encoder=module, model=module, step=0)
+    records = [SimpleNamespace(game_id=f"g{i}") for i in range(4)]
+
+    assert loop._validate(records, run, fields=()) == 1.0

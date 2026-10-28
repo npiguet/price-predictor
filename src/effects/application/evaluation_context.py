@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from effects.domain.baselines import Baseline
 from effects.infrastructure import default_paths
 
 if TYPE_CHECKING:
@@ -111,14 +112,24 @@ class EvaluateEffectModelConfig:
     win_rates: Path = field(default_factory=lambda: DEFAULT_WIN_RATES)
 
 
-def parse_baseline_checkpoint(value: str) -> tuple[str, Path]:
-    """``NAME=PATH`` for ``--variant-checkpoint``."""
+def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:
+    """``NAME=PATH`` for ``--variant-checkpoint``, ``NAME`` a baseline.
+
+    An unknown name is refused rather than carried: a misspelt ``identity``
+    would otherwise read as gate 1's "no identity checkpoint" skip.
+    """
     name, separator, path = value.partition("=")
     if not separator or not name.strip() or not path.strip():
         raise ValueError(
             f"--variant-checkpoint takes NAME=PATH, got {value!r}"
         )
-    return name.strip(), Path(path.strip())
+    known = [b.value for b in Baseline if b is not Baseline.FULL]
+    if name.strip() not in known:
+        raise ValueError(
+            f"--variant-checkpoint names an unknown baseline {name.strip()!r}; "
+            f"known: {known}"
+        )
+    return Baseline(name.strip()), Path(path.strip())
 
 
 # ── corpus provenance (FR-147) ──────────────────────────────────────────

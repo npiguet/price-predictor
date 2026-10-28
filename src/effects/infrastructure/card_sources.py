@@ -6,12 +6,13 @@ File I/O shared by ``build-corpus``, ``collect-coverage``, ``collect-variants``,
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from effects.infrastructure.sidecar_io import SidecarCache
+from effects.infrastructure.sidecar_io import SidecarCache, UnconvertedScript
+
+logger = logging.getLogger(__name__)
 
 
 def load_card_texts(
@@ -20,16 +21,22 @@ def load_card_texts(
     """``card name -> the script texts of its sidecar's lines``.
 
     The I/O half of the holdout, kept apart from the selection so the rule can
-    be exercised without a converted tree on disk.
+    be exercised without a converted tree on disk. A card converted without a
+    sidecar carries no text to hold out; it is skipped and counted.
     """
     out: dict[str, list[str]] = {}
+    skipped = 0
     for name, script_file in card_files.items():
-        sidecar = sidecars.get(script_file)
-        if sidecar is None:
+        try:
+            sidecar = sidecars.get(script_file)
+        except UnconvertedScript:
+            skipped += 1
             continue
         out[name] = [
             line.script_text for line in sidecar.lines if line.script_text
         ]
+    if skipped:
+        logger.warning("%d converted card(s) have no sidecar; skipped", skipped)
     return out
 
 

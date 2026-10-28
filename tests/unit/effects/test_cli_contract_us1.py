@@ -238,7 +238,13 @@ class TestEvaluateEffectModel:
             "--variant-checkpoint", "identity=a.pt",
             "--variant-checkpoint", "no-state=b.pt",
         )
-        assert args.baseline_checkpoints == ["identity=a.pt", "no-state=b.pt"]
+        assert args.baseline_checkpoints == [
+            ("identity", Path("a.pt")), ("no-state", Path("b.pt")),
+        ]
+
+    def test_an_unknown_variant_checkpoint_name_is_a_usage_error(self):
+        with pytest.raises(SystemExit):
+            parse("evaluate-effect-model", "--variant-checkpoint", "identiy=a.pt")
 
     def test_there_is_no_split_flag(self):
         """Splits come from the checkpoint — never a flag, never recomputed."""

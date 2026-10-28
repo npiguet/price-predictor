@@ -32,7 +32,10 @@ def parse(*argv: str):
 
 class TestEffectRecordsDefaultAsymmetry:
     def test_collect_coverage_defaults_to_the_records_directory(self):
-        assert parse("collect-coverage").effect_records == Path("output/effects/records/")
+        from effects.infrastructure.cli import coverage_config_from
+
+        config = coverage_config_from(parse("collect-coverage"))
+        assert config.effect_records == Path("output/effects/records/")
 
     def test_match_outcomes_has_no_default(self):
         """A default there would turn every self-play run into a collection run."""

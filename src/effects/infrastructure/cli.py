@@ -106,10 +106,17 @@ def resolve_cards_folders(values: list[str] | None) -> tuple[Path, ...]:
     return tuple(Path(value) for value in chosen)
 
 
-def _add_effect_records(parser: argparse.ArgumentParser, *, help_text: str) -> None:
-    """``--effect-records``, defaulting to the raw shard root on every command."""
+def _add_effect_records(
+    parser: argparse.ArgumentParser, *, help_text: str,
+    default: str | None = DEFAULT_RECORDS_DIR,
+) -> None:
+    """``--effect-records``, defaulting to the raw shard root.
+
+    A collector passes ``default=None`` and resolves the root itself, so it can
+    tell an explicit ``--effect-records`` beside ``--training-corpus`` from none.
+    """
     parser.add_argument(
-        "--effect-records", type=Path, default=DEFAULT_RECORDS_DIR, help=help_text,
+        "--effect-records", type=Path, default=default, help=help_text,
     )
 
 
@@ -462,7 +469,7 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.set_defaults(func=run_collect_coverage)
-    _add_effect_records(parser, help_text=(
+    _add_effect_records(parser, default=None, help_text=(
         "Destination shard directory. Unlike on match-outcomes this has a "
         f"default ({DEFAULT_RECORDS_DIR}): collection is the whole point "
         "of this command."
@@ -542,8 +549,8 @@ def resolve_training_corpus(args: argparse.Namespace) -> tuple[Path, Path | None
     """
     corpus = getattr(args, "training_corpus", None)
     if corpus is None:
-        return args.effect_records, args.exclude_cards
-    if args.effect_records != Path(DEFAULT_RECORDS_DIR) or args.exclude_cards:
+        return args.effect_records or Path(DEFAULT_RECORDS_DIR), args.exclude_cards
+    if args.effect_records is not None or args.exclude_cards:
         raise ValueError(
             "pass one source of the corpus location, not both: "
             "--training-corpus DIR means --effect-records DIR with its own "
@@ -1194,7 +1201,7 @@ def _collect_variants_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_collect_variants)
     _add_effect_records(
-        parser,
+        parser, default=None,
         help_text=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
     )
     parser.add_argument(
@@ -1524,7 +1531,7 @@ def _evaluate_effect_model_parser(subparsers) -> None:
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument(
         "--variant-checkpoint", action="append", dest="baseline_checkpoints",
-        default=None, metavar="NAME=PATH",
+        type=_baseline_checkpoint, default=None, metavar="NAME=PATH",
         help="Baseline checkpoint to compare against; repeatable",
     )
     parser.add_argument("--records-dir", type=Path, default=DEFAULT_RECORDS_DIR)
@@ -1548,30 +1555,29 @@ def _evaluate_effect_model_parser(subparsers) -> None:
     )
 
 
+def _baseline_checkpoint(value: str):
+    from effects.application.evaluation_context import parse_baseline_checkpoint
+
+    try:
+        return parse_baseline_checkpoint(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     from effects.application.evaluate_effect_model import run as evaluate
     from effects.application.evaluation_context import (
         CorpusMismatchError,
         EvaluateEffectModelConfig,
-        parse_baseline_checkpoint,
     )
     from effects.infrastructure.effect_model_store import (
         HashMismatchError,
         SplitMismatchError,
     )
 
-    try:
-        variants = dict(
-            parse_baseline_checkpoint(value)
-            for value in (args.baseline_checkpoints or [])
-        )
-    except ValueError as exc:
-        logger.error("%s", exc)
-        return 2
-
     config = config_from_args(
         EvaluateEffectModelConfig, args,
-        baseline_checkpoints=variants,
+        baseline_checkpoints=dict(args.baseline_checkpoints or []),
         cards_folders=resolve_cards_folders(args.cards_folders),
     )
     try:

@@ -166,6 +166,21 @@ class TestTheTrainingCorpusFlag:
                 "--effect-records", str(tmp_path / "elsewhere"),
             ]))
 
+    def test_an_explicit_default_records_dir_is_refused_too(self, tmp_path):
+        """Spelling out the default is still a second source."""
+        from effects.infrastructure.cli import build_parser, coverage_config_from
+        from effects.infrastructure.default_paths import DEFAULT_RECORDS_DIR
+
+        corpus = tmp_path / "depleted"
+        corpus.mkdir()
+        (corpus / "holdout-cards.txt").write_text("Soul Echo\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="one source"):
+            coverage_config_from(build_parser().parse_args([
+                "collect-coverage", "--training-corpus", str(corpus),
+                "--effect-records", DEFAULT_RECORDS_DIR,
+            ]))
+
     def test_without_it_the_ordinary_flags_still_work(self, tmp_path):
         config = self._config("--effect-records", str(tmp_path / "records"))
 

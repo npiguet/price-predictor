@@ -254,10 +254,7 @@ class WorkerContext:
 
         found = None
         for key in keys:
-            try:
-                line = self.sidecars.line_for(key)
-            except KeyError:
-                continue
+            line = self.sidecars.line_or_none(key)
             script = line.script_text if line is not None else None
             if script and self.read.held_out.holds_text(script):
                 found = normalize_script_text(script)

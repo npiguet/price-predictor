@@ -255,10 +255,7 @@ def _keyword_misfires(
     found: list[str] = []
     for keys in key_text:
         for key in keys:
-            try:
-                line = sidecars.line_for(key)
-            except KeyError:
-                continue
+            line = sidecars.line_or_none(key)
             if line is None or not line.script_text:
                 continue
             if line.script_api_type == KEYWORD_API_TYPE:

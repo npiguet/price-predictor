@@ -223,10 +223,13 @@ def test_root_param_reads_the_root_segment_only():
 
 
 class _Lines:
-    """A minimal sidecar cache: ``line_for`` over a fixed table."""
+    """A minimal sidecar cache over a fixed table."""
 
     def __init__(self, lines):
         self._lines = lines
 
     def line_for(self, key):
         return self._lines.get(key)
+
+    def first_line(self, keys):
+        return next((self._lines[k] for k in keys if k in self._lines), None)

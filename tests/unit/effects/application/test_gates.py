@@ -469,3 +469,12 @@ class TestVariantCheckpointFlag:
     def test_an_empty_name_is_rejected(self):
         with pytest.raises(ValueError, match="NAME=PATH"):
             parse_baseline_checkpoint("=models/x/latest.pt")
+
+    def test_a_misspelt_baseline_is_rejected(self):
+        """Otherwise gate 1 skips for want of an identity checkpoint."""
+        with pytest.raises(ValueError, match="unknown baseline 'identiy'"):
+            parse_baseline_checkpoint("identiy=models/x/latest.pt")
+
+    def test_the_shipping_model_is_not_a_baseline(self):
+        with pytest.raises(ValueError, match="unknown baseline 'full'"):
+            parse_baseline_checkpoint("full=models/x/latest.pt")
