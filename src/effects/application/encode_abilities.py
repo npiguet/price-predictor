@@ -47,14 +47,13 @@ class EncodeAbilitiesConfig:
 class EncodeSummary:
     sources: int = 0
     rows: int = 0
-    skipped: int = 0
-    cleaned: int = 0
 
 
 def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
     """Encode every source under the configured trees; idempotent."""
     store = AbilityCacheStore(config.output_root, variant=config.variant)
-    cleaned = store.clean() if config.clean else 0
+    if config.clean:
+        store.clean()
 
     # Hash-checked before anything is written.
     loaded = load_for_inference(
@@ -84,14 +83,13 @@ def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
         rows += matrix.shape[0]
 
     logger.info(
-        "Encoded %d sources (%d ability rows) into %s [variant=%s]%s",
-        len(sources), rows, config.output_root, config.variant,
+        "Encoded %d sources (%d ability rows; %d sidecars with no line skipped) "
+        "into %s [variant=%s]%s",
+        len(sources), rows, skipped, config.output_root, config.variant,
         f", withheld keyword {provenance.withheld_keyword}"
         if provenance.withheld_keyword else "",
     )
-    return EncodeSummary(
-        sources=len(sources), rows=rows, skipped=skipped, cleaned=cleaned,
-    )
+    return EncodeSummary(sources=len(sources), rows=rows)
 
 
 def read_sources(
