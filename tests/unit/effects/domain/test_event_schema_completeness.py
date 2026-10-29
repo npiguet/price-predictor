@@ -199,7 +199,7 @@ _CONNECTOR_EFFECTS = (
 #: All six are wired somewhere, just not for an ability's own resolution to
 #: announce what it did -- this scan structurally cannot see that gap, distinguish
 #: its two sub-shapes, or distinguish either from a type that fires normally.
-#: the event-type check (``_EventTypes``) in ``validate_corpus.py``, run against a real
+#: the event-type check (``corpus_validation.event_checks.EventTypes``), run against a real
 #: collection, is the only thing that can. This set shrinks as each remaining type
 #: is moved from unreferenced to emitted; a type silently added or removed here
 #: fails the test, which is the point.
@@ -352,7 +352,7 @@ def _emitted_event_types() -> set[str]:
     types are recorded in ``KNOWN_UNEMITTED`` and shrink as each is wired and
     emitted; the referenced-but-unfired gap cannot be recorded here at all — a
     reference is a reference regardless of what it is for — which is why
-    the event-type check (``_EventTypes``) in ``validate_corpus.py``, run against a real
+    the event-type check (``corpus_validation.event_checks.EventTypes``), run against a real
     collection, exists as this scan's permanent counterpart rather than a
     one-off check.
     """
@@ -421,7 +421,7 @@ class TestEveryDeclaredTypeIsReachable:
        not have caught any of it either way: no static scan, however wide, can
        see whether a reference is on a path that actually runs. Only a corpus
        measurement can, which is what makes the event-type check in
-       ``validate_corpus.py`` this test's permanent counterpart rather than a
+       ``corpus_validation/event_checks.py`` this test's permanent counterpart rather than a
        one-off check that stops mattering once the guard is fixed.
 
     A Task 12 fix round found a **third** category, distinct from both parts

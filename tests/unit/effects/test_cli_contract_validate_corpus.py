@@ -14,7 +14,7 @@ from dataclasses import fields
 
 import pytest
 
-from effects.application.validate_corpus import Thresholds
+from effects.application.corpus_validation.findings import Thresholds
 from effects.infrastructure.cli import build_parser
 
 

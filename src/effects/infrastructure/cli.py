@@ -29,6 +29,7 @@ from effects.application.build_vocab import DEFAULT_TARGET_SIZE, EmptyCardsFolde
 from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
 from effects.application.collector_common import HOLDOUT_LIST_NAME, HoldoutSource
+from effects.application.corpus_validation.findings import Thresholds
 from effects.application.evaluation_context import CorpusMismatchError
 from effects.application.holdout_cards import HoldoutCardsConfig
 from effects.application.train_effect_model import (
@@ -37,7 +38,6 @@ from effects.application.train_effect_model import (
     SurfaceMismatchError,
     TrainEffectModelConfig,
 )
-from effects.application.validate_corpus import Thresholds
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import DEFAULT_RANDOM_SEAT_PROBABILITY, CollectionCaps
@@ -726,7 +726,8 @@ def _validate_corpus_parser(subparsers) -> None:
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
-    from effects.application.validate_corpus import FieldPresence, validate_corpus
+    from effects.application.corpus_validation.presence import FieldPresence
+    from effects.application.validate_corpus import validate_corpus
     from effects.infrastructure.record_io import iter_shards, read_window
 
     root = args.effect_records

@@ -12,8 +12,8 @@ import pytest
 from effects.application.build_corpus import BuildCorpusConfig
 from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
+from effects.application.corpus_validation.findings import Thresholds
 from effects.application.train_effect_model import TrainEffectModelConfig
-from effects.application.validate_corpus import Thresholds
 from effects.infrastructure import cli
 from effects.infrastructure.cli import (
     add_config_flags,

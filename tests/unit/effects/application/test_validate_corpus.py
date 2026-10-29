@@ -19,13 +19,9 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.validate_corpus import (
-    FieldPresence,
-    Finding,
-    Findings,
-    Thresholds,
-    validate_corpus,
-)
+from effects.application.corpus_validation.findings import Finding, Findings, Thresholds
+from effects.application.corpus_validation.presence import FieldPresence
+from effects.application.validate_corpus import validate_corpus
 from effects.domain.event_schema import (
     ATTRIBUTION_ROOT,
     ATTRIBUTION_UNRESOLVED,
