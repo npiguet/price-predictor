@@ -9,12 +9,14 @@ with the amount the labels used.
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 from types import SimpleNamespace
 
 from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.lethality_counterfactuals import (
+    EffectKind,
     counterfactual,
     edit_text,
     lethal,
@@ -90,14 +92,14 @@ def _qualify(record, text=BOLT, keywords_of=_no_keywords):
 
 class TestTheRule:
     def test_damage_kills_at_toughness_counting_marked_damage(self):
-        assert lethal("damage", 3, _creature("E1", 3))
-        assert not lethal("damage", 2, _creature("E1", 3))
-        assert lethal("damage", 2, _creature("E1", 3, damage=1))
+        assert lethal(EffectKind.DAMAGE, 3, _creature("E1", 3))
+        assert not lethal(EffectKind.DAMAGE, 2, _creature("E1", 3))
+        assert lethal(EffectKind.DAMAGE, 2, _creature("E1", 3, damage=1))
 
     def test_a_shrink_kills_at_zero_toughness_or_at_marked_damage(self):
-        assert lethal("shrink", 2, _creature("E1", 2))
-        assert not lethal("shrink", 2, _creature("E1", 3))
-        assert lethal("shrink", 2, _creature("E1", 3, damage=1))
+        assert lethal(EffectKind.SHRINK, 2, _creature("E1", 2))
+        assert not lethal(EffectKind.SHRINK, 2, _creature("E1", 3))
+        assert lethal(EffectKind.SHRINK, 2, _creature("E1", 3, damage=1))
 
 
 class TestQualify:
@@ -251,6 +253,183 @@ class TestTheProseSurface:
         assert [(s.start, s.end) for s in copy.role_spans] == [
             (0, moved), (moved, len(copy.text)),
         ]
+
+
+class TestThePinnedOutput:
+    """The whole of ``counterfactual``'s output for a seeded draw, on four
+    real-shaped records: what any restructuring of it must leave unchanged."""
+
+    SWEEP = ("NumDmg$ 10 | SP$ DamageAll | SpellDescription$ CARDNAME deals 10 damage to "
+             "each creature and each player. | ValidCards$ Creature | ValidPlayers$ Player")
+    SWEEP_PROSE = "cardname deals 10 damage to each creature and each player."
+    WEAKEN = ("IsCurse$ True | NumDef$ -3 | SP$ PumpAll | SpellDescription$ Creatures your "
+              "opponents control get -0/-3 until end of turn. | ValidCards$ Creature.OppCtrl")
+
+    @staticmethod
+    def _summary(record: EffectRecord, copy) -> tuple:
+        """Everything the copy holds, having checked it moved nothing else."""
+        state = copy.record.state
+        assert replace(
+            copy.record, record_id=record.record_id, ability=record.ability,
+            state=replace(state, entities=record.state.entities, refs=record.state.refs),
+        ) == record
+        assert [replace(entity, pt=None, damage=0) for entity in state.entities] == [
+            replace(entity, pt=None, damage=0) for entity in record.state.entities
+        ]
+        assert replace(state.refs, x=None) == replace(record.state.refs, x=None)
+        if copy.key is None:
+            assert copy.record.ability == record.ability
+        else:
+            assert copy.record.ability == (copy.key,)
+            assert replace(copy.key, script_file=KEY.script_file) == KEY
+        return (
+            copy.record.record_id,
+            None if copy.key is None else copy.key.script_file,
+            state.refs.x,
+            tuple((entity.id, entity.pt.base, entity.damage)
+                  for entity in state.entities if entity.pt is not None),
+            copy.text, copy.script,
+            tuple((span.start, span.end, span.role) for span in copy.role_spans),
+            tuple((subject, entry.affected, sorted(entry.fields.items()))
+                  for subject, entry in copy.targets.items()),
+        )
+
+    def _copies(self, record: EffectRecord, text: str, line, seed: int) -> list[tuple]:
+        targets = derive_targets(record)
+        before = {subject: replace(entry, fields=dict(entry.fields))
+                  for subject, entry in targets.items()}
+        qualified = qualify(record, line, targets, _no_keywords)
+        assert qualified is not None
+        rng = random.Random(seed)
+        out = [
+            self._summary(record, counterfactual(record, qualified, targets, line, text, rng, n))
+            for n in range(3)
+        ]
+        assert targets == before
+        return out
+
+    def test_a_sweep_on_the_prose_surface(self):
+        from effects.domain.provenance import RoleSpan
+
+        life = [Event(type=EventType.LIFE_CHANGE, subjects=(player,), params={"delta": -10})
+                for player in ("P0", "P1")]
+        boosted = EntityState(
+            id="E2", name="E2", zone="battlefield", controller="P1", types=("creature",),
+            pt=PowerToughness(base=(1, 1), boosts=(1, 1), counters=(0, 1)), damage=1,
+        )
+        record = _record(
+            [_damage("E1", 10), _died("E1"), _damage("E2", 10), _died("E2"),
+             _damage("E3", 10), *life],
+            [_creature("E1", 2), boosted, _creature("E3", 12)], targets=(),
+        )
+        prose = self.SWEEP_PROSE
+        each = prose.index("each")
+        spans = (RoleSpan(0, each, "effect"), RoleSpan(each, len(prose), "target-spec"))
+        got = self._copies(record, prose, _line(self.SWEEP, spans), seed=23)
+        assert got == PINNED_SWEEP
+
+    def test_a_one_sided_shrink_on_the_script_surface(self):
+        weakened = [Event(type=EventType.PT_CHANGE, subjects=(subject,),
+                          params={"toughness_delta": -3}, duration="end_of_turn")
+                    for subject in ("E1", "E2")]
+        record = _record([weakened[0], _died("E1"), weakened[1]],
+                         [_creature("E1", 3), _creature("E2", 6)])
+        got = self._copies(record, self.WEAKEN, _line(self.WEAKEN), seed=4)
+        assert got == PINNED_WEAKEN
+
+    def test_a_symmetric_shrink_on_the_script_surface(self):
+        record = _record([_shrunk("E1", 2), _died("E1")], [_creature("E1", 2)])
+        got = self._copies(record, SHRINK, _line(SHRINK), seed=9)
+        assert got == PINNED_SHRINK
+
+    def test_a_paid_x_with_a_player_hit(self):
+        text = BOLT.replace("NumDmg$ 3", "NumDmg$ X")
+        life = Event(type=EventType.LIFE_CHANGE, subjects=("P1",), params={"delta": -4})
+        record = _record([_damage("E1", 4), life], [_creature("E1", 6)], x=4)
+        got = self._copies(record, text, _line(text), seed=31)
+        assert got == PINNED_X
+
+
+def _sweep(amount: int) -> tuple[str, str]:
+    return (f"cardname deals {amount} damage to each creature and each player.",
+            f"NumDmg$ {amount} | SP$ DamageAll | SpellDescription$ CARDNAME deals {amount} "
+            "damage to each creature and each player. | ValidCards$ Creature | "
+            "ValidPlayers$ Player")
+
+
+def _weaken(amount: int) -> tuple[str, str]:
+    text = (f"IsCurse$ True | NumDef$ -{amount} | SP$ PumpAll | SpellDescription$ Creatures "
+            f"your opponents control get -0/-{amount} until end of turn. | "
+            "ValidCards$ Creature.OppCtrl")
+    return text, text
+
+
+def _shrink(amount: int) -> tuple[str, str]:
+    text = SHRINK.replace("-2", f"-{amount}")
+    return text, text
+
+
+def _cf(amount: int) -> str:
+    return f"counterfactual/{amount}/{KEY.script_file}"
+
+
+def _hit(kind: str, amount: int, *, dies: bool, symmetric: bool = False) -> list:
+    if kind == "damage":
+        fields = [("damage_taken", float(amount))]
+    else:
+        fields = [("power_delta", -float(amount) if symmetric else 0.0), ("pt_duration", 1),
+                  ("toughness_delta", -float(amount))]
+    return fields + [("zone_outcome", DIED)] * dies
+
+
+def _life(amount: int) -> list:
+    return [("life_delta", -float(amount))]
+
+
+_SPANS = ((0, 27, "effect"), (27, 57, "target-spec"))
+
+PINNED_SWEEP = [
+    ("r.0-0.1~cf0", _cf(5), None, (("E1", (2, 1), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
+     *_sweep(5), _SPANS,
+     (("E1", True, _hit("damage", 5, dies=True)), ("E2", True, _hit("damage", 5, dies=True)),
+      ("E3", True, _hit("damage", 5, dies=False)), ("P0", True, _life(5)),
+      ("P1", True, _life(5)))),
+    ("r.0-0.1~cf1", _cf(5), None, (("E1", (2, 2), 0), ("E2", (1, 5), 0), ("E3", (2, 12), 0)),
+     *_sweep(5), _SPANS,
+     (("E1", True, _hit("damage", 5, dies=True)), ("E2", True, _hit("damage", 5, dies=False)),
+      ("E3", True, _hit("damage", 5, dies=False)), ("P0", True, _life(5)),
+      ("P1", True, _life(5)))),
+    ("r.0-0.1~cf2", _cf(6), None, (("E1", (2, 4), 0), ("E2", (1, 1), 1), ("E3", (2, 12), 0)),
+     *_sweep(6), _SPANS,
+     (("E1", True, _hit("damage", 6, dies=True)), ("E2", True, _hit("damage", 6, dies=True)),
+      ("E3", True, _hit("damage", 6, dies=False)), ("P0", True, _life(6)),
+      ("P1", True, _life(6)))),
+]
+PINNED_WEAKEN = [
+    ("r.0-0.1~cf0", _cf(4), None, (("E1", (2, 3), 0), ("E2", (2, 2), 0)), *_weaken(4), (),
+     (("E1", True, _hit("shrink", 4, dies=True)), ("E2", True, _hit("shrink", 4, dies=True)))),
+    ("r.0-0.1~cf1", _cf(7), None, (("E1", (2, 3), 0), ("E2", (2, 3), 0)), *_weaken(7), (),
+     (("E1", True, _hit("shrink", 7, dies=True)), ("E2", True, _hit("shrink", 7, dies=True)))),
+    ("r.0-0.1~cf2", _cf(2), None, (("E1", (2, 1), 0), ("E2", (2, 6), 0)), *_weaken(2), (),
+     (("E1", True, _hit("shrink", 2, dies=True)),
+      ("E2", True, _hit("shrink", 2, dies=False)))),
+]
+PINNED_SHRINK = [
+    ("r.0-0.1~cf0", _cf(8), None, (("E1", (2, 5), 0),), *_shrink(8), (),
+     (("E1", True, _hit("shrink", 8, dies=True, symmetric=True)),)),
+    ("r.0-0.1~cf1", _cf(3), None, (("E1", (2, 1), 0),), *_shrink(3), (),
+     (("E1", True, _hit("shrink", 3, dies=True, symmetric=True)),)),
+    ("r.0-0.1~cf2", _cf(6), None, (("E1", (2, 2), 0),), *_shrink(6), (),
+     (("E1", True, _hit("shrink", 6, dies=True, symmetric=True)),)),
+]
+PINNED_X = [
+    ("r.0-0.1~cf0", None, 1, (("E1", (2, 2), 0),), None, None, (),
+     (("E1", True, _hit("damage", 1, dies=False)), ("P1", True, _life(1)))),
+    ("r.0-0.1~cf1", None, 7, (("E1", (2, 1), 0),), None, None, (),
+     (("E1", True, _hit("damage", 7, dies=True)), ("P1", True, _life(7)))),
+    ("r.0-0.1~cf2", None, 3, (("E1", (2, 4), 0),), None, None, (),
+     (("E1", True, _hit("damage", 3, dies=False)), ("P1", True, _life(3)))),
+]
 
 
 class TestStepWiring:

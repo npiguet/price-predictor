@@ -18,11 +18,13 @@ from __future__ import annotations
 import dataclasses
 import random
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import partial
 from typing import Any
 
+from effects.domain.budget_allocation import allocate
 from effects.domain.corpus_curation import (
     CapHeap,
     CopyPlan,
@@ -117,20 +119,21 @@ class TrainingSupply:
 
     heap_cap: int
     keyed: Counter[tuple[Cell, Keys]] = field(default_factory=Counter)
-    heaps: dict[tuple[Cell, Keys], CapHeap] = field(default_factory=dict)
+    heaps: defaultdict[tuple[Cell, Keys], CapHeap] = field(init=False)
     keyless: Counter[Cell] = field(default_factory=Counter)
+
+    def __post_init__(self) -> None:
+        # A partial rather than a lambda, so the supply still pickles back from
+        # a survey worker.
+        self.heaps = defaultdict(partial(CapHeap, self.heap_cap))
 
     def add(self, cell: Cell, keys: Keys | None, value: int) -> None:
         """One training-bound record, by its cell, acting keys and record hash."""
         if not keys:
             self.keyless[cell] += 1
             return
-        slot = (cell, keys)
-        self.keyed[slot] += 1
-        heap = self.heaps.get(slot)
-        if heap is None:
-            heap = self.heaps[slot] = CapHeap(self.heap_cap)
-        heap.offer(value)
+        self.keyed[cell, keys] += 1
+        self.heaps[cell, keys].offer(value)
 
     def merge(self, other: TrainingSupply) -> None:
         """Absorb another shard's supply; both must keep the same heap size."""
@@ -156,12 +159,7 @@ class TrainingSupply:
         for (cell, keys), count in self.keyed.items():
             slot = (cell.resolved(mode_counts), keys)
             out.keyed[slot] += count
-            heap = self.heaps[cell, keys]
-            mine = out.heaps.get(slot)
-            if mine is None:
-                out.heaps[slot] = CapHeap(self.heap_cap)
-                mine = out.heaps[slot]
-            mine.merge(heap)
+            out.heaps[slot].merge(self.heaps[cell, keys])
         return out
 
 
@@ -253,6 +251,19 @@ class AllocationNode:
             node = self.children[key] = AllocationNode()
         return node
 
+    def walk(self, depth: int) -> Iterator[tuple[tuple[Any, ...], AllocationNode]]:
+        """``(path, node)`` for every node ``depth`` levels down, siblings in key order.
+
+        Sorted so the plan comes out in one order in every process: a
+        ``Cell`` sorts as a dataclass, the levels above it as strings.
+        """
+        if depth == 0:
+            yield (), self
+            return
+        for key in sorted(self.children):
+            for path, node in self.children[key].walk(depth - 1):
+                yield (key, *path), node
+
     def allocate(self, budget: int, *, share: int | None = None) -> int:
         """Split ``budget`` down the tree; return what this node plans to write.
 
@@ -275,8 +286,6 @@ class AllocationNode:
 
 
 def _split(budget: int, children: Mapping[Any, AllocationNode]) -> dict[Any, int]:
-    from effects.domain.budget_allocation import allocate
-
     if any(child.once is None for child in children.values()):
         return allocate(budget, {key: child.capacity for key, child in children.items()})
     first = allocate(budget, {key: child.once for key, child in children.items()})
@@ -337,55 +346,92 @@ def plan_selection(
     Raises:
         BuildCorpusError: ``mix`` names no class this corpus has a record of.
     """
-    available: Counter[str] = Counter()
-    for cell, cell_members in members.items():
-        for name, member in cell_members.items():
-            available[cell.klass] += member.once(name, text_cap)
+    available = _available(members, text_cap)
     try:
-        targets, shortfall = class_targets(dict(available), mix, ceiling=ceiling)
+        targets, shortfall = class_targets(available, mix, ceiling=ceiling)
     except ValueError as exc:
         # `--class-mix` names classes this corpus has no records of: the
         # operator's flag against the operator's corpus, not a broken invariant.
         raise BuildCorpusError(str(exc)) from exc
 
-    classes: dict[str, AllocationNode] = {}
+    tree = _allocation_tree(members, text_cap=text_cap, reuse_cap=reuse_cap)
+    # The class level is split by the mixture, not equally, so each class
+    # root is given its own target rather than the tree one budget.
+    for klass, root in tree.children.items():
+        root.allocate(targets.get(klass, 0))
+    plans, keyless = _copy_plans(tree, members, keys_of)
+    return SelectionPlan(
+        plans=plans, keyless=keyless, families=_family_shares(tree, members),
+        targets=targets, shortfall=shortfall, available=available,
+    )
+
+
+#: How far below the tree's root each level sits: class, half, family, cell.
+_FAMILY_DEPTH = 3
+_CELL_DEPTH = 4
+
+
+def _available(members: Mapping[Cell, Mapping[str, Member]], text_cap: int) -> dict[str, int]:
+    """Distinct records each class can supply under the text cap, with no repeats."""
+    available: Counter[str] = Counter()
     for cell, cell_members in members.items():
-        node = classes.setdefault(cell.klass, AllocationNode())
-        cell_node = node.child(cell.half).child(cell.family).child(cell)
+        for name, member in cell_members.items():
+            available[cell.klass] += member.once(name, text_cap)
+    return dict(available)
+
+
+def _allocation_tree(
+    members: Mapping[Cell, Mapping[str, Member]], *, text_cap: int, reuse_cap: int,
+) -> AllocationNode:
+    """class -> half -> family -> cell -> member, a member's leaf holding its supply."""
+    tree = AllocationNode()
+    for cell, cell_members in members.items():
+        cell_node = tree.child(cell.klass).child(cell.half).child(cell.family).child(cell)
         for name, member in cell_members.items():
             cell_node.children[name] = AllocationNode(
                 supply=member.capacity(name, text_cap=text_cap, reuse_cap=reuse_cap),
                 once=member.once(name, text_cap),
             )
+    return tree
 
+
+def _family_shares(
+    tree: AllocationNode, members: Mapping[Cell, Mapping[str, Member]],
+) -> dict[str, dict[str, FamilyShare]]:
+    """``class -> family label -> FamilyShare`` of an allocated tree."""
+    families: dict[str, dict[str, FamilyShare]] = {}
+    for (klass, half, family), node in tree.walk(_FAMILY_DEPTH):
+        families.setdefault(klass, {})[Cell(klass, half, family).label] = FamilyShare(
+            available=sum(
+                member.distinct for cell in node.children for member in members[cell].values()
+            ),
+            share=node.share,
+            planned=node.planned,
+        )
+    return families
+
+
+def _copy_plans(
+    tree: AllocationNode,
+    members: Mapping[Cell, Mapping[str, Member]],
+    keys_of: Mapping[tuple[Cell, str], list[Keys]],
+) -> tuple[dict[tuple[Cell, Keys], CopyPlan], dict[Cell, CopyPlan]]:
+    """Each member's planned count as copies: per acting key, or by rate when keyless.
+
+    Members are taken in the order the survey met them, not sorted: the tree
+    sorts every level above them.
+    """
     plans: dict[tuple[Cell, Keys], CopyPlan] = {}
     keyless: dict[Cell, CopyPlan] = {}
-    families: dict[str, dict[str, FamilyShare]] = {}
-    for klass, root in sorted(classes.items()):
-        root.allocate(targets.get(klass, 0))
-        for half, half_node in sorted(root.children.items()):
-            for family, family_node in sorted(half_node.children.items()):
-                families.setdefault(klass, {})[Cell(klass, half, family).label] = FamilyShare(
-                    available=sum(
-                        member.distinct
-                        for cell in family_node.children for member in members[cell].values()
-                    ),
-                    share=family_node.share,
-                    planned=family_node.planned,
-                )
-                for cell, cell_node in sorted(family_node.children.items()):
-                    for name, leaf in cell_node.children.items():
-                        member = members[cell][name]
-                        if name == KEYLESS:
-                            keyless[cell] = rate_plan(member.distinct, leaf.planned)
-                            continue
-                        plan = copy_plan(member.heap.values(), member.distinct, leaf.planned)
-                        for keys in keys_of[cell, name]:
-                            plans[cell, keys] = plan
-    return SelectionPlan(
-        plans=plans, keyless=keyless, families=families, targets=targets,
-        shortfall=shortfall, available=dict(available),
-    )
+    for (*_, cell), cell_node in tree.walk(_CELL_DEPTH):
+        for name, leaf in cell_node.children.items():
+            member = members[cell][name]
+            if name == KEYLESS:
+                keyless[cell] = rate_plan(member.distinct, leaf.planned)
+                continue
+            plan = copy_plan(member.heap.values(), member.distinct, leaf.planned)
+            plans.update(((cell, keys), plan) for keys in keys_of[cell, name])
+    return plans, keyless
 
 
 # ── where each game goes ────────────────────────────────────────────────

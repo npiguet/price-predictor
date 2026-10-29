@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from collections import Counter
 
-from effects.domain.corpus_curation import CapHeap
+from effects.domain.corpus_curation import CapHeap, CopyPlan
 from effects.domain.corpus_plan import (
     AllocationNode,
     Cell,
+    FamilyShare,
     GameStrata,
     TrainingSupply,
     admit_card_disjoint,
+    members_of,
+    plan_selection,
 )
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.sampling import SamplingClass
@@ -131,6 +134,120 @@ def test_a_held_out_game_the_cap_declined_is_dropped_never_validated():
     assert strata.stratum_of("g2") is Stratum.GAME_DISJOINT
     assert strata.stratum_of("g3") is Stratum.DROPPED_HELD_OUT
     assert strata.stratum_of("g4") is Stratum.TRAINING
+
+
+def _keys(n: int) -> tuple[ProvenanceKey, ...]:
+    return (ProvenanceKey(f"cardsfolder/t/t{n}.txt", 0, "spell", 0),)
+
+
+EFFECT = SamplingClass.RESOLUTION_EFFECT
+COMBAT = SamplingClass.COMBAT
+REWRITE = SamplingClass.REWRITE
+
+#: ``(cell, key number or None, records)``: key 8 folds to no text, keys 1
+#: and 2 to one text, and key 3 supplies two cells.
+_SUPPLY = (
+    (Cell(EFFECT, "", "DealDamage", "died"), 1, 5),
+    (Cell(EFFECT, "", "DealDamage", "died"), 2, 3),
+    (Cell(EFFECT, "", "DealDamage", "died"), 3, 8),
+    (Cell(EFFECT, "", "DealDamage", "died"), 8, 2),
+    (Cell(EFFECT, "", "DealDamage", "stayed"), 3, 4),
+    (Cell(EFFECT, "", "Draw", "drew"), 4, 2),
+    (Cell(EFFECT, "", "Pump", "stayed"), 5, 9),
+    (Cell(EFFECT, "", "Pump", "stayed"), 6, 1),
+    (Cell(COMBAT, "", "none", "dealt"), None, 30),
+    (Cell(COMBAT, "", "trample", "dealt"), None, 4),
+    (Cell(LEGALITY, "real", "CantBlock"), None, 7),
+    (Cell(LEGALITY, "real", "Defender"), 7, 5),
+    (Cell(LEGALITY, "what-if", "CantBlock"), None, 20),
+    (Cell(LEGALITY, "what-if", "Defender"), None, 3),
+    (Cell(REWRITE, "", "DamageDone"), 9, 3),
+    (Cell(REWRITE, "", "DamageDone"), 10, 6),
+)
+_TEXTS = {
+    _keys(1): "bolt", _keys(2): "bolt", _keys(3): "shock", _keys(4): "draw",
+    _keys(5): "pump", _keys(6): "growth", _keys(7): "wall", _keys(9): "redirect",
+    _keys(10): "prevent",
+}
+
+
+def test_the_selection_plan_is_pinned_level_by_level_and_in_order():
+    """Every copy plan, family row and class total of a several-level survey,
+    in the order ``plan_selection`` produces them: which member takes an
+    integer remainder, and the order the plans come out in, are part of it."""
+    supply = TrainingSupply(heap_cap=6)
+    value = 0
+    for cell, key, records in _SUPPLY:
+        for _ in range(records):
+            value = (value * 37 + 11) % 1000
+            supply.add(cell, None if key is None else _keys(key), value)
+    members, keys_of = members_of(supply, _TEXTS)
+
+    plan = plan_selection(
+        members, keys_of, mix={EFFECT: 0.4, COMBAT: 0.2, LEGALITY: 0.3, REWRITE: 0.1},
+        ceiling=60, text_cap=6, reuse_cap=2,
+    )
+
+    assert [(cell, keys[0].script_file, copies) for (cell, keys), copies
+            in plan.plans.items()] == PINNED_PLANS
+    assert list(plan.keyless.items()) == PINNED_KEYLESS
+    assert [(klass, list(rows.items())) for klass, rows in plan.families.items()] == (
+        PINNED_FAMILIES)
+    assert (plan.targets, plan.shortfall, plan.available) == PINNED_TOTALS
+
+
+def _file(n: int) -> str:
+    return _keys(n)[0].script_file
+
+
+_DIED = Cell(EFFECT, "", "DealDamage", "died")
+_STAYED = Cell(EFFECT, "", "DealDamage", "stayed")
+_PUMP = Cell(EFFECT, "", "Pump", "stayed")
+_REDIRECT = Cell(REWRITE, "", "DamageDone")
+
+PINNED_PLANS = [
+    (Cell(LEGALITY, "real", "Defender"), _file(7), CopyPlan(base=0, threshold=200)),
+    (_DIED, _file(1), CopyPlan(base=0, threshold=418)),
+    (_DIED, _file(2), CopyPlan(base=0, threshold=418)),
+    (_DIED, _file(3), CopyPlan(base=0, threshold=237)),
+    (_STAYED, _file(3), CopyPlan(base=1, threshold=118)),
+    (Cell(EFFECT, "", "Draw", "drew"), _file(4), CopyPlan(base=2)),
+    (_PUMP, _file(5), CopyPlan(base=0, threshold=531)),
+    (_PUMP, _file(6), CopyPlan(base=2)),
+    (_REDIRECT, _file(9), CopyPlan(base=0, threshold=931)),
+    (_REDIRECT, _file(10), CopyPlan(base=0, threshold=420)),
+]
+PINNED_KEYLESS = [
+    (Cell(COMBAT, "", "none", "dealt"), CopyPlan(base=0, threshold=3689348814741910527)),
+    (Cell(COMBAT, "", "trample", "dealt"), CopyPlan(base=1, threshold=9223372036854775807)),
+    (Cell(LEGALITY, "real", "CantBlock"), CopyPlan(base=0, threshold=13176245766935394303)),
+    (Cell(LEGALITY, "what-if", "CantBlock"), CopyPlan(base=0, threshold=4611686018427387903)),
+    (Cell(LEGALITY, "what-if", "Defender"), CopyPlan(base=1, threshold=6148914691236516863)),
+    (_DIED, CopyPlan(base=1)),
+]
+PINNED_FAMILIES = [
+    (COMBAT, [
+        ("none", FamilyShare(available=30, share=6, planned=6)),
+        ("trample", FamilyShare(available=4, share=6, planned=6)),
+    ]),
+    (LEGALITY, [
+        ("real:CantBlock", FamilyShare(available=7, share=4, planned=5)),
+        ("real:Defender", FamilyShare(available=5, share=4, planned=4)),
+        ("what-if:CantBlock", FamilyShare(available=20, share=4, planned=5)),
+        ("what-if:Defender", FamilyShare(available=3, share=4, planned=4)),
+    ]),
+    (EFFECT, [
+        ("DealDamage", FamilyShare(available=22, share=8, planned=12)),
+        ("Draw", FamilyShare(available=2, share=8, planned=4)),
+        ("Pump", FamilyShare(available=10, share=8, planned=8)),
+    ]),
+    (REWRITE, [("DamageDone", FamilyShare(available=9, share=6, planned=6))]),
+]
+PINNED_TOTALS = (
+    {COMBAT: 12, LEGALITY: 18, EFFECT: 24, REWRITE: 6},
+    {},
+    {COMBAT: 34, LEGALITY: 35, EFFECT: 27, REWRITE: 9},
+)
 
 
 def test_the_supply_keeps_each_slots_smallest_hashes():
