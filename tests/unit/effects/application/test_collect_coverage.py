@@ -779,7 +779,7 @@ class TestCountingReportsProgress:
 
         self._shards(tmp_path, 120)
         counter = TextCoverageCounter(
-            {"cardsfolder": str(tmp_path / "none")}, progress_every=50,
+            {"cardsfolder": str(tmp_path / "none")}, _holding({"t"}), progress_every=50,
         )
 
         with caplog.at_level("INFO"):
@@ -906,9 +906,53 @@ class TestHeldOutTextUnit:
         resolutions, everything = _texts_by_game(_GEN1_SHARD)
         assert resolutions and everything != resolutions
         counted = count_text_shard(
-            _GEN1_SHARD, roots=_GEN1_ROOTS, texts=frozenset(everything),
+            _GEN1_SHARD, roots=_GEN1_ROOTS, held_out=_holding(everything),
         )
         assert counted == resolutions
+
+    def test_a_game_goes_to_the_first_acting_text_held_out_by_its_unit(
+        self, tmp_path,
+    ):
+        """The text build-corpus credits, not the first text the round lists.
+
+        Under ``template`` the first acting key prints ``NumDmg$ 2``, whose
+        template is held out though no listed card prints that exact text;
+        build-corpus credits the game to it, so the round's listed ``Draw``
+        text, acting second, must not count the game either.
+        """
+        from effects.application.collect_coverage import (
+            TextCoverageCounter,
+            count_text_shard,
+        )
+        from effects.domain.coverage import TextCoverage
+        from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+        from effects.domain.text_holdout import HoldoutUnit
+        from effects.infrastructure.record_io import write_shard
+        from effects.infrastructure.sidecar_io import write_sidecar
+        from tests.unit.effects.builders import make_record
+
+        damage, draw = "SP$ DealDamage | NumDmg$ 2", "SP$ Draw | NumCards$ 1"
+        keys = []
+        for stem, text in (("variant", damage), ("listed", draw)):
+            key = ProvenanceKey(f"cardsfolder/a/{stem}.txt", 0, "spell", 0)
+            write_sidecar(
+                ProvenanceSidecar(card=stem, script_file=key.script_file, lines=(
+                    SidecarLine(0, "spell", (key,), script_text=text),
+                )),
+                tmp_path / "cardsfolder" / "a" / f"{stem}.provenance.json",
+            )
+            keys.append(key)
+        shard = tmp_path / "records" / "run.0-a.jsonl.gz"
+        write_shard(shard, [make_record(ability=tuple(keys), payload=ResolutionPayload(
+            events=(Event(type=EventType.CARD_DRAWN, subjects=("P0",)),),
+        ))])
+        roots = {"cardsfolder": str(tmp_path / "cardsfolder")}
+        held_out = _holding({"SP$ DealDamage | NumDmg$ 3", draw}, HoldoutUnit.TEMPLATE)
+        coverage = {draw: TextCoverage(text=draw)}
+
+        assert count_text_shard(shard, roots=roots, held_out=held_out) == {damage: {"g1"}}
+        TextCoverageCounter(roots, held_out).update(coverage, tmp_path / "records", workers=1)
+        assert coverage[draw].games == set()
 
     def test_a_refused_resolution_does_not_count_toward_its_text(self, tmp_path):
         """A record the quality rules refuse never reaches the manifest."""
@@ -932,10 +976,10 @@ class TestHeldOutTextUnit:
             for record in effects
         ])
         _, everything = _texts_by_game(_GEN1_SHARD)
-        texts = frozenset(everything)
+        held_out = _holding(everything)
 
-        assert count_text_shard(clean, roots=_GEN1_ROOTS, texts=texts)
-        assert count_text_shard(flooded, roots=_GEN1_ROOTS, texts=texts) == {}
+        assert count_text_shard(clean, roots=_GEN1_ROOTS, held_out=held_out)
+        assert count_text_shard(flooded, roots=_GEN1_ROOTS, held_out=held_out) == {}
 
     def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
         """A sidecar cache per shard re-read every sidecar the shard named."""
@@ -956,9 +1000,9 @@ class TestHeldOutTextUnit:
             "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
         }
         shard = _FIXTURES / "gen1-records.jsonl.gz"
-        first = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
+        first = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
         read_by_one = len(reads)
-        second = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
+        second = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
         collect_coverage._sidecars.cache_clear()
 
         assert read_by_one > 0
@@ -1020,6 +1064,18 @@ _GEN1_ROOTS = {
     "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
     "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
 }
+
+
+def _holding(texts, unit=None):
+    """A holdout of exactly ``texts``, by ``unit`` (``text`` by default)."""
+    from effects.domain.split import HeldOutCards
+    from effects.domain.text_holdout import HoldoutUnit, holdout_key
+
+    unit = unit or HoldoutUnit.TEXT
+    return HeldOutCards(
+        names=frozenset(), script_files=frozenset(), texts=frozenset(texts),
+        keys=frozenset(holdout_key(text, unit) for text in texts), unit=unit,
+    )
 
 
 def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:

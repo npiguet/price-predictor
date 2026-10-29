@@ -6,10 +6,11 @@ training record would leak through its context role.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 
 from effects.domain.card_names import fold_card_name
+from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import EffectRecord, key_sites
 from effects.domain.text_holdout import HoldoutUnit, holdout_key, select_holdout
 
@@ -73,6 +74,25 @@ class HeldOutCards:
         print a text no card carries.
         """
         return holdout_key(script_text, self.unit) in self.keys
+
+    def text_acted_through(
+        self, keys: Iterable[ProvenanceKey],
+        script_text_of: Callable[[ProvenanceKey], str | None],
+    ) -> str | None:
+        """The held-out script text a record's acting ``keys`` act through, or None.
+
+        The first acting key whose script text :meth:`holds_text`, so under
+        ``template`` an earlier key printing a held-out template takes the
+        record even where no card carries that exact text. ``build-corpus``'s
+        survey and ``collect-coverage``'s held-out round both credit a game to
+        a held-out text through here, so the two count its games alike
+        (FR-053). ``script_text_of`` answers with the normalized script text.
+        """
+        def held_out(key: ProvenanceKey) -> str | None:
+            text = script_text_of(key)
+            return text if text is not None and self.holds_text(text) else None
+
+        return first_text(keys, held_out)
 
 
 @dataclass(frozen=True, slots=True)

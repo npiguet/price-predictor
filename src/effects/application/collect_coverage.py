@@ -44,12 +44,11 @@ from effects.domain.coverage import (
     retire_stalled,
     text_deck_weights,
 )
-from effects.domain.provenance import first_text
 from effects.domain.record_quality import record_refusal
 from effects.domain.records import RecordKind, acting_keys
 
 if TYPE_CHECKING:
-    from effects.domain.provenance import ProvenanceKey
+    from effects.domain.split import HeldOutCards
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.converted_trees import ConvertedTrees
     from effects.infrastructure.sidecar_io import SidecarCache
@@ -462,31 +461,24 @@ def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
 
 
 def count_text_shard(
-    shard: Path, *, roots: dict[str, str], texts: frozenset[str],
+    shard: Path, *, roots: dict[str, str], held_out: HeldOutCards,
 ) -> dict[str, set[str]]:
     """``held-out text -> the game ids it resolved in``, over one shard.
 
     Counted as build-corpus counts a held-out text's games (FR-053): from the
-    resolution records its refusal rule keeps, through the first acting key
-    whose text is held out. Top-level so a process pool can pickle it; each
-    process resolves keys through its own :func:`_sidecars`, because a
-    sidecar cache does not pickle.
+    resolution records its refusal rule keeps, through
+    :meth:`HeldOutCards.text_acted_through`. Top-level so a process pool can
+    pickle it; each process resolves keys through its own :func:`_sidecars`,
+    because a sidecar cache does not pickle.
     """
-    from effects.infrastructure.record_io import read_shard
+    from effects.infrastructure.record_io import iter_shard_matching
 
     sidecars = _sidecars(tuple(sorted(roots.items())))
-
-    def held_out_text(key: ProvenanceKey) -> str | None:
-        text = sidecars.script_text(key)
-        return text if text in texts else None
-
     games: dict[str, set[str]] = defaultdict(set)
-    for record in read_shard(shard):
-        if record.kind is not RecordKind.RESOLUTION:
-            continue
+    for record in iter_shard_matching(shard, kinds={RecordKind.RESOLUTION.value}):
         if record_refusal(record, sidecars.resolution_of) is not None:
             continue
-        text = first_text(acting_keys(record), held_out_text)
+        text = held_out.text_acted_through(acting_keys(record), sidecars.script_text)
         if text is not None:
             games[text].add(record.game_id)
     return dict(games)
@@ -502,13 +494,20 @@ def _sidecars(roots: tuple[tuple[str, str], ...]) -> SidecarCache:
 
 
 class TextCoverageCounter(_ShardCounter):
-    """Each held-out text's games, each shard counted once across the run."""
+    """Each held-out text's games, each shard counted once across the run.
+
+    A game credited to a held-out text that is no unit of the round, such as
+    one only a token script prints, counts toward none: build-corpus credits
+    it to that text too, not to a later acting key's.
+    """
 
     def __init__(
-        self, roots: dict[str, str], progress_every: int = PROGRESS_EVERY_SHARDS,
+        self, roots: dict[str, str], held_out: HeldOutCards,
+        progress_every: int = PROGRESS_EVERY_SHARDS,
     ) -> None:
         super().__init__(progress_every)
         self._roots = dict(roots)
+        self._held_out = held_out
 
     def update(
         self, coverage: Mapping[str, TextCoverage], records_dir: Path,
@@ -518,9 +517,10 @@ class TextCoverageCounter(_ShardCounter):
 
         def add(games_by_text: dict[str, set[str]]) -> None:
             for text, games in games_by_text.items():
-                coverage[text].games |= games
+                if text in coverage:
+                    coverage[text].games |= games
 
-        count = partial(count_text_shard, roots=self._roots, texts=frozenset(coverage))
+        count = partial(count_text_shard, roots=self._roots, held_out=self._held_out)
         return self._count_fresh(records_dir, count, add, workers=workers)
 
 
@@ -658,7 +658,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     coverage = _text_coverage(carriers, verdicts)
     floor = config.min_text_games
     records_dir = Path(config.effect_records)
-    counter = TextCoverageCounter(trees.root_paths)
+    counter = TextCoverageCounter(trees.root_paths, trees.holdout(config.holdout))
     counter.update(coverage, records_dir)
     logger.info(
         "Held-out round: %d text(s) on %d card(s); %d already at %d games; %d "

@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from effects.domain import default_paths
 from effects.domain.collection_caps import CollectionCaps
+from effects.domain.split import HoldoutRule
 
 if TYPE_CHECKING:
     from effects.domain.coverage import DeckCandidate
@@ -47,6 +48,11 @@ class CollectorConfig:
         "help": "Parallel Java worker processes (default: %(default)s)",
     })
     caps: CollectionCaps = field(default_factory=CollectionCaps)
+    #: The holdout ``build-corpus`` chooses, over ``cards_folders``: a variant
+    #: printing a held-out text is dropped under it, and the held-out round
+    #: credits a game to a held-out text by it. Given the flags
+    #: ``build-corpus`` is, so the three agree.
+    holdout: HoldoutRule = HoldoutRule()
 
     def holdout_source(self) -> HoldoutSource:
         return HoldoutSource(

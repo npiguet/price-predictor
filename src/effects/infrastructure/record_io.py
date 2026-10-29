@@ -948,17 +948,28 @@ def read_records_matching(
     for done, shard in enumerate(shards):
         if done and done % 250 == 0:
             logger.info("scanned %d of %d shards under %s", done, len(shards), directory)
-        for line in iter_shard_lines(shard):
-            head = peek_envelope(line)
-            if head is not None and not _wanted(head.game_id, head.kind, game_ids, kinds):
-                continue
-            stripped = line.strip()
-            if not stripped:
-                continue
-            record = record_from_dict(parse_record_line(stripped))
-            if head is None and not _wanted(record.game_id, record.kind.value, game_ids, kinds):
-                continue
-            yield record
+        yield from iter_shard_matching(shard, game_ids=game_ids, kinds=kinds)
+
+
+def iter_shard_matching(
+    shard: Path,
+    *,
+    game_ids: Collection[str] | None = None,
+    kinds: Collection[str] | None = None,
+) -> Iterator[EffectRecord]:
+    """The records of one shard of the named games and kinds, the rest
+    skipped unparsed; :func:`read_records_matching` for one shard."""
+    for line in iter_shard_lines(shard):
+        head = peek_envelope(line)
+        if head is not None and not _wanted(head.game_id, head.kind, game_ids, kinds):
+            continue
+        stripped = line.strip()
+        if not stripped:
+            continue
+        record = record_from_dict(parse_record_line(stripped))
+        if head is None and not _wanted(record.game_id, record.kind.value, game_ids, kinds):
+            continue
+        yield record
 
 
 def _wanted(

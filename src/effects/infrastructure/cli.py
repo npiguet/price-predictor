@@ -239,7 +239,8 @@ def _add_holdout_sources(
 
 def _add_holdout_flags(parser: argparse.ArgumentParser) -> None:
     """The holdout rule, on every command that computes it: ``holdout-cards``,
-    ``build-corpus`` and ``collect-variants`` must be passed the same values."""
+    ``build-corpus``, ``collect-variants`` and ``collect-coverage --only-cards``
+    must be passed the same values."""
     parser.add_argument(
         "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
         help=(
@@ -401,6 +402,9 @@ def _collect_coverage_parser(subparsers) -> None:
             "beside any other holdout source"
         ),
     )
+    # The held-out round credits a game to a held-out text under this rule,
+    # so it has to be the one build-corpus is given.
+    _add_holdout_flags(parser)
     add_config_flags(parser, CollectCoverageConfig, only=(
         "min_text_games", "target_records", "no_progress_rounds",
         "decks_per_round", "workers",
@@ -506,7 +510,10 @@ def _run_collector(
 def run_collect_coverage(args: argparse.Namespace) -> int:
     from effects.application.collect_coverage import run as collect
 
-    return _run_collector(args, "collect-coverage", CollectCoverageConfig, collect)
+    return _run_collector(
+        args, "collect-coverage", CollectCoverageConfig, collect,
+        holdout=holdout_rule(args),
+    )
 
 
 def run_collect_variants(args: argparse.Namespace) -> int:

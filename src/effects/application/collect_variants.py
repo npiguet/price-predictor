@@ -28,7 +28,7 @@ from effects.domain.script_variants import (
     script_card_name,
     variant_name,
 )
-from effects.domain.split import HeldOutCards, HoldoutRule
+from effects.domain.split import HeldOutCards
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
@@ -63,11 +63,6 @@ class CollectVariantsConfig(CollectorConfig):
             "(default: %(default)s)"
         ),
     })
-    #: The holdout rule a variant printing a held-out text is dropped under,
-    #: over ``cards_folders``; given the flags ``build-corpus`` is, so the two
-    #: agree.
-    holdout: HoldoutRule = HoldoutRule()
-
     def volume_source(self) -> Path:
         """The directory the volume cap counts records in."""
         return self.corpus_records or self.effect_records
