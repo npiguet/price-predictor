@@ -315,6 +315,8 @@ class ShardStats:
     parts: dict[str, float] = field(default_factory=dict)
     norms: dict[str, float] = field(default_factory=dict)
     heads: dict[str, float] = field(default_factory=dict)
+    #: The last optimizer step's norms, still on the device until reported.
+    unread_norms: dict[str, torch.Tensor] = field(default_factory=dict)
 
     def add_step(self, loss: StepLoss, *, reported: bool) -> None:
         self.loss += loss.shipped.detach()
@@ -418,11 +420,10 @@ class _HostCopy:
         )
 
 
-def _optimizer_step(optimizer, *, read: bool) -> dict[str, float]:
-    """Clip each group, step and zero; the pre-clip norms only when ``read``,
-    since each read stalls until the GPU drains."""
-    clipped = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM, read=False)
-    norms = _read_back(clipped) if read else {}
+def _optimizer_step(optimizer) -> dict[str, torch.Tensor]:
+    """Clip each group, step and zero; the pre-clip norms unread, since each
+    read stalls until the GPU drains."""
+    norms = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM, read=False)
     optimizer.step()
     optimizer.zero_grad(set_to_none=True)
     return norms
@@ -1081,9 +1082,9 @@ class TrainingLoop:
         # Counted within the epoch, not by run.step: each epoch drops any
         # partial accumulation, so the run's step would misplace boundaries.
         if (tally.taken + 1) % self.config.grad_accum == 0:
-            norms = _optimizer_step(run.optimizer, read=due)
-            if due:
-                stats.norms = norms
+            stats.unread_norms = _optimizer_step(run.optimizer)
+        if due:
+            stats.norms = _read_back(stats.unread_norms)
         tally.add_step(computed)
         stats.add_step(computed, reported=due)
         run.step += 1
