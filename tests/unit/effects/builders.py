@@ -27,7 +27,13 @@ from effects.domain.records import (
     RewritePayload,
     TriggerPayload,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.state_snapshot import (
+    EntityState,
+    GlobalState,
+    InclusionTier,
+    PlayerState,
+    StateSnapshot,
+)
 
 EFFECTS_FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
 #: The converted card and token trees the gen-1 fixture records were collected against.
@@ -43,14 +49,22 @@ GEN1_TRAINING_SHARDS = 3
 _EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
 
 
+#: The tiers stage-one collection wrote: what a test snapshot claims by default.
+STAGE_ONE_TIERS: frozenset[InclusionTier] = frozenset(
+    {InclusionTier.REFERENCED, InclusionTier.CORE}
+)
+
+
 def make_snapshot(**overrides) -> StateSnapshot:
-    """An empty turn-1 board; ``overrides`` replace any ``StateSnapshot`` field."""
+    """An empty turn-1 board collected at the stage-one tiers; ``overrides``
+    replace any ``StateSnapshot`` field."""
     defaults: dict = {
         "global_": GlobalState(
             turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
         ),
         "players": (),
         "entities": (),
+        "tiers": STAGE_ONE_TIERS,
     }
     defaults.update(overrides)
     return StateSnapshot(**defaults)
@@ -482,3 +496,8 @@ def write_sidecar(sidecar, path: Path) -> None:
     path.write_text(
         json.dumps(sidecar_to_dict(sidecar), separators=(",", ":")), encoding="utf-8",
     )
+
+
+def player_of(snapshot: StateSnapshot, player_id: str) -> PlayerState | None:
+    """The snapshot's player of ``player_id``, or None."""
+    return next((each for each in snapshot.players if each.id == player_id), None)

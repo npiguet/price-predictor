@@ -29,7 +29,8 @@ from effects.domain.records import (
     RecordKind,
     ResolutionOutcome,
 )
-from effects.domain.state_snapshot import STAGE_ONE_TIERS, InclusionTier, StateSnapshot
+from effects.domain.state_snapshot import InclusionTier
+from tests.unit.effects.builders import make_snapshot
 
 # The envelope as frozen before stage-one collection. A field may be added to
 # this set by a later stage; one may never be removed, renamed, or retyped.
@@ -165,22 +166,15 @@ class TestRuleThreeTiersAreAdditive:
     def test_the_tiers_are_ordered_by_the_stage_that_adds_them(self):
         assert [t.value for t in InclusionTier] == [1, 2, 3, 4]
 
-    def test_stage_one_collects_the_first_two_tiers(self):
-        assert STAGE_ONE_TIERS == {InclusionTier.REFERENCED, InclusionTier.CORE}
-
-    def test_a_later_stage_only_adds_tiers(self, snapshot):
-        later = StateSnapshot(
-            global_=snapshot.global_,
-            players=snapshot.players,
-            entities=snapshot.entities,
-            tiers=STAGE_ONE_TIERS | {InclusionTier.UNREFERENCED_STACK},
-        )
-        assert STAGE_ONE_TIERS <= later.tiers
-
-    def test_an_absent_tier_reads_as_uncollected_not_empty(self, snapshot):
+    def test_an_absent_tier_reads_as_uncollected_not_empty(self):
+        snapshot = make_snapshot()
         assert snapshot.entities == ()
-        assert not snapshot.collected(InclusionTier.UNREFERENCED_STACK)
-        assert snapshot.collected(InclusionTier.CORE)
+        assert InclusionTier.UNREFERENCED_STACK not in snapshot.tiers
+        assert InclusionTier.CORE in snapshot.tiers
+
+    def test_a_snapshot_naming_no_tier_claims_none_collected(self, snapshot):
+        """Never inferred: a default is not evidence of a collector's depth."""
+        assert snapshot.tiers == frozenset()
 
 
 class TestRuleFourMetadataNeverBecomesAModelInput:

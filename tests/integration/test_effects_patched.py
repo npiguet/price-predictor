@@ -219,6 +219,6 @@ def test_a_patched_checkout_collects_snapshot_tier_three(tmp_path: Path) -> None
     from effects.domain.state_snapshot import InclusionTier
 
     assert any(
-        record.state.collected(InclusionTier.UNREFERENCED_STACK)
+        InclusionTier.UNREFERENCED_STACK in record.state.tiers
         for record in records
     )

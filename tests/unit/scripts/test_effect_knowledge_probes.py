@@ -43,6 +43,8 @@ from effect_knowledge_probes import (  # noqa: E402
 )
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
+from tests.unit.effects.builders import player_of  # noqa: E402
+
 
 @pytest.fixture(scope="module")
 def records():
@@ -559,7 +561,7 @@ class TestAffordabilityEdit:
             assert len(untapped) == amount
             colours = [sweeps.basic_land_colour(e) for e in untapped]
             assert None not in colours
-            player = edited.state.player(actor)
+            player = player_of(edited.state, actor)
             assert player.untapped_production == {
                 c: colours.count(c) for c in ("W", "U", "B", "R", "G")}
             assert player.floating_mana == {}
@@ -580,7 +582,7 @@ class TestAffordabilityEdit:
 
         def board(amount):
             edited = sweeps.set_untapped_lands(record, actor, pips, amount)
-            production = edited.state.player(actor).untapped_production
+            production = player_of(edited.state, actor).untapped_production
             swamp = next(e for e in _lands(edited, actor) if e.name == "Swamp")
             return {c: n for c, n in production.items() if n}, swamp.tapped
 
@@ -1436,7 +1438,7 @@ class TestColourPips:
         actor = record.actor_player
         lands, _ = colour_pips.configurations("{2}{U}")["pip missing"]
         edited = sweeps.set_untapped_lands(record, actor, list(lands), len(lands))
-        production = edited.state.player(actor).untapped_production
+        production = player_of(edited.state, actor).untapped_production
         assert {c: n for c, n in production.items() if n} == {"W": 3}
 
 

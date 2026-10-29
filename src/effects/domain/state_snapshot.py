@@ -32,11 +32,6 @@ class InclusionTier(IntEnum):
     UNREFERENCED_HAND_GRAVEYARD = 4
 
 
-#: The tiers stage-one collection writes; later stages extend this prefix.
-STAGE_ONE_TIERS: frozenset[InclusionTier] = frozenset(
-    {InclusionTier.REFERENCED, InclusionTier.CORE}
-)
-
 COLORS: tuple[str, ...] = ("W", "U", "B", "R", "G", "C")
 
 
@@ -272,22 +267,12 @@ class StateSnapshot:
     refs: Refs = field(default_factory=Refs)
     #: ``rewrite`` and ``trigger`` records only: the incoming event being handled.
     pending_event: Event | None = None
-    #: Which tiers the collector wrote. Never inferred.
-    tiers: frozenset[InclusionTier] = STAGE_ONE_TIERS
-
-    def collected(self, tier: InclusionTier) -> bool:
-        """Whether ``tier`` was collected; check before reading an empty list
-        as an empty zone."""
-        return tier in self.tiers
+    #: Which tiers the collector wrote; check before reading an empty list as
+    #: an empty zone. Never inferred, so a snapshot naming none claims none.
+    tiers: frozenset[InclusionTier] = frozenset()
 
     def entity(self, entity_id: str) -> EntityState | None:
         for candidate in self.entities:
             if candidate.id == entity_id:
-                return candidate
-        return None
-
-    def player(self, player_id: str) -> PlayerState | None:
-        for candidate in self.players:
-            if candidate.id == player_id:
                 return candidate
         return None
