@@ -140,3 +140,8 @@ def test_a_key_round_trips_with_and_without_option():
         assert ProvenanceKey.from_dict(key.as_dict()) == key
     assert "option" not in _CHARM_ROOT.as_dict()
     assert _mode(2).as_dict()["option"] == 2
+
+
+def test_a_key_s_label_names_a_mode_only_when_it_is_one():
+    assert _CHARM_ROOT.label == f"{_CHARM_SCRIPT} face 0 spell[0]"
+    assert _mode(2).label == f"{_CHARM_SCRIPT} face 0 spell[0] option 2"

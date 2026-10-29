@@ -76,9 +76,7 @@ class EvaluateEffectModelConfig:
         default_factory=lambda: Path(default_paths.DEFAULT_CHECKPOINT),
     )
     baseline_checkpoints: dict[str, Path] = field(default_factory=dict)
-    cards_folders: tuple[Path, ...] = tuple(
-        Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-    )
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
     vocab_path: Path | None = None
     keyword_definitions: Path | None = None

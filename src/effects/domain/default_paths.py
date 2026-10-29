@@ -2,16 +2,22 @@
 
 Spelled as an operator types them (trailing slash on a directory), because
 ``--help`` prints them and ``specs/023-ability-effect-model/contracts/cli.md``
-pins them as written. Free of imports, so the parser can read them without
-loading torch.
+pins them as written. Importing nothing but ``pathlib``, so the parser can
+read them without loading torch.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 #: The raw shard root every collector appends to and every reader walks.
 DEFAULT_RECORDS_DIR = "output/effects/records/"
 #: Both converted trees: cards, and the tokens kept out of the card tree.
 DEFAULT_CARDS_FOLDERS = ("output/cardsfolder/", "output/tokenscripts/")
+#: The same two trees as the paths a config holds.
+DEFAULT_CARDS_FOLDER_PATHS: tuple[Path, ...] = tuple(
+    Path(folder) for folder in DEFAULT_CARDS_FOLDERS
+)
 DEFAULT_KEYWORD_DEFINITIONS = "output/effects/keyword-definitions.json"
 DEFAULT_VOCAB_PATH = "models/effects/vocab.txt"
 DEFAULT_SCRIPT_VOCAB_PATH = "models/effects/vocab-script.txt"

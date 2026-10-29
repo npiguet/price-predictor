@@ -74,12 +74,9 @@ def sidecar_cache(cards_folders: Iterable[Path], variant_scripts: Path | None = 
 
 
 def sidecar_paths(cards_folders: Iterable[Path]) -> list[Path]:
-    from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX
+    from effects.infrastructure import sidecar_io
 
-    return [
-        path for folder in cards_folders
-        for path in sorted(Path(folder).rglob(f"*{SIDECAR_SUFFIX}"))
-    ]
+    return [path for folder in cards_folders for path in sidecar_io.sidecar_paths(folder)]
 
 
 @dataclass

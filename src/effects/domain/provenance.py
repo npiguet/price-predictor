@@ -78,6 +78,15 @@ class ProvenanceKey:
         return split_script_file(self.script_file)[0]
 
     @property
+    def label(self) -> str:
+        """The key as a report names it."""
+        suffix = f" option {self.option}" if self.option is not None else ""
+        return (
+            f"{self.script_file} face {self.face} {self.trait_kind}"
+            f"[{self.index_within_kind}]{suffix}"
+        )
+
+    @property
     def root(self) -> ProvenanceKey:
         """The charm's own key for a mode key; the key itself otherwise."""
         if self.option is None:

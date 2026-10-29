@@ -616,3 +616,17 @@ class TestLoadTreeTexts:
 
         assert load_tree_texts(tmp_path / "absent") == {}
         assert load_tree_texts(None) == {}
+
+
+class TestTheTreeWalk:
+    def test_every_sidecar_is_read_recursively_in_path_order(self, tmp_path):
+        from effects.infrastructure.sidecar_io import iter_sidecars
+
+        for script in ("cardsfolder/b/bear.txt", "cardsfolder/a/ant.txt"):
+            write_sidecar(
+                ProvenanceSidecar(card=script, script_file=script, lines=()),
+                sidecar_path_for(tmp_path / script),
+            )
+        (tmp_path / "cardsfolder" / "a" / "ant.txt").write_text("not a sidecar")
+        found = [sidecar.script_file for _path, sidecar in iter_sidecars(tmp_path)]
+        assert found == ["cardsfolder/a/ant.txt", "cardsfolder/b/bear.txt"]

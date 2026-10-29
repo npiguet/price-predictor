@@ -45,6 +45,7 @@ from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import DEFAULT_RANDOM_SEAT_PROBABILITY, CollectionCaps
 from effects.domain.default_paths import (
     DEFAULT_ABILITIES_ROOT,
+    DEFAULT_CARDS_FOLDER_PATHS,
     DEFAULT_CARDS_FOLDERS,
     DEFAULT_CHECKPOINT,
     DEFAULT_CORPUS_OUTPUT,
@@ -181,7 +182,7 @@ class _AppendCardsFolder(argparse.Action):
 def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--cards-folder", action=_AppendCardsFolder, dest="cards_folders",
-        default=tuple(Path(folder) for folder in DEFAULT_CARDS_FOLDERS),
+        default=DEFAULT_CARDS_FOLDER_PATHS,
         help=f"Converted source tree; repeatable (default: {' and '.join(DEFAULT_CARDS_FOLDERS)})",
     )
 

@@ -15,10 +15,10 @@ from effects.domain.ability_tokenizer import Surface
 from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup, first_text
 from effects.domain.records import EffectRecord, acting_keys
 from effects.infrastructure.sidecar_io import (
-    SIDECAR_SUFFIX,
     SidecarCache,
     UnconfiguredTree,
     converted_text_path,
+    sidecar_paths,
 )
 
 
@@ -57,7 +57,7 @@ def known_texts(roots: Mapping[str, Path], surface: Surface) -> list[str]:
     texts: set[str] = set()
     for tree, root in roots.items():
         root = Path(root)
-        for path in sorted(root.rglob(f"*{SIDECAR_SUFFIX}")):
+        for path in sidecar_paths(root):
             relative = converted_text_path(path).relative_to(root).as_posix()
             for line in sidecars.get(f"{tree}/{relative}").lines:
                 if line.provenance:

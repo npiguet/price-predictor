@@ -10,6 +10,7 @@ import errno
 import json
 import logging
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 from effects.domain.provenance import (
@@ -65,10 +66,7 @@ def script_vocabularies(folders) -> tuple[list[str], list[str]]:
 
     from effects.domain.value_targets import params, segments
 
-    paths = [
-        path for folder in folders
-        for path in sorted(Path(folder).rglob(f"*{SIDECAR_SUFFIX}"))
-    ]
+    paths = [path for folder in folders for path in sidecar_paths(folder)]
     api_types: set[str] = set()
     param_keys: set[str] = set()
     # Threads: the cost is file opens, which release the interpreter lock.
@@ -173,6 +171,18 @@ _SIDECAR_READ_ATTEMPTS = 5
 _SIDECAR_RETRY_DELAY = 0.05
 
 
+def sidecar_paths(folder: Path) -> list[Path]:
+    """Every sidecar under ``folder``, recursively, in path order so every
+    walk over a tree visits it the same way."""
+    return sorted(Path(folder).rglob(f"*{SIDECAR_SUFFIX}"))
+
+
+def iter_sidecars(folder: Path) -> Iterator[tuple[Path, ProvenanceSidecar]]:
+    """Every sidecar under ``folder``, read, beside its path."""
+    for path in sidecar_paths(folder):
+        yield path, read_sidecar(path)
+
+
 def read_sidecar(path: Path) -> ProvenanceSidecar:
     """Load one sidecar. Raises ``FileNotFoundError`` if it is missing.
 
@@ -226,8 +236,7 @@ def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
     if root is None or not Path(root).is_dir():
         return {}
     out: dict[str, list[str]] = {}
-    for path in sorted(Path(root).rglob(f"*{SIDECAR_SUFFIX}")):
-        sidecar = read_sidecar(path)
+    for _path, sidecar in iter_sidecars(root):
         texts = [line.script_text for line in sidecar.lines if line.script_text]
         if texts:
             out[sidecar.script_file] = texts

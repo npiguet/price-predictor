@@ -35,9 +35,6 @@ from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
-    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-)
 DEFAULT_KEYWORD_DEFINITIONS = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
 DEFAULT_VOCAB_PATH = Path(default_paths.DEFAULT_VOCAB_PATH)
 DEFAULT_SCRIPT_VOCAB_PATH = Path(default_paths.DEFAULT_SCRIPT_VOCAB_PATH)
@@ -62,7 +59,7 @@ _DESCRIPTION_PARAM_RE = re.compile(r"\w*Description\$[^|\[]*")
 @dataclass
 class BuildVocabConfig:
     surface: Surface = Surface.PROSE
-    cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     vocab_path: Path | None = None
     keyword_definitions: Path = field(
         default_factory=lambda: DEFAULT_KEYWORD_DEFINITIONS,
@@ -126,12 +123,12 @@ def _keyword_corpus_text(definitions: dict) -> str:
 
 def script_lines(folders: list[Path]) -> list[str]:
     """Every sidecar's script lines and API types, for the script surface."""
-    from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, read_sidecar
+    from effects.infrastructure.sidecar_io import iter_sidecars
 
     lines: list[str] = []
     for folder in folders:
-        for sidecar_path in sorted(folder.rglob(f"*{SIDECAR_SUFFIX}")):
-            for line in read_sidecar(sidecar_path).lines:
+        for _path, sidecar in iter_sidecars(folder):
+            for line in sidecar.lines:
                 if line.script_text:
                     lines.append(line.script_text)
                 if line.script_api_type:

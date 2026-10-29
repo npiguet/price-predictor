@@ -15,7 +15,7 @@ import torch
 from effects.application.encode_abilities import (
     EncodeAbilitiesConfig,
     encode_tree,
-    iter_sidecars,
+    read_sources,
     run,
     taxonomy_matrix,
     taxonomy_vector,
@@ -159,7 +159,7 @@ class TestTreeSubtrees:
 
     def test_sidecars_are_found_recursively(self, corpus, tmp_path):
         cards, _tokens, _checkpoint, _vocab = corpus
-        assert len(iter_sidecars(cards)) == 1
+        assert len(read_sources([cards])[0]) == 1
 
 
 class TestVariantIsolation:

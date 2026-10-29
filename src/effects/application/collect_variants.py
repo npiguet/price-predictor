@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.collect_coverage import (
-    DEFAULT_CARDS_FOLDERS,
     DEFAULT_RECORDS_DIR,
     DEFAULT_WORKERS,
     HoldoutSource,
@@ -80,7 +79,7 @@ class CollectVariantsConfig:
     caps: CollectionCaps = field(default_factory=CollectionCaps)
     #: The holdout rule a variant printing a held-out text is dropped under;
     #: given the flags ``build-corpus`` is, so the two agree.
-    cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     holdout: HoldoutRule = HoldoutRule()
 
     def volume_source(self) -> Path:

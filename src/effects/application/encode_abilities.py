@@ -19,20 +19,17 @@ from effects.infrastructure.effect_model_store import (
     load_for_inference,
     model_output_for,
 )
-from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, read_sidecar
+from effects.infrastructure.sidecar_io import iter_sidecars
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
-    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-)
 
 
 @dataclass
 class EncodeAbilitiesConfig:
     variant: str = Baseline.FULL
     checkpoint: Path | None = None
-    cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
     vocab_path: Path | None = None
     keyword_definitions: Path | None = None
@@ -53,10 +50,6 @@ class EncodeSummary:
     rows: int = 0
     skipped: int = 0
     cleaned: int = 0
-
-
-def iter_sidecars(cards_folder: Path) -> list[Path]:
-    return sorted(Path(cards_folder).rglob(f"*{SIDECAR_SUFFIX}"))
 
 
 def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
@@ -131,8 +124,7 @@ def read_sources(
     """Every sidecar with a line to encode, beside its path; and how many had none."""
     sources, skipped = [], 0
     for folder in folders:
-        for sidecar_path in iter_sidecars(folder):
-            sidecar = read_sidecar(sidecar_path)
+        for sidecar_path, sidecar in iter_sidecars(folder):
             if sidecar.lines:
                 sources.append((sidecar_path, sidecar))
             else:

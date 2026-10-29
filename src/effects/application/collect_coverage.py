@@ -51,9 +51,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_RECORDS_DIR = Path(default_paths.DEFAULT_RECORDS_DIR)
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
-    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-)
 #: Java worker processes, for both collectors.
 DEFAULT_WORKERS = 12
 DEFAULT_TARGET_RECORDS = 50
@@ -78,7 +75,7 @@ DEFAULT_MIN_TEXT_GAMES = 5
 @dataclass
 class CollectCoverageConfig:
     effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
-    cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     split_from: Path | None = None
     exclude_cards: Path | None = None
     target_records: int = field(default=DEFAULT_TARGET_RECORDS, metadata={

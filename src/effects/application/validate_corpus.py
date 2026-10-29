@@ -409,7 +409,7 @@ def _join_result(sidecars: SidecarCache, key: ProvenanceKey):
     try:
         resolution = sidecars.resolution_of(key)
     except KeyError as exc:
-        return f"{key.script_file} {key.trait_kind}[{key.index_within_kind}]: {exc}"
+        return f"{key.label}: {exc}"
     if resolution is KeyResolution.UNCONVERTED:
         return f"{key.script_file}: no sidecar beside the converted card"
     if resolution is KeyResolution.RUNTIME_ONLY:

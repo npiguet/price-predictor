@@ -124,9 +124,7 @@ class TrainEffectModelConfig:
 
     #: A curated dataset directory built by ``build-corpus``.
     corpus: str | None = None
-    cards_folders: tuple[Path, ...] = tuple(
-        Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-    )
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
     #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
     holdout_unit: HoldoutUnit | None = None

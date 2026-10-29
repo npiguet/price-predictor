@@ -21,7 +21,7 @@ from effects.domain.ability_tokenizer import (
     Surface,
     Token,
 )
-from effects.domain.provenance import ProvenanceKey, Role, RoleSpan, SidecarLine
+from effects.domain.provenance import Role, RoleSpan, SidecarLine
 
 #: Fixed order, so an embedding row means the same role across checkpoints.
 #: Row 0 is "no role", a token outside every span.
@@ -249,21 +249,13 @@ def log_truncation(logger, command: str):
     """A :class:`TruncationLog` reporter that writes one warning per line."""
 
     def report(text: str, keys: tuple) -> None:
-        named = ", ".join(_key_label(key) for key in keys) or "(no provenance key)"
+        named = ", ".join(key.label for key in keys) or "(no provenance key)"
         logger.warning(
             "%s: truncated at %d tokens: %s — %.80s",
             command, MAX_ABILITY_TOKENS, named, text,
         )
 
     return report
-
-
-def _key_label(key: ProvenanceKey) -> str:
-    suffix = f" option {key.option}" if key.option is not None else ""
-    return (
-        f"{key.script_file} face {key.face} {key.trait_kind}"
-        f"[{key.index_within_kind}]{suffix}"
-    )
 
 
 def collate_lines(

@@ -77,9 +77,7 @@ class BuildCorpusConfig:
 
     records_dir: Path
     output: Path = Path(default_paths.DEFAULT_CORPUS_OUTPUT)
-    cards_folders: tuple[Path, ...] = tuple(
-        Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-    )
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     vocab_path: str = default_paths.DEFAULT_VOCAB_PATH
     variant_scripts: str | None = None
     holdout: HoldoutRule = HoldoutRule()

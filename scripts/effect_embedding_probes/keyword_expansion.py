@@ -85,7 +85,7 @@ from effects.infrastructure.effect_model_store import (  # noqa: E402
     load_effect_checkpoint,
     verified_inference_paths,
 )
-from effects.infrastructure.sidecar_io import tree_of_folder  # noqa: E402
+from effects.infrastructure.sidecar_io import sidecar_paths, tree_of_folder  # noqa: E402
 from price_predictor.infrastructure.tokenizer_store import (  # noqa: E402
     load_vocabulary,
 )
@@ -217,7 +217,7 @@ def corpus_lines(trees) -> list[dict]:
     """Every sidecar line with script text, with its card and tree path."""
     rows = []
     for tree in trees:
-        for path in sorted(tree.rglob("*.provenance.json")):
+        for path in sidecar_paths(tree):
             sidecar = json.loads(path.read_text(encoding="utf-8"))
             # Named by the source tree the keys spell, not the folder's own
             # name: a kept-aside ``gen1-cardsfolder`` still holds ``cardsfolder``.
