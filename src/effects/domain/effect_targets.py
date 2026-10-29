@@ -28,6 +28,8 @@ from effects.domain.effect_head_layout import (
     FieldSpec,
     HeadField,
     ZoneOutcome,
+    counter_field,
+    mana_field,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.keyword_names import overlay_keyword
@@ -216,7 +218,7 @@ def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
 def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
     counter = str(event.params.get("counter_type", "OTHER")).upper()
     name = (
-        f"counters_delta_{counter.lower()}"
+        counter_field(counter)
         if counter in COUNTER_TYPES
         else HeadField.COUNTERS_DELTA_OTHER
     )
@@ -273,7 +275,7 @@ def _apply_mana(entry: EntityTargets, mana, *, sign: int) -> None:
     for color, amount in (mana or {}).items():
         key = str(color).strip().upper()
         if key in COLORS:
-            entry.add(f"mana_delta_{key.lower()}", sign * float(amount))
+            entry.add(mana_field(key), sign * float(amount))
 
 
 #: The events no table above states, each read off its own parameters.

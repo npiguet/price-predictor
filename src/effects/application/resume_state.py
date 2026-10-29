@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from effects.application.train_effect_model import TrainEffectModelConfig
+from effects.application.train_effect_model import SWEEP_FLAGS, TrainEffectModelConfig
 from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
     RESUME_NAME,
@@ -42,8 +42,7 @@ RESUME_MAY_CHANGE: frozenset[str] = frozenset({
 #: compares there as recorded: ``seed`` as the value the run drew, and
 #: ``lethality_copies`` only when set.
 RECORDED_IN_TRAINING_SETTINGS: frozenset[str] = frozenset({
-    "seed", "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob",
-    "api_weight", "lethality_copies",
+    "seed", "lethality_copies", *SWEEP_FLAGS,
 })
 
 

@@ -26,6 +26,7 @@ from effects.application.surface_batching import (
 )
 from effects.application.train_effect_model import (
     LEARNING_RATE,
+    SWEEP_FLAGS,
     WEIGHT_DECAY,
     CorpusFacts,
     EarlyStopper,
@@ -146,11 +147,7 @@ def training_settings(
     return {
         **copies,
         "seed": seed,
-        "e_noise": config.e_noise,
-        "value_weight": config.value_weight,
-        "mlm_weight": config.mlm_weight,
-        "mlm_mask_prob": config.mlm_mask_prob,
-        "api_weight": config.api_weight,
+        **{name: getattr(config, name) for name in SWEEP_FLAGS},
         "api_types": list(api_types),
         "param_keys": list(param_keys),
         TOKENIZER_RULES_KEY: TOKENIZER_RULES,

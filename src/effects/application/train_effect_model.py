@@ -233,6 +233,13 @@ class TrainEffectModelConfig:
         return model_output_for(self.variant)
 
 
+#: The flags a sweep arm differs by: the checkpoint's training settings record
+#: each under its own name, and a resume compares them there, as recorded.
+SWEEP_FLAGS: tuple[str, ...] = (
+    "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob", "api_weight",
+)
+
+
 @dataclass(frozen=True)
 class CorpusFacts:
     """What a run reads off its curated corpus's manifest at startup and

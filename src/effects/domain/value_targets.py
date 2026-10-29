@@ -22,6 +22,7 @@ from enum import StrEnum
 from functools import lru_cache
 
 from effects.domain.script_text import api_of, params, segments
+from effects.domain.state_snapshot import COLORS
 from price_predictor.domain.value_objects import ManaCost
 
 
@@ -75,7 +76,7 @@ _AMOUNT_TARGETS: tuple[str, ...] = (
     *_AMOUNT_KEYS, *dict.fromkeys(target for target, _, _ in _API_AMOUNTS.values()),
 )
 _MANA_TARGETS: tuple[str, ...] = (
-    "mana_w", "mana_u", "mana_b", "mana_r", "mana_g", "mana_c", "mana_generic",
+    *(f"mana_{color.lower()}" for color in COLORS), "mana_generic",
 )
 _COST_TARGETS: tuple[str, ...] = (*_MANA_TARGETS, "cost_taps", "cost_sacrifices")
 

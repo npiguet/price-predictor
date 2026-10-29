@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from effects.domain.ability_encoder import ENCODER_D_MODEL
+from effects.domain.ability_encoder import DROPOUT, ENCODER_D_MODEL, FF_MULTIPLIER
 from effects.domain.effect_head_input import ACT_SLOT, SlotKind
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
@@ -26,8 +26,6 @@ from effects.domain.effect_head_layout import (
 TRUNK_D_MODEL = 256
 TRUNK_N_LAYERS = 6
 TRUNK_N_HEADS = 4
-FF_MULTIPLIER = 4
-DROPOUT = 0.1
 MAX_POSITION = 512
 
 
