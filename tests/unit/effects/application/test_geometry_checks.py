@@ -8,20 +8,26 @@ which would pass while the command read the wrong vocabulary.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from effects.application.evaluation_context import EvaluateEffectModelConfig
+from effects.application.evaluation_context import (
+    EvaluateEffectModelConfig,
+)
 from effects.application.geometry_checks import (
     NEIGHBOUR_QUERIES,
     CachedVectors,
+    CacheGeometry,
     check_baseline_geometry,
     check_decodability,
     check_nearest_neighbours,
     check_umap,
     check_ward,
+    evaluate_ward_canary,
+    gate_three_verdict,
     nearest_neighbours,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY
@@ -619,3 +625,75 @@ class TestBaselineComparison:
         for baseline in baselines:
             check_baseline_geometry(full, baseline, "no-state")
         assert len(calls) == 3
+
+
+class TestGateThree:
+    def test_a_spread_space_passes(self):
+        rng = np.random.default_rng(0)
+        vectors = rng.normal(size=(400, 64))
+        result = gate_three_verdict(CacheGeometry.of(vectors))
+        assert result.status is CheckStatus.PASS
+
+    def test_a_collapsed_space_fails(self):
+        """Every ability on top of every other passes every average-case metric."""
+        rng = np.random.default_rng(0)
+        vectors = np.ones((400, 64)) + 0.001 * rng.normal(size=(400, 64))
+        result = gate_three_verdict(CacheGeometry.of(vectors))
+        assert result.status is CheckStatus.FAIL
+        assert "collapsed" in result.detail
+
+    def test_a_one_dimensional_space_fails_on_the_top_component(self):
+        direction = np.zeros(64)
+        direction[0] = 1.0
+        vectors = np.outer(np.linspace(-1, 1, 400), direction)
+        result = gate_three_verdict(CacheGeometry.of(vectors))
+        assert result.status is CheckStatus.FAIL
+        assert "principal component" in result.detail
+
+    def test_it_blocks_shipping(self):
+        vectors = np.ones((100, 8))
+        assert gate_three_verdict(CacheGeometry.of(vectors)).blocks
+
+    def test_an_all_zero_space_fails(self):
+        """The effect head once trained on an all-zero e: no variance at all is
+        the most collapsed a space can be, not an unmeasurable one."""
+        result = gate_three_verdict(CacheGeometry.of(np.zeros((100, 64))))
+        assert result.status is CheckStatus.FAIL
+        assert "principal component" in result.detail
+
+    def test_too_few_vectors_to_measure_fails(self):
+        result = gate_three_verdict(CacheGeometry.of(np.ones((1, 8))))
+        assert result.status is CheckStatus.FAIL
+        assert "not measured" in result.detail
+
+
+class TestWardCanaryVerdict:
+    def _vectors(self, twin_distance: float):
+        ward = np.array([1.0, 0.0, 0.0])
+        # Twins sit at the requested angle; bare keywords sit further away.
+        angle = twin_distance
+        twins = [np.array([1.0 - angle, math.sqrt(max(0.0, 2 * angle - angle ** 2)), 0.0])]
+        bare = [np.array([0.0, 1.0, 0.0]), np.array([0.0, 0.0, 1.0])]
+        return ward, twins, bare
+
+    def test_ward_nearer_its_twins_than_the_median_keyword_reads_as_such(self):
+        ward, twins, bare = self._vectors(0.05)
+        result = evaluate_ward_canary(ward, twins, bare)
+        assert "every functional twin is nearer" in result.detail
+
+    def test_a_twin_farther_than_the_median_is_reported(self):
+        ward = np.array([1.0, 0.0, 0.0])
+        twins = [np.array([-1.0, 0.0, 0.0])]  # opposite: distance 2
+        bare = [np.array([0.0, 1.0, 0.0])]    # orthogonal: distance 1
+        result = evaluate_ward_canary(ward, twins, bare)
+        assert "sit farther from ward" in result.detail
+
+    def test_the_canary_reports_and_does_not_block(self):
+        ward, twins, bare = self._vectors(0.05)
+        assert evaluate_ward_canary(ward, twins, bare).status is (
+            CheckStatus.REPORTED
+        )
+
+    def test_an_empty_cache_skips_rather_than_failing(self):
+        result = evaluate_ward_canary(np.ones(3), [], [])
+        assert result.status is CheckStatus.SKIPPED

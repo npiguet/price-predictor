@@ -15,9 +15,12 @@ from __future__ import annotations
 import pytest
 
 from effects.application.gate_one import (
+    GateOneMetrics,
+    evaluate_gate_one,
     training_texts,
     unique_text_records,
 )
+from effects.domain.evaluation_report import CheckStatus
 from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import (
     EffectRecord,
@@ -187,3 +190,75 @@ class TestMarginAccumulator:
         metrics = MarginAccumulator(()).metrics()
         assert math.isnan(metrics.affected_gate_f1)
         assert math.isnan(metrics.mean_poisson_deviance)
+
+
+class TestGateOne:
+    """All three margins must hold, on the card-disjoint unique-text stratum."""
+
+    def _identity(self) -> GateOneMetrics:
+        return GateOneMetrics(
+            affected_gate_f1=0.60,
+            zone_outcome_accuracy=0.50,
+            mean_poisson_deviance=1.00,
+        )
+
+    def _passing(self) -> GateOneMetrics:
+        return GateOneMetrics(
+            affected_gate_f1=0.70, zone_outcome_accuracy=0.60,
+            mean_poisson_deviance=0.90,
+        )
+
+    def test_all_three_margins_holding_passes(self):
+        result = evaluate_gate_one(self._passing(), self._identity())
+        assert result.status is CheckStatus.PASS
+        assert not result.blocks
+
+    def test_a_short_gate_f1_gain_fails(self):
+        model = GateOneMetrics(0.64, 0.60, 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "affected-gate F1" in result.detail
+
+    def test_a_short_zone_accuracy_gain_fails(self):
+        model = GateOneMetrics(0.70, 0.54, 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "zone-outcome accuracy" in result.detail
+
+    def test_a_short_deviance_reduction_fails(self):
+        model = GateOneMetrics(0.70, 0.60, 0.96)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "deviance" in result.detail
+
+    def test_exactly_meeting_a_threshold_passes(self):
+        model = GateOneMetrics(0.65, 0.55, 0.95)
+        assert evaluate_gate_one(model, self._identity()).status is CheckStatus.PASS
+
+    def test_failing_two_margins_reports_both(self):
+        model = GateOneMetrics(0.60, 0.50, 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert "affected-gate F1" in result.detail
+        assert "zone-outcome accuracy" in result.detail
+
+    def test_it_blocks_shipping(self):
+        model = GateOneMetrics(0.60, 0.50, 1.00)
+        assert evaluate_gate_one(model, self._identity()).blocks
+
+    def test_the_reduction_is_relative_not_absolute(self):
+        identity = GateOneMetrics(0.60, 0.50, 0.10)
+        model = GateOneMetrics(0.70, 0.60, 0.094)  # 6% relative
+        assert evaluate_gate_one(model, identity).status is CheckStatus.PASS
+
+    def test_a_margin_that_could_not_be_measured_fails(self):
+        """No zone target on the stratum makes the accuracy NaN; a NaN margin
+        compared against its floor is False, which used to read as a pass."""
+        model = GateOneMetrics(0.70, float("nan"), 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "zone-outcome accuracy" in result.detail
+        assert "not measured" in result.detail
+
+    def test_an_unmeasured_model_deviance_fails(self):
+        model = GateOneMetrics(0.70, 0.60, float("nan"))
+        assert evaluate_gate_one(model, self._identity()).status is CheckStatus.FAIL

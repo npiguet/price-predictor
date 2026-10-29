@@ -60,7 +60,7 @@ class RewriteResult(StrEnum):
     """What a replacement effect's handler reported, as Forge names it.
 
     Mirrors ``forge.game.replacement.ReplacementResult`` member for member,
-    lower_snake_case for the wire; ``test_records_us2.py`` pins the two
+    lower_snake_case for the wire; ``test_records.py`` pins the two
     together, since a value the reader raises on loses append-only records.
     Most replacements never edit the event's parameter map, so without this
     "enters tapped" and "prevent that damage" would read as no change at all.

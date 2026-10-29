@@ -15,7 +15,10 @@ import torch
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.aux_heads import TRAINING_ONLY_MODULES
-from effects.domain.baselines import BASELINES, Baseline
+from effects.domain.baselines import (
+    BASELINES,
+    Baseline,
+)
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
@@ -468,3 +471,78 @@ class TestGen2Checkpoint:
             )))
         }
         assert checkpoint.training_settings == {} and checkpoint.cards_folders == ()
+
+
+def _checkpoint_of(provenance: SplitProvenance) -> EffectCheckpoint:
+    return EffectCheckpoint(
+        encoder_config=_ENCODER_CONFIG, model_config=_MODEL_CONFIG,
+        encoder_state={}, model_state={}, provenance=provenance,
+    )
+
+
+class TestVariantCheckpointDisagreement:
+    def _provenance(self, **overrides) -> SplitProvenance:
+        defaults = {
+            "held_out_cards": ("Serra Angel",),
+            "card_disjoint_games": ("g1",),
+            "game_disjoint_games": ("g2",),
+            "vocab_hash": "abc123",
+            "keyword_definitions_hash": "def456",
+        }
+        defaults.update(overrides)
+        return SplitProvenance(**defaults)
+
+    def test_a_split_disagreement_names_both_checkpoints(self, tmp_path):
+        main = _checkpoint_of(self._provenance())
+        variant = _checkpoint_of(self._provenance(card_disjoint_games=("g9",)))
+        with pytest.raises(SplitMismatchError) as excinfo:
+            require_same_split(
+                main, variant,
+                main_path=tmp_path / "full.pt",
+                baseline_path=tmp_path / "identity.pt",
+            )
+        message = str(excinfo.value)
+        assert "full.pt" in message and "identity.pt" in message
+
+    def test_a_vocabulary_disagreement_fails_fast(self, tmp_path):
+        main = _checkpoint_of(self._provenance())
+        variant = _checkpoint_of(self._provenance(vocab_hash="different"))
+        with pytest.raises(SplitMismatchError, match="vocabulary"):
+            require_same_split(
+                main, variant,
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
+            )
+
+    def test_a_keyword_definition_disagreement_fails_fast(self, tmp_path):
+        main = _checkpoint_of(self._provenance())
+        variant = _checkpoint_of(
+            self._provenance(keyword_definitions_hash="different"),
+        )
+        with pytest.raises(SplitMismatchError, match="keyword definitions"):
+            require_same_split(
+                main, variant,
+                main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
+            )
+
+    def test_matching_checkpoints_pass(self, tmp_path):
+        main = _checkpoint_of(self._provenance())
+        variant = _checkpoint_of(self._provenance())
+        require_same_split(
+            main, variant,
+            main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
+        )
+
+
+class TestHashMismatchAtInference:
+    def test_a_changed_vocabulary_fails_before_encoding(self, tmp_path):
+        vocab = tmp_path / "vocab.txt"
+        vocab.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
+        keywords = tmp_path / "kw.json"
+        keywords.write_text("{}", encoding="utf-8")
+        provenance = SplitProvenance(
+            vocab_hash=content_hash(vocab),
+            keyword_definitions_hash=content_hash(keywords),
+        )
+        vocab.write_text("[PAD]\n[UNK]\nmore\n", encoding="utf-8")
+        with pytest.raises(HashMismatchError, match="mean nothing"):
+            provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)

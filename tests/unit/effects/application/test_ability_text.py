@@ -12,7 +12,10 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-from effects.domain.records import EffectRecord, RecordKind
+from effects.domain.records import (
+    EffectRecord,
+    RecordKind,
+)
 from effects.domain.state_snapshot import EntityState
 from effects.infrastructure.sidecar_io import (
     SidecarCache,
@@ -224,3 +227,51 @@ def test_every_line_on_disk_is_a_known_text_spelled_as_the_join_spells_it(tmp_pa
         texts = known_texts(roots, surface)
         assert texts == sorted(set(texts))
         assert texts == sorted({text_for_key(key, sidecars, surface) for key in keys})
+
+
+class TestWeightsKeyByAbilityText:
+    """``StepPreparer._weighted`` must key rarity by ability text, not record id.
+
+    A ``record_id`` is unique per record, so keying on it gives
+    ``effective_games`` a count of exactly 1 for every key and every record in
+    a pool the same weight — rarity weighting silently does nothing.
+    """
+
+    def test_a_single_game_ability_outweighs_a_many_game_one(self, tmp_path):
+        from effects.application.ability_text import KeyResolver
+        from effects.domain.provenance import ProvenanceKey, SidecarLine
+        from tests.unit.effects.application.test_ability_text import (
+            FakeSidecarCache,
+        )
+        from tests.unit.effects.builders import make_preparer
+
+        common_key = ProvenanceKey("cardsfolder/c/common.txt", 0, "keyword", 0)
+        rare_key = ProvenanceKey("cardsfolder/r/rare.txt", 0, "keyword", 0)
+        sidecars = FakeSidecarCache(lines={
+            common_key: SidecarLine(
+                line_index=0, line_kind="keyword", provenance=(common_key,),
+                script_text="Common Ability",
+            ),
+            rare_key: SidecarLine(
+                line_index=0, line_kind="keyword", provenance=(rare_key,),
+                script_text="Rare Ability",
+            ),
+        })
+        # Carried by fifty games...
+        common_records = [
+            make_record(RecordKind.RESOLUTION, game_id=f"g{i}", ability=(common_key,))
+            for i in range(50)
+        ]
+        # ...against one carried by a single game.
+        rare_records = [
+            make_record(RecordKind.RESOLUTION, game_id="g-rare", ability=(rare_key,)),
+        ]
+        preparer = make_preparer(tmp_path)
+        preparer.rarity = None
+        preparer.resolver = KeyResolver(sidecars, preparer.surface)
+
+        shard = [*common_records, *rare_records]
+        texts = preparer._texts(shard)
+        weights = preparer._weighted(shard, texts, preparer._games(shard, texts))
+
+        assert weights[-1] > weights[0]

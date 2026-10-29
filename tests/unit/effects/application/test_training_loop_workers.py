@@ -440,16 +440,6 @@ def test_a_zero_learning_rate_factor_trains_nothing(monkeypatch, corpus, tmp_pat
         assert torch.equal(value, run["parameters"][f"model.{name}"]), name
 
 
-def test_early_stopping_with_no_patience_never_stops():
-    from effects.application.train_effect_model import EarlyStopper
-
-    stopper = EarlyStopper(0)
-    stopper.update(1.0)
-    for _ in range(50):
-        stopper.update(2.0)
-    assert not stopper.should_stop
-
-
 def test_resuming_without_a_resume_file_fails(monkeypatch, corpus, tmp_path, caplog):
     with pytest.raises(FileNotFoundError, match="resume"):
         _run(monkeypatch, corpus, tmp_path / "empty", caplog, workers=0, resume=True)

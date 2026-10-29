@@ -18,6 +18,7 @@ from effects.domain.ability_tokenizer import (
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
     Token,
+    withheld_keyword_tokens,
 )
 from effects.domain.provenance import RoleSpan
 
@@ -819,3 +820,11 @@ class TestTokenizerRulesByCheckpoint:
             self._GEN1_TEXT)]
         assert "youctrl" in legacy and "validtgts" in legacy
         assert "youctrl" not in script and "ctrl" in script
+
+
+class TestWithheldKeyword:
+    def test_no_withholding_hides_nothing(self):
+        assert withheld_keyword_tokens(None) == frozenset()
+
+    def test_the_token_form_matches_the_vocabularys(self):
+        assert withheld_keyword_tokens("First Strike") == {"first_strike"}

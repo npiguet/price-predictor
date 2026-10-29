@@ -398,3 +398,13 @@ def read_cache(abilities_root, sidecar_roots, *, surface, variant: str = "full")
     return cached_vectors(
         SidecarIndex(sidecar_roots, surface=surface), abilities_root, variant=variant,
     )
+
+
+def keyword_score(qualifying: int, agreeing: int):
+    """Gate 2's score with one observation per qualifying record: a combat
+    with a single carrier."""
+    from effects.application.gate_two import KeywordScore
+
+    return KeywordScore(
+        qualifying=qualifying, agreeing=agreeing, observations=qualifying,
+    )

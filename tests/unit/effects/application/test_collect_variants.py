@@ -1,8 +1,8 @@
 """Synthetic script variants (T138).
 
 Four properties: a variant record carries ``synthetic`` and ``variant_of``, no
-variant is generated from a held-out card, variants contribute no pairing loss,
-and no variant is ever converted to prose.
+variant is generated from a held-out card, variants contribute no pairing loss
+(``domain/test_ability_encoder.py``), and no variant is ever converted to prose.
 
 The held-out rule is the one that would be silently wrong. Perturbing a
 parameter changes the text, so a variant of a held-out card carries a text that
@@ -33,82 +33,19 @@ from effects.application.collect_variants import (
 )
 from effects.domain.records import EffectRecord
 from effects.domain.script_variants import (
-    MAX_NUMERIC_SHIFT,
-    SELECTOR_WHITELIST,
-    PerturbationKind,
     is_multi_face,
-    numeric_params,
-    perturb,
-    selector_params,
-    shift,
     variant_name,
 )
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 from tests.unit.effects.builders import make_record
-
-_BOLT_SCRIPT = (
-    "A:SP$ DealDamage | Cost$ R | ValidTgts$ Any | NumDmg$ 3 | "
-    "SpellDescription$ CARDNAME deals 3 damage to any target."
-)
+from tests.unit.effects.domain.test_script_variants import _BOLT_SCRIPT
 
 
 def _record(**overrides) -> EffectRecord:
     defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
     defaults.update(overrides)
     return make_record(**defaults)
-
-
-class TestNumericPerturbation:
-    def test_a_shift_moves_the_value_by_at_most_three(self):
-        rng = random.Random(0)
-        for _ in range(50):
-            assert abs(shift(10, rng) - 10) <= MAX_NUMERIC_SHIFT
-
-    def test_a_shift_is_floored_at_zero(self):
-        """A negative count is not a smaller effect, it is a script Forge
-        rejects — and a rejected script never reaches a game."""
-        rng = random.Random(0)
-        for _ in range(50):
-            assert shift(1, rng) >= 0
-
-    def test_numeric_params_reads_only_whitelisted_numbers(self):
-        found = numeric_params(_BOLT_SCRIPT)
-        assert found == {"NumDmg": 3}
-
-    def test_a_perturbed_script_differs_in_exactly_one_parameter(self):
-        rng = random.Random(1)
-        result = perturb(_BOLT_SCRIPT, rng)
-        assert result is not None
-        perturbed, perturbation = result
-        assert perturbed != _BOLT_SCRIPT
-        assert perturbation.key == "NumDmg"
-        # Every other parameter survives untouched.
-        assert "ValidTgts$ Any" in perturbed
-        assert "Cost$ R" in perturbed
-
-    def test_a_line_with_nothing_to_perturb_is_skipped(self):
-        assert perturb("Name:Lightning Bolt", random.Random(0)) is None
-        assert perturb("Types:Instant", random.Random(0)) is None
-
-
-class TestSelectorPerturbation:
-    def test_a_whitelisted_selector_is_swappable(self):
-        script = "Mode$ Continuous | Affected$ Creature | AddPower$ 1"
-        assert selector_params(script) == {"Affected": "Creature"}
-
-    def test_a_swap_produces_a_selector_forge_recognises(self):
-        script = "Mode$ Continuous | Affected$ Creature | AddPower$ 1"
-        rng = random.Random(7)
-        for _ in range(20):
-            result = perturb(script, rng)
-            if result is None:
-                continue
-            perturbed, perturbation = result
-            if perturbation.kind == PerturbationKind.SELECTOR:
-                assert perturbation.replacement in SELECTOR_WHITELIST
-                assert perturbation.replacement != perturbation.original
-                assert perturbation.replacement in perturbed
 
 
 class TestVariantGeneration:
@@ -330,43 +267,9 @@ class TestVolumeCap:
         assert len({tuple(v) for v in drawn.values()}) > 1
 
 
-
-class TestPairingLoss:
-    def test_a_variant_has_only_the_script_surface(self):
-        """So it contributes no pairing term: there is no prose to pair with."""
-        from effects.domain.ability_encoder import encoding_text
-        from effects.domain.ability_tokenizer import Surface
-
-        class _Line:
-            script_text = "NumDmg$ 7"
-
-        line = _Line()
-        assert encoding_text(line, None, Surface.SCRIPT) == "NumDmg$ 7"
-        # No prose exists, so the prose surface falls back to the script rather
-        # than pairing two different readings of one line.
-        assert encoding_text(line, None, Surface.PROSE) == "NumDmg$ 7"
-
-    def test_a_real_card_has_both_surfaces_and_can_pair(self):
-        from effects.domain.ability_encoder import encoding_text
-        from effects.domain.ability_tokenizer import Surface
-
-        class _Line:
-            script_text = "NumDmg$ 3"
-
-        line = _Line()
-        prose = "deal 3 damage to any target"
-        assert encoding_text(line, prose, Surface.SCRIPT) == "NumDmg$ 3"
-        assert encoding_text(line, prose, Surface.PROSE) == prose
-
-
-def test_variant_name_derives_from_its_source():
-    assert variant_name("Lightning Bolt", 0) == "Lightning Bolt Variant 0"
-    assert variant_name("Lightning Bolt", 1) != variant_name("Lightning Bolt", 0)
-
-
 class TestRunClosesTheSupervisor:
     """The same property as ``collect_coverage.run``'s (see
-    ``TestRunClosesTheSupervisor`` in ``test_coverage.py`` for why): a run
+    ``TestRunClosesTheSupervisor`` in ``test_collect_coverage.py`` for why): a run
     that builds a ``CollectorSupervisor`` and plays a round through it must
     call ``.stop()``, or the worker log handles opened for the latched
     effect-record failure reporters stay open until the interpreter exits on
