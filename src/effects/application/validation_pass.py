@@ -12,11 +12,11 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import torch
 
-from effects.application.step_loss import StepLossComputer, TrainedModules
+from effects.application.step_loss import StepLoss, StepLossComputer, TrainedModules
 from effects.application.step_preparation import DeviceStep
 from effects.application.train_effect_model import TrainEffectModelConfig, load_shard
 from effects.application.training_log import format_floor
@@ -110,6 +110,75 @@ class _HostCopy:
         margins.add(self.gathered, self.prepared.targets)
 
 
+class PassCollector(Protocol):
+    """What one validation pass gathers beside its loss, batch by batch."""
+
+    #: Whether the pass has to keep each field's term for this collector.
+    wants_parts: bool
+
+    def add(self, prepared: DeviceStep, computed: StepLoss) -> None:
+        """Fold in one batch, as prepared and as scored."""
+
+    def finish(self) -> None:
+        """The pass is over: fold in anything still in flight."""
+
+
+class FieldParts:
+    """The loss by field, averaged over the pass's batches."""
+
+    wants_parts = True
+
+    def __init__(self) -> None:
+        self._means = PartsMean()
+
+    def add(self, prepared: DeviceStep, computed: StepLoss) -> None:
+        self._means.add(computed.parts)
+
+    def finish(self) -> None:
+        pass
+
+    def means(self) -> dict[str, float]:
+        return self._means.means()
+
+
+class KeptTargets:
+    """Each batch's host targets, for the constant-predictor floor: a copy of
+    the whole sample's targets, so kept only on an epoch with a floor to
+    compute."""
+
+    wants_parts = False
+
+    def __init__(self) -> None:
+        self.batches: list[EntityTargetBatch] = []
+
+    def add(self, prepared: DeviceStep, computed: StepLoss) -> None:
+        self.batches.append(prepared.targets)
+
+    def finish(self) -> None:
+        pass
+
+
+class ProgressMargins:
+    """Gate 1's margins over the pass's outputs. Each batch's copy to the host
+    is folded in a batch later, so the device never waits on it."""
+
+    wants_parts = False
+
+    def __init__(self, fields: tuple[FieldSpec, ...]) -> None:
+        self.margins = MarginAccumulator(fields)
+        self._pending: _HostCopy | None = None
+
+    def add(self, prepared: DeviceStep, computed: StepLoss) -> None:
+        copy = _HostCopy.queue(computed.gathered, prepared)
+        self.finish()
+        self._pending = copy
+
+    def finish(self) -> None:
+        if self._pending is not None:
+            self._pending.fold_into(self.margins)
+            self._pending = None
+
+
 class FloorCache:
     """The constant-predictor floor, keyed by the active field set.
 
@@ -137,12 +206,10 @@ class ValidationPass:
 
     #: The mean shipped loss over the pass's batches; NaN for an empty sample.
     loss: float
-    #: The loss by field, averaged over batches; empty unless asked for.
+    #: The loss by field, averaged over batches; empty unless collected.
     parts: dict[str, float]
-    #: Gate 1's margins over the pass's outputs; None unless asked for.
+    #: Gate 1's margins over the pass's outputs; None unless collected.
     margins: MarginAccumulator | None
-    #: Each batch's host targets, for the floor; None unless asked for.
-    targets: list[EntityTargetBatch] | None
 
     def progress(self) -> GateOneMetrics:
         """Gate 1's three numbers on the whole card-disjoint sample, every
@@ -177,16 +244,17 @@ class Validator:
     ) -> tuple[ValidationPass, ValidationPass]:
         """Both strata's passes: the card-disjoint one by field, with gate 1's
         progress margins, and the floor recomputed when the field set moved."""
-        card = self.score(
-            samples.card_disjoint, run, fields, parts=True, margins=True,
-            # Collected only on an epoch with a floor to compute: a copy of
-            # the whole sample's targets.
-            targets=self.floor.stale(fields),
+        parts, margins = FieldParts(), ProgressMargins(fields)
+        kept = KeptTargets() if self.floor.stale(fields) else None
+        collectors = (parts, margins) if kept is None else (parts, margins, kept)
+        card = ValidationPass(
+            self.score(samples.card_disjoint, run, fields, collectors),
+            parts.means(), margins.margins,
         )
-        game = self.score(samples.game_disjoint, run, fields)
-        if card.targets is not None:
+        game = ValidationPass(self.score(samples.game_disjoint, run, fields), {}, None)
+        if kept is not None:
             self.floor.update(
-                fields, constant_predictor_floor(card.targets, fields=fields),
+                fields, constant_predictor_floor(kept.batches, fields=fields),
             )
             logger.info(
                 "Constant-predictor floor (card-disjoint): %s",
@@ -195,27 +263,24 @@ class Validator:
         return card, game
 
     def score(
-        self, records, run: RunContext, fields: tuple[FieldSpec, ...], *,
-        parts: bool = False, margins: bool = False, targets: bool = False,
-    ) -> ValidationPass:
+        self, records, run: RunContext, fields: tuple[FieldSpec, ...],
+        collectors: tuple[PassCollector, ...] = (),
+    ) -> float:
         """Mean loss over the stratum, in fixed-size batches, not one per game:
-        one game's outlier would move a per-game mean many times over.
+        one game's outlier would move a per-game mean many times over; NaN for
+        an empty stratum.
 
         ``fields`` is the epoch's set, so validation and training score one
-        objective. ``parts`` keeps the loss by field; ``targets`` each batch's
-        host targets for the floor and ``margins`` its outputs for gate 1's
-        progress margins, so neither needs a second pass. Records are grouped
-        by game within a batch, so one encode of a text serves the whole game.
+        objective. Each of ``collectors`` gathers its own number off the same
+        batches, so none needs a second pass. Records are grouped by game
+        within a batch, so one encode of a text serves the whole game.
         """
-        kept: list[EntityTargetBatch] | None = [] if targets else None
-        accumulator = MarginAccumulator(fields) if margins else None
         if not records:
-            return ValidationPass(float("nan"), {}, accumulator, kept)
+            return float("nan")
+        report_parts = any(collector.wants_parts for collector in collectors)
         size = self.batch_size
         total = torch.zeros((), device=self.device)
         batches = 0
-        means = PartsMean()
-        pending: _HostCopy | None = None
         with evaluating(run), torch.no_grad():
             for start in range(0, len(records), size):
                 grouped: dict[str, list] = defaultdict(list)
@@ -224,22 +289,13 @@ class Validator:
                 prepared = run.preparer.prepare_scoring_step(
                     BatchPlan(dict(grouped)), fields,
                 )
-                if kept is not None:
-                    kept.append(prepared.targets)
                 computed = self.losses.device_loss(
-                    prepared, run, run.scoring, report_parts=parts,
+                    prepared, run, run.scoring, report_parts=report_parts,
                 )
                 total += computed.shipped
                 batches += 1
-                means.add(computed.parts)
-                if accumulator is not None:
-                    copy = _HostCopy.queue(computed.gathered, prepared)
-                    if pending is not None:
-                        pending.fold_into(accumulator)
-                    pending = copy
-            if pending is not None:
-                pending.fold_into(accumulator)
-        return ValidationPass(
-            float(total) / batches if batches else float("nan"),
-            means.means() if parts else {}, accumulator, kept,
-        )
+                for collector in collectors:
+                    collector.add(prepared, computed)
+            for collector in collectors:
+                collector.finish()
+        return float(total) / batches if batches else float("nan")

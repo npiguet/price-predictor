@@ -242,4 +242,4 @@ def test_validation_scores_the_shipped_objective_not_the_backward_total():
     )
     records = [SimpleNamespace(game_id=f"g{i}") for i in range(4)]
 
-    assert validator.score(records, run, ()).loss == 1.0
+    assert validator.score(records, run, ()) == 1.0

@@ -17,7 +17,7 @@ import torch
 
 from effects.application import run_context
 from effects.application.gate_one import measure
-from effects.application.validation_pass import Validator
+from effects.application.validation_pass import FieldParts, Validator
 from effects.domain.effect_model import EffectModel
 from effects.infrastructure.model_runner import Runnable
 from effects.infrastructure.record_io import write_shard
@@ -55,8 +55,8 @@ def scored(corpus, records, tmp_path_factory):  # noqa: F811
             ))
             seen["loss"] = card.loss
             seen["loss without margins"] = self.score(
-                samples.card_disjoint, run, fields, parts=True,
-            ).loss
+                samples.card_disjoint, run, fields, (FieldParts(),),
+            )
             run.encoder.train()
             run.model.train()
             return card, game
