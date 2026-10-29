@@ -23,7 +23,7 @@ from effects.domain.records import (
     SeatPolicy,
     acting_keys,
 )
-from effects.domain.sampling import SamplingClass, sampling_class
+from effects.domain.sampling import SamplingClass
 from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.domain.tally_merge import merge_into
 
@@ -148,69 +148,89 @@ def write_shard_pass(relative: str) -> WriteResult:
 
 
 def write_shard_with(plan: WritePlan, context: WorkerContext, relative: str) -> WriteResult:
-    from effects.infrastructure.record_io import write_shard
-
-    out = WriteResult()
-    outputs: dict[Stratum, list] = {stratum: [] for stratum in OUTPUT_STRATA}
+    writer = _ShardWriter(plan, context)
     for record in context.records(relative):
-        write_record(record, plan, context, out, outputs)
-
-    name = output_name(relative)
-    for stratum, records in outputs.items():
-        if records:
-            write_shard(Path(plan.parts_dirs[stratum]) / name, records)
-    return out
+        writer.observe(record)
+    return writer.finish(output_name(relative))
 
 
-def write_record(
-    record: EffectRecord, plan: WritePlan, context: WorkerContext, out: WriteResult,
-    outputs: dict[Stratum, list],
-) -> None:
-    """Route one record to its outputs and tally it."""
-    klass = sampling_class(record)
-    defect = context.refusal(record)
-    if defect is not None:
-        out.refusals.note(record, klass, defect)
-        return
-    out.training.read[klass] += 1
-    if has_unattributed_events(record):
-        out.unattributed += 1
+class _ShardWriter:
+    """One shard's write pass in progress: every record routed to its outputs
+    and tallied, then each output written as one part."""
 
-    keys = acting_keys(record) or None
-    stratum = plan.strata.stratum_of(record.game_id)
-    if stratum is Stratum.DROPPED_HELD_OUT:
-        out.strata.note(stratum, None)
-        return
-    if stratum is not Stratum.TRAINING:
-        outputs[stratum].append(record)
-        out.strata.note(stratum, keys)
+    def __init__(self, plan: WritePlan, context: WorkerContext) -> None:
+        self.plan = plan
+        self.context = context
+        self.out = WriteResult()
+        self.outputs: dict[Stratum, list] = {stratum: [] for stratum in OUTPUT_STRATA}
+
+    def observe(self, record: EffectRecord) -> None:
+        """Route one record to its outputs and tally it."""
+        klass = self.context.admit(record, self.out.refusals)
+        if klass is None:
+            return
+        self.out.training.read[klass] += 1
+        if has_unattributed_events(record):
+            self.out.unattributed += 1
+        keys = acting_keys(record) or None
+        stratum = self.plan.strata.stratum_of(record.game_id)
+        if stratum is Stratum.DROPPED_HELD_OUT:
+            self.out.strata.note(stratum, None)
+        elif stratum is Stratum.TRAINING:
+            self._train(record, klass, keys)
+        else:
+            self._hold(record, stratum, keys)
+
+    def _emit(self, stratum: Stratum, record: EffectRecord, keys: Keys | None) -> None:
+        self.outputs[stratum].append(record)
+        self.out.strata.note(stratum, keys)
+
+    def _hold(self, record: EffectRecord, stratum: Stratum, keys: Keys | None) -> None:
+        """A validation game's record, and gate 1's copy of a card-disjoint
+        resolution acting through a held-out text."""
+        self._emit(stratum, record, keys)
         if stratum is Stratum.CARD_DISJOINT and record.kind is RecordKind.RESOLUTION:
-            text = context.held_out_text(keys)
+            text = self.context.held_out_text(keys)
             if text is not None:
-                outputs[Stratum.GATE_ONE].append(record)
-                out.strata.note(Stratum.GATE_ONE, keys)
-                out.strata.gate_one_texts.add(text)
-        return
+                self._emit(Stratum.GATE_ONE, record, keys)
+                self.out.strata.gate_one_texts.add(text)
 
-    if context.held_out_text(keys) is not None:
-        # A token or variant printing a held-out text: the rest of the game
-        # still trains, this record would train on the measured text.
-        out.strata.note(Stratum.DROPPED_HELD_OUT_TEXT, None)
-        return
-    cell = context.cell_of(record, plan.mode_counts)
-    copy_plan = plan.plans.get((cell, keys)) if keys else None
-    if copy_plan is None:
-        copy_plan = plan.keyless_plans.get(cell, _NO_COPIES)
-    copies = copy_plan.copies(context.hash_of(record))
-    if copies <= 0:
-        out.training.dropped_by_cap[klass] += 1
-        return
-    outputs[Stratum.TRAINING].extend([record] * copies)
-    out.strata.note(Stratum.TRAINING, keys, copies)
-    out.training.kept[klass] += copies
-    if keys:
-        out.training.kept_keys.setdefault(klass, set()).add(keys)
-    out.families.note(record, klass, cell, copies)
+    def _train(self, record: EffectRecord, klass: SamplingClass, keys: Keys | None) -> None:
+        """A training game's record, written as many times as its cell's plan
+        draws for it."""
+        out = self.out
+        if self.context.held_out_text(keys) is not None:
+            # A token or variant printing a held-out text: the rest of the game
+            # still trains, this record would train on the measured text.
+            out.strata.note(Stratum.DROPPED_HELD_OUT_TEXT, None)
+            return
+        cell = self.context.cell_of(record, self.plan.mode_counts)
+        copies = self._copy_plan(cell, keys).copies(self.context.hash_of(record))
+        if copies <= 0:
+            out.training.dropped_by_cap[klass] += 1
+            return
+        self.outputs[Stratum.TRAINING].extend([record] * copies)
+        out.strata.note(Stratum.TRAINING, keys, copies)
+        out.training.kept[klass] += copies
+        if keys:
+            out.training.kept_keys.setdefault(klass, set()).add(keys)
+        out.families.note(record, klass, cell, copies)
+
+    def _copy_plan(self, cell: Cell, keys: Keys | None) -> CopyPlan:
+        """The plan of the record's ``(cell, keys)`` group, else its cell's."""
+        copy_plan = self.plan.plans.get((cell, keys)) if keys else None
+        if copy_plan is None:
+            copy_plan = self.plan.keyless_plans.get(cell, _NO_COPIES)
+        return copy_plan
+
+    def finish(self, name: str) -> WriteResult:
+        """Write each non-empty output as part ``name`` of its stratum."""
+        from effects.infrastructure.record_io import write_shard
+
+        for stratum, records in self.outputs.items():
+            if records:
+                write_shard(Path(self.plan.parts_dirs[stratum]) / name, records)
+        return self.out
 
 
 def run_write_pass(

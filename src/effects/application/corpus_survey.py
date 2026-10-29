@@ -109,6 +109,18 @@ class WorkerContext:
             record, self.sidecars.resolution_of, max_events=self.read.max_events,
         )
 
+    def admit(
+        self, record: EffectRecord, refusals: RefusalTally,
+    ) -> SamplingClass | None:
+        """The record's sampling class, or None when :meth:`refusal` refuses
+        it, which ``refusals`` then counts: both passes' first step."""
+        klass = sampling_class(record)
+        defect = self.refusal(record)
+        if defect is not None:
+            refusals.note(record, klass, defect)
+            return None
+        return klass
+
     def cell_of(
         self, record: EffectRecord, mode_counts: Mapping[str, int] | None = None,
     ) -> Cell:
@@ -302,10 +314,8 @@ class _ShardSurveyor:
     def observe(self, record: EffectRecord) -> None:
         self.out.records += 1
         self._note_game_properties(record)
-        klass = sampling_class(record)
-        defect = self.context.refusal(record)
-        if defect is not None:
-            self.out.refusals.note(record, klass, defect)
+        klass = self.context.admit(record, self.out.refusals)
+        if klass is None:
             return
         self.out.kept[klass] += 1
         self.pending.append(self._kept(record, klass))
