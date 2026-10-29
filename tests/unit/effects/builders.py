@@ -299,22 +299,22 @@ def stub_below_the_loop(monkeypatch):
 
     Returns the ``(model, encoder)`` stand-ins, from :func:`one_parameter_module`.
     """
-    from effects.application import step_preparation
+    from effects.application import run_context, step_preparation
     from effects.application import training_loop as loop_module
-    from effects.application.training_loop import TrainingLoop
+    from effects.domain.effect_head_input import SlotKind
 
     model, encoder = one_parameter_module(), one_parameter_module()
-    monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
-    monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
+    monkeypatch.setattr(run_context, "AbilityEncoder", lambda config: encoder)
+    monkeypatch.setattr(run_context, "EffectModel", lambda config: model)
     monkeypatch.setattr(
         step_preparation, "load_tokenizer",
         lambda *a, **k: type("T", (), {"vocab_size": 8})(),
     )
     # The script-API vocabulary is read off every real sidecar; none here.
-    monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
+    monkeypatch.setattr(run_context, "script_vocabularies", lambda folders: ([], []))
     monkeypatch.setattr(
         loop_module, "feature_widths",
-        lambda records: dict.fromkeys(loop_module.SlotKind, 4),
+        lambda records: dict.fromkeys(SlotKind, 4),
     )
     return model, encoder
 

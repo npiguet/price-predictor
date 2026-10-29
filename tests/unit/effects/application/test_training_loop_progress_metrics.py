@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 import torch
 
-from effects.application import training_loop as loop_module
+from effects.application import run_context
 from effects.application.gate_one import measure
 from effects.application.training_loop import TrainingLoop
 from effects.domain.effect_model import EffectModel
@@ -62,7 +62,7 @@ def scored(corpus, records, tmp_path_factory):  # noqa: F811
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
         monkeypatch.setattr(
-            loop_module, "EffectModel",
+            run_context, "EffectModel",
             lambda config: EffectModel(replace(
                 config, d_model=32, n_layers=1, n_heads=2, ff_dim=64,
             )),

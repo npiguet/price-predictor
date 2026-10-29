@@ -24,9 +24,10 @@ from pathlib import Path
 import pytest
 import torch
 
+from effects.application import run_context
 from effects.application import training_loop as loop_module
 from effects.application.extract_keyword_definitions import load_keyword_definitions
-from effects.application.resume_state import ResumeState
+from effects.application.run_context import preparer_settings
 from effects.application.step_preparation import (
     ShardOpened,
     ShardTask,
@@ -140,14 +141,14 @@ def _run(
     """
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     if interrupt_after is not None:
-        real_save = ResumeState.save
+        real_save = loop_module.save_resume
 
-        def save_then_stop(self, epoch, *args, **kwargs):
-            real_save(self, epoch, *args, **kwargs)
+        def save_then_stop(run, epoch, **kwargs):
+            real_save(run, epoch, **kwargs)
             if epoch == interrupt_after:
                 raise _Interrupted
 
-        monkeypatch.setattr(ResumeState, "save", save_then_stop)
+        monkeypatch.setattr(loop_module, "save_resume", save_then_stop)
     built: dict[str, torch.nn.Module] = {}
     initial: dict[str, torch.Tensor] = {}
     losses: list[float] = []
@@ -174,8 +175,8 @@ def _run(
         losses.append(float(computed.total.detach()))
         return computed
 
-    monkeypatch.setattr(loop_module, "AbilityEncoder", encoder)
-    monkeypatch.setattr(loop_module, "EffectModel", model)
+    monkeypatch.setattr(run_context, "AbilityEncoder", encoder)
+    monkeypatch.setattr(run_context, "EffectModel", model)
     monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
@@ -471,8 +472,9 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     config = _config(corpus, corpus.root / "unused")
     loop = make_training_loop(config, rarity={"x": 3})
-    loop.api_types, loop.param_keys = loop._script_vocabularies()
-    settings = loop._preparer_settings(feature_widths(records))
+    settings = preparer_settings(
+        config, seed=loop.seed, facts=loop.facts, widths=feature_widths(records),
+    )
     assert settings.heads == frozenset({"value", "api", "mlm"})
     fields = fields_for_epoch(
         config, present=frozenset(sampling_class(r) for r in records), epoch=1,

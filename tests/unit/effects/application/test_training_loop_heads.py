@@ -15,8 +15,10 @@ import pytest
 import torch
 
 from effects.application import training_loop as loop_module
+from effects.application.run_context import build_run, training_settings
 from effects.application.step_preparation import NO_TEXT_BUCKET, training_heads
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
+from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_log import format_shares
 from effects.application.training_loop import StepLoss
 from effects.domain.aux_heads import Head
@@ -255,20 +257,28 @@ class TestEpochShares:
         assert line == "1 37.5%, 20+ 12.5%, no-text 50.0%"
 
 
+def _built_run(monkeypatch, **config):
+    """The run a loop builds over a stand-in preparer, at the smallest encoder."""
+    from effects.domain.effect_head_input import SlotKind
+
+    loop = make_cpu_training_loop(
+        monkeypatch, encoder_layers=1, encoder_d_model=8, **config,
+    )
+    return build_run(loop.config, SimpleNamespace(
+        tokenizer=SimpleNamespace(vocab_size=8), widths=dict.fromkeys(SlotKind, 4),
+        api_types=[], param_keys=[],
+    ), frozenset(), facts=loop.facts, seed=loop.seed, device=loop.device)
+
+
 class TestTheBatchersTheLoopBuilds:
     def test_only_a_training_batch_carries_noise_and_sampled_expansion(
         self, monkeypatch, tmp_path,
     ):
         """FR-056 (training only) and FR-012 (zero outside training)."""
         from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
-        from effects.domain.effect_head_input import SlotKind
 
-        loop = make_cpu_training_loop(monkeypatch, e_noise=0.2, encoder_layers=1, encoder_d_model=8)
-        run = loop._build_run(SimpleNamespace(
-            tokenizer=SimpleNamespace(vocab_size=8), widths=dict.fromkeys(SlotKind, 4),
-            api_types=[], param_keys=[],
-        ), frozenset())
-        assert run.training.noise is loop.noise and loop.noise.ratio == 0.2
+        run = _built_run(monkeypatch, e_noise=0.2)
+        assert run.training.noise is run.noise and run.noise.ratio == 0.2
         assert run.scoring.noise is None
         preparer = make_preparer(tmp_path, keyword_expand_p=0.25)
         assert preparer.batcher(training=True).stager.keyword_expand_p == 0.25
@@ -277,12 +287,13 @@ class TestTheBatchersTheLoopBuilds:
         ) == 0.0
 
     def test_the_noise_ramps_over_one_epoch_of_steps(self, monkeypatch):
-        loop = make_cpu_training_loop(monkeypatch, steps_per_epoch=40)
-        assert loop.noise.ramp_steps == 40
+        assert _built_run(monkeypatch, steps_per_epoch=40).noise.ramp_steps == 40
 
     def test_the_checkpoint_records_the_sweep_flags(self, monkeypatch):
-        loop = make_cpu_training_loop(monkeypatch, e_noise=0.05, value_weight=0.1)
-        settings = loop._training_settings(["Draw"], ["NumCards"])
+        settings = training_settings(
+            TrainEffectModelConfig(corpus="unused", e_noise=0.05, value_weight=0.1),
+            seed=7, api_types=["Draw"], param_keys=["NumCards"],
+        )
         assert settings["e_noise"] == 0.05 and settings["value_weight"] == 0.1
         assert settings["api_types"] == ["Draw"]
         # Every new run reads the gen-2 script rules and says so, so a loader
@@ -294,5 +305,5 @@ class TestTheBatchersTheLoopBuilds:
 
     def test_the_checkpoint_records_the_seed_the_run_drew(self, monkeypatch):
         """A run with no --seed is reproducible only through the one it drew."""
-        loop = make_cpu_training_loop(monkeypatch)
-        assert loop._training_settings((), ())["seed"] == loop.seed
+        run = _built_run(monkeypatch)
+        assert run.training_settings["seed"] == run.seed

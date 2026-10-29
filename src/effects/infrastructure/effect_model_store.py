@@ -149,7 +149,7 @@ class EffectCheckpoint:
     #: The sidecar roots the run resolved keys against (FR-063b); empty on a
     #: checkpoint that predates the field.
     cards_folders: tuple[str, ...] = ()
-    #: ``TrainingLoop._training_settings`` (FR-063); empty or partial on a
+    #: ``run_context.training_settings`` (FR-063); empty or partial on a
     #: checkpoint that predates the field or a key.
     training_settings: dict[str, Any] = field(default_factory=dict)
 

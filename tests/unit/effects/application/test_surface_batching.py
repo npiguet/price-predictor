@@ -199,8 +199,7 @@ def test_the_added_noise_has_covariance_r_squared_sigma():
     torch.manual_seed(0)
     matrix = _spread_matrix()
     noise = NoiseState(ratio=0.5, ramp_steps=10)
-    noise.step = 10
-    added = noise.apply(matrix) - matrix
+    added = noise.apply(matrix, step=10) - matrix
     # Sigma is held in float64 so the factorization stays exact.
     expected = 0.25 * noise.sigma.float()
     observed = torch.cov(added.T)
@@ -221,8 +220,7 @@ def test_sigma_starts_from_the_first_batch_and_decays_at_0_99():
 def test_no_gradient_flows_through_sigma():
     matrix = _spread_matrix(rows=50).requires_grad_(True)
     noise = NoiseState(ratio=0.2, ramp_steps=1)
-    noise.step = 1
-    noise.apply(matrix).sum().backward()
+    noise.apply(matrix, step=1).sum().backward()
     assert not noise.sigma.requires_grad
     # The noise is additive and detached: the gradient is the identity's.
     assert torch.equal(matrix.grad, torch.ones_like(matrix))
@@ -230,18 +228,15 @@ def test_no_gradient_flows_through_sigma():
 
 def test_the_ratio_ramps_linearly_over_the_first_epoch():
     noise = NoiseState(ratio=0.1, ramp_steps=5000)
-    noise.step = 0
-    assert noise.scale() == 0.0
-    noise.step = 2500
-    assert noise.scale() == pytest.approx(0.05)
-    noise.step = 9000
-    assert noise.scale() == pytest.approx(0.1)
+    assert noise.scale(0) == 0.0
+    assert noise.scale(2500) == pytest.approx(0.05)
+    assert noise.scale(9000) == pytest.approx(0.1)
 
 
 def test_at_step_zero_nothing_is_added():
     matrix = _spread_matrix(rows=20)
     noise = NoiseState(ratio=0.1, ramp_steps=100)
-    assert torch.equal(noise.apply(matrix), matrix)
+    assert torch.equal(noise.apply(matrix, step=0), matrix)
 
 
 def test_a_scoring_batcher_carries_no_noise(tmp_path):
@@ -343,10 +338,9 @@ def test_a_rank_deficient_batch_under_bf16_autocast_still_draws_noise():
     # Twelve texts in a 64-wide space, at the scale a trained e reaches.
     matrix = torch.randn(12, dim, generator=generator) * 40.0
     noise = NoiseState(ratio=0.1, ramp_steps=1)
-    noise.step = 1
     with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
         for _ in range(20):
-            out = noise.apply(matrix)
+            out = noise.apply(matrix, step=1)
     assert torch.isfinite(out).all()
     assert out.dtype == matrix.dtype
     assert torch.allclose(noise.sigma, noise.sigma.T)

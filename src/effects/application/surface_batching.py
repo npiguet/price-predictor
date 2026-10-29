@@ -70,7 +70,7 @@ class NoiseState:
         self.ramp_steps = max(int(ramp_steps), 1)
         self.decay = decay
         self.sigma: torch.Tensor | None = None
-        #: Set by the training loop before each batch.
+        #: The training step of the last batch, kept for the resume file.
         self.step = 0
         self.refactor_every = max(int(refactor_every), 1)
         #: ``V √Λ`` of the last factorized ``Σ`` and the draw it was taken at.
@@ -92,9 +92,9 @@ class NoiseState:
         self._factor = on(state["factor"])
         self._draws_since_factor = state["draws_since_factor"]
 
-    def scale(self) -> float:
-        """``r`` at the current step."""
-        return self.ratio * min(1.0, self.step / self.ramp_steps)
+    def scale(self, step: int) -> float:
+        """``r`` at training step ``step``."""
+        return self.ratio * min(1.0, step / self.ramp_steps)
 
     def update(self, matrix: torch.Tensor) -> None:
         """Fold one batch's covariance into ``Σ``."""
@@ -112,14 +112,18 @@ class NoiseState:
                     self.decay * self.sigma + (1.0 - self.decay) * covariance
                 )
 
-    def apply(self, matrix: torch.Tensor) -> torch.Tensor:
-        """``matrix`` plus ``L z``, where ``L Lᵀ = r²Σ``.
+    def apply(self, matrix: torch.Tensor | None, *, step: int) -> torch.Tensor | None:
+        """``matrix`` plus ``L z``, where ``L Lᵀ = r²Σ``, at training step
+        ``step``; a batch with no ``e`` still records its step.
 
         ``L = V √Λ`` with eigenvalues clamped at zero, so a singular ``Σ``
         (a batch narrower than ``e_dim``) never fails to factorize.
         """
+        self.step = step
+        if matrix is None:
+            return None
         self.update(matrix)
-        r = self.scale()
+        r = self.scale(step)
         if r <= 0.0 or self.sigma is None:
             return matrix
         with torch.no_grad(), _exact(matrix):
@@ -268,14 +272,18 @@ class Materializer:
         vectors, _hidden = encode_by_length(encoder, inputs, self.device)
         return vectors
 
-    def materialize(self, prepared: PreparedBatch, encoder: AbilityEncoder) -> Materialized:
-        """``prepared`` on the device, its texts encoded and scattered."""
+    def materialize(
+        self, prepared: PreparedBatch, encoder: AbilityEncoder, *,
+        step: int | None = None,
+    ) -> Materialized:
+        """``prepared`` on the device, its texts encoded and scattered;
+        ``step`` is the training step, which places the noise on its ramp."""
         rows = prepared.rows
         ordered = sorted(rows, key=rows.__getitem__)
         matrix = self.encode(ordered, prepared.encoder_inputs, prepared.stand_in, encoder)
-        if self.noise is not None and matrix is not None:
+        if self.noise is not None:
             # Every e of the batch, whichever variant produced it (FR-056).
-            matrix = self.noise.apply(matrix)
+            matrix = self.noise.apply(matrix, step=step)
         inputs = prepared.inputs
         batch = {
             "slot_features": {

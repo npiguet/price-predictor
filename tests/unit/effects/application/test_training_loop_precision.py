@@ -96,7 +96,7 @@ def _run_device_loss(monkeypatch, loop, *, autocast: bool):
     monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: {})
 
     class _Materializer:
-        def materialize(self, prepared, encoder):
+        def materialize(self, prepared, encoder, *, step=None):
             return {}, [], None
 
     # The host half, as training hands it over: it holds no device work, so

@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from dataclasses import fields, replace
 
-import torch
-
 from effects.application.resume_state import (
     RECORDED_IN_TRAINING_SETTINGS,
     RESUME_MAY_CHANGE,
-    ResumeState,
     compared_flags,
+    resume_settings,
 )
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.infrastructure.effect_model_store import resume_mismatches
@@ -19,10 +17,9 @@ FLAGS = {spec.name for spec in fields(TrainEffectModelConfig)}
 
 
 def _settings(config: TrainEffectModelConfig, **training_settings) -> dict:
-    return ResumeState(
-        config, seed=7, corpus_digest="d", training_settings=lambda: training_settings,
-        noise=None, identity_table=None, device=torch.device("cpu"),
-    ).settings()
+    return resume_settings(
+        config, seed=7, corpus_digest="d", training_settings=training_settings,
+    )
 
 
 def test_every_flag_is_compared_unless_it_is_named_as_free():

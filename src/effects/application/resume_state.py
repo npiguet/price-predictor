@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import logging
 import shutil
-from collections.abc import Callable
 from dataclasses import fields
+from typing import TYPE_CHECKING
 
 import torch
 
-from effects.application.train_effect_model import EarlyStopper, TrainEffectModelConfig
+from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
     RESUME_NAME,
@@ -24,6 +24,9 @@ from effects.infrastructure.effect_model_store import (
     resume_mismatches,
     save_resume_state,
 )
+
+if TYPE_CHECKING:
+    from effects.application.run_context import RunContext
 
 logger = logging.getLogger(__name__)
 
@@ -52,108 +55,102 @@ def compared_flags() -> tuple[str, ...]:
     )
 
 
-class ResumeState:
-    """Writes a run's resume file after each epoch and restores a run from it."""
+def resume_settings(
+    config: TrainEffectModelConfig, *, seed: int, corpus_digest: str,
+    training_settings: dict,
+) -> dict:
+    """Every setting a resumed epoch has to share with the interrupted run:
+    every flag but :data:`RESUME_MAY_CHANGE`, so a flag added later is checked
+    by default, and the training settings as recorded."""
+    return {
+        "seed": seed,
+        "corpus_digest": corpus_digest,
+        "vocab_hash": content_hash(config.vocab_path),
+        "keyword_definitions_hash": content_hash(config.keyword_definitions),
+        **{name: getattr(config, name) for name in compared_flags()},
+        **training_settings,
+    }
 
-    def __init__(
-        self, config: TrainEffectModelConfig, *, seed: int, corpus_digest: str,
-        training_settings: Callable[[], dict], noise, identity_table,
-        device: torch.device,
-    ) -> None:
-        self.config = config
-        self.seed = seed
-        self.corpus_digest = corpus_digest
-        #: The checkpoint's training settings, read when a file is written or
-        #: compared, after the run has fixed its script-API vocabularies.
-        self.training_settings = training_settings
-        self.noise = noise
-        self.identity_table = identity_table
-        self.device = device
 
-    def settings(self) -> dict:
-        """Every setting a resumed epoch has to share with the interrupted run:
-        every flag but :data:`RESUME_MAY_CHANGE`, so a flag added later is
-        checked by default, and the training settings as recorded."""
-        return {
-            "seed": self.seed,
-            "corpus_digest": self.corpus_digest,
-            "vocab_hash": content_hash(self.config.vocab_path),
-            "keyword_definitions_hash": content_hash(self.config.keyword_definitions),
-            **{name: getattr(self.config, name) for name in compared_flags()},
-            **self.training_settings(),
-        }
+def _settings_of(run: RunContext) -> dict:
+    return resume_settings(
+        run.config, seed=run.seed, corpus_digest=run.facts.digest,
+        training_settings=run.training_settings,
+    )
 
-    def save(
-        self, epoch: int, run, stopper: EarlyStopper, *, finished: bool,
-        best: bool = False,
-    ) -> None:
-        """Everything the next epoch needs, written once the epoch is scored,
-        training-only heads included."""
-        directory = self.config.resolved_model_output()
-        save_resume_state(directory, {
-            "epoch": epoch,
-            "step": run.step,
-            "warmup": run.warmup,
-            "finished": finished,
-            "settings": self.settings(),
-            "encoder": run.encoder.state_dict(),
-            "model": run.model.state_dict(),
-            "identity_table": (
-                self.identity_table.state_dict()
-                if self.identity_table is not None else None
+
+def save_resume(
+    run: RunContext, epoch: int, *, finished: bool, best: bool = False,
+) -> None:
+    """Everything the next epoch needs, written once the epoch is scored,
+    training-only heads included."""
+    directory = run.config.resolved_model_output()
+    save_resume_state(directory, {
+        "epoch": epoch,
+        "step": run.step,
+        "warmup": run.warmup,
+        "finished": finished,
+        "settings": _settings_of(run),
+        "encoder": run.encoder.state_dict(),
+        "model": run.model.state_dict(),
+        "identity_table": (
+            run.identity_table.state_dict()
+            if run.identity_table is not None else None
+        ),
+        "optimizer": run.optimizer.state_dict(),
+        "stopper": run.stopper.state_dict(),
+        "noise": run.noise.state_dict(),
+        "rng": {
+            "cpu": torch.get_rng_state(),
+            "cuda": (
+                torch.cuda.get_rng_state_all()
+                if torch.cuda.is_available() else None
             ),
-            "optimizer": run.optimizer.state_dict(),
-            "stopper": stopper.state_dict(),
-            "noise": self.noise.state_dict(),
-            "rng": {
-                "cpu": torch.get_rng_state(),
-                "cuda": (
-                    torch.cuda.get_rng_state_all()
-                    if torch.cuda.is_available() else None
-                ),
-            },
-        })
-        if best:
-            # The best epoch's own resume state, so a later run can continue
-            # from the best epoch rather than the last one (FR-063f).
-            shutil.copyfile(directory / RESUME_NAME, directory / RESUME_BEST_NAME)
+        },
+    })
+    if best:
+        # The best epoch's own resume state, so a later run can continue
+        # from the best epoch rather than the last one (FR-063f).
+        shutil.copyfile(directory / RESUME_NAME, directory / RESUME_BEST_NAME)
 
-    def restore(self, run, stopper: EarlyStopper) -> int | None:
-        """The first epoch to train, with ``run`` where it left off; None when
-        nothing is left. Raises ``ResumeMismatchError`` for a resume file
-        written under other settings."""
-        state = load_resume_state(self.config.resolved_model_output())
-        mismatches = resume_mismatches(state["settings"], self.settings())
-        if mismatches:
-            raise ResumeMismatchError(
-                "The resume file was written under other settings: "
-                + "; ".join(mismatches)
-            )
-        run.encoder.load_state_dict(state["encoder"])
-        run.model.load_state_dict(state["model"])
-        if self.identity_table is not None and state["identity_table"] is not None:
-            self.identity_table.load_state_dict(state["identity_table"])
-        run.optimizer.load_state_dict(state["optimizer"])
-        stopper.load_state_dict(state["stopper"])
-        self.noise.load_state_dict(state["noise"], self.device)
-        torch.set_rng_state(state["rng"]["cpu"])
-        if state["rng"]["cuda"] is not None and torch.cuda.is_available():
-            torch.cuda.set_rng_state_all(state["rng"]["cuda"])
-        epoch, run.step = state["epoch"], state["step"]
-        # The run that started fixed its warmup from its own --epochs, which a
-        # resume may change.
-        run.warmup = state["warmup"]
-        # Recomputed under this run's patience rather than read from the file,
-        # so a run that stopped early continues when given more patience, or
-        # none (FR-063f).
-        if stopper.should_stop or epoch >= self.config.epochs:
-            logger.info(
-                "The resume file records a finished run (epoch %d); nothing "
-                "to resume.", epoch,
-            )
-            return None
-        logger.info(
-            "Resuming after epoch %d, step %d: best card-disjoint %.4f, %d "
-            "epoch(s) since.", epoch, run.step, stopper.best, stopper.since_best,
+
+def restore_resume(run: RunContext) -> int | None:
+    """The first epoch to train, with ``run`` where it left off; None when
+    nothing is left. Raises ``ResumeMismatchError`` for a resume file written
+    under other settings."""
+    state = load_resume_state(run.config.resolved_model_output())
+    mismatches = resume_mismatches(state["settings"], _settings_of(run))
+    if mismatches:
+        raise ResumeMismatchError(
+            "The resume file was written under other settings: "
+            + "; ".join(mismatches)
         )
-        return epoch + 1
+    run.encoder.load_state_dict(state["encoder"])
+    run.model.load_state_dict(state["model"])
+    if run.identity_table is not None and state["identity_table"] is not None:
+        run.identity_table.load_state_dict(state["identity_table"])
+    run.optimizer.load_state_dict(state["optimizer"])
+    run.stopper.load_state_dict(state["stopper"])
+    run.noise.load_state_dict(state["noise"], run.device)
+    torch.set_rng_state(state["rng"]["cpu"])
+    if state["rng"]["cuda"] is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(state["rng"]["cuda"])
+    epoch, run.step = state["epoch"], state["step"]
+    # The run that started fixed its warmup from its own --epochs, which a
+    # resume may change.
+    run.warmup = state["warmup"]
+    # Recomputed under this run's patience rather than read from the file, so
+    # a run that stopped early continues when given more patience, or none
+    # (FR-063f).
+    if run.stopper.should_stop or epoch >= run.config.epochs:
+        logger.info(
+            "The resume file records a finished run (epoch %d); nothing to "
+            "resume.", epoch,
+        )
+        return None
+    logger.info(
+        "Resuming after epoch %d, step %d: best card-disjoint %.4f, %d "
+        "epoch(s) since.", epoch, run.step, run.stopper.best,
+        run.stopper.since_best,
+    )
+    return epoch + 1
