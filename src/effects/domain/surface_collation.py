@@ -16,7 +16,7 @@ from effects.domain.entity_field_targets import EntityFieldTargets, EntityTarget
 
 def gather_entities(outputs: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
     """``(batch, entities, width)``: each surface's ``[CARD]`` and ``[PLAYER]``
-    columns of the per-entity output, in one batched gather."""
+    columns of the trunk output, in one batched gather."""
     return outputs.gather(1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
 
 

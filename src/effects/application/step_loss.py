@@ -145,11 +145,10 @@ class StepLossComputer:
                 prepared.batch, modules.encoder, step=step,
             )
             hidden = modules.model(**batch)
-            outputs = modules.model.per_entity(hidden)
             targets = prepared.targets
-            gathered = gather_entities(
-                outputs, targets.index.to(self.device, non_blocking=True),
-            )
+            gathered = modules.model.per_entity(gather_entities(
+                hidden, targets.index.to(self.device, non_blocking=True),
+            ))
             loss, parts = per_entity_loss(
                 gathered, targets.fields_on(self.device, non_blocking=True),
                 fields=prepared.fields, report_parts=report_parts,

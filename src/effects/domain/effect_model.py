@@ -153,8 +153,9 @@ class EffectModel(nn.Module):
         return self.norm(hidden)
 
     def per_entity(self, hidden: torch.Tensor) -> torch.Tensor:
-        """Map the shared per-entity head over every slot; callers select the
-        ``[CARD]`` and ``[PLAYER]`` positions."""
+        """The shared per-entity head over the trunk outputs it is handed. It
+        reads each position alone, so callers gather the ``[CARD]`` and
+        ``[PLAYER]`` positions first and never run it over an ability slot."""
         return self.per_entity_head(hidden)
 
     def created_objects(self, hidden: torch.Tensor) -> torch.Tensor:
