@@ -67,3 +67,22 @@ def corpus(tmp_path_factory, records):
         "root": root, "shards": shards, "sample": sample, "held": held,
         "vocab": vocab_path,
     })
+
+
+@pytest.fixture
+def fake_supervisor(monkeypatch):
+    """The records-only supervisor a collector builds, stood in for.
+
+    ``spec``-ed, so a method the real one lacks fails here as it would there,
+    and never interrupted; the stand-in constructor is ``.constructor``, for
+    the keywords a collector built it with.
+    """
+    from unittest.mock import MagicMock
+
+    from effects.infrastructure import collector_connector
+
+    supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
+    supervisor.interrupted = False
+    supervisor.constructor = MagicMock(return_value=supervisor)
+    monkeypatch.setattr(collector_connector, "CollectorSupervisor", supervisor.constructor)
+    return supervisor

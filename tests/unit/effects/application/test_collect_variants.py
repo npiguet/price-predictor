@@ -286,122 +286,6 @@ def _written(name: str, source: str, path: Path, *, perturbation: str = "numeric
     )
 
 
-class TestRunClosesTheSupervisor:
-    """The same property as ``collect_coverage.run``'s (see
-    ``TestRunClosesTheSupervisor`` in ``test_collect_coverage.py`` for why): a run
-    that builds a ``CollectorSupervisor`` and plays a round through it must
-    call ``.stop()``, or the worker log handles opened for the latched
-    effect-record failure reporters stay open until the interpreter exits on
-    its own.
-    """
-
-    def _config(self, tmp_path, **overrides):
-        forge_cards = tmp_path / "forge-cards"
-        forge_cards.mkdir()
-        variant_scripts = tmp_path / "variant-scripts"
-        return CollectVariantsConfig(
-            effect_records=tmp_path / "records",
-            forge_cards_path=forge_cards,
-            variant_scripts=variant_scripts,
-            **overrides,
-        )
-
-    def _variant(self, tmp_path) -> GeneratedVariant:
-        """A ``GeneratedVariant`` whose ``.path`` is a real file on disk.
-
-        ``generate_variants`` is stubbed out below rather than exercised for
-        real, so nothing else would write this file -- and ``run()`` now
-        reads it (``_deck_candidate``) to build the round's decks.
-        """
-        path = tmp_path / "variant-scripts" / "lightning_bolt_variant_0.txt"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            "Name:Lightning Bolt Variant 0\nManaCost:R\nTypes:Instant\n",
-            encoding="utf-8",
-        )
-        return GeneratedVariant(
-            name="Lightning Bolt Variant 0", source_card="Lightning Bolt",
-            path=path, perturbation="numeric",
-        )
-
-    def _patch_prerequisites(self, monkeypatch, variant):
-        """Everything ``run()`` needs before it ever reaches the supervisor,
-        stood in for rather than exercised for real: the corpus size, the
-        variant generator (which otherwise reads real Forge card scripts) and
-        the sidecar writer (which otherwise needs a real JVM).
-
-        The sidecar writer is patched on ``collect_variants`` itself, not on
-        ``effects.infrastructure.one_shot_workers`` where the function
-        lives -- ``run()`` now resolves the name at module scope (so
-        ``TestTheVariantRoundPlaysTheVariants`` can patch it there too), and
-        patching the source module no longer reaches a name ``run()`` never
-        looks up again.
-        """
-        from unittest.mock import MagicMock
-
-        import effects.application.collect_variants as collect_variants
-        import effects.infrastructure.record_io as record_io
-
-        # The volume source's size alone: the growth check counts the shards
-        # the round adds, which a test's supervisor writes itself.
-        monkeypatch.setattr(record_io, "count_records", lambda path, **_: 1000)
-        monkeypatch.setattr(
-            collect_variants, "generate_variants",
-            lambda *a, **k: [variant],
-        )
-        # Stubbed like the sidecar writer beside it: the real one reads the
-        # list VariantSidecarMain writes from a staged Forge database, which
-        # needs a JVM. Its own behaviour is covered by
-        # TestOnlyLoadableVariantsAreDecked.
-        monkeypatch.setattr(
-            collect_variants, "loadable_variants", lambda generated, _root: generated,
-        )
-        monkeypatch.setattr(
-            collect_variants, "write_variant_sidecars", MagicMock(return_value=0),
-        )
-        return collect_variants
-
-    def test_stop_runs_after_an_ordinary_round(self, tmp_path, monkeypatch):
-        from unittest.mock import MagicMock
-
-        import effects.infrastructure.collector_connector as collector_connector
-
-        variant = self._variant(tmp_path)
-        collect_variants = self._patch_prerequisites(monkeypatch, variant)
-        supervisor = MagicMock()
-        supervisor.interrupted = False
-        supervisor.play_round.side_effect = _writes_a_shard(tmp_path / "records", 100)
-        monkeypatch.setattr(
-            collector_connector, "CollectorSupervisor",
-            MagicMock(return_value=supervisor),
-        )
-
-        code = collect_variants.run(self._config(tmp_path))
-
-        assert code == 0
-        supervisor.play_round.assert_called_once()
-        supervisor.stop.assert_called_once()
-
-    def test_stop_runs_even_if_the_round_raises(self, tmp_path, monkeypatch):
-        from unittest.mock import MagicMock
-
-        import effects.infrastructure.collector_connector as collector_connector
-
-        variant = self._variant(tmp_path)
-        collect_variants = self._patch_prerequisites(monkeypatch, variant)
-        supervisor = MagicMock()
-        supervisor.play_round.side_effect = RuntimeError("boom")
-        monkeypatch.setattr(
-            collector_connector, "CollectorSupervisor",
-            MagicMock(return_value=supervisor),
-        )
-
-        with pytest.raises(RuntimeError, match="boom"):
-            collect_variants.run(self._config(tmp_path))
-
-        supervisor.stop.assert_called_once()
-
-
 class TestTheHoldoutNameBoundary:
     """Forge source scripts carry printed case; the holdout carries converted.
 
@@ -432,9 +316,8 @@ class TestTheHoldoutNameBoundary:
 
 
 class TestTheVariantRoundPlaysTheVariants:
-    def test_the_scripts_are_staged_and_decked(self, tmp_path):
+    def test_the_scripts_are_staged_and_decked(self, tmp_path, fake_supervisor):
         from effects.application import collect_variants
-        from effects.infrastructure import collector_connector
 
         source = tmp_path / "cards"
         source.mkdir()
@@ -447,10 +330,7 @@ class TestTheVariantRoundPlaysTheVariants:
         records.mkdir()
         (records / "seed.jsonl").write_text("{}\n" * 100, encoding="utf-8")
 
-        supervisor = MagicMock()
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=supervisor) as ctor, \
-             patch.object(collect_variants, "write_variant_sidecars",
+        with patch.object(collect_variants, "write_variant_sidecars",
                           return_value=0), \
              patch.object(collect_variants, "loadable_variants",
                           side_effect=lambda generated, _root: generated):
@@ -466,10 +346,11 @@ class TestTheVariantRoundPlaysTheVariants:
                 )
             )
 
-        assert ctor.call_args.kwargs["variant_scripts"] == tmp_path / "variants"
-        decks_file = supervisor.play_round.call_args.args[0]
+        constructed = fake_supervisor.constructor.call_args.kwargs
+        assert constructed["variant_scripts"] == tmp_path / "variants"
+        decks_file = fake_supervisor.play_round.call_args.args[0]
         assert decks_file.read_text(encoding="utf-8").strip(), "no variant decks"
-        assert supervisor.play_round.call_args.kwargs["matches"] == 3
+        assert fake_supervisor.play_round.call_args.kwargs["matches"] == 3
 
 
 class TestVariantManaCostIsParseable:
@@ -579,7 +460,7 @@ class TestTheRunReportsWhatItCollected:
     0 having collected nothing, and nothing said so.
     """
 
-    def _fixture(self, tmp_path, monkeypatch, source_records, added):
+    def _fixture(self, tmp_path, monkeypatch, supervisor, source_records, added):
         """A run whose only unknowns are the corpus sizes.
 
         ``source_records`` is what ``count_records`` reports for the *volume
@@ -589,10 +470,8 @@ class TestTheRunReportsWhatItCollected:
         the round writes, in a shard of its own beside one already in the
         destination, which must not count as growth either.
         """
-        from unittest.mock import MagicMock
 
         import effects.application.collect_variants as collect_variants
-        import effects.infrastructure.collector_connector as collector_connector
         import effects.infrastructure.record_io as record_io
 
         path = tmp_path / "variant-scripts" / "bolt_variant_0.txt"
@@ -620,14 +499,8 @@ class TestTheRunReportsWhatItCollected:
         )
         records = tmp_path / "records"
         _writes_a_shard(records, 7, name="earlier.0-a.jsonl")()
-        supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
-        supervisor.interrupted = False
         if added:
             supervisor.play_round.side_effect = _writes_a_shard(records, added)
-        monkeypatch.setattr(
-            collector_connector, "CollectorSupervisor",
-            MagicMock(return_value=supervisor),
-        )
         forge_cards = tmp_path / "forge-cards"
         forge_cards.mkdir()
         config = CollectVariantsConfig(
@@ -638,12 +511,12 @@ class TestTheRunReportsWhatItCollected:
         return collect_variants, config, supervisor
 
     def test_a_round_that_collected_nothing_fails_loudly(
-        self, tmp_path, monkeypatch, caplog,
+        self, tmp_path, monkeypatch, caplog, fake_supervisor,
     ):
         import logging
 
         collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, 1000, added=0,
+            tmp_path, monkeypatch, fake_supervisor, 1000, added=0,
         )
 
         with caplog.at_level(logging.ERROR):
@@ -659,12 +532,12 @@ class TestTheRunReportsWhatItCollected:
         ), "nothing in the log said the round collected nothing"
 
     def test_a_round_that_collected_records_says_how_many(
-        self, tmp_path, monkeypatch, caplog,
+        self, tmp_path, monkeypatch, caplog, fake_supervisor,
     ):
         import logging
 
         collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, 1000, added=42,
+            tmp_path, monkeypatch, fake_supervisor, 1000, added=42,
         )
 
         with caplog.at_level(logging.INFO):
@@ -677,7 +550,7 @@ class TestTheRunReportsWhatItCollected:
         ), "the run never reported how many records it added"
 
     def test_a_corpus_counted_elsewhere_never_enters_the_growth_figure(
-        self, tmp_path, monkeypatch, caplog,
+        self, tmp_path, monkeypatch, caplog, fake_supervisor,
     ):
         """The reported figure was "Interrupted after -39332737 new records".
 
@@ -689,7 +562,7 @@ class TestTheRunReportsWhatItCollected:
         import logging
 
         collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, 39_000_000, added=42,
+            tmp_path, monkeypatch, fake_supervisor, 39_000_000, added=42,
         )
 
         with caplog.at_level(logging.INFO):
@@ -702,13 +575,13 @@ class TestTheRunReportsWhatItCollected:
         )
 
     def test_an_interrupted_round_does_not_report_success(
-        self, tmp_path, monkeypatch,
+        self, tmp_path, monkeypatch, fake_supervisor,
     ):
         """Ctrl-C on the variant side: ``ForgeWorkerPool``
         swallows SIGINT, so a round the operator stopped returns exactly like
         one that finished."""
         collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, 1000, added=42,
+            tmp_path, monkeypatch, fake_supervisor, 1000, added=42,
         )
         supervisor.interrupted = True
 

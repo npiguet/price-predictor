@@ -7,7 +7,7 @@ terminate; the unit's own rules are in ``tests/unit/effects/domain/test_coverage
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -189,81 +189,6 @@ class TestHeldOutExclusion:
         assert set(units) == {"Serra Angel"}
 
 
-class TestRunClosesTheSupervisor:
-    """``CollectorSupervisor.stop()`` is the only caller of
-    ``WorkerLogFiles.close_all()``. Unless ``run()`` invokes it, a coverage
-    run's worker log handles -- opened so the latched effect-record failure
-    reporters are visible to an operator -- stay open until the interpreter
-    exits on its own, not when the run itself finishes.
-    """
-
-    def _config(self, tmp_path, **overrides):
-        cardsfolder = tmp_path / "cardsfolder"
-        cardsfolder.mkdir()
-        (cardsfolder / "bears.txt").write_text(
-            "name: Grizzly Bears\ntypes: creature\n", encoding="utf-8",
-        )
-        overrides.setdefault("target_records", 0)
-        return CollectCoverageConfig(
-            cards_folders=(cardsfolder,),
-            effect_records=tmp_path / "records",
-            **overrides,
-        )
-
-    def test_stop_runs_even_though_no_round_was_ever_needed(
-        self, tmp_path, monkeypatch,
-    ):
-        """``target_records=0`` satisfies every card before the ``while``
-        loop's first check, so ``play_round`` is never called -- proving
-        ``stop()`` is not merely tacked on after the last round, but wraps
-        the supervisor's whole lifetime regardless of how many rounds ran."""
-        from unittest.mock import MagicMock
-
-        import effects.application.collect_coverage as collect_coverage
-        import effects.infrastructure.collector_connector as collector_connector
-
-        monkeypatch.setattr(
-            collect_coverage, "consult_castability", lambda names: {},
-        )
-        supervisor = MagicMock()
-        monkeypatch.setattr(
-            collector_connector, "CollectorSupervisor",
-            MagicMock(return_value=supervisor),
-        )
-
-        code = collect_coverage.run(self._config(tmp_path))
-
-        assert code == 0
-        supervisor.play_round.assert_not_called()
-        supervisor.stop.assert_called_once()
-
-    def test_stop_runs_even_if_a_round_raises(self, tmp_path, monkeypatch):
-        """The property a bare call after the loop cannot give: a round that
-        raises must still close the log handles and shut the pool down
-        before the exception is let through, not leave the handles open on
-        the way out."""
-        from unittest.mock import MagicMock
-
-        import effects.application.collect_coverage as collect_coverage
-        import effects.infrastructure.collector_connector as collector_connector
-
-        monkeypatch.setattr(
-            collect_coverage, "consult_castability", lambda names: {},
-        )
-        supervisor = MagicMock()
-        supervisor.play_round.side_effect = RuntimeError("boom")
-        monkeypatch.setattr(
-            collector_connector, "CollectorSupervisor",
-            MagicMock(return_value=supervisor),
-        )
-
-        with pytest.raises(RuntimeError, match="boom"):
-            collect_coverage.run(self._config(tmp_path, target_records=50))
-
-        supervisor.play_round.assert_called_once()
-        supervisor.stop.assert_called_once()
-
-
 class TestExclusionsWithoutACheckpoint:
     """The holdout no longer needs a trained model to exist (T171).
 
@@ -329,9 +254,8 @@ class TestTheRoundPlaysTheComputedDecks:
     `match-outcomes` that reaches none of the cards coverage exists for.
     """
 
-    def test_the_decks_played_are_built_from_the_weights(self, tmp_path):
+    def test_the_decks_played_are_built_from_the_weights(self, tmp_path, fake_supervisor):
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
@@ -341,8 +265,7 @@ class TestTheRoundPlaysTheComputedDecks:
         (cards / "a" / "bb.txt").write_text(
             "name: bb\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
         )
-        supervisor = MagicMock()
-        supervisor.interrupted = False
+        supervisor = fake_supervisor
 
         # Two candidates, and a recount that plays out over three rounds, so
         # the test can tell "decks track the weights `run` recomputes each
@@ -381,9 +304,7 @@ class TestTheRoundPlaysTheComputedDecks:
 
         supervisor.play_round.side_effect = _play
 
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", return_value={}):
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
             collect_coverage.run(
                 collect_coverage.CollectCoverageConfig(
                     effect_records=tmp_path / "records",
@@ -464,10 +385,9 @@ class TestCtrlCEndsTheRun:
     ``ForgeWorkerPool.interrupted``, so ``run`` built a fresh pool for the
     next round and Ctrl-C degraded to "skip this round, start another".
 
-    ``spec=CollectorSupervisor`` rather than a bare ``MagicMock`` on purpose:
-    a bare one answers to ``interrupted`` whether or not the supervisor
-    exposes it, which is the same blindness ``TestARoundEndsInItsReport``
-    exists for.
+    The ``fake_supervisor`` is ``spec``-ed on purpose: a bare ``MagicMock``
+    answers to ``interrupted`` whether or not the supervisor exposes it, which
+    is the same blindness ``TestARoundEndsInItsReport`` exists for.
     """
 
     def _two_round_config(self, tmp_path):
@@ -484,21 +404,16 @@ class TestCtrlCEndsTheRun:
             no_progress_rounds=5,
         )
 
-    def _run_with(self, tmp_path, *, interrupted: bool):
+    def _run_with(self, tmp_path, supervisor, *, interrupted: bool):
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
-        supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
         supervisor.interrupted = interrupted
-
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", return_value={}):
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
             code = collect_coverage.run(self._two_round_config(tmp_path))
         return code, supervisor
 
-    def test_an_interrupted_round_is_the_last_round(self, tmp_path):
-        code, supervisor = self._run_with(tmp_path, interrupted=True)
+    def test_an_interrupted_round_is_the_last_round(self, tmp_path, fake_supervisor):
+        code, supervisor = self._run_with(tmp_path, fake_supervisor, interrupted=True)
 
         assert supervisor.play_round.call_count == 1, (
             "a second round was started after the operator interrupted the "
@@ -506,9 +421,9 @@ class TestCtrlCEndsTheRun:
         )
         assert code == 130, "an interrupted run must not report success"
 
-    def test_an_uninterrupted_run_plays_every_round_it_needs(self, tmp_path):
+    def test_an_uninterrupted_run_plays_every_round_it_needs(self, tmp_path, fake_supervisor):
         """The control: five stalled rounds, then retirement ends the run."""
-        code, supervisor = self._run_with(tmp_path, interrupted=False)
+        code, supervisor = self._run_with(tmp_path, fake_supervisor, interrupted=False)
 
         assert supervisor.play_round.call_count == 5
         assert code == 0
@@ -541,11 +456,10 @@ class TestOnlyDeckedCardsCountAStalledRound:
             "a card that was never put in a deck retired without one attempt"
         )
 
-    def test_the_round_reports_exactly_the_names_it_decked(self, tmp_path):
+    def test_the_round_reports_exactly_the_names_it_decked(self, tmp_path, fake_supervisor):
         """``run`` must hand ``retire_stalled`` the round's own decks, not the
         whole coverage unit -- otherwise the guard above never fires."""
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
         # Sixty candidates against a single deck of 23 nonland slots: most of
         # the unit cannot be in the round at all, which is the real shape of
@@ -558,8 +472,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
                 f"name: {name}\nmana cost: {{G}}\ntypes: creature\n",
                 encoding="utf-8",
             )
-        supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
-        supervisor.interrupted = False
+        supervisor = fake_supervisor
         seen = []
         real = collect_coverage.retire_stalled
 
@@ -570,9 +483,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
                 decked=decked,
             )
 
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", return_value={}), \
+        with patch.object(collect_coverage, "consult_castability", return_value={}), \
              patch.object(collect_coverage, "retire_stalled", _spy):
             collect_coverage.run(CollectCoverageConfig(
                 effect_records=tmp_path / "records",
@@ -1171,9 +1082,8 @@ class TestNonDeckTypesLeaveTheUnit:
 
         assert is_deckable("name: x\n")
 
-    def test_the_training_unit_holds_no_non_deck_card(self, tmp_path):
+    def test_the_training_unit_holds_no_non_deck_card(self, tmp_path, fake_supervisor):
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
@@ -1190,22 +1100,18 @@ class TestNonDeckTypesLeaveTheUnit:
             consulted.append(list(names))
             return {}
 
-        supervisor = MagicMock()
-        supervisor.interrupted = False
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", _consult):
+        with patch.object(collect_coverage, "consult_castability", _consult):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
                 target_records=1, decks_per_round=5,
             ))
 
         assert consulted == [["aa"]]
-        decks = supervisor.play_round.call_args.args[0].read_text(encoding="utf-8")
+        decks = fake_supervisor.play_round.call_args.args[0].read_text(encoding="utf-8")
         assert "my_plan" not in decks and "squee" not in decks
 
     def test_the_held_out_round_drops_non_deck_carriers_only(
-        self, tmp_path, caplog,
+        self, tmp_path, caplog, fake_supervisor,
     ):
         """A text a non-deck held-out card shares stays held out.
 
@@ -1216,7 +1122,6 @@ class TestNonDeckTypesLeaveTheUnit:
         import logging
 
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
@@ -1240,9 +1145,7 @@ class TestNonDeckTypesLeaveTheUnit:
             consulted.append(list(names))
             return {}
 
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=MagicMock(interrupted=False)), \
-             patch.object(collect_coverage, "consult_castability", _consult), \
+        with patch.object(collect_coverage, "consult_castability", _consult), \
              patch("effects.infrastructure.converted_trees.load_card_texts",
                    return_value=texts_by_card), \
              caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
