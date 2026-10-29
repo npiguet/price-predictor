@@ -101,13 +101,21 @@ _ABSENT = "absent"
 _OMITTED_AT_DEFAULT = "omitted_at_default"
 
 
-def _reads(read, **extra) -> dict[str, Any]:
-    """A field's metadata: its reader, plus any of the flags above."""
-    return {_READ: read, **extra}
+def _reads(
+    read, *, absent: Any = MISSING, omitted_at_default: bool = False,
+) -> dict[str, Any]:
+    """A field's metadata: its reader, the value an absent one reads as when
+    ``absent`` is given, and whether ``as_dict`` omits it at its default."""
+    metadata: dict[str, Any] = {_READ: read}
+    if absent is not MISSING:
+        metadata[_ABSENT] = absent
+    if omitted_at_default:
+        metadata[_OMITTED_AT_DEFAULT] = True
+    return metadata
 
 
 def _gen1_implied(read) -> dict[str, Any]:
-    return _reads(read, **{_OMITTED_AT_DEFAULT: True})
+    return _reads(read, omitted_at_default=True)
 
 
 def _default_of(spec: Field) -> Any:

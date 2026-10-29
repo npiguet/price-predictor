@@ -51,10 +51,6 @@ def test_round_trips_through_a_dict():
     assert CorpusManifest.from_dict(original.as_dict()) == original
 
 
-def test_digest_is_stable_across_instances():
-    assert manifest().digest() == manifest().digest()
-
-
 def test_digest_is_the_value_checkpoints_already_pinned():
     """The hash rule is fixed: a checkpoint records this exact string (FR-147)."""
     assert manifest().digest() == "49b74d299099eb1da3ac0000e5a278eb"
