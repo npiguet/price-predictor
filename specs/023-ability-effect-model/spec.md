@@ -561,7 +561,7 @@ loss.
 - **FR-081**: Loss MUST be normalized per record over entity count; the affected gate trains on every
   entity — players included, since the per-entity head is mapped over `[PLAYER]` outputs too — and
   a conditional field only where the gate's target fires **and** the field is present
-  (`EntityFieldTargets`, `effect_head_layout.py`). A field MUST be present on an entity where the
+  (`EntityFieldTargets`, `entity_field_targets.py`). A field MUST be present on an entity where the
   record writes it (an event, or a payload's legality mark), or where it has a silent value, the
   record's sampling class supervises it, and the entity is of the field's `FieldScope` (player or
   permanent); a field the record declares unknown MUST be absent whatever its silent value. Silent

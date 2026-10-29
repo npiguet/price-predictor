@@ -217,7 +217,8 @@ class TestWeightsKeyByAbilityText:
         preparer.rarity = None
         preparer.resolver = KeyResolver(sidecars, preparer.surface)
 
-        weights = preparer._weighted([*common_records, *rare_records])
+        shard = [*common_records, *rare_records]
+        weights = preparer._weighted(shard, preparer._texts(shard))
 
         assert weights[-1] > weights[0]
 

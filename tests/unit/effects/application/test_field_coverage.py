@@ -15,6 +15,7 @@ from effects.application.field_coverage import (
     KNOWN_CONSTANT_FIELDS,
     FieldCoverage,
     field_coverage,
+    report_lines,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
@@ -266,3 +267,35 @@ class TestTheRatchet:
     def test_a_coverage_row_reports_what_it_saw(self):
         row = FieldCoverage(path="p", populated=1, seen=4, varied=True)
         assert not row.constant
+
+
+class TestReportLines:
+    """The rows ``field-coverage`` prints, tagged by what the list says."""
+
+    def _coverage(self, *rows: FieldCoverage) -> dict[str, FieldCoverage]:
+        return {row.path: row for row in rows}
+
+    def test_constant_fields_are_tagged_known_or_new(self):
+        known = next(iter(sorted(KNOWN_CONSTANT_FIELDS)))
+        lines = report_lines(self._coverage(
+            FieldCoverage(path=known, populated=0, seen=3, varied=False),
+            FieldCoverage(path="record.x", populated=0, seen=3, varied=False),
+            FieldCoverage(path="record.y", populated=2, seen=3, varied=True),
+        ))
+        assert lines == [f"  [known ] {known}   (seen 3)", "  [NEW   ] record.x   (seen 3)"]
+
+    def test_all_fields_adds_the_varying_ones(self):
+        lines = report_lines(self._coverage(
+            FieldCoverage(path="record.y", populated=2, seen=3, varied=True),
+        ), all_fields=True)
+        assert lines == ["  [varies] record.y   (2/3)"]
+
+    def test_a_listed_field_that_varied_is_named_for_removal(self):
+        known = next(iter(sorted(KNOWN_CONSTANT_FIELDS)))
+        lines = report_lines(self._coverage(
+            FieldCoverage(path=known, populated=1, seen=3, varied=True),
+        ))
+        assert lines[-2:] == [
+            "listed as constant but carrying data — remove from the list:",
+            f"  {known}",
+        ]

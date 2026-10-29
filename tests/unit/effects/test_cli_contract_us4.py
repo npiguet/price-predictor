@@ -1,4 +1,4 @@
-﻿"""The stage-four CLI surface (T136).
+"""The stage-four CLI surface (T136).
 
 ``--surface script`` writes a vocabulary of its own, and every stage-four flag
 defaults to absent on the commands stage one already ships — a stage-one

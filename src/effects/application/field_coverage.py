@@ -133,6 +133,34 @@ def field_coverage(records: Iterable[EffectRecord]) -> dict[str, FieldCoverage]:
     }
 
 
+def report_lines(
+    coverage: dict[str, FieldCoverage], *, all_fields: bool = False,
+) -> list[str]:
+    """``field-coverage``'s rows, constant fields only unless ``all_fields``.
+
+    A constant field is tagged ``known`` when :data:`KNOWN_CONSTANT_FIELDS`
+    lists it and ``NEW`` otherwise: only the writer says whether a new one is
+    broken or merely rare. A listed field that varied is named for removal.
+    """
+    lines = []
+    for row in coverage.values():
+        if not row.constant:
+            if all_fields:
+                lines.append(f"  [varies] {row.path}   ({row.populated}/{row.seen})")
+        elif row.path in KNOWN_CONSTANT_FIELDS:
+            lines.append(f"  [known ] {row.path}   (seen {row.seen})")
+        else:
+            lines.append(f"  [NEW   ] {row.path}   (seen {row.seen})")
+    stale = sorted(
+        path for path in KNOWN_CONSTANT_FIELDS
+        if path in coverage and not coverage[path].constant
+    )
+    if stale:
+        lines += ["", "listed as constant but carrying data — remove from the list:"]
+        lines.extend(f"  {path}" for path in stale)
+    return lines
+
+
 class _Tally:
     """One path's running counts.
 

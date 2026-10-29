@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import logging
+import multiprocessing
 import os
 import pickle
 import queue
@@ -28,6 +29,7 @@ from effects.application.step_preparation import (
     StepPreparer,
     StepReady,
 )
+from effects.application.train_effect_model import load_shard
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +125,6 @@ def unpack(packed: PackedStep, *, pin: bool = False) -> StepReady:
 def _exit_with_parent() -> None:
     """Exit this worker when the training process does, even when it is
     killed outright and runs none of its shutdown."""
-    import multiprocessing
-
     parent = multiprocessing.parent_process()
     if parent is None:
         return
@@ -147,8 +147,6 @@ def work(index: int, settings: PreparerSettings, tasks, results) -> None:
     # Single-threaded Python; torch's own pool would only oversubscribe cores.
     torch.set_num_threads(1)
     try:
-        from effects.application.train_effect_model import load_shard
-
         preparer = StepPreparer(settings)
         while (task := tasks.get()) is not None:
             records = load_shard(task.shard)

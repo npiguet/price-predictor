@@ -34,7 +34,6 @@ from effects.domain.effect_head_layout import (
     PER_ENTITY_WIDTH,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
-    EntityFieldTargets,
     FieldGroup,
     FieldScope,
     FieldSpec,
@@ -52,6 +51,7 @@ from effects.domain.effect_losses import (
     verdict_loss,
 )
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.loss_floor import (
     EntityTargetBatch,
     PartsMean,

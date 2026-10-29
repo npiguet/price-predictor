@@ -99,7 +99,7 @@ def _terms(monkeypatch, preparer, loop, records, batcher, model, hidden, *, trai
     forward is stood in for by the token outputs it would read.
     """
     targets = preparer._head_targets(
-        records, batcher, batcher.prepared(), training=training,
+        records, batcher, batcher.prepared(),
         heads=(
             training_heads(preparer.config, api_types=preparer.api_types)
             if training else frozenset()
@@ -236,7 +236,8 @@ class TestEpochShares:
     """FR-055: the share of trained records per rarity bucket and family."""
 
     def test_every_record_gets_a_bucket_and_a_family(self, records, tmp_path):
-        labels = _fixture_preparer(tmp_path)._shard_labels(records)
+        preparer = _fixture_preparer(tmp_path)
+        labels = preparer._shard_labels(records, preparer._texts(records))
         assert set(labels) == {r.record_id for r in records}
         buckets = {bucket for bucket, _ in labels.values()}
         assert buckets <= {*RARITY_BUCKETS, NO_TEXT_BUCKET}
@@ -251,7 +252,8 @@ class TestEpochShares:
             and preparer.resolver.acting_text(r) is not None
         )
         preparer.rarity = {preparer.resolver.acting_text(record): 50}
-        assert preparer._shard_labels([record])[record.record_id][0] == "20+"
+        labels = preparer._shard_labels([record], preparer._texts([record]))
+        assert labels[record.record_id][0] == "20+"
 
     def test_shares_are_reported_in_bucket_order(self):
         line = format_shares(
@@ -269,9 +271,12 @@ class TestTheBatchersTheLoopBuilds:
         from effects.domain.effect_head_input import SlotKind
 
         loop = _loop(monkeypatch, e_noise=0.2, encoder_layers=1, encoder_d_model=8)
-        loop._build_run(8, dict.fromkeys(SlotKind, 4))
-        assert loop._training.noise is loop.noise and loop.noise.ratio == 0.2
-        assert loop._scoring.noise is None
+        run = loop._build_run(SimpleNamespace(
+            tokenizer=SimpleNamespace(vocab_size=8), widths=dict.fromkeys(SlotKind, 4),
+            api_types=[], param_keys=[],
+        ), frozenset())
+        assert run.training.noise is loop.noise and loop.noise.ratio == 0.2
+        assert run.scoring.noise is None
         preparer = make_preparer(tmp_path, keyword_expand_p=0.25)
         assert preparer.batcher(training=True).stager.keyword_expand_p == 0.25
         assert preparer.batcher(training=False).stager.keyword_expand_p == (
@@ -284,8 +289,7 @@ class TestTheBatchersTheLoopBuilds:
 
     def test_the_checkpoint_records_the_sweep_flags(self, monkeypatch):
         loop = _loop(monkeypatch, e_noise=0.05, value_weight=0.1)
-        loop.api_types, loop.param_keys = ["Draw"], ["NumCards"]
-        settings = loop._training_settings()
+        settings = loop._training_settings(["Draw"], ["NumCards"])
         assert settings["e_noise"] == 0.05 and settings["value_weight"] == 0.1
         assert settings["api_types"] == ["Draw"]
         # Every new run reads the gen-2 script rules and says so, so a loader
@@ -298,4 +302,4 @@ class TestTheBatchersTheLoopBuilds:
     def test_the_checkpoint_records_the_seed_the_run_drew(self, monkeypatch):
         """A run with no --seed is reproducible only through the one it drew."""
         loop = _loop(monkeypatch)
-        assert loop._training_settings()["seed"] == loop.seed
+        assert loop._training_settings((), ())["seed"] == loop.seed

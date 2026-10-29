@@ -22,6 +22,7 @@ import pytest
 from effects.application.validate_corpus import (
     FieldPresence,
     Finding,
+    Findings,
     Thresholds,
     read_window,
     validate_corpus,
@@ -291,6 +292,27 @@ class TestAHealthyWindowPasses:
             assert finding.ok, "a watched finding can never fail a run"
             assert finding.measured
             assert finding.lines()[0].startswith("[WATCH]")
+
+
+class TestTheSummary:
+    """The closing lines count judged invariants only: a watched one cannot fail."""
+
+    def test_a_clean_pass_says_every_judged_invariant_holds(self):
+        findings = Findings([
+            Finding(name="a", ok=True, measured="1"),
+            Finding(name="b", ok=True, measured="2", watched=True),
+        ])
+        assert findings.broken() == []
+        assert findings.summary() == [
+            "all 1 judged invariants hold (1 watched, not judged)",
+        ]
+
+    def test_a_breach_names_each_broken_invariant(self):
+        findings = Findings([
+            Finding(name="a", ok=False, measured="1"),
+            Finding(name="b", ok=True, measured="2"),
+        ])
+        assert findings.summary() == ["1 of 2 judged invariants broken:", "  a"]
 
 
 class TestRecordIdCollision:

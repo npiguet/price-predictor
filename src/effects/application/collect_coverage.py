@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from effects.application.parallel_map import run_parallel
+from effects.domain import default_paths
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
     CardCoverage,
@@ -66,10 +67,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_RECORDS_DIR = Path("output/effects/records/")
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
-    Path("output/cardsfolder/"), Path("output/tokenscripts/"),
+DEFAULT_RECORDS_DIR = Path(default_paths.DEFAULT_RECORDS_DIR)
+DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
+    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
 )
+#: Java worker processes, for both collectors.
+DEFAULT_WORKERS = 12
 DEFAULT_TARGET_RECORDS = 50
 DEFAULT_DECKS_PER_ROUND = 500
 DEFAULT_NO_PROGRESS_ROUNDS = 3
@@ -97,17 +100,32 @@ class CollectCoverageConfig:
     cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
     split_from: Path | None = None
     exclude_cards: Path | None = None
-    target_records: int = DEFAULT_TARGET_RECORDS
-    decks_per_round: int = DEFAULT_DECKS_PER_ROUND
-    no_progress_rounds: int = DEFAULT_NO_PROGRESS_ROUNDS
-    workers: int = 12
+    target_records: int = field(default=DEFAULT_TARGET_RECORDS, metadata={
+        "help": "Per-card satisfaction goal (default: %(default)s)",
+    })
+    decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
+        "help": "Decks played as matches per round (default: %(default)s)",
+    })
+    no_progress_rounds: int = field(default=DEFAULT_NO_PROGRESS_ROUNDS, metadata={
+        "help": (
+            "Consecutive rounds without a new qualifying record before a card "
+            "retires, which is what makes the run end (default: %(default)s)"
+        ),
+    })
+    workers: int = field(default=DEFAULT_WORKERS, metadata={
+        "help": "Parallel Java worker processes (default: %(default)s)",
+    })
     caps: CollectionCaps = field(default_factory=CollectionCaps)
     #: ``--only-cards``: the ``holdout-cards`` list. Set, the run is the
     #: held-out coverage round (FR-035): decks from these cards alone, and the
     #: unit is the held-out ability text rather than the card.
     only_cards: Path | None = None
-    #: Distinct games a held-out text must act in to be satisfied (FR-036).
-    min_text_games: int = DEFAULT_MIN_TEXT_GAMES
+    min_text_games: int = field(default=DEFAULT_MIN_TEXT_GAMES, metadata={
+        "help": (
+            "With --only-cards: distinct games a held-out text must act in to "
+            "be satisfied (FR-036; default: %(default)s)"
+        ),
+    })
 
     def converted_trees(self) -> ConvertedTrees:
         """The trees ``--cards-folder`` names.

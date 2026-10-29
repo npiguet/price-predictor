@@ -10,7 +10,8 @@ import numpy as np
 import torch
 
 from effects.domain.effect_head_input import SlotKind
-from effects.domain.effect_head_layout import EntityFieldTargets, FieldSpec, FieldType
+from effects.domain.effect_head_layout import FieldSpec, FieldType
+from effects.domain.entity_field_targets import EntityFieldTargets
 
 
 def gather_entities(outputs: torch.Tensor, index: torch.Tensor) -> torch.Tensor:

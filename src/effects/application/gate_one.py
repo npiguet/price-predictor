@@ -11,13 +11,17 @@ import math
 from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 import numpy as np
 import torch
 
-from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, EntityFieldTargets
+from effects.application.ability_text import KeyResolver
+from effects.application.evaluation_context import EvaluationContext
+from effects.domain.ability_encoder import surface_of
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX
 from effects.domain.effect_targets import derive_targets
+from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
@@ -41,15 +45,12 @@ from effects.domain.head_decoding import (
 )
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.surface_collation import entity_target_tensors, gather_entities
-from effects.infrastructure.model_runner import (
-    BATCH_RECORDS,
+from effects.infrastructure.corpus_store import (
+    CorpusStore,
     card_disjoint_resolutions,
     training_acting_keys,
 )
-
-if TYPE_CHECKING:
-    from effects.application.evaluation_context import EvaluationContext
-    from effects.infrastructure.model_runner import Runnable
+from effects.infrastructure.model_runner import BATCH_RECORDS, Runnable
 
 logger = logging.getLogger(__name__)
 
@@ -115,8 +116,6 @@ def unique_text_stratum(corpus_path, card_disjoint_games, texts: TextsOf) -> lis
     is not necessarily a training game (curation drops held-out games, and
     collection continues after a build).
     """
-    from effects.infrastructure.corpus_store import CorpusStore
-
     seen = training_texts(
         training_acting_keys(CorpusStore(corpus_path).training_dir), texts,
     )
@@ -223,9 +222,6 @@ def _cat(chunks: list[np.ndarray]) -> np.ndarray:
 
 def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
     """Score both models on the split's unique-text stratum and compare."""
-    from effects.application.ability_text import KeyResolver
-    from effects.domain.ability_encoder import surface_of
-
     games =context.main.provenance.card_disjoint_games
     if not games:
         return CheckResult(

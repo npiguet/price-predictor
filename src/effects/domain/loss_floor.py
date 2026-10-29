@@ -19,11 +19,11 @@ from effects.domain.effect_head_layout import (
     PER_ENTITY_WIDTH,
     SIGNED_DIRECTIONS,
     SIGNED_MAGNITUDE,
-    EntityFieldTargets,
     FieldSpec,
     FieldType,
 )
 from effects.domain.effect_losses import LossParts, capped, counted, per_entity_loss
+from effects.domain.entity_field_targets import EntityFieldTargets
 
 #: A guard on the division, not the detector: a field whose targets never vary
 #: is given a floor of exactly zero by :func:`constant_predictor_floor`, and

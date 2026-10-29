@@ -8,10 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from effects.application.evaluation_context import (
-    DEFAULT_WIN_RATES,
-    EvaluateEffectModelConfig,
-)
+from effects.application.evaluation_context import EvaluateEffectModelConfig
 from effects.domain.evaluation_report import EvaluationReport
 from effects.infrastructure.cli import build_parser
 
@@ -37,10 +34,8 @@ def test_the_flag_names_the_table_the_battery_reads(monkeypatch, tmp_path):
 
 def test_the_default_is_the_sealed_pipeline_s_table(monkeypatch):
     config = _config_from([], monkeypatch)
-    assert config.win_rates == DEFAULT_WIN_RATES == Path(
-        "output/sealed/cards-win-rates.txt",
-    )
-    assert EvaluateEffectModelConfig().win_rates == DEFAULT_WIN_RATES
+    assert config.win_rates == Path("output/sealed/cards-win-rates.txt")
+    assert EvaluateEffectModelConfig().win_rates == config.win_rates
 
 
 

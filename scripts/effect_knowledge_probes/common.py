@@ -25,7 +25,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from effects.infrastructure import default_paths
+from effects.domain import default_paths
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CARDS_FOLDERS = tuple(ROOT / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)

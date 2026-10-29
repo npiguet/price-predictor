@@ -1,4 +1,4 @@
-﻿"""The instrumentation opt-in on ``sealed match-outcomes`` (T044).
+"""The instrumentation opt-in on ``sealed match-outcomes`` (T044).
 
 ``--effect-records`` has **no default** here, unlike on the effects-owned
 collectors where collection is the whole point. That asymmetry is the contract
@@ -14,15 +14,17 @@ from __future__ import annotations
 import pytest
 
 from sealed.infrastructure.cli import (
+    build_parser,
+    check_random_seat_flags,
+    run_match_outcomes,
+)
+from sealed.infrastructure.effect_collection_flags import (
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
     EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBE_KEYWORDS,
     EFFECT_PROBES_PER_GAME,
     announce_probe_state,
-    build_parser,
-    check_random_seat_flags,
-    run_match_outcomes,
 )
 
 

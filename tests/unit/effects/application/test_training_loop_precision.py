@@ -19,8 +19,8 @@ from effects.application import training_loop as loop_module
 from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import StepLoss, TrainingLoop, autocast_enabled
-from effects.domain.effect_head_layout import EntityFieldTargets
 from effects.domain.effect_losses import LossParts
+from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.builders import make_training_loop
@@ -115,7 +115,7 @@ def _run_device_loss(monkeypatch, loop, *, autocast: bool):
 
     # The host half, as training hands it over: it holds no device work, so
     # whether autocast encloses it is not the question.
-    prepared = loop_module.PreparedStep(
+    prepared = loop_module.DeviceStep(
         batch=None, fields=("dummy",),
         gate=torch.zeros((1, 1)), field_targets=EntityFieldTargets({}, {}),
         mask=torch.zeros((1, 1)),
@@ -196,7 +196,9 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
     )
     # The step's host half would pin its tensors on this fake device; the plan
     # stands in for what it would have prepared.
-    monkeypatch.setattr(StepPreparer, "prepare_step", lambda self, plan, *a, **k: plan)
+    monkeypatch.setattr(
+        StepPreparer, "prepare_training_step", lambda self, plan, *a, **k: (plan, 0),
+    )
     monkeypatch.setattr(
         TrainingLoop, "_validate", lambda self, records, *a, **k: 1.0,
     )

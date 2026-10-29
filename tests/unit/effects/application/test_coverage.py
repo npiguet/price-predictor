@@ -1174,13 +1174,13 @@ class TestOnlyCardsRefusals:
         ("--split-from", "models/x/latest.pt"),
     ])
     def test_only_cards_beside_another_holdout_source_is_refused(self, extra):
-        from effects.infrastructure.cli import build_parser, coverage_config_from
+        from effects.infrastructure.cli import build_parser, collector_config
 
         args = build_parser().parse_args(
             ["collect-coverage", "--only-cards", "holdout.txt", *extra],
         )
         with pytest.raises(ValueError, match="--only-cards"):
-            coverage_config_from(args)
+            collector_config(CollectCoverageConfig, args)
 
     def test_only_cards_beside_a_training_corpus_is_refused(self, tmp_path):
         from effects.infrastructure.cli import build_parser, run_collect_coverage
@@ -1197,9 +1197,9 @@ class TestOnlyCardsRefusals:
         collect.assert_not_called()
 
     def test_alone_it_selects_the_text_unit(self):
-        from effects.infrastructure.cli import build_parser, coverage_config_from
+        from effects.infrastructure.cli import build_parser, collector_config
 
-        config = coverage_config_from(build_parser().parse_args(
+        config = collector_config(CollectCoverageConfig, build_parser().parse_args(
             ["collect-coverage", "--only-cards", "holdout.txt", "--min-text-games", "7"],
         ))
         assert config.only_cards == Path("holdout.txt")

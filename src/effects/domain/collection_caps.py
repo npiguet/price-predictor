@@ -1,8 +1,4 @@
-"""The caps a collecting run applies, and how they reach the worker.
-
-Kept here rather than in the CLI so the three collecting commands cannot drift
-into passing different names for the same knob.
-"""
+"""The caps a collecting run applies, and how they reach the worker."""
 
 from __future__ import annotations
 
@@ -41,21 +37,6 @@ class CollectionCaps:
     random_seat_share: float = DEFAULT_RANDOM_SEAT_SHARE
     #: ``P``: the chance the random seat draws uniformly from the legal options.
     random_seat_probability: float = DEFAULT_RANDOM_SEAT_PROBABILITY
-
-    @classmethod
-    def from_args(cls, args) -> CollectionCaps:
-        """Read the flags `_add_cap_flags` installed, falling back per field
-        for a namespace without them. ``field.default``, because ``slots=True``
-        leaves no class attribute."""
-        # None is an unset flag: --random-seat-probability defaults to None so
-        # a share above 0 without it can be refused.
-        return cls(**{
-            spec.name: (
-                spec.default if getattr(args, spec.name, None) is None
-                else getattr(args, spec.name)
-            )
-            for spec in fields(cls)
-        })
 
     def as_system_properties(self) -> dict[str, str]:
         """The `-D effect.*` properties the worker reads them back from."""

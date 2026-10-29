@@ -158,8 +158,8 @@ class TestMarginAccumulator:
             GATE_INDEX,
             PER_ENTITY_WIDTH,
             ZONE_OUTCOMES,
-            EntityFieldTargets,
         )
+        from effects.domain.entity_field_targets import EntityFieldTargets
 
         gathered = torch.zeros(1, 2, PER_ENTITY_WIDTH)
         gathered[0, 0, GATE_INDEX] = 3.0   # predicted affected

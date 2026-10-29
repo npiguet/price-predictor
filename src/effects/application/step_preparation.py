@@ -3,9 +3,9 @@
 A step splits into a host half — the plan, tokenizing, the surfaces, every
 target, the MLM mask, all CPU tensors — and a device half: the encoder, the
 noise on ``e``, the model, the losses, backward. This module owns the host half
-and nothing that reads the weights, so the same code runs on a thread of the
-training process (``--prefetch-workers 0``) or in a worker process of its own,
-and the training process does only the device half.
+and nothing that reads the weights, so the same code runs in the training
+process (``--prefetch-workers 0``) or in a worker process of its own, which
+leaves the training process only the device half.
 
 Its randomness is explicit for the same reason. Every draw the host half
 takes — the shard's weighted shuffle, keyword expansion, context dropout, the
@@ -20,7 +20,6 @@ from __future__ import annotations
 import random
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -43,18 +42,14 @@ from effects.domain.aux_heads import TRAINING_HEADS, Head
 from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_input import SlotKind
-from effects.domain.effect_head_layout import (
-    CREATED_OBJECTS_WIDTH,
-    VERDICT_WIDTH,
-    EntityFieldTargets,
-    FieldSpec,
-)
+from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH, FieldSpec
 from effects.domain.effect_targets import (
     created_objects_targets,
     derive_targets,
     supervises_created_objects,
     verdict_targets,
 )
+from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.rarity import rarity_bucket
 from effects.domain.records import EffectRecord
@@ -121,14 +116,19 @@ class HeadTargets(dict[Head, object]):
 
 
 @dataclass
-class PreparedStep:
-    """One step's host half: what the device half needs besides the model.
+class DeviceStep:
+    """One step as its device half reads it: tensors, and the rows ``e`` fills.
 
     Everything here is a function of the planned records, the sidecars, the
     tokenizer and the step's generator, and nothing of the weights, which is
-    what lets it be built ahead of time, on another thread or in another
-    process. ``e`` is not among it: the encoder runs in the device half, so
-    the effect loss still reaches it.
+    what lets it be built ahead of time and in another process. ``e`` is not
+    among it: the encoder runs in the device half, so the effect loss still
+    reaches it.
+
+    ``batch`` keeps only what ``Materializer.materialize`` reads. The host
+    intermediates the targets were built from — each text's sidecar line, the
+    tokenized lines, the surfaces — are left behind, as the bulk of what a
+    worker would otherwise pickle every step.
     """
 
     batch: PreparedBatch
@@ -139,20 +139,6 @@ class PreparedStep:
     mask: torch.Tensor
     index: torch.Tensor
     heads: HeadTargets
-    #: Counterfactual copies the step appended to its planned records (FR-063e).
-    counterfactuals: int = 0
-
-    def slim(self) -> PreparedStep:
-        """Only what the device half reads: tensors and the rows' texts.
-
-        Drops each text's sidecar line, the tokenized lines and the surfaces —
-        host-side intermediates the targets were built from, and the bulk of
-        what a worker would otherwise pickle every step.
-        """
-        self.batch.texts = {}
-        self.batch.prepared = []
-        self.batch.surfaces = []
-        return self
 
     def pin(self) -> None:
         """Every tensor the device half copies, in page-locked memory."""
@@ -162,7 +148,6 @@ class PreparedStep:
         )
         self.index = self.index.pin_memory()
         self.heads.pin()
-
 
 
 @dataclass(frozen=True)
@@ -197,7 +182,7 @@ class ShardOpened:
 class StepReady:
     """One prepared step, with the epoch-line shares of the records it planned."""
 
-    prepared: PreparedStep | None
+    prepared: DeviceStep
     #: Trained records by rarity bucket and by rule family (FR-055).
     buckets: dict[str, int]
     families: dict[str, int]
@@ -234,24 +219,6 @@ def value_batch(
         torch.tensor([row.values for row in rows]),
         torch.tensor([row.mask for row in rows]),
     )
-
-
-def one_ahead(iterator: Iterator, pool: ThreadPoolExecutor) -> Iterator:
-    """``iterator``, each item computed on ``pool`` while the last is used.
-
-    The in-process path's prefetch: the next step's host half runs on the
-    pool's thread while the caller runs this one's device half, whose torch
-    calls release the interpreter lock. An exception the iterator raises is
-    re-raised here, at the item it belongs to.
-    """
-    end = object()
-    pending = pool.submit(next, iterator, end)
-    while True:
-        item = pending.result()
-        if item is end:
-            return
-        pending = pool.submit(next, iterator, end)
-        yield item
 
 
 @dataclass(frozen=True)
@@ -384,52 +351,58 @@ class StepPreparer:
 
     # ── one step ────────────────────────────────────────────────────────
 
-    def prepare_step(
-        self, plan, *, fields: tuple[FieldSpec, ...],
-        training: bool = True, heads: frozenset[Head] = frozenset(),
-        pin: bool = False, rng: random.Random | None = None,
-        slim: bool = False,
-    ) -> PreparedStep | None:
-        """One step's host half, or ``None`` when the plan holds no records.
+    def prepare_training_step(
+        self, plan, *, fields: tuple[FieldSpec, ...], rng: random.Random,
+        pin: bool = False,
+    ) -> tuple[DeviceStep, int]:
+        """One training step's host half, and how many counterfactual copies
+        it appended to the planned records (FR-063e).
 
         Pure CPU: no model, no device, nothing that reads the weights. Every
-        draw it takes comes from ``rng`` — the keyword expansion, the context
-        dropout and the MLM mask, in that order.
-
-        ``fields`` is the epoch's field set. ``heads`` names the training-only
-        heads to build targets for. ``pin`` moves the tensors the device half
-        copies into page-locked memory, which is what lets those copies run
-        without holding the host; only the training process can, since
-        page-locked memory does not survive a trip between processes. ``slim``
-        keeps only what the device half reads (``PreparedStep.slim``).
+        draw it takes comes from ``rng`` — the counterfactual copies, the
+        keyword expansion, the context dropout and the MLM mask, in that order.
+        ``fields`` is the epoch's field set. ``pin`` moves the tensors the
+        device half copies into page-locked memory, which is what lets those
+        copies run without holding the host; only the training process can,
+        since page-locked memory does not survive a trip between processes.
         """
+        batcher = self.batcher(training=True, rng=rng)
         records = plan.records
-        if not records:
-            return None
-        batcher = self.batcher(training=training, rng=rng)
         targets = [derive_targets(record) for record in records]
         copies = []
-        if training and self.config.lethality_copies > 0:
+        if self.config.lethality_copies > 0:
             copies = self._counterfactuals(records, targets, batcher)
             records = [*records, *(copy.record for copy in copies)]
             targets = [*targets, *(copy.targets for copy in copies)]
+        step = self._build(records, targets, fields, batcher, heads=self.heads)
+        if pin:
+            step.pin()
+        return step, len(copies)
+
+    def prepare_scoring_step(self, plan, fields: tuple[FieldSpec, ...]) -> DeviceStep:
+        """One validation batch's host half: no augmentation, no copies, and
+        only the shipped heads' targets."""
+        records = plan.records
+        return self._build(
+            records, [derive_targets(record) for record in records], fields,
+            self.batcher(training=False), heads=frozenset(),
+        )
+
+    def _build(
+        self, records, targets, fields: tuple[FieldSpec, ...],
+        batcher: SurfaceBatcher, *, heads: frozenset[Head],
+    ) -> DeviceStep:
+        """The surfaces, the per-entity targets and ``heads``' targets."""
         batch = batcher.prepare(records)
         gate, field_targets, mask, index = entity_target_tensors(
             batch.surfaces, targets, fields,
         )
-        head_targets = self._head_targets(
-            records, batcher, batch, training=training, heads=heads,
+        return DeviceStep(
+            batch=replace(batch, texts={}, prepared=[], surfaces=[]),
+            fields=fields, gate=gate, field_targets=field_targets, mask=mask,
+            index=index,
+            heads=self._head_targets(records, batcher, batch, heads=heads),
         )
-        prepared = PreparedStep(
-            batch=batch, fields=fields, gate=gate,
-            field_targets=field_targets, mask=mask, index=index,
-            heads=head_targets, counterfactuals=len(copies),
-        )
-        if slim:
-            prepared.slim()
-        if pin:
-            prepared.pin()
-        return prepared
 
     def _counterfactuals(self, records, targets, batcher) -> list:
         """``--lethality-copies`` copies of each step record that qualifies (FR-063e).
@@ -461,19 +434,19 @@ class StepPreparer:
         return copies
 
     def _head_targets(
-        self, records, batcher, batch: PreparedBatch, *, training: bool,
-        heads: frozenset[Head],
+        self, records, batcher, batch: PreparedBatch, *, heads: frozenset[Head],
     ) -> HeadTargets:
         """The targets the device half scores, built on the host.
 
         The verdict head reads ``[ACT]`` — a decision's verdict bits, a cost
         half's mana paid, a trigger's fired bit — and the created-objects head
         reads ``[GLOBAL]`` on effect halves and in-place rewrites (FR-060a).
-        In training only, the value and script-API heads read the batch's
-        encoded ``e`` rows, one per unique text, and the MLM head a masked
-        second pass over the same texts (FR-058, FR-060b); ``heads`` names the
-        ones whose weight is not zero, and no other is prepared. The MLM mask
-        is the step's last draw from the batcher's generator.
+        The training-only heads ``heads`` names — a training step's whose
+        weight is not zero, a scoring step's none — come after: the value and
+        script-API heads read the batch's encoded ``e`` rows, one per unique
+        text, and the MLM head a masked second pass over the same texts
+        (FR-058, FR-060b). The MLM mask is the step's last draw from the
+        batcher's generator.
         """
         targets = HeadTargets()
         verdicts = [verdict_targets(record) for record in records]
@@ -498,7 +471,7 @@ class StepPreparer:
             )
         # No text, no matrix: the device half then has nothing to score
         # these heads on.
-        if not training or not batch.rows:
+        if not heads or not batch.rows:
             return targets
         texts = sorted(batch.rows, key=batch.rows.__getitem__)
         if Head.VALUE in heads:
@@ -556,18 +529,16 @@ class StepPreparer:
         }
 
     def _weighted(
-        self, records: list, texts: Mapping[str, str | None] | None = None,
+        self, records: list, texts: Mapping[str, str | None],
     ) -> list[float]:
         """Rarity weights for a shard's records, from the manifest's table (FR-086)."""
-        if texts is None:
-            texts = self._texts(records)
         return sample_weights(
             records, lambda record: texts[record.record_id],
             rarity=self.rarity, class_of=sampling_class,
         )
 
     def _shard_labels(
-        self, records: list, texts: Mapping[str, str | None] | None = None,
+        self, records: list, texts: Mapping[str, str | None],
     ) -> dict[str, tuple[str, str]]:
         """``record_id -> (rarity bucket, rule family)`` for one shard's records.
 
@@ -576,8 +547,6 @@ class StepPreparer:
         names the text and the shard's own game count where it does not, the
         same fallback the weights use.
         """
-        if texts is None:
-            texts = self._texts(records)
         own_games = effective_games(records, lambda r: texts[r.record_id])
         labels: dict[str, tuple[str, str]] = {}
         for record in records:
@@ -634,15 +603,13 @@ class StepPreparer:
                 bucket, family = labels[record.record_id]
                 buckets[bucket] += 1
                 families[family] += 1
-            prepared = self.prepare_step(
-                plan, fields=task.fields, training=True, heads=self.heads,
-                pin=pin, slim=True,
+            step, copies = self.prepare_training_step(
+                plan, fields=task.fields, pin=pin,
                 rng=step_rng(self.seed, task.epoch, task.position, index),
             )
-            copies = getattr(prepared, "counterfactuals", 0)
             if copies:
                 families[COUNTERFACTUAL_FAMILY] += copies
-            yield StepReady(prepared, dict(buckets), dict(families))
+            yield StepReady(step, dict(buckets), dict(families))
 
     def steps(self, task: ShardTask, records: list) -> Iterator:
         """``shard_steps``, then a ``ShardClosed``: a worker's whole shard."""

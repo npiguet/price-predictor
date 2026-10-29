@@ -1,4 +1,4 @@
-﻿"""The collecting supervisors' flags and their shared caps (T101).
+"""The collecting supervisors' flags and their shared caps (T101).
 
 ``--effect-records`` has a default on the effects-owned collectors and **no**
 default on ``sealed match-outcomes``. That asymmetry is the contract: on this
@@ -32,9 +32,10 @@ def parse(*argv: str):
 
 class TestEffectRecordsDefaultAsymmetry:
     def test_collect_coverage_defaults_to_the_records_directory(self):
-        from effects.infrastructure.cli import coverage_config_from
+        from effects.application.collect_coverage import CollectCoverageConfig
+        from effects.infrastructure.cli import collector_config
 
-        config = coverage_config_from(parse("collect-coverage"))
+        config = collector_config(CollectCoverageConfig, parse("collect-coverage"))
         assert config.effect_records == Path("output/effects/records/")
 
     def test_match_outcomes_has_no_default(self):
@@ -96,13 +97,6 @@ class TestSharedCapFlags:
         assert parse("collect-coverage").probe_keywords
         assert parse("collect-coverage", "--probe-keywords", "").probe_keywords == ""
 
-    def test_the_same_flags_appear_on_match_outcomes(self):
-        """One cap table, shared by every collecting supervisor."""
-        theirs = sealed_parser().parse_args(["match-outcomes"])
-        ours = parse("collect-coverage")
-        for flag in CAP_DEFAULTS:
-            assert getattr(theirs, flag) == getattr(ours, flag), flag
-
     def test_continuous_records_take_no_cap(self):
         """Coalescing per stable board is itself the cap (FR-029)."""
         args = parse("collect-coverage")
@@ -142,21 +136,21 @@ class TestTheRandomSeatOnTheCollectors:
 
     @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
     def test_the_flags_reach_the_worker_properties(self, command):
-        from effects.domain.collection_caps import CollectionCaps
+        from effects.infrastructure.cli import collection_caps
 
         args = parse(
             command, "--random-seat-share", "0.5",
             "--random-seat-probability", "0.25",
         )
-        properties = CollectionCaps.from_args(args).as_system_properties()
+        properties = collection_caps(args).as_system_properties()
         assert properties["effect.random.seat.share"] == "0.5"
         assert properties["effect.random.seat.probability"] == "0.25"
 
     @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
     def test_unset_flags_leave_the_seat_off(self, command):
-        from effects.domain.collection_caps import CollectionCaps
+        from effects.infrastructure.cli import collection_caps
 
-        caps = CollectionCaps.from_args(parse(command))
+        caps = collection_caps(parse(command))
         assert caps.random_seat_share == 0.0
         assert caps.random_seat_probability == 0.0
 
@@ -253,9 +247,10 @@ class TestTheHeldOutCoverageRound:
         assert args.min_text_games == 5
 
     def test_only_cards_beside_exclude_cards_is_refused(self):
-        from effects.infrastructure.cli import coverage_config_from
+        from effects.application.collect_coverage import CollectCoverageConfig
+        from effects.infrastructure.cli import collector_config
 
         with pytest.raises(ValueError, match="--exclude-cards"):
-            coverage_config_from(parse(
+            collector_config(CollectCoverageConfig, parse(
                 "collect-coverage", "--only-cards", "h.txt", "--exclude-cards", "h.txt",
             ))

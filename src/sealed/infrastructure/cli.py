@@ -15,6 +15,18 @@ from sealed.infrastructure.cli_resume import (
     dataclass_default,
     resolve_resumable_args,
 )
+from sealed.infrastructure.effect_collection_flags import (
+    EFFECT_INTERVENTIONS_PER_GAME,
+    EFFECT_MANA_CAP,
+    EFFECT_PLAYABILITY_RATE,
+    EFFECT_PROBE_KEYWORDS,
+    EFFECT_PROBES_PER_GAME,
+    EFFECT_RANDOM_SEAT_PROBABILITY,
+    EFFECT_RANDOM_SEAT_SHARE,
+    add_cap_flags,
+    announce_probe_state,
+    random_seat_error,
+)
 from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT
 
 
@@ -981,25 +993,6 @@ def _build_match_outcomes_parser(subparsers) -> None:
 # and match-outcomes.txt and cards-played.txt keep their exact format and
 # content.
 
-#: Cap and budget defaults, shared with the effects-owned collectors (FR-028).
-#:
-#: Restated rather than imported: `sealed` never imports from `effects`, and
-#: the import-direction test enforces that. Two copies of a default is two
-#: corpora that mean different things, so a test in the effects suite — which
-#: may import both — asserts these agree with `CollectionCaps`.
-EFFECT_MANA_CAP = 1
-EFFECT_PLAYABILITY_RATE = 0.1
-EFFECT_INTERVENTIONS_PER_GAME = 2
-EFFECT_PROBES_PER_GAME = 2
-#: Every damage-step keyword gate 2 checks, in the spelling the JVM compares a
-#: normalized Forge keyword against.
-EFFECT_PROBE_KEYWORDS = (
-    "first_strike,double_strike,deathtouch,lifelink,trample,indestructible,"
-    "wither,infect"
-)
-EFFECT_RANDOM_SEAT_SHARE = 0.0
-EFFECT_RANDOM_SEAT_PROBABILITY = 0.0
-
 
 def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
     """The cap flags as the ``-D`` properties the worker reads them from.
@@ -1045,133 +1038,25 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
             " this command behaves exactly as it does today."
         ),
     )
-    parser.add_argument(
-        "--mana-cap",
-        type=int,
-        default=EFFECT_MANA_CAP,
-        help=(
-            "Records per unique mana ability, per game (default:"
-            f" {EFFECT_MANA_CAP}). A Mountain taps a dozen times a game for the"
-            " same R, and the repeats observe a board that barely moved. Keyed"
-            " on the mana produced too, so a dual land's two colours both"
-            " record."
-        ),
-    )
-    parser.add_argument(
-        "--playability-rate",
-        type=float,
-        default=EFFECT_PLAYABILITY_RATE,
-        help=(
-            "Fraction of decision-subkind playability logging points sampled."
-            " attackers and blockers records are not sampled: every real"
-            " declaration is written, and a repeat on an unchanged board is"
-            " coalesced."
-            f" Default: {EFFECT_PLAYABILITY_RATE}."
-        ),
-    )
-    parser.add_argument(
-        "--interventions-per-game",
-        type=int,
-        default=EFFECT_INTERVENTIONS_PER_GAME,
-        help=(
-            "Interventional resolutions per game (stage three). Default:"
-            f" {EFFECT_INTERVENTIONS_PER_GAME}."
-        ),
-    )
-    parser.add_argument(
-        "--probes-per-game",
-        type=int,
-        default=EFFECT_PROBES_PER_GAME,
-        help=(
-            "Damage-step probe forks per game. Default:"
-            f" {EFFECT_PROBES_PER_GAME}. A budget, not a switch: it is spent"
-            " only on keywords --probe-keywords names."
-        ),
-    )
-    parser.add_argument(
-        "--probe-keywords",
-        default=EFFECT_PROBE_KEYWORDS,
-        help=(
-            "Comma-separated damage-step keywords to probe (default: all"
-            f" eight, {EFFECT_PROBE_KEYWORDS}). Name a subset to narrow the"
-            " probes; an empty string takes no fork whatever"
-            " --probes-per-game says."
-        ),
-    )
-    parser.add_argument(
-        "--random-seat-share",
-        type=float,
-        default=EFFECT_RANDOM_SEAT_SHARE,
-        help=(
-            "Share of matches in which one seat, chosen at random per match, is"
-            " a random seat: with probability --random-seat-probability it"
-            " plays, targets, attacks and blocks uniformly at random among the"
-            " legal options instead of as the Forge AI. A random-seat match"
-            " writes effect records only, never a match-outcome or cards-played"
-            f" row. Needs --effect-records. Default: {EFFECT_RANDOM_SEAT_SHARE}."
-        ),
-    )
-    parser.add_argument(
-        "--random-seat-probability",
-        type=float,
-        default=None,
-        help=(
-            "P, the chance the random seat draws at random at a decision point."
-            " Required when --random-seat-share is above 0; no default."
-        ),
-    )
+    add_cap_flags(parser)
 
 
 def check_random_seat_flags(args: argparse.Namespace) -> str | None:
     """Why the random-seat flags cannot run, or None when they can (FR-026).
 
-    Checked before any game: a random-seat match writes effect records only, so
-    one with nowhere to write them plays for nothing, and a share with no ``P``
-    is a seat whose behaviour nobody chose.
+    Beyond the collectors' shared rules: a random-seat match writes effect
+    records only, so one with nowhere to write them plays for nothing.
     """
+    error = random_seat_error(args)
+    if error is not None:
+        return error
     share = getattr(args, "random_seat_share", EFFECT_RANDOM_SEAT_SHARE)
-    probability = getattr(args, "random_seat_probability", None)
-    if not 0.0 <= share <= 1.0:
-        return f"--random-seat-share must be between 0 and 1, got {share}"
-    if probability is not None and not 0.0 <= probability <= 1.0:
-        return (
-            f"--random-seat-probability must be between 0 and 1, got {probability}"
-        )
-    if share > 0 and probability is None:
-        return "--random-seat-share above 0 needs --random-seat-probability"
     if share > 0 and not getattr(args, "effect_records", None):
         return (
             "--random-seat-share above 0 needs --effect-records: a random-seat"
             " match writes effect records only"
         )
     return None
-
-
-def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
-    """The startup line a collecting run prints about its probe budget.
-
-    ``--probes-per-game`` reads like the switch and is not: the budget is spent
-    only on keywords ``--probe-keywords`` names. A run that empties that list
-    produces a corpus with zero probe forks in it — the smoke corpus was
-    exactly that, 55,296 records and no probe evidence at all — and nothing
-    said so until gate 2 had nothing to check its model-side perturbation
-    against. So the state is announced at startup rather than left to a flag
-    table an operator reads once.
-
-    Restated here rather than imported from ``effects``, like the cap defaults
-    above and for the same reason: this package never imports that one.
-    """
-    named = [word.strip() for word in probe_keywords.split(",") if word.strip()]
-    if not named:
-        return (
-            "Damage-step probes DISABLED: --probe-keywords is empty, so the"
-            f" --probes-per-game {probes_per_game} budget buys no fork at all."
-            " Pass --probe-keywords <keyword>[,<keyword>...] to take any."
-        )
-    return (
-        f"Damage-step probes: up to {probes_per_game} per game on"
-        f" {', '.join(named)}"
-    )
 
 
 _ENCODE_CARDS_DEFAULT_ENCODER = "models/sealed/encoder/latest.pt"
@@ -1871,9 +1756,9 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         )
         return 2
 
-    random_seat_error = check_random_seat_flags(args)
-    if random_seat_error is not None:
-        print(f"Error: {random_seat_error}", file=sys.stderr)
+    seat_error = check_random_seat_flags(args)
+    if seat_error is not None:
+        print(f"Error: {seat_error}", file=sys.stderr)
         return 2
 
     output_path = Path("output") / "sealed" / "match-outcomes.txt"

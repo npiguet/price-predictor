@@ -10,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,6 +28,7 @@ from effects.application.corpus_survey import (
     run_survey,
 )
 from effects.application.corpus_write import WriteConfig, WritePlan, WriteResult, run_write_pass
+from effects.domain import default_paths
 from effects.domain.corpus_plan import (
     BuildCorpusError,
     GameRouting,
@@ -67,39 +68,71 @@ DEFAULT_GAME_DISJOINT_KEYWORDS: tuple[str, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class BuildCorpusConfig:
-    """The `build-corpus` flags (root spec § Curated corpus)."""
+    """The `build-corpus` flags (root spec § Curated corpus).
+
+    ``help`` metadata is the flag's help, so a default lives here alone.
+    """
 
     records_dir: Path
-    output: Path = Path("output/effects/corpus")
-    cards_folders: tuple[Path, ...] = (Path("output/cardsfolder"), Path("output/tokenscripts"))
-    vocab_path: str = "models/effects/vocab.txt"
+    output: Path = Path(default_paths.DEFAULT_CORPUS_OUTPUT)
+    cards_folders: tuple[Path, ...] = tuple(
+        Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
+    )
+    vocab_path: str = default_paths.DEFAULT_VOCAB_PATH
     variant_scripts: str | None = None
     holdout_permille: int = HOLDOUT_PERMILLE
     holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
     #: ``template`` (gen-2) or ``text`` (feature 023's rule, FR-041).
     holdout_unit: str = "template"
-    #: Most written records per ability text **per cell**, repeats included.
-    text_cap: int = 200
-    #: Most copies of one record toward a short family's share (FR-049).
-    reuse_cap: int = 4
+    text_cap: int = field(default=200, metadata={"help": (
+        "Max written training records per ability text per selection cell, "
+        "repeats included; 0 means no cap (default: %(default)s)"
+    )})
+    reuse_cap: int = field(default=4, metadata={"help": (
+        "Max copies of one record toward a short rule family's share (FR-049); "
+        "1 means no repeats (default: %(default)s)"
+    )})
     class_mix: dict[str, float] | None = None
-    training_records: int = 0
-    #: The per-game hash threshold of the game-disjoint stratum (FR-044).
-    game_disjoint_share: float = 0.01
-    #: The threshold for a game holding a qualifying combat for one of
-    #: ``game_disjoint_keywords`` (FR-045).
-    game_disjoint_keyword_share: float = 0.15
+    training_records: int = field(default=0, metadata={"help": (
+        "Total training records after capping, subsampled per class; 0 means "
+        "no ceiling (default: %(default)s)"
+    )})
+    game_disjoint_share: float = field(default=0.01, metadata={"help": (
+        "A game naming no held-out card enters the game-disjoint stratum when "
+        "crc32(game_id) mod 1e6 / 1e6 is below this, so a rebuild over a grown "
+        "corpus keeps every game it placed (default: %(default)s)"
+    )})
+    game_disjoint_keyword_share: float = field(default=0.15, metadata={"help": (
+        "The threshold instead for a game holding a qualifying combat for one "
+        "of --game-disjoint-keywords (default: %(default)s)"
+    )})
     game_disjoint_keywords: tuple[str, ...] = DEFAULT_GAME_DISJOINT_KEYWORDS
     #: Read by FR-015's check; None or a missing file skips it, since nothing
     #: can expand without a table.
-    keyword_definitions: Path | None = Path("output/effects/keyword-definitions.json")
-    card_disjoint_text_cap: int = 50
-    shard_records: int = 2000
+    keyword_definitions: Path | None = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
+    card_disjoint_text_cap: int = field(default=50, metadata={"help": (
+        "Max card-disjoint games admitted per held-out ability text, so each "
+        "weighs comparably in gate 1; 0 means no cap (default: %(default)s)"
+    )})
+    shard_records: int = field(default=2000, metadata={"help": (
+        "Records per output shard: whole games are dealt to shards by a seeded "
+        "hash of their game id; 0 keeps one output shard per source shard "
+        "(default: %(default)s)"
+    )})
     max_events: int = MAX_EVENTS_PER_RECORD
-    validation_sample: int = 2048
-    seed: int = 42
-    workers: int | None = None
-    verify: bool = False
+    validation_sample: int = field(default=2048, metadata={"help": (
+        "Records per stratum in validation/samples/, mixture-matched; 0 writes "
+        "no sample (default: %(default)s)"
+    )})
+    seed: int = field(default=42, metadata={"help": (
+        "Seeds the selection and the repacking (default: %(default)s)"
+    )})
+    workers: int | None = field(default=None, metadata={"help": (
+        "Parallel shard readers; unset uses the CPU count"
+    )})
+    verify: bool = field(default=False, metadata={"help": (
+        "Report drift against an existing manifest and write nothing"
+    )})
 
     def __post_init__(self) -> None:
         """Refuse a negative count; zero is a real setting for each.

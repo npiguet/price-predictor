@@ -115,75 +115,94 @@ class Thresholds:
     rather than moved — so pinning a floor before the collector settles would
     make the report a wolf-crier. Passing a floor turns the measurement into a
     verdict without changing what is measured.
+
+    Each field is a ``validate-corpus`` flag, its ``help`` metadata the flag's
+    help.
     """
 
-    #: Share of records that must resolve their acting line to a printed key.
-    min_keyed_rate: float = 0.95
-    #: Share of records that may be byte-identical to an earlier record of the
-    #: same kind in the same game.
-    max_duplicate_rate: float = 0.02
-    #: Share of link ids that may lack exactly one activation and one
-    #: resolution half. A worker killed mid-game truncates its last block, so a
-    #: few unpaired halves at the tail of a window are expected.
-    max_unpaired_link_rate: float = 0.02
-    #: Distinct entity names one game may show. Two forty-card sealed decks
-    #: plus tokens sit far below this; the first corpus averaged about 460 per
-    #: ``game_id``, because dozens of unrelated games shared one.
-    max_names_per_game: int = 120
-    #: Activation records a window needs before a dead cost channel means
-    #: anything. Under this, a channel reading zero is scarcity; over it, it is
-    #: a channel nothing writes to.
-    min_cost_evidence: int = 200
-    #: How far a snapshot's turn may sit below the highest already seen in its
-    #: game. Records are written when they are observed but carry the snapshot
-    #: of the moment they describe, so a deferred half can legitimately lag by
-    #: a turn; a *game boundary* shows up as a jump of many turns, not of one.
-    turn_jump_tolerance: int = 1
-    #: Share of a record's own events that may repeat another event in the same
-    #: record. Two identical outcomes on identical subjects inside one
-    #: resolution are one outcome written twice; the smoke corpus duplicated
-    #: 13.68% of its events this way while its *record* duplicate rate read
-    #: 0.00%, which is why the record-level check alone could not see it.
-    max_duplicate_event_rate: float = 0.02
-    #: Share of trigger records that may report ``fired = true``. The negatives
-    #: are drawn from same-event-type evaluations at a ~1:1 target, so a window
-    #: far above this is a sampler that stopped drawing them — and a corpus of
-    #: positives teaches the base rate rather than the condition.
-    max_trigger_fired_share: float = 0.65
-    #: Share of ``zone_change`` events that must say ``from_zone``. ``None``
-    #: watches the number without judging it.
-    min_zone_change_from_zone_rate: float | None = None
-    #: Share of resolution events that must name a producing clause — a
-    #: sub-ability index, the root line, or an explicit ``unresolved``. ``None``
-    #: watches the number without judging it.
-    min_attributed_rate: float | None = None
-    #: Share of fork records' events that must name a producing clause.
-    #: Separate from :attr:`min_attributed_rate` because the fork collectors
-    #: are different code that the attribution channel reached last: the
-    #: aggregate rate hides a fork path writing ``null`` on every event behind
-    #: the observed records' healthy majority. ``None`` watches it.
-    min_fork_attributed_rate: float | None = None
-    #: Share of the events whose own parameter row declares ``cause`` that
-    #: must populate it. An empty ``cause`` is why two attackers dealing 1 to
-    #: the same player serialize byte-identically and read as a duplicated
-    #: event. ``None`` watches the number: the healthy share is below 1 —
-    #: some hooks genuinely name no causing object — and is not yet known.
-    min_cause_rate: float | None = None
-    #: Share of ``replaced``/``updated`` rewrite records that must name the
-    #: ability that ran instead. ``None`` watches the number without judging
-    #: it, and it has to stay watched until someone measures the healthy share:
-    #: a replacement scripted with ``ReplacementResult$`` returns one of those
-    #: two outcomes having run no ability at all, so the ceiling is below 1 and
-    #: nobody knows by how much.
-    min_rewrite_replaced_by_rate: float | None = None
-    #: Share of fork records that may carry a ``state.global.turn`` differing
-    #: from the record they mirror. Judged at zero rather than watched: a fork
-    #: is taken *at* the moment it mirrors, so its snapshot is that moment's,
-    #: and there is no healthy rate at which the two disagree. The smoke
-    #: corpus disagreed on 3.9% of probe forks, always behind, and that was
-    #: the whole residue of the game_id invariant — which reported it as a
-    #: backward turn jump, naming the game rather than the collector.
-    max_mirror_turn_disagreement_rate: float = 0.0
+    min_keyed_rate: float = field(default=0.95, metadata={"help": (
+        "Share of records naming a line that must resolve it to a printed key "
+        "(default: %(default)s)"
+    )})
+    max_duplicate_rate: float = field(default=0.02, metadata={"help": (
+        "Share of a kind's records that may repeat an earlier record of the "
+        "same kind in the same game (default: %(default)s)"
+    )})
+    #: A worker killed mid-game truncates its last block, so a few unpaired
+    #: halves at the tail of a window are expected.
+    max_unpaired_link_rate: float = field(default=0.02, metadata={"help": (
+        "Share of link ids that may lack one activation and one resolution "
+        "half (default: %(default)s)"
+    )})
+    #: Two forty-card sealed decks plus tokens sit far below this; the first
+    #: corpus averaged about 460 per ``game_id``, because dozens of unrelated
+    #: games shared one.
+    max_names_per_game: int = field(default=120, metadata={"help": (
+        "Distinct card names one game_id may show before it reads as more "
+        "than one game (default: %(default)s)"
+    )})
+    min_cost_evidence: int = field(default=200, metadata={"help": (
+        "Activation records needed before a cost channel reading zero means "
+        "the collector rather than the pool (default: %(default)s)"
+    )})
+    #: Records carry the snapshot of the moment they describe, so a deferred
+    #: half can legitimately lag by a turn; a game boundary is a jump of many.
+    turn_jump_tolerance: int = field(default=1, metadata={"help": (
+        "Turns a snapshot may sit below the highest already seen in its game "
+        "before that reads as a game boundary; deferred mana-reservoir flushes "
+        "are exempt (default: %(default)s)"
+    )})
+    #: The smoke corpus duplicated 13.68% of its events this way while its
+    #: record duplicate rate read 0.00%.
+    max_duplicate_event_rate: float = field(default=0.02, metadata={"help": (
+        "Share of events that may repeat another event in the same record, "
+        "which --max-duplicate-rate's whole-record comparison cannot see "
+        "(default: %(default)s)"
+    )})
+    #: A window far above the sampler's ~1:1 target is a sampler that stopped
+    #: drawing negatives, and positives alone teach the base rate.
+    max_trigger_fired_share: float = field(default=0.65, metadata={"help": (
+        "Share of trigger records that may report fired=true; the negative "
+        "sampler targets ~1:1 (default: %(default)s)"
+    )})
+    min_zone_change_from_zone_rate: float | None = field(default=None, metadata={
+        "help": (
+            "Share of zone_change events that must carry from_zone; unset, it "
+            "is reported as [WATCH] without failing the run"
+        ),
+    })
+    min_attributed_rate: float | None = field(default=None, metadata={"help": (
+        "Share of resolution events that must name a producing clause; unset, "
+        "it is reported as [WATCH] without failing the run"
+    )})
+    #: The fork collectors are different code, and the aggregate rate hid a
+    #: fork path writing ``null`` on every event.
+    min_fork_attributed_rate: float | None = field(default=None, metadata={"help": (
+        "Share of events on fork records that must name a producing clause, "
+        "apart from --min-attributed-rate; unset, it is reported as [WATCH]"
+    )})
+    #: An empty ``cause`` is why two attackers dealing 1 to the same player
+    #: serialize byte-identically. The healthy share is below 1 — some hooks
+    #: genuinely name no causing object — and is not yet known.
+    min_cause_rate: float | None = field(default=None, metadata={"help": (
+        "Share of the events whose schema row declares a cause that must "
+        "populate it; unset, it is reported as [WATCH]"
+    )})
+    #: Watched until someone measures the healthy share: a replacement scripted
+    #: with ``ReplacementResult$`` returns ``replaced``/``updated`` having run
+    #: no ability, so the ceiling is below 1 by an unknown amount.
+    min_rewrite_replaced_by_rate: float | None = field(default=None, metadata={
+        "help": (
+            "Share of the rewrite records whose result ran an ability that must "
+            "name it; unset, it is reported as [WATCH]"
+        ),
+    })
+    #: Judged at zero rather than watched: a fork is taken at the moment it
+    #: mirrors, so there is no healthy rate at which the two disagree.
+    max_mirror_turn_disagreement_rate: float = field(default=0.0, metadata={"help": (
+        "Share of fork records whose turn may differ from the record they "
+        "mirror, a stale snapshot (default: %(default)s)"
+    )})
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,12 +228,31 @@ class Finding:
         return (head, *(f"         {line}" for line in self.detail))
 
 
+class Findings(list[Finding]):
+    """Every finding of one pass, in report order."""
+
+    def broken(self) -> list[Finding]:
+        return [finding for finding in self if not finding.ok]
+
+    def summary(self) -> list[str]:
+        """The closing lines: what broke, or that every judged invariant held."""
+        broken = self.broken()
+        watched = sum(1 for finding in self if finding.watched)
+        judged = len(self) - watched
+        if broken:
+            return [
+                f"{len(broken)} of {judged} judged invariants broken:",
+                *(f"  {finding.name}" for finding in broken),
+            ]
+        return [f"all {judged} judged invariants hold ({watched} watched, not judged)"]
+
+
 def validate_corpus(
     records: Iterable[EffectRecord],
     thresholds: Thresholds | None = None,
     sidecars=None,
     presence: FieldPresence | None = None,
-) -> list[Finding]:
+) -> Findings:
     """Every invariant, measured over one pass of ``records``.
 
     ``sidecars`` is a :class:`~effects.infrastructure.sidecar_io.SidecarCache`
@@ -233,7 +271,9 @@ def validate_corpus(
         for check in checks:
             check.add(record)
     limits = thresholds or Thresholds()
-    findings = [finding for check in checks for finding in check.findings(limits)]
+    findings = Findings(
+        finding for check in checks for finding in check.findings(limits)
+    )
     if presence is not None:
         findings.append(presence.finding())
     return findings

@@ -17,13 +17,9 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.record_scoring import _record_losses
-        from effects.domain.effect_head_layout import (
-            PER_ENTITY_FIELDS,
-            PER_ENTITY_WIDTH,
-            EntityFieldTargets,
-            FieldType,
-        )
+        from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH, FieldType
         from effects.domain.effect_losses import per_entity_loss
+        from effects.domain.entity_field_targets import EntityFieldTargets
 
         torch.manual_seed(0)
         fields = PER_ENTITY_FIELDS
@@ -50,11 +46,8 @@ class TestPerRecordLosses:
 
         from effects.application.breakdowns import TOTAL
         from effects.application.record_scoring import _record_losses
-        from effects.domain.effect_head_layout import (
-            PER_ENTITY_FIELDS,
-            PER_ENTITY_WIDTH,
-            EntityFieldTargets,
-        )
+        from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH
+        from effects.domain.entity_field_targets import EntityFieldTargets
 
         outputs = torch.zeros(1, 2, PER_ENTITY_WIDTH)
         losses = _record_losses(
@@ -77,10 +70,10 @@ class TestPerRecordLosses:
             GATE_INDEX,
             PER_ENTITY_FIELDS,
             PER_ENTITY_WIDTH,
-            EntityFieldTargets,
             FieldType,
         )
         from effects.domain.effect_losses import field_loss
+        from effects.domain.entity_field_targets import EntityFieldTargets
 
         generator = torch.Generator().manual_seed(3)
         fields = PER_ENTITY_FIELDS

@@ -27,11 +27,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import shutil
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NamedTuple
+
+import torch
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.aux_heads import TRAINING_ONLY_MODULES
@@ -437,10 +440,6 @@ def save_resume_state(directory: Path, state: dict[str, Any]) -> Path:
     that stops mid-write leaves the previous epoch's state rather than half of
     this one's.
     """
-    import os
-
-    import torch
-
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / RESUME_NAME
@@ -452,8 +451,6 @@ def save_resume_state(directory: Path, state: dict[str, Any]) -> Path:
 
 def load_resume_state(directory: Path) -> dict[str, Any]:
     """The state :func:`save_resume_state` wrote, on the CPU."""
-    import torch
-
     path = Path(directory) / RESUME_NAME
     if not path.exists():
         raise FileNotFoundError(

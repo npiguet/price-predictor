@@ -34,10 +34,10 @@ from effects.domain.effect_head_layout import (
     VALUE_SLICES,
     VERDICT_BITS,
     CreatedSlot,
-    EntityFieldTargets,
     FieldSpec,
     FieldType,
 )
+from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS, ValueKind
 

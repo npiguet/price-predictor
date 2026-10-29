@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from effects.infrastructure import default_paths
+from effects.domain import default_paths
 
 ROOT = Path(__file__).resolve().parents[2]
 REPORTS = ROOT / default_paths.DEFAULT_REPORTS_DIR

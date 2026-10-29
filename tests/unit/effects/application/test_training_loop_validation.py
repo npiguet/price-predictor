@@ -15,8 +15,9 @@ from effects.application.train_effect_model import (
 )
 from effects.application.training_log import format_floor, format_parts
 from effects.application.training_loop import FloorCache
-from effects.domain.effect_head_layout import FIELDS_BY_NAME, EntityFieldTargets
+from effects.domain.effect_head_layout import FIELDS_BY_NAME
 from effects.domain.effect_losses import LossParts
+from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
@@ -46,11 +47,11 @@ def test_the_loop_loads_both_samples_and_the_probe(samples):
         TrainEffectModelConfig(corpus="unused"),
         validation_samples=samples,
     )
-    loop._load_validation()
-    assert [r.record_id for r in loop.card_disjoint] == [f"c{i}" for i in range(5)]
-    assert len(loop.game_disjoint) == 3
-    assert loop.probe and loop.probe[0].record_id == "c0"
-    assert loop.present == {"resolution-effect", "combat"}
+    samples = loop._load_validation()
+    assert [r.record_id for r in samples.card_disjoint] == [f"c{i}" for i in range(5)]
+    assert len(samples.game_disjoint) == 3
+    assert samples.probe and samples.probe[0].record_id == "c0"
+    assert samples.present == {"resolution-effect", "combat"}
 
 
 def test_run_refuses_to_train_without_a_corpus(caplog):
@@ -117,23 +118,22 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):  # noq
         TrainEffectModelConfig(corpus="unused"),
         validation_samples=paths,
     )
-    loop._load_validation()
+    present = loop._load_validation().present
 
     with caplog.at_level(logging.WARNING):
-        loop._warn_missing_classes()
+        loop._warn_missing_classes(present)
 
-    assert loop.present == {"resolution-effect", "combat"}
-    for absent in set(SAMPLING_CLASSES) - loop.present:
+    assert present == {"resolution-effect", "combat"}
+    for absent in set(SAMPLING_CLASSES) - present:
         assert absent in caplog.text
     assert "no loss" in caplog.text
 
 
 def test_a_sample_naming_every_class_says_nothing(caplog):
     loop = make_training_loop(TrainEffectModelConfig(corpus="unused"))
-    loop.present = set(SAMPLING_CLASSES)
 
     with caplog.at_level(logging.WARNING):
-        loop._warn_missing_classes()
+        loop._warn_missing_classes(frozenset(SAMPLING_CLASSES))
 
     assert caplog.text == ""
 
@@ -237,12 +237,14 @@ def test_validation_scores_the_shipped_objective_not_the_backward_total():
     from effects.application.training_loop import StepLoss
 
     loop = make_training_loop(TrainEffectModelConfig(corpus="unused", batch_size=2))
-    loop.preparer = SimpleNamespace(prepare_step=lambda *a, **k: SimpleNamespace())
     loop._device_loss = lambda *a, **k: StepLoss(
         total=torch.tensor(5.0), shipped=torch.tensor(1.0), parts=LossParts(), terms={},
     )
     module = SimpleNamespace(eval=lambda: None, train=lambda: None)
-    run = SimpleNamespace(encoder=module, model=module, step=0)
+    run = SimpleNamespace(
+        encoder=module, model=module, step=0, scoring=None,
+        preparer=SimpleNamespace(prepare_scoring_step=lambda *a, **k: SimpleNamespace()),
+    )
     records = [SimpleNamespace(game_id=f"g{i}") for i in range(4)]
 
     assert loop._validate(records, run, fields=()) == 1.0

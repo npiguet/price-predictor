@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 import random
-import re
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import batched
@@ -28,12 +27,12 @@ import torch
 
 from effects.application.ability_text import KeyResolver
 from effects.application.surface_batching import (
+    IDENTITY_TABLE_KEY,
     IdentityTable,
     Materializer,
     SurfaceBatcher,
 )
 from effects.application.text_staging import TextStager
-from effects.application.train_effect_model import RANDOM_SEED
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     TruncationLog,
@@ -57,7 +56,9 @@ from effects.infrastructure.torch_device import default_device
 
 logger = logging.getLogger(__name__)
 
-IDENTITY_TABLE_KEY = "identity_table"
+#: Seeds every evaluation batcher's generator, so whatever draws from it draws
+#: the same from one evaluation of a checkpoint to the next.
+EVALUATION_SEED = 42
 
 
 def build_sidecars(config) -> SidecarCache:
@@ -180,7 +181,7 @@ class LoadedModel:
             widths=feature_widths(records, layout=layout),
             materializer=Materializer(self.device, masks, self.identity_table),
             context_dropout=0.0,
-            rng=random.Random(RANDOM_SEED),
+            rng=random.Random(EVALUATION_SEED),
             input_layout=layout,
         )
 
@@ -271,65 +272,4 @@ def evaluation_fields(records) -> tuple[FieldSpec, ...]:
     """
     return active_fields(
         frozenset(sampling_class(r) for r in records), sparse=True,
-    )
-
-
-#: Where a shard line names its record, read before the line is parsed.
-_RECORD_ID = re.compile(r'"record_id":"([^"]*)"')
-_RECORD_ID_SPAN = 256
-
-
-def training_acting_keys(directory: Path) -> set[tuple]:
-    """Every distinct ``acting_keys`` tuple among the records under ``directory``.
-
-    ``directory`` is the curated corpus's ``training/``: what the checkpoint
-    actually trained on, and so what the identity baseline could have
-    memorized. A record curation wrote several times (``--reuse-cap``) is
-    parsed once; the set is all gate 1 needs, and the records are never held.
-    """
-    from effects.domain.records import acting_keys
-    from effects.infrastructure.record_io import (
-        iter_shard_lines,
-        iter_shards,
-        parse_record_line,
-        record_from_dict,
-    )
-
-    shards = iter_shards(directory)
-    read: set[str] = set()
-    acting: set[tuple] = set()
-    for done, shard in enumerate(shards, start=1):
-        for line in iter_shard_lines(shard):
-            found = _RECORD_ID.search(line, 0, _RECORD_ID_SPAN)
-            if found is not None:
-                if found.group(1) in read:
-                    continue
-                read.add(found.group(1))
-            stripped = line.strip()
-            if not stripped:
-                continue
-            keys = acting_keys(record_from_dict(parse_record_line(stripped)))
-            if keys:
-                acting.add(keys)
-        if done % 50 == 0:
-            logger.info(
-                "gate 1: %d of %d training shards read, %d acting lines",
-                done, len(shards), len(acting),
-            )
-    return acting
-
-
-def card_disjoint_resolutions(corpus_path: Path, games: frozenset[str]) -> Iterator:
-    """The resolution records of the curated corpus's card-disjoint ``games``, streamed.
-
-    Resolutions only, the one kind gate 1's stratum holds; the stratum's other
-    kinds are never parsed.
-    """
-    from effects.domain.records import RecordKind
-    from effects.infrastructure.corpus_store import CorpusStore
-    from effects.infrastructure.record_io import read_records_matching
-
-    return read_records_matching(
-        CorpusStore(corpus_path).card_disjoint_dir,
-        game_ids=games, kinds={RecordKind.RESOLUTION.value},
     )

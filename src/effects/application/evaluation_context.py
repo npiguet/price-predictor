@@ -10,8 +10,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from effects.domain import default_paths
 from effects.domain.baselines import Baseline
-from effects.infrastructure import default_paths
 
 if TYPE_CHECKING:
     from effects.domain.corpus_manifest import CorpusManifest
@@ -70,9 +70,6 @@ class EvaluationContext:
         )
 
 
-DEFAULT_WIN_RATES = Path(default_paths.DEFAULT_WIN_RATES)
-
-
 @dataclass
 class EvaluateEffectModelConfig:
     checkpoint: Path = field(
@@ -92,7 +89,9 @@ class EvaluateEffectModelConfig:
         default_factory=lambda: Path(default_paths.DEFAULT_ABILITIES_ROOT),
     )
     #: The per-card win-rate table the decodability battery reads (FR-070).
-    win_rates: Path = field(default_factory=lambda: DEFAULT_WIN_RATES)
+    win_rates: Path = field(
+        default_factory=lambda: Path(default_paths.DEFAULT_WIN_RATES),
+    )
 
 
 def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:

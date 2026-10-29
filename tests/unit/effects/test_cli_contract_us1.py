@@ -344,31 +344,6 @@ class TestBuildCorpus:
         assert args.verify is False
         assert parse("build-corpus", "--verify").verify is True
 
-    def test_the_parsed_defaults_and_the_configs_own_agree(self):
-        """Two default surfaces for one flag set, and only this compares them."""
-        from effects.application.build_corpus import BuildCorpusConfig
-
-        args = parse("build-corpus")
-        config = BuildCorpusConfig(records_dir=Path("."))
-        assert config.output == Path(args.output)
-        assert config.vocab_path == args.vocab_path
-        assert config.holdout_permille == args.holdout_permille
-        assert config.holdout_max_carriers == args.holdout_max_carriers
-        assert config.text_cap == args.text_cap
-        assert config.card_disjoint_text_cap == args.card_disjoint_text_cap
-        assert config.game_disjoint_share == args.game_disjoint_share
-        assert config.game_disjoint_keyword_share == args.game_disjoint_keyword_share
-        assert config.game_disjoint_keywords == args.game_disjoint_keywords
-        assert config.reuse_cap == args.reuse_cap
-        assert config.holdout_unit == args.holdout_unit
-        assert config.keyword_definitions == Path(args.keyword_definitions)
-        assert config.training_records == args.training_records
-        assert config.class_mix == args.class_mix
-        assert config.seed == args.seed
-        assert config.workers == args.workers
-        assert config.verify == args.verify
-        assert config.cards_folders == args.cards_folders == BOTH_TREES
-
     def test_the_class_mix_is_parsed_through_the_trainers_own_syntax(self):
         args = parse("build-corpus", "--class-mix", "rewrite=0.5,combat=0.5")
         assert args.class_mix == {"rewrite": 0.5, "combat": 0.5}

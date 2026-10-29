@@ -26,16 +26,28 @@ from __future__ import annotations
 
 import logging
 import random
+import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from effects.domain import default_paths
 from effects.domain.baselines import Baseline
+from effects.domain.effect_head_layout import active_fields
 from effects.domain.records import (
     EffectRecord,
 )
 from effects.domain.split import CorpusSplit
 from effects.domain.strata import VALIDATION_STRATA, Stratum
+from effects.domain.text_holdout import normalize_script_text
+from effects.infrastructure.converted_trees import ConvertedTrees
+from effects.infrastructure.corpus_store import CorpusStore
+from effects.infrastructure.record_io import (
+    MixedGenerationsError,
+    iter_shards,
+    read_shard,
+    refuse_mixed_generations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +56,6 @@ logger = logging.getLogger(__name__)
 #: before gate 1's margins mean anything. A floor, not a rule: below it
 #: the run warns, at zero it stops.
 MIN_HOLDOUT_RECORDS = 2000
-RANDOM_SEED = 42
 
 #: Shards an epoch reads.
 #:
@@ -170,53 +181,66 @@ def check_holdout(
 
 @dataclass
 class TrainEffectModelConfig:
-    """The trainer's flag surface (contracts/cli.md § train-effect-model)."""
+    """The trainer's flag surface (contracts/cli.md § train-effect-model).
+
+    ``help`` metadata is the flag's help, so a default lives here alone.
+    """
 
     #: A curated dataset directory built by ``build-corpus``, and the trainer's
     #: only input (FR-125 withdrawn): its manifest already decides the split,
     #: the holdout, the validation samples and the rarity table.
     corpus: str | None = None
-    cards_folders: tuple[Path, ...] = (
-        Path("output/cardsfolder/"), Path("output/tokenscripts/"),
+    cards_folders: tuple[Path, ...] = tuple(
+        Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
     )
     variant_scripts: Path | None = None
     #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
     holdout_unit: str | None = None
-    vocab_path: Path = field(default_factory=lambda: Path("models/effects/vocab.txt"))
-    #: Seeds weight init, batch planning and each epoch's shard draw.
-    #:
-    #: ``None`` draws one from the OS and logs it, because these runs are not
-    #: meant to be repeatable and a pinned default quietly makes every run
-    #: sample the same shards in the same order — which looks like a stable
-    #: result and is one arrangement of the corpus measured many times. The
-    #: drawn value is reported at startup and recorded on the checkpoint, so a
-    #: run stays reproducible after the fact by passing it back.
-    seed: int | None = None
+    vocab_path: Path = field(
+        default_factory=lambda: Path(default_paths.DEFAULT_VOCAB_PATH),
+    )
+    #: ``None`` draws one from the OS and logs it, because a pinned default
+    #: quietly makes every run sample the same shards in the same order — one
+    #: arrangement of the corpus measured many times. The drawn value is
+    #: recorded on the checkpoint, so a run stays reproducible after the fact.
+    seed: int | None = field(default=None, metadata={"help": (
+        "Seeds weight init, batch planning and each epoch's shard draw; drawn "
+        "from the OS and logged when omitted, so any run can be repeated"
+    )})
     keyword_definitions: Path = field(
-        default_factory=lambda: Path("output/effects/keyword-definitions.json"),
+        default_factory=lambda: Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS),
     )
     model_output: Path | None = None
     variant: str = Baseline.FULL
     e_dim: int = 64
-    #: The noise ratio ``r`` on ``e``, relative to the running covariance of
-    #: ``e`` itself (FR-056) — no longer a fixed σ.
-    e_noise: float = 0.1
-    #: The value head's loss weight (FR-058).
-    value_weight: float = 0.05
-    #: The ability encoder's size (FR-061); the checkpoint records both.
-    encoder_layers: int = 4
-    encoder_d_model: int = 256
+    e_noise: float = field(default=0.1, metadata={"help": (
+        "Noise ratio on e relative to e's running covariance (FR-056), ramped "
+        "in over the first --steps-per-epoch steps (default: %(default)s)"
+    )})
+    value_weight: float = field(default=0.05, metadata={"help": (
+        "Loss weight of the training-only value head (default: %(default)s)"
+    )})
+    encoder_layers: int = field(default=4, metadata={"help": (
+        "Ability-encoder layers, recorded in the checkpoint (default: %(default)s)"
+    )})
+    encoder_d_model: int = field(default=256, metadata={"help": (
+        "Ability-encoder width, recorded in the checkpoint; must divide by the "
+        "encoder's head count (default: %(default)s)"
+    )})
     keyword_expand_p: float = 0.25
     context_dropout: float = 0.15
-    #: Counterfactual copies of each qualifying damage or -X/-X resolution a
-    #: training step makes, labelled by the rules (FR-063e); 0 makes none.
-    lethality_copies: int = 0
-    #: A factor on the learning rate at every step (FR-063f). Not a resume
-    #: setting: a resumed run may continue at another rate.
-    lr_scale: float = 1.0
-    #: Also keep each epoch's checkpoint under ``<model-output>/epochs/``
-    #: (FR-063f), beside the best-only ones, so any epoch can be probed.
-    save_every_epoch: bool = False
+    lethality_copies: int = field(default=0, metadata={"help": (
+        "Counterfactual copies per qualifying damage or -X/-X resolution per "
+        "step, toughness and amount redrawn and the death labelled by the rules "
+        "(default: %(default)s)"
+    )})
+    lr_scale: float = field(default=1.0, metadata={"help": (
+        "Factor on the learning rate; may differ from the run a --resume continues"
+    )})
+    save_every_epoch: bool = field(default=False, metadata={"help": (
+        "Also keep every epoch's checkpoint under <model-output>/epochs/, so "
+        "any epoch can be probed"
+    )})
     mlm_weight: float = 0.1
     mlm_mask_prob: float = 0.15
     #: The script-API head's weight. Its term sums ~1,245 parameter-key BCEs per
@@ -224,26 +248,40 @@ class TrainEffectModelConfig:
     #: two orders of magnitude above the value term; this weight starts it on the
     #: scale of the value and MLM terms rather than beside the per-entity loss.
     api_weight: float = 0.003
-    #: The epoch whose first step enables the sparse field group (FR-082).
     #: An epoch rather than a step so validation before and after the switch
     #: scores different field sets at an epoch boundary, never inside one: a
     #: switch mid-epoch validates the new fields' untrained heads at the
     #: epoch's end, which reads as a loss spike.
-    curriculum_epoch: int = 3
+    curriculum_epoch: int = field(default=3, metadata={"help": (
+        "Epoch whose first step enables the sparse field group (default: %(default)s)"
+    )})
     batch_size: int = 32
     grad_accum: int = 1
     steps_per_epoch: int = 5_000
-    shards_per_epoch: int = DEFAULT_SHARDS_PER_EPOCH
-    #: Worker processes preparing each step's host half (``--prefetch-workers``);
-    #: 0 prepares it in the training process. Where a step is prepared never
-    #: changes what it holds, so this is not recorded among the settings.
-    prefetch_workers: int = DEFAULT_PREFETCH_WORKERS
+    shards_per_epoch: int = field(default=DEFAULT_SHARDS_PER_EPOCH, metadata={"help": (
+        "Record shards an epoch reads, drawn at random across the corpus: "
+        "--steps-per-epoch fixes how long an epoch takes, this how many shards "
+        "its steps spread over (default: %(default)s)"
+    )})
+    #: Where a step is prepared never changes what it holds, so this is not
+    #: recorded among the settings.
+    prefetch_workers: int = field(default=DEFAULT_PREFETCH_WORKERS, metadata={"help": (
+        "Worker processes preparing each step's host half while this process "
+        "trains; 0 prepares each step here, just before it trains. Changes speed, never results "
+        "(default: %(default)s)"
+    )})
     epochs: int = 40
-    patience: int = 5
-    withhold_keyword: str | None = None
-    #: ``--resume``: continue from the ``resume.pt`` the run left in
-    #: ``--model-output`` after its last completed epoch.
-    resume: bool = False
+    patience: int = field(default=5, metadata={"help": (
+        "Epochs without a new card-disjoint best before stopping; 0 never stops early"
+    )})
+    withhold_keyword: str | None = field(default=None, metadata={"help": (
+        "Hold one implemented keyword's token out of training, always expanding "
+        "it instead, so the zero-shot check has something to measure"
+    )})
+    resume: bool = field(default=False, metadata={"help": (
+        "Continue an interrupted run from the resume.pt in --model-output; "
+        "every setting that shapes the run, --seed included, must match"
+    )})
 
     def __post_init__(self) -> None:
         # Refused before anything is read (FR-062): the encoder's attention
@@ -413,8 +451,6 @@ def fields_for_epoch(config: TrainEffectModelConfig, *, present: frozenset[str],
     The sparse group is on from the first step of ``--curriculum-epoch``; at 1
     or below, from the run's first step.
     """
-    from effects.domain.effect_head_layout import active_fields
-
     return active_fields(present, sparse=epoch >= config.curriculum_epoch)
 
 
@@ -493,14 +529,10 @@ def load_shard(path: Path) -> list[EffectRecord]:
     the corpus as a whole would cost hundreds — which is why nothing here ever
     holds more than one shard at a time.
     """
-    from effects.infrastructure.record_io import read_shard
-
     return list(read_shard(Path(path)))
 
 
 def corpus_shards(records_dir: Path) -> list[Path]:
-    from effects.infrastructure.record_io import iter_shards
-
     return iter_shards(Path(records_dir))
 
 
@@ -518,9 +550,6 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
     corpus was built against would train on texts it believes are held out,
     so it is refused before any step rather than discovered at evaluation.
     """
-    from effects.domain.text_holdout import normalize_script_text
-    from effects.infrastructure.converted_trees import ConvertedTrees
-
     unit = manifest.holdout_unit
     if config.holdout_unit is not None and config.holdout_unit != unit:
         raise HoldoutMismatchError(
@@ -536,8 +565,6 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
             "the holdout cannot be recomputed: no converted card tree among "
             f"--cards-folder {', '.join(str(f) for f in config.cards_folders)}"
         )
-    import time
-
     started = time.monotonic()
     logger.info(
         "Recomputing the %s holdout over %d cards' sidecars under %s.",
@@ -583,9 +610,7 @@ def run(config: TrainEffectModelConfig) -> int:
             "shards was withdrawn with FR-125."
         )
         return 1
-    from effects.infrastructure.corpus_store import CorpusStore
-
-    store = CorpusStore(Path(config.corpus))
+    store =CorpusStore(Path(config.corpus))
     manifest = store.load()
     require_matching_surface(
         manifest_surface=manifest.surface, vocab_path=Path(config.vocab_path),
@@ -605,12 +630,6 @@ def run(config: TrainEffectModelConfig) -> int:
             "build-corpus that writes validation/samples/.", config.corpus, ", ".join(missing),
         )
         return 1
-    from effects.infrastructure.record_io import (
-        MixedGenerationsError,
-        iter_shards,
-        refuse_mixed_generations,
-    )
-
     try:
         # Before any record is read (FR-033).
         refuse_mixed_generations(iter_shards(Path(config.corpus)))

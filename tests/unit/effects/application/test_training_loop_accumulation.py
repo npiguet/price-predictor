@@ -43,7 +43,9 @@ def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkey
         loop_module, "_optimizer_step",
         lambda optimizer, read: updates.append((epoch, tally.taken)) or {},
     )
-    run = SimpleNamespace(step=0, encoder=None, model=None, optimizer=None)
+    run = SimpleNamespace(
+        step=0, encoder=None, model=None, optimizer=None, training=None,
+    )
     for epoch in (1, 2):
         tally = EpochTally(running=torch.zeros(()))
         for _ in range(3):

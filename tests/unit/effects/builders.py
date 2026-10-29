@@ -226,8 +226,7 @@ def make_batcher(
 
 
 def make_training_loop(
-    config, *, training_shards=(), validation_samples=None, prefetch_batches=True,
-    **facts,
+    config, *, training_shards=(), validation_samples=None, **facts,
 ):
     """A ``TrainingLoop`` over ``config`` and a corpus described by ``facts``.
 
@@ -245,5 +244,4 @@ def make_training_loop(
         }),
         training_shards=list(training_shards),
         validation_samples=validation_samples or {},
-        prefetch_batches=prefetch_batches,
     )

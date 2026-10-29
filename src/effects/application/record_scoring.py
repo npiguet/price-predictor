@@ -13,8 +13,8 @@ import torch
 from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.gate_one import acting_text, forward_chunks
 from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
-from effects.domain.effect_head_layout import EntityFieldTargets
 from effects.domain.effect_losses import per_entity_loss
+from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import acting_keys
 from effects.domain.rule_families import rule_family

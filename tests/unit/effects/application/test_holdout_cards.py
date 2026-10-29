@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.holdout_cards import (
     HoldoutCardsConfig,
     HoldoutCardsError,
@@ -199,10 +200,11 @@ class TestTheTrainingCorpusFlag:
     """
 
     def _config(self, *argv):
-        from effects.infrastructure.cli import build_parser, coverage_config_from
+        from effects.infrastructure.cli import build_parser, collector_config
 
-        return coverage_config_from(
-            build_parser().parse_args(["collect-coverage", *argv])
+        return collector_config(
+            CollectCoverageConfig,
+            build_parser().parse_args(["collect-coverage", *argv]),
         )
 
     def test_it_sets_both_the_records_dir_and_the_holdout_list(self, tmp_path):
@@ -217,40 +219,40 @@ class TestTheTrainingCorpusFlag:
 
     def test_a_corpus_without_a_holdout_list_is_refused(self, tmp_path):
         """Silently running undepleted is the failure this whole area had."""
-        from effects.infrastructure.cli import build_parser, coverage_config_from
+        from effects.infrastructure.cli import build_parser, collector_config
 
         corpus = tmp_path / "depleted"
         corpus.mkdir()
 
         with pytest.raises(ValueError, match="holdout-cards.txt"):
-            coverage_config_from(build_parser().parse_args(
+            collector_config(CollectCoverageConfig, build_parser().parse_args(
                 ["collect-coverage", "--training-corpus", str(corpus)]
             ))
 
     def test_it_refuses_to_share_the_stage_with_the_flags_it_implies(self, tmp_path):
-        from effects.infrastructure.cli import build_parser, coverage_config_from
+        from effects.infrastructure.cli import build_parser, collector_config
 
         corpus = tmp_path / "depleted"
         corpus.mkdir()
         (corpus / "holdout-cards.txt").write_text("Soul Echo\n", encoding="utf-8")
 
         with pytest.raises(ValueError, match="one source"):
-            coverage_config_from(build_parser().parse_args([
+            collector_config(CollectCoverageConfig, build_parser().parse_args([
                 "collect-coverage", "--training-corpus", str(corpus),
                 "--effect-records", str(tmp_path / "elsewhere"),
             ]))
 
     def test_an_explicit_default_records_dir_is_refused_too(self, tmp_path):
         """Spelling out the default is still a second source."""
-        from effects.infrastructure.cli import build_parser, coverage_config_from
-        from effects.infrastructure.default_paths import DEFAULT_RECORDS_DIR
+        from effects.domain.default_paths import DEFAULT_RECORDS_DIR
+        from effects.infrastructure.cli import build_parser, collector_config
 
         corpus = tmp_path / "depleted"
         corpus.mkdir()
         (corpus / "holdout-cards.txt").write_text("Soul Echo\n", encoding="utf-8")
 
         with pytest.raises(ValueError, match="one source"):
-            coverage_config_from(build_parser().parse_args([
+            collector_config(CollectCoverageConfig, build_parser().parse_args([
                 "collect-coverage", "--training-corpus", str(corpus),
                 "--effect-records", DEFAULT_RECORDS_DIR,
             ]))

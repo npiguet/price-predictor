@@ -81,8 +81,8 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
     # The step's host half reads real surfaces off real records; what it is
     # handed stands in for what it would have prepared.
     monkeypatch.setattr(
-        StepPreparer, "prepare_step",
-        lambda self, plan, *a, fields=None, **k: {"fields": fields},
+        StepPreparer, "prepare_training_step",
+        lambda self, plan, *a, fields=None, **k: ({"fields": fields}, 0),
     )
     monkeypatch.setattr(TrainingLoop, "_validate", validate)
 

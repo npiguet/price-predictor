@@ -15,11 +15,14 @@ from pathlib import Path
 
 from effects.application.collect_coverage import (
     DEFAULT_CARDS_FOLDERS,
+    DEFAULT_RECORDS_DIR,
+    DEFAULT_WORKERS,
     HoldoutSource,
     build_coverage_decks,
     collector_supervisor,
     play_decks,
 )
+from effects.domain import default_paths
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import DeckCandidate
 from effects.domain.script_variants import (
@@ -35,10 +38,6 @@ from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_RECORDS_DIR = Path("output/effects/records/")
-DEFAULT_FORGE_CARDS_PATH = Path("../forge/forge-gui/res/cardsfolder/")
-DEFAULT_VARIANT_SCRIPTS = Path("output/effects/variant-scripts/")
-
 #: Cap on variant records as a fraction of the real records already present.
 DEFAULT_VARIANT_VOLUME = 0.2
 DEFAULT_DECKS_PER_ROUND = 500
@@ -49,23 +48,35 @@ RANDOM_SEED = 42
 class CollectVariantsConfig:
     effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
     forge_cards_path: Path = field(
-        default_factory=lambda: DEFAULT_FORGE_CARDS_PATH,
+        default_factory=lambda: Path(default_paths.DEFAULT_FORGE_CARDS_PATH),
     )
     variant_scripts: Path = field(
-        default_factory=lambda: DEFAULT_VARIANT_SCRIPTS,
+        default_factory=lambda: Path(default_paths.DEFAULT_VARIANT_SCRIPTS),
     )
-    variant_volume: float = DEFAULT_VARIANT_VOLUME
+    variant_volume: float = field(default=DEFAULT_VARIANT_VOLUME, metadata={
+        "help": (
+            "Cap on generated variant scripts, as a fraction of the real records "
+            "already present, so it scales with the corpus (default: %(default)s)"
+        ),
+    })
     #: The real records ``--variant-volume`` is measured against; defaults to
     #: the destination, which caps a run writing to its own directory at zero.
     corpus_records: Path | None = None
-    decks_per_round: int = DEFAULT_DECKS_PER_ROUND
-    #: Seeds the perturbation and the deck build. Settable because a variant
-    #: round has no feedback: with a pinned seed a second invocation
-    #: regenerates the same perturbations and decks.
-    seed: int = RANDOM_SEED
+    decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
+        "help": "Decks played as matches per round (default: %(default)s)",
+    })
+    seed: int = field(default=RANDOM_SEED, metadata={
+        "help": (
+            "Seeds the perturbation and the deck build; a repeat run with the "
+            "same seed collects nothing new, so change it to top a corpus up "
+            "(default: %(default)s)"
+        ),
+    })
     split_from: Path | None = None
     exclude_cards: Path | None = None
-    workers: int = 12
+    workers: int = field(default=DEFAULT_WORKERS, metadata={
+        "help": "Parallel Java worker processes (default: %(default)s)",
+    })
     caps: CollectionCaps = field(default_factory=CollectionCaps)
     #: The holdout rule a variant printing a held-out text is dropped under;
     #: must agree with ``build-corpus``'s.

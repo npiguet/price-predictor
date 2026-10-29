@@ -228,6 +228,10 @@ class Materialized(NamedTuple):
     encoded: EncodedBatch
 
 
+#: Where a checkpoint's ``extra`` holds the identity baseline's table.
+IDENTITY_TABLE_KEY = "identity_table"
+
+
 class IdentityTable(torch.nn.Module):
     """The ``identity`` baseline's free ``e`` per ability text, indexed exactly.
 

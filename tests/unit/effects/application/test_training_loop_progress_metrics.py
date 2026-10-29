@@ -42,17 +42,18 @@ def scored(corpus, records, tmp_path_factory):  # noqa: F811
     seen: dict = {}
     real = TrainingLoop._validate_epoch
 
-    def validate_epoch(self, epoch, run, tally, fields):
-        result, parts, metrics = real(self, epoch, run, tally, fields)
+    def validate_epoch(self, epoch, run, tally, samples):
+        result, parts, metrics = real(self, epoch, run, tally, samples)
+        fields = run.fields[epoch]
         seen["fed"] = metrics
-        seen["measured"] = measure(self.card_disjoint, Runnable(
+        seen["measured"] = measure(samples.card_disjoint, Runnable(
             run.encoder, run.model,
-            self.preparer.batcher(training=False, materializer=self._scoring),
+            run.preparer.batcher(training=False, materializer=run.scoring),
             fields,
         ))
         seen["loss"] = result.card_disjoint_loss
         seen["loss without margins"] = self._validate(
-            self.card_disjoint, run, fields=fields, parts={},
+            samples.card_disjoint, run, fields=fields, parts={},
         )
         run.encoder.train()
         run.model.train()
