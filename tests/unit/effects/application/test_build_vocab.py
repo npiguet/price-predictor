@@ -430,7 +430,7 @@ class TestScriptSurfaceSeeding:
 
         monkeypatch.setattr(
             module, "seed_tokens",
-            lambda surface, definitions, staged: module.SeededTokens(),
+            lambda stager, definitions, staged: module.SeededTokens(),
         )
         with pytest.raises(module.KeywordExpansionUnknownError, match="Vigilance"):
             run(_config(corpus, tmp_path, target_size=80))

@@ -231,6 +231,18 @@ class Decisions:
     #: Kept records per legality mode (FR-053's ``legality_mode_counts``).
     mode_counts: dict[str, int]
 
+    def write_plan(self, store: CorpusStore) -> WritePlan:
+        """What the write pass applies: these decisions, its parts in ``store``."""
+        return WritePlan(
+            parts_dirs={
+                stratum: str(store.parts_dir_for(stratum)) for stratum in OUTPUT_STRATA
+            },
+            strata=self.strata,
+            plans=self.selection.plans,
+            keyless_plans=self.selection.keyless,
+            mode_counts=self.mode_counts,
+        )
+
 
 def _keyword_misfires(
     key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
@@ -341,16 +353,7 @@ def build(config: BuildCorpusConfig) -> int:
     trees = _converted_trees(config)
     held_out = _select_holdout(config, trees)
     surface = surface_of(config.vocab_path)
-    logger.info(
-        "Holdout (%s unit): %d ability text(s) on %d card(s) and %d token "
-        "script(s); encoding surface %r.",
-        config.holdout.unit, len(held_out.texts), len(held_out.names),
-        sum(
-            1 for script in held_out.script_files
-            if split_script_file(script)[0] == SourceTree.TOKENSCRIPTS
-        ),
-        surface,
-    )
+    _log_holdout(config, held_out, surface)
     _refuse_mixed_generations(Path(config.records_dir))
     read = ReadConfig(
         records_dir=str(config.records_dir), sidecar_roots=trees.root_paths,
@@ -364,15 +367,7 @@ def build(config: BuildCorpusConfig) -> int:
     store.clear_outputs()
     written = run_write_pass(
         [shard.name for shard in survey.shards],
-        config=WriteConfig(read=read, plan=WritePlan(
-            parts_dirs={
-                stratum: str(store.parts_dir_for(stratum)) for stratum in OUTPUT_STRATA
-            },
-            strata=decisions.strata,
-            plans=decisions.selection.plans,
-            keyless_plans=decisions.selection.keyless,
-            mode_counts=decisions.mode_counts,
-        )),
+        config=WriteConfig(read=read, plan=decisions.write_plan(store)),
         workers=config.workers,
     )
     report_write_pass(survey, written)
@@ -390,6 +385,19 @@ def build(config: BuildCorpusConfig) -> int:
         sum(written.training.kept.values()), store.directory, manifest.digest(),
     )
     return 0
+
+
+def _log_holdout(config: BuildCorpusConfig, held_out: HeldOutCards, surface: Surface) -> None:
+    logger.info(
+        "Holdout (%s unit): %d ability text(s) on %d card(s) and %d token "
+        "script(s); encoding surface %r.",
+        config.holdout.unit, len(held_out.texts), len(held_out.names),
+        sum(
+            1 for script in held_out.script_files
+            if split_script_file(script)[0] == SourceTree.TOKENSCRIPTS
+        ),
+        surface,
+    )
 
 
 def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:

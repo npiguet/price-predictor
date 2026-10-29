@@ -750,7 +750,11 @@ def _fixture_keyword_lines() -> list[str]:
 def test_no_definition_expands_to_a_percent_or_unk(surface, source):
     """SC-002 over every real definition and every real fixture keyword line,
     against a vocabulary seeded the way ``build-vocab`` seeds it."""
-    from effects.application.build_vocab import SEEDED_SPECIALS, seed_tokens
+    from effects.application.build_vocab import (
+        SEEDED_SPECIALS,
+        seed_tokens,
+        staging_tokenizer,
+    )
     from effects.application.extract_keyword_definitions import (
         load_keyword_definitions,
     )
@@ -761,7 +765,7 @@ def test_no_definition_expands_to_a_percent_or_unk(surface, source):
         pytest.skip("no keyword-definition file in output/")
     definitions = load_keyword_definitions(path)
     staged = _fixture_keyword_lines() if surface == "script" else []
-    seeded = seed_tokens(surface, definitions, staged)
+    seeded = seed_tokens(staging_tokenizer(surface, definitions), definitions, staged)
     vocab: dict[str, int] = {}
     for token in (*SEEDED_SPECIALS, *MULTI_WORD_KEYWORDS, *seeded.all()):
         vocab.setdefault(token, len(vocab))
