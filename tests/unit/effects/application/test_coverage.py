@@ -1113,7 +1113,7 @@ class TestHeldOutTextUnit:
             return real_read(path)
 
         monkeypatch.setattr(sidecar_io, "read_sidecar", counting_read)
-        collect_coverage._script_texts.cache_clear()
+        collect_coverage._sidecars.cache_clear()
         roots = {
             "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
             "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
@@ -1122,7 +1122,7 @@ class TestHeldOutTextUnit:
         first = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
         read_by_one = len(reads)
         second = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
-        collect_coverage._script_texts.cache_clear()
+        collect_coverage._sidecars.cache_clear()
 
         assert read_by_one > 0
         assert len(reads) == read_by_one

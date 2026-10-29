@@ -37,6 +37,7 @@ from effects.domain.corpus_plan import (
     TrainingSupply,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
+from effects.domain.provenance import first_text
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
     EffectRecord,
@@ -50,7 +51,7 @@ from effects.domain.tally_merge import NOT_MERGED, merge_into
 
 if TYPE_CHECKING:
     from effects.domain.damage_step_keywords import KeywordResolver
-    from effects.domain.provenance import SidecarLookup
+    from effects.domain.provenance import ProvenanceKey, SidecarLookup
     from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
@@ -173,19 +174,15 @@ class WorkerContext:
         since that is the surface the holdout is chosen on."""
         if not keys or not self.read.held_out.keys:
             return None
-        if keys in self._held_text:
-            return self._held_text[keys]
-        from effects.domain.text_holdout import normalize_script_text
+        if keys not in self._held_text:
+            self._held_text[keys] = first_text(keys, self._held_out_script)
+        return self._held_text[keys]
 
-        found = None
-        for key in keys:
-            line = self.sidecars.line_or_none(key)
-            script = line.script_text if line is not None else None
-            if script and self.read.held_out.holds_text(script):
-                found = normalize_script_text(script)
-                break
-        self._held_text[keys] = found
-        return found
+    def _held_out_script(self, key: ProvenanceKey) -> str | None:
+        # The holdout key normalizes first, so testing the normalized text
+        # tests the script.
+        text = self.sidecars.script_text(key)
+        return text if text is not None and self.read.held_out.holds_text(text) else None
 
 
 # ── the tallies ─────────────────────────────────────────────────────────

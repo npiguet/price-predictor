@@ -7,7 +7,7 @@ rendered lines and aligns the ability cache. Pure dataclasses; the JSON is
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
@@ -323,3 +323,24 @@ class SidecarLookup(Protocol):
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
         """The join's answer for a key."""
         ...
+
+    def script_text(self, key: ProvenanceKey) -> str | None:
+        """The normalized script text of the line a key names, None where
+        :meth:`line_or_none` gives no line or the line has no script."""
+        ...
+
+
+def first_text(
+    keys: Iterable[ProvenanceKey], text_of: Callable[[ProvenanceKey], str | None],
+) -> str | None:
+    """The text of the first key ``text_of`` names one for, or None.
+
+    The acting line is the first acting key that resolves, so every reader of
+    "the text this record acts through" folds a key tuple this way, whatever
+    ``text_of`` resolves to.
+    """
+    for key in keys:
+        text = text_of(key)
+        if text is not None:
+            return text
+    return None

@@ -10,7 +10,7 @@ landed on. Cost halves contribute the observed cost (mana, tap, sacrifice,
 life), static abilities their continuous contributions, triggers their fired
 share.
 
-The acting text follows ``effects.application.gate_one.acting_text``: the
+The acting text follows ``effects.domain.provenance.first_text``: the
 first key of ``record.ability`` that resolves to a sidecar line, encoded on
 the checkpoint's surface. The key → text map comes from ``cache/keymap.pkl``
 (written by ``build_texts.py``), so no worker builds a ``SidecarCache``.

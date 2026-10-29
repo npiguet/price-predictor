@@ -1,8 +1,9 @@
-"""``acting_keys``: the keys a record's ``[ACT]`` reads."""
+"""``acting_keys``: the keys a record's ``[ACT]`` reads, and ``first_text``, the
+text they fold to."""
 
 from __future__ import annotations
 
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import (
     Candidate,
     CombatPayload,
@@ -40,3 +41,17 @@ def test_a_decision_without_candidates_acts_through_nothing():
 
 def test_a_record_with_no_acting_line_acts_through_nothing():
     assert acting_keys(_Record(CombatPayload())) == ()
+
+
+def test_the_first_key_that_resolves_names_the_text():
+    """A line merged from several traits carries several keys; a runtime-only
+    one ahead of them names no text and is passed over."""
+    runtime = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 9)
+    other = ProvenanceKey("cardsfolder/b/bolt.txt", 0, "spell", 0)
+    texts = {_KEY: "deal 2 damage", other: "deal 3 damage"}
+    assert first_text((runtime, _KEY, other), texts.get) == "deal 2 damage"
+
+
+def test_keys_that_resolve_to_nothing_have_no_text():
+    assert first_text((_KEY,), {}.get) is None
+    assert first_text((), {_KEY: "deal 2 damage"}.get) is None

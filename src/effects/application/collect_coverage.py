@@ -38,6 +38,7 @@ from effects.domain.coverage import (
     retire_stalled,
     text_deck_weights,
 )
+from effects.domain.provenance import first_text
 from effects.domain.record_quality import record_refusal
 from effects.domain.records import RecordKind, acting_keys
 
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
     from effects.domain.provenance import ProvenanceKey
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.converted_trees import ConvertedTrees
+    from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
 
@@ -623,53 +625,36 @@ def count_text_shard(
     Counted as build-corpus counts a held-out text's games (FR-053): from the
     resolution records its refusal rule keeps, through the first acting key
     whose text is held out. Top-level so a process pool can pickle it; each
-    process resolves keys through its own :func:`_script_texts`, because a
+    process resolves keys through its own :func:`_sidecars`, because a
     sidecar cache does not pickle.
     """
     from effects.infrastructure.record_io import read_shard
 
-    script_texts = _script_texts(tuple(sorted(roots.items())))
+    sidecars = _sidecars(tuple(sorted(roots.items())))
+
+    def held_out_text(key: ProvenanceKey) -> str | None:
+        text = sidecars.script_text(key)
+        return text if text in texts else None
+
     games: dict[str, set[str]] = defaultdict(set)
     for record in read_shard(shard):
         if record.kind is not RecordKind.RESOLUTION:
             continue
-        if record_refusal(record, script_texts.sidecars.resolution_of) is not None:
+        if record_refusal(record, sidecars.resolution_of) is not None:
             continue
-        text = next(
-            (text for key in acting_keys(record) if (text := script_texts.of(key)) in texts),
-            None,
-        )
+        text = first_text(acting_keys(record), held_out_text)
         if text is not None:
             games[text].add(record.game_id)
     return dict(games)
 
 
-class _ScriptTexts:
-    """Each provenance key's normalized script text, resolved once per key."""
-
-    def __init__(self, roots: tuple[tuple[str, str], ...]) -> None:
-        from effects.infrastructure.sidecar_io import SidecarCache
-
-        self.sidecars = SidecarCache({tree: Path(root) for tree, root in roots})
-        self._by_key: dict[ProvenanceKey, str | None] = {}
-
-    def of(self, key: ProvenanceKey) -> str | None:
-        from effects.domain.text_holdout import normalize_script_text
-
-        if key not in self._by_key:
-            line = self.sidecars.line_or_none(key)
-            self._by_key[key] = (
-                normalize_script_text(line.script_text)
-                if line is not None and line.script_text else None
-            )
-        return self._by_key[key]
-
-
 @lru_cache(maxsize=1)
-def _script_texts(roots: tuple[tuple[str, str], ...]) -> _ScriptTexts:
-    """The process's resolver for ``roots``, kept across the shards it counts,
-    which name largely the same cards."""
-    return _ScriptTexts(roots)
+def _sidecars(roots: tuple[tuple[str, str], ...]) -> SidecarCache:
+    """The process's sidecar cache for ``roots``, kept across the shards it
+    counts, which name largely the same cards."""
+    from effects.infrastructure.sidecar_io import SidecarCache
+
+    return SidecarCache({tree: Path(root) for tree, root in roots})
 
 
 class TextCoverageCounter(_ShardCounter):

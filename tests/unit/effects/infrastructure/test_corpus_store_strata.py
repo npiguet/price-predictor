@@ -86,6 +86,6 @@ def test_a_text_seen_only_outside_the_training_stratum_stays_unique(tmp_path):
     raw = tmp_path / "records"
     write_shard(raw / "dropped.jsonl.gz", [_record("dropped", 1, (_key("bolt"),))])
 
-    stratum = unique_text_stratum(store.directory, frozenset({"held"}), _Texts())
+    stratum = unique_text_stratum(store.directory, frozenset({"held"}), _Texts().text_of)
 
     assert [r.record_id for r in stratum] == ["held.1"]

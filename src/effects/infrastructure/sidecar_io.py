@@ -23,6 +23,7 @@ from effects.domain.provenance import (
     SubAbilityLink,
     split_script_file,
 )
+from effects.domain.text_holdout import normalize_script_text
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +296,7 @@ class SidecarCache:
         #: Script files found to have no sidecar, so a miss stats the disk once.
         self._missing: set[str] = set()
         self._prose: dict[str, list[str]] = {}
+        self._script_texts: dict[ProvenanceKey, str | None] = {}
         #: ``script_file -> times asked`` for keys naming an unconverted script,
         #: counted so a broken conversion shows.
         self.unresolved: dict[str, int] = {}
@@ -360,6 +362,18 @@ class SidecarCache:
             if line is not None:
                 return line
         return None
+
+    def script_text(self, key: ProvenanceKey) -> str | None:
+        """The normalized script text of the line a key names, under
+        :meth:`line_or_none`; resolved once per key, since the holdout tests
+        and the coverage counts ask for the same keys shard after shard."""
+        if key not in self._script_texts:
+            line = self.line_or_none(key)
+            self._script_texts[key] = (
+                normalize_script_text(line.script_text)
+                if line is not None and line.script_text else None
+            )
+        return self._script_texts[key]
 
     def prose_for(self, key: ProvenanceKey) -> str | None:
         """The converted prose of the line a key names.

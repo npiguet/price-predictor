@@ -11,11 +11,12 @@ from typing import TYPE_CHECKING
 import torch
 
 from effects.application.breakdowns import TOTAL, RecordResult
-from effects.application.gate_one import acting_text, forward_chunks
+from effects.application.gate_one import forward_chunks
 from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
 from effects.domain.effect_losses import per_entity_loss
 from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.keyword_names import normalize_keyword
+from effects.domain.provenance import first_text
 from effects.domain.records import acting_keys
 from effects.domain.rule_families import rule_family
 
@@ -85,7 +86,7 @@ def _record_result(
         game_id=record.game_id,
         kind=record.kind.value,
         subkind=record.subkind.value if record.subkind else None,
-        text=acting_text(record, batcher),
+        text=first_text(acting_keys(record), batcher.text_of),
         family=family,
         random_seat=bool(record.random_seat),
         what_if=record.what_if,

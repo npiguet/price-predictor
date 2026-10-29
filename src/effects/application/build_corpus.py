@@ -42,7 +42,7 @@ from effects.domain.corpus_plan import (
     plan_selection,
 )
 from effects.domain.keyword_names import normalize_keyword
-from effects.domain.provenance import SourceTree, split_script_file
+from effects.domain.provenance import ProvenanceKey, SourceTree, first_text, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
 from effects.domain.sampling import DEFAULT_KIND_MIX
@@ -223,17 +223,6 @@ class Decisions:
     mode_counts: dict[str, int]
 
 
-def _text_of_keys(keys: Keys, sidecars: SidecarCache, surface: Surface) -> str | None:
-    """The text a key tuple folds to, through the trainer's own definition."""
-    from effects.application.ability_text import text_for_key
-
-    for key in keys:
-        text = text_for_key(key, sidecars, surface)
-        if text is not None:
-            return text
-    return None
-
-
 def _keyword_misfires(
     key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
 ) -> list[str]:
@@ -280,10 +269,16 @@ def decide(
             "with what the manifest is about to record."
         )
 
+    from effects.application.ability_text import text_for_key
+
+    def text_of(key: ProvenanceKey) -> str | None:
+        # The trainer's own key-to-text join, so the rarity table keys match.
+        return text_for_key(key, sidecars, surface)
+
     key_text: dict[Keys, str] = {}
     text_games: dict[str, set[int]] = {}
     for keys in survey.rarity.key_records:
-        text = _text_of_keys(keys, sidecars, surface)
+        text = first_text(keys, text_of)
         if text is None:
             # A runtime-only trait or an unconverted script: no text to cap
             # against, so its records are sampled with the cell's keyless ones.

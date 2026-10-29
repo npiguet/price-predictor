@@ -15,11 +15,10 @@ from __future__ import annotations
 import pytest
 
 from effects.application.gate_one import (
-    acting_text,
     training_texts,
     unique_text_records,
 )
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import (
     EffectRecord,
     RecordKind,
@@ -67,23 +66,13 @@ def _acting(records) -> set:
     return {acting_keys(record) for record in records}
 
 
+def _text(record, batcher) -> str | None:
+    return first_text(acting_keys(record), batcher.text_of)
+
+
 @pytest.fixture
 def batcher() -> _Batcher:
     return _Batcher({0: "deal 3 damage", 1: "draw a card", 2: "gain 2 life"})
-
-
-class TestActingText:
-    def test_the_first_key_that_resolves_wins(self, batcher):
-        """A rendered line merged from several traits carries several keys, and
-        they all name the same line."""
-        record = _record(0)
-        assert acting_text(record, batcher) == "deal 3 damage"
-
-    def test_a_record_with_no_ability_has_no_text(self, batcher):
-        assert acting_text(_record(None), batcher) is None
-
-    def test_an_unresolvable_key_yields_no_text(self, batcher):
-        assert acting_text(_record(99), batcher) is None
 
 
 class TestTheStratum:
@@ -92,13 +81,14 @@ class TestTheStratum:
         training = [_record(0)]
         held_out = [_record(0), _record(1)]
         stratum = unique_text_records(
-            held_out, batcher, seen=training_texts(_acting(training), batcher),
+            held_out, batcher.text_of, seen=training_texts(_acting(training), batcher.text_of),
         )
-        assert [acting_text(r, batcher) for r in stratum] == ["draw a card"]
+        assert [_text(r, batcher) for r in stratum] == ["draw a card"]
 
     def test_a_text_absent_from_training_is_kept(self, batcher):
         stratum = unique_text_records(
-            [_record(2)], batcher, seen=training_texts(_acting([_record(0)]), batcher),
+            [_record(2)], batcher.text_of,
+            seen=training_texts(_acting([_record(0)]), batcher.text_of),
         )
         assert len(stratum) == 1
 
@@ -106,7 +96,7 @@ class TestTheStratum:
         """The rule is "absent from training", not "seen once" — a text held out
         twice is held out twice, and both records score."""
         stratum = unique_text_records(
-            [_record(1), _record(1)], batcher, seen=set(),
+            [_record(1), _record(1)], batcher.text_of, seen=set(),
         )
         assert len(stratum) == 2
 
@@ -114,27 +104,27 @@ class TestTheStratum:
         """The envelope forbids it an acting line, so it could not be
         stratified by text even if the kind filter were removed."""
         combat = _record(None, kind=RecordKind.COMBAT)
-        assert acting_text(combat, batcher) is None
-        assert unique_text_records([combat], batcher, seen=set()) == []
+        assert _text(combat, batcher) is None
+        assert unique_text_records([combat], batcher.text_of, seen=set()) == []
 
     def test_a_record_whose_text_does_not_resolve_is_skipped(self, batcher):
-        assert unique_text_records([_record(99)], batcher, seen=set()) == []
+        assert unique_text_records([_record(99)], batcher.text_of, seen=set()) == []
 
     def test_an_empty_training_set_keeps_every_resolution_record(self, batcher):
         stratum = unique_text_records(
-            [_record(0), _record(1), _record(2)], batcher, seen=set(),
+            [_record(0), _record(1), _record(2)], batcher.text_of, seen=set(),
         )
         assert len(stratum) == 3
 
 
 class TestTrainingTexts:
     def test_it_collects_every_acting_text(self, batcher):
-        assert training_texts(_acting([_record(0), _record(1)]), batcher) == {
+        assert training_texts(_acting([_record(0), _record(1)]), batcher.text_of) == {
             "deal 3 damage", "draw a card",
         }
 
     def test_records_without_an_acting_line_contribute_nothing(self, batcher):
-        assert training_texts(_acting([_record(None)]), batcher) == set()
+        assert training_texts(_acting([_record(None)]), batcher.text_of) == set()
 
 
 class TestMarginAccumulator:

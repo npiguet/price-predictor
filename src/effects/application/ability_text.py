@@ -12,7 +12,7 @@ from pathlib import Path
 
 from effects.domain.ability_encoder import encoding_text
 from effects.domain.ability_tokenizer import Surface
-from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
+from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup, first_text
 from effects.domain.records import EffectRecord, acting_keys
 from effects.infrastructure.sidecar_io import (
     SIDECAR_SUFFIX,
@@ -96,11 +96,7 @@ class KeyResolver:
     def acting_text(self, record: EffectRecord) -> str | None:
         """The acting line's text, or None where no line acts (``combat``,
         ``attackers``, ``blockers``), which samples uniformly."""
-        for key in acting_keys(record):
-            text = self.text_of(key)
-            if text is not None:
-                return text
-        return None
+        return first_text(acting_keys(record), self.text_of)
 
     def keys_of(self, text: str) -> list[ProvenanceKey]:
         """The keys resolved to ``text`` so far."""
