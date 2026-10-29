@@ -8,10 +8,20 @@ can refuse a dataset rebuilt since (FR-147).
 from __future__ import annotations
 
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields
-from typing import Any
+from typing import Any, NamedTuple
 
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.canonical_digest import canonical_digest
+from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
+
+
+class ManifestDrift(NamedTuple):
+    """The source shards that changed since a build, each sorted by name."""
+
+    added: tuple[str, ...]
+    removed: tuple[str, ...]
+    resized: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +113,7 @@ class CorpusManifest:
     seed: int = field(metadata=_reads(int))
     #: The encoding surface (``surface_of(vocab_path)``) the rarity table's
     #: text keys were built on; the other surface keys every text differently.
-    surface: str = field(metadata=_reads(str))
+    surface: Surface = field(metadata=_reads(Surface))
     vocab_path: str = field(metadata=_reads(str))
     #: The variant tree the build resolved keys against, or "" when none.
     variant_scripts: str = field(metadata=_reads(str, absent=""))
@@ -239,6 +249,12 @@ class CorpusManifest:
         default_factory=dict, metadata=_gen1_implied(_int_map),
     )
 
+    @property
+    def holdout(self) -> HoldoutRule:
+        """The rule the held-out texts were chosen by; stored as three fields,
+        the form every manifest so far was written in."""
+        return HoldoutRule(self.holdout_permille, self.holdout_max_carriers, self.holdout_unit)
+
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["sources"] = [asdict(shard) for shard in self.sources]
@@ -276,9 +292,7 @@ class CorpusManifest:
         payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
         return canonical_digest(payload).hex()
 
-    def drift(
-        self, current: tuple[SourceShard, ...],
-    ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    def drift(self, current: tuple[SourceShard, ...]) -> ManifestDrift:
         """Shards added, removed and resized since the build, each sorted: what
         ``--verify`` reports (FR-144)."""
         was = {shard.name: shard.size for shard in self.sources}
@@ -288,7 +302,7 @@ class CorpusManifest:
         resized = tuple(
             sorted(name for name in set(was) & set(now) if was[name] != now[name])
         )
-        return added, removed, resized
+        return ManifestDrift(added, removed, resized)
 
 
 _FIELDS = {spec.name: spec for spec in fields(CorpusManifest)}

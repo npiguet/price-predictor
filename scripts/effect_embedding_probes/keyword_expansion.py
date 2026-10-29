@@ -76,6 +76,7 @@ from effects.domain.ability_encoder import (  # noqa: E402
 from effects.domain.ability_tokenizer import (  # noqa: E402
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
+    Surface,
     keyword_token,
     tokenizer_surface,
 )
@@ -84,7 +85,7 @@ from effects.infrastructure.effect_model_store import (  # noqa: E402
     load_effect_checkpoint,
     verified_inference_paths,
 )
-from effects.infrastructure.sidecar_io import tree_of_folder  # noqa: E402
+from effects.infrastructure.sidecar_io import sidecar_paths, tree_of_folder  # noqa: E402
 from price_predictor.infrastructure.tokenizer_store import (  # noqa: E402
     load_vocabulary,
 )
@@ -216,7 +217,7 @@ def corpus_lines(trees) -> list[dict]:
     """Every sidecar line with script text, with its card and tree path."""
     rows = []
     for tree in trees:
-        for path in sorted(tree.rglob("*.provenance.json")):
+        for path in sidecar_paths(tree):
             sidecar = json.loads(path.read_text(encoding="utf-8"))
             # Named by the source tree the keys spell, not the folder's own
             # name: a kept-aside ``gen1-cardsfolder`` still holds ``cardsfolder``.
@@ -319,7 +320,7 @@ def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one l
         vocab, definitions,
         surface=tokenizer_surface(paths.surface, settings),
     )
-    script_tok = AbilityTokenizer(vocab, definitions, surface="script")
+    script_tok = AbilityTokenizer(vocab, definitions, surface=Surface.SCRIPT)
     UNK_ID = tok.unk_id
     summary: list[str] = [
         f"checkpoint {paths.checkpoint}",

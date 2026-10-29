@@ -18,7 +18,7 @@ from effects.application.breakdowns import (
     breakdown_checks,
 )
 from effects.domain.evaluation_report import CheckStatus
-from effects.domain.records import WHAT_IF_SUBKINDS, LegalityDecision
+from effects.domain.records import LEGALITY_SUBKINDS, LegalityDecision
 from effects.domain.rule_families import rule_family
 from effects.domain.strata import Stratum
 from effects.infrastructure.record_io import read_shard
@@ -136,7 +136,7 @@ class TestPolicyAndDecisionSlices:
         assert groups[bd.ON_POLICY].per_record.records == len(rows) - 1
 
     def test_legality_records_split_into_real_what_if_and_unknown(self, rows):
-        legality = [r for r in rows if r.subkind in WHAT_IF_SUBKINDS]
+        legality = [r for r in rows if r.subkind in LEGALITY_SUBKINDS]
         assert len(legality) >= 3
         marked = [
             replace(legality[0], what_if=False),
@@ -170,7 +170,7 @@ class TestWithheldKeyword:
 
 class TestTheReport:
     def test_every_section_appears_for_a_gen2_shaped_set(self, rows):
-        legality = next(r for r in rows if r.subkind in WHAT_IF_SUBKINDS)
+        legality = next(r for r in rows if r.subkind in LEGALITY_SUBKINDS)
         card = [*rows, replace(rows[0], random_seat=True),
                 replace(legality, what_if=False)]
         checks = breakdown_checks(

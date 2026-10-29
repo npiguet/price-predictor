@@ -32,7 +32,7 @@ from effects.domain.effect_head_layout import (
     FieldSpec,
     FieldType,
 )
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS, ValueKind
 
@@ -77,6 +77,14 @@ def counted(target: torch.Tensor) -> torch.Tensor:
     return target.clamp(min=0.0, max=MAGNITUDE_CAP)
 
 
+def magnitude_target(spec: FieldSpec, target: torch.Tensor) -> torch.Tensor:
+    """The magnitude a count or signed-delta field's Poisson term trains on,
+    so anything scoring that term reads the target the same way."""
+    if spec.type is FieldType.COUNT:
+        return counted(target.float())
+    return capped(target.float()).abs()
+
+
 def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """Poisson NLL on a log-rate prediction, summed. ``full=True`` changes no
     gradient but puts every term's minimum near zero, so the loss does not
@@ -86,6 +94,12 @@ def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     )
 
 
+def delta_direction(target: torch.Tensor) -> torch.Tensor:
+    """A signed delta's direction class, in :data:`DIRECTIONS` order:
+    -1, 0 and 1 become 0, 1 and 2."""
+    return torch.sign(target).long() + 1
+
+
 def _signed_delta_loss(
     prediction: torch.Tensor, target: torch.Tensor,
 ) -> torch.Tensor:
@@ -93,7 +107,7 @@ def _signed_delta_loss(
     a loss are different predictions rather than a hedge."""
     direction_logits = prediction[..., SIGNED_DIRECTIONS]
     log_magnitude = prediction[..., SIGNED_MAGNITUDE]
-    direction = torch.sign(target).long() + 1  # -1,0,1 -> 0,1,2
+    direction = delta_direction(target)
     loss = functional.cross_entropy(
         direction_logits.reshape(-1, len(DIRECTIONS)), direction.reshape(-1),
         reduction="sum",
@@ -115,7 +129,7 @@ def field_loss(
                 prediction, target.float(), reduction="sum",
             )
         case FieldType.COUNT:
-            return _poisson(prediction.squeeze(-1), counted(target.float()))
+            return _poisson(prediction.squeeze(-1), magnitude_target(spec, target))
         case FieldType.SIGNED_DELTA:
             return _signed_delta_loss(prediction, capped(target.float()))
         case FieldType.CATEGORICAL:
@@ -128,9 +142,7 @@ def field_loss(
 
 def per_entity_loss(
     outputs: torch.Tensor,
-    gate_target: torch.Tensor,
-    field_targets: EntityFieldTargets,
-    entity_mask: torch.Tensor,
+    targets: EntityTargetBatch,
     *,
     fields: tuple[FieldSpec, ...],
     report_parts: bool = False,
@@ -139,9 +151,8 @@ def per_entity_loss(
     ``report_parts`` (scaled alike, so they sum to the loss).
 
     Args:
-        outputs: ``(batch, entities, PER_ENTITY_WIDTH)``.
-        gate_target: ``(batch, entities)``, 1 where the entity was affected.
-        entity_mask: ``(batch, entities)``, 1 for a real entity.
+        outputs: ``(batch, entities, PER_ENTITY_WIDTH)``, already gathered
+            column for column with ``targets``.
         fields: the fields active at this step.
 
     The gate trains on every real entity, players included. A field trains
@@ -152,8 +163,9 @@ def per_entity_loss(
     names: list[str] = []
     terms: list[torch.Tensor] = []
     device = outputs.device
-    real_mask = entity_mask.detach().bool().cpu()
-    gate_host = gate_target.detach().cpu()
+    field_targets = targets.fields
+    real_mask = targets.mask.detach().bool().cpu()
+    gate_host = targets.gate.detach().cpu()
     real = real_mask.flatten().nonzero().squeeze(1)
     hit_mask = real_mask & gate_host.bool()
     flat_outputs = outputs.reshape(-1, outputs.shape[-1])

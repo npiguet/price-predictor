@@ -13,6 +13,7 @@ from collections import Counter
 
 import pytest
 
+from effects.domain.rarity import TextGames
 from effects.domain.records import (
     Moment,
     PlayabilitySubkind,
@@ -22,10 +23,8 @@ from effects.domain.sampling import (
     DEFAULT_KIND_MIX,
     RARITY_CAP,
     SAMPLING_CLASSES,
-    UNIFORM_CLASSES,
     SamplingClass,
     batches_without_replacement,
-    effective_games,
     parse_kind_mix,
     rarity_weights,
     sample_weights,
@@ -106,22 +105,21 @@ class TestRarityWeighting:
     def test_an_empty_corpus_weighs_nothing(self):
         assert rarity_weights({}) == {}
 
-    def test_effective_games_counts_distinct_games_not_records(self):
-        """One long game producing many records is still one game."""
-        records = [
-            make_record(RecordKind.COMBAT, game_id="g1", record_id=f"g1.{i}")
-            for i in range(50)
-        ] + [make_record(RecordKind.COMBAT, game_id="g2")]
-        assert effective_games(records, lambda r: "bolt") == {"bolt": 2}
-
-    def test_a_record_with_no_text_is_not_counted(self):
-        records = [make_record(RecordKind.COMBAT)]
-        assert effective_games(records, lambda r: None) == {}
-
 
 class TestUniformClasses:
-    def test_combat_and_playability_legality_sample_uniformly(self):
-        assert UNIFORM_CLASSES == {SamplingClass.COMBAT, SamplingClass.PLAYABILITY_LEGALITY}
+    def test_combat_and_playability_legality_have_no_acting_line(self):
+        records = [
+            make_record(kind, subkind=subkind)
+            for kind, subkind in (
+                (RecordKind.COMBAT, None),
+                (RecordKind.PLAYABILITY, PlayabilitySubkind.ATTACKERS),
+                (RecordKind.PLAYABILITY, PlayabilitySubkind.BLOCKERS),
+                (RecordKind.PLAYABILITY, PlayabilitySubkind.DECISION),
+                (RecordKind.RESOLUTION, None),
+            )
+        ]
+        uniform = {sampling_class(r) for r in records if not r.has_act_line}
+        assert uniform == {SamplingClass.COMBAT, SamplingClass.PLAYABILITY_LEGALITY}
 
     def test_a_record_with_no_acting_text_weighs_one(self):
         records = [
@@ -146,7 +144,7 @@ class TestUniformClasses:
         """One record, one example per candidate, each keyed on its own text."""
         record = make_record(RecordKind.PLAYABILITY)
         assert sampling_class(record) == SamplingClass.PLAYABILITY_DECISION
-        assert SamplingClass.PLAYABILITY_DECISION not in UNIFORM_CLASSES
+        assert record.has_act_line
 
 
 class TestSampleWeightsRarityTable:
@@ -161,8 +159,11 @@ class TestSampleWeightsRarityTable:
         texts = {"r1": "t", "r2": "u"}
         # The resident shard shows one game of each; corpus-wide ``t`` was in
         # a hundred, so within the class it now weighs less than ``u``.
+        def text_of(record):
+            return texts[record.record_id]
+
         corpus_wide = sample_weights(
-            records, lambda r: texts[r.record_id], rarity={"t": 100, "u": 1},
+            records, text_of, games=TextGames.of(records, text_of, {"t": 100, "u": 1}),
         )
         shard_only = sample_weights(records, lambda r: texts[r.record_id])
         assert corpus_wide[0] < corpus_wide[1]
@@ -171,86 +172,10 @@ class TestSampleWeightsRarityTable:
     def test_a_text_the_table_does_not_name_falls_back_to_the_shard(self):
         """A shard collected after the dataset was built still weights sanely."""
         records = [make_record(RecordKind.COMBAT, game_id="g1", record_id="r1")]
-        assert sample_weights(records, lambda r: "new", rarity={"t": 100}) == (
+        table = TextGames.of(records, lambda r: "new", {"t": 100})
+        assert sample_weights(records, lambda r: "new", games=table) == (
             sample_weights(records, lambda r: "new")
         )
-
-
-class TestWeightsKeyByAbilityText:
-    """``StepPreparer._weighted`` must key rarity by ability text, not record id.
-
-    A ``record_id`` is unique per record, so keying on it gives
-    ``effective_games`` a count of exactly 1 for every key and every record in
-    a pool the same weight — rarity weighting silently does nothing.
-    """
-
-    def test_a_single_game_ability_outweighs_a_many_game_one(self, tmp_path):
-        from effects.application.ability_text import KeyResolver
-        from effects.domain.provenance import ProvenanceKey, SidecarLine
-        from tests.unit.effects.application.test_ability_text import (
-            FakeSidecarCache,
-        )
-        from tests.unit.effects.builders import make_preparer
-
-        common_key = ProvenanceKey("cardsfolder/c/common.txt", 0, "keyword", 0)
-        rare_key = ProvenanceKey("cardsfolder/r/rare.txt", 0, "keyword", 0)
-        sidecars = FakeSidecarCache(lines={
-            common_key: SidecarLine(
-                line_index=0, line_kind="keyword", provenance=(common_key,),
-                script_text="Common Ability",
-            ),
-            rare_key: SidecarLine(
-                line_index=0, line_kind="keyword", provenance=(rare_key,),
-                script_text="Rare Ability",
-            ),
-        })
-        # Carried by fifty games...
-        common_records = [
-            make_record(RecordKind.RESOLUTION, game_id=f"g{i}", ability=(common_key,))
-            for i in range(50)
-        ]
-        # ...against one carried by a single game.
-        rare_records = [
-            make_record(RecordKind.RESOLUTION, game_id="g-rare", ability=(rare_key,)),
-        ]
-        preparer = make_preparer(tmp_path)
-        preparer.rarity = None
-        preparer.resolver = KeyResolver(sidecars, preparer.surface)
-
-        shard = [*common_records, *rare_records]
-        weights = preparer._weighted(shard, preparer._texts(shard))
-
-        assert weights[-1] > weights[0]
-
-
-class TestProvenanceRecordsTheCorpus:
-    """FR-147: a checkpoint records the curated corpus it read, alongside its
-    split, so ``evaluate-effect-model`` can refuse one rebuilt since."""
-
-    def test_a_corpus_runs_provenance_records_the_manifest_digest(self):
-        from effects.application.train_effect_model import (
-            CorpusFacts,
-            TrainEffectModelConfig,
-        )
-
-        provenance = CorpusFacts(digest="abc123").provenance(
-            TrainEffectModelConfig(corpus="output/effects/corpus"),
-        )
-
-        assert provenance.corpus_path == "output/effects/corpus"
-        assert provenance.corpus_digest == "abc123"
-
-    def test_a_run_without_a_digest_records_no_corpus(self):
-        """Nothing is pinned until a manifest has been read."""
-        from effects.application.train_effect_model import (
-            CorpusFacts,
-            TrainEffectModelConfig,
-        )
-
-        provenance = CorpusFacts().provenance(TrainEffectModelConfig())
-
-        assert provenance.corpus_path == ""
-        assert provenance.corpus_digest == ""
 
 
 class TestBatchesWithoutReplacement:
@@ -347,9 +272,13 @@ class TestRarityWeightsWithinAClass:
         ]
         texts = {f"r{i}": ("rare" if i == 0 else "common") for i in range(6)}
         records = [*resolutions, *combats]
+        def text_of(record):
+            return texts.get(record.record_id)
+
         weights = sample_weights(
-            records, lambda r: texts.get(r.record_id),
-            rarity={"rare": 1, "common": 100}, class_of=sampling_class,
+            records, text_of,
+            games=TextGames.of(records, text_of, {"rare": 1, "common": 100}),
+            class_of=sampling_class,
         )
         resolution_weights = weights[:6]
         assert sum(resolution_weights) / 6 == pytest.approx(1.0)

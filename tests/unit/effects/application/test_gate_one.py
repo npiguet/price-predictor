@@ -15,18 +15,20 @@ from __future__ import annotations
 import pytest
 
 from effects.application.gate_one import (
-    acting_text,
+    GateOneMetrics,
+    evaluate_gate_one,
     training_texts,
     unique_text_records,
 )
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.evaluation_report import CheckStatus
+from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import (
     EffectRecord,
     RecordKind,
     acting_keys,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.builders import make_entity_targets, make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -67,23 +69,13 @@ def _acting(records) -> set:
     return {acting_keys(record) for record in records}
 
 
+def _text(record, batcher) -> str | None:
+    return first_text(acting_keys(record), batcher.text_of)
+
+
 @pytest.fixture
 def batcher() -> _Batcher:
     return _Batcher({0: "deal 3 damage", 1: "draw a card", 2: "gain 2 life"})
-
-
-class TestActingText:
-    def test_the_first_key_that_resolves_wins(self, batcher):
-        """A rendered line merged from several traits carries several keys, and
-        they all name the same line."""
-        record = _record(0)
-        assert acting_text(record, batcher) == "deal 3 damage"
-
-    def test_a_record_with_no_ability_has_no_text(self, batcher):
-        assert acting_text(_record(None), batcher) is None
-
-    def test_an_unresolvable_key_yields_no_text(self, batcher):
-        assert acting_text(_record(99), batcher) is None
 
 
 class TestTheStratum:
@@ -92,13 +84,14 @@ class TestTheStratum:
         training = [_record(0)]
         held_out = [_record(0), _record(1)]
         stratum = unique_text_records(
-            held_out, batcher, seen=training_texts(_acting(training), batcher),
+            held_out, batcher.text_of, seen=training_texts(_acting(training), batcher.text_of),
         )
-        assert [acting_text(r, batcher) for r in stratum] == ["draw a card"]
+        assert [_text(r, batcher) for r in stratum] == ["draw a card"]
 
     def test_a_text_absent_from_training_is_kept(self, batcher):
         stratum = unique_text_records(
-            [_record(2)], batcher, seen=training_texts(_acting([_record(0)]), batcher),
+            [_record(2)], batcher.text_of,
+            seen=training_texts(_acting([_record(0)]), batcher.text_of),
         )
         assert len(stratum) == 1
 
@@ -106,7 +99,7 @@ class TestTheStratum:
         """The rule is "absent from training", not "seen once" — a text held out
         twice is held out twice, and both records score."""
         stratum = unique_text_records(
-            [_record(1), _record(1)], batcher, seen=set(),
+            [_record(1), _record(1)], batcher.text_of, seen=set(),
         )
         assert len(stratum) == 2
 
@@ -114,33 +107,33 @@ class TestTheStratum:
         """The envelope forbids it an acting line, so it could not be
         stratified by text even if the kind filter were removed."""
         combat = _record(None, kind=RecordKind.COMBAT)
-        assert acting_text(combat, batcher) is None
-        assert unique_text_records([combat], batcher, seen=set()) == []
+        assert _text(combat, batcher) is None
+        assert unique_text_records([combat], batcher.text_of, seen=set()) == []
 
     def test_a_record_whose_text_does_not_resolve_is_skipped(self, batcher):
-        assert unique_text_records([_record(99)], batcher, seen=set()) == []
+        assert unique_text_records([_record(99)], batcher.text_of, seen=set()) == []
 
     def test_an_empty_training_set_keeps_every_resolution_record(self, batcher):
         stratum = unique_text_records(
-            [_record(0), _record(1), _record(2)], batcher, seen=set(),
+            [_record(0), _record(1), _record(2)], batcher.text_of, seen=set(),
         )
         assert len(stratum) == 3
 
 
 class TestTrainingTexts:
     def test_it_collects_every_acting_text(self, batcher):
-        assert training_texts(_acting([_record(0), _record(1)]), batcher) == {
+        assert training_texts(_acting([_record(0), _record(1)]), batcher.text_of) == {
             "deal 3 damage", "draw a card",
         }
 
     def test_records_without_an_acting_line_contribute_nothing(self, batcher):
-        assert training_texts(_acting([_record(None)]), batcher) == set()
+        assert training_texts(_acting([_record(None)]), batcher.text_of) == set()
 
 
 class TestMarginAccumulator:
     """The three margins pool every chunk's entities, then reduce once."""
 
-    def _chunk(self, affected_damage: float):
+    def _chunk(self, affected_damage: float, observed_damage: float = 2.0):
         import torch
 
         from effects.domain.effect_head_layout import (
@@ -162,9 +155,9 @@ class TestMarginAccumulator:
             "zone_outcome": torch.tensor(
                 [[float(ZONE_OUTCOMES.index("died")), 0.0]],
             ),
-            "damage_taken": torch.tensor([[2.0, 0.0]]),
+            "damage_taken": torch.tensor([[observed_damage, 0.0]]),
         })
-        return gathered, torch.tensor([[1.0, 0.0]]), targets, torch.ones(1, 2)
+        return gathered, make_entity_targets(torch.tensor([[1.0, 0.0]]), targets)
 
     def test_a_perfect_chunk_scores_perfectly(self):
         from effects.application.gate_one import MarginAccumulator
@@ -179,6 +172,16 @@ class TestMarginAccumulator:
         assert metrics.zone_outcome_accuracy == pytest.approx(1.0)
         assert metrics.mean_poisson_deviance == pytest.approx(0.0, abs=1e-6)
 
+    def test_a_count_netted_negative_scores_as_none_as_it_trains(self):
+        """A heal netted into ``damage_taken`` trains as zero damage, not as
+        the heal's size."""
+        from effects.application.gate_one import MarginAccumulator
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
+
+        margins = MarginAccumulator((FIELDS_BY_NAME["damage_taken"],))
+        margins.add(*self._chunk(1e-6, observed_damage=-2.0))
+        assert margins.metrics().mean_poisson_deviance == pytest.approx(0.0, abs=1e-4)
+
     def test_nothing_added_is_unmeasured_rather_than_perfect(self):
         import math
 
@@ -187,3 +190,75 @@ class TestMarginAccumulator:
         metrics = MarginAccumulator(()).metrics()
         assert math.isnan(metrics.affected_gate_f1)
         assert math.isnan(metrics.mean_poisson_deviance)
+
+
+class TestGateOne:
+    """All three margins must hold, on the card-disjoint unique-text stratum."""
+
+    def _identity(self) -> GateOneMetrics:
+        return GateOneMetrics(
+            affected_gate_f1=0.60,
+            zone_outcome_accuracy=0.50,
+            mean_poisson_deviance=1.00,
+        )
+
+    def _passing(self) -> GateOneMetrics:
+        return GateOneMetrics(
+            affected_gate_f1=0.70, zone_outcome_accuracy=0.60,
+            mean_poisson_deviance=0.90,
+        )
+
+    def test_all_three_margins_holding_passes(self):
+        result = evaluate_gate_one(self._passing(), self._identity())
+        assert result.status is CheckStatus.PASS
+        assert not result.blocks
+
+    def test_a_short_gate_f1_gain_fails(self):
+        model = GateOneMetrics(0.64, 0.60, 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "affected-gate F1" in result.detail
+
+    def test_a_short_zone_accuracy_gain_fails(self):
+        model = GateOneMetrics(0.70, 0.54, 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "zone-outcome accuracy" in result.detail
+
+    def test_a_short_deviance_reduction_fails(self):
+        model = GateOneMetrics(0.70, 0.60, 0.96)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "deviance" in result.detail
+
+    def test_exactly_meeting_a_threshold_passes(self):
+        model = GateOneMetrics(0.65, 0.55, 0.95)
+        assert evaluate_gate_one(model, self._identity()).status is CheckStatus.PASS
+
+    def test_failing_two_margins_reports_both(self):
+        model = GateOneMetrics(0.60, 0.50, 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert "affected-gate F1" in result.detail
+        assert "zone-outcome accuracy" in result.detail
+
+    def test_it_blocks_shipping(self):
+        model = GateOneMetrics(0.60, 0.50, 1.00)
+        assert evaluate_gate_one(model, self._identity()).blocks
+
+    def test_the_reduction_is_relative_not_absolute(self):
+        identity = GateOneMetrics(0.60, 0.50, 0.10)
+        model = GateOneMetrics(0.70, 0.60, 0.094)  # 6% relative
+        assert evaluate_gate_one(model, identity).status is CheckStatus.PASS
+
+    def test_a_margin_that_could_not_be_measured_fails(self):
+        """No zone target on the stratum makes the accuracy NaN; a NaN margin
+        compared against its floor is False, which used to read as a pass."""
+        model = GateOneMetrics(0.70, float("nan"), 0.90)
+        result = evaluate_gate_one(model, self._identity())
+        assert result.status is CheckStatus.FAIL
+        assert "zone-outcome accuracy" in result.detail
+        assert "not measured" in result.detail
+
+    def test_an_unmeasured_model_deviance_fails(self):
+        model = GateOneMetrics(0.70, 0.60, float("nan"))
+        assert evaluate_gate_one(model, self._identity()).status is CheckStatus.FAIL

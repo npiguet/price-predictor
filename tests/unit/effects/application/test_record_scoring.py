@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.unit.effects.builders import make_entity_targets
+
 
 class TestPerRecordLosses:
     """``score_records``' per-record rows sum the trainer's own loss terms (T104)."""
@@ -19,26 +21,25 @@ class TestPerRecordLosses:
         from effects.application.record_scoring import _record_losses
         from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH, FieldType
         from effects.domain.effect_losses import per_entity_loss
-        from effects.domain.entity_field_targets import EntityFieldTargets
 
         torch.manual_seed(0)
         fields = PER_ENTITY_FIELDS
         outputs = torch.randn(2, 3, PER_ENTITY_WIDTH)
         gate = torch.tensor([[1.0, 0.0, 1.0], [0.0, 0.0, 0.0]])
         mask = torch.tensor([[1.0, 1.0, 1.0], [1.0, 1.0, 0.0]])
-        targets = EntityFieldTargets.everywhere({
+        targets = make_entity_targets(gate, {
             spec.name: torch.zeros(
                 (2, 3, spec.arity) if spec.type is FieldType.MULTI_BINARY else (2, 3)
             )
             for spec in fields
-        })
+        }, mask)
         for row in range(2):
-            expected, _ = per_entity_loss(
-                outputs[row : row + 1], gate[row : row + 1],
-                targets.select(slice(row, row + 1)),
-                mask[row : row + 1], fields=fields,
+            alone = make_entity_targets(
+                gate[row : row + 1], targets.fields.select(slice(row, row + 1)),
+                mask[row : row + 1],
             )
-            losses = _record_losses(row, outputs, gate, targets, mask, fields)
+            expected, _ = per_entity_loss(outputs[row : row + 1], alone, fields=fields)
+            losses = _record_losses(row, outputs, targets, fields)
             assert losses[TOTAL] == pytest.approx(float(expected), rel=1e-5)
 
     def test_a_record_with_nothing_affected_supervises_only_the_gate(self):
@@ -47,12 +48,10 @@ class TestPerRecordLosses:
         from effects.application.breakdowns import TOTAL
         from effects.application.record_scoring import _record_losses
         from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, PER_ENTITY_WIDTH
-        from effects.domain.entity_field_targets import EntityFieldTargets
 
         outputs = torch.zeros(1, 2, PER_ENTITY_WIDTH)
         losses = _record_losses(
-            0, outputs, torch.zeros(1, 2), EntityFieldTargets({}, {}), torch.ones(1, 2),
-            PER_ENTITY_FIELDS,
+            0, outputs, make_entity_targets(torch.zeros(1, 2)), PER_ENTITY_FIELDS,
         )
         assert set(losses) == {"gate", TOTAL}
 
@@ -73,7 +72,6 @@ class TestPerRecordLosses:
             FieldType,
         )
         from effects.domain.effect_losses import field_loss
-        from effects.domain.entity_field_targets import EntityFieldTargets
 
         generator = torch.Generator().manual_seed(3)
         fields = PER_ENTITY_FIELDS
@@ -98,7 +96,7 @@ class TestPerRecordLosses:
             return torch.randint(0, 2, (3, 4), generator=generator)
 
         values = {spec.name: target(spec).float() for spec in fields}
-        targets = EntityFieldTargets.everywhere(values)
+        targets = make_entity_targets(gate, values, mask)
         for row in range(3):
             real = mask[row].bool()
             affected = real & gate[row].bool()
@@ -112,7 +110,7 @@ class TestPerRecordLosses:
                         spec, outputs[row, :, start:end][affected],
                         values[spec.name][row][affected],
                     ))
-            losses = _record_losses(row, outputs, gate, targets, mask, fields)
+            losses = _record_losses(row, outputs, targets, fields)
             assert set(losses) == {*expected, TOTAL}
             for name, value in expected.items():
                 assert losses[name] == pytest.approx(value, rel=1e-6, abs=1e-6), name

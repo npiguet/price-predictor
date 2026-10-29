@@ -14,7 +14,7 @@ from effects.application.build_vocab import (
     DEFAULT_VOCAB_PATH,
     BuildVocabConfig,
 )
-from effects.domain.ability_tokenizer import SURFACE_SCRIPT
+from effects.domain.ability_tokenizer import Surface
 from effects.infrastructure.cli import build_parser
 
 
@@ -49,7 +49,7 @@ class TestScriptSurface:
         stage-one-to-three checkpoint recorded."""
         assert DEFAULT_VOCAB_PATH != DEFAULT_SCRIPT_VOCAB_PATH
         assert BuildVocabConfig(
-            surface=SURFACE_SCRIPT,
+            surface=Surface.SCRIPT,
         ).resolved_vocab_path() == DEFAULT_SCRIPT_VOCAB_PATH
 
 

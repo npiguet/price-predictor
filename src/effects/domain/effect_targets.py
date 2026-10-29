@@ -10,6 +10,7 @@ that a destroyed creature was untapped.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from effects.domain.effect_head_input import CARD_TYPES, COUNTER_TYPES, OVERLAY_KEYWORDS
@@ -25,6 +26,8 @@ from effects.domain.effect_head_layout import (
     CreatedSlot,
     FieldScope,
     FieldSpec,
+    HeadField,
+    ZoneOutcome,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.keyword_names import overlay_keyword
@@ -32,11 +35,10 @@ from effects.domain.records import (
     ActivationPayload,
     ContinuousPayload,
     EffectRecord,
-    Moment,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
-    RecordKind,
+    ResolutionPayload,
     RewritePayload,
     TriggerPayload,
     events_of,
@@ -46,23 +48,23 @@ from effects.domain.state_snapshot import COLORS
 
 #: The zone outcome each moving event implies; the record keeps destroy and
 #: sacrifice apart, the target collapses them.
-_ZONE_BY_EVENT: dict[EventType, str] = {
-    EventType.DESTROYED: "died",
-    EventType.SACRIFICED: "died",
-    EventType.PHASED: "phased_out",
-    EventType.FACE_CHANGE: "face_changed",
-    EventType.SPELL_COUNTERED: "countered",
+_ZONE_BY_EVENT: dict[EventType, ZoneOutcome] = {
+    EventType.DESTROYED: ZoneOutcome.DIED,
+    EventType.SACRIFICED: ZoneOutcome.DIED,
+    EventType.PHASED: ZoneOutcome.PHASED_OUT,
+    EventType.FACE_CHANGE: ZoneOutcome.FACE_CHANGED,
+    EventType.SPELL_COUNTERED: ZoneOutcome.COUNTERED,
 }
 
-_ZONE_BY_DESTINATION: dict[str, str] = {
-    "graveyard": "died",
-    "exile": "exiled",
-    "hand": "to_hand",
-    "library": "library_top",
-    "battlefield": "blinked",
+_ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
+    "graveyard": ZoneOutcome.DIED,
+    "exile": ZoneOutcome.EXILED,
+    "hand": ZoneOutcome.TO_HAND,
+    "library": ZoneOutcome.LIBRARY_TOP,
+    "battlefield": ZoneOutcome.BLINKED,
 }
 #: The outcome of a ``zone_change`` to a destination the table does not name.
-_STAYED = "stayed"
+_STAYED = ZoneOutcome.STAYED
 
 _LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
     EventType.CARD_LOOKED_AT: "scry",
@@ -72,21 +74,21 @@ _LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
 
 #: ``type -> (field, parameter, default when absent, sign)``.
 _ADDITIVE: dict[EventType, tuple[str, str, float, float]] = {
-    EventType.DAMAGE_DEALT: ("damage_taken", "amount", 0, 1.0),
-    EventType.DAMAGE_HEALED: ("damage_taken", "amount", 0, -1.0),
-    EventType.LIFE_CHANGE: ("life_delta", "delta", 0, 1.0),
-    EventType.POISON_CHANGE: ("poison_delta", "delta", 0, 1.0),
-    EventType.CARD_DRAWN: ("cards_drawn", "count", 1, 1.0),
-    EventType.CARD_DISCARDED: ("cards_discarded", "count", 1, 1.0),
-    EventType.CARD_MILLED: ("cards_milled", "count", 1, 1.0),
+    EventType.DAMAGE_DEALT: (HeadField.DAMAGE_TAKEN, "amount", 0, 1.0),
+    EventType.DAMAGE_HEALED: (HeadField.DAMAGE_TAKEN, "amount", 0, -1.0),
+    EventType.LIFE_CHANGE: (HeadField.LIFE_DELTA, "delta", 0, 1.0),
+    EventType.POISON_CHANGE: (HeadField.POISON_DELTA, "delta", 0, 1.0),
+    EventType.CARD_DRAWN: (HeadField.CARDS_DRAWN, "count", 1, 1.0),
+    EventType.CARD_DISCARDED: (HeadField.CARDS_DISCARDED, "count", 1, 1.0),
+    EventType.CARD_MILLED: (HeadField.CARDS_MILLED, "count", 1, 1.0),
 }
 
 _SETTERS: dict[EventType, tuple[str, int]] = {
-    EventType.TAPPED: ("tap_state", 1),
-    EventType.UNTAPPED: ("tap_state", 0),
-    EventType.CONTROL_CHANGE: ("control_change", 1),
-    EventType.ATTACHED: ("attached_to_change", 1),
-    EventType.UNATTACHED: ("attached_to_change", 1),
+    EventType.TAPPED: (HeadField.TAP_STATE, 1),
+    EventType.UNTAPPED: (HeadField.TAP_STATE, 0),
+    EventType.CONTROL_CHANGE: (HeadField.CONTROL_CHANGE, 1),
+    EventType.ATTACHED: (HeadField.ATTACHED_TO_CHANGE, 1),
+    EventType.UNATTACHED: (HeadField.ATTACHED_TO_CHANGE, 1),
 }
 
 _OVERLAY_INDEX: dict[str, int] = {
@@ -155,7 +157,7 @@ def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:
             )
         return entry
 
-    for event in _outcome_events(record):
+    for event in _target_events(record):
         for subject in event.subjects:
             entry = slot(subject)
             entry.affected = True
@@ -166,9 +168,10 @@ def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:
     return targets
 
 
-def _outcome_events(record: EffectRecord) -> tuple[Event, ...]:
-    """The events that are this record's outcome: none on a trigger record,
-    whose events caused it and whose effect is its resolution's record."""
+def _target_events(record: EffectRecord) -> tuple[Event, ...]:
+    """The events the head trains on as this record's outcome: those that
+    happened, except on a trigger record, whose event caused it and whose
+    effect is its resolution's record."""
     if isinstance(record.payload, TriggerPayload):
         return ()
     return events_of(record)
@@ -176,57 +179,68 @@ def _outcome_events(record: EffectRecord) -> tuple[Event, ...]:
 
 def _apply_event(entry: EntityTargets, event: Event) -> None:
     """Fold one event into an entity's targets."""
-    params = event.params
+    if not _apply_tabled_event(entry, event):
+        apply = _EVENT_APPLIERS.get(event.type)
+        if apply is not None:
+            apply(entry, event)
+
+
+def _apply_tabled_event(entry: EntityTargets, event: Event) -> bool:
+    """An event whose whole target one table states; False for any other."""
     if event.type in _ADDITIVE:
         name, parameter, default, sign = _ADDITIVE[event.type]
-        entry.add(name, sign * float(params.get(parameter, default)))
-        return
-    if event.type in _SETTERS:
+        entry.add(name, sign * float(event.params.get(parameter, default)))
+    elif event.type in _SETTERS:
         entry.set(*_SETTERS[event.type])
-        return
-    if event.type in _ZONE_BY_EVENT:
-        entry.set("zone_outcome", ZONE_OUTCOMES.index(_ZONE_BY_EVENT[event.type]))
-        return
-    if event.type in _LIBRARY_EVENT_BY_TYPE:
+    elif event.type in _ZONE_BY_EVENT:
+        entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(_ZONE_BY_EVENT[event.type]))
+    elif event.type in _LIBRARY_EVENT_BY_TYPE:
         entry.flag(
-            "library_events",
+            HeadField.LIBRARY_EVENTS,
             LIBRARY_EVENTS.index(_LIBRARY_EVENT_BY_TYPE[event.type]),
             len(LIBRARY_EVENTS),
         )
-        return
-    match event.type:
-        case EventType.ZONE_CHANGE:
-            destination = str(params.get("to_zone", "")).lower()
-            entry.set(
-                "zone_outcome",
-                ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)),
-            )
-        case EventType.COUNTER_CHANGE:
-            counter = str(params.get("counter_type", "OTHER")).upper()
-            name = (
-                f"counters_delta_{counter.lower()}"
-                if counter in COUNTER_TYPES
-                else "counters_delta_other"
-            )
-            entry.add(name, float(params.get("delta", 0)))
-        case EventType.PT_CHANGE:
-            entry.add("power_delta", float(params.get("power_delta", 0)))
-            entry.add("toughness_delta", float(params.get("toughness_delta", 0)))
-            _apply_duration(entry, "pt_duration", event.duration)
-        case EventType.KEYWORD_CHANGE:
-            _apply_keywords(entry, params)
-        case EventType.TYPE_CHANGE:
-            _apply_multi(entry, "types_gained", params.get("types_added"), _TYPE_SLOTS)
-            _apply_multi(entry, "types_lost", params.get("types_removed"), _TYPE_SLOTS)
-            _apply_duration(entry, "type_color_duration", event.duration)
-        case EventType.COLOR_CHANGE:
-            _apply_multi(entry, "colors_gained", params.get("colors"), _COLOR_SLOTS)
-            _apply_multi(entry, "colors_lost", params.get("colors_removed"), _COLOR_SLOTS)
-            _apply_duration(entry, "type_color_duration", event.duration)
-        case EventType.MANA_PRODUCED:
-            _apply_mana(entry, params.get("mana_by_color"), sign=1)
-        case EventType.MANA_LOST:
-            _apply_mana(entry, params.get("mana_by_color"), sign=-1)
+    else:
+        return False
+    return True
+
+
+def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
+    destination = str(event.params.get("to_zone", "")).lower()
+    entry.set(
+        HeadField.ZONE_OUTCOME,
+        ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)),
+    )
+
+
+def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
+    counter = str(event.params.get("counter_type", "OTHER")).upper()
+    name = (
+        f"counters_delta_{counter.lower()}"
+        if counter in COUNTER_TYPES
+        else HeadField.COUNTERS_DELTA_OTHER
+    )
+    entry.add(name, float(event.params.get("delta", 0)))
+
+
+def _apply_pt_change(entry: EntityTargets, event: Event) -> None:
+    entry.add(HeadField.POWER_DELTA, float(event.params.get("power_delta", 0)))
+    entry.add(HeadField.TOUGHNESS_DELTA, float(event.params.get("toughness_delta", 0)))
+    _apply_duration(entry, HeadField.PT_DURATION, event.duration)
+
+
+def _apply_type_change(entry: EntityTargets, event: Event) -> None:
+    params = event.params
+    _apply_multi(entry, HeadField.TYPES_GAINED, params.get("types_added"), _TYPE_SLOTS)
+    _apply_multi(entry, HeadField.TYPES_LOST, params.get("types_removed"), _TYPE_SLOTS)
+    _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
+
+
+def _apply_color_change(entry: EntityTargets, event: Event) -> None:
+    params = event.params
+    _apply_multi(entry, HeadField.COLORS_GAINED, params.get("colors"), _COLOR_SLOTS)
+    _apply_multi(entry, HeadField.COLORS_LOST, params.get("colors_removed"), _COLOR_SLOTS)
+    _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
 
 
 def _apply_duration(entry: EntityTargets, name: str, duration: str | None) -> None:
@@ -244,7 +258,7 @@ def _apply_multi(entry: EntityTargets, name: str, values, slots: dict[str, int])
 
 
 def _apply_keywords(entry: EntityTargets, params: dict) -> None:
-    name = "keywords_lost" if params.get("removed") else "keywords_gained"
+    name = HeadField.KEYWORDS_LOST if params.get("removed") else HeadField.KEYWORDS_GAINED
     for keyword in params.get("keywords") or ():
         _flag_keyword(entry, name, str(keyword))
 
@@ -262,6 +276,23 @@ def _apply_mana(entry: EntityTargets, mana, *, sign: int) -> None:
             entry.add(f"mana_delta_{key.lower()}", sign * float(amount))
 
 
+#: The events no table above states, each read off its own parameters.
+_EVENT_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
+    EventType.ZONE_CHANGE: _apply_zone_change,
+    EventType.COUNTER_CHANGE: _apply_counter_change,
+    EventType.PT_CHANGE: _apply_pt_change,
+    EventType.KEYWORD_CHANGE: lambda entry, event: _apply_keywords(entry, event.params),
+    EventType.TYPE_CHANGE: _apply_type_change,
+    EventType.COLOR_CHANGE: _apply_color_change,
+    EventType.MANA_PRODUCED: lambda entry, event: _apply_mana(
+        entry, event.params.get("mana_by_color"), sign=1,
+    ),
+    EventType.MANA_LOST: lambda entry, event: _apply_mana(
+        entry, event.params.get("mana_by_color"), sign=-1,
+    ),
+}
+
+
 def _apply_playability(record: EffectRecord, slot) -> None:
     """Legality bits, which come from the payload rather than from events."""
     payload = record.payload
@@ -274,19 +305,21 @@ def _apply_playability(record: EffectRecord, slot) -> None:
     if isinstance(payload, PlayabilityDecisionPayload):
         for candidate in payload.candidates:
             for target in candidate.legal_targets:
-                mark(target, "target_legal", 1)
+                mark(target, HeadField.TARGET_LEGAL, 1)
     elif isinstance(payload, PlayabilityAttackersPayload):
-        for entity in payload.legal_attackers:
-            mark(entity, "attacker_legal", 1)
-        for forbidden in payload.forbidden:
-            mark(forbidden.entity, "attacker_legal", 0)
+        _mark_legality(mark, HeadField.ATTACKER_LEGAL, payload.legal_attackers, payload)
     elif isinstance(payload, PlayabilityBlockersPayload):
-        for entity in payload.legal_blockers:
-            mark(entity, "blocker_legal", 1)
-        for forbidden in payload.forbidden:
-            mark(forbidden.entity, "blocker_legal", 0)
+        _mark_legality(mark, HeadField.BLOCKER_LEGAL, payload.legal_blockers, payload)
         # min_blockers is read at the anchored attacker, not at the blockers.
-        mark(payload.anchor_attacker, "min_blockers", payload.min_blockers)
+        mark(payload.anchor_attacker, HeadField.MIN_BLOCKERS, payload.min_blockers)
+
+
+def _mark_legality(mark, name: str, legal, payload) -> None:
+    """One combat declaration's legal entities as 1, its forbidden ones as 0."""
+    for entity in legal:
+        mark(entity, name, 1)
+    for forbidden in payload.forbidden:
+        mark(forbidden.entity, name, 0)
 
 
 def _apply_continuous(record: EffectRecord, slot) -> None:
@@ -298,24 +331,24 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
         entry = slot(contribution.entity)
         entry.affected = True
         if contribution.pt_boost != (0, 0):
-            entry.add("power_delta", float(contribution.pt_boost[0]))
-            entry.add("toughness_delta", float(contribution.pt_boost[1]))
+            entry.add(HeadField.POWER_DELTA, float(contribution.pt_boost[0]))
+            entry.add(HeadField.TOUGHNESS_DELTA, float(contribution.pt_boost[1]))
         for keyword in contribution.keywords:
             # The type and colour channels' "-" convention.
             lost = keyword.startswith("-")
             _flag_keyword(
-                entry, "keywords_lost" if lost else "keywords_gained",
+                entry, HeadField.KEYWORDS_LOST if lost else HeadField.KEYWORDS_GAINED,
                 keyword.lstrip("-"),
             )
-        for channel, slots, name in (
-            (contribution.types, _TYPE_SLOTS, "types"),
-            (contribution.colors, _COLOR_SLOTS, "colors"),
+        for channel, slots, gained_field, lost_field in (
+            (contribution.types, _TYPE_SLOTS, HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
+            (contribution.colors, _COLOR_SLOTS, HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
         ):
             gained, lost = _split_contribution(channel)
-            _apply_multi(entry, f"{name}_gained", gained, slots)
-            _apply_multi(entry, f"{name}_lost", lost, slots)
-            if "=" in channel and f"{name}_lost" not in entry.fields:
-                entry.unknown.add(f"{name}_lost")
+            _apply_multi(entry, gained_field, gained, slots)
+            _apply_multi(entry, lost_field, lost, slots)
+            if "=" in channel and lost_field not in entry.fields:
+                entry.unknown.add(lost_field)
 
 
 def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
@@ -352,38 +385,35 @@ def verdict_targets(
     """
     target = [0.0] * VERDICT_WIDTH
     mask = [False] * VERDICT_WIDTH
-    payload = record.payload
     bits = len(VERDICT_BITS)
-    if isinstance(payload, PlayabilityDecisionPayload):
-        if not payload.candidates:
+    match record.payload:
+        case PlayabilityDecisionPayload(candidates=(candidate, *_)):
+            for index, value in enumerate(
+                (candidate.can_play, candidate.affordable, candidate.has_legal_target)
+            ):
+                target[index] = 1.0 if value else 0.0
+                mask[index] = True
+        case ActivationPayload(costs=costs):
+            paid = costs.mana_by_color
+            for offset, color in enumerate(COLORS):
+                target[bits + offset] = float(paid.get(color, 0))
+                mask[bits + offset] = True
+        case TriggerPayload(fired=fired):
+            target[-1] = 1.0 if fired else 0.0
+            mask[-1] = True
+        case _:
             return None
-        candidate = payload.candidates[0]
-        for index, value in enumerate(
-            (candidate.can_play, candidate.affordable, candidate.has_legal_target)
-        ):
-            target[index] = 1.0 if value else 0.0
-            mask[index] = True
-        return target, mask
-    if record.moment is Moment.ACTIVATION and isinstance(payload, ActivationPayload):
-        paid = payload.costs.mana_by_color
-        for offset, color in enumerate(COLORS):
-            target[bits + offset] = float(paid.get(color, 0))
-            mask[bits + offset] = True
-        return target, mask
-    if isinstance(payload, TriggerPayload):
-        target[-1] = 1.0 if payload.fired else 0.0
-        mask[-1] = True
-        return target, mask
-    return None
+    return target, mask
 
 
 def supervises_created_objects(record: EffectRecord) -> bool:
     """Effect halves and in-place rewrites carry created-objects targets; any
     other rewrite ran another ability, whose effect half supervises it."""
-    if record.kind is RecordKind.RESOLUTION:
-        return record.moment is Moment.RESOLUTION
-    if record.kind is RecordKind.REWRITE:
-        return isinstance(record.payload, RewritePayload) and record.payload.rewritten
+    match record.payload:
+        case ResolutionPayload():
+            return True
+        case RewritePayload(rewritten=rewritten):
+            return rewritten
     return False
 
 

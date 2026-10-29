@@ -26,6 +26,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from effects.domain import default_paths
+from effects.domain.ability_tokenizer import Surface
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CARDS_FOLDERS = tuple(ROOT / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
@@ -73,12 +74,9 @@ def sidecar_cache(cards_folders: Iterable[Path], variant_scripts: Path | None = 
 
 
 def sidecar_paths(cards_folders: Iterable[Path]) -> list[Path]:
-    from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX
+    from effects.infrastructure import sidecar_io
 
-    return [
-        path for folder in cards_folders
-        for path in sorted(Path(folder).rglob(f"*{SIDECAR_SUFFIX}"))
-    ]
+    return [path for folder in cards_folders for path in sidecar_io.sidecar_paths(folder)]
 
 
 @dataclass
@@ -101,7 +99,7 @@ class LineItem:
 
 
 def line_items(
-    cards_folders: Iterable[Path], surface: str, abilities_root: Path | None = None,
+    cards_folders: Iterable[Path], surface: Surface, abilities_root: Path | None = None,
     *, text_by_key: dict | None = None,
 ) -> list[LineItem]:
     """Every unique encoded text over the sidecar trees, with its cached ``e``.
@@ -131,7 +129,7 @@ def line_items(
                 continue
             if len(matrix) != len(sidecar.lines):
                 continue
-        rendered = prose_lines(converted_text_path(path)) if surface == "prose" else []
+        rendered = prose_lines(converted_text_path(path)) if surface == Surface.PROSE else []
         for row, line in enumerate(sidecar.lines):
             if not line.provenance:
                 continue
@@ -220,7 +218,7 @@ class ProbeModel:
     batcher: object
     fields: tuple
     device: object
-    surface: str
+    surface: Surface
     e_dim: int
 
 

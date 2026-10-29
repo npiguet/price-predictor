@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from effects.application.corpus_report import (
     build_manifest,
+    check_refusals,
     check_samples,
     log_report,
     report_write_pass,
@@ -29,6 +30,7 @@ from effects.application.corpus_survey import (
 )
 from effects.application.corpus_write import WriteConfig, WritePlan, WriteResult, run_write_pass
 from effects.domain import default_paths
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_plan import (
     BuildCorpusError,
     GameRouting,
@@ -39,12 +41,13 @@ from effects.domain.corpus_plan import (
     members_of,
     plan_selection,
 )
+from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
 from effects.domain.keyword_names import normalize_keyword
-from effects.domain.provenance import SourceTree, split_script_file
+from effects.domain.provenance import ProvenanceKey, SourceTree, first_text, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
 from effects.domain.sampling import DEFAULT_KIND_MIX
-from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOutCards
+from effects.domain.split import HeldOutCards, HoldoutRule
 from effects.domain.strata import OUTPUT_STRATA
 
 if TYPE_CHECKING:
@@ -75,15 +78,10 @@ class BuildCorpusConfig:
 
     records_dir: Path
     output: Path = Path(default_paths.DEFAULT_CORPUS_OUTPUT)
-    cards_folders: tuple[Path, ...] = tuple(
-        Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-    )
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     vocab_path: str = default_paths.DEFAULT_VOCAB_PATH
     variant_scripts: str | None = None
-    holdout_permille: int = HOLDOUT_PERMILLE
-    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
-    #: ``template`` (gen-2) or ``text`` (feature 023's rule, FR-041).
-    holdout_unit: str = "template"
+    holdout: HoldoutRule = HoldoutRule()
     text_cap: int = field(default=200, metadata={"help": (
         "Max written training records per ability text per selection cell, "
         "repeats included; 0 means no cap (default: %(default)s)"
@@ -109,7 +107,13 @@ class BuildCorpusConfig:
     game_disjoint_keywords: tuple[str, ...] = DEFAULT_GAME_DISJOINT_KEYWORDS
     #: Read by FR-015's check; None or a missing file skips it, since nothing
     #: can expand without a table.
-    keyword_definitions: Path | None = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
+    keyword_definitions: Path | None = field(
+        default=Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS), metadata={"help": (
+            "The keyword table the tokenizer expands with; the build fails when "
+            "a display-name match would expand a non-keyword line "
+            "(default: %(default)s)"
+        )},
+    )
     card_disjoint_text_cap: int = field(default=50, metadata={"help": (
         "Max card-disjoint games admitted per held-out ability text, so each "
         "weighs comparably in gate 1; 0 means no cap (default: %(default)s)"
@@ -135,6 +139,21 @@ class BuildCorpusConfig:
     )})
 
     def __post_init__(self) -> None:
+        self._refuse_negative_counts()
+        if self.reuse_cap < 1:
+            raise BuildCorpusError(
+                f"--reuse-cap is {self.reuse_cap}; it is the most copies of one "
+                "record a short family may write, and 1 already means no repeats."
+            )
+        for flag, share in (
+            ("--game-disjoint-share", self.game_disjoint_share),
+            ("--game-disjoint-keyword-share", self.game_disjoint_keyword_share),
+        ):
+            if not 0.0 <= share <= 1.0:
+                raise BuildCorpusError(f"{flag} is {share}; a share is between 0 and 1.")
+        self._refuse_unscored_keywords()
+
+    def _refuse_negative_counts(self) -> None:
         """Refuse a negative count; zero is a real setting for each.
 
         - ``--text-cap 0`` — no per-text cap; ``--reuse-cap`` alone bounds a
@@ -165,23 +184,8 @@ class BuildCorpusConfig:
                     "negative. Zero is allowed and means no cap, no ceiling, "
                     "or an empty stratum depending on the flag — see --help."
                 )
-        if self.reuse_cap < 1:
-            raise BuildCorpusError(
-                f"--reuse-cap is {self.reuse_cap}; it is the most copies of one "
-                "record a short family may write, and 1 already means no repeats."
-            )
-        for flag, share in (
-            ("--game-disjoint-share", self.game_disjoint_share),
-            ("--game-disjoint-keyword-share", self.game_disjoint_keyword_share),
-        ):
-            if not 0.0 <= share <= 1.0:
-                raise BuildCorpusError(f"{flag} is {share}; a share is between 0 and 1.")
-        if self.holdout_unit not in ("template", "text"):
-            raise BuildCorpusError(
-                f"--holdout-unit is {self.holdout_unit!r}; expected template or text."
-            )
-        from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
 
+    def _refuse_unscored_keywords(self) -> None:
         unknown = [
             name for name in self.game_disjoint_keywords
             if normalize_keyword(name) not in KEYWORDS_BY_NAME
@@ -228,17 +232,6 @@ class Decisions:
     mode_counts: dict[str, int]
 
 
-def _text_of_keys(keys: Keys, sidecars: SidecarCache, surface: str) -> str | None:
-    """The text a key tuple folds to, through the trainer's own definition."""
-    from effects.application.ability_text import text_for_key
-
-    for key in keys:
-        text = text_for_key(key, sidecars, surface)
-        if text is not None:
-            return text
-    return None
-
-
 def _keyword_misfires(
     key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
 ) -> list[str]:
@@ -268,7 +261,7 @@ def decide(
     survey: Survey,
     *,
     sidecars: SidecarCache,
-    surface: str,
+    surface: Surface,
     config: BuildCorpusConfig,
 ) -> Decisions:
     """Fold keys to texts, split the games, and plan every record's copies.
@@ -285,10 +278,16 @@ def decide(
             "with what the manifest is about to record."
         )
 
+    from effects.application.ability_text import text_for_key
+
+    def text_of(key: ProvenanceKey) -> str | None:
+        # The trainer's own key-to-text join, so the rarity table keys match.
+        return text_for_key(key, sidecars, surface)
+
     key_text: dict[Keys, str] = {}
     text_games: dict[str, set[int]] = {}
     for keys in survey.rarity.key_records:
-        text = _text_of_keys(keys, sidecars, surface)
+        text = first_text(keys, text_of)
         if text is None:
             # A runtime-only trait or an unconverted script: no text to cap
             # against, so its records are sampled with the cell's keyless ones.
@@ -344,7 +343,7 @@ def build(config: BuildCorpusConfig) -> int:
     logger.info(
         "Holdout (%s unit): %d ability text(s) on %d card(s) and %d token "
         "script(s); encoding surface %r.",
-        config.holdout_unit, len(held_out.texts), len(held_out.names),
+        config.holdout.unit, len(held_out.texts), len(held_out.names),
         sum(
             1 for script in held_out.script_files
             if split_script_file(script)[0] == SourceTree.TOKENSCRIPTS
@@ -422,11 +421,7 @@ def _converted_trees(config: BuildCorpusConfig) -> ConvertedTrees:
 
 def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOutCards:
     """The trainer's own holdout rule over the converted trees; refuses an empty one."""
-    held_out = trees.holdout(
-        permille=config.holdout_permille,
-        max_carriers=config.holdout_max_carriers,
-        unit=config.holdout_unit,
-    )
+    held_out = trees.holdout(config.holdout)
     if not held_out.names:
         tried = ", ".join(
             f"{folder} ({'found' if Path(folder).is_dir() else 'missing'})"
@@ -484,10 +479,12 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
 
 
 def _decide_or_refuse(
-    config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: str,
+    config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: Surface,
     held_out: HeldOutCards,
 ) -> Decisions:
-    """:func:`decide`, refusing a dataset gate 1 could not be scored on."""
+    """:func:`decide`, refusing a corpus the quality rules reject or a dataset
+    gate 1 could not be scored on."""
+    check_refusals(survey.refusals, survey.kept)
     decisions = decide(survey, sidecars=trees.sidecars, surface=surface, config=config)
     if not decisions.strata.card_disjoint:
         raise BuildCorpusError(

@@ -25,6 +25,7 @@ from effects.application.text_staging import (
     pinned,
 )
 from effects.domain.ability_encoder import AbilityEncoder, EncodedLine
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks
 from effects.domain.damage_step_keywords import keyword_of_line
 from effects.domain.effect_head_input import (
@@ -36,6 +37,7 @@ from effects.domain.effect_head_input import (
     build_effect_head_input,
     continuous_masked_keywords,
 )
+from effects.domain.provenance import SidecarLookup
 from effects.domain.records import PlayabilityDecisionPayload, acting_keys
 from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
 
@@ -68,7 +70,7 @@ class NoiseState:
         self.ramp_steps = max(int(ramp_steps), 1)
         self.decay = decay
         self.sigma: torch.Tensor | None = None
-        #: Set by the training loop before each batch.
+        #: The training step of the last batch, kept for the resume file.
         self.step = 0
         self.refactor_every = max(int(refactor_every), 1)
         #: ``V √Λ`` of the last factorized ``Σ`` and the draw it was taken at.
@@ -90,9 +92,9 @@ class NoiseState:
         self._factor = on(state["factor"])
         self._draws_since_factor = state["draws_since_factor"]
 
-    def scale(self) -> float:
-        """``r`` at the current step."""
-        return self.ratio * min(1.0, self.step / self.ramp_steps)
+    def scale(self, step: int) -> float:
+        """``r`` at training step ``step``."""
+        return self.ratio * min(1.0, step / self.ramp_steps)
 
     def update(self, matrix: torch.Tensor) -> None:
         """Fold one batch's covariance into ``Σ``."""
@@ -110,14 +112,18 @@ class NoiseState:
                     self.decay * self.sigma + (1.0 - self.decay) * covariance
                 )
 
-    def apply(self, matrix: torch.Tensor) -> torch.Tensor:
-        """``matrix`` plus ``L z``, where ``L Lᵀ = r²Σ``.
+    def apply(self, matrix: torch.Tensor | None, *, step: int) -> torch.Tensor | None:
+        """``matrix`` plus ``L z``, where ``L Lᵀ = r²Σ``, at training step
+        ``step``; a batch with no ``e`` still records its step.
 
         ``L = V √Λ`` with eigenvalues clamped at zero, so a singular ``Σ``
         (a batch narrower than ``e_dim``) never fails to factorize.
         """
+        self.step = step
+        if matrix is None:
+            return None
         self.update(matrix)
-        r = self.scale()
+        r = self.scale(step)
         if r <= 0.0 or self.sigma is None:
             return matrix
         with torch.no_grad(), _exact(matrix):
@@ -266,14 +272,18 @@ class Materializer:
         vectors, _hidden = encode_by_length(encoder, inputs, self.device)
         return vectors
 
-    def materialize(self, prepared: PreparedBatch, encoder: AbilityEncoder) -> Materialized:
-        """``prepared`` on the device, its texts encoded and scattered."""
+    def materialize(
+        self, prepared: PreparedBatch, encoder: AbilityEncoder, *,
+        step: int | None = None,
+    ) -> Materialized:
+        """``prepared`` on the device, its texts encoded and scattered;
+        ``step`` is the training step, which places the noise on its ramp."""
         rows = prepared.rows
         ordered = sorted(rows, key=rows.__getitem__)
         matrix = self.encode(ordered, prepared.encoder_inputs, prepared.stand_in, encoder)
-        if self.noise is not None and matrix is not None:
+        if self.noise is not None:
             # Every e of the batch, whichever variant produced it (FR-056).
-            matrix = self.noise.apply(matrix)
+            matrix = self.noise.apply(matrix, step=step)
         inputs = prepared.inputs
         batch = {
             "slot_features": {
@@ -333,11 +343,11 @@ class SurfaceBatcher:
         self._staged: dict[object, tuple[str, object]] = {}
 
     @property
-    def sidecars(self):
+    def sidecars(self) -> SidecarLookup:
         return self.resolver.sidecars
 
     @property
-    def surface(self) -> str:
+    def surface(self) -> Surface:
         return self.stager.surface
 
     def _resolve(self, key) -> tuple[str | None, object]:
@@ -456,31 +466,19 @@ class SurfaceBatcher:
         to remove from that entity's input through both channels.
         """
 
-        def e_for(key):
-            text = self.text_of(key)
-            return None if text is None else rows.get(text)
-
-        def has_line(key) -> bool:
-            # A dropped key gets no token; a line a variant masks keeps its
-            # token, zeroed in ``prepare``, so the geometry is the model's.
-            return self.text_of(key) is not None
-
         return build_effect_head_input(
             record,
-            e_for=e_for,
-            has_line=has_line,
+            lines=_StagedLines(self, rows),
             e_dim=self.e_dim,
+            rng=self.rng,
             # A decision record's [ACT] reads its candidate's e (FR-060a).
             candidate_index=(
                 0 if isinstance(record.payload, PlayabilityDecisionPayload)
                 else None
             ),
             context_dropout=self.context_dropout,
-            rng=self.rng,
             masked_keywords=continuous_masked_keywords(record),
             stripped_keywords=strip_keywords,
-            keyword_of=self.keyword_of_key,
-            options_for=self.options_for,
             layout=self.input_layout,
         )
 
@@ -531,3 +529,27 @@ class SurfaceBatcher:
             inputs["e_rows"][:, zeroed] = -1
             inputs["e_vectors"][:, zeroed] = 0.0
         return inputs
+
+
+@dataclass(frozen=True, slots=True)
+class _StagedLines:
+    """A batch's lines as the surface reads them: ``e`` as a row of the
+    staged encodings, keyed by each key's text on the batcher's surface."""
+
+    batcher: SurfaceBatcher
+    rows: dict[str, int]
+
+    def e_for(self, key) -> int | None:
+        text = self.batcher.text_of(key)
+        return None if text is None else self.rows.get(text)
+
+    def has_line(self, key) -> bool:
+        # A dropped key gets no token; a line a variant masks keeps its
+        # token, zeroed in ``prepare``, so the geometry is the model's.
+        return self.batcher.text_of(key) is not None
+
+    def keyword_of(self, key) -> str | None:
+        return self.batcher.keyword_of_key(key)
+
+    def options_for(self, key) -> tuple:
+        return self.batcher.options_for(key)

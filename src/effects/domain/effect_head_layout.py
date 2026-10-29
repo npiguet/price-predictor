@@ -23,11 +23,25 @@ from effects.domain.sampling import SamplingClass
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS, ValueKind
 
-#: Zone outcomes, a closed vocabulary (FR-077).
-ZONE_OUTCOMES: tuple[str, ...] = (
-    "stayed", "died", "exiled", "to_hand", "library_top", "library_bottom",
-    "transformed", "face_changed", "phased_out", "blinked", "countered",
-)
+
+class ZoneOutcome(StrEnum):
+    """Where an entity ends up, a closed vocabulary (FR-077)."""
+
+    STAYED = "stayed"
+    DIED = "died"
+    EXILED = "exiled"
+    TO_HAND = "to_hand"
+    LIBRARY_TOP = "library_top"
+    LIBRARY_BOTTOM = "library_bottom"
+    TRANSFORMED = "transformed"
+    FACE_CHANGED = "face_changed"
+    PHASED_OUT = "phased_out"
+    BLINKED = "blinked"
+    COUNTERED = "countered"
+
+
+#: The zone outcomes in the head's column order, which a target stores as an index.
+ZONE_OUTCOMES: tuple[ZoneOutcome, ...] = tuple(ZoneOutcome)
 DURATIONS: tuple[str, ...] = ("instant", "end_of_turn", "permanent")
 LIBRARY_EVENTS: tuple[str, ...] = ("scry", "surveil", "tutor", "reveal", "reorder")
 
@@ -59,6 +73,39 @@ class FieldType(StrEnum):
     COUNT = "count"
     SIGNED_DELTA = "signed_delta"
     CATEGORICAL = "categorical"
+
+
+class HeadField(StrEnum):
+    """The per-entity fields code names one by one; the counter and mana
+    fields are generated per counter type and colour, so their builders name them."""
+
+    ZONE_OUTCOME = "zone_outcome"
+    TAP_STATE = "tap_state"
+    DAMAGE_TAKEN = "damage_taken"
+    POWER_DELTA = "power_delta"
+    TOUGHNESS_DELTA = "toughness_delta"
+    PT_DURATION = "pt_duration"
+    #: The generated counter field a counter type the layout does not list lands in.
+    COUNTERS_DELTA_OTHER = "counters_delta_other"
+    TYPES_GAINED = "types_gained"
+    TYPES_LOST = "types_lost"
+    COLORS_GAINED = "colors_gained"
+    COLORS_LOST = "colors_lost"
+    TYPE_COLOR_DURATION = "type_color_duration"
+    KEYWORDS_GAINED = "keywords_gained"
+    KEYWORDS_LOST = "keywords_lost"
+    CONTROL_CHANGE = "control_change"
+    ATTACHED_TO_CHANGE = "attached_to_change"
+    LIFE_DELTA = "life_delta"
+    CARDS_DRAWN = "cards_drawn"
+    CARDS_DISCARDED = "cards_discarded"
+    CARDS_MILLED = "cards_milled"
+    LIBRARY_EVENTS = "library_events"
+    POISON_DELTA = "poison_delta"
+    TARGET_LEGAL = "target_legal"
+    ATTACKER_LEGAL = "attacker_legal"
+    BLOCKER_LEGAL = "blocker_legal"
+    MIN_BLOCKERS = "min_blockers"
 
 
 class FieldGroup(StrEnum):
@@ -162,61 +209,61 @@ def _mana_fields() -> tuple[FieldSpec, ...]:
 #: appending is safe and reordering is not.
 PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     # ── permanents and stack entities ──
-    FieldSpec("zone_outcome", FieldType.CATEGORICAL, FieldScope.PERMANENT,
-              classes=ZONE_OUTCOMES, silent=float(ZONE_OUTCOMES.index("stayed"))),
-    FieldSpec("tap_state", FieldType.BINARY, FieldScope.PERMANENT),
-    FieldSpec("damage_taken", FieldType.COUNT, FieldScope.PERMANENT, silent=0.0),
-    FieldSpec("power_delta", FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
+    FieldSpec(HeadField.ZONE_OUTCOME, FieldType.CATEGORICAL, FieldScope.PERMANENT,
+              classes=ZONE_OUTCOMES, silent=float(ZONE_OUTCOMES.index(ZoneOutcome.STAYED))),
+    FieldSpec(HeadField.TAP_STATE, FieldType.BINARY, FieldScope.PERMANENT),
+    FieldSpec(HeadField.DAMAGE_TAKEN, FieldType.COUNT, FieldScope.PERMANENT, silent=0.0),
+    FieldSpec(HeadField.POWER_DELTA, FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
-    FieldSpec("toughness_delta", FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
+    FieldSpec(HeadField.TOUGHNESS_DELTA, FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
-    FieldSpec("pt_duration", FieldType.CATEGORICAL, FieldScope.PERMANENT,
+    FieldSpec(HeadField.PT_DURATION, FieldType.CATEGORICAL, FieldScope.PERMANENT,
               classes=DURATIONS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS),
     *_counter_fields(),
-    FieldSpec("types_gained", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+    FieldSpec(HeadField.TYPES_GAINED, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
               classes=CARD_TYPES, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
-    FieldSpec("types_lost", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+    FieldSpec(HeadField.TYPES_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
               classes=CARD_TYPES, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
-    FieldSpec("colors_gained", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+    FieldSpec(HeadField.COLORS_GAINED, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
               classes=COLORS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
-    FieldSpec("colors_lost", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+    FieldSpec(HeadField.COLORS_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
               classes=COLORS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
-    FieldSpec("type_color_duration", FieldType.CATEGORICAL, FieldScope.PERMANENT,
+    FieldSpec(HeadField.TYPE_COLOR_DURATION, FieldType.CATEGORICAL, FieldScope.PERMANENT,
               classes=DURATIONS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS),
-    FieldSpec("keywords_gained", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+    FieldSpec(HeadField.KEYWORDS_GAINED, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
               classes=OVERLAY_KEYWORDS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
-    FieldSpec("keywords_lost", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
+    FieldSpec(HeadField.KEYWORDS_LOST, FieldType.MULTI_BINARY, FieldScope.PERMANENT,
               classes=OVERLAY_KEYWORDS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
-    FieldSpec("control_change", FieldType.BINARY, FieldScope.PERMANENT,
+    FieldSpec(HeadField.CONTROL_CHANGE, FieldType.BINARY, FieldScope.PERMANENT,
               group=FieldGroup.SPARSE, silent=0.0),
-    FieldSpec("attached_to_change", FieldType.BINARY, FieldScope.PERMANENT,
+    FieldSpec(HeadField.ATTACHED_TO_CHANGE, FieldType.BINARY, FieldScope.PERMANENT,
               group=FieldGroup.SPARSE, silent=0.0),
     # ── players ──
-    FieldSpec("life_delta", FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
-    FieldSpec("cards_drawn", FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
-    FieldSpec("cards_discarded", FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
-    FieldSpec("cards_milled", FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
-    FieldSpec("library_events", FieldType.MULTI_BINARY, FieldScope.PLAYER,
+    FieldSpec(HeadField.LIFE_DELTA, FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
+    FieldSpec(HeadField.CARDS_DRAWN, FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
+    FieldSpec(HeadField.CARDS_DISCARDED, FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
+    FieldSpec(HeadField.CARDS_MILLED, FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
+    FieldSpec(HeadField.LIBRARY_EVENTS, FieldType.MULTI_BINARY, FieldScope.PLAYER,
               classes=LIBRARY_EVENTS, silent=0.0),
     # Not in FR-077's player group, but gate 2's infect row needs it.
-    FieldSpec("poison_delta", FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
+    FieldSpec(HeadField.POISON_DELTA, FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
     *_mana_fields(),
     # ── legality bits: only a payload's own marks set them ──
-    FieldSpec("target_legal", FieldType.BINARY, FieldScope.LEGALITY,
+    FieldSpec(HeadField.TARGET_LEGAL, FieldType.BINARY, FieldScope.LEGALITY,
               supervised_by=frozenset({SamplingClass.PLAYABILITY_DECISION})),
-    FieldSpec("attacker_legal", FieldType.BINARY, FieldScope.LEGALITY,
+    FieldSpec(HeadField.ATTACKER_LEGAL, FieldType.BINARY, FieldScope.LEGALITY,
               supervised_by=frozenset({SamplingClass.PLAYABILITY_LEGALITY})),
-    FieldSpec("blocker_legal", FieldType.BINARY, FieldScope.LEGALITY,
+    FieldSpec(HeadField.BLOCKER_LEGAL, FieldType.BINARY, FieldScope.LEGALITY,
               supervised_by=frozenset({SamplingClass.PLAYABILITY_LEGALITY})),
-    FieldSpec("min_blockers", FieldType.COUNT, FieldScope.LEGALITY,
+    FieldSpec(HeadField.MIN_BLOCKERS, FieldType.COUNT, FieldScope.LEGALITY,
               supervised_by=frozenset({SamplingClass.PLAYABILITY_LEGALITY})),
 )
 
@@ -277,12 +324,6 @@ for _name, _kind in VALUE_TARGETS:
         AT_LEAST_SLICES[_name] = (_value_offset, _value_offset + AT_LEAST_STEPS)
         _value_offset += AT_LEAST_STEPS
 VALUE_WIDTH = _value_offset
-
-
-def per_entity_fields_of_type(*types: FieldType) -> tuple[FieldSpec, ...]:
-    """Every per-entity field of one of ``types``."""
-    wanted = set(types)
-    return tuple(spec for spec in PER_ENTITY_FIELDS if spec.type in wanted)
 
 
 def active_fields(

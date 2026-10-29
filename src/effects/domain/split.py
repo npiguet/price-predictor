@@ -22,6 +22,23 @@ HOLDOUT_MAX_CARRIERS = 8
 
 
 @dataclass(frozen=True, slots=True)
+class HoldoutRule:
+    """How the held-out texts are chosen: one value, so every command computing
+    the holdout is handed the same rule rather than three flags to keep in step.
+
+    The defaults are the commands' own; a corpus manifest or checkpoint that
+    predates the unit records ``text``.
+    """
+
+    permille: int = HOLDOUT_PERMILLE
+    max_carriers: int = HOLDOUT_MAX_CARRIERS
+    unit: HoldoutUnit = HoldoutUnit.TEMPLATE
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "unit", HoldoutUnit(self.unit))
+
+
+@dataclass(frozen=True, slots=True)
 class HeldOutCards:
     """The card-disjoint holdout, addressable both ways a record names a card.
 
@@ -78,15 +95,13 @@ class CorpusSplit:
 def text_keyed_holdout(
     card_files: dict[str, str],
     texts_by_card: Mapping[str, Iterable[str]],
+    rule: HoldoutRule,
     *,
-    permille: int = HOLDOUT_PERMILLE,
-    max_carriers: int = HOLDOUT_MAX_CARRIERS,
-    unit: HoldoutUnit = HoldoutUnit.TEXT,
     token_texts: Mapping[str, Iterable[str]] | None = None,
 ) -> HeldOutCards:
     """Hold out ability texts, and with them every card carrying one (FR-088).
 
-    ``unit`` selects what is counted and hashed (FR-040, FR-041).
+    ``rule.unit`` selects what is counted and hashed (FR-040, FR-041).
     ``holdout-cards``, ``build-corpus`` and ``train-effect-model`` all go
     through here, so the three agree by construction.
 
@@ -99,8 +114,8 @@ def text_keyed_holdout(
     """
     tokens = dict(token_texts or {})
     chosen = select_holdout(
-        {**texts_by_card, **tokens}, permille=permille, max_carriers=max_carriers,
-        unit=unit,
+        {**texts_by_card, **tokens}, permille=rule.permille,
+        max_carriers=rule.max_carriers, unit=rule.unit,
     )
     names = frozenset(chosen.cards & card_files.keys())
     return HeldOutCards(
@@ -109,7 +124,7 @@ def text_keyed_holdout(
         | (chosen.cards & tokens.keys()),
         texts=chosen.texts,
         keys=chosen.keys,
-        unit=unit,
+        unit=rule.unit,
     )
 
 

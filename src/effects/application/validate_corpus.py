@@ -20,8 +20,8 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, fields, replace
-from pathlib import Path
-from typing import Protocol
+from enum import Enum, auto
+from typing import NamedTuple, Protocol
 
 from effects.domain.canonical_digest import canonical_digest
 from effects.domain.event_schema import (
@@ -34,10 +34,10 @@ from effects.domain.event_schema import (
 from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
+    LEGALITY_SUBKINDS,
     PAYLOAD_TYPES,
     REWRITE_RESULTS_RUNNING_AN_ABILITY,
     REWRITE_RESULTS_WITHOUT_ABILITY,
-    WHAT_IF_SUBKINDS,
     ActivationPayload,
     CollectionMode,
     CombatPayload,
@@ -49,9 +49,10 @@ from effects.domain.records import (
     ResolutionPayload,
     RewritePayload,
     TriggerPayload,
+    UnresolvedReason,
     key_sites,
 )
-from effects.infrastructure.sidecar_io import UnconfiguredTree
+from effects.infrastructure.sidecar_io import SidecarCache, UnconfiguredTree
 
 #: Envelope fields that say when a record was written rather than what it says,
 #: blanked before hashing; ``mode`` is constant within a run.
@@ -201,16 +202,15 @@ class Findings(list[Finding]):
 def validate_corpus(
     records: Iterable[EffectRecord],
     thresholds: Thresholds | None = None,
-    sidecars=None,
+    sidecars: SidecarCache | None = None,
     presence: FieldPresence | None = None,
 ) -> Findings:
     """Every invariant, measured over one pass of ``records``.
 
-    ``sidecars`` is a :class:`~effects.infrastructure.sidecar_io.SidecarCache`;
-    ``None`` reports the key-join checks as unchecked rather than as holding.
-    ``presence`` is the per-shard envelope tally :func:`read_window` fills from
-    the raw lines (FR-033), since a parsed record cannot say whether a field was
-    on the wire.
+    ``sidecars`` of ``None`` reports the key-join checks as unchecked rather
+    than as holding. ``presence`` is the per-shard envelope tally
+    ``record_io.read_window`` fills from the raw lines (FR-033), since a parsed
+    record cannot say whether a field was on the wire.
     """
     checks = _checks(sidecars)
     for record in records:
@@ -254,7 +254,7 @@ class FieldPresence:
         counts.with_random_seat += "random_seat" in data
         legality = (
             data.get("kind") == RecordKind.PLAYABILITY.value
-            and data.get("subkind") in WHAT_IF_SUBKINDS
+            and data.get("subkind") in LEGALITY_SUBKINDS
         )
         if legality:
             counts.legality += 1
@@ -313,31 +313,6 @@ def _joined(halves: list[tuple[str, tuple[ProvenanceKey, ...]]]) -> bool:
     return len(roots) == 1
 
 
-def read_window(
-    directory: Path, limit: int = 0, presence: FieldPresence | None = None,
-) -> Iterator[EffectRecord]:
-    """The first ``limit`` records under ``directory``; 0 reads all of them.
-    ``presence``, when given, is filled from each raw line before it is parsed.
-    """
-    from effects.infrastructure.record_io import (
-        iter_record_dicts,
-        iter_shards,
-        record_from_dict,
-    )
-
-    root = Path(directory)
-    seen = 0
-    for shard in iter_shards(root):
-        name = shard.relative_to(root).as_posix() if shard.is_relative_to(root) else str(shard)
-        for data in iter_record_dicts(shard):
-            if presence is not None:
-                presence.observe(name, data)
-            yield record_from_dict(data)
-            seen += 1
-            if limit and seen >= limit:
-                return
-
-
 def _kind_label(record: EffectRecord) -> str:
     """``resolution/activation``, ``playability/decision``, or a bare kind:
     discriminated kinds are counted apart because their collectors are
@@ -385,19 +360,27 @@ def _is_deferred_mana_record(record: EffectRecord) -> bool:
     )
 
 
-#: :func:`_join_result` for a key in a tree this run was not given (such as
-#: ``variant-scripts`` without ``--variant-scripts``): unchecked, never a
-#: mismatch.
-_UNCHECKED = object()
+class JoinOutcome(Enum):
+    """How one provenance key meets the sidecar of the card it names."""
 
-#: :func:`_join_result` for a key outside every ``(face, trait_kind)`` range
-#: its sidecar declares: a trait Forge attached at runtime, neither a join nor
-#: a mismatch.
-_RUNTIME_ONLY = object()
+    JOINED = auto()
+    UNJOINABLE = auto()
+    #: Outside every ``(face, trait_kind)`` range its sidecar declares: a
+    #: trait Forge attached at runtime, neither a join nor a mismatch.
+    RUNTIME_ONLY = auto()
+    #: In a tree this run was not given (such as ``variant-scripts`` without
+    #: ``--variant-scripts``): unchecked, never a mismatch.
+    UNCHECKED = auto()
 
 
-def _join_result(sidecars, key: ProvenanceKey):
-    """``None`` where ``key`` joins, a sentinel, or why it does not.
+class _Join(NamedTuple):
+    outcome: JoinOutcome
+    #: Why an unjoinable key does not join.
+    why: str = ""
+
+
+def _join_result(sidecars: SidecarCache, key: ProvenanceKey) -> _Join:
+    """How ``key`` joins.
 
     ``resolution_of`` rather than ``row_for``, which answers ``None`` both to a
     dropped line (a join) and to a key outside every range (not one).
@@ -405,16 +388,18 @@ def _join_result(sidecars, key: ProvenanceKey):
     try:
         sidecars.path_for(key.script_file)
     except UnconfiguredTree:
-        return _UNCHECKED
+        return _Join(JoinOutcome.UNCHECKED)
     try:
         resolution = sidecars.resolution_of(key)
     except KeyError as exc:
-        return f"{key.script_file} {key.trait_kind}[{key.index_within_kind}]: {exc}"
+        return _Join(JoinOutcome.UNJOINABLE, f"{key.label}: {exc}")
     if resolution is KeyResolution.UNCONVERTED:
-        return f"{key.script_file}: no sidecar beside the converted card"
+        return _Join(
+            JoinOutcome.UNJOINABLE, f"{key.script_file}: no sidecar beside the converted card",
+        )
     if resolution is KeyResolution.RUNTIME_ONLY:
-        return _RUNTIME_ONLY
-    return None
+        return _Join(JoinOutcome.RUNTIME_ONLY)
+    return _Join(JoinOutcome.JOINED)
 
 
 def _rate(part: int, whole: int) -> float:
@@ -618,6 +603,8 @@ class _ActingCounts:
     present: int = 0
     #: ``ability`` resolved to at least one key.
     keyed: int = 0
+    #: Why the records with an empty ``ability`` have none.
+    unresolved: Counter[UnresolvedReason] = field(default_factory=Counter)
 
 
 class _ActingLines:
@@ -632,7 +619,6 @@ class _ActingLines:
 
     def __init__(self) -> None:
         self.acting: dict[str, _ActingCounts] = defaultdict(_ActingCounts)
-        self.unresolved: Counter[str] = Counter()
         #: Records whose ``ability`` is empty and which say nothing about why.
         self.silent_empty = 0
         self.silent_empty_examples: list[str] = []
@@ -646,7 +632,7 @@ class _ActingLines:
         counts.present += record.ability is not None
         counts.keyed += bool(record.ability)
         if record.ability_unresolved:
-            self.unresolved[record.ability_unresolved] += 1
+            counts.unresolved[record.ability_unresolved] += 1
         elif record.ability is not None and not record.ability:
             self.silent_empty += 1
             _keep_example(self.silent_empty_examples, f"{record.record_id} ({label})")
@@ -665,6 +651,7 @@ class _ActingLines:
             seen = sum(counts.records for counts in groups)
             present = sum(counts.present for counts in groups)
             keyed = sum(counts.keyed for counts in groups)
+            unresolved = sum((counts.unresolved for counts in groups), Counter())
             title = f"{name} records name an acting line"
             if not seen:
                 yield Finding(
@@ -683,7 +670,7 @@ class _ActingLines:
                 ),
                 detail=tuple(
                     f"unresolved: {reason} x {count}"
-                    for reason, count in sorted(self.unresolved.items())
+                    for reason, count in sorted(unresolved.items())
                 ),
             )
 
@@ -691,7 +678,8 @@ class _ActingLines:
         """An empty ``ability`` needs an ``ability_unresolved`` reason: "the
         Monarch has no printed line" and "the resolver regressed" both write
         ``ability: []``."""
-        empty = self.silent_empty + sum(self.unresolved.values())
+        unresolved = sum((counts.unresolved for counts in self.acting.values()), Counter())
+        empty = self.silent_empty + unresolved.total()
         return Finding(
             name="every empty ability says why it is empty",
             ok=self.silent_empty == 0,
@@ -703,7 +691,7 @@ class _ActingLines:
                 f"silent: {example}" for example in self.silent_empty_examples
             ) or tuple(
                 f"reason {reason}: {count}"
-                for reason, count in sorted(self.unresolved.items())
+                for reason, count in sorted(unresolved.items())
             ),
         )
 
@@ -725,7 +713,7 @@ class _KeyJoins:
     of its face there, so the keyword finding names that count too.
     """
 
-    def __init__(self, sidecars) -> None:
+    def __init__(self, sidecars: SidecarCache | None) -> None:
         self.sidecars = sidecars
         #: Every distinct printed-line key the window named, joined once.
         self.keys: set[ProvenanceKey] = set()
@@ -759,35 +747,41 @@ class _KeyJoins:
 
 
 @dataclass(slots=True)
-class _JoinTally:
-    """One join of a window's distinct keys, by trait kind."""
+class _TraitTally:
+    """One partition of a window's checked keys, by trait kind."""
 
     checked: Counter[str] = field(default_factory=Counter)
     unjoinable: Counter[str] = field(default_factory=Counter)
     runtime_only: Counter[str] = field(default_factory=Counter)
-    unchecked_by_tree: Counter[str] = field(default_factory=Counter)
-    #: ``keyword`` or ``other`` -> why the first few unjoinable keys failed.
-    examples: dict[str, list[str]] = field(
-        default_factory=lambda: {"keyword": [], "other": []},
-    )
+    #: Why the first few unjoinable keys failed.
+    examples: list[str] = field(default_factory=list)
 
-    def add(self, key: ProvenanceKey, result) -> None:
-        """Count one key by its :func:`_join_result`."""
-        if result is _UNCHECKED:
-            self.unchecked_by_tree[key.tree] += 1
-            return
+    def add(self, key: ProvenanceKey, join: _Join) -> None:
         self.checked[key.trait_kind] += 1
-        if result is _RUNTIME_ONLY:
+        if join.outcome is JoinOutcome.RUNTIME_ONLY:
             self.runtime_only[key.trait_kind] += 1
-            return
-        if result is None:
-            return
-        self.unjoinable[key.trait_kind] += 1
-        bucket = "keyword" if key.trait_kind == "keyword" else "other"
-        _keep_example(self.examples[bucket], result)
+        elif join.outcome is JoinOutcome.UNJOINABLE:
+            self.unjoinable[key.trait_kind] += 1
+            _keep_example(self.examples, join.why)
+
+
+@dataclass(slots=True)
+class _JoinTally:
+    """One join of a window's distinct keys: the judged ``keyword`` keys apart
+    from the watched rest."""
+
+    keyword: _TraitTally = field(default_factory=_TraitTally)
+    other: _TraitTally = field(default_factory=_TraitTally)
+    unchecked_by_tree: Counter[str] = field(default_factory=Counter)
+
+    def add(self, key: ProvenanceKey, join: _Join) -> None:
+        if join.outcome is JoinOutcome.UNCHECKED:
+            self.unchecked_by_tree[key.tree] += 1
+        else:
+            (self.keyword if key.trait_kind == "keyword" else self.other).add(key, join)
 
     def keyword_finding(self) -> Finding:
-        broken = self.unjoinable.get("keyword", 0)
+        broken = self.keyword.unjoinable.total()
         trees = tuple(
             f"{count} keys in {tree}, a tree this run was not given"
             for tree, count in sorted(self.unchecked_by_tree.items())
@@ -796,18 +790,17 @@ class _JoinTally:
             name=_KEYWORD_JOIN,
             ok=broken == 0,
             measured=(
-                f"{broken}/{self.checked.get('keyword', 0)} keyword keys fail to "
-                f"join, {self.runtime_only.get('keyword', 0)} outside every "
-                f"declared range, {sum(self.unchecked_by_tree.values())} unchecked"
+                f"{broken}/{self.keyword.checked.total()} keyword keys fail to "
+                f"join, {self.keyword.runtime_only.total()} outside every "
+                f"declared range, {self.unchecked_by_tree.total()} unchecked"
             ),
-            detail=trees + tuple(self.examples["keyword"]),
+            detail=trees + tuple(self.keyword.examples),
         )
 
     def other_finding(self) -> Finding:
-        other_checked = sum(self.checked.values()) - self.checked.get("keyword", 0)
-        other_broken = (
-            sum(self.unjoinable.values()) - self.unjoinable.get("keyword", 0)
-        )
+        other = self.other
+        other_checked = other.checked.total()
+        other_broken = other.unjoinable.total()
         other_rate = _rate(other_broken, other_checked)
         return Finding(
             name=_OTHER_JOIN,
@@ -818,15 +811,16 @@ class _JoinTally:
                 f"kind fail to join ({other_rate:.1%}, watched, no ceiling)"
             ),
             detail=tuple(
-                f"{kind}: {self.unjoinable[kind]}/{count} unjoinable"
-                for kind, count in sorted(self.checked.items())
-                if kind != "keyword"
-            ) + tuple(self.examples["other"]),
+                f"{kind}: {other.unjoinable[kind]}/{count} unjoinable"
+                for kind, count in sorted(other.checked.items())
+            ) + tuple(other.examples),
         )
 
     def outside_finding(self) -> Finding:
-        total_checked = sum(self.checked.values())
-        outside = sum(self.runtime_only.values())
+        checked = self.keyword.checked + self.other.checked
+        runtime_only = self.keyword.runtime_only + self.other.runtime_only
+        total_checked = checked.total()
+        outside = runtime_only.total()
         outside_rate = _rate(outside, total_checked)
         return Finding(
             name=_OUTSIDE_JOIN,
@@ -838,9 +832,9 @@ class _JoinTally:
                 f"({outside_rate:.1%}, watched, no ceiling)"
             ),
             detail=tuple(
-                f"{kind}: {self.runtime_only[kind]}/{self.checked[kind]} outside "
+                f"{kind}: {runtime_only[kind]}/{checked[kind]} outside "
                 "every declared range"
-                for kind in sorted(self.runtime_only)
+                for kind in sorted(runtime_only)
             ),
         )
 
@@ -1527,7 +1521,7 @@ class _EventTypes:
         )
 
 
-def _checks(sidecars) -> tuple[_Check, ...]:
+def _checks(sidecars: SidecarCache | None) -> tuple[_Check, ...]:
     """Every invariant, in the order the report prints them."""
     record_ids = _RecordIds()
     return (

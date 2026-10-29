@@ -10,23 +10,23 @@ from __future__ import annotations
 import logging
 import random
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.domain import default_paths
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
 from effects.domain.effect_head_layout import active_fields
 from effects.domain.records import (
     EffectRecord,
 )
-from effects.domain.split import CorpusSplit
+from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
-from effects.domain.text_holdout import normalize_script_text
+from effects.domain.text_holdout import HoldoutUnit, normalize_script_text
 from effects.infrastructure.converted_trees import ConvertedTrees
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import (
-    MixedGenerationsError,
     iter_shards,
     read_shard,
     refuse_mixed_generations,
@@ -124,12 +124,10 @@ class TrainEffectModelConfig:
 
     #: A curated dataset directory built by ``build-corpus``.
     corpus: str | None = None
-    cards_folders: tuple[Path, ...] = tuple(
-        Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-    )
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
     #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
-    holdout_unit: str | None = None
+    holdout_unit: HoldoutUnit | None = None
     vocab_path: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_VOCAB_PATH),
     )
@@ -142,7 +140,10 @@ class TrainEffectModelConfig:
     keyword_definitions: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS),
     )
-    model_output: Path | None = None
+    model_output: Path | None = field(default=None, metadata={"help": (
+        "Checkpoint directory (default: models/effects/effect-model/, under "
+        "{variant}/ for a baseline)"
+    )})
     variant: str = Baseline.FULL
     e_dim: int = 64
     e_noise: float = field(default=0.1, metadata={"help": (
@@ -240,9 +241,7 @@ class CorpusFacts:
     split: CorpusSplit = field(default_factory=CorpusSplit)
     #: The holdout rule the corpus was composed against; no trainer flag, as
     #: re-deriving it could only disagree.
-    holdout_permille: int = 0
-    holdout_max_carriers: int = 0
-    holdout_unit: str = "text"
+    holdout: HoldoutRule = HoldoutRule(0, 0, HoldoutUnit.TEXT)
     #: Records in the manifest's gate-1 slice (FR-088b).
     gate_one_records: int = 0
     #: The corpus-wide ``text -> games`` table (FR-146).
@@ -261,9 +260,7 @@ class CorpusFacts:
                 card_disjoint_games=frozenset(manifest.card_disjoint_games),
                 game_disjoint_games=frozenset(manifest.game_disjoint_games),
             ),
-            holdout_permille=manifest.holdout_permille,
-            holdout_max_carriers=manifest.holdout_max_carriers,
-            holdout_unit=manifest.holdout_unit,
+            holdout=manifest.holdout,
             gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
             rarity=manifest.rarity,
             legality_mode_counts=manifest.legality_mode_counts or None,
@@ -286,11 +283,11 @@ class CorpusFacts:
             vocab_hash=content_hash(Path(config.vocab_path)),
             keyword_definitions_hash=content_hash(Path(config.keyword_definitions)),
             withheld_keyword=config.withhold_keyword,
-            holdout_permille=self.holdout_permille,
-            holdout_max_carriers=self.holdout_max_carriers,
+            holdout_permille=self.holdout.permille,
+            holdout_max_carriers=self.holdout.max_carriers,
             corpus_path=config.corpus or "",
             corpus_digest=self.digest,
-            holdout_unit=self.holdout_unit,
+            holdout_unit=self.holdout.unit,
         )
 
 
@@ -299,7 +296,7 @@ class SurfaceMismatchError(ValueError):
 
 
 def require_matching_surface(
-    *, manifest_surface: str, vocab_path: Path, corpus: str,
+    *, manifest_surface: Surface, vocab_path: Path, corpus: str,
 ) -> None:
     """Refuse a vocabulary whose encoding surface is not the dataset's (FR-141).
 
@@ -319,14 +316,6 @@ def require_matching_surface(
             "curated dataset exists to stop. Pass the vocabulary the manifest "
             "records, or rebuild the dataset against this one."
         )
-
-
-def rarity_coverage(
-    texts: Iterable[str | None], rarity: Mapping[str, int],
-) -> tuple[int, int]:
-    """``(named, distinct)``: how many distinct ability texts the table names."""
-    distinct = {text for text in texts if text is not None}
-    return sum(1 for text in distinct if text in rarity), len(distinct)
 
 
 # Hardcoded, not flags (FR-095).
@@ -408,10 +397,6 @@ def load_shard(path: Path) -> list[EffectRecord]:
     return list(read_shard(Path(path)))
 
 
-def corpus_shards(records_dir: Path) -> list[Path]:
-    return iter_shards(Path(records_dir))
-
-
 class HoldoutMismatchError(ValueError):
     """The trainer's own holdout disagrees with the one its corpus recorded."""
 
@@ -440,11 +425,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
         "Recomputing the %s holdout over %d cards' sidecars under %s.",
         unit, len(trees.card_files), cards_folder,
     )
-    recomputed = trees.holdout(
-        permille=manifest.holdout_permille,
-        max_carriers=manifest.holdout_max_carriers,
-        unit=unit,
-    )
+    recomputed = trees.holdout(manifest.holdout)
     logger.info(
         "Holdout recomputed in %.0fs: %d held-out text(s).",
         time.monotonic() - started, len(recomputed.texts),
@@ -477,13 +458,13 @@ def run(config: TrainEffectModelConfig) -> int:
             "shards was withdrawn with FR-125."
         )
         return 1
-    store =CorpusStore(Path(config.corpus))
+    store = CorpusStore(Path(config.corpus))
     manifest = store.load()
     require_matching_surface(
         manifest_surface=manifest.surface, vocab_path=Path(config.vocab_path),
         corpus=config.corpus,
     )
-    training_shards = corpus_shards(store.training_dir)
+    training_shards = iter_shards(store.training_dir)
     if not training_shards:
         logger.error("No training shards under %s.", store.training_dir)
         return 1
@@ -497,13 +478,9 @@ def run(config: TrainEffectModelConfig) -> int:
             "build-corpus that writes validation/samples/.", config.corpus, ", ".join(missing),
         )
         return 1
-    try:
-        # Before any record is read (FR-033).
-        refuse_mixed_generations(iter_shards(Path(config.corpus)))
-        check_manifest_holdout(manifest, config)
-    except (HoldoutMismatchError, MixedGenerationsError) as exc:
-        logger.error("%s", exc)
-        return 1
+    # Before any record is read (FR-033).
+    refuse_mixed_generations(iter_shards(Path(config.corpus)))
+    check_manifest_holdout(manifest, config)
     facts = CorpusFacts.of(manifest)
     logger.info(
         "Curated corpus at %s: %d training shards, %d gate-one record(s), "

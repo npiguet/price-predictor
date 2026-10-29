@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from dataclasses import fields, replace
 
-import torch
-
 from effects.application.resume_state import (
     RECORDED_IN_TRAINING_SETTINGS,
     RESUME_MAY_CHANGE,
-    ResumeState,
     compared_flags,
+    resume_settings,
 )
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.infrastructure.effect_model_store import resume_mismatches
@@ -19,10 +17,9 @@ FLAGS = {spec.name for spec in fields(TrainEffectModelConfig)}
 
 
 def _settings(config: TrainEffectModelConfig, **training_settings) -> dict:
-    return ResumeState(
-        config, seed=7, corpus_digest="d", training_settings=lambda: training_settings,
-        noise=None, identity_table=None, device=torch.device("cpu"),
-    ).settings()
+    return resume_settings(
+        config, seed=7, corpus_digest="d", training_settings=training_settings,
+    )
 
 
 def test_every_flag_is_compared_unless_it_is_named_as_free():
@@ -47,6 +44,32 @@ def test_a_compared_flag_that_moved_is_a_mismatch_and_a_free_one_is_not():
     assert resume_mismatches(saved, _settings(replace(config, batch_size=16)))
     assert not resume_mismatches(
         saved, _settings(replace(config, epochs=80, patience=0, lr_scale=0.5)),
+    )
+
+
+def test_a_resume_dropping_the_copies_of_the_run_it_continues_is_a_mismatch():
+    """Recorded only when set, so the saved side alone can hold the key."""
+    config = TrainEffectModelConfig()
+    saved = _settings(config, lethality_copies=3)
+    assert resume_mismatches(saved, _settings(config))
+    assert resume_mismatches(_settings(config), saved)
+
+
+def test_a_vocabulary_rebuilt_at_the_same_path_is_a_mismatch(tmp_path):
+    """Rebuilt at the same size the embedding shapes match, so only the bytes
+    say every token id may have moved."""
+    vocab, keywords = tmp_path / "vocab.json", tmp_path / "keywords.json"
+    vocab.write_text('{"a": 0}')
+    keywords.write_text("{}")
+    config = TrainEffectModelConfig(vocab_path=vocab, keyword_definitions=keywords)
+    saved = _settings(config)
+
+    vocab.write_text('{"b": 0}')
+    assert any("vocab" in line for line in resume_mismatches(saved, _settings(config)))
+    vocab.write_text('{"a": 0}')
+    keywords.write_text('{"flying": "x"}')
+    assert any(
+        "keyword" in line for line in resume_mismatches(saved, _settings(config))
     )
 
 

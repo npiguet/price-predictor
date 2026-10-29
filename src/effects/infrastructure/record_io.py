@@ -20,7 +20,7 @@ from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, NamedTuple
 
 import orjson
 
@@ -794,9 +794,9 @@ def _write_shuffled_buckets(
 
 def _game_of_line(line: str) -> str:
     """A shard line's ``game_id``, read off the envelope head without a parse."""
-    head = _ENVELOPE_HEAD.search(line, 0, _ENVELOPE_HEAD_SPAN)
+    head = peek_envelope(line)
     if head is not None:
-        return head.group(1)
+        return head.game_id
     return parse_record_line(line.strip())["game_id"]
 
 
@@ -846,6 +846,29 @@ def iter_record_dicts(path: Path) -> Iterator[dict]:
             yield parse_record_line(stripped)
 
 
+def read_window(
+    directory: Path, limit: int = 0,
+    observe: Callable[[str, dict], None] | None = None,
+) -> Iterator[EffectRecord]:
+    """The first ``limit`` records under ``directory``; 0 reads all of them.
+
+    ``observe``, when given, sees each record's raw dict, with its shard's
+    path relative to ``directory``, before it is parsed: a parsed record
+    cannot say whether a field was on the wire.
+    """
+    root = Path(directory)
+    seen = 0
+    for shard in iter_shards(root):
+        name = shard.relative_to(root).as_posix()
+        for data in iter_record_dicts(shard):
+            if observe is not None:
+                observe(name, data)
+            yield record_from_dict(data)
+            seen += 1
+            if limit and seen >= limit:
+                return
+
+
 def read_shard(path: Path) -> Iterator[EffectRecord]:
     """Yield every complete record in one shard; skip a trailing partial line."""
     for data in iter_record_dicts(path):
@@ -882,14 +905,31 @@ def read_records(directory: Path) -> Iterator[EffectRecord]:
         yield from read_shard(shard)
 
 
-#: ``game_id`` and ``kind`` as both writers lay out the envelope's head: the
-#: Java ``EffectRecord.toJson`` and :func:`record_to_dict` emit ``record_id``,
+#: The envelope's head as both writers lay it out: the Java
+#: ``EffectRecord.toJson`` and :func:`record_to_dict` emit ``record_id``,
 #: ``run_id``, ``timestamp``, ``game_id`` and ``kind`` first, in that order.
-_ENVELOPE_HEAD = re.compile(r'"game_id":"([^"]*)","kind":"([a-z_]+)"')
+_ENVELOPE_HEAD = re.compile(
+    r'"record_id":"([^"]*)",.*?"game_id":"([^"]*)","kind":"([a-z_]+)"'
+)
 
-#: How far into a line the head is looked for. The four leading fields are a
+#: How far into a line the head is looked for. The five leading fields are a
 #: few hundred characters; the state snapshot that follows is the bulk.
 _ENVELOPE_HEAD_SPAN = 512
+
+
+class EnvelopeHead(NamedTuple):
+    """A shard line's leading envelope fields, read without parsing it."""
+
+    record_id: str
+    game_id: str
+    kind: str
+
+
+def peek_envelope(line: str) -> EnvelopeHead | None:
+    """The head of one shard line, or None where it has another shape, which
+    the caller then parses: a reordered envelope costs speed, never records."""
+    head = _ENVELOPE_HEAD.search(line, 0, _ENVELOPE_HEAD_SPAN)
+    return None if head is None else EnvelopeHead(*head.groups())
 
 
 def read_records_matching(
@@ -901,30 +941,31 @@ def read_records_matching(
     """The records under ``directory`` of the named games and kinds.
 
     The same records a filter over :func:`read_records` keeps, without
-    parsing the rest. A line whose head has another shape is parsed and
-    filtered the slow way, so a reordered envelope costs speed, never records.
+    parsing the rest; a line :func:`peek_envelope` cannot read is parsed and
+    filtered the slow way.
     """
     shards = iter_shards(directory)
     for done, shard in enumerate(shards):
         if done and done % 250 == 0:
             logger.info("scanned %d of %d shards under %s", done, len(shards), directory)
         for line in iter_shard_lines(shard):
-            head = _ENVELOPE_HEAD.search(line, 0, _ENVELOPE_HEAD_SPAN)
-            if head is not None:
-                game_id, kind = head.groups()
-                if game_ids is not None and game_id not in game_ids:
-                    continue
-                if kinds is not None and kind not in kinds:
-                    continue
+            head = peek_envelope(line)
+            if head is not None and not _wanted(head.game_id, head.kind, game_ids, kinds):
+                continue
             stripped = line.strip()
             if not stripped:
                 continue
             record = record_from_dict(parse_record_line(stripped))
-            if game_ids is not None and record.game_id not in game_ids:
-                continue
-            if kinds is not None and record.kind.value not in kinds:
+            if head is None and not _wanted(record.game_id, record.kind.value, game_ids, kinds):
                 continue
             yield record
+
+
+def _wanted(
+    game_id: str, kind: str, game_ids: Collection[str] | None, kinds: Collection[str] | None,
+) -> bool:
+    """Whether a record of ``game_id`` and ``kind`` passes both filters."""
+    return (game_ids is None or game_id in game_ids) and (kinds is None or kind in kinds)
 
 
 def count_records(directory: Path, *, ceiling: int = 0) -> int:

@@ -157,7 +157,7 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
     (``KeywordResolver.keywords_of``), so a printed keyword disqualifies as well as a
     granted one.
     """
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import CombatPayload, RecordKind
 
@@ -196,12 +196,12 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
     # prevention, regeneration or a replacement the board does not show cannot
     # be what the grid reads.
     targets = derive_targets(record)
-    died = ZONE_OUTCOMES.index("died")
+    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
     before = BoardEdit(record).clear_damage(attacker_id, blocker_id).record
     expected = step_deaths(side_of(before, attacker_id)[0], side_of(before, blocker_id)[0])
     for entity_id, should_die in zip((attacker_id, blocker_id), expected):
         entry = targets.get(entity_id)
-        observed = entry is not None and entry.fields.get("zone_outcome") == died
+        observed = entry is not None and entry.fields.get(HeadField.ZONE_OUTCOME) == died
         if observed != should_die:
             return None
     return attacker_id, blocker_id

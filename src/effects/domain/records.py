@@ -60,7 +60,7 @@ class RewriteResult(StrEnum):
     """What a replacement effect's handler reported, as Forge names it.
 
     Mirrors ``forge.game.replacement.ReplacementResult`` member for member,
-    lower_snake_case for the wire; ``test_records_us2.py`` pins the two
+    lower_snake_case for the wire; ``test_records.py`` pins the two
     together, since a value the reader raises on loses append-only records.
     Most replacements never edit the event's parameter map, so without this
     "enters tapped" and "prevent that damage" would read as no change at all.
@@ -106,9 +106,9 @@ COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
     "random_seat", "what_if",
 })
 
-#: The legality subkinds that carry ``what_if`` (FR-031); a ``decision`` is
-#: always a real evaluation.
-WHAT_IF_SUBKINDS: frozenset[PlayabilitySubkind] = frozenset({
+#: The legality subkinds, the ones that carry ``what_if`` (FR-031); a
+#: ``decision`` is always a real evaluation.
+LEGALITY_SUBKINDS: frozenset[PlayabilitySubkind] = frozenset({
     PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS,
 })
 
@@ -162,7 +162,9 @@ class UnresolvedReason(StrEnum):
     UNINDEXABLE = "unindexable"
 
 
-#: Kinds where no single line acts, so the envelope carries no ``ability``.
+#: Kinds whose envelope carries no ``ability``: no single line acts in a combat
+#: or a legality declaration, and a decision acts through its candidate's line
+#: (:attr:`EffectRecord.has_act_line`), which the payload names.
 KINDS_WITHOUT_ACTING_ABILITY: frozenset[RecordKind] = frozenset({
     RecordKind.COMBAT, RecordKind.PLAYABILITY,
 })
@@ -174,8 +176,8 @@ class _PayloadQueries:
 
     __slots__ = ()
 
-    def outcome_events(self) -> tuple[Event, ...]:
-        """The events that happened: the outcome the effect head trains on."""
+    def happened_events(self) -> tuple[Event, ...]:
+        """The events that happened, which on most kinds are the record's outcome."""
         return ()
 
     def listed_events(self) -> tuple[Event, ...]:
@@ -232,7 +234,7 @@ class ResolutionPayload(_PayloadQueries):
 
     events: tuple[Event, ...] = ()
 
-    def outcome_events(self) -> tuple[Event, ...]:
+    def happened_events(self) -> tuple[Event, ...]:
         return self.events
 
     def listed_events(self) -> tuple[Event, ...]:
@@ -266,7 +268,7 @@ class RewritePayload(_PayloadQueries):
         """Whether the event's parameter map was edited in place."""
         return self.outgoing is not None
 
-    def outcome_events(self) -> tuple[Event, ...]:
+    def happened_events(self) -> tuple[Event, ...]:
         # The incoming event is what was proposed, not what happened; returning
         # it would train the head on the replaced event.
         return (self.outgoing,) if self.outgoing is not None else ()
@@ -329,7 +331,7 @@ class CombatPayload(_PayloadQueries):
     probed_keyword: str | None = None
     probed_entity: str | None = None
 
-    def outcome_events(self) -> tuple[Event, ...]:
+    def happened_events(self) -> tuple[Event, ...]:
         return self.events
 
     def listed_events(self) -> tuple[Event, ...]:
@@ -350,7 +352,7 @@ class TriggerPayload(_PayloadQueries):
     event: Event
     fired: bool
 
-    def outcome_events(self) -> tuple[Event, ...]:
+    def happened_events(self) -> tuple[Event, ...]:
         # An unfired trigger's event is the one it evaluated, not one it caused.
         return (self.event,) if self.fired else ()
 
@@ -501,9 +503,9 @@ class EffectRecord:
     #: The acting line, several keys where the line merged several traits; on a
     #: modal resolution, the chosen ``option`` line's key (FR-017).
     ability: tuple[ProvenanceKey, ...] | None = None
-    #: An :class:`UnresolvedReason`, set only where a line was looked for and
-    #: none found.
-    ability_unresolved: str | None = None
+    #: Set only where a line was looked for and none found; a reason given as
+    #: its string is read as the member.
+    ability_unresolved: UnresolvedReason | None = None
     #: Envelope keys a newer writer added that this code does not model, kept
     #: verbatim so a read-and-rewrite round trip is lossless (compatibility
     #: rule 1).
@@ -558,6 +560,9 @@ class EffectRecord:
                 f"ability_unresolved={self.ability_unresolved!r} is outside the "
                 f"closed vocabulary {sorted(reason.value for reason in UnresolvedReason)}"
             )
+        object.__setattr__(
+            self, "ability_unresolved", UnresolvedReason(self.ability_unresolved),
+        )
 
     def _check_flags(self) -> None:
         if self.interventional:
@@ -573,7 +578,7 @@ class EffectRecord:
         if self.variant_of is not None and not self.synthetic:
             raise ValueError("variant_of names the card a synthetic script came from")
         if self.what_if is not None and (
-            self.subkind not in WHAT_IF_SUBKINDS
+            self.subkind not in LEGALITY_SUBKINDS
         ):
             raise ValueError(
                 "what_if classes a legality record; "
@@ -601,6 +606,13 @@ class EffectRecord:
         return self.moment or self.subkind
 
     @property
+    def has_act_line(self) -> bool:
+        """Whether one line acts, filling the ``[ACT]`` slot and keying the
+        record's rarity: not in a combat or a legality declaration, which
+        sample uniformly instead (FR-087)."""
+        return self.kind is not RecordKind.COMBAT and self.subkind not in LEGALITY_SUBKINDS
+
+    @property
     def is_probe(self) -> bool:
         """A damage-step probe: a combat fork that intervened in nothing."""
         return (
@@ -616,7 +628,7 @@ def events_of(record: EffectRecord) -> tuple[Event, ...]:
     Here rather than beside target derivation, which imports torch, because
     the coverage counter's pool workers read it.
     """
-    return record.payload.outcome_events()
+    return record.payload.happened_events()
 
 
 def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:

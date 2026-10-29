@@ -124,49 +124,67 @@ def _amount_type_words(amount: str, noun: str) -> str:
     return f"{word} {noun if count == 1 else noun + 's'}"
 
 
+def _sacrifice(amount: str, noun: str, fields: list[str]) -> str:
+    if noun.startswith("another"):
+        return f"Sacrifice {noun}"
+    return f"Sacrifice {_count(amount, noun or 'permanent')}"
+
+
+def _discard(amount: str, noun: str, fields: list[str]) -> str:
+    if noun == "hand":
+        return "Discard your hand"
+    return f"Discard {_count(amount, noun or 'card')}"
+
+
+def _get_counter(amount: str, noun: str, fields: list[str]) -> str:
+    counter = fields[1].capitalize() if len(fields) > 1 else ""
+    return f"Get {_amount_type_words(amount, counter + ' counter')}"
+
+
+#: ``CostPart.toString`` for the common parts, by the part's script name; each
+#: takes the part's amount, its lower-cased noun and its raw ``/`` fields.
+_BRACKET_WORDINGS: dict[str, Callable[[str, str, list[str]], str]] = {
+    "PayLife": lambda amount, noun, fields: f"Pay {amount} life",
+    "PayEnergy": lambda amount, noun, fields: (
+        "Pay " + ("X {E}" if amount == "X" else "{E}" * int(amount))
+    ),
+    "Behold": lambda amount, noun, fields: f"Behold {_amount_type_words(amount, fields[-1])}",
+    "AddCounterYou": _get_counter,
+    "Blight": lambda amount, noun, fields: f"Blight {amount}",
+    "CollectEvidence": lambda amount, noun, fields: f"Collect evidence {amount}",
+    "Waterbend": lambda amount, noun, fields: f"Waterbend {cost_text(amount)}",
+    "Sac": _sacrifice,
+    "Discard": _discard,
+    "ExileFromGrave": lambda amount, noun, fields: (
+        f"Exile {_count(amount, noun or 'card')} from your graveyard"
+    ),
+    "Exile": lambda amount, noun, fields: f"Exile {_count(amount, noun or 'card')}",
+    "Return": lambda amount, noun, fields: (
+        f"Return {_count(amount, noun or 'permanent')} you control to its owner's hand"
+    ),
+    "tapXType": lambda amount, noun, fields: (
+        f"Tap {_count(amount, 'untapped ' + (noun or 'creature'))} you control"
+    ),
+    "AddCounter": lambda amount, noun, fields: (
+        f"Put {_count(amount, (noun or 'counter') + ' counter')} on this"
+    ),
+    "SubCounter": lambda amount, noun, fields: (
+        f"Remove {_count(amount, (noun or 'counter') + ' counter')} from this"
+    ),
+}
+
+
 def _bracket_part(part: str) -> str:
     """A non-mana cost part, worded the way ``CostPart.toString`` words the common ones."""
     name, _, rest = part.partition("<")
+    wording = _BRACKET_WORDINGS.get(name)
+    if wording is None:
+        return part
     fields = rest.rstrip(">").split("/")
     amount = fields[0] if fields else "1"
     noun = (fields[2] if len(fields) > 2 else fields[1] if len(fields) > 1 else "").lower()
     noun = noun.replace(".other", "").replace("card.", "")
-    if name == "PayLife":
-        return f"Pay {amount} life"
-    if name == "PayEnergy":
-        return "Pay " + ("X {E}" if amount == "X" else "{E}" * int(amount))
-    if name == "Behold":
-        return f"Behold {_amount_type_words(amount, fields[-1])}"
-    if name == "AddCounterYou":
-        counter = fields[1].capitalize() if len(fields) > 1 else ""
-        return f"Get {_amount_type_words(amount, counter + ' counter')}"
-    if name == "Blight":
-        return f"Blight {amount}"
-    if name == "CollectEvidence":
-        return f"Collect evidence {amount}"
-    if name == "Waterbend":
-        return f"Waterbend {cost_text(amount)}"
-    if name == "Sac":
-        if noun.startswith("another"):
-            return f"Sacrifice {noun}"
-        return f"Sacrifice {_count(amount, noun or 'permanent')}"
-    if name == "Discard":
-        if noun == "hand":
-            return "Discard your hand"
-        return f"Discard {_count(amount, noun or 'card')}"
-    if name == "ExileFromGrave":
-        return f"Exile {_count(amount, noun or 'card')} from your graveyard"
-    if name == "Exile":
-        return f"Exile {_count(amount, noun or 'card')}"
-    if name == "Return":
-        return f"Return {_count(amount, noun or 'permanent')} you control to its owner's hand"
-    if name == "tapXType":
-        return f"Tap {_count(amount, 'untapped ' + (noun or 'creature'))} you control"
-    if name == "AddCounter":
-        return f"Put {_count(amount, (noun or 'counter') + ' counter')} on this"
-    if name == "SubCounter":
-        return f"Remove {_count(amount, (noun or 'counter') + ' counter')} from this"
-    return part
+    return wording(amount, noun, fields)
 
 
 def cost_text(cost: str) -> str:

@@ -316,6 +316,17 @@ class TestSidecarCache:
         cache.line_or_none(_DROPPED)
         assert cache.undescribed == {_SCRIPT: 2}
 
+    def test_script_text_is_the_line_s_normalized_script(self, tmp_path):
+        """Normalized, the form the holdout hashes; None wherever the join
+        gives no line or the line carries no script."""
+        cache = self._write_trees(tmp_path)
+        assert cache.script_text(_STATIC) == (
+            "DB$ PutCounter | Defined$ Self | CounterType$ P1P1 | CounterNum$ 1"
+        )
+        assert cache.script_text(_DROPPED) is None
+        token = ProvenanceKey("tokenscripts/ajanis_pridemate.txt", 0, "static", 0)
+        assert cache.script_text(token) is None
+
     def test_the_cache_joins_a_record_key_to_its_row(self, tmp_path):
         cache = self._write_trees(tmp_path)
         assert cache.row_for(_TRIGGER) == 1
@@ -605,3 +616,17 @@ class TestLoadTreeTexts:
 
         assert load_tree_texts(tmp_path / "absent") == {}
         assert load_tree_texts(None) == {}
+
+
+class TestTheTreeWalk:
+    def test_every_sidecar_is_read_recursively_in_path_order(self, tmp_path):
+        from effects.infrastructure.sidecar_io import iter_sidecars
+
+        for script in ("cardsfolder/b/bear.txt", "cardsfolder/a/ant.txt"):
+            write_sidecar(
+                ProvenanceSidecar(card=script, script_file=script, lines=()),
+                sidecar_path_for(tmp_path / script),
+            )
+        (tmp_path / "cardsfolder" / "a" / "ant.txt").write_text("not a sidecar")
+        found = [sidecar.script_file for _path, sidecar in iter_sidecars(tmp_path)]
+        assert found == ["cardsfolder/a/ant.txt", "cardsfolder/b/bear.txt"]

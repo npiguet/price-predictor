@@ -13,11 +13,9 @@ import pytest
 
 from effects.domain.event_schema import (
     ATTRIBUTION_ROOT,
-    ATTRIBUTION_SENTINELS,
     ATTRIBUTION_UNRESOLVED,
     CAUSE_BEARING_TYPES,
     EVENT_PARAMS,
-    SUPERSEDED_EVENT_TYPES,
     Event,
     EventType,
     attribution_kind,
@@ -29,26 +27,6 @@ class TestVocabulary:
         values = [t.value for t in EventType]
         assert len(values) == len(set(values))
         assert all(v == v.lower() and " " not in v for v in values)
-
-    def test_every_normalized_type_is_a_real_event_type(self):
-        """``EVENT_PARAMS``'s keys are well-formed, nothing more.
-
-        Narrower than it sounds next to ``TestEveryDeclaredTypeIsReachable``: this
-        only checks that a type with a params row is a real ``EventType`` member,
-        not that every declared member is reachable. ``EVENT_PARAMS`` keys are
-        written as ``EventType.X`` literals, so this is close to tautological in
-        practice — the reachability question is answered by
-        ``test_no_declared_type_is_unreachable_by_surprise``, over the full
-        vocabulary, not this one.
-        """
-        assert set(EVENT_PARAMS) <= set(EventType)
-
-    def test_the_common_outcome_families_are_all_present(self):
-        for name in (
-            "ZONE_CHANGE", "DAMAGE_DEALT", "LIFE_CHANGE", "COUNTER_CHANGE",
-            "PT_CHANGE", "KEYWORD_CHANGE", "TOKEN_CREATED", "CARD_DRAWN",
-        ):
-            assert hasattr(EventType, name)
 
 
 class TestEventNormalization:
@@ -78,14 +56,6 @@ class TestEventNormalization:
             attributed_to="0",
         )
         assert Event.from_dict(event.as_dict()) == event
-
-    def test_a_continuous_outcome_carries_its_duration(self):
-        event = Event(
-            type=EventType.PT_CHANGE,
-            params={"power_delta": 3, "toughness_delta": 3},
-            duration="end_of_turn",
-        )
-        assert event.duration == "end_of_turn"
 
 
 class TestTheZoneChangeRow:
@@ -132,12 +102,6 @@ class TestTheCauseBearingTypes:
     table rather than restated, so widening a row's params widens the
     measurement with it.
     """
-
-    def test_it_is_exactly_the_rows_that_declare_a_cause(self):
-        assert CAUSE_BEARING_TYPES == {
-            event_type for event_type, params in EVENT_PARAMS.items()
-            if "cause" in params
-        }
 
     def test_the_three_removal_shaped_types_are_in_it(self):
         for event_type in (
@@ -189,7 +153,9 @@ class TestAttributionIsTriState:
         assert len(seen) == 4
 
     def test_a_sentinel_is_not_mistakable_for_a_chain_index(self):
-        assert all(not value.isdigit() for value in ATTRIBUTION_SENTINELS)
+        assert all(
+            not value.isdigit() for value in (ATTRIBUTION_ROOT, ATTRIBUTION_UNRESOLVED)
+        )
 
     def test_a_sentinel_survives_the_wire_form_unchanged(self):
         """Widening a value set, not redefining the field: it stays a string."""
@@ -534,16 +500,5 @@ class TestSupersededTypes:
     """
 
     def test_the_superseded_types_are_out_of_the_vocabulary(self):
-        for retired in SUPERSEDED_EVENT_TYPES:
+        for retired in ("cost_adjusted", "damage_assignment_ordered", "name_change"):
             assert retired not in EVENT_PARAMS
-
-    def test_each_names_where_the_information_lives(self):
-        assert SUPERSEDED_EVENT_TYPES == {
-            "cost_adjusted":
-                "playability/decision payload, candidates[].cost_after_adjustment",
-            "damage_assignment_ordered":
-                "combat payload, assignment_choices",
-            "name_change":
-                "continuous payload, contributions[].name",
-        }
-

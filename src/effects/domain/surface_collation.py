@@ -11,7 +11,7 @@ import torch
 
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import FieldSpec, FieldType
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
 
 
 def gather_entities(outputs: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
@@ -89,12 +89,12 @@ def scatter_e_rows(
 
 def entity_target_tensors(
     surfaces: list, targets_per_surface: list[dict], fields: tuple[FieldSpec, ...],
-) -> tuple[torch.Tensor, EntityFieldTargets, torch.Tensor, torch.Tensor]:
-    """``(gate_target, field_targets, entity_mask, entity_index)``, aligned.
+) -> EntityTargetBatch:
+    """The batch's per-entity targets.
 
-    ``entity_index`` selects the ``[CARD]`` and ``[PLAYER]`` columns of the
-    trunk output; an entity no slot represents is not gathered. A field's
-    value where it is not present is a zero the loss never reads.
+    ``index`` selects the ``[CARD]`` and ``[PLAYER]`` columns of the trunk
+    output; an entity no slot represents is not gathered. A field's value
+    where it is not present is a zero the loss never reads.
     """
     batch = len(surfaces)
     width = max((len(s.entity_slots) for s in surfaces), default=1)
@@ -134,7 +134,7 @@ def entity_target_tensors(
                     collected[spec.name][row, column, : len(value)] = value
                 else:
                     collected[spec.name][row, column] = float(value)
-    return (
+    return EntityTargetBatch(
         torch.from_numpy(gate),
         EntityFieldTargets(
             {name: torch.from_numpy(values) for name, values in collected.items()},

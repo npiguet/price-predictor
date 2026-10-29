@@ -66,11 +66,22 @@ A random-seat match writes effect records and the progress line only.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--only-cards` | none | the `holdout-cards` list; decks from listed cards plus basics; unit = held-out text; full-strength caps |
-| `--min-text-games` | 5 | distinct games a held-out text must act in |
+| `--min-text-games` | 5 | distinct games a held-out text must resolve in (kept resolution records) |
 
 Refuses `--only-cards` beside `--exclude-cards`, `--training-corpus` or `--split-from`. Ends when
 every held-out text with a castable carrier (by feature 023's castability consult) is satisfied or
 retired; reports the texts under the floor and, separately, the texts with no castable carrier.
+
+## `python -m effects collect-variants` (existing)
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | repeatable; the converted trees the holdout is chosen over |
+| `--holdout-permille` / `--holdout-max-carriers` | 20 / 8 | as `build-corpus` |
+| `--holdout-unit` | `template` | as `build-corpus` |
+
+Deletes, before decking, every variant whose lines print a text held out under this rule. Passed
+the values `build-corpus` is given, so no variant printing a held-out text reaches a training game.
 
 ## `python -m effects build-corpus` (existing)
 

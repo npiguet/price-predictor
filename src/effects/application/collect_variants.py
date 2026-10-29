@@ -14,16 +14,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.collect_coverage import (
-    DEFAULT_CARDS_FOLDERS,
-    DEFAULT_RECORDS_DIR,
-    DEFAULT_WORKERS,
+    CollectorConfig,
     HoldoutSource,
     build_coverage_decks,
     collector_supervisor,
     play_decks,
 )
 from effects.domain import default_paths
-from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import DeckCandidate
 from effects.domain.script_variants import (
     is_multi_face,
@@ -32,7 +29,7 @@ from effects.domain.script_variants import (
     script_card_name,
     variant_name,
 )
-from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOutCards
+from effects.domain.split import HeldOutCards, HoldoutRule
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
@@ -40,13 +37,11 @@ logger = logging.getLogger(__name__)
 
 #: Cap on variant records as a fraction of the real records already present.
 DEFAULT_VARIANT_VOLUME = 0.2
-DEFAULT_DECKS_PER_ROUND = 500
 RANDOM_SEED = 42
 
 
 @dataclass
-class CollectVariantsConfig:
-    effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
+class CollectVariantsConfig(CollectorConfig):
     forge_cards_path: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_FORGE_CARDS_PATH),
     )
@@ -62,9 +57,6 @@ class CollectVariantsConfig:
     #: The real records ``--variant-volume`` is measured against; defaults to
     #: the destination, which caps a run writing to its own directory at zero.
     corpus_records: Path | None = None
-    decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
-        "help": "Decks played as matches per round (default: %(default)s)",
-    })
     seed: int = field(default=RANDOM_SEED, metadata={
         "help": (
             "Seeds the perturbation and the deck build; a repeat run with the "
@@ -72,18 +64,10 @@ class CollectVariantsConfig:
             "(default: %(default)s)"
         ),
     })
-    split_from: Path | None = None
-    exclude_cards: Path | None = None
-    workers: int = field(default=DEFAULT_WORKERS, metadata={
-        "help": "Parallel Java worker processes (default: %(default)s)",
-    })
-    caps: CollectionCaps = field(default_factory=CollectionCaps)
-    #: The holdout rule a variant printing a held-out text is dropped under;
-    #: must agree with ``build-corpus``'s.
-    cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
-    holdout_permille: int = HOLDOUT_PERMILLE
-    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
-    holdout_unit: str = "template"
+    #: The holdout rule a variant printing a held-out text is dropped under,
+    #: over ``cards_folders``; given the flags ``build-corpus`` is, so the two
+    #: agree.
+    holdout: HoldoutRule = HoldoutRule()
 
     def volume_source(self) -> Path:
         """The directory the volume cap counts records in."""
@@ -380,15 +364,12 @@ def _keep_unheld(
             ", ".join(str(folder) for folder in config.cards_folders),
         )
         return variants
-    held_out = trees.holdout(
-        permille=config.holdout_permille, max_carriers=config.holdout_max_carriers,
-        unit=config.holdout_unit,
-    )
+    held_out = trees.holdout(config.holdout)
     kept = drop_held_out_variants(variants, held_out)
     if len(kept) < len(variants):
         logger.info(
             "Dropped %d of %d variant(s) printing a held-out %s.",
-            len(variants) - len(kept), len(variants), config.holdout_unit,
+            len(variants) - len(kept), len(variants), config.holdout.unit,
         )
     if not kept:
         logger.error("Every variant printed a held-out text; there is nothing to deck.")

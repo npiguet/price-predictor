@@ -341,7 +341,7 @@ def effect_profile(record) -> np.ndarray | None:
 
     None for a record that is not an effect half.
     """
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import Moment, RecordKind
 
@@ -350,21 +350,21 @@ def effect_profile(record) -> np.ndarray | None:
     targets = derive_targets(record)
     affected = [t for t in targets.values() if t.affected]
     n = len(affected)
-    died = ZONE_OUTCOMES.index("died")
-    stayed = ZONE_OUTCOMES.index("stayed")
+    died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+    stayed = ZONE_OUTCOMES.index(ZoneOutcome.STAYED)
 
     def share(test) -> float:
         return sum(1 for t in affected if test(t.fields)) / n if n else 0.0
 
     return np.array([
         math.log1p(n),
-        share(lambda f: f.get("zone_outcome") == died),
-        share(lambda f: (f.get("damage_taken") or 0) > 0),
-        share(lambda f: f.get("zone_outcome") not in (None, stayed)),
-        share(lambda f: bool(f.get("power_delta") or f.get("toughness_delta"))),
+        share(lambda f: f.get(HeadField.ZONE_OUTCOME) == died),
+        share(lambda f: (f.get(HeadField.DAMAGE_TAKEN) or 0) > 0),
+        share(lambda f: f.get(HeadField.ZONE_OUTCOME) not in (None, stayed)),
+        share(lambda f: bool(f.get(HeadField.POWER_DELTA) or f.get(HeadField.TOUGHNESS_DELTA))),
         share(lambda f: any(k.startswith("counters_delta") for k in f)),
-        share(lambda f: bool(f.get("life_delta"))),
-        share(lambda f: bool(f.get("cards_drawn"))),
+        share(lambda f: bool(f.get(HeadField.LIFE_DELTA))),
+        share(lambda f: bool(f.get(HeadField.CARDS_DRAWN))),
     ], dtype=np.float64)
 
 
@@ -594,7 +594,12 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
     ``acting_text`` is ``key -> text or None``, the checkpoint-independent text
     the fold groups key on.
     """
-    from effects.domain.effect_head_layout import DURATIONS, ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import (
+        DURATIONS,
+        ZONE_OUTCOMES,
+        HeadField,
+        ZoneOutcome,
+    )
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import (
         Moment,
@@ -618,7 +623,7 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
 
     if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
         targets = derive_targets(record)
-        died = ZONE_OUTCOMES.index("died")
+        died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
         eot = DURATIONS.index("end_of_turn")
         for entity in record.state.entities:
             if entity.zone != "battlefield":
@@ -628,17 +633,17 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
                                     entity=entity.id, group=card_of(entity)))
             if entry is None:
                 continue
-            damage = entry.fields.get("damage_taken") or 0
+            damage = entry.fields.get(HeadField.DAMAGE_TAKEN) or 0
             if "creature" in entity.types and damage > 0:
                 items.append(RecordItem(
-                    rid, "dies", float(entry.fields.get("zone_outcome") == died),
+                    rid, "dies", float(entry.fields.get(HeadField.ZONE_OUTCOME) == died),
                     entity=entity.id, group=card_of(entity)))
                 items.append(RecordItem(rid, "damage_taken", capped(damage),
                                         entity=entity.id, group=card_of(entity)))
-            if entry.fields.get("pt_duration") is not None:
+            if entry.fields.get(HeadField.PT_DURATION) is not None:
                 items.append(RecordItem(
                     rid, "pt_until_end_of_turn",
-                    float(entry.fields["pt_duration"] == eot),
+                    float(entry.fields[HeadField.PT_DURATION] == eot),
                     entity=entity.id, group=card_of(entity)))
     elif isinstance(payload, TriggerPayload):
         items.append(RecordItem(rid, "fires", float(payload.fired),

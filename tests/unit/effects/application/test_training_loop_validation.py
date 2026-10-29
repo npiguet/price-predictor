@@ -14,15 +14,21 @@ from effects.application.train_effect_model import (
     run,
 )
 from effects.application.training_log import format_floor, format_parts
-from effects.application.training_loop import FloorCache
+from effects.application.validation_pass import FloorCache, ValidationSamples
 from effects.domain.effect_head_layout import FIELDS_BY_NAME
 from effects.domain.effect_losses import LossParts
 from effects.domain.entity_field_targets import EntityFieldTargets
-from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
+from effects.domain.loss_floor import constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
+from effects.domain.split import HoldoutRule
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.builders import make_preparer, make_training_loop
+from tests.unit.effects.builders import (
+    StubLosses,
+    make_entity_targets,
+    make_preparer,
+    make_training_loop,
+)
 
 
 @pytest.fixture
@@ -38,11 +44,7 @@ def samples(tmp_path, make_record):
 
 
 def test_the_loop_loads_both_samples_and_the_probe(samples):
-    loop = make_training_loop(
-        TrainEffectModelConfig(corpus="unused"),
-        validation_samples=samples,
-    )
-    samples = loop._load_validation()
+    samples = ValidationSamples.load(samples)
     assert [r.record_id for r in samples.card_disjoint] == [f"c{i}" for i in range(5)]
     assert len(samples.game_disjoint) == 3
     assert samples.probe and samples.probe[0].record_id == "c0"
@@ -61,7 +63,7 @@ def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
     anything but the defaults would be described by a checkpoint that never
     read it.
     """
-    provenance = CorpusFacts(holdout_permille=30, holdout_max_carriers=5).provenance(
+    provenance = CorpusFacts(holdout=HoldoutRule(30, 5)).provenance(
         TrainEffectModelConfig(corpus="unused"),
     )
 
@@ -109,14 +111,11 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):
     write_shard(paths["game-disjoint"],
                 [make_record(record_id="g0", game_id="gg",
                              kind=RecordKind.COMBAT, payload=CombatPayload())])
-    loop = make_training_loop(
-        TrainEffectModelConfig(corpus="unused"),
-        validation_samples=paths,
-    )
-    present = loop._load_validation().present
+    loop = make_training_loop(TrainEffectModelConfig(corpus="unused"))
+    present = ValidationSamples.load(paths).present
 
     with caplog.at_level(logging.WARNING):
-        loop._warn_missing_classes(present)
+        loop.reporter.missing_classes(present)
 
     assert present == {"resolution-effect", "combat"}
     for absent in set(SAMPLING_CLASSES) - present:
@@ -128,7 +127,7 @@ def test_a_sample_naming_every_class_says_nothing(caplog):
     loop = make_training_loop(TrainEffectModelConfig(corpus="unused"))
 
     with caplog.at_level(logging.WARNING):
-        loop._warn_missing_classes(frozenset(SAMPLING_CLASSES))
+        loop.reporter.missing_classes(frozenset(SAMPLING_CLASSES))
 
     assert caplog.text == ""
 
@@ -207,7 +206,7 @@ def test_a_field_whose_targets_never_vary_reads_not_applicable_end_to_end():
     reporting the ratio the rate clamp would otherwise produce.
     """
     gate = torch.ones(2, 2)
-    batch = EntityTargetBatch(
+    batch = make_entity_targets(
         gate=gate,
         fields=EntityFieldTargets.everywhere({"damage_taken": torch.zeros(2, 2)}),
         mask=gate,
@@ -229,12 +228,13 @@ def test_validation_scores_the_shipped_objective_not_the_backward_total():
     """
     from types import SimpleNamespace
 
-    from effects.application.training_loop import StepLoss
+    from effects.application.step_loss import StepLoss
+    from effects.application.validation_pass import Validator
 
     loop = make_training_loop(TrainEffectModelConfig(corpus="unused", batch_size=2))
-    loop._device_loss = lambda *a, **k: StepLoss(
+    validator = Validator(loop.config, loop.device, StubLosses(lambda prepared: StepLoss(
         total=torch.tensor(5.0), shipped=torch.tensor(1.0), parts=LossParts(), terms={},
-    )
+    )))
     module = SimpleNamespace(eval=lambda: None, train=lambda: None)
     run = SimpleNamespace(
         encoder=module, model=module, step=0, scoring=None,
@@ -242,4 +242,4 @@ def test_validation_scores_the_shipped_objective_not_the_backward_total():
     )
     records = [SimpleNamespace(game_id=f"g{i}") for i in range(4)]
 
-    assert loop._validate(records, run, fields=()) == 1.0
+    assert validator.score(records, run, ()).loss == 1.0

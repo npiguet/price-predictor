@@ -387,7 +387,12 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
         return float("nan")
     import torch
 
-    from effects.domain.effect_head_layout import FIELD_SLICES, VERDICT_BITS
+    from effects.domain.effect_head_layout import (
+        FIELD_SLICES,
+        VERDICT_BITS,
+        HeadField,
+        ZoneOutcome,
+    )
     from effects.domain.head_decoding import HeadReading
 
     reading = HeadReading(outputs[row, slot])
@@ -395,13 +400,13 @@ def _readout(target: str, outputs, verdict, slot: int, row: int, *,
     if target == "affected":
         value = reading.p_affected
     elif target == "dies":
-        value = reading.p_zone("died")
+        value = reading.p_zone(ZoneOutcome.DIED)
     elif target == "damage_taken":
-        value = reading.expected("damage_taken", conditional=True)
+        value = reading.expected(HeadField.DAMAGE_TAKEN, conditional=True)
     elif target == "pt_until_end_of_turn":
-        value = reading.p_class("pt_duration", "end_of_turn")
+        value = reading.p_class(HeadField.PT_DURATION, "end_of_turn")
     elif target == "may_block":
-        value = torch.sigmoid(outputs[row, slot, FIELD_SLICES["blocker_legal"][0]])
+        value = torch.sigmoid(outputs[row, slot, FIELD_SLICES[HeadField.BLOCKER_LEGAL][0]])
     elif target in ("legal_target", "legal_target_protected"):
         # The gate, not the `target_legal` field: training sets that field only
         # on legal targets, always to 1, so on an illegal entity its output was

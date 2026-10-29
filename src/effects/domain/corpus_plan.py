@@ -15,22 +15,29 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from effects.domain.budget_allocation import allocate
 from effects.domain.corpus_curation import (
+    SIGNATURE_CLASSES,
     CapHeap,
     CopyPlan,
     class_targets,
     copy_plan,
     game_disjoint_draw,
     in_game_disjoint_stratum,
+    outcome_signature,
     rate_plan,
+    signature_label,
     text_capacity,
 )
-from effects.domain.provenance import ProvenanceKey
-from effects.domain.sampling import SamplingClass
+from effects.domain.provenance import ProvenanceKey, SidecarLookup
+from effects.domain.records import EffectRecord, LegalityDecision
+from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.strata import Stratum
+
+if TYPE_CHECKING:
+    from effects.domain.damage_step_keywords import KeywordResolver
 
 #: A record's acting keys: the whole tuple, hashable and picklable as it is.
 Keys = tuple[ProvenanceKey, ...]
@@ -58,7 +65,7 @@ class Cell:
     """
 
     klass: SamplingClass
-    half: str = ""
+    half: LegalityDecision | Literal[""] = ""
     family: str = ""
     signature: str = ""
     modes: frozenset[str] = frozenset()
@@ -73,10 +80,53 @@ class Cell:
             self, family=legality_family(self.modes, mode_counts), modes=frozenset(),
         )
 
+    @classmethod
+    def of(
+        cls, record: EffectRecord, sidecars: SidecarLookup, resolver: KeywordResolver,
+        legality_mode_counts: Mapping[str, int] | None = None,
+    ) -> Cell:
+        """The cell a record is selected in. Both passes call this one function.
+
+        ``random_seat`` is not a component (FR-050). A legality record's family is
+        its rarest mode, which only the whole corpus can say, so without
+        ``legality_mode_counts`` (the survey) its cell carries the modes for
+        :meth:`resolved` to fold later.
+        """
+        from effects.domain.rule_families import FamilySentinel, legality_modes, rule_family
+
+        klass = sampling_class(record)
+        half = _selection_half(record, klass)
+        if klass == SamplingClass.PLAYABILITY_LEGALITY:
+            modes = legality_modes(record, sidecars)
+            family = "" if modes else FamilySentinel.NONE
+            cell = cls(klass=klass, half=half, family=family, modes=modes)
+            return cell if legality_mode_counts is None else cell.resolved(legality_mode_counts)
+        return cls(
+            klass=klass,
+            half=half,
+            family=rule_family(record, sidecars, resolver=resolver),
+            signature=(
+                signature_label(outcome_signature(record))
+                if klass in SIGNATURE_CLASSES else ""
+            ),
+        )
+
     @property
     def label(self) -> str:
         """The family's name in the manifest: prefixed by its half on a legality cell."""
         return f"{self.half}:{self.family}" if self.half else self.family
+
+
+def _selection_half(
+    record: EffectRecord, klass: SamplingClass,
+) -> LegalityDecision | Literal[""]:
+    """``real`` / ``what-if`` on a legality record (FR-049 step 3), empty on
+    every other; a gen-1 record, whose decision is unknown, is a what-if."""
+    if klass != SamplingClass.PLAYABILITY_LEGALITY:
+        return ""
+    if LegalityDecision.of(record) is LegalityDecision.REAL:
+        return LegalityDecision.REAL
+    return LegalityDecision.WHAT_IF
 
 
 # ── what the training-bound records can supply ──────────────────────────
@@ -150,16 +200,17 @@ class Member:
     distinct: int = 0
     heap: CapHeap | None = None
 
-    def once(self, name: str, text_cap: int) -> int:
-        """Records this member can supply once each: the text cap, or all of them."""
-        if name == KEYLESS or text_cap <= 0:
+    def once(self, text_cap: int) -> int:
+        """Records this member can supply once each: the text cap, or all of
+        them, which the keyless member always can."""
+        if self.heap is None or text_cap <= 0:
             return self.distinct
         return min(self.distinct, text_cap)
 
-    def capacity(self, name: str, *, text_cap: int, reuse_cap: int) -> int:
+    def capacity(self, *, text_cap: int, reuse_cap: int) -> int:
         """Records this member can supply with repeats."""
         return text_capacity(
-            self.distinct, text_cap=0 if name == KEYLESS else text_cap,
+            self.distinct, text_cap=0 if self.heap is None else text_cap,
             reuse_cap=reuse_cap,
         )
 
@@ -178,7 +229,9 @@ def members_of(
         if text is None:
             members[cell].setdefault(KEYLESS, Member()).distinct += count
             continue
-        member = members[cell].setdefault(text, Member(heap=CapHeap(supply.heap_cap)))
+        member = members[cell].get(text)
+        if member is None:
+            member = members[cell][text] = Member(heap=CapHeap(supply.heap_cap))
         member.distinct += count
         member.heap.merge(supply.heaps[cell, keys])
         keys_of[cell, text].append(keys)
@@ -331,8 +384,8 @@ def _available(members: Mapping[Cell, Mapping[str, Member]], text_cap: int) -> d
     """Distinct records each class can supply under the text cap, with no repeats."""
     available: Counter[str] = Counter()
     for cell, cell_members in members.items():
-        for name, member in cell_members.items():
-            available[cell.klass] += member.once(name, text_cap)
+        for member in cell_members.values():
+            available[cell.klass] += member.once(text_cap)
     return dict(available)
 
 
@@ -345,8 +398,8 @@ def _allocation_tree(
         cell_node = tree.child(cell.klass).child(cell.half).child(cell.family).child(cell)
         for name, member in cell_members.items():
             cell_node.children[name] = AllocationNode(
-                supply=member.capacity(name, text_cap=text_cap, reuse_cap=reuse_cap),
-                once=member.once(name, text_cap),
+                supply=member.capacity(text_cap=text_cap, reuse_cap=reuse_cap),
+                once=member.once(text_cap),
             )
     return tree
 

@@ -53,18 +53,6 @@ class TestInclusionTiers:
         assert not snapshot.collected(InclusionTier.UNREFERENCED_HAND_GRAVEYARD)
 
 class TestPerspectiveIsNotStored:
-    def test_mine_and_opponent_derive_from_the_records_actor(self):
-        snapshot = _snapshot()
-        assert snapshot.controller_tag("P0", actor_player="P0") == "mine"
-        assert snapshot.controller_tag("P0", actor_player="P1") == "opponent"
-
-    def test_one_snapshot_serves_records_with_different_actors(self):
-        """The reason perspective is derived: the same board, two actors."""
-        snapshot = _snapshot()
-        assert snapshot.controller_tag("P1", "P0") != snapshot.controller_tag(
-            "P1", "P1"
-        )
-
     def test_no_snapshot_field_names_a_perspective(self):
         from dataclasses import fields
 

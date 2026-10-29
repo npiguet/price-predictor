@@ -24,9 +24,11 @@ from pathlib import Path
 import pytest
 import torch
 
+from effects.application import run_context
 from effects.application import training_loop as loop_module
 from effects.application.extract_keyword_definitions import load_keyword_definitions
-from effects.application.resume_state import ResumeState
+from effects.application.run_context import preparer_settings
+from effects.application.step_loss import StepLossComputer
 from effects.application.step_preparation import (
     ShardOpened,
     ShardTask,
@@ -37,7 +39,6 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     fields_for_epoch,
 )
-from effects.application.training_loop import TrainingLoop
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.baselines import baseline_masks
@@ -129,29 +130,56 @@ class _Interrupted(Exception):
     """Stands in for the machine turning off after an epoch."""
 
 
+class _RecordedLosses(StepLossComputer):
+    """The real device half, noting every loss it computes, training's and
+    validation's, and pressing Ctrl+C on the ``interrupt_at``-th."""
+
+    def __init__(self, config, device, sink: list[float], interrupt_at) -> None:
+        super().__init__(config, device)
+        self.sink = sink
+        self.interrupt_at = interrupt_at
+        self.calls = 0
+
+    def device_loss(self, *args, **kwargs):
+        self.calls += 1
+        if self.calls == self.interrupt_at:
+            raise KeyboardInterrupt
+        computed = super().device_loss(*args, **kwargs)
+        self.sink.append(float(computed.total.detach()))
+        return computed
+
+
+def record_losses(loop, sink: list[float], *, interrupt_at=None) -> None:
+    """Swap ``loop``'s device half, training's and validation's, for one that
+    records into ``sink``."""
+    recorded = _RecordedLosses(loop.config, loop.device, sink, interrupt_at)
+    loop.losses = loop.validator.losses = recorded
+
+
 def _run(
     monkeypatch, corpus, out: Path, caplog, *, workers: int, seed: int = SEED,
-    interrupt_after: int | None = None, resume: bool = False, **config,
+    interrupt_after: int | None = None, resume: bool = False,
+    interrupt_at: int | None = None, **config,
 ) -> dict:
     """Two epochs end to end; every loss, the final weights, the share lines.
 
     ``interrupt_after`` stops the run once that epoch's resume file is written,
     as a machine turning off would; ``resume`` continues from that file.
+    ``interrupt_at`` presses Ctrl+C on that device loss, counted from 1.
     """
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     if interrupt_after is not None:
-        real_save = ResumeState.save
+        real_save = loop_module.save_resume
 
-        def save_then_stop(self, epoch, *args, **kwargs):
-            real_save(self, epoch, *args, **kwargs)
+        def save_then_stop(run, epoch, **kwargs):
+            real_save(run, epoch, **kwargs)
             if epoch == interrupt_after:
                 raise _Interrupted
 
-        monkeypatch.setattr(ResumeState, "save", save_then_stop)
+        monkeypatch.setattr(loop_module, "save_resume", save_then_stop)
     built: dict[str, torch.nn.Module] = {}
     initial: dict[str, torch.Tensor] = {}
     losses: list[float] = []
-    real_loss = TrainingLoop._device_loss
 
     def encoder(config):
         built["encoder"] = AbilityEncoder(config)
@@ -169,16 +197,10 @@ def _run(
         })
         return built["model"]
 
-    def device_loss(self, *args, **kwargs):
-        computed = real_loss(self, *args, **kwargs)
-        losses.append(float(computed.total.detach()))
-        return computed
-
-    monkeypatch.setattr(loop_module, "AbilityEncoder", encoder)
-    monkeypatch.setattr(loop_module, "EffectModel", model)
-    monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
+    monkeypatch.setattr(run_context, "AbilityEncoder", encoder)
+    monkeypatch.setattr(run_context, "EffectModel", model)
     caplog.clear()
-    with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
+    with caplog.at_level(logging.INFO, logger="effects.application"):
         loop = make_training_loop(
             _config(
                 corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
@@ -193,6 +215,7 @@ def _run(
                 "card-disjoint": corpus.sample, "game-disjoint": corpus.sample,
             },
         )
+        record_losses(loop, losses, interrupt_at=interrupt_at)
         try:
             code = loop.execute()
         except _Interrupted:
@@ -329,6 +352,23 @@ def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
     assert not multiprocessing.active_children()
 
 
+def test_a_run_resumed_for_more_epochs_warms_up_as_the_run_it_continues(
+    monkeypatch, corpus, tmp_path, caplog, in_process,
+):
+    """``--epochs`` may grow on resume, but the warmup was fixed by the run
+    that started: at 40 epochs it would still be warming up through epoch 2."""
+    out = tmp_path / "extended"
+    first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    second = _run(
+        monkeypatch, corpus, out, caplog, workers=0, resume=True, epochs=40,
+        interrupt_after=2,
+    )
+
+    assert first["losses"] + second["losses"] == in_process["losses"]
+    for name, value in in_process["parameters"].items():
+        assert torch.equal(value, second["parameters"][name]), name
+
+
 def test_a_resume_under_another_seed_is_refused(monkeypatch, corpus, tmp_path, caplog):
     from effects.infrastructure.effect_model_store import ResumeMismatchError
 
@@ -400,16 +440,6 @@ def test_a_zero_learning_rate_factor_trains_nothing(monkeypatch, corpus, tmp_pat
         assert torch.equal(value, run["parameters"][f"model.{name}"]), name
 
 
-def test_early_stopping_with_no_patience_never_stops():
-    from effects.application.train_effect_model import EarlyStopper
-
-    stopper = EarlyStopper(0)
-    stopper.update(1.0)
-    for _ in range(50):
-        stopper.update(2.0)
-    assert not stopper.should_stop
-
-
 def test_resuming_without_a_resume_file_fails(monkeypatch, corpus, tmp_path, caplog):
     with pytest.raises(FileNotFoundError, match="resume"):
         _run(monkeypatch, corpus, tmp_path / "empty", caplog, workers=0, resume=True)
@@ -454,8 +484,9 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     config = _config(corpus, corpus.root / "unused")
     loop = make_training_loop(config, rarity={"x": 3})
-    loop.api_types, loop.param_keys = loop._script_vocabularies()
-    settings = loop._preparer_settings(feature_widths(records))
+    settings = preparer_settings(
+        config, seed=loop.seed, facts=loop.facts, widths=feature_widths(records),
+    )
     assert settings.heads == frozenset({"value", "api", "mlm"})
     fields = fields_for_epoch(
         config, present=frozenset(sampling_class(r) for r in records), epoch=1,
@@ -463,7 +494,7 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     task = ShardTask(
         shard=Path("fixture"), epoch=1, position=2, budget=5, fields=fields,
     )
-    here = list(StepPreparer(settings, truncations=loop.truncations).shard_steps(
+    here = list(StepPreparer(settings, truncations=loop.reporter.truncations).shard_steps(
         task, records,
     ))
     worker = StepPreparer(settings)
@@ -520,16 +551,6 @@ def test_an_interrupt_mid_shard_leaves_no_process_behind(
     monkeypatch, corpus, tmp_path, caplog,
 ):
     """Ctrl+C lands in the training loop with workers blocked on full queues."""
-    real_loss = TrainingLoop._device_loss
-    calls = []
-
-    def interrupted(self, *args, **kwargs):
-        calls.append(1)
-        if len(calls) == 3:
-            raise KeyboardInterrupt
-        return real_loss(self, *args, **kwargs)
-
-    monkeypatch.setattr(TrainingLoop, "_device_loss", interrupted)
     with pytest.raises(KeyboardInterrupt):
-        _run(monkeypatch, corpus, tmp_path / "out", caplog, workers=2)
+        _run(monkeypatch, corpus, tmp_path / "out", caplog, workers=2, interrupt_at=3)
     assert not multiprocessing.active_children()

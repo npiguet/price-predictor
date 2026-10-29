@@ -10,18 +10,21 @@ import errno
 import json
 import logging
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 from effects.domain.provenance import (
     KeyResolution,
     ProvenanceKey,
     ProvenanceSidecar,
+    Role,
     RoleSpan,
     SidecarLine,
     SourceTree,
     SubAbilityLink,
     split_script_file,
 )
+from effects.domain.text_holdout import normalize_script_text
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +66,7 @@ def script_vocabularies(folders) -> tuple[list[str], list[str]]:
 
     from effects.domain.value_targets import params, segments
 
-    paths = [
-        path for folder in folders
-        for path in sorted(Path(folder).rglob(f"*{SIDECAR_SUFFIX}"))
-    ]
+    paths = [path for folder in folders for path in sidecar_paths(folder)]
     api_types: set[str] = set()
     param_keys: set[str] = set()
     # Threads: the cost is file opens, which release the interpreter lock.
@@ -146,7 +146,7 @@ def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
                 script_text=line.get("script_text"),
                 role_spans=tuple(
                     RoleSpan(
-                        start=span["start"], end=span["end"], role=span["role"],
+                        start=span["start"], end=span["end"], role=Role(span["role"]),
                     )
                     for span in line.get("role_spans", ())
                 ),
@@ -169,6 +169,18 @@ _TRANSIENT_ERRNOS = frozenset({errno.EINVAL, errno.EACCES})
 #: second.
 _SIDECAR_READ_ATTEMPTS = 5
 _SIDECAR_RETRY_DELAY = 0.05
+
+
+def sidecar_paths(folder: Path) -> list[Path]:
+    """Every sidecar under ``folder``, recursively, in path order so every
+    walk over a tree visits it the same way."""
+    return sorted(Path(folder).rglob(f"*{SIDECAR_SUFFIX}"))
+
+
+def iter_sidecars(folder: Path) -> Iterator[tuple[Path, ProvenanceSidecar]]:
+    """Every sidecar under ``folder``, read, beside its path."""
+    for path in sidecar_paths(folder):
+        yield path, read_sidecar(path)
 
 
 def read_sidecar(path: Path) -> ProvenanceSidecar:
@@ -224,8 +236,7 @@ def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
     if root is None or not Path(root).is_dir():
         return {}
     out: dict[str, list[str]] = {}
-    for path in sorted(Path(root).rglob(f"*{SIDECAR_SUFFIX}")):
-        sidecar = read_sidecar(path)
+    for _path, sidecar in iter_sidecars(root):
         texts = [line.script_text for line in sidecar.lines if line.script_text]
         if texts:
             out[sidecar.script_file] = texts
@@ -294,6 +305,7 @@ class SidecarCache:
         #: Script files found to have no sidecar, so a miss stats the disk once.
         self._missing: set[str] = set()
         self._prose: dict[str, list[str]] = {}
+        self._script_texts: dict[ProvenanceKey, str | None] = {}
         #: ``script_file -> times asked`` for keys naming an unconverted script,
         #: counted so a broken conversion shows.
         self.unresolved: dict[str, int] = {}
@@ -359,6 +371,18 @@ class SidecarCache:
             if line is not None:
                 return line
         return None
+
+    def script_text(self, key: ProvenanceKey) -> str | None:
+        """The normalized script text of the line a key names, under
+        :meth:`line_or_none`; resolved once per key, since the holdout tests
+        and the coverage counts ask for the same keys shard after shard."""
+        if key not in self._script_texts:
+            line = self.line_or_none(key)
+            self._script_texts[key] = (
+                normalize_script_text(line.script_text)
+                if line is not None and line.script_text else None
+            )
+        return self._script_texts[key]
 
     def prose_for(self, key: ProvenanceKey) -> str | None:
         """The converted prose of the line a key names.

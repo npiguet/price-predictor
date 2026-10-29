@@ -15,10 +15,13 @@ import random
 from dataclasses import dataclass, field
 from enum import IntEnum
 from functools import lru_cache
+from typing import Protocol
 
 from effects.domain.keyword_names import overlay_keyword
 from effects.domain.provenance import ProvenanceKey
+from effects.domain.recorded_version import recorded_version
 from effects.domain.records import (
+    ActivationPayload,
     CombatPayload,
     ContinuousPayload,
     EffectRecord,
@@ -28,7 +31,7 @@ from effects.domain.records import (
     RecordKind,
     ResolutionOutcome,
 )
-from effects.domain.state_snapshot import COLORS, EntityState, PlayerState
+from effects.domain.state_snapshot import COLORS, EntityState, PlayerState, normalize_counter_type
 
 
 class SlotKind(IntEnum):
@@ -88,7 +91,6 @@ PHASE_ALIASES: dict[str, str] = {
     "combat_first_strike_damage": "first_strike_damage",
     "combat_end": "end_combat",
 }
-COUNTER_ALIASES: dict[str, str] = {"+1/+1": "P1P1", "-1/-1": "M1M1"}
 #: Appended rather than inserted, so every earlier member keeps its slot.
 OVERLAY_KEYWORDS_GEN2: tuple[str, ...] = (*OVERLAY_KEYWORDS, "landwalk")
 
@@ -111,7 +113,7 @@ class InputLayout:
         """The layout a checkpoint's training settings record; the earlier one
         where they record none (gen-1, and gen-2 arms trained before the
         layout existed)."""
-        if (training_settings or {}).get(INPUT_LAYOUT_KEY) is None:
+        if recorded_version(training_settings, INPUT_LAYOUT_KEY, (INPUT_LAYOUT.name,)) is None:
             return EARLIER_LAYOUT
         return INPUT_LAYOUT
 
@@ -174,6 +176,15 @@ def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
     return out
 
 
+#: What :func:`_push_scalar` appends per scalar.
+_SCALAR_WIDTH = 2
+
+
+def _one_hot_width(vocabulary: tuple[str, ...]) -> int:
+    """What :func:`_one_hot` returns over ``vocabulary``."""
+    return len(vocabulary) + 1
+
+
 def _push_scalar(out: list[float], value: float) -> None:
     """A scalar as raw plus signed ``log1p``, onto the caller's list; nothing
     is binned (FR-074). Appended rather than returned: a list per scalar made
@@ -183,10 +194,12 @@ def _push_scalar(out: list[float], value: float) -> None:
     out.append(math.copysign(math.log1p(abs(raw)), raw))
 
 
-_NO_PT: tuple[float, ...] = (0.0,) * 13
-#: One scalar (two zeros) per counter type plus the catch-all.
-_NO_COUNTERS: tuple[float, ...] = (0.0,) * (2 * (len(COUNTER_TYPES) + 1))
-_NO_STACK_EXTRAS: tuple[float, ...] = (0.0,) * 6
+#: Power and toughness of the base, boosts and counters, then the present flag.
+_NO_PT: tuple[float, ...] = (0.0,) * (3 * 2 * _SCALAR_WIDTH + 1)
+#: One scalar per counter type plus the catch-all.
+_NO_COUNTERS: tuple[float, ...] = (0.0,) * (_SCALAR_WIDTH * (len(COUNTER_TYPES) + 1))
+#: Targets, per-target amounts and up-to counts.
+_NO_STACK_EXTRAS: tuple[float, ...] = (0.0,) * (3 * _SCALAR_WIDTH)
 
 
 def _multi_hot(present, vocabulary: tuple[str, ...]) -> list[float]:
@@ -269,7 +282,7 @@ def global_features(
 
 #: Width of the kind, moment and subkind one-hots that end every ``[GLOBAL]``
 #: slot; the ``no-state`` baseline keeps exactly these (FR-094).
-KIND_FLAG_WIDTH = len(_RECORD_KINDS) + len(_MOMENTS) + len(_PLAYABILITY_SUBKINDS) + 3
+KIND_FLAG_WIDTH = sum(map(_one_hot_width, (_RECORD_KINDS, _MOMENTS, _PLAYABILITY_SUBKINDS)))
 
 ACT_SLOT = 1
 
@@ -278,7 +291,7 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
     """Announced values and the resolution outcome flag; zeros for
     ``combat`` and the ``attackers``/``blockers`` subkinds, where no single
     line acts."""
-    if _act_is_empty(record):
+    if not record.has_act_line:
         return tuple([0.0] * _ACT_FEATURE_WIDTH)
     refs = record.state.refs
     out: list[float] = [1.0]  # slot is populated
@@ -289,25 +302,21 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
     _push_scalar(out, len(refs.choices))
     # The outcome flag comes from the paired cost record; a half with no
     # partner resolved by definition, which is why `resolved` is the default.
-    outcome = ResolutionOutcome.RESOLVED
-    if record.moment is Moment.ACTIVATION and hasattr(record.payload, "outcome"):
-        outcome = record.payload.outcome
+    payload = record.payload
+    outcome = (
+        payload.outcome if isinstance(payload, ActivationPayload)
+        else ResolutionOutcome.RESOLVED
+    )
     out += _one_hot(outcome.value, _RESOLUTION_OUTCOMES)
     return tuple(out)
 
 
-_ACT_FEATURE_WIDTH = 1 + 2 + 1 + 2 + 2 + 2 + (len(ResolutionOutcome) + 1)
 _RESOLUTION_OUTCOMES: tuple[str, ...] = tuple(
     o.value for o in ResolutionOutcome
 )
-
-
-def _act_is_empty(record: EffectRecord) -> bool:
-    if record.kind is RecordKind.COMBAT:
-        return True
-    return record.subkind in (
-        PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS,
-    )
+#: The populated and X-present flags, the X, mode, target and choice scalars,
+#: and the outcome one-hot.
+_ACT_FEATURE_WIDTH = 2 + 4 * _SCALAR_WIDTH + _one_hot_width(_RESOLUTION_OUTCOMES)
 
 
 def player_features(
@@ -395,8 +404,7 @@ def _push_overlay(
         granted = [overlay_keyword(keyword) for keyword in granted]
     out += _multi_hot(granted, layout.overlay_keywords)
     _push_scalar(out, len(entity.granted_temporary.abilities))
-    out.append(1.0 if state.controller_tag(
-        entity.controller, record.actor_player) == "mine" else 0.0)
+    out.append(1.0 if entity.controller == record.actor_player else 0.0)
     out.append(1.0 if entity.id in state.refs.targets else 0.0)
     out.append(1.0 if entity.id == state.refs.source else 0.0)
 
@@ -408,7 +416,7 @@ def _push_counters(out: list[float], counters, layout: InputLayout) -> None:
     if layout.forge_spellings:
         renamed: dict[str, int] = {}
         for name, value in counters.items():
-            name = COUNTER_ALIASES.get(name, name)
+            name = normalize_counter_type(name)
             renamed[name] = renamed.get(name, 0) + value
         counters = renamed
     for counter in COUNTER_TYPES:
@@ -469,47 +477,53 @@ def _pending_event_features(
     ]
 
 
+class LineLookup(Protocol):
+    """What the surface asks of each ability key's rendered line."""
+
+    def e_for(self, key: ProvenanceKey) -> tuple[float, ...] | int | None:
+        """The line's ``e`` (see :attr:`Slot.e`). None gives a zero vector
+        rather than dropping the token, so a variant that masks ``e`` keeps
+        the geometry."""
+
+    def has_line(self, key: ProvenanceKey) -> bool:
+        """False for a key with no rendered line (the implicit permanent
+        spell), which gets no token."""
+
+    def keyword_of(self, key: ProvenanceKey) -> str | None:
+        """Which keyword the line *is*."""
+
+    def options_for(self, key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
+        """The charm-mode keys whose slots follow the key's (FR-063a)."""
+
+
 def build_effect_head_input(
     record: EffectRecord,
     *,
-    e_for,
+    lines: LineLookup,
     e_dim: int,
-    has_line=None,
+    rng: random.Random,
     candidate_index: int | None = None,
     context_dropout: float = 0.0,
-    rng: random.Random | None = None,
     masked_keywords: dict[str, frozenset[str]] | None = None,
     stripped_keywords: dict[str, frozenset[str]] | None = None,
-    keyword_of=None,
-    options_for=None,
     layout: InputLayout = INPUT_LAYOUT,
 ) -> EffectHeadInput:
     """Lay one record out as the token surface.
 
     Args:
-        e_for: ``ProvenanceKey -> tuple[float, ...] | int | None`` (see
-            :attr:`Slot.e`). None gives a zero vector rather than dropping the
-            token, so a variant that masks ``e`` keeps the geometry.
-        has_line: ``ProvenanceKey -> bool``; a key with no rendered line (the
-            implicit permanent spell) gets no token. None keeps every key.
         candidate_index: which candidate's ``e`` a ``decision`` record's
             ``[ACT]`` reads.
         context_dropout: per-token drop probability for every entity's
-            abilities but the acting one's.
+            abilities but the acting one's, drawn from ``rng``.
         masked_keywords: per-entity keywords to hide from the temporary-grant
             channel, e.g. a ``continuous`` record's own contribution.
         stripped_keywords: gate 2's perturbation: per-entity keywords removed
             from the overlay *and* as ability slots, since a printed keyword
             reaches the model as a token. Kept apart from ``masked_keywords``,
-            which must not silence a printed line of the same keyword. The
-            ability channel needs ``keyword_of``.
-        keyword_of: ``ProvenanceKey -> str | None``, which keyword a line *is*.
-        options_for: ``ProvenanceKey -> tuple[ProvenanceKey, ...]``, the
-            charm-mode keys whose slots follow the key's (FR-063a).
+            which must not silence a printed line of the same keyword.
         layout: :data:`INPUT_LAYOUT`, or the one a checkpoint recorded
             (:meth:`InputLayout.of`).
     """
-    rng = rng or random.Random()
     masked = masked_keywords or {}
     stripped = stripped_keywords or {}
     zero = tuple([0.0] * e_dim)
@@ -525,7 +539,7 @@ def build_effect_head_input(
     slots.append(Slot(
         kind=SlotKind.ACT, position=position,
         features=act_features(record),
-        e=_act_vector(record, e_for, zero, candidate_index),
+        e=_act_vector(record, lines.e_for, zero, candidate_index),
     ))
     position += 1
 
@@ -544,11 +558,10 @@ def build_effect_head_input(
         gone = stripped.get(entity.id, frozenset())
         entity_slots.append(len(slots))
         slots += _entity_block(
-            entity, record, e_for=e_for, zero=zero,
+            entity, record, lines=lines, zero=zero,
             masked=masked.get(entity.id, frozenset()) | gone, layout=layout,
-            options_for=options_for,
             keeps=lambda key, entity=entity, gone=gone: _keeps_ability(
-                key, has_line=has_line, gone=gone, keyword_of=keyword_of,
+                key, lines=lines, gone=gone,
                 dropout=context_dropout if entity.id != source_id else 0.0, rng=rng,
             ),
         )
@@ -557,8 +570,8 @@ def build_effect_head_input(
 
 
 def _entity_block(
-    entity: EntityState, record: EffectRecord, *, e_for, zero, masked, layout,
-    options_for, keeps,
+    entity: EntityState, record: EffectRecord, *, lines: LineLookup, zero, masked, layout,
+    keeps,
 ) -> list[Slot]:
     """One entity's ``CARD`` slot, then an ``ABILITY`` slot per ability it
     keeps, each charm root followed by its mode lines; positions restart."""
@@ -570,9 +583,9 @@ def _entity_block(
     for key in _ability_keys(entity):
         if not keeps(key):
             continue
-        modes = options_for(key) if options_for is not None else ()
+        modes = lines.options_for(key)
         for mode_key, option in ((key, False), *((mode, True) for mode in modes)):
-            resolved = e_for(mode_key)
+            resolved = lines.e_for(mode_key)
             block.append(Slot(
                 kind=SlotKind.ABILITY, position=len(block),
                 # Explicitly against None: row 0 is a valid matrix row and
@@ -583,11 +596,11 @@ def _entity_block(
     return block
 
 
-def _keeps_ability(key, *, has_line, gone, keyword_of, dropout: float, rng) -> bool:
+def _keeps_ability(key, *, lines: LineLookup, gone, dropout: float, rng) -> bool:
     """Whether one of an entity's abilities gets a slot."""
-    if has_line is not None and not has_line(key):
+    if not lines.has_line(key):
         return False
-    if gone and keyword_of is not None and keyword_of(key) in gone:
+    if gone and lines.keyword_of(key) in gone:
         # Dropped rather than zeroed: a zero token still says an ability is
         # here.
         return False
@@ -604,7 +617,7 @@ def _act_vector(
     record: EffectRecord, e_for, zero: tuple[float, ...],
     candidate_index: int | None,
 ):
-    if _act_is_empty(record):
+    if not record.has_act_line:
         return zero
     payload = record.payload
     if isinstance(payload, PlayabilityDecisionPayload):
@@ -630,16 +643,14 @@ def _first_vector(keys, e_for, zero: tuple[float, ...]):
 def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]]:
     """Keywords a ``continuous`` record's own static contributed (FR-020),
     hidden so the input does not already contain the answer."""
-    payload = record.payload
-    if record.kind is not RecordKind.CONTINUOUS or not isinstance(
-        payload, ContinuousPayload,
-    ):
-        return {}
-    return {
-        contribution.entity: frozenset(contribution.keywords)
-        for contribution in payload.contributions
-        if contribution.keywords
-    }
+    match record.payload:
+        case ContinuousPayload(contributions=contributions):
+            return {
+                contribution.entity: frozenset(contribution.keywords)
+                for contribution in contributions
+                if contribution.keywords
+            }
+    return {}
 
 
 def feature_widths(records, *, layout: InputLayout = INPUT_LAYOUT) -> dict[SlotKind, int]:

@@ -57,6 +57,7 @@ from effects.domain.baselines import Baseline  # noqa: E402
 from effects.infrastructure.ability_cache_store import AbilityCacheStore  # noqa: E402
 from effects.infrastructure.sidecar_io import (  # noqa: E402
     converted_text_path,
+    iter_sidecars,
     prose_for,
     prose_lines,
     read_sidecar,
@@ -87,8 +88,7 @@ def build(paths: ProbePaths) -> pd.DataFrame:
     taxonomy_cache = AbilityCacheStore(paths.abilities_root, variant=Baseline.TAXONOMY)
     for folder in paths.cards_folders:
         tree = tree_of_folder(folder)
-        for sidecar_path in sorted(Path(folder).rglob("*.provenance.json")):
-            sidecar = read_sidecar(sidecar_path)
+        for sidecar_path, sidecar in iter_sidecars(folder):
             full = full_cache.read(sidecar.script_file)
             if full is None:
                 skipped["no_cache"] += 1

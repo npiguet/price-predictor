@@ -33,16 +33,20 @@ from effects.application.collect_coverage import (
 )
 from effects.application.collect_variants import CollectVariantsConfig
 from effects.application.evaluation_context import CorpusMismatchError
+from effects.application.holdout_cards import HoldoutCardsConfig
 from effects.application.train_effect_model import (
     EmptyHoldoutError,
+    HoldoutMismatchError,
     SurfaceMismatchError,
     TrainEffectModelConfig,
 )
 from effects.application.validate_corpus import Thresholds
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import DEFAULT_RANDOM_SEAT_PROBABILITY, CollectionCaps
 from effects.domain.default_paths import (
     DEFAULT_ABILITIES_ROOT,
+    DEFAULT_CARDS_FOLDER_PATHS,
     DEFAULT_CARDS_FOLDERS,
     DEFAULT_CHECKPOINT,
     DEFAULT_CORPUS_OUTPUT,
@@ -55,7 +59,8 @@ from effects.domain.default_paths import (
     DEFAULT_WIN_RATES,
 )
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
-from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE
+from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
+from effects.domain.text_holdout import HoldoutUnit
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     announce_probe_state,
@@ -103,6 +108,9 @@ def add_config_flags(
         spec = specs[name]
         kind = _flag_type(config, name, hints[name])
         default = spec.default if spec.default is not MISSING else spec.default_factory()
+        if isinstance(default, Path):
+            # Spelled as typed in --help; argparse parses a string default too.
+            default = default.as_posix()
         flag, help_text = "--" + name.replace("_", "-"), spec.metadata.get("help")
         if kind is bool and default is False:
             parser.add_argument(flag, action="store_true", help=help_text)
@@ -112,10 +120,14 @@ def add_config_flags(
             raise TypeError(f"{config.__name__}.{name} defaults to True; declare its flag")
 
 
-def _flag_type(config: type, name: str, hint: Any) -> type:
+def _flag_type(config: type, name: str, hint: Any) -> Callable[[str], Any]:
+    """The flag's parser: the scalar itself, or a path, where an optional one
+    reads an empty value as None."""
     kinds = [kind for kind in typing.get_args(hint) or (hint,) if kind is not type(None)]
     if len(kinds) == 1 and kinds[0] in (int, float, str, bool):
         return kinds[0]
+    if kinds == [Path]:
+        return _optional_path if type(None) in typing.get_args(hint) else Path
     raise TypeError(f"{config.__name__}.{name} is {hint}; declare its flag")
 
 
@@ -178,7 +190,7 @@ class _AppendCardsFolder(argparse.Action):
 def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--cards-folder", action=_AppendCardsFolder, dest="cards_folders",
-        default=tuple(Path(folder) for folder in DEFAULT_CARDS_FOLDERS),
+        default=DEFAULT_CARDS_FOLDER_PATHS,
         help=f"Converted source tree; repeatable (default: {' and '.join(DEFAULT_CARDS_FOLDERS)})",
     )
 
@@ -228,8 +240,8 @@ def _add_holdout_sources(
 
 
 def _add_holdout_flags(parser: argparse.ArgumentParser) -> None:
-    """The holdout rule, on both commands that compute it: ``holdout-cards`` and
-    ``build-corpus`` must be passed the same values."""
+    """The holdout rule, on every command that computes it: ``holdout-cards``,
+    ``build-corpus`` and ``collect-variants`` must be passed the same values."""
     parser.add_argument(
         "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
         help=(
@@ -244,18 +256,25 @@ def _add_holdout_flags(parser: argparse.ArgumentParser) -> None:
             "(default: %(default)s)"
         ),
     )
-    _add_holdout_unit(parser, default="template")
+    _add_holdout_unit(parser, default=HoldoutRule().unit)
 
 
-def _add_holdout_unit(parser: argparse.ArgumentParser, *, default: str | None) -> None:
+def _add_holdout_unit(
+    parser: argparse.ArgumentParser, *, default: HoldoutUnit | None,
+) -> None:
     parser.add_argument(
-        "--holdout-unit", choices=("template", "text"), default=default,
+        "--holdout-unit", type=HoldoutUnit, choices=list(HoldoutUnit), default=default,
         help=(
             "'template' holds out every text sharing a masked template together; "
             "'text' is feature 023's per-text rule (default: "
             + ("%(default)s)" if default else "the corpus manifest's recorded unit)")
         ),
     )
+
+
+def holdout_rule(args: argparse.Namespace) -> HoldoutRule:
+    """The rule :func:`_add_holdout_flags` parsed."""
+    return HoldoutRule(args.holdout_permille, args.holdout_max_carriers, args.holdout_unit)
 
 
 def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = None) -> None:
@@ -299,7 +318,7 @@ def _build_vocab_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_build_vocab)
     parser.add_argument(
-        "--surface", choices=("prose", "script"), default="prose",
+        "--surface", type=Surface, choices=list(Surface), default=Surface.PROSE,
         help=(
             "prose reads the converted text; script adds the sidecars' script "
             "lines and switches the --vocab-path default (default: %(default)s)"
@@ -422,6 +441,10 @@ def _collect_variants_parser(subparsers) -> None:
     )
     add_config_flags(parser, CollectVariantsConfig, only=("variant_volume", "seed"))
     _add_holdout_sources(parser, excluded="held-out cards, and their variants,")
+    # A variant printing a held-out text is dropped under this rule, so it has
+    # to be the one build-corpus is given.
+    _add_cards_folder(parser)
+    _add_holdout_flags(parser)
     add_config_flags(parser, CollectVariantsConfig, only=("decks_per_round", "workers"))
     add_cap_flags(parser)
 
@@ -450,7 +473,9 @@ def collection_caps(args: argparse.Namespace) -> CollectionCaps:
     )
 
 
-def collector_config(config_type: type[_Config], args: argparse.Namespace) -> _Config:
+def collector_config(
+    config_type: type[_Config], args: argparse.Namespace, **overrides: Any,
+) -> _Config:
     """A collector's config, with its corpus location and holdout resolved."""
     source = holdout_source(args)
     return config_from_args(
@@ -458,18 +483,19 @@ def collector_config(config_type: type[_Config], args: argparse.Namespace) -> _C
         effect_records=source.effect_records,
         exclude_cards=source.exclude_cards,
         caps=collection_caps(args),
+        **overrides,
     )
 
 
 def _run_collector(
     args: argparse.Namespace, command: str, config_type: type,
-    collect: Callable[[Any], int],
+    collect: Callable[[Any], int], **overrides: Any,
 ) -> int:
     """Refuse a bad flag combination as a message before any worker starts."""
     error = random_seat_error(args)
     if error is None:
         try:
-            config = collector_config(config_type, args)
+            config = collector_config(config_type, args, **overrides)
         except ValueError as exc:
             error = str(exc)
     if error is not None:
@@ -488,7 +514,10 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
 def run_collect_variants(args: argparse.Namespace) -> int:
     from effects.application.collect_variants import run as collect
 
-    return _run_collector(args, "collect-variants", CollectVariantsConfig, collect)
+    return _run_collector(
+        args, "collect-variants", CollectVariantsConfig, collect,
+        holdout=holdout_rule(args),
+    )
 
 
 # ── build-corpus ────────────────────────────────────────────────────────
@@ -570,14 +599,7 @@ def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
         "a variant line resolves to no ability text, so it escapes the rarity "
         "table and the per-text cap"
     ))
-    parser.add_argument(
-        "--keyword-definitions", type=_optional_path, default=DEFAULT_KEYWORD_DEFINITIONS,
-        help=(
-            "The keyword table the tokenizer expands with; the build fails when "
-            "a display-name match would expand a non-keyword line "
-            "(default: %(default)s)"
-        ),
-    )
+    add_config_flags(parser, BuildCorpusConfig, only=("keyword_definitions",))
 
 
 # A bare ValueError is NOT mapped: `decide`'s cap-mismatch guard and
@@ -588,6 +610,7 @@ def run_build_corpus(args: argparse.Namespace) -> int:
 
     return build_corpus_module.build(config_from_args(
         BuildCorpusConfig, args, max_events=args.max_events_per_record,
+        holdout=holdout_rule(args),
     ))
 
 
@@ -608,29 +631,23 @@ def _holdout_cards_parser(subparsers) -> None:
         help="Destination file, one Forge canonical card name per line",
     )
     _add_cards_folder(parser)
-    parser.add_argument(
-        "--printings-path", type=Path, default=Path("resources/AllPrintings.json"),
-        help=(
-            "MTGJSON dump, read only to write names in Forge's printed spelling "
-            "(default: %(default)s)"
-        ),
-    )
+    add_config_flags(parser, HoldoutCardsConfig, only=("printings_path",))
     _add_holdout_flags(parser)
 
 
 def run_holdout_cards(args: argparse.Namespace) -> int:
     """Write the list, and report the share of the corpus it removes: what a
     depleted pool loses, and the knob the two holdout flags turn."""
-    from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
+    from effects.application.holdout_cards import HoldoutCardsError
     from effects.application.holdout_cards import run as holdout_cards
 
-    config = config_from_args(HoldoutCardsConfig, args)
+    config = config_from_args(HoldoutCardsConfig, args, holdout=holdout_rule(args))
     try:
         report = holdout_cards(config)
     except HoldoutCardsError as exc:
         print(exc)
         return 1
-    if report.unit == "template":
+    if report.unit is HoldoutUnit.TEMPLATE:
         print(f"held-out templates: {report.keys}")
     print(f"held-out texts: {report.texts}")
     print(
@@ -711,12 +728,8 @@ def _validate_corpus_parser(subparsers) -> None:
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
-    from effects.application.validate_corpus import (
-        FieldPresence,
-        read_window,
-        validate_corpus,
-    )
-    from effects.infrastructure.record_io import iter_shards
+    from effects.application.validate_corpus import FieldPresence, validate_corpus
+    from effects.infrastructure.record_io import iter_shards, read_window
 
     root = args.effect_records
     shards = iter_shards(root)
@@ -726,7 +739,7 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
 
     presence = FieldPresence()
     findings = validate_corpus(
-        read_window(root, args.limit, presence), config_from_args(Thresholds, args),
+        read_window(root, args.limit, presence.observe), config_from_args(Thresholds, args),
         _sidecars_for_validation(args), presence,
     )
     window = f" (first {args.limit} records)" if args.limit else ""
@@ -769,37 +782,30 @@ def _train_effect_model_parser(subparsers) -> None:
     _add_cards_folder(parser)
     _add_holdout_unit(parser, default=None)
     _add_variant_scripts(parser)
-    parser.add_argument("--vocab-path", type=Path, default=DEFAULT_VOCAB_PATH)
-    parser.add_argument(
-        "--keyword-definitions", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
-    )
-    parser.add_argument(
-        "--model-output", type=_optional_path, default=None,
-        help=(
-            "Checkpoint directory (default: models/effects/effect-model/, under "
-            "{variant}/ for a baseline)"
-        ),
-    )
     _add_variant(parser)
     add_config_flags(parser, TrainEffectModelConfig)
 
 
-@exits_with({SurfaceMismatchError: 2, EmptyHoldoutError: 2})
+@exits_with({
+    HoldoutMismatchError: 1,
+    "effects.infrastructure.record_io.MixedGenerationsError": 1,
+    SurfaceMismatchError: 2,
+    EmptyHoldoutError: 2,
+    f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 2,
+    # A missing manifest or resume file.
+    FileNotFoundError: 2,
+})
 def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import run as train
 
     try:
-        config = train_config_from(args)
+        config = config_from_args(TrainEffectModelConfig, args)
     except ValueError as exc:
         # An encoder shape the config refuses; a ValueError out of training
         # itself is an invariant and keeps its traceback.
         logger.error("%s", exc)
         return 2
     return train(config)
-
-
-def train_config_from(args: argparse.Namespace) -> TrainEffectModelConfig:
-    return config_from_args(TrainEffectModelConfig, args)
 
 
 # ── encode-abilities ────────────────────────────────────────────────────

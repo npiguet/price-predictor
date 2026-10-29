@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,28 +10,25 @@ import numpy as np
 
 from effects.domain import default_paths
 from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
-from effects.domain.baselines import Baseline
-from effects.domain.provenance import ProvenanceSidecar, SidecarLine
+from effects.domain.baselines import Baseline, taxonomy_matrix
+from effects.domain.provenance import ProvenanceSidecar
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.effect_model_store import (
     InferenceCheckpoint,
     load_for_inference,
     model_output_for,
 )
-from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, read_sidecar
+from effects.infrastructure.sidecar_io import iter_sidecars
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
-    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-)
 
 
 @dataclass
 class EncodeAbilitiesConfig:
     variant: str = Baseline.FULL
     checkpoint: Path | None = None
-    cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
     vocab_path: Path | None = None
     keyword_definitions: Path | None = None
@@ -53,33 +49,6 @@ class EncodeSummary:
     rows: int = 0
     skipped: int = 0
     cleaned: int = 0
-
-
-def iter_sidecars(cards_folder: Path) -> list[Path]:
-    return sorted(Path(cards_folder).rglob(f"*{SIDECAR_SUFFIX}"))
-
-
-def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
-    """The ``taxonomy`` baseline's stand-in for an encoded ``e``: a
-    deterministic hash embedding of the line's API type and parameter keys."""
-    vector = np.zeros(e_dim, dtype=np.float32)
-    features = [f"api:{line.script_api_type or ''}"]
-    features += [f"param:{key}" for key in line.script_param_keys]
-    for feature in features:
-        digest = hashlib.sha256(feature.encode("utf-8")).digest()
-        index = int.from_bytes(digest[:4], "big") % e_dim
-        sign = 1.0 if digest[4] % 2 else -1.0
-        vector[index] += sign
-    norm = float(np.linalg.norm(vector))
-    return vector / norm if norm > 0 else vector
-
-
-def taxonomy_matrix(sidecar: ProvenanceSidecar, e_dim: int) -> np.ndarray:
-    """The ``taxonomy`` variant's ``(n_lines, e_dim)`` matrix, row-aligned to
-    its sidecar, with no encoder at all."""
-    if not sidecar.lines:
-        return np.zeros((0, e_dim), dtype=np.float32)
-    return np.stack([taxonomy_vector(line, e_dim) for line in sidecar.lines])
 
 
 def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
@@ -131,8 +100,7 @@ def read_sources(
     """Every sidecar with a line to encode, beside its path; and how many had none."""
     sources, skipped = [], 0
     for folder in folders:
-        for sidecar_path in iter_sidecars(folder):
-            sidecar = read_sidecar(sidecar_path)
+        for sidecar_path, sidecar in iter_sidecars(folder):
             if sidecar.lines:
                 sources.append((sidecar_path, sidecar))
             else:

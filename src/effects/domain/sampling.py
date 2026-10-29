@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import random
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from effects.domain.rarity import TextGames
 from effects.domain.records import EffectRecord, Moment, PlayabilitySubkind, RecordKind
 
 
@@ -47,13 +48,6 @@ DEFAULT_KIND_MIX: dict[SamplingClass, float] = {
     SamplingClass.REWRITE: 0.07,
     SamplingClass.PLAYABILITY_LEGALITY: 0.05,
 }
-
-
-#: Classes whose records have no acting ability text, so rarity weighting has
-#: nothing to key on and they sample uniformly instead (FR-087).
-UNIFORM_CLASSES: frozenset[SamplingClass] = frozenset({
-    SamplingClass.COMBAT, SamplingClass.PLAYABILITY_LEGALITY,
-})
 
 
 #: Rarity weight ceiling, as a multiple of the weight of the text at
@@ -109,22 +103,6 @@ def parse_kind_mix(value: str | None) -> dict[SamplingClass, float]:
     return mix
 
 
-def effective_games(
-    records: Iterable[EffectRecord], text_of,
-) -> dict[str, int]:
-    """Distinct games contributing a record of each unique ability text.
-
-    Games rather than records: one long game can produce hundreds of records
-    of one ability, all on one board.
-    """
-    games: defaultdict[str, set[str]] = defaultdict(set)
-    for record in records:
-        text = text_of(record)
-        if text is not None:
-            games[text].add(record.game_id)
-    return {text: len(ids) for text, ids in games.items()}
-
-
 def _percentile(values: Sequence[float], percentile: float) -> float:
     """Nearest-rank percentile of a non-empty sequence."""
     ordered = sorted(values)
@@ -155,7 +133,7 @@ def rarity_weights(
 
 def sample_weights(
     records: Sequence[EffectRecord], text_of, *,
-    rarity: Mapping[str, int] | None = None,
+    games: TextGames | None = None,
     class_of=None,
 ) -> list[float]:
     """Per-record sampling weight within its class (FR-054).
@@ -165,27 +143,20 @@ def sample_weights(
     records inside a class without moving mass between classes.
 
     Args:
-        rarity: a corpus-wide ``text -> games`` table, preferred to the shard's
-            own count; a text it does not name falls back to the shard's count
-            rather than zero, which would dominate every batch.
+        games: each text's games over ``records``, from the corpus-wide table
+            where one is given (FR-146); absent, the shard's own count.
         class_of: ``record -> class``; absent, the records are one class.
     """
     texts = [text_of(record) for record in records]
-    shard_counts = effective_games(records, text_of)
-    classes = [
-        class_of(record) if class_of is not None else "" for record in records
-    ]
+    if games is None:
+        games = TextGames.of(records, text_of)
+    by_class: dict[str, list[int]] = defaultdict(list)
+    for i, record in enumerate(records):
+        by_class[class_of(record) if class_of is not None else ""].append(i)
     out = [1.0] * len(records)
-    for name in set(classes):
-        members = [i for i, value in enumerate(classes) if value == name]
+    for members in by_class.values():
         present = {texts[i] for i in members if texts[i] is not None}
-        weights = rarity_weights({
-            text: (
-                shard_counts[text] if rarity is None
-                else rarity.get(text, shard_counts[text])
-            )
-            for text in present
-        })
+        weights = rarity_weights({text: games.games(text) for text in present})
         for i in members:
             if texts[i] is not None:
                 out[i] = weights.get(texts[i], 1.0)

@@ -54,8 +54,10 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "ability": "tuple[ProvenanceKey, ...] | None",
     # Added after the first collected corpus, under rule 1: an empty `ability`
     # could not tell "no printed line exists" (an engine-built card) from "the
-    # resolver failed", which is how a resolver bug survived a whole run.
-    "ability_unresolved": "str | None",
+    # resolver failed", which is how a resolver bug survived a whole run. Typed
+    # as the closed vocabulary it was always validated against; on the wire it
+    # is still one of those strings or null.
+    "ability_unresolved": "UnresolvedReason | None",
     # Gen-2 (feature 024), both under rule 1 and both collection metadata:
     # whether the acting player was the random seat, and whether a legality
     # record is a real declaration or a what-if query. Absent on gen-1 shards,

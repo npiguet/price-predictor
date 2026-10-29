@@ -122,14 +122,12 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
     def losses(batch, surfaces, targets, e_vectors) -> dict[str, float]:
         hidden = model(**{**batch, "e_vectors": e_vectors})
         outputs = model.per_entity(hidden)
-        gate, field_targets, mask, index = entity_target_tensors(surfaces, targets, fields)
-        index = index.to(outputs.device)
+        batch_targets = entity_target_tensors(surfaces, targets, fields)
+        index = batch_targets.index.to(outputs.device)
         gathered = outputs.gather(1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
-        device = gathered.device
         _total, parts = per_entity_loss(
-            gathered.float(), gate.to(device),
-            field_targets.to(device),
-            mask.to(device), fields=fields, report_parts=True,
+            gathered.float(), batch_targets.fields_on(gathered.device),
+            fields=fields, report_parts=True,
         )
         return parts.as_dict()
 
@@ -196,16 +194,13 @@ def field_losses(model, probe_model, records: list, *, batch_size: int = 32) -> 
             batch, surfaces, _encoded = probe_model.batcher.build(chunk, probe_model.encoder)
             outputs = model.per_entity(model(**batch))
             targets = [derive_targets(record) for record in chunk]
-            gate, field_targets, mask, index = entity_target_tensors(
-                surfaces, targets, probe_model.fields)
-            index = index.to(outputs.device)
+            batch_targets = entity_target_tensors(surfaces, targets, probe_model.fields)
+            index = batch_targets.index.to(outputs.device)
             gathered = outputs.gather(
                 1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1])).float()
-            device = gathered.device
             _total, parts = per_entity_loss(
-                gathered, gate.to(device),
-                field_targets.to(device),
-                mask.to(device), fields=probe_model.fields, report_parts=True,
+                gathered, batch_targets.fields_on(gathered.device),
+                fields=probe_model.fields, report_parts=True,
             )
             for name, value in parts.as_dict().items():
                 totals[name] += value * len(chunk)

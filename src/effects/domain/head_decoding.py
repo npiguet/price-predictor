@@ -16,6 +16,8 @@ from effects.domain.effect_head_layout import (
     SIGNED_MAGNITUDE,
     FieldSpec,
     FieldType,
+    HeadField,
+    ZoneOutcome,
 )
 
 #: Field types that predict a magnitude under the count loss.
@@ -101,13 +103,13 @@ class HeadReading:
         value = probabilities[..., spec.classes.index(category)]
         return self._gated(value, conditional)
 
-    def p_zone(self, outcome: str, *, conditional: bool = False) -> torch.Tensor:
+    def p_zone(self, outcome: ZoneOutcome, *, conditional: bool = False) -> torch.Tensor:
         """The probability of one zone outcome: ``died``, ``exiled``, …"""
-        return self.p_class("zone_outcome", outcome, conditional=conditional)
+        return self.p_class(HeadField.ZONE_OUTCOME, outcome, conditional=conditional)
 
     def zone_probabilities(self, *, conditional: bool = False) -> torch.Tensor:
         """Every zone outcome's probability, in :data:`ZONE_OUTCOMES` order."""
-        spec = FIELDS_BY_NAME["zone_outcome"]
+        spec = FIELDS_BY_NAME[HeadField.ZONE_OUTCOME]
         probabilities = torch.softmax(self._columns(spec), dim=-1)
         return probabilities if conditional else (
             self.p_affected[..., None] * probabilities

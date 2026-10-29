@@ -17,15 +17,15 @@ import torch
 import torch.nn as nn
 
 from effects.domain.ability_tokenizer import (
-    SURFACE_PROSE,
-    SURFACE_SCRIPT,
     AbilityTokenizer,
+    Surface,
     Token,
 )
+from effects.domain.provenance import Role, RoleSpan, SidecarLine
 
 #: Fixed order, so an embedding row means the same role across checkpoints.
 #: Row 0 is "no role", a token outside every span.
-ROLE_ORDER: tuple[str, ...] = ("cost", "effect", "trigger-condition", "target-spec")
+ROLE_ORDER: tuple[Role, ...] = tuple(Role)
 NO_ROLE_INDEX = 0
 
 # Defaults of `--encoder-d-model` and `--encoder-layers` (FR-061), and the size
@@ -142,46 +142,48 @@ class AbilityEncoder(nn.Module):
         hidden = self.encoder(hidden, src_key_padding_mask=padding_mask)
         hidden = self.norm(hidden)
 
-        e =self.to_e(hidden[:, 0, :])
+        e = self.to_e(hidden[:, 0, :])
         return e, hidden
 
 
 # ── surfaces (FR-062, stage four) ───────────────────────────────────────
 
 
-def surface_of(vocab_path) -> str:
+def surface_of(vocab_path) -> Surface:
     """Which surface a vocabulary path implies: never a flag of its own, which
     could disagree with the vocabulary and still look like a working run."""
     from pathlib import Path
 
     return (
-        SURFACE_SCRIPT
+        Surface.SCRIPT
         if "vocab-script" in Path(vocab_path).name
-        else SURFACE_PROSE
+        else Surface.PROSE
     )
 
 
-def encoding_text(line, prose: str | None, surface: str) -> str | None:
+def encoding_text(line: SidecarLine | None, prose: str | None, surface: Surface) -> str | None:
     """The text a line is encoded from on ``surface``, falling back to the
     other surface's where its own is missing (a keyword-derived line has no
     script, a variant script no prose)."""
-    script = getattr(line, "script_text", None)
-    if surface == SURFACE_SCRIPT:
+    script = line.script_text if line is not None else None
+    if surface == Surface.SCRIPT:
         return script or prose
     return prose or script
 
 
-def encoding_role_spans(line, text: str | None, surface: str) -> tuple:
+def encoding_role_spans(
+    line: SidecarLine | None, text: str | None, surface: Surface,
+) -> tuple[RoleSpan, ...]:
     """The role spans a line's encoding text is tokenized with (FR-069): only
     on a prose text, since the spans index the converted prose."""
-    if surface != SURFACE_PROSE or line is None or text is None:
+    if surface != Surface.PROSE or line is None or text is None:
         return ()
-    if text == getattr(line, "script_text", None):
+    if text == line.script_text:
         return ()
-    return tuple(getattr(line, "role_spans", ()) or ())
+    return line.role_spans
 
 
-def role_index(role: str | None) -> int:
+def role_index(role: Role | None) -> int:
     if role is None:
         return NO_ROLE_INDEX
     return ROLE_ORDER.index(role) + 1
@@ -247,22 +249,13 @@ def log_truncation(logger, command: str):
     """A :class:`TruncationLog` reporter that writes one warning per line."""
 
     def report(text: str, keys: tuple) -> None:
-        named = ", ".join(_key_label(key) for key in keys) or "(no provenance key)"
+        named = ", ".join(key.label for key in keys) or "(no provenance key)"
         logger.warning(
             "%s: truncated at %d tokens: %s — %.80s",
             command, MAX_ABILITY_TOKENS, named, text,
         )
 
     return report
-
-
-def _key_label(key) -> str:
-    option = getattr(key, "option", None)
-    suffix = f" option {option}" if option is not None else ""
-    return (
-        f"{key.script_file} face {key.face} {key.trait_kind}"
-        f"[{key.index_within_kind}]{suffix}"
-    )
 
 
 def collate_lines(

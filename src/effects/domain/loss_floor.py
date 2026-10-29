@@ -7,8 +7,7 @@ the floor it says whether the head learned the field or only how often it fires.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
 
 import torch
 
@@ -22,8 +21,14 @@ from effects.domain.effect_head_layout import (
     FieldSpec,
     FieldType,
 )
-from effects.domain.effect_losses import LossParts, capped, counted, per_entity_loss
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.effect_losses import (
+    LossParts,
+    capped,
+    counted,
+    delta_direction,
+    per_entity_loss,
+)
+from effects.domain.entity_field_targets import EntityTargetBatch
 
 #: A guard on dividing by a floor, not the degenerate-field detector.
 FLOOR_EPSILON = 1e-9
@@ -31,16 +36,6 @@ FLOOR_EPSILON = 1e-9
 #: Rates are clamped away from zero and one before a log, or an outcome the
 #: sample never showed would make the floor nan.
 _RATE_FLOOR = 1e-6
-
-
-@dataclass(frozen=True, slots=True)
-class EntityTargetBatch:
-    """One scored batch's per-entity targets, kept so the floor is measured
-    over exactly the entities the head was."""
-
-    gate: torch.Tensor
-    fields: EntityFieldTargets
-    mask: torch.Tensor
 
 
 def _mean(values: torch.Tensor) -> torch.Tensor:
@@ -78,28 +73,31 @@ def _supervised(
     return selected if selected.numel() else None
 
 
-def _degenerate(batches: Sequence[EntityTargetBatch], name: str) -> bool:
+def _degenerate(target: torch.Tensor | None) -> bool:
     """Whether a field's supervised targets never vary, whole rows compared.
 
     Such a field has no deviance to explain, and the clamp leaves a near-zero
     floor any head would read as enormously worse than constant.
     """
-    target = _supervised(batches, name)
     return target is None or bool((target == target[0]).all())
 
 
 def constant_predictor_outputs(
     batches: Sequence[EntityTargetBatch], *, fields: tuple[FieldSpec, ...],
+    supervised: Mapping[str, torch.Tensor | None] | None = None,
 ) -> torch.Tensor:
     """The best constant prediction for the gate and each active field: one
     ``(PER_ENTITY_WIDTH,)`` vector, each slice the maximum-likelihood constant
-    under that field's own loss."""
+    under that field's own loss. ``supervised`` holds each field's
+    :func:`_supervised` targets where the caller selected them already."""
+    if supervised is None:
+        supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
     vector = torch.zeros(PER_ENTITY_WIDTH)
     real = [batch.gate[batch.mask.bool()] for batch in batches]
     vector[GATE_INDEX] = _logit(_mean(torch.cat(real or [torch.zeros(0)])))
 
     for spec in fields:
-        target = _supervised(batches, spec.name)
+        target = supervised[spec.name]
         if target is None:
             continue
         start, end = FIELD_SLICES[spec.name]
@@ -114,7 +112,7 @@ def constant_predictor_outputs(
                 )
             case FieldType.SIGNED_DELTA:
                 target = capped(target)
-                direction = torch.sign(target).long().reshape(-1) + 1
+                direction = delta_direction(target).reshape(-1)
                 columns = vector[start:end]
                 columns[SIGNED_DIRECTIONS] = _log_frequencies(
                     torch.bincount(direction, minlength=len(DIRECTIONS)).float()
@@ -140,15 +138,14 @@ def constant_predictor_floor(
     loss's own masking and normalization. A field whose targets never vary
     reports exactly zero: no floor.
     """
-    vector = constant_predictor_outputs(batches, fields=fields)
-    degenerate = {
-        spec.name for spec in fields if _degenerate(batches, spec.name)
-    }
+    # Selected once: each field's targets are a concatenation over every batch.
+    supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
+    vector = constant_predictor_outputs(batches, fields=fields, supervised=supervised)
+    degenerate = {name for name, target in supervised.items() if _degenerate(target)}
     means = PartsMean()
     for batch in batches:
         _, parts = per_entity_loss(
-            vector.expand(*batch.gate.shape, PER_ENTITY_WIDTH),
-            batch.gate, batch.fields, batch.mask,
+            vector.expand(*batch.gate.shape, PER_ENTITY_WIDTH), batch,
             fields=fields, report_parts=True,
         )
         means.add(parts)

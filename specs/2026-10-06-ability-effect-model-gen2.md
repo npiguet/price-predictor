@@ -325,7 +325,9 @@ Every gen-2 record carries `random_seat`, and every gen-2 legality record carrie
   cards alone, plus basics, and writes full-strength records. `PATH` is the list
   `holdout-cards` writes.
 - In this mode the coverage unit is the held-out ability text. A text is satisfied once it
-  acts in records from at least `--min-text-games` distinct games, default 5.
+  resolves in at least `--min-text-games` distinct games, default 5.
+- A game counts toward a text only through a resolution record the corpus build keeps, the
+  same count the manifest's under-five list reads.
 - The run ends when every held-out text with a castable carrier is satisfied or retired,
   and reports the texts left under the floor.
 - A text has a castable carrier when the base spec's castability consult judges at least
@@ -371,8 +373,10 @@ Every gen-2 record carries `random_seat`, and every gen-2 legality record carrie
   token tree for it.
 - Under `template` a script text is held out when its template is. `collect-variants` deletes,
   before decking, every variant whose lines print a held-out text or template under the holdout
-  `build-corpus` chooses. `build-corpus` does not write a training game's record acting through a
-  held-out text, and counts it under the `dropped-held-out-text` stratum.
+  `build-corpus` chooses. It takes `build-corpus`'s `--cards-folder`, `--holdout-permille`,
+  `--holdout-max-carriers` and `--holdout-unit`, with the same defaults, and is passed the same
+  values. `build-corpus` does not write a training game's record acting through a held-out text,
+  and counts it under the `dropped-held-out-text` stratum.
 - `holdout-cards`, `build-corpus` and `train-effect-model` share the rule through
   `--holdout-unit template|text`. `text` is the base spec's rule, kept for corpora
   collected under it. Manifests and checkpoints record the unit, and one that records none

@@ -12,12 +12,14 @@ import pytest
 
 from effects.application.train_effect_model import (
     CorpusFacts,
+    HoldoutMismatchError,
     TrainEffectModelConfig,
     run,
 )
 from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import write_shard
+from effects.infrastructure.record_io import MixedGenerationsError, write_shard
 
 #: Three texts ``text_is_held_out`` selects at the default permille, found by
 #: search: the trainer recomputes the holdout from its sidecars at startup and
@@ -126,7 +128,7 @@ def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, s
     assert facts == CorpusFacts.of(manifest)
     assert facts.split.card_disjoint_games == frozenset({"cg"})
     assert facts.split.game_disjoint_games == frozenset({"gg"})
-    assert (facts.holdout_permille, facts.holdout_max_carriers) == (20, 8)
+    assert (facts.holdout.permille, facts.holdout.max_carriers) == (20, 8)
     assert facts.gate_one_records == 4096
     assert facts.digest == manifest.digest()
 
@@ -162,6 +164,36 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
     assert "not divisible" in caplog.text
 
 
+@pytest.mark.parametrize("failure, code", [
+    ("HoldoutMismatchError", 1),
+    ("MixedGenerationsError", 1),
+    ("ResumeMismatchError", 2),
+    ("FileNotFoundError", 2),
+])
+def test_an_operator_error_out_of_training_exits_with_its_code(
+    tmp_path, monkeypatch, caplog, failure, code,
+):
+    """A refused corpus, a resume under other settings, and a missing manifest
+    or resume file end in one logged line, not a traceback."""
+    from effects.application import train_effect_model
+    from effects.infrastructure import cli, effect_model_store, record_io
+
+    kind = {
+        "HoldoutMismatchError": train_effect_model.HoldoutMismatchError,
+        "MixedGenerationsError": record_io.MixedGenerationsError,
+        "ResumeMismatchError": effect_model_store.ResumeMismatchError,
+        "FileNotFoundError": FileNotFoundError,
+    }[failure]
+
+    def refuse(config):
+        raise kind("refused for the test")
+
+    monkeypatch.setattr(train_effect_model, "run", refuse)
+    with caplog.at_level(logging.ERROR):
+        assert cli.run_train_effect_model(_train_args(tmp_path)) == code
+    assert "refused for the test" in caplog.text
+
+
 @pytest.mark.parametrize(
     "shape", [{"encoder_d_model": 250}, {"encoder_d_model": 0}, {"encoder_layers": 0}],
 )
@@ -171,9 +203,9 @@ def test_the_config_refuses_an_encoder_shape_it_cannot_build(shape):
 
 
 def test_the_size_flags_reach_the_trainers_config(tmp_path):
-    from effects.infrastructure.cli import train_config_from
+    from effects.infrastructure.cli import config_from_args
 
-    config = train_config_from(_train_args(
+    config = config_from_args(TrainEffectModelConfig, _train_args(
         tmp_path, "--encoder-layers", "6", "--encoder-d-model", "384",
         "--value-weight", "0.2", "--e-noise", "0.05",
     ))
@@ -208,22 +240,20 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
 def test_the_trainer_takes_the_manifests_unit_when_the_flag_is_absent(config, started):
     """A gen-1 manifest records no unit and reads as ``text``."""
     assert run(config) == 0
-    assert started[-1].facts.holdout_unit == "text"
+    assert started[-1].facts.holdout.unit is HoldoutUnit.TEXT
     assert config.holdout_unit is None
 
 
-def test_a_unit_differing_from_the_manifests_is_refused(config, caplog):
-    config.holdout_unit = "template"
-    with caplog.at_level(logging.ERROR):
-        assert run(config) == 1
-    assert "--holdout-unit template differs" in caplog.text
+def test_a_unit_differing_from_the_manifests_is_refused(config):
+    config.holdout_unit = HoldoutUnit.TEMPLATE
+    with pytest.raises(HoldoutMismatchError, match="--holdout-unit template differs"):
+        run(config)
 
 
-def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config, caplog):
+def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config):
     corpus.save(_manifest(held_out_texts=("SP$ Bespoke | Weird$ 82",)))
-    with caplog.at_level(logging.ERROR):
-        assert run(config) == 1
-    assert "recomputed" in caplog.text
+    with pytest.raises(HoldoutMismatchError, match="recomputed"):
+        run(config)
 
 
 def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
@@ -251,10 +281,10 @@ def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
     )
 
     assert run(config) == 0
-    assert started[-1].facts.holdout_unit == "text"
+    assert started[-1].facts.holdout.unit is HoldoutUnit.TEXT
 
 
-def test_a_records_set_mixing_generations_is_refused(corpus, config, caplog, make_record):
+def test_a_records_set_mixing_generations_is_refused(corpus, config, make_record):
     """FR-033: refused before any record is read."""
     from effects.infrastructure.record_io import record_to_dict
 
@@ -265,6 +295,5 @@ def test_a_records_set_mixing_generations_is_refused(corpus, config, caplog, mak
 
     with gzip.open(corpus.training_dir / "gen1.jsonl.gz", "wt", encoding="utf-8") as out:
         out.write(json.dumps(gen1) + "\n")
-    with caplog.at_level(logging.ERROR):
-        assert run(config) == 1
-    assert "mixes gen-1 shards" in caplog.text
+    with pytest.raises(MixedGenerationsError, match="mixes gen-1 shards"):
+        run(config)

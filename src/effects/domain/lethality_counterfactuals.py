@@ -23,15 +23,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum, StrEnum, auto
 
-from effects.domain.effect_head_layout import ZONE_OUTCOMES
+from effects.domain.damage_step_keywords import KeywordsOf
+from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 from effects.domain.effect_targets import EntityTargets
 from effects.domain.provenance import ProvenanceKey, RoleSpan, SidecarLine, SourceTree
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.script_text import api_of, params, segments
-from effects.domain.state_snapshot import EntityState, StateSnapshot
-
-#: ``entity -> its keywords``, as the caller's keyword resolver names them.
-KeywordsOf = Callable[[EntityState], set[str]]
+from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
 
 #: Amounts and toughnesses a copy draws from, uniformly: lethal a little more
 #: than half the time.
@@ -50,8 +48,8 @@ BLOCKED_PARAMS = frozenset({
 SOURCE_EXCLUSIONS = frozenset({"deathtouch", "wither", "infect", "lifelink"})
 
 _INT = re.compile(r"^-?\d+$")
-_DIED = ZONE_OUTCOMES.index("died")
-_STAYED = ZONE_OUTCOMES.index("stayed")
+_DIED = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
+_STAYED = ZONE_OUTCOMES.index(ZoneOutcome.STAYED)
 
 
 class EffectKind(StrEnum):
@@ -107,11 +105,11 @@ class _KindRules:
 
     #: The target field a hit creature records the amount in, and the sign it
     #: carries there: damage taken is positive, a toughness change negative.
-    field: str
+    field: HeadField
     sign: int
     #: What a hit creature's targets may hold: anything else means another
     #: part of the chain touched it.
-    hit_fields: frozenset[str]
+    hit_fields: frozenset[HeadField]
     #: ``(toughness, marked damage, amount) -> dies`` under rule 704.5f-g.
     lethal: Callable[[int, int, int], bool]
     #: ``(script, old amount, new amount, symmetric) -> the script with the
@@ -125,13 +123,16 @@ class _KindRules:
 
 _RULES: dict[EffectKind, _KindRules] = {
     EffectKind.DAMAGE: _KindRules(
-        field="damage_taken", sign=1,
-        hit_fields=frozenset({"damage_taken", "zone_outcome"}),
+        field=HeadField.DAMAGE_TAKEN, sign=1,
+        hit_fields=frozenset({HeadField.DAMAGE_TAKEN, HeadField.ZONE_OUTCOME}),
         lethal=_damage_lethal, edit_params=_params_damage, prose=_prose_damage,
     ),
     EffectKind.SHRINK: _KindRules(
-        field="toughness_delta", sign=-1,
-        hit_fields=frozenset({"toughness_delta", "power_delta", "pt_duration", "zone_outcome"}),
+        field=HeadField.TOUGHNESS_DELTA, sign=-1,
+        hit_fields=frozenset({
+            HeadField.TOUGHNESS_DELTA, HeadField.POWER_DELTA, HeadField.PT_DURATION,
+            HeadField.ZONE_OUTCOME,
+        }),
         lethal=_shrink_lethal, edit_params=_params_shrink, prose=_prose_shrink,
     ),
 }
@@ -244,9 +245,9 @@ class _Hit(Enum):
 
 
 def _player_hit(fields: dict, found: _Amount) -> _Hit:
-    if fields.get("poison_delta"):
+    if fields.get(HeadField.POISON_DELTA):
         return _Hit.REFUSED
-    life = fields.get("life_delta")
+    life = fields.get(HeadField.LIFE_DELTA)
     if life is None or life == 0:
         return _Hit.MISSED
     if found.kind is not EffectKind.DAMAGE or life != -found.amount:
@@ -269,9 +270,9 @@ def _creature_hit(entity: EntityState | None, fields: dict, found: _Amount,
     if set(fields) - rules.hit_fields:
         return _Hit.REFUSED
     if ("indestructible" in keywords_of(entity) or entity.id in attached
-            or any(name.lower() == "shield" for name in entity.counters)):
+            or any(normalize_counter_type(name) == "SHIELD" for name in entity.counters)):
         return _Hit.REFUSED
-    zone = fields.get("zone_outcome", _STAYED)
+    zone = fields.get(HeadField.ZONE_OUTCOME, _STAYED)
     if zone not in (_STAYED, _DIED) or (zone == _DIED) != lethal(found.kind, found.amount, entity):
         return _Hit.REFUSED
     return _Hit.HIT
@@ -373,11 +374,11 @@ def _relabel(entry: EntityTargets, qualified: Qualified, amount: int, dies: bool
     rules = _RULES[qualified.kind]
     fields[rules.field] = float(amount * rules.sign)
     if qualified.symmetric:
-        fields["power_delta"] = float(-amount)
+        fields[HeadField.POWER_DELTA] = float(-amount)
     if dies:
-        fields["zone_outcome"] = _DIED
+        fields[HeadField.ZONE_OUTCOME] = _DIED
     else:
-        fields.pop("zone_outcome", None)
+        fields.pop(HeadField.ZONE_OUTCOME, None)
     return replace(entry, affected=True, fields=fields)
 
 
@@ -445,7 +446,7 @@ def _relabelled_targets(targets: dict[str, EntityTargets], qualified: Qualified,
             targets[subject], qualified, amount,
             lethal(qualified.kind, amount, by_id[subject]))
     for subject in qualified.players:
-        fields = {**targets[subject].fields, "life_delta": float(-amount)}
+        fields = {**targets[subject].fields, HeadField.LIFE_DELTA: float(-amount)}
         relabelled[subject] = replace(targets[subject], fields=fields)
     return relabelled
 

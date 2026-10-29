@@ -1,8 +1,7 @@
-"""The coverage collector's three rules (T102).
+"""The coverage collector (T102): its rounds, its counting and its refusals.
 
-The consult ranks but never drops; satisfaction counts acting hosts, event
-subjects and referenced refs but **not** mere snapshot presence; and a card with
-no progress retires, which is the only thing that makes the run terminate.
+A card with no progress retires, which is the only thing that makes the run
+terminate; the unit's own rules are in ``tests/unit/effects/domain/test_coverage.py``.
 """
 
 from __future__ import annotations
@@ -20,140 +19,18 @@ from effects.application.collect_coverage import (
 from effects.domain.coverage import (
     CardCoverage,
     ConsultVerdict,
-    deck_weights,
     is_complete,
-    qualifying_cards,
-    rank_by_consult,
     retire_stalled,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
-    EffectRecord,
+    RecordKind,
     ResolutionPayload,
 )
-from effects.domain.state_snapshot import EntityState, Refs
 from tests.unit.effects.builders import (
     fresh_interpreter_env,
-    make_entity,
-    make_record,
-    make_snapshot,
 )
-
-
-def _entity(entity_id: str, name: str) -> EntityState:
-    return make_entity(entity_id, name)
-
-
-def _record(entities, *, source=None, targets=(), events=()) -> EffectRecord:
-    return make_record(
-        record_id="r.0.1", run_id="r", game_id="r.0.1",
-        state=make_snapshot(
-            entities=tuple(entities),
-            refs=Refs(source=source, targets=tuple(targets)),
-        ),
-        payload=ResolutionPayload(events=tuple(events)),
-    )
-
-
-class TestSatisfactionCounting:
-    def test_the_acting_lines_host_counts(self):
-        record = _record([_entity("E1", "Shock")], source="E1")
-        assert qualifying_cards(record) == {"Shock"}
-
-    def test_a_referenced_ref_counts(self):
-        record = _record(
-            [_entity("E1", "Shock"), _entity("E2", "Grizzly Bears")],
-            source="E1", targets=("E2",),
-        )
-        assert qualifying_cards(record) == {"Shock", "Grizzly Bears"}
-
-    def test_an_event_subject_counts(self):
-        record = _record(
-            [_entity("E1", "Shock"), _entity("E2", "Grizzly Bears")],
-            source="E1",
-            events=(Event(
-                type=EventType.DAMAGE_DEALT, subjects=("E2",),
-                params={"amount": 2},
-            ),),
-        )
-        assert qualifying_cards(record) == {"Shock", "Grizzly Bears"}
-
-    def test_mere_snapshot_presence_does_not_count(self):
-        """A card on the battlefield while something else resolves teaches
-        the model nothing about that card."""
-        record = _record(
-            [_entity("E1", "Shock"), _entity("E9", "Bystander")], source="E1",
-        )
-        assert "Bystander" not in qualifying_cards(record)
-
-    def test_a_vanilla_creature_can_still_be_satisfied(self):
-        """The unit is not resolution records: a vanilla creature has no
-        acting line and is still coverable through combat."""
-        record = _record(
-            [_entity("E1", "Grizzly Bears")],
-            events=(Event(
-                type=EventType.DAMAGE_DEALT, subjects=("E1",),
-                params={"amount": 3, "combat": True},
-            ),),
-        )
-        assert qualifying_cards(record) == {"Grizzly Bears"}
-
-    def test_counting_tallies_across_the_whole_corpus(self):
-        records = [
-            _record([_entity("E1", "Shock")], source="E1") for _ in range(3)
-        ]
-        assert sum("Shock" in qualifying_cards(r) for r in records) == 3
-
-
-class TestConsultRanksButNeverDrops:
-    def test_an_uncastable_card_keeps_a_weight(self):
-        """Being in a game is the precondition an intervention forks from."""
-        weights = rank_by_consult(
-            {"Weird Card": 50.0},
-            {"Weird Card": ConsultVerdict.UNCASTABLE},
-        )
-        assert "Weird Card" in weights
-        assert weights["Weird Card"] > 0
-
-    def test_a_castable_card_outranks_an_uncastable_one(self):
-        weights = rank_by_consult(
-            {"a": 50.0, "b": 50.0},
-            {"a": ConsultVerdict.CASTABLE, "b": ConsultVerdict.UNCASTABLE},
-        )
-        assert weights["a"] > weights["b"]
-
-    def test_an_unconsulted_card_ranks_as_castable(self):
-        """The safe direction: under-ranking merely slows the run down."""
-        weights = rank_by_consult({"a": 50.0, "b": 50.0}, {})
-        assert weights["a"] == weights["b"] == 50.0
-
-    def test_no_card_is_ever_removed_by_the_consult(self):
-        weights = {"a": 1.0, "b": 2.0, "c": 3.0}
-        verdicts = dict.fromkeys(weights, ConsultVerdict.UNCASTABLE)
-        assert set(rank_by_consult(weights, verdicts)) == set(weights)
-
-
-class TestDeckWeighting:
-    def test_a_card_with_no_records_weighs_most(self):
-        coverage = {
-            "empty": CardCoverage("empty", records=0),
-            "half": CardCoverage("half", records=25),
-        }
-        weights = deck_weights(coverage, 50)
-        assert weights["empty"] > weights["half"]
-
-    def test_a_satisfied_card_drops_out_of_the_draw(self):
-        coverage = {"done": CardCoverage("done", records=50)}
-        assert deck_weights(coverage, 50) == {}
-
-    def test_a_retired_card_drops_out_too(self):
-        coverage = {"gone": CardCoverage("gone", records=0, retired=True)}
-        assert deck_weights(coverage, 50) == {}
-
-    def test_a_card_one_short_still_gets_drawn(self):
-        """Linear in the shortfall, so the last records do not take forever."""
-        coverage = {"nearly": CardCoverage("nearly", records=49)}
-        assert deck_weights(coverage, 50)["nearly"] == 1.0
+from tests.unit.effects.domain.test_coverage import _entity, _record
 
 
 class TestRetirement:
@@ -231,21 +108,6 @@ class TestResidues:
         assert residues(coverage, 50).castable_but_short == ("unknown",)
 
 
-class TestConfig:
-    def test_the_coverage_unit_comes_from_the_card_tree_alone(self):
-        """A token script is not a deckable card and could never be retired."""
-        config = CollectCoverageConfig()
-        assert config.converted_trees().cards_folder.name == "cardsfolder"
-
-    def test_a_reordered_cards_folder_still_finds_the_card_tree(self):
-        from pathlib import Path
-
-        config = CollectCoverageConfig(cards_folders=(
-            Path("output/tokenscripts/"), Path("output/cardsfolder/"),
-        ))
-        assert config.converted_trees().cards_folder.name == "cardsfolder"
-
-
 class TestCoverageDeckBuilding:
     """A coverage deck is 40 cards and favours the cards that need records."""
 
@@ -306,25 +168,6 @@ class TestCoverageDeckBuilding:
         assert all("ghost" not in deck for deck in decks)
 
 
-class TestDeckCandidateFromConvertedText:
-    """The cost a converted card hands the manabase heuristic."""
-
-    def test_the_mana_cost_line_is_read(self):
-        from effects.domain.coverage import DeckCandidate
-
-        candidate = DeckCandidate.from_converted_text(
-            "bolt", "name: bolt\nmana cost: {2}{R}{R}\ntypes: instant\n",
-        )
-        assert candidate == DeckCandidate("bolt", "{2}{R}{R}")
-        assert candidate.mana_cost_line() == "{2}{R}{R}"
-
-    @pytest.mark.parametrize("text", ["name: land\ntypes: land\n", "mana cost:  \n"])
-    def test_a_missing_or_empty_cost_is_none(self, text):
-        from effects.domain.coverage import DeckCandidate
-
-        assert DeckCandidate.from_converted_text("x", text).mana_cost is None
-
-
 class TestHeldOutExclusion:
     def test_no_split_holds_nothing_out(self):
         from effects.application.collect_coverage import load_held_out
@@ -333,7 +176,7 @@ class TestHeldOutExclusion:
 
     def test_held_out_cards_are_absent_from_the_coverage_unit(self, tmp_path):
         from effects.application.collect_coverage import build_coverage_units
-        from effects.infrastructure.card_sources import load_card_files
+        from effects.infrastructure.converted_trees import ConvertedTrees
 
         (tmp_path / "s").mkdir()
         for stem, name in (("serra_angel", "Serra Angel"), ("shock", "Shock")):
@@ -341,14 +184,9 @@ class TestHeldOutExclusion:
                 f"name: {name}\ntypes: creature\n", encoding="utf-8",
             )
         units = build_coverage_units(
-            load_card_files(tmp_path), frozenset({"Shock"}),
+            ConvertedTrees({"cardsfolder": tmp_path}).card_files, frozenset({"Shock"}),
         )
         assert set(units) == {"Serra Angel"}
-
-
-@pytest.mark.parametrize("records,target,expected", [(0, 50, False), (50, 50, True)])
-def test_satisfied_is_records_at_or_above_target(records, target, expected):
-    assert CardCoverage("x", records=records).satisfied(target) is expected
 
 
 class TestRunClosesTheSupervisor:
@@ -842,7 +680,7 @@ class TestIncrementalCounting:
 class TestCountingCrossesTheNameBoundary:
     """Coverage units are converted names; record entities are Forge's (T174).
 
-    `build_coverage_units` keys off `load_card_files`, which reads names out of
+    `build_coverage_units` keys off `ConvertedTrees.card_files`, which reads names out of
     converted card text — lowercased, `soul echo`. A record's `EntityState.name`
     is Forge's own, `Soul Echo`. Looking one up in the other matches nothing, so
     every card counts zero records forever: nothing is ever satisfied, the
@@ -1060,28 +898,44 @@ class TestHeldOutTextUnit:
         assert texts == {"SP$ Rare | Thing$ 1": frozenset({"alpha", "beta"})}
 
     def test_a_shard_counts_distinct_games_per_text(self):
+        """Counted as build-corpus counts a held-out text's games (FR-053):
+        from resolution records only, so a text whose triggers fire but never
+        resolve is not satisfied."""
         from effects.application.collect_coverage import count_text_shard
-        from effects.domain.text_holdout import normalize_script_text
-        from effects.infrastructure.record_io import read_shard
-        from effects.infrastructure.sidecar_io import SidecarCache
 
-        roots = {
-            "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
-            "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
-        }
-        shard = _FIXTURES / "gen1-records.jsonl.gz"
-        cache = SidecarCache({k: Path(v) for k, v in roots.items()})
-        expected: dict[str, set[str]] = {}
-        for record in read_shard(shard):
-            for key in record.ability or ():
-                line = cache.line_for(key)
-                if line is not None and line.script_text:
-                    expected.setdefault(
-                        normalize_script_text(line.script_text), set(),
-                    ).add(record.game_id)
-        assert expected
-        counted = count_text_shard(shard, roots=roots, texts=frozenset(expected))
-        assert counted == expected
+        resolutions, everything = _texts_by_game(_GEN1_SHARD)
+        assert resolutions and everything != resolutions
+        counted = count_text_shard(
+            _GEN1_SHARD, roots=_GEN1_ROOTS, texts=frozenset(everything),
+        )
+        assert counted == resolutions
+
+    def test_a_refused_resolution_does_not_count_toward_its_text(self, tmp_path):
+        """A record the quality rules refuse never reaches the manifest."""
+        from dataclasses import replace
+
+        from effects.application.collect_coverage import count_text_shard
+        from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
+        from effects.infrastructure.record_io import read_shard, write_shard
+
+        effects = [
+            record for record in read_shard(_GEN1_SHARD)
+            if isinstance(record.payload, ResolutionPayload)
+        ]
+        flood = (Event(type=EventType.DAMAGE_DEALT, subjects=("P0",)),) * (
+            MAX_EVENTS_PER_RECORD + 1
+        )
+        clean, flooded = tmp_path / "clean.jsonl.gz", tmp_path / "flooded.jsonl.gz"
+        write_shard(clean, effects)
+        write_shard(flooded, [
+            replace(record, payload=replace(record.payload, events=flood))
+            for record in effects
+        ])
+        _, everything = _texts_by_game(_GEN1_SHARD)
+        texts = frozenset(everything)
+
+        assert count_text_shard(clean, roots=_GEN1_ROOTS, texts=texts)
+        assert count_text_shard(flooded, roots=_GEN1_ROOTS, texts=texts) == {}
 
     def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
         """A sidecar cache per shard re-read every sidecar the shard named."""
@@ -1096,7 +950,7 @@ class TestHeldOutTextUnit:
             return real_read(path)
 
         monkeypatch.setattr(sidecar_io, "read_sidecar", counting_read)
-        collect_coverage._script_texts.cache_clear()
+        collect_coverage._sidecars.cache_clear()
         roots = {
             "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
             "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
@@ -1105,7 +959,7 @@ class TestHeldOutTextUnit:
         first = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
         read_by_one = len(reads)
         second = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
-        collect_coverage._script_texts.cache_clear()
+        collect_coverage._sidecars.cache_clear()
 
         assert read_by_one > 0
         assert len(reads) == read_by_one
@@ -1117,7 +971,7 @@ class TestHeldOutTextUnit:
         unit = TextCoverage(text="t", games={"g1", "g2", "g3", "g4"})
         assert not unit.satisfied(5)
         unit.games.add("g5")
-        assert unit.satisfied(5) and unit.records == 5
+        assert unit.satisfied(5) and unit.progress == 5
 
     def test_the_round_ends_without_waiting_on_uncastable_texts(self):
         """FR-037 / spec Story 2 scenario 6."""
@@ -1159,6 +1013,36 @@ class TestHeldOutTextUnit:
         decks = build_coverage_decks(weights, candidates, 3, rng=random.Random(0))
         basics = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
         assert all(set(deck) <= {"alpha"} | basics for deck in decks)
+
+
+_GEN1_SHARD = _FIXTURES / "gen1-records.jsonl.gz"
+_GEN1_ROOTS = {
+    "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
+    "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
+}
+
+
+def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """``text -> games`` over the shard's resolution records, and over every
+    record: each record counted through its first key with a script text."""
+    from effects.domain.text_holdout import normalize_script_text
+    from effects.infrastructure.record_io import read_shard
+    from effects.infrastructure.sidecar_io import SidecarCache
+
+    cache = SidecarCache({tree: Path(root) for tree, root in _GEN1_ROOTS.items()})
+    resolutions: dict[str, set[str]] = {}
+    everything: dict[str, set[str]] = {}
+    for record in read_shard(shard):
+        for key in record.ability or ():
+            line = cache.line_for(key)
+            if line is None or not line.script_text:
+                continue
+            text = normalize_script_text(line.script_text)
+            everything.setdefault(text, set()).add(record.game_id)
+            if record.kind is RecordKind.RESOLUTION:
+                resolutions.setdefault(text, set()).add(record.game_id)
+            break
+    return resolutions, everything
 
 
 class TestOnlyCardsRefusals:

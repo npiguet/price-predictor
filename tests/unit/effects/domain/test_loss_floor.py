@@ -12,12 +12,12 @@ from effects.domain.effect_head_layout import FIELD_SLICES, FIELDS_BY_NAME, PER_
 from effects.domain.effect_losses import LossParts, per_entity_loss
 from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.loss_floor import (
-    EntityTargetBatch,
     PartsMean,
     constant_predictor_floor,
     constant_predictor_outputs,
 )
 from effects.domain.state_snapshot import COLORS
+from tests.unit.effects.builders import make_entity_targets
 
 
 class TestConstantPredictorFloor:
@@ -30,7 +30,7 @@ class TestConstantPredictorFloor:
 
     def _batch(self, gate, fields, mask=None):
         gate = torch.tensor(gate, dtype=torch.float32)
-        return EntityTargetBatch(
+        return make_entity_targets(
             gate=gate,
             fields=EntityFieldTargets.everywhere({
                 name: torch.tensor(value, dtype=torch.float32)
@@ -85,8 +85,7 @@ class TestConstantPredictorFloor:
         floor = constant_predictor_floor([batch], fields=fields)
         constant = constant_predictor_outputs([batch], fields=fields)
         _, reported = per_entity_loss(
-            constant.expand(2, 3, PER_ENTITY_WIDTH), batch.gate, batch.fields,
-            batch.mask, fields=fields, report_parts=True,
+            constant.expand(2, 3, PER_ENTITY_WIDTH), batch, fields=fields, report_parts=True,
         )
         parts = reported.as_dict()
 
@@ -106,7 +105,7 @@ class TestConstantPredictorFloor:
             (torch.tensor(values) * 2 - 1) * 20
         ).unsqueeze(-1)
         _, parts = per_entity_loss(
-            outputs, batch.gate, batch.fields, batch.mask, fields=fields,
+            outputs, batch, fields=fields,
             report_parts=True,
         )
 
@@ -163,7 +162,7 @@ class TestDegenerateFields:
 
     def _batch(self, gate, fields):
         gate = torch.tensor(gate, dtype=torch.float32)
-        return EntityTargetBatch(
+        return make_entity_targets(
             gate=gate,
             fields=EntityFieldTargets.everywhere({
                 name: torch.tensor(value, dtype=torch.float32)

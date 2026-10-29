@@ -15,21 +15,17 @@ validation records, is covered in ``test_shard_streaming.py``.
 
 from __future__ import annotations
 
-import json
-
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     EffectRecord,
 )
 from effects.domain.split import (
     HeldOutCards,
+    HoldoutRule,
     record_names_held_out_card,
 )
 from effects.domain.state_snapshot import EntityState
-from effects.infrastructure.card_sources import (
-    load_card_files,
-    load_first_printings,
-)
+from effects.domain.text_holdout import HoldoutUnit
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
@@ -75,40 +71,6 @@ class TestRecordNamesHeldOutCard:
         assert not record_names_held_out_card(record, self._held())
 
 
-class TestCorpusLoaders:
-    def test_card_files_are_keyed_by_the_name_line(self, tmp_path):
-        (tmp_path / "s").mkdir()
-        (tmp_path / "s" / "serra_angel.txt").write_text(
-            "name: Serra Angel\ntypes: creature angel\n", encoding="utf-8",
-        )
-        assert load_card_files(tmp_path) == {
-            "Serra Angel": "cardsfolder/s/serra_angel.txt",
-        }
-
-    def test_a_file_without_a_name_line_is_skipped(self, tmp_path):
-        (tmp_path / "broken.txt").write_text("types: creature\n", encoding="utf-8")
-        assert load_card_files(tmp_path) == {}
-
-    def test_first_printings_take_the_earliest_release(self, tmp_path):
-        path = tmp_path / "AllPrintings.json"
-        path.write_text(json.dumps({"data": {
-            "NEW": {"releaseDate": "2026-01-01", "cards": [{"name": "Shock"}]},
-            "OLD": {"releaseDate": "1999-01-01", "cards": [{"name": "Shock"}]},
-        }}), encoding="utf-8")
-        assert load_first_printings(path)["Shock"] == "1999-01-01"
-
-    def test_face_names_are_indexed_too(self, tmp_path):
-        path = tmp_path / "AllPrintings.json"
-        path.write_text(json.dumps({"data": {
-            "SET": {"releaseDate": "2020-01-01", "cards": [
-                {"name": "Front // Back", "faceName": "Front"},
-            ]},
-        }}), encoding="utf-8")
-        printings = load_first_printings(path)
-        assert printings["Front // Back"] == "2020-01-01"
-        assert printings["Front"] == "2020-01-01"
-
-
 def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
     """Searing Spear and Lightning Strike compile to the same script (T158).
 
@@ -132,7 +94,7 @@ def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
 
     for permille in range(0, 1001, 50):
         held = text_keyed_holdout(
-            card_files, texts_by_card, permille=permille, max_carriers=8,
+            card_files, texts_by_card, HoldoutRule(permille, 8, HoldoutUnit.TEXT),
         )
         assert ("Searing Spear" in held.names) == ("Lightning Strike" in held.names), (
             f"reprints disagreed at permille={permille}"
@@ -146,7 +108,7 @@ def test_the_holdout_carries_its_texts_for_sizing_the_stratum() -> None:
     held = text_keyed_holdout(
         {"Alpha": "cardsfolder/a/alpha.txt"},
         {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]},
-        permille=1000, max_carriers=8,
+        HoldoutRule(1000, 8, HoldoutUnit.TEXT),
     )
 
     assert held.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
@@ -174,7 +136,7 @@ def test_a_corpus_shaped_holdout_carries_its_texts_too() -> None:
 class TestTheConvertedToRuntimeNameBoundary:
     """Card names change case crossing from the converted tree to Forge.
 
-    `load_card_files` reads names out of converted card text, which is
+    `ConvertedTrees.card_files` reads names out of converted card text, which is
     lowercased (`name: soul echo`). Forge's own `getName()` and every record's
     `EntityState.name` are printed case (`Soul Echo`). Matching one against the
     other silently never fires, which is how a depleted collection run came back
@@ -226,7 +188,7 @@ class TestTokenScriptsCarryHeldOutTexts:
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"},
             {"Alpha": [self._TEXT]},
-            permille=1000, max_carriers=8,
+            HoldoutRule(1000, 8, HoldoutUnit.TEXT),
             token_texts={"tokenscripts/r_1_1_goblin_shock.txt": [self._TEXT]},
         )
         assert "tokenscripts/r_1_1_goblin_shock.txt" in held.script_files
@@ -238,7 +200,7 @@ class TestTokenScriptsCarryHeldOutTexts:
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"},
             {"Alpha": [self._TEXT]},
-            permille=1000, max_carriers=1,
+            HoldoutRule(1000, 1, HoldoutUnit.TEXT),
             token_texts={"tokenscripts/goblin.txt": [self._TEXT]},
         )
         assert not held.texts
@@ -248,7 +210,7 @@ class TestTokenScriptsCarryHeldOutTexts:
 
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"}, {"Alpha": ["SP$ Draw"]},
-            permille=1000, max_carriers=8,
+            HoldoutRule(1000, 8, HoldoutUnit.TEXT),
             token_texts={"tokenscripts/goblin.txt": [self._TEXT]},
         )
         assert self._TEXT in held.texts
@@ -266,7 +228,7 @@ class TestHeldOutTextMatching:
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"},
             {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]},
-            permille=1000, max_carriers=8, unit="template",
+            HoldoutRule(1000, 8, HoldoutUnit.TEMPLATE),
         )
         assert held.holds_text("SP$ DealDamage | NumDmg$ 7")
         assert not held.holds_text("SP$ Draw | NumCards$ 1")
@@ -277,7 +239,7 @@ class TestHeldOutTextMatching:
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"},
             {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]},
-            permille=1000, max_carriers=8, unit="text",
+            HoldoutRule(1000, 8, HoldoutUnit.TEXT),
         )
         assert held.holds_text("SP$  DealDamage |  NumDmg$ 3")
         assert not held.holds_text("SP$ DealDamage | NumDmg$ 7")

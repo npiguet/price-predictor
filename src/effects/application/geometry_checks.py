@@ -8,10 +8,11 @@ Only gate 3 is a verdict; the rest are reported.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -34,6 +35,9 @@ from effects.domain.gate_metrics import (
 )
 from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import SourceTree
+
+if TYPE_CHECKING:
+    from effects.infrastructure.ability_cache_store import SidecarIndex
 
 logger = logging.getLogger(__name__)
 
@@ -127,68 +131,25 @@ class CachedVectors:
         return len(self.by_text)
 
 
-def load_cache(
-    abilities_root: Path,
-    sidecar_roots: Path | Iterable[Path],
-    *,
-    surface: str,
-    variant: str = Baseline.FULL,
+def cached_vectors(
+    index: SidecarIndex, abilities_root: Path, *, variant: str = Baseline.FULL,
 ) -> CachedVectors:
-    """Load a variant's cache, keyed by the ability text each row encodes.
-
-    ``surface`` comes from the checkpoint and has no default: keyed on the
-    other surface, a script checkpoint's cache silently merges every pair of
-    scripts sharing a prose line. Only a ``cardsfolder`` source contributes a
-    pooled per-card vector.
-    """
-    from effects.domain.ability_encoder import encoding_text
-    from effects.infrastructure.ability_cache_store import AbilityCacheStore
-    from effects.infrastructure.sidecar_io import (
-        SIDECAR_SUFFIX,
-        converted_text_path,
-        prose_for,
-        prose_lines,
-        read_sidecar,
-    )
-
-    roots = (
-        (Path(sidecar_roots),) if isinstance(sidecar_roots, (str, Path))
-        else tuple(Path(r) for r in sidecar_roots)
-    )
+    """One variant's cache over sidecars already read. Only a ``cardsfolder``
+    source contributes a pooled per-card vector."""
     cached = CachedVectors()
-    store = AbilityCacheStore(abilities_root, variant=variant)
-    if not store.root.is_dir():
-        return cached
-
-    for sidecar_root in roots:
-        for sidecar_path in sorted(sidecar_root.rglob(f"*{SIDECAR_SUFFIX}")):
-            sidecar = read_sidecar(sidecar_path)
-            relative = Path(sidecar.script_file)
-            matrix = store.read(sidecar.script_file)
-            if matrix is None:
+    for source, matrix in index.matrices(abilities_root, variant=variant):
+        card = normalize_prose(source.card)
+        for row, line in zip(matrix, source.lines):
+            if line is None:
                 continue
-            if matrix.shape[0] != len(sidecar.lines):
-                logger.warning(
-                    "skipping %s: %d cache rows for %d sidecar lines",
-                    store.path_for(sidecar.script_file), matrix.shape[0],
-                    len(sidecar.lines),
-                )
-                continue
-            rendered = prose_lines(converted_text_path(sidecar_path))
-            card = normalize_prose(sidecar.card)
-            for row, line in zip(matrix, sidecar.lines):
-                prose = prose_for(line, rendered)
-                text = encoding_text(line, prose, surface)
-                if not text:
-                    continue
-                cached.by_text.setdefault(text, row)
-                cached.display.setdefault(text, prose or text)
-                if prose:
-                    cached.by_prose.setdefault(
-                        normalize_prose(prose), {},
-                    ).setdefault(text, set()).add(card)
-            if matrix.size and relative.parts[:1] == (SourceTree.CARDSFOLDER,):
-                cached.by_card[sidecar.card] = pooled_card_vector(matrix)
+            cached.by_text.setdefault(line.text, row)
+            cached.display.setdefault(line.text, line.prose or line.text)
+            if line.prose:
+                cached.by_prose.setdefault(
+                    normalize_prose(line.prose), {},
+                ).setdefault(line.text, set()).add(card)
+        if matrix.size and Path(source.script_file).parts[:1] == (SourceTree.CARDSFOLDER,):
+            cached.by_card[source.card] = pooled_card_vector(matrix)
     return cached
 
 

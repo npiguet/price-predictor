@@ -13,7 +13,6 @@ refusal rule, the held-out test and a record's cell cannot drift apart.
 from __future__ import annotations
 
 import logging
-import zlib
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -22,10 +21,8 @@ from typing import TYPE_CHECKING
 
 from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import (
-    SIGNATURE_CLASSES,
-    outcome_signature,
+    game_hash,
     record_hash,
-    signature_label,
 )
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import (
@@ -37,15 +34,10 @@ from effects.domain.corpus_plan import (
     TrainingSupply,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
-from effects.domain.record_quality import (
-    QualityDefect,
-    acting_text_defect,
-    quality_defect,
-    unjoinable_key_defect,
-)
+from effects.domain.provenance import first_text
+from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
     EffectRecord,
-    LegalityDecision,
     RecordKind,
     acting_keys,
 )
@@ -54,56 +46,11 @@ from effects.domain.split import HeldOutCards, record_names_held_out_card
 from effects.domain.tally_merge import NOT_MERGED, merge_into
 
 if TYPE_CHECKING:
+    from effects.domain.damage_step_keywords import KeywordResolver
+    from effects.domain.provenance import ProvenanceKey
     from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
-
-
-def game_hash(game_id: str) -> int:
-    """A stable 32-bit id for counting distinct games without holding their
-    names; not ``hash()``, which is salted per process (FR-088a)."""
-    return zlib.crc32(game_id.encode("utf-8"))
-
-
-def selection_half(record: EffectRecord, klass: SamplingClass) -> str:
-    """``real`` / ``what-if`` on a legality record (FR-049 step 3), empty on
-    every other; a gen-1 record, whose decision is unknown, is a what-if."""
-    if klass != SamplingClass.PLAYABILITY_LEGALITY:
-        return ""
-    if LegalityDecision.of(record) is LegalityDecision.REAL:
-        return LegalityDecision.REAL
-    return LegalityDecision.WHAT_IF
-
-
-def cell_of(
-    record: EffectRecord, sidecars, resolver,
-    legality_mode_counts: Mapping[str, int] | None = None,
-) -> Cell:
-    """The cell a record is selected in. Both passes call this one function.
-
-    ``random_seat`` is not a component (FR-050). A legality record's family is
-    its rarest mode, which only the whole corpus can say, so without
-    ``legality_mode_counts`` (the survey) its cell carries the modes for
-    :meth:`Cell.resolved` to fold later.
-    """
-    from effects.domain.rule_families import FamilySentinel, legality_modes, rule_family
-
-    klass = sampling_class(record)
-    half = selection_half(record, klass)
-    if klass == SamplingClass.PLAYABILITY_LEGALITY:
-        modes = legality_modes(record, sidecars)
-        family = "" if modes else FamilySentinel.NONE
-        cell = Cell(klass=klass, half=half, family=family, modes=modes)
-        return cell if legality_mode_counts is None else cell.resolved(legality_mode_counts)
-    return Cell(
-        klass=klass,
-        half=half,
-        family=rule_family(record, sidecars, resolver=resolver),
-        signature=(
-            signature_label(outcome_signature(record))
-            if klass in SIGNATURE_CLASSES else ""
-        ),
-    )
 
 
 # ── what both passes read with ──────────────────────────────────────────
@@ -144,7 +91,7 @@ class WorkerContext:
         return self._sidecars
 
     @property
-    def resolver(self):
+    def resolver(self) -> KeywordResolver:
         if self._resolver is None:
             from effects.domain.damage_step_keywords import KeywordResolver
 
@@ -156,21 +103,28 @@ class WorkerContext:
 
         return read_shard(Path(self.read.records_dir) / relative)
 
-    def refusal(self, record: EffectRecord) -> str | None:
+    def refusal(self, record: EffectRecord) -> QualityDefect | None:
         """The one refusal rule both passes apply."""
-        defect = quality_defect(record, max_events=self.read.max_events)
+        return record_refusal(
+            record, self.sidecars.resolution_of, max_events=self.read.max_events,
+        )
+
+    def admit(
+        self, record: EffectRecord, refusals: RefusalTally,
+    ) -> SamplingClass | None:
+        """The record's sampling class, or None when :meth:`refusal` refuses
+        it, which ``refusals`` then counts: both passes' first step."""
+        klass = sampling_class(record)
+        defect = self.refusal(record)
         if defect is not None:
-            return defect
-        resolve = self.sidecars.resolution_of
-        defect = unjoinable_key_defect(record, resolve)
-        if defect is not None:
-            return defect
-        return acting_text_defect(record, resolve)
+            refusals.note(record, klass, defect)
+            return None
+        return klass
 
     def cell_of(
         self, record: EffectRecord, mode_counts: Mapping[str, int] | None = None,
     ) -> Cell:
-        return cell_of(record, self.sidecars, self.resolver, mode_counts)
+        return Cell.of(record, self.sidecars, self.resolver, mode_counts)
 
     def hash_of(self, record: EffectRecord) -> int:
         return record_hash(record.record_id, seed=self.read.seed)
@@ -181,19 +135,15 @@ class WorkerContext:
         since that is the surface the holdout is chosen on."""
         if not keys or not self.read.held_out.keys:
             return None
-        if keys in self._held_text:
-            return self._held_text[keys]
-        from effects.domain.text_holdout import normalize_script_text
+        if keys not in self._held_text:
+            self._held_text[keys] = first_text(keys, self._held_out_script)
+        return self._held_text[keys]
 
-        found = None
-        for key in keys:
-            line = self.sidecars.line_or_none(key)
-            script = line.script_text if line is not None else None
-            if script and self.read.held_out.holds_text(script):
-                found = normalize_script_text(script)
-                break
-        self._held_text[keys] = found
-        return found
+    def _held_out_script(self, key: ProvenanceKey) -> str | None:
+        # The holdout key normalizes first, so testing the normalized text
+        # tests the script.
+        text = self.sidecars.script_text(key)
+        return text if text is not None and self.read.held_out.holds_text(text) else None
 
 
 # ── the tallies ─────────────────────────────────────────────────────────
@@ -259,6 +209,8 @@ class ShardSurvey:
     rarity: RarityTally = field(default_factory=RarityTally)
     games: GameTally = field(default_factory=GameTally)
     refusals: RefusalTally = field(default_factory=RefusalTally)
+    #: Records per class the quality rules keep, the refusal guard's other half.
+    kept: Counter[SamplingClass] = field(default_factory=Counter)
     mode_counts: Counter[str] = field(default_factory=Counter)
     #: Training-bound records per class acting through a held-out text.
     held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
@@ -275,6 +227,7 @@ class Survey:
     supply: TrainingSupply
     games: GameTally
     refusals: RefusalTally = field(default_factory=RefusalTally)
+    kept: Counter[SamplingClass] = field(default_factory=Counter)
     mode_counts: Counter[str] = field(default_factory=Counter)
     held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
     #: Per top-level source directory (FR-149): held-out games in a depleted
@@ -361,11 +314,10 @@ class _ShardSurveyor:
     def observe(self, record: EffectRecord) -> None:
         self.out.records += 1
         self._note_game_properties(record)
-        klass = sampling_class(record)
-        defect = self.context.refusal(record)
-        if defect is not None:
-            self.out.refusals.note(record, klass, defect)
+        klass = self.context.admit(record, self.out.refusals)
+        if klass is None:
             return
+        self.out.kept[klass] += 1
         self.pending.append(self._kept(record, klass))
 
     def _note_game_properties(self, record: EffectRecord) -> None:
@@ -455,6 +407,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         supply=total.supply,
         games=total.games,
         refusals=total.refusals,
+        kept=total.kept,
         mode_counts=total.mode_counts,
         held_out_text_dropped=total.held_out_text_dropped,
         games_by_source={s: len(g) for s, g in games_by_source.items()},

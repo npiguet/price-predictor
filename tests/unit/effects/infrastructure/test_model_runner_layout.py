@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from effects.domain.effect_head_input import (
     EARLIER_LAYOUT,
     INPUT_LAYOUT,
@@ -17,6 +19,7 @@ from effects.domain.effect_head_input import (
     SlotKind,
     feature_widths,
 )
+from effects.domain.recorded_version import UnknownRecordedVersion
 from tests.unit.effects.domain.test_effect_head_input import _record
 
 
@@ -27,6 +30,11 @@ def test_a_checkpoint_recording_no_layout_reads_the_earlier_one():
 
 def test_a_checkpoint_recording_the_layout_reads_it():
     assert InputLayout.of({"input_layout": "gen-2"}) is INPUT_LAYOUT
+
+
+def test_a_layout_this_code_does_not_know_is_refused():
+    with pytest.raises(UnknownRecordedVersion, match="gen-3"):
+        InputLayout.of({"input_layout": "gen-3"})
 
 
 def test_a_run_records_its_layout_under_the_value_checkpoints_on_disk_hold():

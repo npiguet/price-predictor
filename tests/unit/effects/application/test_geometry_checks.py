@@ -8,21 +8,26 @@ which would pass while the command read the wrong vocabulary.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from effects.application.evaluation_context import EvaluateEffectModelConfig
+from effects.application.evaluation_context import (
+    EvaluateEffectModelConfig,
+)
 from effects.application.geometry_checks import (
     NEIGHBOUR_QUERIES,
     CachedVectors,
+    CacheGeometry,
     check_baseline_geometry,
     check_decodability,
     check_nearest_neighbours,
     check_umap,
     check_ward,
-    load_cache,
+    evaluate_ward_canary,
+    gate_three_verdict,
     nearest_neighbours,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY
@@ -31,6 +36,7 @@ from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from tests.unit.effects.builders import read_cache
 
 
 def _write_source(
@@ -114,33 +120,35 @@ TAX_PROSE = "spells your opponents cast that target CARDNAME cost {2} more to ca
 class TestLoadingTheCache:
     def test_rows_are_keyed_by_the_text_they_encode(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         assert set(loaded.texts) == {
             "Flying", "Vigilance", "DealDamage | NumDmg$ 2",
         }
 
     def test_the_prose_surface_keys_on_prose(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="prose")
+        loaded = read_cache(abilities, cards, surface="prose")
         assert "CARDNAME deals 2 damage to any target." in loaded.texts
 
     def test_the_surface_is_never_defaulted(self, cache):
         """A default is how the evaluator came to key a script model on prose."""
-        cards, abilities = cache
+        from effects.infrastructure.ability_cache_store import SidecarIndex
+
+        cards, _ = cache
         with pytest.raises(TypeError):
-            load_cache(abilities, cards)
+            SidecarIndex(cards)
 
     def test_one_prose_on_two_scripts_is_two_points_on_the_script_surface(
         self, tmp_path,
     ):
         """The model read two different texts; merging them hides one."""
         cards, abilities = _two_cards_one_prose(tmp_path)
-        assert len(load_cache(abilities, cards, surface="script")) == 2
-        assert len(load_cache(abilities, cards, surface="prose")) == 1
+        assert len(read_cache(abilities, cards, surface="script")) == 2
+        assert len(read_cache(abilities, cards, surface="prose")) == 1
 
     def test_a_row_carries_the_vector_its_sidecar_line_points_at(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         np.testing.assert_allclose(loaded.by_text["Flying"], [1.0, 0.0])
         np.testing.assert_allclose(loaded.by_text["Vigilance"], [0.0, 1.0])
 
@@ -151,7 +159,7 @@ class TestLoadingTheCache:
         abilities = tmp_path / "abilities"
         for stem in ("a/one", "a/two"):
             _write_source(cards, abilities, stem, stem, ["flying"], [[1.0, 0.0]])
-        assert len(load_cache(abilities, cards, surface="script")) == 1
+        assert len(read_cache(abilities, cards, surface="script")) == 1
 
     def test_a_reprint_is_one_point_even_when_its_vectors_differ_in_float_noise(
         self, tmp_path,
@@ -168,11 +176,11 @@ class TestLoadingTheCache:
         _write_source(
             cards, abilities, "two", "a/two", ["Flying"], [[1.0 + 1.5e-5, 0.0]],
         )
-        assert len(load_cache(abilities, cards, surface="script")) == 1
+        assert len(read_cache(abilities, cards, surface="script")) == 1
 
     def test_pooled_card_vectors_are_mean_then_max(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         np.testing.assert_allclose(
             loaded.by_card["Serra Angel"], [0.5, 0.5, 1.0, 1.0],
         )
@@ -185,12 +193,12 @@ class TestLoadingTheCache:
             cards, abilities, "Broken", "s/broken", ["a", "b"], [[1.0, 0.0]],
         )
         with caplog.at_level("WARNING"):
-            assert len(load_cache(abilities, cards, surface="script")) == 0
+            assert len(read_cache(abilities, cards, surface="script")) == 0
         assert "cache rows" in caplog.text
 
     def test_an_absent_cache_loads_empty_rather_than_raising(self, tmp_path):
         assert len(
-            load_cache(tmp_path / "nothing", tmp_path, surface="script"),
+            read_cache(tmp_path / "nothing", tmp_path, surface="script"),
         ) == 0
 
     def test_a_variant_cache_loads_separately(self, cache):
@@ -200,14 +208,40 @@ class TestLoadingTheCache:
             ["Flying", "Vigilance"], [[9.0, 9.0], [9.0, 9.0]],
             variant="no-state", prose=["flying", "vigilance"],
         )
-        variant = load_cache(
+        variant = read_cache(
             abilities, cards, variant="no-state", surface="script",
         )
         assert variant.by_text["Flying"].tolist() == [9.0, 9.0]
         np.testing.assert_allclose(
-            load_cache(abilities, cards, surface="script").by_text["Flying"],
+            read_cache(abilities, cards, surface="script").by_text["Flying"],
             [1.0, 0.0],
         )
+
+    def test_every_variant_joins_the_sidecars_read_once(self, cache):
+        """The evaluator reads the trees once for its three variants."""
+        from effects.application.geometry_checks import cached_vectors
+        from effects.infrastructure.ability_cache_store import SidecarIndex
+        from effects.infrastructure.sidecar_io import sidecar_paths
+
+        cards, abilities = cache
+        _write_source(
+            cards, abilities, "Serra Angel", "s/serra_angel",
+            ["Flying", "Vigilance"], [[9.0, 9.0], [9.0, 9.0]],
+            variant="no-state", prose=["flying", "vigilance"],
+        )
+        expected = {
+            variant: read_cache(abilities, cards, surface="script", variant=variant)
+            for variant in ("full", "no-state")
+        }
+        index = SidecarIndex(cards, surface="script")
+        for path in sidecar_paths(cards):
+            path.unlink()
+        for variant, loaded in expected.items():
+            joined = cached_vectors(index, abilities, variant=variant)
+            assert joined.texts == loaded.texts
+            np.testing.assert_array_equal(joined.matrix, loaded.matrix)
+            assert joined.by_prose == loaded.by_prose
+            assert set(joined.by_card) == set(loaded.by_card)
 
 
 class TestTheShippingCache:
@@ -240,7 +274,7 @@ class TestTheShippingCache:
 
     def _load(self, tmp_path):
         config = self._config(tmp_path)
-        return load_cache(
+        return read_cache(
             config.abilities_root, config.cards_folders, surface="script",
         )
 
@@ -261,7 +295,7 @@ class TestTheShippingCache:
 class TestResolvingAQuery:
     def test_a_query_resolves_by_prose_to_the_script_the_model_read(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         resolved = loaded.resolve(
             LineQuery("cardname deals 2 damage to any target."),
         )
@@ -269,14 +303,14 @@ class TestResolvingAQuery:
 
     def test_matching_ignores_case_and_whitespace_only(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         assert loaded.resolve(LineQuery("  FLYING ")).key == "Flying"
         assert loaded.resolve(LineQuery("flying.")).key is None
         assert loaded.resolve(LineQuery("fly")).key is None
 
     def test_an_absent_line_says_so(self, cache):
         cards, abilities = cache
-        resolved = load_cache(abilities, cards, surface="script").resolve(
+        resolved = read_cache(abilities, cards, surface="script").resolve(
             LineQuery("draw a card."),
         )
         assert resolved.key is None
@@ -286,7 +320,7 @@ class TestResolvingAQuery:
         self, tmp_path,
     ):
         cards, abilities = _two_cards_one_prose(tmp_path)
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         ambiguous = loaded.resolve(LineQuery(TAX_PROSE))
         assert ambiguous.key is None
         assert "2 scripts" in ambiguous.problem
@@ -296,7 +330,7 @@ class TestResolvingAQuery:
 
     def test_a_card_that_does_not_print_the_line_does_not_resolve(self, cache):
         cards, abilities = cache
-        resolved = load_cache(abilities, cards, surface="script").resolve(
+        resolved = read_cache(abilities, cards, surface="script").resolve(
             LineQuery("flying", card="shock"),
         )
         assert resolved.key is None
@@ -304,7 +338,7 @@ class TestResolvingAQuery:
 
     def test_a_line_is_displayed_in_prose(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         assert loaded.label("DealDamage | NumDmg$ 2") == (
             "CARDNAME deals 2 damage to any target."
         )
@@ -338,7 +372,7 @@ class TestNearestNeighbours:
     def test_the_check_reports_and_blocks_nothing(self, cache):
         cards, abilities = cache
         result = check_nearest_neighbours(
-            load_cache(abilities, cards, surface="script"),
+            read_cache(abilities, cards, surface="script"),
             (LineQuery("flying"),),
         )
         assert result.status is CheckStatus.REPORTED
@@ -347,7 +381,7 @@ class TestNearestNeighbours:
     def test_neighbours_are_listed_in_prose_for_the_reader(self, cache):
         cards, abilities = cache
         result = check_nearest_neighbours(
-            load_cache(abilities, cards, surface="script"),
+            read_cache(abilities, cards, surface="script"),
             (LineQuery("flying"),),
         )
         assert "CARDNAME deals 2 damage to any target." in result.detail
@@ -357,7 +391,7 @@ class TestNearestNeighbours:
         """A silently dropped query shrinks the comparison without saying so."""
         cards, abilities = cache
         result = check_nearest_neighbours(
-            load_cache(abilities, cards, surface="script"),
+            read_cache(abilities, cards, surface="script"),
             (LineQuery("flying"), LineQuery("draw a card.")),
         )
         assert "draw a card." in result.detail
@@ -375,7 +409,7 @@ class TestUmap:
     def test_too_few_vectors_skips(self, cache):
         cards, abilities = cache
         assert check_umap(
-            load_cache(abilities, cards, surface="script"),
+            read_cache(abilities, cards, surface="script"),
         ).status is CheckStatus.SKIPPED
 
     def test_a_populated_cache_projects(self):
@@ -411,13 +445,13 @@ def _ward_cache(tmp_path, *, missing: tuple[LineQuery, ...] = ()):
             [keyword.prose.title()], [rng.normal(size=3).tolist()],
             prose=[keyword.prose],
         )
-    return load_cache(abilities, cards, surface="script")
+    return read_cache(abilities, cards, surface="script")
 
 
 class TestWardCanary:
     def test_it_skips_when_ward_is_not_in_the_cache(self, cache):
         cards, abilities = cache
-        result = check_ward(load_cache(abilities, cards, surface="script"))
+        result = check_ward(read_cache(abilities, cards, surface="script"))
         assert result.status is CheckStatus.SKIPPED
         assert "ward {2}" in result.detail
 
@@ -491,7 +525,7 @@ class TestDecodability:
     def test_it_skips_without_a_win_rate_table(self, cache):
         cards, abilities = cache
         result = check_decodability(
-            load_cache(abilities, cards, surface="script"), cards / "absent.txt",
+            read_cache(abilities, cards, surface="script"), cards / "absent.txt",
         )
         assert result.status is CheckStatus.SKIPPED
         assert "win-rate table" in result.detail
@@ -501,7 +535,7 @@ class TestDecodability:
         win_rates = tmp_path / "cards-win-rates.txt"
         win_rates.write_text("card_name;a\n", encoding="utf-8")
         result = check_decodability(
-            load_cache(abilities, cards, surface="script"), win_rates,
+            read_cache(abilities, cards, surface="script"), win_rates,
         )
         assert result.status is CheckStatus.SKIPPED
         assert "too few" in result.detail
@@ -551,7 +585,7 @@ class TestBaselineComparison:
     def test_it_skips_without_the_variant_cache(self, cache):
         cards, abilities = cache
         result = check_baseline_geometry(
-            load_cache(abilities, cards, surface="script"), CachedVectors(), "no-state",
+            read_cache(abilities, cards, surface="script"), CachedVectors(), "no-state",
         )
         assert result.status is CheckStatus.SKIPPED
         assert "--variant no-state" in result.detail
@@ -591,3 +625,75 @@ class TestBaselineComparison:
         for baseline in baselines:
             check_baseline_geometry(full, baseline, "no-state")
         assert len(calls) == 3
+
+
+class TestGateThree:
+    def test_a_spread_space_passes(self):
+        rng = np.random.default_rng(0)
+        vectors = rng.normal(size=(400, 64))
+        result = gate_three_verdict(CacheGeometry.of(vectors))
+        assert result.status is CheckStatus.PASS
+
+    def test_a_collapsed_space_fails(self):
+        """Every ability on top of every other passes every average-case metric."""
+        rng = np.random.default_rng(0)
+        vectors = np.ones((400, 64)) + 0.001 * rng.normal(size=(400, 64))
+        result = gate_three_verdict(CacheGeometry.of(vectors))
+        assert result.status is CheckStatus.FAIL
+        assert "collapsed" in result.detail
+
+    def test_a_one_dimensional_space_fails_on_the_top_component(self):
+        direction = np.zeros(64)
+        direction[0] = 1.0
+        vectors = np.outer(np.linspace(-1, 1, 400), direction)
+        result = gate_three_verdict(CacheGeometry.of(vectors))
+        assert result.status is CheckStatus.FAIL
+        assert "principal component" in result.detail
+
+    def test_it_blocks_shipping(self):
+        vectors = np.ones((100, 8))
+        assert gate_three_verdict(CacheGeometry.of(vectors)).blocks
+
+    def test_an_all_zero_space_fails(self):
+        """The effect head once trained on an all-zero e: no variance at all is
+        the most collapsed a space can be, not an unmeasurable one."""
+        result = gate_three_verdict(CacheGeometry.of(np.zeros((100, 64))))
+        assert result.status is CheckStatus.FAIL
+        assert "principal component" in result.detail
+
+    def test_too_few_vectors_to_measure_fails(self):
+        result = gate_three_verdict(CacheGeometry.of(np.ones((1, 8))))
+        assert result.status is CheckStatus.FAIL
+        assert "not measured" in result.detail
+
+
+class TestWardCanaryVerdict:
+    def _vectors(self, twin_distance: float):
+        ward = np.array([1.0, 0.0, 0.0])
+        # Twins sit at the requested angle; bare keywords sit further away.
+        angle = twin_distance
+        twins = [np.array([1.0 - angle, math.sqrt(max(0.0, 2 * angle - angle ** 2)), 0.0])]
+        bare = [np.array([0.0, 1.0, 0.0]), np.array([0.0, 0.0, 1.0])]
+        return ward, twins, bare
+
+    def test_ward_nearer_its_twins_than_the_median_keyword_reads_as_such(self):
+        ward, twins, bare = self._vectors(0.05)
+        result = evaluate_ward_canary(ward, twins, bare)
+        assert "every functional twin is nearer" in result.detail
+
+    def test_a_twin_farther_than_the_median_is_reported(self):
+        ward = np.array([1.0, 0.0, 0.0])
+        twins = [np.array([-1.0, 0.0, 0.0])]  # opposite: distance 2
+        bare = [np.array([0.0, 1.0, 0.0])]    # orthogonal: distance 1
+        result = evaluate_ward_canary(ward, twins, bare)
+        assert "sit farther from ward" in result.detail
+
+    def test_the_canary_reports_and_does_not_block(self):
+        ward, twins, bare = self._vectors(0.05)
+        assert evaluate_ward_canary(ward, twins, bare).status is (
+            CheckStatus.REPORTED
+        )
+
+    def test_an_empty_cache_skips_rather_than_failing(self):
+        result = evaluate_ward_canary(np.ones(3), [], [])
+        assert result.status is CheckStatus.SKIPPED

@@ -11,6 +11,7 @@ from effects.domain.corpus_curation import (
     class_targets,
     copy_plan,
     game_disjoint_draw,
+    game_hash,
     in_game_disjoint_stratum,
     outcome_signature,
     rate_plan,
@@ -257,3 +258,15 @@ class TestGameDisjointPlacement:
         import zlib
 
         assert game_disjoint_draw("run.0-a.5") == zlib.crc32(b"run.0-a.5") % 10**6 / 10**6
+
+    def test_game_hash_is_stable_across_calls(self):
+        """Pinned to the algorithm, not merely to idempotency (FR-088a).
+
+        ``game_hash("x") == game_hash("x")`` is also true of the built-in
+        ``hash()``, whose salt is per-process rather than per-call, so that
+        assertion alone cannot fail for the defect the function warns against.
+        """
+        import zlib
+
+        assert game_hash("run.0-a.3") == zlib.crc32(b"run.0-a.3")
+        assert game_hash("run.0-a.3") == game_hash("run.0-a.3")

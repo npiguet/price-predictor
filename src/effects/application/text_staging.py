@@ -21,8 +21,9 @@ from effects.domain.ability_encoder import (
     encoding_role_spans,
     prepare_line,
 )
-from effects.domain.ability_tokenizer import AbilityTokenizer, withheld_keyword_tokens
+from effects.domain.ability_tokenizer import AbilityTokenizer, Surface, withheld_keyword_tokens
 from effects.domain.baselines import BaselineMasks
+from effects.domain.provenance import SidecarLine
 
 #: Texts per length-sorted encoder pass. Padded to the batch's longest instead,
 #: one 512-token chain makes every line cost 512 positions and the saved
@@ -117,13 +118,13 @@ class TextStager:
     """Ability texts to encoder inputs, the one way every caller agrees on."""
 
     tokenizer: AbilityTokenizer
-    surface: str
+    surface: Surface
     withhold_keyword: str | None = None
     keyword_expand_p: float = 0.0
     truncations: TruncationLog | None = None
 
     def stage(
-        self, texts: Mapping[str, object], *, masks: BaselineMasks, e_dim: int,
+        self, texts: Mapping[str, SidecarLine], *, masks: BaselineMasks, e_dim: int,
         rng: random.Random, keys_of: Callable[[str], list],
     ) -> StagedTexts:
         """``texts`` (each to its sidecar line) staged for this variant;
@@ -142,7 +143,7 @@ class TextStager:
         )
 
     def prepare_texts(
-        self, ordered: list[str], lines_of: Mapping[str, object] | None = None,
+        self, ordered: list[str], lines_of: Mapping[str, SidecarLine] | None = None,
         *, rng: random.Random, keys_of: Callable[[str], list] = lambda text: [],
     ) -> list[EncodedLine]:
         """Each text through :meth:`prepare`, with the role spans of its
@@ -173,11 +174,11 @@ class TextStager:
 
 
 def _taxonomy_vectors(
-    ordered: list[str], lines: Mapping[str, object], e_dim: int,
+    ordered: list[str], lines: Mapping[str, SidecarLine], e_dim: int,
 ) -> torch.Tensor:
     """The taxonomy baseline's stand-in for ``e``: the hash embedding its cache
     writes, so the trained baseline and its cache agree."""
-    from effects.application.encode_abilities import taxonomy_vector
+    from effects.domain.baselines import taxonomy_vector
 
     rows = np.stack([taxonomy_vector(lines[text], e_dim) for text in ordered])
     return torch.from_numpy(rows)

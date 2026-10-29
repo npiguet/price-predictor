@@ -24,7 +24,6 @@ from effects.application.validate_corpus import (
     Finding,
     Findings,
     Thresholds,
-    read_window,
     validate_corpus,
 )
 from effects.domain.event_schema import (
@@ -57,6 +56,7 @@ from effects.domain.state_snapshot import (
     InclusionTier,
     StateSnapshot,
 )
+from effects.infrastructure.record_io import read_window
 from effects.infrastructure.sidecar_io import SidecarCache, write_sidecar
 from tests.unit.effects.builders import (
     RawShardWriter,
@@ -511,6 +511,17 @@ class TestActingLines:
         assert not finding.ok
         assert "unindexable" in " ".join(finding.detail)
 
+    def test_a_reason_is_reported_under_its_own_kind_alone(self):
+        records = _healthy() + [
+            _resolution(
+                f"run.0-L1.{index}", ability=(), ability_unresolved="unindexable",
+            )
+            for index in range(400, 410)
+        ]
+        findings = validate_corpus(records)
+        assert "unindexable" in " ".join(_named(findings, "resolution records name").detail)
+        assert "unindexable" not in " ".join(_named(findings, "trigger and rewrite").detail)
+
     def test_the_keyed_floor_is_configurable(self):
         records = _healthy() + [
             _resolution(
@@ -662,13 +673,6 @@ class TestDuplicates:
 
 
 class TestTheWindow:
-    def test_limit_stops_reading(self, tmp_path):
-        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
-            for record in _healthy():
-                writer.write(record)
-        assert len(list(read_window(tmp_path, limit=2))) == 2
-        assert len(list(read_window(tmp_path))) == len(_healthy())
-
     def test_an_empty_window_reports_rather_than_raising(self):
         findings = validate_corpus([])
         assert all(finding.ok for finding in findings)
@@ -1949,7 +1953,9 @@ class TestGen2FieldPresence:
 
     def _finding(self, tmp_path: Path):
         presence = FieldPresence()
-        findings = validate_corpus(read_window(tmp_path, presence=presence), presence=presence)
+        findings = validate_corpus(
+            read_window(tmp_path, observe=presence.observe), presence=presence,
+        )
         return _named(findings, "gen-2 envelope")
 
     def test_a_gen1_shard_passes(self, tmp_path):

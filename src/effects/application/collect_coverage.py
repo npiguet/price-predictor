@@ -12,17 +12,18 @@ from __future__ import annotations
 import logging
 import random
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from effects.application.parallel_map import run_parallel
 from effects.domain import default_paths
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
+    HELD_OUT_GAME_FLOOR,
     CardCoverage,
     ConsultVerdict,
     CoverageUnit,
@@ -38,18 +39,19 @@ from effects.domain.coverage import (
     retire_stalled,
     text_deck_weights,
 )
+from effects.domain.provenance import first_text
+from effects.domain.record_quality import record_refusal
+from effects.domain.records import RecordKind, acting_keys
 
 if TYPE_CHECKING:
     from effects.domain.provenance import ProvenanceKey
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.converted_trees import ConvertedTrees
+    from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_RECORDS_DIR = Path(default_paths.DEFAULT_RECORDS_DIR)
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
-    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
-)
 #: Java worker processes, for both collectors.
 DEFAULT_WORKERS = 12
 DEFAULT_TARGET_RECORDS = 50
@@ -67,21 +69,29 @@ DECK_SIZE = 40
 #: Seeds the per-round deck sampler so which cards fill a round is reproducible.
 RANDOM_SEED = 42
 
-#: FR-036's floor: distinct games a held-out text must act in.
-DEFAULT_MIN_TEXT_GAMES = 5
+
+@dataclass
+class CollectorConfig:
+    """What both collectors take: the corpus they write to, the converted
+    trees, the holdout they keep out of their decks, and how they play."""
+
+    effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
+    split_from: Path | None = None
+    exclude_cards: Path | None = None
+    decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
+        "help": "Decks played as matches per round (default: %(default)s)",
+    })
+    workers: int = field(default=DEFAULT_WORKERS, metadata={
+        "help": "Parallel Java worker processes (default: %(default)s)",
+    })
+    caps: CollectionCaps = field(default_factory=CollectionCaps)
 
 
 @dataclass
-class CollectCoverageConfig:
-    effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
-    cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
-    split_from: Path | None = None
-    exclude_cards: Path | None = None
+class CollectCoverageConfig(CollectorConfig):
     target_records: int = field(default=DEFAULT_TARGET_RECORDS, metadata={
         "help": "Per-card satisfaction goal (default: %(default)s)",
-    })
-    decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
-        "help": "Decks played as matches per round (default: %(default)s)",
     })
     no_progress_rounds: int = field(default=DEFAULT_NO_PROGRESS_ROUNDS, metadata={
         "help": (
@@ -89,15 +99,11 @@ class CollectCoverageConfig:
             "retires, which is what makes the run end (default: %(default)s)"
         ),
     })
-    workers: int = field(default=DEFAULT_WORKERS, metadata={
-        "help": "Parallel Java worker processes (default: %(default)s)",
-    })
-    caps: CollectionCaps = field(default_factory=CollectionCaps)
     #: ``--only-cards``: the ``holdout-cards`` list. Set, the run is the
     #: held-out coverage round (FR-035): decks from these cards alone, and the
     #: unit is the held-out ability text rather than the card.
     only_cards: Path | None = None
-    min_text_games: int = field(default=DEFAULT_MIN_TEXT_GAMES, metadata={
+    min_text_games: int = field(default=HELD_OUT_GAME_FLOOR, metadata={
         "help": (
             "With --only-cards: distinct games a held-out text must act in to "
             "be satisfied (FR-036; default: %(default)s)"
@@ -317,19 +323,10 @@ class HoldoutSource:
         no depletion list, or when two sources name the held-out cards.
         """
         if only_cards is not None:
-            clashing = [
-                flag for flag, value in (
-                    ("--exclude-cards", exclude_cards),
-                    ("--training-corpus", training_corpus),
-                    ("--split-from", split_from),
-                ) if value
-            ]
-            if clashing:
-                # FR-038: opposite instructions, so one of them is a mistake.
-                raise ValueError(
-                    f"--only-cards decks the held-out cards; {', '.join(clashing)} "
-                    "keeps a holdout out of every deck. Pass one or the other."
-                )
+            _refuse_holdout_beside_only_cards(
+                exclude_cards=exclude_cards, training_corpus=training_corpus,
+                split_from=split_from,
+            )
         if training_corpus is None:
             return cls(
                 effect_records=effect_records or DEFAULT_RECORDS_DIR,
@@ -341,18 +338,9 @@ class HoldoutSource:
                 "--training-corpus DIR means --effect-records DIR with its own "
                 f"{HOLDOUT_LIST_NAME}"
             )
-        listed = training_corpus / HOLDOUT_LIST_NAME
-        if not listed.is_file():
-            raise ValueError(
-                f"{training_corpus} holds no {HOLDOUT_LIST_NAME}. A training "
-                "corpus is depleted against a list, and without it this run "
-                "would deck the held-out cards and contaminate the split. Write "
-                "one with 'python -m effects holdout-cards', or pass "
-                "--effect-records and --exclude-cards separately if they "
-                "genuinely live apart."
-            )
         return cls(
-            effect_records=training_corpus, exclude_cards=listed, split_from=split_from,
+            effect_records=training_corpus,
+            exclude_cards=_depletion_list(training_corpus), split_from=split_from,
         )
 
     def exclusions(self) -> frozenset[str]:
@@ -360,6 +348,39 @@ class HoldoutSource:
         if self.exclude_cards is not None:
             return read_name_list(self.exclude_cards)
         return load_held_out(self.split_from)
+
+
+def _refuse_holdout_beside_only_cards(
+    *, exclude_cards: Path | None, training_corpus: Path | None, split_from: Path | None,
+) -> None:
+    clashing = [
+        flag for flag, value in (
+            ("--exclude-cards", exclude_cards),
+            ("--training-corpus", training_corpus),
+            ("--split-from", split_from),
+        ) if value
+    ]
+    if clashing:
+        # FR-038: opposite instructions, so one of them is a mistake.
+        raise ValueError(
+            f"--only-cards decks the held-out cards; {', '.join(clashing)} "
+            "keeps a holdout out of every deck. Pass one or the other."
+        )
+
+
+def _depletion_list(training_corpus: Path) -> Path:
+    """The list ``training_corpus`` was depleted against, which it must hold."""
+    listed = training_corpus / HOLDOUT_LIST_NAME
+    if not listed.is_file():
+        raise ValueError(
+            f"{training_corpus} holds no {HOLDOUT_LIST_NAME}. A training "
+            "corpus is depleted against a list, and without it this run "
+            "would deck the held-out cards and contaminate the split. Write "
+            "one with 'python -m effects holdout-cards', or pass "
+            "--effect-records and --exclude-cards separately if they "
+            "genuinely live apart."
+        )
+    return listed
 
 
 def read_name_list(path: Path) -> frozenset[str]:
@@ -386,13 +407,12 @@ def load_held_out(split_from: Path | None) -> frozenset[str]:
 
 
 def build_coverage_units(
-    card_files: dict[str, str], held_out: frozenset[str],
+    names: Iterable[str], held_out: frozenset[str],
 ) -> dict[str, CardCoverage]:
-    """Every deckable card, minus the holdout. Takes the loaded ``name ->
-    script`` mapping because ``run`` has already paid for reading the tree."""
+    """Every deckable card, minus the holdout."""
     return {
         name: CardCoverage(name=name)
-        for name in card_files
+        for name in names
         if name not in held_out
     }
 
@@ -440,26 +460,46 @@ def play_decks(
     supervisor.play_round(decks_file, matches=matches)
 
 
-@dataclass(frozen=True)
-class CoverageRounds:
+class CoverageRounds(Protocol):
     """What the round loop needs from one kind of coverage unit: the card run
     and the held-out round differ in what a unit is, how its cards are weighted
     and which units have to finish."""
 
-    units: Mapping[str, CoverageUnit]
-    #: The units whose completion ends the run: every card, but only the
-    #: held-out texts some castable card carries (FR-037).
-    awaited: Mapping[str, CoverageUnit]
-    target: int
-    candidates: Mapping[str, DeckCandidate]
-    #: The next round's per-card deck weights, the consult applied.
-    weights: Callable[[], dict[str, float]]
-    #: The units a round attempted, from the cards its decks held.
-    units_decked: Callable[[set[str]], set[str]]
-    #: Counts the shards the last round wrote into ``units``; returns how many.
-    count_new_shards: Callable[[], int]
-    #: Logged when the weighted cards yield no deck at all.
-    no_decks: str
+    @property
+    def units(self) -> Mapping[str, CoverageUnit]: ...
+
+    @property
+    def awaited(self) -> Mapping[str, CoverageUnit]:
+        """The units whose completion ends the run: every card, but only the
+        held-out texts some castable card carries (FR-037)."""
+        ...
+
+    @property
+    def target(self) -> int: ...
+
+    @property
+    def candidates(self) -> Mapping[str, DeckCandidate]: ...
+
+    @property
+    def no_decks(self) -> str:
+        """Logged when the weighted cards yield no deck at all."""
+        ...
+
+    def weights(self) -> dict[str, float]:
+        """The next round's per-card deck weights, the consult applied."""
+        ...
+
+    def units_decked(self, cards: set[str]) -> set[str]:
+        """The units a round attempted, from the cards its decks held."""
+        ...
+
+    def count_new_shards(self) -> int:
+        """Count the shards the last round wrote into ``units``; how many."""
+        ...
+
+    def report(self) -> str:
+        """What the rounds could not reach, printed however they ended."""
+        ...
 
 
 def round_summary(
@@ -488,7 +528,7 @@ def play_rounds(
     round_number = 0
     while not is_complete(rounds.awaited, rounds.target):
         round_number += 1
-        previous = {key: unit.records for key, unit in rounds.units.items()}
+        previous = {key: unit.progress for key, unit in rounds.units.items()}
         weights = rounds.weights()
         if not weights:
             break
@@ -521,6 +561,53 @@ def play_rounds(
     return False
 
 
+def _play_to_completion(
+    rounds: CoverageRounds, config: CollectCoverageConfig, caps: CollectionCaps,
+) -> int:
+    """Play ``rounds`` under a supervisor and report what they left; 130 when
+    Ctrl-C ended them."""
+    with collector_supervisor(
+        workers=config.workers, effect_records=config.effect_records, caps=caps,
+    ) as supervisor:
+        interrupted = play_rounds(rounds, supervisor, config)
+    logger.info("%s", rounds.report())
+    # Residues print either way, but an interrupted run did not finish.
+    return 130 if interrupted else 0
+
+
+@dataclass
+class CardRounds:
+    """The card run's rounds: every deckable card a unit, and every one awaited."""
+
+    coverage: dict[str, CardCoverage]
+    verdicts: Mapping[str, ConsultVerdict]
+    counter: CoverageCounter
+    records_dir: Path
+    target: int
+    candidates: dict[str, DeckCandidate]
+    no_decks: str = "No card with a weight has converted text; nothing to deck."
+
+    @property
+    def units(self) -> dict[str, CardCoverage]:
+        return self.coverage
+
+    @property
+    def awaited(self) -> dict[str, CardCoverage]:
+        return self.coverage
+
+    def weights(self) -> dict[str, float]:
+        return rank_by_consult(deck_weights(self.coverage, self.target), self.verdicts)
+
+    def units_decked(self, cards: set[str]) -> set[str]:
+        return cards
+
+    def count_new_shards(self) -> int:
+        return self.counter.update(self.coverage, self.records_dir)
+
+    def report(self) -> str:
+        return residues(self.coverage, self.target).render(self.target)
+
+
 def run(config: CollectCoverageConfig) -> int:
     """Play rounds until every card is satisfied or retired."""
     if config.only_cards is not None:
@@ -536,11 +623,7 @@ def run(config: CollectCoverageConfig) -> int:
     texts = {name: card.text for name, card in converted.items()}
     non_deck = non_deck_names(texts)
     coverage = build_coverage_units(
-        {
-            name: card.script_file for name, card in converted.items()
-            if name not in non_deck
-        },
-        held_out,
+        (name for name in converted if name not in non_deck), held_out,
     )
     if not coverage:
         logger.error("No deckable cards under %s", trees.cards_folder)
@@ -566,31 +649,15 @@ def run(config: CollectCoverageConfig) -> int:
         if name in coverage:
             coverage[name].verdict = verdict
 
-    rounds = CoverageRounds(
-        units=coverage,
-        awaited=coverage,
-        target=config.target_records,
+    rounds = CardRounds(
+        coverage=coverage, verdicts=verdicts, counter=counter,
+        records_dir=records_dir, target=config.target_records,
         candidates={
             name: DeckCandidate.from_converted_text(name, text)
             for name, text in texts.items()
         },
-        weights=lambda: rank_by_consult(
-            deck_weights(coverage, config.target_records), verdicts,
-        ),
-        units_decked=lambda cards: cards,
-        count_new_shards=lambda: counter.update(coverage, records_dir),
-        no_decks="No card with a weight has converted text; nothing to deck.",
     )
-    with collector_supervisor(
-        workers=config.workers, effect_records=config.effect_records,
-        caps=config.caps,
-    ) as supervisor:
-        interrupted = play_rounds(rounds, supervisor, config)
-
-    report = residues(coverage, config.target_records)
-    logger.info("%s", report.render(config.target_records))
-    # Residues print either way, but an interrupted run did not finish.
-    return 130 if interrupted else 0
+    return _play_to_completion(rounds, config, config.caps)
 
 
 def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
@@ -616,47 +683,41 @@ def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
 def count_text_shard(
     shard: Path, *, roots: dict[str, str], texts: frozenset[str],
 ) -> dict[str, set[str]]:
-    """``held-out text -> the game ids it acted in``, over one shard. Top-level
-    so a process pool can pickle it; each process resolves keys through its own
-    :func:`_script_texts`, because a sidecar cache does not pickle."""
+    """``held-out text -> the game ids it resolved in``, over one shard.
+
+    Counted as build-corpus counts a held-out text's games (FR-053): from the
+    resolution records its refusal rule keeps, through the first acting key
+    whose text is held out. Top-level so a process pool can pickle it; each
+    process resolves keys through its own :func:`_sidecars`, because a
+    sidecar cache does not pickle.
+    """
     from effects.infrastructure.record_io import read_shard
 
-    script_texts = _script_texts(tuple(sorted(roots.items())))
+    sidecars = _sidecars(tuple(sorted(roots.items())))
+
+    def held_out_text(key: ProvenanceKey) -> str | None:
+        text = sidecars.script_text(key)
+        return text if text in texts else None
+
     games: dict[str, set[str]] = defaultdict(set)
     for record in read_shard(shard):
-        for key in record.ability or ():
-            text = script_texts.of(key)
-            if text in texts:
-                games[text].add(record.game_id)
+        if record.kind is not RecordKind.RESOLUTION:
+            continue
+        if record_refusal(record, sidecars.resolution_of) is not None:
+            continue
+        text = first_text(acting_keys(record), held_out_text)
+        if text is not None:
+            games[text].add(record.game_id)
     return dict(games)
 
 
-class _ScriptTexts:
-    """Each provenance key's normalized script text, resolved once per key."""
-
-    def __init__(self, roots: tuple[tuple[str, str], ...]) -> None:
-        from effects.infrastructure.sidecar_io import SidecarCache
-
-        self._sidecars = SidecarCache({tree: Path(root) for tree, root in roots})
-        self._by_key: dict[ProvenanceKey, str | None] = {}
-
-    def of(self, key: ProvenanceKey) -> str | None:
-        from effects.domain.text_holdout import normalize_script_text
-
-        if key not in self._by_key:
-            line = self._sidecars.line_or_none(key)
-            self._by_key[key] = (
-                normalize_script_text(line.script_text)
-                if line is not None and line.script_text else None
-            )
-        return self._by_key[key]
-
-
 @lru_cache(maxsize=1)
-def _script_texts(roots: tuple[tuple[str, str], ...]) -> _ScriptTexts:
-    """The process's resolver for ``roots``, kept across the shards it counts,
-    which name largely the same cards."""
-    return _ScriptTexts(roots)
+def _sidecars(roots: tuple[tuple[str, str], ...]) -> SidecarCache:
+    """The process's sidecar cache for ``roots``, kept across the shards it
+    counts, which name largely the same cards."""
+    from effects.infrastructure.sidecar_io import SidecarCache
+
+    return SidecarCache({tree: Path(root) for tree, root in roots})
 
 
 class TextCoverageCounter(_ShardCounter):
@@ -717,6 +778,47 @@ def held_out_round_caps(caps: CollectionCaps) -> CollectionCaps:
     because these are the only games that will ever see them.
     """
     return replace(caps, playability_rate=1.0)
+
+
+@dataclass
+class TextRounds:
+    """The held-out round's rounds: each held-out text a unit, awaited only
+    when some castable card carries it."""
+
+    coverage: dict[str, TextCoverage]
+    #: ``held-out text -> the deckable listed cards carrying it``.
+    carriers: Mapping[str, frozenset[str]]
+    verdicts: Mapping[str, ConsultVerdict]
+    counter: TextCoverageCounter
+    records_dir: Path
+    target: int
+    candidates: dict[str, DeckCandidate]
+    no_decks: str = "No unfinished held-out text has a card with converted text."
+    awaited: dict[str, TextCoverage] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.awaited = awaited_texts(self.coverage)
+
+    @property
+    def units(self) -> dict[str, TextCoverage]:
+        return self.coverage
+
+    def weights(self) -> dict[str, float]:
+        return rank_by_consult(
+            text_deck_weights(self.coverage, self.carriers, self.target),
+            self.verdicts,
+        )
+
+    def units_decked(self, cards: set[str]) -> set[str]:
+        return {
+            text for text, carrying in self.carriers.items() if carrying & cards
+        }
+
+    def count_new_shards(self) -> int:
+        return self.counter.update(self.coverage, self.records_dir)
+
+    def report(self) -> str:
+        return text_residues(self.coverage, self.target).render(self.target)
 
 
 def run_text_coverage(config: CollectCoverageConfig) -> int:
@@ -781,28 +883,12 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         sum(1 for unit in coverage.values() if not unit.castable),
     )
 
-    rounds = CoverageRounds(
-        units=coverage,
-        awaited=awaited_texts(coverage),
-        target=floor,
+    rounds = TextRounds(
+        coverage=coverage, carriers=carriers, verdicts=verdicts,
+        counter=counter, records_dir=records_dir, target=floor,
         candidates={
             name: DeckCandidate.from_converted_text(name, text)
             for name, text in texts.items() if name in present
         },
-        weights=lambda: rank_by_consult(
-            text_deck_weights(coverage, carriers, floor), verdicts,
-        ),
-        units_decked=lambda cards: {
-            text for text, carrying in carriers.items() if carrying & cards
-        },
-        count_new_shards=lambda: counter.update(coverage, records_dir),
-        no_decks="No unfinished held-out text has a card with converted text.",
     )
-    with collector_supervisor(
-        workers=config.workers, effect_records=config.effect_records,
-        caps=held_out_round_caps(config.caps),
-    ) as supervisor:
-        interrupted = play_rounds(rounds, supervisor, config)
-
-    logger.info("%s", text_residues(coverage, floor).render(floor))
-    return 130 if interrupted else 0
+    return _play_to_completion(rounds, config, held_out_round_caps(config.caps))

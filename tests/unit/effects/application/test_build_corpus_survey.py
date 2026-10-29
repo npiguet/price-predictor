@@ -12,7 +12,6 @@ write pass will route to training alone.
 
 from __future__ import annotations
 
-import zlib
 from collections import Counter
 
 import pytest
@@ -21,7 +20,6 @@ from effects.application.corpus_survey import (
     ReadConfig,
     ShardSurvey,
     SurveyConfig,
-    game_hash,
     init_survey_worker,
     merge_surveys,
     run_survey,
@@ -150,17 +148,6 @@ def _survey_one(tmp_path, records, **config):
     write_shard(tmp_path / "records" / "run.0-a.jsonl.gz", records)
     init_survey_worker(a_config(tmp_path / "records", **config))
     return survey_shard("run.0-a.jsonl.gz")
-
-
-def test_game_hash_is_stable_across_calls():
-    """Pinned to the algorithm, not merely to idempotency (FR-088a).
-
-    ``game_hash("x") == game_hash("x")`` is also true of the built-in
-    ``hash()``, whose salt is per-process rather than per-call, so that
-    assertion alone cannot fail for the defect the function warns against.
-    """
-    assert game_hash("run.0-a.3") == zlib.crc32(b"run.0-a.3")
-    assert game_hash("run.0-a.3") == game_hash("run.0-a.3")
 
 
 def test_survey_counts_records_classes_and_games(tmp_path):

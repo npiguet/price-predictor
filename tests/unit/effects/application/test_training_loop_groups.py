@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 
-from effects.application.training_loop import parameter_groups
+from effects.application.run_context import parameter_groups
 
 
 def test_groups_are_named_and_cover_every_parameter():

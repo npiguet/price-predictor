@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from functools import partial
-from typing import Protocol
 
 import numpy as np
 import torch
@@ -19,9 +18,10 @@ import torch
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
 from effects.domain.ability_encoder import surface_of
-from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, HeadField
+from effects.domain.effect_losses import magnitude_target
 from effects.domain.effect_targets import derive_targets
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
@@ -43,6 +43,7 @@ from effects.domain.head_decoding import (
     expected_magnitude,
     field_outputs,
 )
+from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.surface_collation import entity_target_tensors, gather_entities
 from effects.infrastructure.corpus_store import (
@@ -54,8 +55,6 @@ from effects.infrastructure.model_runner import BATCH_RECORDS, Runnable
 
 logger = logging.getLogger(__name__)
 
-ZONE_OUTCOME = "zone_outcome"
-
 
 @dataclass(frozen=True, slots=True)
 class GateOneMetrics:
@@ -66,35 +65,20 @@ class GateOneMetrics:
     mean_poisson_deviance: float
 
 
-class TextsOf(Protocol):
-    """Anything that names a key's text on the checkpoint's surface: a
-    ``SurfaceBatcher`` or the ``KeyResolver`` it reads through."""
-
-    def text_of(self, key) -> str | None: ...
+#: A key's text on the checkpoint's surface: ``SurfaceBatcher.text_of`` or
+#: the ``KeyResolver.text_of`` it reads through.
+TextOf = Callable[[ProvenanceKey], str | None]
 
 
-def acting_text(record, texts: TextsOf) -> str | None:
-    """The text of the line that acted, or None where nothing did."""
-    return _text_of_keys(acting_keys(record), texts)
-
-
-def _text_of_keys(keys, texts: TextsOf) -> str | None:
-    for key in keys:
-        text = texts.text_of(key)
-        if text is not None:
-            return text
-    return None
-
-
-def training_texts(acting, texts: TextsOf) -> set[str]:
+def training_texts(acting, text_of: TextOf) -> set[str]:
     """Every acting-line text among ``acting``, the training records' distinct
     ``acting_keys`` tuples (the records themselves would not fit in memory)."""
-    found = {_text_of_keys(keys, texts) for keys in acting}
+    found = {first_text(keys, text_of) for keys in acting}
     found.discard(None)
     return found
 
 
-def unique_text_records(records, texts: TextsOf, *, seen) -> list:
+def unique_text_records(records, text_of: TextOf, *, seen) -> list:
     """The unique-text stratum: resolution records whose text is not in ``seen``.
 
     ``records`` is read once, so it may be a stream.
@@ -103,13 +87,13 @@ def unique_text_records(records, texts: TextsOf, *, seen) -> list:
     for record in records:
         if record.kind is not RecordKind.RESOLUTION:
             continue
-        text = acting_text(record, texts)
+        text = first_text(acting_keys(record), text_of)
         if text is not None and text not in seen:
             stratum.append(record)
     return stratum
 
 
-def unique_text_stratum(corpus_path, card_disjoint_games, texts: TextsOf) -> list:
+def unique_text_stratum(corpus_path, card_disjoint_games, text_of: TextOf) -> list:
     """Gate 1's population, read from the curated corpus the checkpoint trained on.
 
     Not from the raw shards: a raw game outside the recorded validation sets
@@ -117,42 +101,44 @@ def unique_text_stratum(corpus_path, card_disjoint_games, texts: TextsOf) -> lis
     collection continues after a build).
     """
     seen = training_texts(
-        training_acting_keys(CorpusStore(corpus_path).training_dir), texts,
+        training_acting_keys(CorpusStore(corpus_path).training_dir), text_of,
     )
     logger.info("gate 1: %d acting texts in the training stratum", len(seen))
     return unique_text_records(
         card_disjoint_resolutions(corpus_path, frozenset(card_disjoint_games)),
-        texts, seen=seen,
+        text_of, seen=seen,
     )
 
 
-def forward_chunks(records, runnable: Runnable) -> Iterator[tuple[list, tuple]]:
-    """``(chunk, (gathered, gate, field_targets, mask))`` per chunk of ``records``,
-    shared by the margins and :mod:`effects.application.record_scoring`."""
+def forward_chunks(
+    records, runnable: Runnable,
+) -> Iterator[tuple[list, torch.Tensor, EntityTargetBatch]]:
+    """``(chunk, gathered, targets)`` per chunk of ``records``, shared by the
+    margins and :mod:`effects.application.record_scoring`."""
     for chunk in runnable.inference_chunks(records, BATCH_RECORDS):
-        yield chunk, _forward(chunk, runnable)
+        yield chunk, *_forward(chunk, runnable)
 
 
 def measure(records, runnable: Runnable) -> GateOneMetrics:
     """Run the model over ``records`` and score the three margins."""
     margins = MarginAccumulator(runnable.fields)
-    for _chunk, forward in forward_chunks(records, runnable):
-        margins.add(*forward)
+    for _chunk, gathered, targets in forward_chunks(records, runnable):
+        margins.add(gathered, targets)
     return margins.metrics()
 
 
-def _forward(chunk, runnable: Runnable):
-    """``(gathered, gate, field_targets, mask)`` for one chunk, on the host,
-    ``gathered`` aligned column for column with the targets."""
+def _forward(chunk, runnable: Runnable) -> tuple[torch.Tensor, EntityTargetBatch]:
+    """``(gathered, targets)`` for one chunk, on the host, ``gathered``
+    aligned column for column with the targets."""
     model = runnable.model
     batch, surfaces, _encoded = runnable.batcher.build(chunk, runnable.encoder)
     outputs = model.per_entity(model(**batch))
     targets = [derive_targets(record) for record in chunk]
-    gate, field_targets, mask, index = entity_target_tensors(
-        surfaces, targets, runnable.fields,
-    )
-    gathered = gather_entities(outputs, index.to(outputs.device)).float().cpu()
-    return gathered, gate, field_targets, mask
+    batch_targets = entity_target_tensors(surfaces, targets, runnable.fields)
+    gathered = gather_entities(
+        outputs, batch_targets.index.to(outputs.device),
+    ).float().cpu()
+    return gathered, batch_targets
 
 
 class MarginAccumulator:
@@ -173,25 +159,24 @@ class MarginAccumulator:
         self._count_pred: list[np.ndarray] = []
         self._count_true: list[np.ndarray] = []
 
-    def add(
-        self, gathered: torch.Tensor, gate: torch.Tensor,
-        field_targets: EntityFieldTargets, mask: torch.Tensor,
-    ) -> None:
+    def add(self, gathered: torch.Tensor, targets: EntityTargetBatch) -> None:
         """Fold one chunk in: the gate over every real entity, zone and
         magnitude only where they train (target affected, field present)."""
-        real = mask.bool()
+        gate, field_targets = targets.gate, targets.fields
+        real = targets.mask.bool()
         self._gate_pred.append(
             (gathered[..., GATE_INDEX][real] > 0).numpy().astype(np.int8)
         )
         self._gate_true.append(gate[real].numpy().astype(np.int8))
 
         affected = real & gate.bool()
-        if ZONE_OUTCOME in field_targets:
-            scored = affected & field_targets.present[ZONE_OUTCOME]
-            logits = field_outputs(gathered, FIELDS_BY_NAME[ZONE_OUTCOME])[scored]
+        zone = HeadField.ZONE_OUTCOME
+        if zone in field_targets:
+            scored = affected & field_targets.present[zone]
+            logits = field_outputs(gathered, FIELDS_BY_NAME[zone])[scored]
             if logits.numel():
                 self._zone_pred.append(logits.argmax(-1).numpy())
-                self._zone_true.append(field_targets.values[ZONE_OUTCOME][scored].numpy())
+                self._zone_true.append(field_targets.values[zone][scored].numpy())
         for spec in self._magnitude_specs:
             target = field_targets.values.get(spec.name)
             if target is None:
@@ -201,7 +186,7 @@ class MarginAccumulator:
             if not slice_.numel():
                 continue
             self._count_pred.append(expected_magnitude(spec, slice_).numpy())
-            self._count_true.append(np.abs(target[scored].numpy()))
+            self._count_true.append(magnitude_target(spec, target[scored]).numpy())
 
     def metrics(self) -> GateOneMetrics:
         """The three margins over everything added; NaN where nothing was."""
@@ -222,7 +207,7 @@ def _cat(chunks: list[np.ndarray]) -> np.ndarray:
 
 def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
     """Score both models on the split's unique-text stratum and compare."""
-    games =context.main.provenance.card_disjoint_games
+    games = context.main.provenance.card_disjoint_games
     if not games:
         return CheckResult(
             CheckName.GATE_1, CheckStatus.SKIPPED,
@@ -232,7 +217,7 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
     # Both checkpoints read one vocabulary (require_same_split), so one
     # surface's texts decide the stratum for both: the batcher's own join.
     texts = KeyResolver(context.sidecars, surface_of(context.vocab_path))
-    stratum = unique_text_stratum(context.corpus_path, games, texts)
+    stratum = unique_text_stratum(context.corpus_path, games, texts.text_of)
     if not stratum:
         return CheckResult(
             CheckName.GATE_1, CheckStatus.SKIPPED,

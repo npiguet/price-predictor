@@ -1,8 +1,8 @@
 """bf16 autocast and the CUDA reservation cap (FR-095).
 
 The GPU work itself is untestable without a real card, so what is pinned here
-is the *wiring*: which flag `_device_loss` reads to decide whether to enter
-`torch.autocast`, and which of the three CUDA calls `execute` makes and when.
+is the *wiring*: when the device half's autocast flag is set, and which of the
+three CUDA calls `execute` makes and when.
 Every torch.cuda.* function used below is a spy or a stub — nothing here
 touches a real device, matching the rest of this package's CPU-only unit
 suite.
@@ -10,39 +10,21 @@ suite.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import torch
 
 from effects.application import training_loop as loop_module
+from effects.application.step_loss import autocast_enabled
 from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
-from effects.application.training_loop import StepLoss, TrainingLoop, autocast_enabled
-from effects.domain.effect_losses import LossParts
-from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.builders import (
-    make_cpu_training_loop,
+    StubLosses,
     make_training_loop,
     stub_below_the_loop,
+    stub_validator,
     write_validation_samples,
 )
-
-
-class _AutocastSpy:
-    """Stands in for `torch.autocast`: records its kwargs, does nothing else."""
-
-    calls: list[dict] = []
-
-    def __init__(self, **kwargs) -> None:
-        self.calls.append(kwargs)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
 
 
 class TestAutocastEnabled:
@@ -75,62 +57,6 @@ class TestAutocastEnabled:
         assert autocast_enabled(torch.device("cuda")) is False
 
 
-def _run_device_loss(monkeypatch, loop, *, autocast: bool):
-    """Call the real `_device_loss` with every internal step stubbed out.
-
-    What is under test is only whether the call is wrapped in
-    `torch.autocast(dtype=torch.bfloat16, enabled=...)` — not the batching,
-    targets or loss math, which their own suites already cover. Forcing
-    `loop.autocast` directly (rather than faking a CUDA device) is the
-    fallback the task called for: a device fake would have to fake every
-    other CUDA-touching call `execute` and `SurfaceBatcher` make along the
-    way, none of which this test is about.
-    """
-    loop.autocast = autocast
-    _AutocastSpy.calls = []
-    monkeypatch.setattr(loop_module.torch, "autocast", _AutocastSpy)
-    monkeypatch.setattr(
-        loop_module, "per_entity_loss",
-        lambda *a, **k: (torch.tensor(0.0), LossParts()),
-    )
-    monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: {})
-
-    class _Materializer:
-        def materialize(self, prepared, encoder):
-            return {}, [], None
-
-    # The host half, as training hands it over: it holds no device work, so
-    # whether autocast encloses it is not the question.
-    prepared = loop_module.DeviceStep(
-        batch=None, fields=("dummy",),
-        gate=torch.zeros((1, 1)), field_targets=EntityFieldTargets({}, {}),
-        mask=torch.zeros((1, 1)),
-        index=torch.zeros((1, 1), dtype=torch.long),
-        heads=loop_module.HeadTargets(),
-    )
-
-    class _Model:
-        def __call__(self, **batch):
-            return "hidden"
-
-        def per_entity(self, hidden):
-            return torch.zeros((1, 1, 3))
-
-    run = SimpleNamespace(encoder=None, model=_Model())
-    assert loop._device_loss(prepared, run, _Materializer()) is not None
-    return _AutocastSpy.calls
-
-
-class TestDeviceLossAutocast:
-    def test_disabled_on_a_cpu_loop(self, monkeypatch):
-        calls = _run_device_loss(monkeypatch, make_cpu_training_loop(monkeypatch), autocast=False)
-        assert calls == [{"device_type": "cuda", "dtype": torch.bfloat16, "enabled": False}]
-
-    def test_enabled_when_the_loop_says_so(self, monkeypatch):
-        calls = _run_device_loss(monkeypatch, make_cpu_training_loop(monkeypatch), autocast=True)
-        assert calls == [{"device_type": "cuda", "dtype": torch.bfloat16, "enabled": True}]
-
-
 def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):
     """Run one real epoch/shard with everything below the loop stubbed.
 
@@ -150,19 +76,10 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):
     samples = write_validation_samples(tmp_path, combat[:2])
 
     model, _encoder = stub_below_the_loop(monkeypatch)
-    monkeypatch.setattr(
-        TrainingLoop, "_device_loss",
-        lambda self, prepared, *a, **k: StepLoss(
-            total=model.p.sum(), shipped=model.p.sum(), parts=LossParts(), terms={},
-        ),
-    )
     # The step's host half would pin its tensors on this fake device; the plan
     # stands in for what it would have prepared.
     monkeypatch.setattr(
         StepPreparer, "prepare_training_step", lambda self, plan, *a, **k: (plan, 0),
-    )
-    monkeypatch.setattr(
-        TrainingLoop, "_validate", lambda self, records, *a, **k: 1.0,
     )
 
     memory_fraction_calls: list[float] = []
@@ -197,8 +114,10 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):
         # real ones.
         prefetch_workers=0,
     )
-    code = make_training_loop(config, training_shards=[shard], validation_samples=samples).execute()
-    assert code == 0
+    loop = make_training_loop(config, training_shards=[shard], validation_samples=samples)
+    loop.losses = StubLosses(lambda prepared: model.p.sum())
+    stub_validator(loop)
+    assert loop.execute() == 0
     return memory_fraction_calls, empty_cache_calls
 
 

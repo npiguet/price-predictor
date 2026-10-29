@@ -22,10 +22,7 @@ from effects.application.surface_batching import (
     SurfaceBatcher,
 )
 from effects.application.text_staging import MaskedTokens, TextStager, pinned
-from effects.application.train_effect_model import (
-    TrainEffectModelConfig,
-    rarity_coverage,
-)
+from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.domain.ability_encoder import TruncationLog, surface_of
 from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
 from effects.domain.aux_heads import TRAINING_HEADS, Head
@@ -39,14 +36,14 @@ from effects.domain.effect_targets import (
     supervises_created_objects,
     verdict_targets,
 )
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
-from effects.domain.rarity import rarity_bucket
+from effects.domain.provenance import SidecarLine
+from effects.domain.rarity import TextGames
 from effects.domain.records import EffectRecord
 from effects.domain.rule_families import rule_family
 from effects.domain.sampling import (
     batches_without_replacement,
-    effective_games,
     sample_weights,
     sampling_class,
 )
@@ -99,19 +96,17 @@ class DeviceStep:
 
     batch: PreparedBatch
     fields: tuple[FieldSpec, ...]
-    #: ``entity_target_tensors``' four outputs.
-    gate: torch.Tensor
-    field_targets: EntityFieldTargets
-    mask: torch.Tensor
-    index: torch.Tensor
+    targets: EntityTargetBatch
     heads: HeadTargets
 
     def pin(self) -> None:
         self.batch.pin()
-        self.field_targets = replace(
-            self.field_targets, values=pinned(dict(self.field_targets.values)),
+        targets = self.targets
+        self.targets = replace(
+            targets,
+            fields=replace(targets.fields, values=pinned(dict(targets.fields.values))),
+            index=targets.index.pin_memory(),
         )
-        self.index = self.index.pin_memory()
         self.heads.pin()
 
 
@@ -160,18 +155,19 @@ class ShardClosed:
     truncated: tuple[tuple[str, tuple], ...] = ()
 
 
+def _script_of(line: SidecarLine | None) -> str | None:
+    return line.script_text if line is not None else None
+
+
 def value_batch(
-    texts: Sequence[str], lines: Mapping[str, object],
+    texts: Sequence[str], lines: Mapping[str, SidecarLine],
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """``(values, mask)`` of the value head's targets, one row per text (FR-058).
 
     Read from the sidecar line's script whatever the surface, since prose
     holds no ``$`` parameter; a text with no line reads itself.
     """
-    rows = [
-        value_targets(getattr(lines.get(text), "script_text", None) or text)
-        for text in texts
-    ]
+    rows = [value_targets(_script_of(lines.get(text)) or text) for text in texts]
     return (
         torch.tensor([row.values for row in rows]),
         torch.tensor([row.mask for row in rows]),
@@ -315,13 +311,10 @@ class StepPreparer:
     ) -> DeviceStep:
         """The surfaces, the per-entity targets and ``heads``' targets."""
         batch = batcher.prepare(records)
-        gate, field_targets, mask, index = entity_target_tensors(
-            batch.surfaces, targets, fields,
-        )
         return DeviceStep(
             batch=replace(batch, texts={}, prepared=[], surfaces=[]),
-            fields=fields, gate=gate, field_targets=field_targets, mask=mask,
-            index=index,
+            fields=fields,
+            targets=entity_target_tensors(batch.surfaces, targets, fields),
             heads=self._head_targets(records, batcher, batch, heads=heads),
         )
 
@@ -393,7 +386,7 @@ class StepPreparer:
         return targets
 
     def _api_batch(
-        self, texts: Sequence[str], lines: Mapping[str, object],
+        self, texts: Sequence[str], lines: Mapping[str, SidecarLine],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """The script-API head's ``(types, keys)`` for the batch's texts, in
         row order: the API type (``-1`` when none or unknown) and the
@@ -404,9 +397,9 @@ class StepPreparer:
             cached = self._api_targets.get(text)
             if cached is None:
                 line = lines.get(text)
-                api = getattr(line, "script_api_type", None)
-                found = set(getattr(line, "script_param_keys", ()) or ())
-                for segment in segments(getattr(line, "script_text", None) or ""):
+                api = line.script_api_type if line is not None else None
+                found = set(line.script_param_keys if line is not None else ())
+                for segment in segments(_script_of(line) or ""):
                     found.update(params(segment))
                 cached = (
                     self._api_type_index.get(api, -1),
@@ -426,30 +419,29 @@ class StepPreparer:
             record.record_id: self.resolver.acting_text(record) for record in records
         }
 
+    def _games(self, records: list, texts: Mapping[str, str | None]) -> TextGames:
+        """Each text's games for a shard's records: the manifest's corpus-wide
+        table (FR-086), else the shard's own count."""
+        return TextGames.of(records, lambda record: texts[record.record_id], self.rarity)
+
     def _weighted(
-        self, records: list, texts: Mapping[str, str | None],
+        self, records: list, texts: Mapping[str, str | None], games: TextGames,
     ) -> list[float]:
-        """Rarity weights for a shard's records, from the manifest's table (FR-086)."""
+        """Rarity weights for a shard's records."""
         return sample_weights(
             records, lambda record: texts[record.record_id],
-            rarity=self.rarity, class_of=sampling_class,
+            games=games, class_of=sampling_class,
         )
 
     def _shard_labels(
-        self, records: list, texts: Mapping[str, str | None],
+        self, records: list, texts: Mapping[str, str | None], games: TextGames,
     ) -> dict[str, tuple[str, str]]:
         """``record_id -> (rarity bucket, rule family)`` for one shard's
-        records; the bucket falls back to the shard's own game count as the
-        weights do."""
-        own_games = effective_games(records, lambda r: texts[r.record_id])
+        records, bucketed by the games the weights read."""
         labels: dict[str, tuple[str, str]] = {}
         for record in records:
             text = texts[record.record_id]
-            if text is None:
-                bucket = NO_TEXT_BUCKET
-            else:
-                games = (self.rarity or {}).get(text, own_games.get(text, 1))
-                bucket = rarity_bucket(games)
+            bucket = NO_TEXT_BUCKET if text is None else games.bucket(text)
             labels[record.record_id] = (
                 bucket, rule_family(
                     record, self.sidecars, resolver=self._keywords,
@@ -466,17 +458,15 @@ class StepPreparer:
         excluded = self.split.validation_games
         training = [r for r in records if r.game_id not in excluded]
         texts = self._texts(training)
+        games = self._games(training, texts)
         yield ShardOpened(
             trainable=len(training), held_back=len(records) - len(training),
-            rarity_coverage=(
-                rarity_coverage(texts.values(), self.rarity)
-                if self.rarity is not None else None
-            ),
+            rarity_coverage=games.coverage(),
         )
         if not training:
             return
-        weights = self._weighted(training, texts)
-        labels = self._shard_labels(training, texts)
+        weights = self._weighted(training, texts, games)
+        labels = self._shard_labels(training, texts, games)
         del texts
         batches = batches_without_replacement(
             training, weights, batch_size=self.config.batch_size,

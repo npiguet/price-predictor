@@ -15,11 +15,14 @@ their signal is in playability records.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from effects.domain.effect_head_layout import HeadField, ZoneOutcome
 from effects.domain.keyword_names import normalize_keyword
+from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import RecordKind
 from effects.domain.script_text import is_bare_keyword
 from effects.domain.state_snapshot import EntityState, StateSnapshot
@@ -92,6 +95,14 @@ def combat_participant(
     )
 
 
+#: Forge renders a card defender (a planeswalker or a battle) as ``Name (id)``,
+#: and a player defender by the player's name, which carries no such suffix.
+_CARD_DEFENDER = re.compile(r" \(\d+\)$")
+
+#: Forge's rendering of an attack whose defender is gone.
+_NO_DEFENDER = "<Nothing>"
+
+
 def _defending_player(
     state: StateSnapshot, carrier: EntityState,
 ) -> str | None:
@@ -103,10 +114,7 @@ def _defending_player(
     has no defending player, since no player's life or poison can move.
     """
     attacking = carrier.combat.attacking if carrier.combat else None
-    for player in state.players:
-        if player.id == attacking:
-            return player.id
-    if any(entity.name == attacking for entity in state.entities):
+    if attacking in (None, _NO_DEFENDER) or _CARD_DEFENDER.search(attacking):
         return None
     others = [p.id for p in state.players if p.id != carrier.controller]
     return others[0] if len(others) == 1 else None
@@ -351,17 +359,17 @@ def _first_strike_step_effects(keyword: str) -> tuple[KeywordEffect, ...]:
     """
     return (
         KeywordEffect(
-            "damage_taken", Subject.OPPONENT, direction=1,
+            HeadField.DAMAGE_TAKEN, Subject.OPPONENT, direction=1,
             applies=_strikes_first_and(
                 keyword, lambda participant, _: _lone_opponent(participant) is not None,
             ),
         ),
         KeywordEffect(
-            "zone_outcome", Subject.OPPONENT, direction=1, category="died",
+            HeadField.ZONE_OUTCOME, Subject.OPPONENT, direction=1, category=ZoneOutcome.DIED,
             applies=_strikes_first_and(keyword, _kills_outright),
         ),
         KeywordEffect(
-            "life_delta", Subject.DEFENDING_PLAYER, direction=-1,
+            HeadField.LIFE_DELTA, Subject.DEFENDING_PLAYER, direction=-1,
             applies=_strikes_first_and(
                 keyword, lambda participant, _: _is_unblocked_attacker(participant),
             ),
@@ -395,7 +403,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         ),
         effects=(
             KeywordEffect(
-                "zone_outcome", Subject.OPPONENT, direction=1, category="died",
+                HeadField.ZONE_OUTCOME, Subject.OPPONENT, direction=1, category=ZoneOutcome.DIED,
                 applies=_an_opponent_survives_a_normal_hit,
             ),
         ),
@@ -405,7 +413,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         qualifies_when="the carrier deals combat damage to a creature or player",
         effects=(
             KeywordEffect(
-                "life_delta", Subject.CONTROLLER, direction=1,
+                HeadField.LIFE_DELTA, Subject.CONTROLLER, direction=1,
                 applies=_damages_anything,
             ),
         ),
@@ -418,7 +426,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         ),
         effects=(
             KeywordEffect(
-                "life_delta", Subject.DEFENDING_PLAYER, direction=-1,
+                HeadField.LIFE_DELTA, Subject.DEFENDING_PLAYER, direction=-1,
                 applies=_runs_over_its_blockers,
             ),
         ),
@@ -432,7 +440,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         ),
         effects=(
             KeywordEffect(
-                "zone_outcome", Subject.CARRIER, direction=-1, category="died",
+                HeadField.ZONE_OUTCOME, Subject.CARRIER, direction=-1, category=ZoneOutcome.DIED,
                 applies=_would_be_destroyed,
             ),
         ),
@@ -446,7 +454,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
                 applies=_damages_a_creature,
             ),
             KeywordEffect(
-                "damage_taken", Subject.OPPONENT, direction=-1,
+                HeadField.DAMAGE_TAKEN, Subject.OPPONENT, direction=-1,
                 applies=_damages_a_creature,
             ),
         ),
@@ -460,16 +468,16 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
                 applies=_damages_a_creature,
             ),
             KeywordEffect(
-                "damage_taken", Subject.OPPONENT, direction=-1,
+                HeadField.DAMAGE_TAKEN, Subject.OPPONENT, direction=-1,
                 applies=_damages_a_creature,
             ),
             KeywordEffect(
-                "poison_delta", Subject.DEFENDING_PLAYER, direction=1,
+                HeadField.POISON_DELTA, Subject.DEFENDING_PLAYER, direction=1,
                 applies=_damages_the_defending_player,
             ),
             # Poison instead of life loss: life moves up with infect.
             KeywordEffect(
-                "life_delta", Subject.DEFENDING_PLAYER, direction=1,
+                HeadField.LIFE_DELTA, Subject.DEFENDING_PLAYER, direction=1,
                 applies=_damages_the_defending_player,
             ),
         ),
@@ -505,10 +513,10 @@ def subject_id(
     raise ValueError(f"unhandled subject {effect.subject}")
 
 
-def keyword_of_line(line) -> str | None:
+def keyword_of_line(line: SidecarLine | None) -> str | None:
     """The keyword a sidecar line *is* (a bare ``First Strike``), in the
     gate's spelling, or None."""
-    script = getattr(line, "script_text", None)
+    script = line.script_text if line is not None else None
     if not is_bare_keyword(script):
         return None
     return normalize_keyword(script)
@@ -528,11 +536,11 @@ class KeywordResolver:
     overlay alone misses the common case.
     """
 
-    def __init__(self, sidecars=None) -> None:
+    def __init__(self, sidecars: SidecarLookup | None = None) -> None:
         self._sidecars = sidecars
-        self._by_key: dict[object, str | None] = {}
+        self._by_key: dict[ProvenanceKey, str | None] = {}
 
-    def _keyword_for(self, key) -> str | None:
+    def _keyword_for(self, key: ProvenanceKey) -> str | None:
         if key not in self._by_key:
             line = self._sidecars.line_or_none(key)
             self._by_key[key] = keyword_of_line(line) if line is not None else None

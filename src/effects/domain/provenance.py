@@ -7,8 +7,10 @@ rendered lines and aligns the ability cache. Pure dataclasses; the JSON is
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Protocol
 
 
 class SourceTree(StrEnum):
@@ -30,12 +32,6 @@ def split_script_file(script_file: str) -> tuple[str, str]:
     tree, _, relative = script_file.partition("/")
     return tree, relative
 
-
-#: The fields every key's dict form carries (``option`` is written only when
-#: set); what tells a key dict from any other mapping in a record's raw JSON.
-KEY_DICT_FIELDS: frozenset[str] = frozenset({
-    "script_file", "face", "trait_kind", "index_within_kind",
-})
 
 class KeyResolution(StrEnum):
     """What a provenance key resolves to at the join.
@@ -74,6 +70,15 @@ class ProvenanceKey:
     def tree(self) -> str:
         """The source tree this key's script file belongs to."""
         return split_script_file(self.script_file)[0]
+
+    @property
+    def label(self) -> str:
+        """The key as a report names it."""
+        suffix = f" option {self.option}" if self.option is not None else ""
+        return (
+            f"{self.script_file} face {self.face} {self.trait_kind}"
+            f"[{self.index_within_kind}]{suffix}"
+        )
 
     @property
     def root(self) -> ProvenanceKey:
@@ -127,13 +132,26 @@ class SubAbilityLink:
     label: str
 
 
+class Role(StrEnum):
+    """What a span of converted prose does, as ``convert`` tags it.
+
+    Declaration order is the encoder's role-embedding row order, after row 0
+    for no role, so a role is appended and never reordered.
+    """
+
+    COST = "cost"
+    EFFECT = "effect"
+    TRIGGER_CONDITION = "trigger-condition"
+    TARGET_SPEC = "target-spec"
+
+
 @dataclass(frozen=True, slots=True)
 class RoleSpan:
     """A character range over the converted prose, tagged with its role."""
 
     start: int
     end: int
-    role: str
+    role: Role
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,24 +241,24 @@ class ProvenanceSidecar:
 
     def row_for(self, key: ProvenanceKey) -> int | None:
         """The ability-cache row a key resolves to, or None where it was dropped."""
-        row = self._row_by_key.get(key)
-        if row is not None:
-            return row
-        if key in self._dropped or self.is_runtime_only(key):
-            return None
-        raise KeyError(self._mismatch_message(key))
+        return self._resolve(key)[1]
 
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
         """Which of the join's answers this key gets; raises on a mismatch.
 
         Unlike ``row_for``, tells a dropped key from a runtime-only one.
         """
-        if key in self._row_by_key:
-            return KeyResolution.LINE
+        return self._resolve(key)[0]
+
+    def _resolve(self, key: ProvenanceKey) -> tuple[KeyResolution, int | None]:
+        """The join's answer for a key and its row, the one place it is decided."""
+        row = self._row_by_key.get(key)
+        if row is not None:
+            return KeyResolution.LINE, row
         if key in self._dropped:
-            return KeyResolution.DROPPED
+            return KeyResolution.DROPPED, None
         if self.is_runtime_only(key):
-            return KeyResolution.RUNTIME_ONLY
+            return KeyResolution.RUNTIME_ONLY, None
         raise KeyError(self._mismatch_message(key))
 
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
@@ -275,3 +293,57 @@ class ProvenanceSidecar:
             "the card this record was collected against (reconversion between "
             "collection and training?)"
         )
+
+
+class SidecarLookup(Protocol):
+    """The sidecar join as its readers use it, by provenance key.
+
+    ``infrastructure.sidecar_io.SidecarCache`` implements it over the converted
+    trees; a test double need implement only what its caller reads.
+    """
+
+    def get(self, script_file: str) -> ProvenanceSidecar:
+        """The sidecar of one script file; ``KeyError`` where none was written."""
+        ...
+
+    def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
+        """The line a key names, None where there is none; ``KeyError`` on a key
+        the sidecar does not describe."""
+        ...
+
+    def line_or_none(self, key: ProvenanceKey) -> SidecarLine | None:
+        """:meth:`line_for`, with every join failure read as no line."""
+        ...
+
+    def first_line(self, keys: Iterable[ProvenanceKey]) -> SidecarLine | None:
+        """The first line any of ``keys`` names, under :meth:`line_or_none`."""
+        ...
+
+    def prose_for(self, key: ProvenanceKey) -> str | None:
+        """The converted prose of the line a key names."""
+        ...
+
+    def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
+        """The join's answer for a key."""
+        ...
+
+    def script_text(self, key: ProvenanceKey) -> str | None:
+        """The normalized script text of the line a key names, None where
+        :meth:`line_or_none` gives no line or the line has no script."""
+        ...
+
+
+def first_text(
+    keys: Iterable[ProvenanceKey], text_of: Callable[[ProvenanceKey], str | None],
+) -> str | None:
+    """The text of the first key ``text_of`` names one for, or None.
+
+    The acting line is the first acting key that resolves, so every reader of
+    "the text this record acts through" folds a key tuple this way, whatever
+    ``text_of`` resolves to.
+    """
+    for key in keys:
+        text = text_of(key)
+        if text is not None:
+            return text
+    return None

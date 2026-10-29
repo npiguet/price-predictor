@@ -149,7 +149,7 @@ class EffectCheckpoint:
     #: The sidecar roots the run resolved keys against (FR-063b); empty on a
     #: checkpoint that predates the field.
     cards_folders: tuple[str, ...] = ()
-    #: ``TrainingLoop._training_settings`` (FR-063); empty or partial on a
+    #: ``run_context.training_settings`` (FR-063); empty or partial on a
     #: checkpoint that predates the field or a key.
     training_settings: dict[str, Any] = field(default_factory=dict)
 
@@ -208,11 +208,20 @@ class EffectModelStore:
             "training_settings": dict(checkpoint.training_settings),
             **checkpoint.extra,
         }
-        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        path = self.directory / f"{stamp}.pt"
+        path = self._unused_path(datetime.now(UTC).strftime("%Y%m%d-%H%M%S"))
         save_checkpoint(path, payload, checkpoint.model_config)
         shutil.copyfile(path, self.latest_path())
         logger.info("Saved %s checkpoint to %s", checkpoint.variant, path)
+        return path
+
+    def _unused_path(self, stamp: str) -> Path:
+        """``{stamp}.pt``, or a numbered sibling when a save in the same second
+        took it: a second write would replace the first epoch's checkpoint."""
+        path = self.directory / f"{stamp}.pt"
+        copy = 1
+        while path.exists():
+            path = self.directory / f"{stamp}-{copy}.pt"
+            copy += 1
         return path
 
     def load(self, path: Path | None = None) -> EffectCheckpoint:
@@ -364,9 +373,11 @@ def load_resume_state(directory: Path) -> dict[str, Any]:
 
 
 def resume_mismatches(saved: dict[str, Any], current: dict[str, Any]) -> list[str]:
-    """Every setting whose value differs between a resume file and this run."""
+    """Every setting whose value differs between a resume file and this run,
+    over both sides' names: a setting recorded only when set can be missing
+    from either."""
     return [
-        f"{name}: resume file {saved.get(name)!r}, this run {current[name]!r}"
-        for name in sorted(current)
-        if saved.get(name) != current[name]
+        f"{name}: resume file {saved.get(name)!r}, this run {current.get(name)!r}"
+        for name in sorted(saved.keys() | current.keys())
+        if saved.get(name) != current.get(name)
     ]

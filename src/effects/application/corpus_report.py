@@ -11,13 +11,15 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING
 
-from effects.application.corpus_survey import Survey
+from effects.application.corpus_survey import RefusalTally, Survey
 from effects.application.corpus_write import WriteResult
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_plan import BuildCorpusError, Keys
+from effects.domain.coverage import HELD_OUT_GAME_FLOOR
 from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
+from effects.domain.sampling import SamplingClass
 from effects.domain.strata import OUTPUT_STRATA, Stratum
-from effects.domain.text_holdout import HoldoutUnit
 
 if TYPE_CHECKING:
     from effects.application.build_corpus import BuildCorpusConfig, Decisions
@@ -35,10 +37,6 @@ MAX_REFUSED_SHARE = 0.5
 MAX_UNJOINABLE_SHARE = 0.001
 MAX_UNJOINABLE_RECORDS = 20
 
-#: A held-out text recorded in fewer games than this is listed in the manifest
-#: (FR-053), the floor the held-out coverage round collects to (FR-036).
-HELD_OUT_GAME_FLOOR = 5
-
 #: A directory whose share of held-out games is above zero and below this
 #: holds a few held-out games where it should hold none: a leak in collection,
 #: not a full-strength source.
@@ -49,13 +47,16 @@ _LEAK_SHARE = 0.05
 _DELIVERY_TOLERANCE = 0.01
 
 
-def check_refusals(written: WriteResult) -> None:
+def check_refusals(refusals: RefusalTally, kept: Mapping[SamplingClass, int]) -> None:
     """Stop when the quality rules refused most of any one sampling class, or
     past both unjoinable-key limits over every record read: those are the join
-    failing, not a record being poor."""
-    refusals = written.refusals
+    failing, not a record being poor.
+
+    Read from the survey, which judges every record under the write pass's own
+    rule, so a refused build stops before it clears the previous dataset.
+    """
     unjoinable = refusals.by_reason.get(QualityDefect.UNJOINABLE_KEY, 0)
-    total_read = sum(written.training.read.values()) + sum(refusals.by_class.values())
+    total_read = sum(kept.values()) + sum(refusals.by_class.values())
     if (
         unjoinable > MAX_UNJOINABLE_RECORDS
         and unjoinable > MAX_UNJOINABLE_SHARE * total_read
@@ -76,7 +77,7 @@ def check_refusals(written: WriteResult) -> None:
         )
     for name in sorted(refusals.by_class):
         refused = refusals.by_class[name]
-        total = refused + written.training.read.get(name, 0)
+        total = refused + kept.get(name, 0)
         if not total or refused <= MAX_REFUSED_SHARE * total:
             continue
         raise BuildCorpusError(
@@ -114,8 +115,7 @@ def check_samples(counts: Mapping[str, int], *, size: int) -> None:
 
 
 def report_write_pass(survey: Survey, written: WriteResult) -> None:
-    """The write pass's refusals and attribution, checked and logged."""
-    check_refusals(written)
+    """The write pass's refusals and attribution, logged."""
     kept_records = sum(written.training.read.values())
     logger.info(
         "%-22s %9d record(s) kept (%.1f%%) name no producing clause for at "
@@ -197,7 +197,7 @@ def _unique_texts(keys: Iterable[Keys], key_text: Mapping[Keys, str]) -> int:
 
 
 def build_manifest(
-    config: BuildCorpusConfig, *, surface: str, held_out: HeldOutCards, survey: Survey,
+    config: BuildCorpusConfig, *, surface: Surface, held_out: HeldOutCards, survey: Survey,
     decisions: Decisions, written: WriteResult,
 ) -> CorpusManifest:
     """Everything the build decided and wrote, as the manifest records it."""
@@ -225,8 +225,8 @@ def build_manifest(
         surface=surface,
         vocab_path=config.vocab_path,
         variant_scripts=config.variant_scripts or "",
-        holdout_permille=config.holdout_permille,
-        holdout_max_carriers=config.holdout_max_carriers,
+        holdout_permille=config.holdout.permille,
+        holdout_max_carriers=config.holdout.max_carriers,
         text_cap=config.text_cap,
         card_disjoint_text_cap=config.card_disjoint_text_cap,
         training_records=config.training_records,
@@ -256,7 +256,7 @@ def build_manifest(
         validation_sample=config.validation_sample,
         max_events_per_record=config.max_events,
         unattributed_records=written.unattributed,
-        holdout_unit=HoldoutUnit(config.holdout_unit),
+        holdout_unit=config.holdout.unit,
         families=families,
         signatures=signatures,
         policy_counts=_nested(written.families.policy),

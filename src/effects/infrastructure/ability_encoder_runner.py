@@ -28,6 +28,7 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
     AbilityTokenizer,
+    Surface,
 )
 from effects.domain.provenance import SidecarLine
 from effects.infrastructure.torch_device import default_device
@@ -48,7 +49,7 @@ class AbilityEncoderRunner:
         state: dict,
         tokenizer: AbilityTokenizer,
         *,
-        surface: str,
+        surface: Surface,
         device: torch.device | None = None,
         withheld_keyword: str | None = None,
         truncations: TruncationLog | None = None,

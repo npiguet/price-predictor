@@ -18,6 +18,7 @@ from effects.domain.ability_tokenizer import (
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
     Token,
+    withheld_keyword_tokens,
 )
 from effects.domain.provenance import RoleSpan
 
@@ -163,6 +164,10 @@ class TestKeywordExpansion:
         tokens = tokenizer.tokenize("flying")
         expanded = tokenizer.expand_keywords(tokens, probability=1.0)
         assert [t.text for t in expanded][:3] == ["cant", "be", "blocked"]
+
+    def test_a_probability_the_draws_decide_needs_an_rng(self, tokenizer):
+        with pytest.raises(ValueError, match="needs an rng"):
+            tokenizer.expand_keywords(tokenizer.tokenize("flying"), probability=0.5)
 
     def test_a_forced_keyword_expands_at_probability_zero(self, tokenizer):
         """``--withhold-keyword``: the model reads the definition, never the token."""
@@ -800,6 +805,13 @@ class TestTokenizerRulesByCheckpoint:
         assert tokenizer_surface("script", settings) == "script"
         assert tokenizer_surface("prose", settings) == "prose"
 
+    def test_rules_this_code_does_not_know_are_refused(self):
+        from effects.domain.ability_tokenizer import tokenizer_surface
+        from effects.domain.recorded_version import UnknownRecordedVersion
+
+        with pytest.raises(UnknownRecordedVersion, match="gen-3"):
+            tokenizer_surface("script", {"tokenizer_rules": "gen-3"})
+
     def test_the_two_grammars_differ_on_a_gen1_line(self):
         vocab = _vocab(("validtgts", "creature", "youctrl", "defined"))
         legacy = [t.text for t in AbilityTokenizer(vocab, surface="prose").tokenize(
@@ -808,3 +820,11 @@ class TestTokenizerRulesByCheckpoint:
             self._GEN1_TEXT)]
         assert "youctrl" in legacy and "validtgts" in legacy
         assert "youctrl" not in script and "ctrl" in script
+
+
+class TestWithheldKeyword:
+    def test_no_withholding_hides_nothing(self):
+        assert withheld_keyword_tokens(None) == frozenset()
+
+    def test_the_token_form_matches_the_vocabularys(self):
+        assert withheld_keyword_tokens("First Strike") == {"first_strike"}

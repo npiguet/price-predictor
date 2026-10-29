@@ -13,19 +13,27 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass, replace
+from enum import StrEnum
+from typing import NamedTuple
 
 from effects.domain.keyword_formatting import (
     format_reminder,
     java_format,
     strip_specifiers,
 )
-from effects.domain.provenance import RoleSpan
+from effects.domain.provenance import Role, RoleSpan
+from effects.domain.recorded_version import recorded_version
 from effects.domain.script_text import CHAIN_KEYS, SEG
 from price_predictor.domain.tokenizer import MtgTokenizer
 
-#: Defined here rather than beside the encoder, which loads torch.
-SURFACE_PROSE = "prose"
-SURFACE_SCRIPT = "script"
+
+class Surface(StrEnum):
+    """Which text of an ability line is encoded: the converted prose or the
+    Forge script. Defined here rather than beside the encoder, which loads torch."""
+
+    PROSE = "prose"
+    SCRIPT = "script"
+
 
 #: Each is one token wherever it appears, never ``[``, a word and ``]``.
 SPECIAL_TOKENS: tuple[str, ...] = ("[PAD]", "[UNK]", "[MASK]", "[CLS]", SEG)
@@ -60,8 +68,8 @@ _TOKEN_SCRIPT_VALUE_RE = re.compile(r"(?<![A-Za-z])TokenScript\$[ \t]*([^\s|]+)"
 
 #: When two role spans cover a token, the more specific one wins: a target
 #: phrase sits inside the clause it restricts.
-_ROLE_PRIORITY: tuple[str, ...] = (
-    "target-spec", "cost", "trigger-condition", "effect",
+_ROLE_PRIORITY: tuple[Role, ...] = (
+    Role.TARGET_SPEC, Role.COST, Role.TRIGGER_CONDITION, Role.EFFECT,
 )
 
 #: Keywords whose body is printed on the host card rather than in a reminder
@@ -82,11 +90,11 @@ TOKENIZER_RULES_KEY = "tokenizer_rules"
 TOKENIZER_RULES = "gen-2"
 
 
-def tokenizer_surface(vocab_surface: str, training_settings) -> str:
+def tokenizer_surface(vocab_surface: Surface, training_settings) -> Surface:
     """The surface whose rules a loaded checkpoint's tokenizer applies: the
     vocabulary's under the gen-2 rules, else the prose grammar it trained on."""
-    rules = (training_settings or {}).get(TOKENIZER_RULES_KEY)
-    return vocab_surface if rules == TOKENIZER_RULES else SURFACE_PROSE
+    rules = recorded_version(training_settings, TOKENIZER_RULES_KEY, (TOKENIZER_RULES,))
+    return Surface.PROSE if rules is None else vocab_surface
 
 
 def keyword_token(display_name: str) -> str:
@@ -133,7 +141,7 @@ class Token:
     token_id: int
     start: int | None = None
     end: int | None = None
-    role: str | None = None
+    role: Role | None = None
     expanded_from: str | None = None
     number: float | None = None
     #: Set on the first token of a keyword line only: the line expands whole.
@@ -154,12 +162,12 @@ class AbilityTokenizer:
         vocab: dict[str, int],
         keyword_definitions: dict | None = None,
         *,
-        surface: str = SURFACE_PROSE,
+        surface: Surface = Surface.PROSE,
     ) -> None:
         """``surface`` is fixed for the tokenizer's life, which keeps the
         per-text cache valid (FR-010). Without ``keyword_definitions`` no
         keyword expands."""
-        if surface not in (SURFACE_PROSE, SURFACE_SCRIPT):
+        if surface not in (Surface.PROSE, Surface.SCRIPT):
             raise ValueError(f"unknown surface {surface!r}")
         self._vocab = vocab
         self._reverse = {i: t for t, i in vocab.items()}
@@ -245,7 +253,7 @@ class AbilityTokenizer:
         return list(tokens)
 
     def _split_with_offsets(self, text: str) -> list[Token]:
-        if self.surface == SURFACE_SCRIPT:
+        if self.surface == Surface.SCRIPT:
             return self._split_script(text)
         return [
             self._token(match.group(0), match.start(), match.end())
@@ -274,9 +282,9 @@ class AbilityTokenizer:
         """
         tokens: list[Token] = []
         position = 0
-        for start, end, kind in _script_regions(text):
+        for start, end, whole in _script_regions(text):
             tokens.extend(self._split_camel_region(text, position, start))
-            if kind == "whole":
+            if whole:
                 whole = text[start:end].lower()
                 tokens.append(Token(
                     text=whole, token_id=self.id_of(whole), start=start, end=end,
@@ -344,7 +352,7 @@ class AbilityTokenizer:
         return None
 
     @staticmethod
-    def _role_at(token: Token, spans: tuple[RoleSpan, ...]) -> str | None:
+    def _role_at(token: Token, spans: tuple[RoleSpan, ...]) -> Role | None:
         covering = [
             span.role for span in spans
             if token.start is not None
@@ -423,9 +431,13 @@ class AbilityTokenizer:
         own values (FR-013, FR-017). Any other line goes token by token, the
         template's placeholders removed (FR-014). A keyword in ``forced``
         always expands, as an unknown one does, and an empty ``forced`` takes
-        exactly the draws it would without the parameter.
+        exactly the draws it would without the parameter. Without ``rng`` the
+        draws decide nothing, so a ``probability`` they would decide is refused.
         """
-        rng = rng or random.Random()
+        if rng is None:
+            if 0.0 < probability < 1.0:
+                raise ValueError(f"expanding at probability {probability} needs an rng")
+            rng = random.Random(0)
         line = tokens[0].keyword_line if tokens else None
         if line is not None:
             return self._expand_line(tokens, line, probability, rng, forced)
@@ -500,7 +512,7 @@ class AbilityTokenizer:
         return self._as_expansion(text, role=token.role, keyword=token.text)
 
     def _as_expansion(
-        self, text: str, *, role: str | None, keyword: str,
+        self, text: str, *, role: Role | None, keyword: str,
     ) -> list[Token]:
         expanded = self._merge_multi_word(self._split_with_offsets(text))
         return [
@@ -537,32 +549,46 @@ def camel_parts(word: str) -> list[tuple[int, int]]:
     return parts
 
 
-def _script_regions(text: str) -> list[tuple[int, int, str]]:
-    """Ordered, non-overlapping ``(start, end, kind)`` spans the grammar skips:
-    ``whole`` (FR-009) or ``underscore`` (FR-009a)."""
-    regions: list[tuple[int, int, str]] = []
+class _Region(NamedTuple):
+    """A span the script grammar skips: kept ``whole`` (FR-009), or split at
+    underscores (FR-009a). Sorts underscore-first at an equal span."""
+
+    start: int
+    end: int
+    whole: bool
+
+
+def _item_regions(match: re.Match) -> list[_Region]:
+    """One whole region per non-empty item of a comma list in group 1."""
+    regions: list[_Region] = []
+    offset = match.start(1)
+    for item in match.group(1).split(","):
+        if item:
+            regions.append(_Region(offset, offset + len(item), whole=True))
+        offset += len(item) + 1
+    return regions
+
+
+def _script_regions(text: str) -> list[_Region]:
+    """The ordered, non-overlapping regions of ``text`` the grammar skips."""
+    regions: list[_Region] = []
     for match in _WHOLE_VALUE_RE.finditer(text):
-        offset = match.start(1)
-        for item in match.group(1).split(","):
-            if item:
-                regions.append((offset, offset + len(item), "whole"))
-            offset += len(item) + 1
+        regions.extend(_item_regions(match))
     for match in _CHOICES_RE.finditer(text):
-        if not _CHOOSER_API_RE.search(_segment_at(text, match.start())):
-            continue
-        offset = match.start(1)
-        for item in match.group(1).split(","):
-            if item:
-                regions.append((offset, offset + len(item), "whole"))
-            offset += len(item) + 1
-    for match in _SEGMENT_OPENER_RE.finditer(text):
-        regions.append((match.start(1), match.end(1), "whole"))
-    for match in _TOKEN_SCRIPT_VALUE_RE.finditer(text):
-        regions.append((match.start(1), match.end(1), "underscore"))
+        if _CHOOSER_API_RE.search(_segment_at(text, match.start())):
+            regions.extend(_item_regions(match))
+    regions.extend(
+        _Region(match.start(1), match.end(1), whole=True)
+        for match in _SEGMENT_OPENER_RE.finditer(text)
+    )
+    regions.extend(
+        _Region(match.start(1), match.end(1), whole=False)
+        for match in _TOKEN_SCRIPT_VALUE_RE.finditer(text)
+    )
     regions.sort()
-    ordered: list[tuple[int, int, str]] = []
+    ordered: list[_Region] = []
     for region in regions:
-        if ordered and region[0] < ordered[-1][1]:
+        if ordered and region.start < ordered[-1].end:
             continue
         ordered.append(region)
     return ordered

@@ -233,7 +233,3 @@ class StateSnapshot:
             if candidate.id == player_id:
                 return candidate
         return None
-
-    def controller_tag(self, controller: str, actor_player: str) -> str:
-        """``"mine"`` or ``"opponent"`` relative to the record's actor."""
-        return "mine" if controller == actor_player else "opponent"
