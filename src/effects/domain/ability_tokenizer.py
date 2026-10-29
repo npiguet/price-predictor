@@ -14,6 +14,7 @@ import random
 import re
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import NamedTuple
 
 from effects.domain.keyword_formatting import (
     format_reminder,
@@ -280,9 +281,9 @@ class AbilityTokenizer:
         """
         tokens: list[Token] = []
         position = 0
-        for start, end, kind in _script_regions(text):
+        for start, end, whole in _script_regions(text):
             tokens.extend(self._split_camel_region(text, position, start))
-            if kind == "whole":
+            if whole:
                 whole = text[start:end].lower()
                 tokens.append(Token(
                     text=whole, token_id=self.id_of(whole), start=start, end=end,
@@ -429,9 +430,13 @@ class AbilityTokenizer:
         own values (FR-013, FR-017). Any other line goes token by token, the
         template's placeholders removed (FR-014). A keyword in ``forced``
         always expands, as an unknown one does, and an empty ``forced`` takes
-        exactly the draws it would without the parameter.
+        exactly the draws it would without the parameter. Without ``rng`` the
+        draws decide nothing, so a ``probability`` they would decide is refused.
         """
-        rng = rng or random.Random()
+        if rng is None:
+            if 0.0 < probability < 1.0:
+                raise ValueError(f"expanding at probability {probability} needs an rng")
+            rng = random.Random(0)
         line = tokens[0].keyword_line if tokens else None
         if line is not None:
             return self._expand_line(tokens, line, probability, rng, forced)
@@ -543,32 +548,46 @@ def camel_parts(word: str) -> list[tuple[int, int]]:
     return parts
 
 
-def _script_regions(text: str) -> list[tuple[int, int, str]]:
-    """Ordered, non-overlapping ``(start, end, kind)`` spans the grammar skips:
-    ``whole`` (FR-009) or ``underscore`` (FR-009a)."""
-    regions: list[tuple[int, int, str]] = []
+class _Region(NamedTuple):
+    """A span the script grammar skips: kept ``whole`` (FR-009), or split at
+    underscores (FR-009a). Sorts underscore-first at an equal span."""
+
+    start: int
+    end: int
+    whole: bool
+
+
+def _item_regions(match: re.Match) -> list[_Region]:
+    """One whole region per non-empty item of a comma list in group 1."""
+    regions: list[_Region] = []
+    offset = match.start(1)
+    for item in match.group(1).split(","):
+        if item:
+            regions.append(_Region(offset, offset + len(item), whole=True))
+        offset += len(item) + 1
+    return regions
+
+
+def _script_regions(text: str) -> list[_Region]:
+    """The ordered, non-overlapping regions of ``text`` the grammar skips."""
+    regions: list[_Region] = []
     for match in _WHOLE_VALUE_RE.finditer(text):
-        offset = match.start(1)
-        for item in match.group(1).split(","):
-            if item:
-                regions.append((offset, offset + len(item), "whole"))
-            offset += len(item) + 1
+        regions.extend(_item_regions(match))
     for match in _CHOICES_RE.finditer(text):
-        if not _CHOOSER_API_RE.search(_segment_at(text, match.start())):
-            continue
-        offset = match.start(1)
-        for item in match.group(1).split(","):
-            if item:
-                regions.append((offset, offset + len(item), "whole"))
-            offset += len(item) + 1
-    for match in _SEGMENT_OPENER_RE.finditer(text):
-        regions.append((match.start(1), match.end(1), "whole"))
-    for match in _TOKEN_SCRIPT_VALUE_RE.finditer(text):
-        regions.append((match.start(1), match.end(1), "underscore"))
+        if _CHOOSER_API_RE.search(_segment_at(text, match.start())):
+            regions.extend(_item_regions(match))
+    regions.extend(
+        _Region(match.start(1), match.end(1), whole=True)
+        for match in _SEGMENT_OPENER_RE.finditer(text)
+    )
+    regions.extend(
+        _Region(match.start(1), match.end(1), whole=False)
+        for match in _TOKEN_SCRIPT_VALUE_RE.finditer(text)
+    )
     regions.sort()
-    ordered: list[tuple[int, int, str]] = []
+    ordered: list[_Region] = []
     for region in regions:
-        if ordered and region[0] < ordered[-1][1]:
+        if ordered and region.start < ordered[-1].end:
             continue
         ordered.append(region)
     return ordered

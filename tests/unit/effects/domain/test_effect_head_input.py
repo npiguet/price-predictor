@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -97,6 +99,17 @@ def _e_for(key: ProvenanceKey):
     return _VECTORS.get(key)
 
 
+@dataclass(frozen=True)
+class _Lines:
+    """A :class:`LineLookup` from plain callables: every key has a line, is
+    no keyword and has no modes unless a test says otherwise."""
+
+    e_for: Callable = _e_for
+    has_line: Callable = lambda key: True
+    keyword_of: Callable = lambda key: None
+    options_for: Callable = lambda key: ()
+
+
 def _entity(entity_id: str, **overrides) -> EntityState:
     defaults = {
         "name": "Serra Angel", "types": ("Creature",), "colors": ("W",),
@@ -135,8 +148,15 @@ def _record(**overrides) -> EffectRecord:
     return make_record(kind, **defaults)
 
 
-def _build(record, **kwargs):
-    return build_effect_head_input(record, e_for=_e_for, e_dim=E_DIM, **kwargs)
+def _build(record, *, rng=None, e_for=_e_for, has_line=None, options_for=None, **kwargs):
+    lines = _Lines(e_for=e_for)
+    if has_line is not None:
+        lines = replace(lines, has_line=has_line)
+    if options_for is not None:
+        lines = replace(lines, options_for=options_for)
+    return build_effect_head_input(
+        record, lines=lines, e_dim=E_DIM, rng=rng or random.Random(0), **kwargs,
+    )
 
 
 class TestSurfaceShape:
@@ -498,9 +518,7 @@ class TestKeysWithNoLine:
     def test_a_masked_line_keeps_its_zero_token(self):
         """The state-only control zeroes ``e`` but keeps the geometry."""
         record = _record(state=_snapshot(entities=(_entity("E1", printed=(_ANTHEM,)),)))
-        surface = build_effect_head_input(
-            record, e_for=lambda key: None, e_dim=E_DIM, has_line=lambda key: True,
-        )
+        surface = _build(record, e_for=lambda key: None, has_line=lambda key: True)
         assert [slot.e for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [_ZERO]
 
     def test_without_the_predicate_every_key_keeps_its_token(self):
@@ -658,9 +676,9 @@ class TestOptionRows:
         record = _record(state=_snapshot(entities=(
             _entity("E1", printed=(self._CHARM, _ANTHEM)),
         )))
-        return build_effect_head_input(
+        return _build(
             record, e_for=lambda key: vectors.get(key, _VECTORS.get(key)),
-            e_dim=E_DIM, options_for=options_for,
+            options_for=options_for,
         )
 
     def test_a_charm_gets_its_root_then_its_modes_in_choices_order(self):

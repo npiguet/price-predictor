@@ -41,6 +41,7 @@ from effects.domain.corpus_plan import (
     members_of,
     plan_selection,
 )
+from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SourceTree, first_text, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
@@ -132,6 +133,21 @@ class BuildCorpusConfig:
     )})
 
     def __post_init__(self) -> None:
+        self._refuse_negative_counts()
+        if self.reuse_cap < 1:
+            raise BuildCorpusError(
+                f"--reuse-cap is {self.reuse_cap}; it is the most copies of one "
+                "record a short family may write, and 1 already means no repeats."
+            )
+        for flag, share in (
+            ("--game-disjoint-share", self.game_disjoint_share),
+            ("--game-disjoint-keyword-share", self.game_disjoint_keyword_share),
+        ):
+            if not 0.0 <= share <= 1.0:
+                raise BuildCorpusError(f"{flag} is {share}; a share is between 0 and 1.")
+        self._refuse_unscored_keywords()
+
+    def _refuse_negative_counts(self) -> None:
         """Refuse a negative count; zero is a real setting for each.
 
         - ``--text-cap 0`` — no per-text cap; ``--reuse-cap`` alone bounds a
@@ -162,19 +178,8 @@ class BuildCorpusConfig:
                     "negative. Zero is allowed and means no cap, no ceiling, "
                     "or an empty stratum depending on the flag — see --help."
                 )
-        if self.reuse_cap < 1:
-            raise BuildCorpusError(
-                f"--reuse-cap is {self.reuse_cap}; it is the most copies of one "
-                "record a short family may write, and 1 already means no repeats."
-            )
-        for flag, share in (
-            ("--game-disjoint-share", self.game_disjoint_share),
-            ("--game-disjoint-keyword-share", self.game_disjoint_keyword_share),
-        ):
-            if not 0.0 <= share <= 1.0:
-                raise BuildCorpusError(f"{flag} is {share}; a share is between 0 and 1.")
-        from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
 
+    def _refuse_unscored_keywords(self) -> None:
         unknown = [
             name for name in self.game_disjoint_keywords
             if normalize_keyword(name) not in KEYWORDS_BY_NAME

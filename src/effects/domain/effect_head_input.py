@@ -15,6 +15,7 @@ import random
 from dataclasses import dataclass, field
 from enum import IntEnum
 from functools import lru_cache
+from typing import Protocol
 
 from effects.domain.keyword_names import overlay_keyword
 from effects.domain.provenance import ProvenanceKey
@@ -463,47 +464,53 @@ def _pending_event_features(
     ]
 
 
+class LineLookup(Protocol):
+    """What the surface asks of each ability key's rendered line."""
+
+    def e_for(self, key: ProvenanceKey) -> tuple[float, ...] | int | None:
+        """The line's ``e`` (see :attr:`Slot.e`). None gives a zero vector
+        rather than dropping the token, so a variant that masks ``e`` keeps
+        the geometry."""
+
+    def has_line(self, key: ProvenanceKey) -> bool:
+        """False for a key with no rendered line (the implicit permanent
+        spell), which gets no token."""
+
+    def keyword_of(self, key: ProvenanceKey) -> str | None:
+        """Which keyword the line *is*."""
+
+    def options_for(self, key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
+        """The charm-mode keys whose slots follow the key's (FR-063a)."""
+
+
 def build_effect_head_input(
     record: EffectRecord,
     *,
-    e_for,
+    lines: LineLookup,
     e_dim: int,
-    has_line=None,
+    rng: random.Random,
     candidate_index: int | None = None,
     context_dropout: float = 0.0,
-    rng: random.Random | None = None,
     masked_keywords: dict[str, frozenset[str]] | None = None,
     stripped_keywords: dict[str, frozenset[str]] | None = None,
-    keyword_of=None,
-    options_for=None,
     layout: InputLayout = INPUT_LAYOUT,
 ) -> EffectHeadInput:
     """Lay one record out as the token surface.
 
     Args:
-        e_for: ``ProvenanceKey -> tuple[float, ...] | int | None`` (see
-            :attr:`Slot.e`). None gives a zero vector rather than dropping the
-            token, so a variant that masks ``e`` keeps the geometry.
-        has_line: ``ProvenanceKey -> bool``; a key with no rendered line (the
-            implicit permanent spell) gets no token. None keeps every key.
         candidate_index: which candidate's ``e`` a ``decision`` record's
             ``[ACT]`` reads.
         context_dropout: per-token drop probability for every entity's
-            abilities but the acting one's.
+            abilities but the acting one's, drawn from ``rng``.
         masked_keywords: per-entity keywords to hide from the temporary-grant
             channel, e.g. a ``continuous`` record's own contribution.
         stripped_keywords: gate 2's perturbation: per-entity keywords removed
             from the overlay *and* as ability slots, since a printed keyword
             reaches the model as a token. Kept apart from ``masked_keywords``,
-            which must not silence a printed line of the same keyword. The
-            ability channel needs ``keyword_of``.
-        keyword_of: ``ProvenanceKey -> str | None``, which keyword a line *is*.
-        options_for: ``ProvenanceKey -> tuple[ProvenanceKey, ...]``, the
-            charm-mode keys whose slots follow the key's (FR-063a).
+            which must not silence a printed line of the same keyword.
         layout: :data:`INPUT_LAYOUT`, or the one a checkpoint recorded
             (:meth:`InputLayout.of`).
     """
-    rng = rng or random.Random()
     masked = masked_keywords or {}
     stripped = stripped_keywords or {}
     zero = tuple([0.0] * e_dim)
@@ -519,7 +526,7 @@ def build_effect_head_input(
     slots.append(Slot(
         kind=SlotKind.ACT, position=position,
         features=act_features(record),
-        e=_act_vector(record, e_for, zero, candidate_index),
+        e=_act_vector(record, lines.e_for, zero, candidate_index),
     ))
     position += 1
 
@@ -538,11 +545,10 @@ def build_effect_head_input(
         gone = stripped.get(entity.id, frozenset())
         entity_slots.append(len(slots))
         slots += _entity_block(
-            entity, record, e_for=e_for, zero=zero,
+            entity, record, lines=lines, zero=zero,
             masked=masked.get(entity.id, frozenset()) | gone, layout=layout,
-            options_for=options_for,
             keeps=lambda key, entity=entity, gone=gone: _keeps_ability(
-                key, has_line=has_line, gone=gone, keyword_of=keyword_of,
+                key, lines=lines, gone=gone,
                 dropout=context_dropout if entity.id != source_id else 0.0, rng=rng,
             ),
         )
@@ -551,8 +557,8 @@ def build_effect_head_input(
 
 
 def _entity_block(
-    entity: EntityState, record: EffectRecord, *, e_for, zero, masked, layout,
-    options_for, keeps,
+    entity: EntityState, record: EffectRecord, *, lines: LineLookup, zero, masked, layout,
+    keeps,
 ) -> list[Slot]:
     """One entity's ``CARD`` slot, then an ``ABILITY`` slot per ability it
     keeps, each charm root followed by its mode lines; positions restart."""
@@ -564,9 +570,9 @@ def _entity_block(
     for key in _ability_keys(entity):
         if not keeps(key):
             continue
-        modes = options_for(key) if options_for is not None else ()
+        modes = lines.options_for(key)
         for mode_key, option in ((key, False), *((mode, True) for mode in modes)):
-            resolved = e_for(mode_key)
+            resolved = lines.e_for(mode_key)
             block.append(Slot(
                 kind=SlotKind.ABILITY, position=len(block),
                 # Explicitly against None: row 0 is a valid matrix row and
@@ -577,11 +583,11 @@ def _entity_block(
     return block
 
 
-def _keeps_ability(key, *, has_line, gone, keyword_of, dropout: float, rng) -> bool:
+def _keeps_ability(key, *, lines: LineLookup, gone, dropout: float, rng) -> bool:
     """Whether one of an entity's abilities gets a slot."""
-    if has_line is not None and not has_line(key):
+    if not lines.has_line(key):
         return False
-    if gone and keyword_of is not None and keyword_of(key) in gone:
+    if gone and lines.keyword_of(key) in gone:
         # Dropped rather than zeroed: a zero token still says an ability is
         # here.
         return False

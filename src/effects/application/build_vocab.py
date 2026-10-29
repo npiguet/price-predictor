@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import statistics
+import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -204,10 +205,30 @@ def run(config: BuildVocabConfig) -> int:
     staged_tokens = [stager.tokenize(line) for line in staged]
     seeded = seed_tokens(config.surface, definitions, staged)
 
+    results, sources = _scan_vocabularies(folders, definitions)
+    # The staged script lines count as a source too.
+    scanned = sources + bool(staged)
+    vocab, domain_token_count = _merge_vocab(results, seeded, staged_tokens)
+    truncated = truncate_to_target_size(vocab, domain_token_count, config.target_size)
+    final = AbilityTokenizer(truncated, definitions, surface=config.surface)
+    _check_expansions(final, definitions)
+
+    vocab_path = config.resolved_vocab_path()
+    vocab_path.parent.mkdir(parents=True, exist_ok=True)
+    save_vocabulary(truncated, vocab_path)
+    logger.info(
+        "Wrote %d tokens to %s (surface=%s, %d sources)",
+        len(truncated), vocab_path, config.surface, scanned,
+    )
+    _report(config.surface, seeded, staged, staged_tokens, final)
+    return len(truncated)
+
+
+def _scan_vocabularies(folders: list[Path], definitions: dict) -> tuple[list, int]:
+    """The shared builder's result over each source folder and the keyword
+    file, and how many sources were scanned."""
     # The shared builder scans directory trees, so the keyword file is staged
     # in a scratch one.
-    import tempfile
-
     with tempfile.TemporaryDirectory(prefix="effects-vocab-") as scratch:
         extra = Path(scratch)
         if definitions:
@@ -224,9 +245,15 @@ def run(config: BuildVocabConfig) -> int:
             )
             for source in [*folders, extra]
         ]
-        # Inside the scratch tree's lifetime: the staged sources count too.
-        scanned = len(folders) + len(list(extra.glob("*.txt"))) + bool(staged)
+        # Inside the scratch tree's lifetime, which the keyword file counts in.
+        return results, len(folders) + len(list(extra.glob("*.txt")))
 
+
+def _merge_vocab(
+    results: list, seeded: SeededTokens, staged_tokens: list[list[Token]],
+) -> tuple[dict[str, int], int]:
+    """One vocabulary from the seeds, the staged script lines and the scans,
+    and its ``domain_token_count``."""
     # Specials, seeded tokens and the shared builder's domain terms all sit
     # below ``domain_token_count``, which a truncation never drops.
     vocab: dict[str, int] = {}
@@ -243,20 +270,7 @@ def run(config: BuildVocabConfig) -> int:
     for result in results:
         for token in result.vocab:
             vocab.setdefault(token, len(vocab))
-
-    truncated = truncate_to_target_size(vocab, domain_token_count, config.target_size)
-    final = AbilityTokenizer(truncated, definitions, surface=config.surface)
-    _check_expansions(final, definitions)
-
-    vocab_path = config.resolved_vocab_path()
-    vocab_path.parent.mkdir(parents=True, exist_ok=True)
-    save_vocabulary(truncated, vocab_path)
-    logger.info(
-        "Wrote %d tokens to %s (surface=%s, %d sources)",
-        len(truncated), vocab_path, config.surface, scanned,
-    )
-    _report(config.surface, seeded, staged, staged_tokens, final)
-    return len(truncated)
+    return vocab, domain_token_count
 
 
 def _load_definitions(path: Path) -> dict:
@@ -312,22 +326,33 @@ def _report(
     )
     if surface != Surface.SCRIPT or not staged:
         return
+    _report_lengths(staged, staged_tokens)
+    _report_unknown_rate(staged, final)
+    _report_camel_parts(staged)
+
+
+def _report_lengths(staged: list[str], staged_tokens: list[list[Token]]) -> None:
+    """The script lines' token-length quantiles, and how many truncate."""
     from effects.domain.ability_encoder import MAX_ABILITY_TOKENS
 
     lengths = sorted(
         len(tokens) for line, tokens in zip(staged, staged_tokens, strict=True)
         if _KEY_RE.search(line)
     )
-    if lengths:
-        # [CLS] takes one position, so a line truncates past MAX - 1 tokens.
-        over = sum(1 for n in lengths if n > MAX_ABILITY_TOKENS - 1)
-        quantiles = statistics.quantiles(lengths, n=100, method="inclusive")
-        logger.info(
-            "Script-line length in tokens over %d lines: min %d, p50 %.0f, "
-            "p90 %.0f, p99 %.0f, max %d; %d over %d (truncated)",
-            len(lengths), lengths[0], quantiles[49], quantiles[89],
-            quantiles[98], lengths[-1], over, MAX_ABILITY_TOKENS,
-        )
+    if not lengths:
+        return
+    # [CLS] takes one position, so a line truncates past MAX - 1 tokens.
+    over = sum(1 for n in lengths if n > MAX_ABILITY_TOKENS - 1)
+    quantiles = statistics.quantiles(lengths, n=100, method="inclusive")
+    logger.info(
+        "Script-line length in tokens over %d lines: min %d, p50 %.0f, "
+        "p90 %.0f, p99 %.0f, max %d; %d over %d (truncated)",
+        len(lengths), lengths[0], quantiles[49], quantiles[89],
+        quantiles[98], lengths[-1], over, MAX_ABILITY_TOKENS,
+    )
+
+
+def _report_unknown_rate(staged: list[str], final: AbilityTokenizer) -> None:
     total = unknown = 0
     for line in staged:
         stripped = _DESCRIPTION_PARAM_RE.sub("", line)
@@ -338,6 +363,9 @@ def _report(
         "Unknown-token rate over script parameters (descriptions removed): "
         "%.3f%% (%d of %d)", 100.0 * unknown / max(total, 1), unknown, total,
     )
+
+
+def _report_camel_parts(staged: list[str]) -> None:
     parts: set[str] = set()
     for line in staged:
         for word in re.findall(r"[A-Za-z]+", line):

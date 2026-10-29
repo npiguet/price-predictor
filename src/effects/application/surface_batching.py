@@ -466,31 +466,19 @@ class SurfaceBatcher:
         to remove from that entity's input through both channels.
         """
 
-        def e_for(key):
-            text = self.text_of(key)
-            return None if text is None else rows.get(text)
-
-        def has_line(key) -> bool:
-            # A dropped key gets no token; a line a variant masks keeps its
-            # token, zeroed in ``prepare``, so the geometry is the model's.
-            return self.text_of(key) is not None
-
         return build_effect_head_input(
             record,
-            e_for=e_for,
-            has_line=has_line,
+            lines=_StagedLines(self, rows),
             e_dim=self.e_dim,
+            rng=self.rng,
             # A decision record's [ACT] reads its candidate's e (FR-060a).
             candidate_index=(
                 0 if isinstance(record.payload, PlayabilityDecisionPayload)
                 else None
             ),
             context_dropout=self.context_dropout,
-            rng=self.rng,
             masked_keywords=continuous_masked_keywords(record),
             stripped_keywords=strip_keywords,
-            keyword_of=self.keyword_of_key,
-            options_for=self.options_for,
             layout=self.input_layout,
         )
 
@@ -541,3 +529,27 @@ class SurfaceBatcher:
             inputs["e_rows"][:, zeroed] = -1
             inputs["e_vectors"][:, zeroed] = 0.0
         return inputs
+
+
+@dataclass(frozen=True, slots=True)
+class _StagedLines:
+    """A batch's lines as the surface reads them: ``e`` as a row of the
+    staged encodings, keyed by each key's text on the batcher's surface."""
+
+    batcher: SurfaceBatcher
+    rows: dict[str, int]
+
+    def e_for(self, key) -> int | None:
+        text = self.batcher.text_of(key)
+        return None if text is None else self.rows.get(text)
+
+    def has_line(self, key) -> bool:
+        # A dropped key gets no token; a line a variant masks keeps its
+        # token, zeroed in ``prepare``, so the geometry is the model's.
+        return self.batcher.text_of(key) is not None
+
+    def keyword_of(self, key) -> str | None:
+        return self.batcher.keyword_of_key(key)
+
+    def options_for(self, key) -> tuple:
+        return self.batcher.options_for(key)

@@ -164,6 +164,10 @@ class TestKeywordExpansion:
         expanded = tokenizer.expand_keywords(tokens, probability=1.0)
         assert [t.text for t in expanded][:3] == ["cant", "be", "blocked"]
 
+    def test_a_probability_the_draws_decide_needs_an_rng(self, tokenizer):
+        with pytest.raises(ValueError, match="needs an rng"):
+            tokenizer.expand_keywords(tokenizer.tokenize("flying"), probability=0.5)
+
     def test_a_forced_keyword_expands_at_probability_zero(self, tokenizer):
         """``--withhold-keyword``: the model reads the definition, never the token."""
         tokens = tokenizer.tokenize("flying")

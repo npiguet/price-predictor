@@ -323,19 +323,10 @@ class HoldoutSource:
         no depletion list, or when two sources name the held-out cards.
         """
         if only_cards is not None:
-            clashing = [
-                flag for flag, value in (
-                    ("--exclude-cards", exclude_cards),
-                    ("--training-corpus", training_corpus),
-                    ("--split-from", split_from),
-                ) if value
-            ]
-            if clashing:
-                # FR-038: opposite instructions, so one of them is a mistake.
-                raise ValueError(
-                    f"--only-cards decks the held-out cards; {', '.join(clashing)} "
-                    "keeps a holdout out of every deck. Pass one or the other."
-                )
+            _refuse_holdout_beside_only_cards(
+                exclude_cards=exclude_cards, training_corpus=training_corpus,
+                split_from=split_from,
+            )
         if training_corpus is None:
             return cls(
                 effect_records=effect_records or DEFAULT_RECORDS_DIR,
@@ -347,18 +338,9 @@ class HoldoutSource:
                 "--training-corpus DIR means --effect-records DIR with its own "
                 f"{HOLDOUT_LIST_NAME}"
             )
-        listed = training_corpus / HOLDOUT_LIST_NAME
-        if not listed.is_file():
-            raise ValueError(
-                f"{training_corpus} holds no {HOLDOUT_LIST_NAME}. A training "
-                "corpus is depleted against a list, and without it this run "
-                "would deck the held-out cards and contaminate the split. Write "
-                "one with 'python -m effects holdout-cards', or pass "
-                "--effect-records and --exclude-cards separately if they "
-                "genuinely live apart."
-            )
         return cls(
-            effect_records=training_corpus, exclude_cards=listed, split_from=split_from,
+            effect_records=training_corpus,
+            exclude_cards=_depletion_list(training_corpus), split_from=split_from,
         )
 
     def exclusions(self) -> frozenset[str]:
@@ -366,6 +348,39 @@ class HoldoutSource:
         if self.exclude_cards is not None:
             return read_name_list(self.exclude_cards)
         return load_held_out(self.split_from)
+
+
+def _refuse_holdout_beside_only_cards(
+    *, exclude_cards: Path | None, training_corpus: Path | None, split_from: Path | None,
+) -> None:
+    clashing = [
+        flag for flag, value in (
+            ("--exclude-cards", exclude_cards),
+            ("--training-corpus", training_corpus),
+            ("--split-from", split_from),
+        ) if value
+    ]
+    if clashing:
+        # FR-038: opposite instructions, so one of them is a mistake.
+        raise ValueError(
+            f"--only-cards decks the held-out cards; {', '.join(clashing)} "
+            "keeps a holdout out of every deck. Pass one or the other."
+        )
+
+
+def _depletion_list(training_corpus: Path) -> Path:
+    """The list ``training_corpus`` was depleted against, which it must hold."""
+    listed = training_corpus / HOLDOUT_LIST_NAME
+    if not listed.is_file():
+        raise ValueError(
+            f"{training_corpus} holds no {HOLDOUT_LIST_NAME}. A training "
+            "corpus is depleted against a list, and without it this run "
+            "would deck the held-out cards and contaminate the split. Write "
+            "one with 'python -m effects holdout-cards', or pass "
+            "--effect-records and --exclude-cards separately if they "
+            "genuinely live apart."
+        )
+    return listed
 
 
 def read_name_list(path: Path) -> frozenset[str]:

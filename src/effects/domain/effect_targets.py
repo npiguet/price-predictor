@@ -10,6 +10,7 @@ that a destroyed creature was untapped.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from effects.domain.effect_head_input import CARD_TYPES, COUNTER_TYPES, OVERLAY_KEYWORDS
@@ -178,57 +179,68 @@ def _target_events(record: EffectRecord) -> tuple[Event, ...]:
 
 def _apply_event(entry: EntityTargets, event: Event) -> None:
     """Fold one event into an entity's targets."""
-    params = event.params
+    if not _apply_tabled_event(entry, event):
+        apply = _EVENT_APPLIERS.get(event.type)
+        if apply is not None:
+            apply(entry, event)
+
+
+def _apply_tabled_event(entry: EntityTargets, event: Event) -> bool:
+    """An event whose whole target one table states; False for any other."""
     if event.type in _ADDITIVE:
         name, parameter, default, sign = _ADDITIVE[event.type]
-        entry.add(name, sign * float(params.get(parameter, default)))
-        return
-    if event.type in _SETTERS:
+        entry.add(name, sign * float(event.params.get(parameter, default)))
+    elif event.type in _SETTERS:
         entry.set(*_SETTERS[event.type])
-        return
-    if event.type in _ZONE_BY_EVENT:
+    elif event.type in _ZONE_BY_EVENT:
         entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(_ZONE_BY_EVENT[event.type]))
-        return
-    if event.type in _LIBRARY_EVENT_BY_TYPE:
+    elif event.type in _LIBRARY_EVENT_BY_TYPE:
         entry.flag(
             HeadField.LIBRARY_EVENTS,
             LIBRARY_EVENTS.index(_LIBRARY_EVENT_BY_TYPE[event.type]),
             len(LIBRARY_EVENTS),
         )
-        return
-    match event.type:
-        case EventType.ZONE_CHANGE:
-            destination = str(params.get("to_zone", "")).lower()
-            entry.set(
-                HeadField.ZONE_OUTCOME,
-                ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)),
-            )
-        case EventType.COUNTER_CHANGE:
-            counter = str(params.get("counter_type", "OTHER")).upper()
-            name = (
-                f"counters_delta_{counter.lower()}"
-                if counter in COUNTER_TYPES
-                else HeadField.COUNTERS_DELTA_OTHER
-            )
-            entry.add(name, float(params.get("delta", 0)))
-        case EventType.PT_CHANGE:
-            entry.add(HeadField.POWER_DELTA, float(params.get("power_delta", 0)))
-            entry.add(HeadField.TOUGHNESS_DELTA, float(params.get("toughness_delta", 0)))
-            _apply_duration(entry, HeadField.PT_DURATION, event.duration)
-        case EventType.KEYWORD_CHANGE:
-            _apply_keywords(entry, params)
-        case EventType.TYPE_CHANGE:
-            _apply_multi(entry, HeadField.TYPES_GAINED, params.get("types_added"), _TYPE_SLOTS)
-            _apply_multi(entry, HeadField.TYPES_LOST, params.get("types_removed"), _TYPE_SLOTS)
-            _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
-        case EventType.COLOR_CHANGE:
-            _apply_multi(entry, HeadField.COLORS_GAINED, params.get("colors"), _COLOR_SLOTS)
-            _apply_multi(entry, HeadField.COLORS_LOST, params.get("colors_removed"), _COLOR_SLOTS)
-            _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
-        case EventType.MANA_PRODUCED:
-            _apply_mana(entry, params.get("mana_by_color"), sign=1)
-        case EventType.MANA_LOST:
-            _apply_mana(entry, params.get("mana_by_color"), sign=-1)
+    else:
+        return False
+    return True
+
+
+def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
+    destination = str(event.params.get("to_zone", "")).lower()
+    entry.set(
+        HeadField.ZONE_OUTCOME,
+        ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)),
+    )
+
+
+def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
+    counter = str(event.params.get("counter_type", "OTHER")).upper()
+    name = (
+        f"counters_delta_{counter.lower()}"
+        if counter in COUNTER_TYPES
+        else HeadField.COUNTERS_DELTA_OTHER
+    )
+    entry.add(name, float(event.params.get("delta", 0)))
+
+
+def _apply_pt_change(entry: EntityTargets, event: Event) -> None:
+    entry.add(HeadField.POWER_DELTA, float(event.params.get("power_delta", 0)))
+    entry.add(HeadField.TOUGHNESS_DELTA, float(event.params.get("toughness_delta", 0)))
+    _apply_duration(entry, HeadField.PT_DURATION, event.duration)
+
+
+def _apply_type_change(entry: EntityTargets, event: Event) -> None:
+    params = event.params
+    _apply_multi(entry, HeadField.TYPES_GAINED, params.get("types_added"), _TYPE_SLOTS)
+    _apply_multi(entry, HeadField.TYPES_LOST, params.get("types_removed"), _TYPE_SLOTS)
+    _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
+
+
+def _apply_color_change(entry: EntityTargets, event: Event) -> None:
+    params = event.params
+    _apply_multi(entry, HeadField.COLORS_GAINED, params.get("colors"), _COLOR_SLOTS)
+    _apply_multi(entry, HeadField.COLORS_LOST, params.get("colors_removed"), _COLOR_SLOTS)
+    _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
 
 
 def _apply_duration(entry: EntityTargets, name: str, duration: str | None) -> None:
@@ -264,6 +276,23 @@ def _apply_mana(entry: EntityTargets, mana, *, sign: int) -> None:
             entry.add(f"mana_delta_{key.lower()}", sign * float(amount))
 
 
+#: The events no table above states, each read off its own parameters.
+_EVENT_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
+    EventType.ZONE_CHANGE: _apply_zone_change,
+    EventType.COUNTER_CHANGE: _apply_counter_change,
+    EventType.PT_CHANGE: _apply_pt_change,
+    EventType.KEYWORD_CHANGE: lambda entry, event: _apply_keywords(entry, event.params),
+    EventType.TYPE_CHANGE: _apply_type_change,
+    EventType.COLOR_CHANGE: _apply_color_change,
+    EventType.MANA_PRODUCED: lambda entry, event: _apply_mana(
+        entry, event.params.get("mana_by_color"), sign=1,
+    ),
+    EventType.MANA_LOST: lambda entry, event: _apply_mana(
+        entry, event.params.get("mana_by_color"), sign=-1,
+    ),
+}
+
+
 def _apply_playability(record: EffectRecord, slot) -> None:
     """Legality bits, which come from the payload rather than from events."""
     payload = record.payload
@@ -278,17 +307,19 @@ def _apply_playability(record: EffectRecord, slot) -> None:
             for target in candidate.legal_targets:
                 mark(target, HeadField.TARGET_LEGAL, 1)
     elif isinstance(payload, PlayabilityAttackersPayload):
-        for entity in payload.legal_attackers:
-            mark(entity, HeadField.ATTACKER_LEGAL, 1)
-        for forbidden in payload.forbidden:
-            mark(forbidden.entity, HeadField.ATTACKER_LEGAL, 0)
+        _mark_legality(mark, HeadField.ATTACKER_LEGAL, payload.legal_attackers, payload)
     elif isinstance(payload, PlayabilityBlockersPayload):
-        for entity in payload.legal_blockers:
-            mark(entity, HeadField.BLOCKER_LEGAL, 1)
-        for forbidden in payload.forbidden:
-            mark(forbidden.entity, HeadField.BLOCKER_LEGAL, 0)
+        _mark_legality(mark, HeadField.BLOCKER_LEGAL, payload.legal_blockers, payload)
         # min_blockers is read at the anchored attacker, not at the blockers.
         mark(payload.anchor_attacker, HeadField.MIN_BLOCKERS, payload.min_blockers)
+
+
+def _mark_legality(mark, name: str, legal, payload) -> None:
+    """One combat declaration's legal entities as 1, its forbidden ones as 0."""
+    for entity in legal:
+        mark(entity, name, 1)
+    for forbidden in payload.forbidden:
+        mark(forbidden.entity, name, 0)
 
 
 def _apply_continuous(record: EffectRecord, slot) -> None:

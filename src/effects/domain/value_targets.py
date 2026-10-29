@@ -104,6 +104,23 @@ def value_targets(text: str) -> ValueTargets:
     root = parsed[0] if parsed else {}
     values = dict.fromkeys(VALUE_TARGET_NAMES, 0.0)
     masked: set[str] = set()
+    # A charm's root states only its choices (FR-005a); its modes carry the
+    # amounts on their own option lines.
+    if api_of(root) == "Charm" or "Choices" in root:
+        masked.update(_AMOUNT_TARGETS)
+    else:
+        for found in parsed:
+            _read_amounts(found, values, masked)
+    _read_cost(root.get("Cost"), "SP" in root, values, masked)
+    return ValueTargets(
+        values=tuple(values[name] for name in VALUE_TARGET_NAMES),
+        mask=tuple(name not in masked for name in VALUE_TARGET_NAMES),
+    )
+
+
+def _read_amounts(found: dict[str, str], values: dict[str, float], masked: set[str]) -> None:
+    """One segment's stated amounts into ``values``; a non-literal one, or
+    one the segment's API leaves unstated, into ``masked``."""
 
     def add(target: str, raw: str | None) -> None:
         if raw is not None and _LITERAL_RE.fullmatch(raw):
@@ -111,41 +128,34 @@ def value_targets(text: str) -> ValueTargets:
         else:
             masked.add(target)
 
-    # A charm's root states only its choices (FR-005a); its modes carry the
-    # amounts on their own option lines.
-    if api_of(root) == "Charm" or "Choices" in root:
-        masked.update(_AMOUNT_TARGETS)
-    else:
-        for found in parsed:
-            for target, keys in _AMOUNT_KEYS.items():
-                for key in keys:
-                    if key in found:
-                        add(target, found[key])
-            api = api_of(found)
-            if api in _API_AMOUNTS:
-                target, key, default = _API_AMOUNTS[api]
-                add(target, found.get(key, default))
-            elif api in _COUNTER_UNSTATED:
-                masked.update(_COUNTER_TARGETS)
+    for target, keys in _AMOUNT_KEYS.items():
+        for key in keys:
+            if key in found:
+                add(target, found[key])
+    api = api_of(found)
+    if api in _API_AMOUNTS:
+        target, key, default = _API_AMOUNTS[api]
+        add(target, found.get(key, default))
+    elif api in _COUNTER_UNSTATED:
+        masked.update(_COUNTER_TARGETS)
 
-    cost = root.get("Cost")
+
+def _read_cost(
+    cost: str | None, spell: bool, values: dict[str, float], masked: set[str],
+) -> None:
+    """The root's ``Cost$`` into the cost targets; a spell's mana is masked."""
     if cost is None:
         masked.update(_COST_TARGETS)
-    else:
-        shards = _COST_GROUP_RE.sub("", cost).split()
-        values["cost_taps"] = 1.0 if "T" in shards else 0.0
-        values["cost_sacrifices"] = 1.0 if "Sac<" in cost else 0.0
-        mana = ManaCost.parse(" ".join(shards))
-        if "SP" in root or mana is None or mana.has_x:
-            masked.update(_MANA_TARGETS)
-        else:
-            for target, amount in zip(_MANA_TARGETS, (
-                mana.w, mana.u, mana.b, mana.r, mana.g, mana.colorless_mana,
-                mana.generic_mana,
-            )):
-                values[target] = float(amount)
-
-    return ValueTargets(
-        values=tuple(values[name] for name in VALUE_TARGET_NAMES),
-        mask=tuple(name not in masked for name in VALUE_TARGET_NAMES),
-    )
+        return
+    shards = _COST_GROUP_RE.sub("", cost).split()
+    values["cost_taps"] = 1.0 if "T" in shards else 0.0
+    values["cost_sacrifices"] = 1.0 if "Sac<" in cost else 0.0
+    mana = ManaCost.parse(" ".join(shards))
+    if spell or mana is None or mana.has_x:
+        masked.update(_MANA_TARGETS)
+        return
+    for target, amount in zip(_MANA_TARGETS, (
+        mana.w, mana.u, mana.b, mana.r, mana.g, mana.colorless_mana,
+        mana.generic_mana,
+    )):
+        values[target] = float(amount)

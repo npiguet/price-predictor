@@ -950,21 +950,22 @@ def read_records_matching(
             logger.info("scanned %d of %d shards under %s", done, len(shards), directory)
         for line in iter_shard_lines(shard):
             head = peek_envelope(line)
-            if head is not None:
-                if game_ids is not None and head.game_id not in game_ids:
-                    continue
-                if kinds is not None and head.kind not in kinds:
-                    continue
+            if head is not None and not _wanted(head.game_id, head.kind, game_ids, kinds):
+                continue
             stripped = line.strip()
             if not stripped:
                 continue
             record = record_from_dict(parse_record_line(stripped))
-            if head is None:
-                if game_ids is not None and record.game_id not in game_ids:
-                    continue
-                if kinds is not None and record.kind.value not in kinds:
-                    continue
+            if head is None and not _wanted(record.game_id, record.kind.value, game_ids, kinds):
+                continue
             yield record
+
+
+def _wanted(
+    game_id: str, kind: str, game_ids: Collection[str] | None, kinds: Collection[str] | None,
+) -> bool:
+    """Whether a record of ``game_id`` and ``kind`` passes both filters."""
+    return (game_ids is None or game_id in game_ids) and (kinds is None or kind in kinds)
 
 
 def count_records(directory: Path, *, ceiling: int = 0) -> int:
