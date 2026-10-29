@@ -19,6 +19,7 @@ import zlib
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
+from enum import StrEnum
 from pathlib import Path
 from typing import IO, Any, NamedTuple
 
@@ -885,15 +886,9 @@ def iter_shards(directory: Path) -> list[Path]:
     directory = Path(directory)
     if not directory.is_dir():
         return []
-    found: list[Path] = []
-    for pattern in SHARD_GLOBS:
-        found.extend(
-            path for path in directory.rglob(pattern)
-            # "*.jsonl" also matches "x.jsonl.gz" on some platforms; the
-            # compressed pattern already claimed those.
-            if path.suffix != ".gz" or pattern.endswith(".gz")
-        )
-    return sorted(set(found))
+    return sorted(
+        path for pattern in SHARD_GLOBS for path in directory.rglob(pattern)
+    )
 
 
 def read_records(directory: Path) -> Iterator[EffectRecord]:
