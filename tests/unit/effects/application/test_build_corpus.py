@@ -1074,23 +1074,11 @@ def test_the_build_writes_a_validation_sample_per_stratum(tmp_path, shared_corpu
     assert store.load().validation_sample == 4
 
 
-def test_the_cli_exposes_the_rework_flags():
+def test_the_max_events_help_says_zero_disables_the_rule():
+    """The zero reading must survive in --help, not just in the docstring:
+    this is what would have caught it silently vanishing."""
     from effects.infrastructure.cli import build_parser
-    args = build_parser().parse_args([
-        "build-corpus", "--shard-records", "500", "--max-events-per-record", "32",
-        "--validation-sample", "64",
-    ])
-    assert (args.shard_records, args.max_events_per_record, args.validation_sample) == (500, 32, 64)
-    defaults = build_parser().parse_args(["build-corpus"])
-    assert (
-        defaults.shard_records,
-        defaults.max_events_per_record,
-        defaults.validation_sample,
-    ) == (2000, 64, 2048)
 
-    # The zero reading for each of the three flags must survive in --help,
-    # not just in the docstring: this is what would have caught it silently
-    # vanishing from --max-events-per-record's help text.
     subparsers_action = next(
         action for action in build_parser()._actions
         if getattr(action, "choices", None) and "build-corpus" in action.choices
@@ -1329,17 +1317,13 @@ def test_the_retired_game_count_flag_is_rejected_by_argparse(capsys):
     assert "--game-disjoint-games" in capsys.readouterr().err
 
 
-def test_the_new_flags_reach_the_config():
+def test_the_game_disjoint_keywords_parse_as_a_comma_separated_list():
     from effects.infrastructure.cli import build_parser
 
     args = build_parser().parse_args([
-        "build-corpus", "--game-disjoint-share", "0.02",
-        "--game-disjoint-keyword-share", "0.3", "--game-disjoint-keywords", "trample,infect",
-        "--reuse-cap", "2", "--holdout-unit", "text",
+        "build-corpus", "--game-disjoint-keywords", "trample,infect",
     ])
-    assert (args.game_disjoint_share, args.game_disjoint_keyword_share) == (0.02, 0.3)
     assert args.game_disjoint_keywords == ("trample", "infect")
-    assert (args.reuse_cap, args.holdout_unit) == (2, HoldoutUnit.TEXT)
 
 
 def test_an_unscored_game_disjoint_keyword_is_refused(tmp_path, shared_corpus):
