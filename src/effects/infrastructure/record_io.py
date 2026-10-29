@@ -9,7 +9,6 @@ silently renames itself in a corpus that cannot be rebuilt.
 from __future__ import annotations
 
 import gzip
-import json
 import logging
 import math
 import random
@@ -71,8 +70,6 @@ from price_predictor.infrastructure.append_only import (
 )
 
 logger = logging.getLogger(__name__)
-
-_JSON_SEPARATORS = (",", ":")  # compact, newline-free
 
 #: Envelope keys this code models. Anything else on a line is a field a newer
 #: writer added and is kept in ``EffectRecord.extra_fields``.
@@ -655,8 +652,13 @@ def record_from_dict(data: dict) -> EffectRecord:
 
 
 def format_record_line(record: EffectRecord) -> str:
-    """Render one shard line (compact JSON, no trailing newline)."""
-    return json.dumps(record_to_dict(record), separators=_JSON_SEPARATORS)
+    """Render one shard line: compact JSON in field order, no trailing newline.
+
+    ``orjson``, as the reader is; non-ASCII text is written as UTF-8 rather
+    than ``\\u`` escapes, which every reader decodes alike. A non-string key
+    is written as its string, as ``json`` would.
+    """
+    return orjson.dumps(record_to_dict(record), option=orjson.OPT_NON_STR_KEYS).decode()
 
 
 def _write_line(handle: IO[str], record: EffectRecord) -> None:

@@ -9,6 +9,7 @@ collection precisely so those can be checked now.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -59,6 +60,7 @@ from effects.infrastructure.record_io import (
     read_window,
     record_from_dict,
     record_to_dict,
+    write_shard,
 )
 from tests.unit.effects.builders import RawShardWriter
 
@@ -254,6 +256,19 @@ class TestRoundTrip:
 
     def test_a_line_holds_no_newline_of_its_own(self):
         assert "\n" not in format_record_line(_record())
+
+    def test_a_non_ascii_name_is_written_as_utf8_and_reads_back(self, tmp_path):
+        """The writer is ``orjson``, which does not escape; the reader decodes
+        a ``\\u`` escape and the raw character alike."""
+        record = _record(state=replace(_rich_snapshot(), entities=(
+            EntityState(id="E1", name="Lim-Dûl's Vault", zone="hand", controller="P0"),
+        )))
+        line = format_record_line(record)
+        assert "Lim-Dûl's Vault" in line
+        assert record_from_dict(json.loads(line)) == record
+        shard = tmp_path / "run.0-a.jsonl.gz"
+        write_shard(shard, [record])
+        assert list(read_shard(shard)) == [record]
 
     def test_the_snapshot_survives_in_full(self):
         restored = record_from_dict(record_to_dict(_record()))
