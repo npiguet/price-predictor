@@ -7,7 +7,7 @@ rendered lines and aligns the ability cache. Pure dataclasses; the JSON is
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
@@ -175,6 +175,23 @@ class SidecarLine:
     role_spans: tuple[RoleSpan, ...] = ()
     prose_offset: int | None = None
 
+    def prose_in(self, rendered: Sequence[str]) -> str | None:
+        """This line's converted prose, without its ``kind[n]: `` prefix, out
+        of its converted file's ``rendered`` lines; None where they hold none.
+
+        Role spans are offsets into the prose without the prefix. The split is
+        ``prose_offset``, since a continuation line has no prefix but may hold
+        a ``{T}: ``; an older sidecar without it is cut at the first ``": "``,
+        right for every line such sidecars hold.
+        """
+        if not (0 <= self.line_index < len(rendered)):
+            return None
+        line = rendered[self.line_index]
+        if self.prose_offset is not None:
+            return line[self.prose_offset:]
+        separator = line.find(": ")
+        return line if separator < 0 else line[separator + 2:]
+
 
 def _note_declared(
     declared: dict[tuple[int, str], int], key: ProvenanceKey,
@@ -238,6 +255,10 @@ class ProvenanceSidecar:
     @property
     def tree(self) -> str:
         return split_script_file(self.script_file)[0]
+
+    def script_texts(self) -> list[str]:
+        """The script text of every line that has one, in line order."""
+        return [line.script_text for line in self.lines if line.script_text]
 
     def row_for(self, key: ProvenanceKey) -> int | None:
         """The ability-cache row a key resolves to, or None where it was dropped."""

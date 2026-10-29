@@ -497,7 +497,6 @@ class TestWardCanary:
         print the line resolves to nothing on the real corpus."""
         from effects.infrastructure.sidecar_io import (
             converted_text_path,
-            prose_for,
             prose_lines,
             read_sidecar,
         )
@@ -511,7 +510,7 @@ class TestWardCanary:
             sidecar = read_sidecar(path)
             rendered = prose_lines(converted_text_path(path))
             printed = {
-                normalize_prose(prose_for(line, rendered) or "")
+                normalize_prose(line.prose_in(rendered) or "")
                 for line in sidecar.lines
             }
             assert normalize_prose(query.prose) in printed, query.card

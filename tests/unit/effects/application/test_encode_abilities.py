@@ -400,7 +400,7 @@ class TestTheRealEncoder:
 class TestProseOfAVariant:
     def test_a_variants_source_script_is_not_read_as_prose(self, tmp_path):
         """The trainer encodes a variant from its script; the cache must too."""
-        from effects.application.encode_abilities import prose_of
+        from effects.infrastructure.sidecar_io import rendered_prose
 
         source = tmp_path / "variant_bolt.txt"
         source.write_text(
@@ -409,8 +409,10 @@ class TestProseOfAVariant:
         variant = _sidecar("variant-scripts/variant_bolt.txt")
         card = _sidecar("cardsfolder/v/variant_bolt.txt")
         sidecar_path = tmp_path / "variant_bolt.provenance.json"
-        assert prose_of(variant, sidecar_path) == []
-        assert prose_of(card, sidecar_path) == source.read_text(encoding="utf-8").splitlines()
+        assert rendered_prose(sidecar_path, variant) == []
+        assert rendered_prose(sidecar_path, card) == (
+            source.read_text(encoding="utf-8").splitlines()
+        )
 
 
 class TestTheWithheldKeyword:

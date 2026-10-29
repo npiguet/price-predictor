@@ -25,7 +25,6 @@ from effects.domain.provenance import (
 from effects.infrastructure import sidecar_io as _sidecar_io
 from effects.infrastructure.sidecar_io import (
     SidecarCache,
-    prose_for,
     read_sidecar,
     sidecar_from_dict,
     sidecar_path_for,
@@ -313,15 +312,15 @@ class TestTheProseSplit:
         )
 
     def test_a_continuation_line_keeps_its_colon(self):
-        assert prose_for(self._line(1, 0), self._RENDERED) == "{T}: add {G}."
+        assert self._line(1, 0).prose_in(self._RENDERED) == "{T}: add {G}."
 
     def test_a_prefixed_line_starts_after_its_prefix(self):
         line = self._line(0, len("static: "))
-        assert prose_for(line, self._RENDERED) == "creatures you control have:"
+        assert line.prose_in(self._RENDERED) == "creatures you control have:"
 
     def test_a_sidecar_without_the_offset_falls_back_to_the_first_colon(self):
         """Sidecars on disk predate the field and must still read."""
-        assert prose_for(self._line(0, None), self._RENDERED) == (
+        assert self._line(0, None).prose_in(self._RENDERED) == (
             "creatures you control have:"
         )
 

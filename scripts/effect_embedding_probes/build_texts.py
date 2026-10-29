@@ -57,9 +57,8 @@ from effects.domain.baselines import Baseline  # noqa: E402
 from effects.infrastructure.ability_cache_store import AbilityCacheStore  # noqa: E402
 from effects.infrastructure.sidecar_io import (  # noqa: E402
     converted_text_path,
+    encoded_lines,
     iter_sidecars,
-    prose_for,
-    prose_lines,
     read_sidecar,
     tree_of_folder,
 )
@@ -102,13 +101,11 @@ def build(paths: ProbePaths) -> pd.DataFrame:
                 skipped["row_mismatch"] += 1
                 continue
             converted = converted_text_path(sidecar_path)
-            rendered = prose_lines(converted)
             facts = None
-            for index, line in enumerate(sidecar.lines):
+            encoded = encoded_lines(sidecar_path, sidecar, paths.surface)
+            for index, (line, prose, text) in enumerate(encoded):
                 row_full = full[index]
                 row_tax = empty if tax is None else tax[index]
-                prose = prose_for(line, rendered)
-                text = encoding_text(line, prose, paths.surface)
                 if not text:
                     skipped["no_text"] += 1
                     continue

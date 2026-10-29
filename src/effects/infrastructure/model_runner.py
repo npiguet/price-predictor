@@ -39,7 +39,7 @@ from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
 from effects.domain.surface_collation import entity_index
-from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 from effects.infrastructure.torch_device import default_device
 
@@ -53,9 +53,9 @@ def build_sidecars(config) -> SidecarCache:
     """The sidecar roots ``--cards-folder`` names (FR-063b), each keyed by the
     tree its name ends in, so ``output/gen1-cardsfolder`` serves
     ``cardsfolder/`` keys."""
-    return SidecarCache(sidecar_roots(
+    return SidecarCache.from_folders(
         config.cards_folders, getattr(config, "variant_scripts", None),
-    ))
+    )
 
 
 def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:

@@ -26,9 +26,7 @@ def load_card_texts(
         except UnconvertedScript:
             skipped += 1
             continue
-        out[name] = [
-            line.script_text for line in sidecar.lines if line.script_text
-        ]
+        out[name] = sidecar.script_texts()
     if skipped:
         logger.warning("%d converted card(s) have no sidecar; skipped", skipped)
     return out

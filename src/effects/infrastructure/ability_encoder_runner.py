@@ -113,10 +113,9 @@ class AbilityEncoderRunner:
                 rows[block] = vectors.cpu().numpy()
         return rows
 
-    def unit_of(self, line: SidecarLine, prose: list[str]) -> tuple[str, tuple]:
-        """``(text, role spans)`` one sidecar line is encoded from."""
-        from effects.infrastructure.sidecar_io import prose_for
-
+    def unit_of(self, line: SidecarLine, prose: str | None) -> tuple[str, tuple]:
+        """``(text, role spans)`` one sidecar line is encoded from, given its
+        converted prose."""
         surface = self.stager.surface
-        text = encoding_text(line, prose_for(line, prose), surface) or ""
+        text = encoding_text(line, prose, surface) or ""
         return text, encoding_role_spans(line, text, surface)

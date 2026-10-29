@@ -68,9 +68,9 @@ def load_checkpoint(path: Path):
 
 
 def sidecar_cache(cards_folders: Iterable[Path], variant_scripts: Path | None = None):
-    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+    from effects.infrastructure.sidecar_io import SidecarCache
 
-    return SidecarCache(sidecar_roots(list(cards_folders), variant_scripts))
+    return SidecarCache.from_folders(cards_folders, variant_scripts)
 
 
 def sidecar_paths(cards_folders: Iterable[Path]) -> list[Path]:
@@ -113,7 +113,6 @@ def line_items(
     from effects.infrastructure.ability_cache_store import AbilityCacheStore
     from effects.infrastructure.sidecar_io import (
         converted_text_path,
-        prose_for,
         prose_lines,
         read_sidecar,
     )
@@ -133,7 +132,7 @@ def line_items(
         for row, line in enumerate(sidecar.lines):
             if not line.provenance:
                 continue
-            text = encoding_text(line, prose_for(line, rendered), surface)
+            text = encoding_text(line, line.prose_in(rendered), surface)
             if not text:
                 continue
             item = items.get(text)

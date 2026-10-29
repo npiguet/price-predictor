@@ -18,7 +18,7 @@ from effects.infrastructure.effect_model_store import (
     load_for_inference,
     model_output_for,
 )
-from effects.infrastructure.sidecar_io import iter_sidecars
+from effects.infrastructure.sidecar_io import iter_sidecars, rendered_prose
 
 logger = logging.getLogger(__name__)
 
@@ -118,10 +118,10 @@ def encode_tree(
     keys: dict[str, tuple] = {}
     rows_of: list[list[int]] = []
     for sidecar_path, sidecar in sources:
-        prose = prose_of(sidecar, sidecar_path)
+        rendered = rendered_prose(sidecar_path, sidecar)
         rows = []
         for line in sidecar.lines:
-            unit = runner.unit_of(line, prose)
+            unit = runner.unit_of(line, line.prose_in(rendered))
             rows.append(index.setdefault(unit, len(index)))
             keys.setdefault(unit[0], line.provenance)
         rows_of.append(rows)
@@ -131,17 +131,6 @@ def encode_tree(
     )
     encoded = runner.encode(list(index), keys_of=keys.__getitem__)
     return [encoded[rows] for rows in rows_of]
-
-
-def prose_of(sidecar: ProvenanceSidecar, sidecar_path: Path) -> list[str]:
-    """The converted prose lines beside a sidecar, as the trainer's join reads
-    them; none for a variant, whose ``.txt`` is the Forge source script."""
-    from effects.domain.provenance import SourceTree
-    from effects.infrastructure.sidecar_io import converted_text_path, prose_lines
-
-    if sidecar.tree == SourceTree.VARIANT_SCRIPTS:
-        return []
-    return prose_lines(converted_text_path(sidecar_path))
 
 
 def build_runner(loaded: InferenceCheckpoint):

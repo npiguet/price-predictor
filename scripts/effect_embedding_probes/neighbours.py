@@ -46,13 +46,7 @@ from common import (  # noqa: E402
     write_markdown,
 )
 
-from effects.domain.ability_encoder import encoding_text  # noqa: E402
-from effects.infrastructure.sidecar_io import (  # noqa: E402
-    converted_text_path,
-    prose_for,
-    prose_lines,
-    read_sidecar,
-)
+from effects.infrastructure.sidecar_io import encoded_lines, read_sidecar  # noqa: E402
 
 CARDS = ("lightning bolt", "llanowar elves", "giant growth", "wrath of god",
          "divination", "pacifism", "counterspell", "glorious anthem",
@@ -69,10 +63,7 @@ def card_texts(card: str, paths: ProbePaths) -> list[str]:
     path = root / stem[0] / f"{stem}.provenance.json"
     if not path.exists():
         return []
-    sidecar = read_sidecar(path)
-    rendered = prose_lines(converted_text_path(path))
-    return [encoding_text(line, prose_for(line, rendered), paths.surface)
-            for line in sidecar.lines]
+    return [encoded.text for encoded in encoded_lines(path, read_sidecar(path), paths.surface)]
 
 
 def unit(E: np.ndarray) -> np.ndarray:
