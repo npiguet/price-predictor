@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -22,6 +21,7 @@ from effects.infrastructure.record_io import (
     iter_shard_lines,
     iter_shards,
     parse_record_line,
+    peek_envelope,
     read_records_matching,
     record_from_dict,
 )
@@ -138,11 +138,6 @@ def current_sources(records_dir: Path) -> tuple[SourceShard, ...]:
     )
 
 
-#: Where a shard line names its record, read before the line is parsed.
-_RECORD_ID = re.compile(r'"record_id":"([^"]*)"')
-_RECORD_ID_SPAN = 256
-
-
 def training_acting_keys(directory: Path) -> set[tuple]:
     """Every distinct ``acting_keys`` tuple among the records under ``directory``.
 
@@ -156,11 +151,11 @@ def training_acting_keys(directory: Path) -> set[tuple]:
     acting: set[tuple] = set()
     for done, shard in enumerate(shards, start=1):
         for line in iter_shard_lines(shard):
-            found = _RECORD_ID.search(line, 0, _RECORD_ID_SPAN)
-            if found is not None:
-                if found.group(1) in read:
+            head = peek_envelope(line)
+            if head is not None:
+                if head.record_id in read:
                     continue
-                read.add(found.group(1))
+                read.add(head.record_id)
             stripped = line.strip()
             if not stripped:
                 continue

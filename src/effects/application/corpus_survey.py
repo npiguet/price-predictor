@@ -13,7 +13,6 @@ refusal rule, the held-out test and a record's cell cannot drift apart.
 from __future__ import annotations
 
 import logging
-import zlib
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -23,6 +22,7 @@ from typing import TYPE_CHECKING, Literal
 from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import (
     SIGNATURE_CLASSES,
+    game_hash,
     outcome_signature,
     record_hash,
     signature_label,
@@ -55,12 +55,6 @@ if TYPE_CHECKING:
     from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
-
-
-def game_hash(game_id: str) -> int:
-    """A stable 32-bit id for counting distinct games without holding their
-    names; not ``hash()``, which is salted per process (FR-088a)."""
-    return zlib.crc32(game_id.encode("utf-8"))
 
 
 def selection_half(record: EffectRecord, klass: SamplingClass) -> LegalityDecision | Literal[""]:

@@ -20,7 +20,7 @@ from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, NamedTuple
 
 import orjson
 
@@ -794,9 +794,9 @@ def _write_shuffled_buckets(
 
 def _game_of_line(line: str) -> str:
     """A shard line's ``game_id``, read off the envelope head without a parse."""
-    head = _ENVELOPE_HEAD.search(line, 0, _ENVELOPE_HEAD_SPAN)
+    head = peek_envelope(line)
     if head is not None:
-        return head.group(1)
+        return head.game_id
     return parse_record_line(line.strip())["game_id"]
 
 
@@ -882,14 +882,31 @@ def read_records(directory: Path) -> Iterator[EffectRecord]:
         yield from read_shard(shard)
 
 
-#: ``game_id`` and ``kind`` as both writers lay out the envelope's head: the
-#: Java ``EffectRecord.toJson`` and :func:`record_to_dict` emit ``record_id``,
+#: The envelope's head as both writers lay it out: the Java
+#: ``EffectRecord.toJson`` and :func:`record_to_dict` emit ``record_id``,
 #: ``run_id``, ``timestamp``, ``game_id`` and ``kind`` first, in that order.
-_ENVELOPE_HEAD = re.compile(r'"game_id":"([^"]*)","kind":"([a-z_]+)"')
+_ENVELOPE_HEAD = re.compile(
+    r'"record_id":"([^"]*)",.*?"game_id":"([^"]*)","kind":"([a-z_]+)"'
+)
 
-#: How far into a line the head is looked for. The four leading fields are a
+#: How far into a line the head is looked for. The five leading fields are a
 #: few hundred characters; the state snapshot that follows is the bulk.
 _ENVELOPE_HEAD_SPAN = 512
+
+
+class EnvelopeHead(NamedTuple):
+    """A shard line's leading envelope fields, read without parsing it."""
+
+    record_id: str
+    game_id: str
+    kind: str
+
+
+def peek_envelope(line: str) -> EnvelopeHead | None:
+    """The head of one shard line, or None where it has another shape, which
+    the caller then parses: a reordered envelope costs speed, never records."""
+    head = _ENVELOPE_HEAD.search(line, 0, _ENVELOPE_HEAD_SPAN)
+    return None if head is None else EnvelopeHead(*head.groups())
 
 
 def read_records_matching(
@@ -901,29 +918,29 @@ def read_records_matching(
     """The records under ``directory`` of the named games and kinds.
 
     The same records a filter over :func:`read_records` keeps, without
-    parsing the rest. A line whose head has another shape is parsed and
-    filtered the slow way, so a reordered envelope costs speed, never records.
+    parsing the rest; a line :func:`peek_envelope` cannot read is parsed and
+    filtered the slow way.
     """
     shards = iter_shards(directory)
     for done, shard in enumerate(shards):
         if done and done % 250 == 0:
             logger.info("scanned %d of %d shards under %s", done, len(shards), directory)
         for line in iter_shard_lines(shard):
-            head = _ENVELOPE_HEAD.search(line, 0, _ENVELOPE_HEAD_SPAN)
+            head = peek_envelope(line)
             if head is not None:
-                game_id, kind = head.groups()
-                if game_ids is not None and game_id not in game_ids:
+                if game_ids is not None and head.game_id not in game_ids:
                     continue
-                if kinds is not None and kind not in kinds:
+                if kinds is not None and head.kind not in kinds:
                     continue
             stripped = line.strip()
             if not stripped:
                 continue
             record = record_from_dict(parse_record_line(stripped))
-            if game_ids is not None and record.game_id not in game_ids:
-                continue
-            if kinds is not None and record.kind.value not in kinds:
-                continue
+            if head is None:
+                if game_ids is not None and record.game_id not in game_ids:
+                    continue
+                if kinds is not None and record.kind.value not in kinds:
+                    continue
             yield record
 
 

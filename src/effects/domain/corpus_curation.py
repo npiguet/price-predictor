@@ -224,9 +224,15 @@ def rate_plan(distinct: int, quota: int) -> CopyPlan:
     return CopyPlan(base=base, threshold=int(extra / distinct * 2**64) - 1)
 
 
+def game_hash(game_id: str) -> int:
+    """A stable 32-bit id for a game; not ``hash()``, which is salted per
+    process (FR-088a)."""
+    return zlib.crc32(game_id.encode("utf-8"))
+
+
 def game_disjoint_draw(game_id: str) -> float:
     """A game's position in [0, 1), from its id alone (FR-044)."""
-    return zlib.crc32(game_id.encode("utf-8")) % 10**6 / 10**6
+    return game_hash(game_id) % 10**6 / 10**6
 
 
 def in_game_disjoint_stratum(

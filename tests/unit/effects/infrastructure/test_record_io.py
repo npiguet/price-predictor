@@ -909,6 +909,18 @@ class TestReadRecordsMatching:
         ))
         assert [r.record_id for r in got] == [record.record_id]
 
+    def test_the_head_is_read_off_a_written_line(self):
+        from effects.infrastructure.record_io import format_record_line, peek_envelope
+
+        record = _record(**ALL_KINDS["playability-blockers"])
+        head = peek_envelope(format_record_line(record))
+        assert head == (record.record_id, record.game_id, "playability")
+
+    def test_a_head_of_another_shape_reads_as_none(self):
+        from effects.infrastructure.record_io import peek_envelope
+
+        assert peek_envelope('{"kind":"combat","game_id":"g","record_id":"r"}') is None
+
 
 class TestInternedProvenanceKeys:
     """A shard repeats the same few hundred keys tens of thousands of times."""
