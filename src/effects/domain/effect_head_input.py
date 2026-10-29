@@ -29,7 +29,7 @@ from effects.domain.records import (
     RecordKind,
     ResolutionOutcome,
 )
-from effects.domain.state_snapshot import COLORS, EntityState, PlayerState
+from effects.domain.state_snapshot import COLORS, EntityState, PlayerState, normalize_counter_type
 
 
 class SlotKind(IntEnum):
@@ -89,7 +89,6 @@ PHASE_ALIASES: dict[str, str] = {
     "combat_first_strike_damage": "first_strike_damage",
     "combat_end": "end_combat",
 }
-COUNTER_ALIASES: dict[str, str] = {"+1/+1": "P1P1", "-1/-1": "M1M1"}
 #: Appended rather than inserted, so every earlier member keeps its slot.
 OVERLAY_KEYWORDS_GEN2: tuple[str, ...] = (*OVERLAY_KEYWORDS, "landwalk")
 
@@ -403,7 +402,7 @@ def _push_counters(out: list[float], counters, layout: InputLayout) -> None:
     if layout.forge_spellings:
         renamed: dict[str, int] = {}
         for name, value in counters.items():
-            name = COUNTER_ALIASES.get(name, name)
+            name = normalize_counter_type(name)
             renamed[name] = renamed.get(name, 0) + value
         counters = renamed
     for counter in COUNTER_TYPES:

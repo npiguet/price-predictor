@@ -94,6 +94,12 @@ def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     )
 
 
+def delta_direction(target: torch.Tensor) -> torch.Tensor:
+    """A signed delta's direction class, in :data:`DIRECTIONS` order:
+    -1, 0 and 1 become 0, 1 and 2."""
+    return torch.sign(target).long() + 1
+
+
 def _signed_delta_loss(
     prediction: torch.Tensor, target: torch.Tensor,
 ) -> torch.Tensor:
@@ -101,7 +107,7 @@ def _signed_delta_loss(
     a loss are different predictions rather than a hedge."""
     direction_logits = prediction[..., SIGNED_DIRECTIONS]
     log_magnitude = prediction[..., SIGNED_MAGNITUDE]
-    direction = torch.sign(target).long() + 1  # -1,0,1 -> 0,1,2
+    direction = delta_direction(target)
     loss = functional.cross_entropy(
         direction_logits.reshape(-1, len(DIRECTIONS)), direction.reshape(-1),
         reduction="sum",

@@ -21,7 +21,13 @@ from effects.domain.effect_head_layout import (
     FieldSpec,
     FieldType,
 )
-from effects.domain.effect_losses import LossParts, capped, counted, per_entity_loss
+from effects.domain.effect_losses import (
+    LossParts,
+    capped,
+    counted,
+    delta_direction,
+    per_entity_loss,
+)
 from effects.domain.entity_field_targets import EntityTargetBatch
 
 #: A guard on dividing by a floor, not the degenerate-field detector.
@@ -103,7 +109,7 @@ def constant_predictor_outputs(
                 )
             case FieldType.SIGNED_DELTA:
                 target = capped(target)
-                direction = torch.sign(target).long().reshape(-1) + 1
+                direction = delta_direction(target).reshape(-1)
                 columns = vector[start:end]
                 columns[SIGNED_DIRECTIONS] = _log_frequencies(
                     torch.bincount(direction, minlength=len(DIRECTIONS)).float()

@@ -23,15 +23,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum, StrEnum, auto
 
+from effects.domain.damage_step_keywords import KeywordsOf
 from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 from effects.domain.effect_targets import EntityTargets
 from effects.domain.provenance import ProvenanceKey, RoleSpan, SidecarLine, SourceTree
 from effects.domain.records import EffectRecord, Moment, RecordKind
 from effects.domain.script_text import api_of, params, segments
-from effects.domain.state_snapshot import EntityState, StateSnapshot
-
-#: ``entity -> its keywords``, as the caller's keyword resolver names them.
-KeywordsOf = Callable[[EntityState], set[str]]
+from effects.domain.state_snapshot import EntityState, StateSnapshot, normalize_counter_type
 
 #: Amounts and toughnesses a copy draws from, uniformly: lethal a little more
 #: than half the time.
@@ -272,7 +270,7 @@ def _creature_hit(entity: EntityState | None, fields: dict, found: _Amount,
     if set(fields) - rules.hit_fields:
         return _Hit.REFUSED
     if ("indestructible" in keywords_of(entity) or entity.id in attached
-            or any(name.lower() == "shield" for name in entity.counters)):
+            or any(normalize_counter_type(name) == "SHIELD" for name in entity.counters)):
         return _Hit.REFUSED
     zone = fields.get(HeadField.ZONE_OUTCOME, _STAYED)
     if zone not in (_STAYED, _DIED) or (zone == _DIED) != lethal(found.kind, found.amount, entity):

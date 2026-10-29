@@ -52,6 +52,11 @@ class ConsultVerdict(StrEnum):
             return cls.UNKNOWN
 
 
+#: Distinct games a held-out text must act in: the floor the held-out coverage
+#: round collects to (FR-036), and below which the manifest lists the text
+#: (FR-053). Both count the kept resolution records' games.
+HELD_OUT_GAME_FLOOR = 5
+
 #: An uncastable card's share of a castable card's deck weight: above zero so
 #: interventions have it in play, below one since the AI mostly cannot cast it.
 UNCASTABLE_RANK_MULTIPLIER = 0.25

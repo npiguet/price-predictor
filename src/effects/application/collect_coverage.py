@@ -23,6 +23,7 @@ from effects.application.parallel_map import run_parallel
 from effects.domain import default_paths
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
+    HELD_OUT_GAME_FLOOR,
     CardCoverage,
     ConsultVerdict,
     CoverageUnit,
@@ -68,21 +69,29 @@ DECK_SIZE = 40
 #: Seeds the per-round deck sampler so which cards fill a round is reproducible.
 RANDOM_SEED = 42
 
-#: FR-036's floor: distinct games a held-out text must act in.
-DEFAULT_MIN_TEXT_GAMES = 5
-
 
 @dataclass
-class CollectCoverageConfig:
+class CollectorConfig:
+    """What both collectors take: the corpus they write to, the converted
+    trees, the holdout they keep out of their decks, and how they play."""
+
     effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     split_from: Path | None = None
     exclude_cards: Path | None = None
-    target_records: int = field(default=DEFAULT_TARGET_RECORDS, metadata={
-        "help": "Per-card satisfaction goal (default: %(default)s)",
-    })
     decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
         "help": "Decks played as matches per round (default: %(default)s)",
+    })
+    workers: int = field(default=DEFAULT_WORKERS, metadata={
+        "help": "Parallel Java worker processes (default: %(default)s)",
+    })
+    caps: CollectionCaps = field(default_factory=CollectionCaps)
+
+
+@dataclass
+class CollectCoverageConfig(CollectorConfig):
+    target_records: int = field(default=DEFAULT_TARGET_RECORDS, metadata={
+        "help": "Per-card satisfaction goal (default: %(default)s)",
     })
     no_progress_rounds: int = field(default=DEFAULT_NO_PROGRESS_ROUNDS, metadata={
         "help": (
@@ -90,15 +99,11 @@ class CollectCoverageConfig:
             "retires, which is what makes the run end (default: %(default)s)"
         ),
     })
-    workers: int = field(default=DEFAULT_WORKERS, metadata={
-        "help": "Parallel Java worker processes (default: %(default)s)",
-    })
-    caps: CollectionCaps = field(default_factory=CollectionCaps)
     #: ``--only-cards``: the ``holdout-cards`` list. Set, the run is the
     #: held-out coverage round (FR-035): decks from these cards alone, and the
     #: unit is the held-out ability text rather than the card.
     only_cards: Path | None = None
-    min_text_games: int = field(default=DEFAULT_MIN_TEXT_GAMES, metadata={
+    min_text_games: int = field(default=HELD_OUT_GAME_FLOOR, metadata={
         "help": (
             "With --only-cards: distinct games a held-out text must act in to "
             "be satisfied (FR-036; default: %(default)s)"

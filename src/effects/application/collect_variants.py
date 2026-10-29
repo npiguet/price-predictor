@@ -14,15 +14,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.collect_coverage import (
-    DEFAULT_RECORDS_DIR,
-    DEFAULT_WORKERS,
+    CollectorConfig,
     HoldoutSource,
     build_coverage_decks,
     collector_supervisor,
     play_decks,
 )
 from effects.domain import default_paths
-from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import DeckCandidate
 from effects.domain.script_variants import (
     is_multi_face,
@@ -39,13 +37,11 @@ logger = logging.getLogger(__name__)
 
 #: Cap on variant records as a fraction of the real records already present.
 DEFAULT_VARIANT_VOLUME = 0.2
-DEFAULT_DECKS_PER_ROUND = 500
 RANDOM_SEED = 42
 
 
 @dataclass
-class CollectVariantsConfig:
-    effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
+class CollectVariantsConfig(CollectorConfig):
     forge_cards_path: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_FORGE_CARDS_PATH),
     )
@@ -61,9 +57,6 @@ class CollectVariantsConfig:
     #: The real records ``--variant-volume`` is measured against; defaults to
     #: the destination, which caps a run writing to its own directory at zero.
     corpus_records: Path | None = None
-    decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
-        "help": "Decks played as matches per round (default: %(default)s)",
-    })
     seed: int = field(default=RANDOM_SEED, metadata={
         "help": (
             "Seeds the perturbation and the deck build; a repeat run with the "
@@ -71,15 +64,9 @@ class CollectVariantsConfig:
             "(default: %(default)s)"
         ),
     })
-    split_from: Path | None = None
-    exclude_cards: Path | None = None
-    workers: int = field(default=DEFAULT_WORKERS, metadata={
-        "help": "Parallel Java worker processes (default: %(default)s)",
-    })
-    caps: CollectionCaps = field(default_factory=CollectionCaps)
-    #: The holdout rule a variant printing a held-out text is dropped under;
-    #: given the flags ``build-corpus`` is, so the two agree.
-    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
+    #: The holdout rule a variant printing a held-out text is dropped under,
+    #: over ``cards_folders``; given the flags ``build-corpus`` is, so the two
+    #: agree.
     holdout: HoldoutRule = HoldoutRule()
 
     def volume_source(self) -> Path:

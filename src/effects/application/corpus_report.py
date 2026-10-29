@@ -15,6 +15,7 @@ from effects.application.corpus_survey import RefusalTally, Survey
 from effects.application.corpus_write import WriteResult
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_plan import BuildCorpusError, Keys
+from effects.domain.coverage import HELD_OUT_GAME_FLOOR
 from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
 from effects.domain.sampling import SamplingClass
@@ -35,10 +36,6 @@ MAX_REFUSED_SHARE = 0.5
 #: small pilot does not stop on its one Flashback-cast charm.
 MAX_UNJOINABLE_SHARE = 0.001
 MAX_UNJOINABLE_RECORDS = 20
-
-#: A held-out text recorded in fewer games than this is listed in the manifest
-#: (FR-053), the floor the held-out coverage round collects to (FR-036).
-HELD_OUT_GAME_FLOOR = 5
 
 #: A directory whose share of held-out games is above zero and below this
 #: holds a few held-out games where it should hold none: a leak in collection,
