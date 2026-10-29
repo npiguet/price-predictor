@@ -115,7 +115,7 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):
     present = ValidationSamples.load(paths).present
 
     with caplog.at_level(logging.WARNING):
-        loop._warn_missing_classes(present)
+        loop.reporter.missing_classes(present)
 
     assert present == {"resolution-effect", "combat"}
     for absent in set(SAMPLING_CLASSES) - present:
@@ -127,7 +127,7 @@ def test_a_sample_naming_every_class_says_nothing(caplog):
     loop = make_training_loop(TrainEffectModelConfig(corpus="unused"))
 
     with caplog.at_level(logging.WARNING):
-        loop._warn_missing_classes(frozenset(SAMPLING_CLASSES))
+        loop.reporter.missing_classes(frozenset(SAMPLING_CLASSES))
 
     assert caplog.text == ""
 

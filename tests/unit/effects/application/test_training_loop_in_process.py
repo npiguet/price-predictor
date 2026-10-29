@@ -19,6 +19,7 @@ import pytest
 import torch
 
 from effects.application import training_loop as loop_module
+from effects.application.run_reporter import EpochTally
 from effects.application.step_preparation import (
     ShardOpened,
     ShardTask,
@@ -29,7 +30,7 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     epoch_shards,
 )
-from effects.application.training_loop import EpochTally
+from effects.application.training_loop import local_steps
 from effects.domain.records import CombatPayload, RecordKind
 from tests.unit.effects.builders import (
     EFFECTS_FIXTURES,
@@ -187,7 +188,7 @@ def _shard(monkeypatch, directory, *, failing_at: int | None = None):
         optimizer=torch.optim.SGD(model.parameters(), lr=0.1),
     )
     loop._train_on_shard(
-        task, loop._local_steps(task, preparer), run,
+        task, local_steps(task, preparer, pin=False), run,
         EpochTally(running=torch.zeros(())), of=1,
     )
     return marks
@@ -202,7 +203,7 @@ def test_each_step_is_prepared_just_before_it_trains(monkeypatch, tmp_path):
 
 def test_a_failing_preparation_surfaces_at_its_own_step(monkeypatch, tmp_path, caplog):
     with (
-        caplog.at_level(logging.ERROR, logger="effects.application.training_loop"),
+        caplog.at_level(logging.ERROR, logger="effects.application"),
         pytest.raises(RuntimeError, match="step 2"),
     ):
         _shard(monkeypatch, tmp_path, failing_at=2)
@@ -210,6 +211,6 @@ def test_a_failing_preparation_surfaces_at_its_own_step(monkeypatch, tmp_path, c
 
 
 def test_the_shard_line_reports_the_batch_wait(monkeypatch, tmp_path, caplog):
-    with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
+    with caplog.at_level(logging.INFO, logger="effects.application"):
         _shard(monkeypatch, tmp_path)
     assert any("batch wait" in message for message in caplog.messages)

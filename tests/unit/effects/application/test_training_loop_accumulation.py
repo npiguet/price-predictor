@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import torch
 
 from effects.application import training_loop as loop_module
-from effects.application.training_loop import EpochTally, ShardStats
+from effects.application.run_reporter import EpochTally, ShardStats
 from tests.unit.effects.builders import StubLosses, make_cpu_training_loop
 
 

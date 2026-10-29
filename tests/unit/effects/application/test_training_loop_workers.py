@@ -200,7 +200,7 @@ def _run(
     monkeypatch.setattr(run_context, "AbilityEncoder", encoder)
     monkeypatch.setattr(run_context, "EffectModel", model)
     caplog.clear()
-    with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
+    with caplog.at_level(logging.INFO, logger="effects.application"):
         loop = make_training_loop(
             _config(
                 corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
@@ -504,7 +504,7 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     task = ShardTask(
         shard=Path("fixture"), epoch=1, position=2, budget=5, fields=fields,
     )
-    here = list(StepPreparer(settings, truncations=loop.truncations).shard_steps(
+    here = list(StepPreparer(settings, truncations=loop.reporter.truncations).shard_steps(
         task, records,
     ))
     worker = StepPreparer(settings)

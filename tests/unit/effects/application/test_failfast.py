@@ -244,8 +244,8 @@ class TestConfigDefaults:
 class TestHoldoutGuard:
     """An empty card-disjoint stratum must stop the run (T160, FR-088b).
 
-    Left alone it produces a training run that writes nothing: `_validate` over
-    no records returns `nan`, `nan < inf` is False, so `EarlyStopper` never
+    Left alone it produces a training run that writes nothing: `Validator.score`
+    over no records returns `nan`, `nan < inf` is False, so `EarlyStopper` never
     records a best, the checkpoint is never saved, and the run early-stops after
     its patience and exits 0. Hours of GPU time and no artifact.
     """
