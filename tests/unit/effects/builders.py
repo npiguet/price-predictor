@@ -332,7 +332,7 @@ def stub_validator(loop, on_score=None) -> None:
     Only ``score`` is stood in for, so the epoch's own choice of which pass
     feeds the margins and the floor is still the real one.
     """
-    from effects.application.gate_one import MarginAccumulator
+    from effects.domain.gate_metrics import MarginAccumulator
     from effects.application.validation_pass import ValidationPass, Validator
 
     class _Scored(Validator):

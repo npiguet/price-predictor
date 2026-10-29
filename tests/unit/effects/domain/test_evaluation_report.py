@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from effects.application.evaluate_effect_model import not_implemented
-from effects.application.gate_one import GateOneMetrics, evaluate_gate_one
+from effects.application.gate_one import evaluate_gate_one
 from effects.application.gate_two import evaluate_gate_two, evaluate_keyword
 from effects.application.geometry_checks import (
     CacheGeometry,
@@ -22,6 +22,7 @@ from effects.domain.evaluation_report import (
     Margin,
     gate_verdict,
 )
+from effects.domain.gate_metrics import GateOneMetrics
 from tests.unit.effects.builders import keyword_score
 
 

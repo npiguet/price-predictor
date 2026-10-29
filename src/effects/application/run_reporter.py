@@ -13,7 +13,6 @@ from pathlib import Path
 
 import torch
 
-from effects.application.gate_one import GateOneMetrics
 from effects.application.step_loss import StepLoss, read_back
 from effects.application.step_preparation import (
     NO_TEXT_BUCKET,
@@ -37,6 +36,7 @@ from effects.application.training_log import (
 )
 from effects.application.validation_pass import ValidationSamples
 from effects.domain.ability_encoder import TruncationLog, log_truncation
+from effects.domain.gate_metrics import GateOneMetrics
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES
 

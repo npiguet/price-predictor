@@ -16,13 +16,13 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from effects.application.gate_one import GateOneMetrics, MarginAccumulator
 from effects.application.step_loss import StepLossComputer, TrainedModules
 from effects.application.step_preparation import DeviceStep
 from effects.application.train_effect_model import TrainEffectModelConfig, load_shard
 from effects.application.training_log import format_floor
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.entity_field_targets import EntityTargetBatch
+from effects.domain.gate_metrics import GateOneMetrics, MarginAccumulator
 from effects.domain.loss_floor import PartsMean, constant_predictor_floor
 from effects.domain.sampling import BatchPlan, sampling_class
 from effects.domain.strata import VALIDATION_STRATA, Stratum
