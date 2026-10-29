@@ -208,11 +208,20 @@ class EffectModelStore:
             "training_settings": dict(checkpoint.training_settings),
             **checkpoint.extra,
         }
-        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        path = self.directory / f"{stamp}.pt"
+        path = self._unused_path(datetime.now(UTC).strftime("%Y%m%d-%H%M%S"))
         save_checkpoint(path, payload, checkpoint.model_config)
         shutil.copyfile(path, self.latest_path())
         logger.info("Saved %s checkpoint to %s", checkpoint.variant, path)
+        return path
+
+    def _unused_path(self, stamp: str) -> Path:
+        """``{stamp}.pt``, or a numbered sibling when a save in the same second
+        took it: a second write would replace the first epoch's checkpoint."""
+        path = self.directory / f"{stamp}.pt"
+        copy = 1
+        while path.exists():
+            path = self.directory / f"{stamp}-{copy}.pt"
+            copy += 1
         return path
 
     def load(self, path: Path | None = None) -> EffectCheckpoint:

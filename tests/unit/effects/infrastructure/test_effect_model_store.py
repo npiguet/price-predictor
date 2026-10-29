@@ -81,6 +81,23 @@ def _checkpoint(files, **overrides) -> EffectCheckpoint:
     return EffectCheckpoint(**defaults)
 
 
+def test_two_saves_in_one_second_keep_both_checkpoints(tmp_path, files, monkeypatch):
+    """A fast epoch under --save-every-epoch saves twice in one second."""
+    from datetime import UTC, datetime
+
+    import effects.infrastructure.effect_model_store as store_module
+
+    class _Frozen(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 29, 12, 0, 0, tzinfo=UTC)
+
+    monkeypatch.setattr(store_module, "datetime", _Frozen)
+    store = EffectModelStore(tmp_path / "effect-model")
+    saved = [store.save(_checkpoint(files)).name for _ in range(3)]
+    assert saved == ["20261029-120000.pt", "20261029-120000-1.pt", "20261029-120000-2.pt"]
+
+
 class TestSplitRoundTrip:
     def test_the_split_survives_a_save_and_load(self, tmp_path, files):
         store = EffectModelStore(tmp_path / "effect-model")
