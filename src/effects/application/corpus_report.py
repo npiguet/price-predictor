@@ -126,13 +126,13 @@ def report_write_pass(survey: Survey, written: WriteResult) -> None:
         "unattributed", written.unattributed,
         100.0 * written.unattributed / kept_records if kept_records else 0.0,
     )
-    if survey.refusals.by_reason != written.refusals.by_reason:
+    if survey.totals.refusals.by_reason != written.refusals.by_reason:
         logger.warning(
             "The survey and the write pass disagree about which records are "
             "refused: survey %s, write pass %s. Both read the same shards "
             "under the same rule, so this means the corpus changed between "
             "the passes.",
-            dict(sorted(survey.refusals.by_reason.items())),
+            dict(sorted(survey.totals.refusals.by_reason.items())),
             dict(sorted(written.refusals.by_reason.items())),
         )
     if survey.split_games:
@@ -182,11 +182,11 @@ def held_out_text_report(
     """Held-out texts with no gate-one record, and those resolved in under five games."""
     from effects.domain.text_holdout import normalize_script_text
 
-    held_games = survey.games.held_out
+    held_games = survey.totals.games.held_out
     texts = {normalize_script_text(text) for text in held_out_texts}
     without = tuple(sorted(texts - written.strata.gate_one_texts))
     games = {
-        text: len(survey.games.held_out_text_games.get(text, set()) & held_games)
+        text: len(survey.totals.games.held_out_text_games.get(text, set()) & held_games)
         for text in sorted(texts)
     }
     under = {text: count for text, count in games.items() if count < HELD_OUT_GAME_FLOOR}

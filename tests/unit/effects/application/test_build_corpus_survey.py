@@ -159,9 +159,9 @@ def test_survey_counts_records_classes_and_games(tmp_path):
 
     survey = run_survey(tmp_path, config=a_config(tmp_path), workers=1)
 
-    assert survey.records == 3
-    assert survey.games.games == {"g1", "g2"}
-    assert survey.games.held_out == set()
+    assert survey.totals.records == 3
+    assert survey.totals.games.games == {"g1", "g2"}
+    assert survey.totals.games.held_out == set()
 
 
 def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
@@ -185,7 +185,7 @@ def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
         workers=1,
     )
 
-    assert survey.games.held_out == {"g1"}
+    assert survey.totals.games.held_out == {"g1"}
 
 
 def test_survey_counts_games_not_records_for_rarity(tmp_path):
@@ -202,8 +202,8 @@ def test_survey_counts_games_not_records_for_rarity(tmp_path):
         workers=1,
     )
 
-    assert len(survey.rarity.key_games[keys]) == 2
-    assert survey.rarity.key_records[keys] == 3
+    assert len(survey.totals.rarity.key_games[keys]) == 2
+    assert survey.totals.rarity.key_records[keys] == 3
 
 
 def test_survey_records_each_shards_name_relative_to_the_corpus_root(tmp_path):
@@ -234,10 +234,10 @@ def test_merging_shard_surveys_unions_games_and_sums_records():
     merged = merge_surveys(
         [_part("a", {"g1"}, (10,)), _part("b", {"g2"}, (20,))], heap_cap=2,
     )
-    assert merged.rarity.key_records[_BOLT] == 2
-    assert len(merged.rarity.key_games[_BOLT]) == 2
-    assert sorted(merged.supply.heaps[_CELL, _BOLT].values()) == [10, 20]
-    assert merged.supply.keyed[_CELL, _BOLT] == 2
+    assert merged.totals.rarity.key_records[_BOLT] == 2
+    assert len(merged.totals.rarity.key_games[_BOLT]) == 2
+    assert sorted(merged.totals.supply.heaps[_CELL, _BOLT].values()) == [10, 20]
+    assert merged.totals.supply.keyed[_CELL, _BOLT] == 2
     assert merged.split_games == 0
 
 

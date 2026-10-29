@@ -266,12 +266,13 @@ def decide(
 ) -> Decisions:
     """Fold keys to texts, split the games, and plan every record's copies.
 
-    ``survey.supply`` must already be legality-resolved, as :func:`_survey`
-    leaves it.
+    ``survey.totals.supply`` must already be legality-resolved, as
+    :func:`_survey` leaves it.
     """
-    if survey.supply.heap_cap != config.heap_cap:
+    totals = survey.totals
+    if totals.supply.heap_cap != config.heap_cap:
         raise ValueError(
-            f"the survey kept {survey.supply.heap_cap} hashes per cell and key, "
+            f"the survey kept {totals.supply.heap_cap} hashes per cell and key, "
             f"but config.text_cap {config.text_cap} keeps {config.heap_cap}. "
             "decide() must be run against the Survey that this same "
             "--text-cap produced, or the copy plans it writes would disagree "
@@ -286,14 +287,14 @@ def decide(
 
     key_text: dict[Keys, str] = {}
     text_games: dict[str, set[int]] = {}
-    for keys in survey.rarity.key_records:
+    for keys in totals.rarity.key_records:
         text = first_text(keys, text_of)
         if text is None:
             # A runtime-only trait or an unconverted script: no text to cap
             # against, so its records are sampled with the cell's keyless ones.
             continue
         key_text[keys] = text
-        text_games.setdefault(text, set()).update(survey.rarity.key_games.get(keys, ()))
+        text_games.setdefault(text, set()).update(totals.rarity.key_games.get(keys, ()))
 
     misfires = _keyword_misfires(key_text, sidecars, config.keyword_definitions)
     if misfires:
@@ -304,13 +305,13 @@ def decide(
             "Keyword. First: " + "; ".join(misfires[:5])
         )
 
-    held_out = frozenset(survey.games.held_out)
-    game_disjoint = frozenset(survey.games.game_disjoint) - held_out
+    held_out = frozenset(totals.games.held_out)
+    game_disjoint = frozenset(totals.games.game_disjoint) - held_out
     card_disjoint = admit_card_disjoint(
-        held_out, survey.games.held_out_text_games,
+        held_out, totals.games.held_out_text_games,
         cap=config.card_disjoint_text_cap, seed=config.seed,
     )
-    members, keys_of = members_of(survey.supply, key_text)
+    members, keys_of = members_of(totals.supply, key_text)
     return Decisions(
         selection=plan_selection(
             members, keys_of, mix=config.mix(), ceiling=config.training_records,
@@ -324,7 +325,7 @@ def decide(
         ),
         rarity={text: len(games) for text, games in text_games.items()},
         key_text=key_text,
-        mode_counts=dict(sorted(survey.mode_counts.items())),
+        mode_counts=dict(sorted(totals.mode_counts.items())),
     )
 
 
@@ -465,17 +466,20 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
         ),
         workers=config.workers,
     )
-    supply = survey.supply
+    totals = survey.totals
+    supply = totals.supply
     logger.info(
         "Surveyed %d record(s) in %d game(s); %d game(s) name a held-out card, "
         "%d are game-disjoint; %d record(s) are training-bound, and %d more act "
         "through a held-out text.",
-        survey.records, len(survey.games.games), len(survey.games.held_out),
-        len(survey.games.game_disjoint),
+        totals.records, len(totals.games.games), len(totals.games.held_out),
+        len(totals.games.game_disjoint),
         sum(supply.keyed.values()) + sum(supply.keyless.values()),
-        sum(survey.held_out_text_dropped.values()),
+        sum(totals.held_out_text_dropped.values()),
     )
-    return dataclasses.replace(survey, supply=supply.resolved(survey.mode_counts))
+    return dataclasses.replace(survey, totals=dataclasses.replace(
+        totals, supply=supply.resolved(totals.mode_counts),
+    ))
 
 
 def _decide_or_refuse(
@@ -484,14 +488,14 @@ def _decide_or_refuse(
 ) -> Decisions:
     """:func:`decide`, refusing a corpus the quality rules reject or a dataset
     gate 1 could not be scored on."""
-    check_refusals(survey.refusals, survey.kept)
+    check_refusals(survey.totals.refusals, survey.totals.kept)
     decisions = decide(survey, sidecars=trees.sidecars, surface=surface, config=config)
     if not decisions.strata.card_disjoint:
         raise BuildCorpusError(
             "No game is admitted to the card-disjoint stratum, so the dataset "
             "cannot score gate 1 and the trainer would refuse it in its first "
-            f"minute. {config.records_dir} holds {len(survey.games.games)} game(s), "
-            f"{len(survey.games.held_out)} of which name one of the "
+            f"minute. {config.records_dir} holds {len(survey.totals.games.games)} game(s), "
+            f"{len(survey.totals.games.held_out)} of which name one of the "
             f"{len(held_out.names)} held-out card(s). Depleted and "
             "full-strength shards live in sibling subdirectories of the raw "
             "corpus root: point --records-dir at the parent of both, and check "

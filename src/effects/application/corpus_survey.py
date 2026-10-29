@@ -200,7 +200,8 @@ class GameTally:
 
 @dataclass(slots=True)
 class ShardSurvey:
-    """One shard's contribution. Plain data, so it pickles back cheaply."""
+    """One shard's contribution, or every shard's folded into
+    :attr:`Survey.totals`. Plain data, so it pickles back cheaply."""
 
     name: str = field(metadata=NOT_MERGED)
     size: int = field(metadata=NOT_MERGED)
@@ -218,18 +219,13 @@ class ShardSurvey:
 
 @dataclass(frozen=True, slots=True)
 class Survey:
-    """What the whole corpus holds."""
+    """What the whole corpus holds: every shard's survey folded together, and
+    what only the fold can see."""
 
+    #: Its ``name`` and ``size`` are blank; ``supply`` counts training-bound
+    #: records only, its legality cells resolved by the build.
+    totals: ShardSurvey
     shards: tuple[SourceShard, ...]
-    records: int
-    rarity: RarityTally
-    #: Training-bound records only; legality cells resolved by the build.
-    supply: TrainingSupply
-    games: GameTally
-    refusals: RefusalTally = field(default_factory=RefusalTally)
-    kept: Counter[SamplingClass] = field(default_factory=Counter)
-    mode_counts: Counter[str] = field(default_factory=Counter)
-    held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
     #: Per top-level source directory (FR-149): held-out games in a depleted
     #: directory are a collection leak nothing else would notice.
     games_by_source: dict[str, int] = field(default_factory=dict)
@@ -401,15 +397,8 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         held_by_source[source] |= part.games.held_out
 
     return Survey(
+        totals=total,
         shards=tuple(sorted(shards, key=lambda s: s.name)),
-        records=total.records,
-        rarity=total.rarity,
-        supply=total.supply,
-        games=total.games,
-        refusals=total.refusals,
-        kept=total.kept,
-        mode_counts=total.mode_counts,
-        held_out_text_dropped=total.held_out_text_dropped,
         games_by_source={s: len(g) for s, g in games_by_source.items()},
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
         split_games=split_games,
