@@ -45,6 +45,21 @@ class ClassCounts:
     unique_texts: int
 
 
+@dataclass(frozen=True, slots=True)
+class FamilyRow:
+    """One rule family's row of ``families`` (FR-053): what its class budget
+    gave it and what the training output holds. ``share`` is the equal split
+    before redistribution, so ``shortfall`` is ``max(0, share - written)``."""
+
+    available: int
+    share: int
+    planned: int
+    #: Copies included; ``repeats`` is how many of them are copies.
+    written: int
+    repeats: int
+    shortfall: int
+
+
 def _optional_float(value) -> float | None:
     return None if value is None else float(value)
 
@@ -199,7 +214,9 @@ class CorpusManifest:
     holdout_unit: HoldoutUnit = field(
         default=HoldoutUnit.TEXT, metadata=_gen1_implied(HoldoutUnit),
     )
-    #: ``class -> family -> {available, share, written, repeats, shortfall}``.
+    #: ``class -> family ->`` a :class:`FamilyRow`'s fields. Stored as plain
+    #: numbers rather than rows: a manifest built before ``planned`` existed
+    #: lacks it, and reading one in as a row would change its digest.
     families: dict[str, dict[str, dict[str, int]]] = field(
         default_factory=dict, metadata=_gen1_implied(_doubly_nested_int_map),
     )
