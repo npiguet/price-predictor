@@ -19,7 +19,11 @@ from effects.application.step_loss import StepLoss
 from effects.application.step_preparation import NO_TEXT_BUCKET, training_heads
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
 from effects.application.text_staging import MlmMasker, StagedTexts
-from effects.application.train_effect_model import TrainEffectModelConfig
+from effects.application.train_effect_model import (
+    CorpusFacts,
+    RunSpec,
+    TrainEffectModelConfig,
+)
 from effects.application.training_log import format_shares
 from effects.domain.aux_head_targets import (
     created_objects_targets,
@@ -266,10 +270,10 @@ def _built_run(monkeypatch, **config):
     loop = make_cpu_training_loop(
         monkeypatch, encoder_layers=1, encoder_d_model=8, **config,
     )
-    return build_run(loop.config, SimpleNamespace(
+    return build_run(loop.spec, SimpleNamespace(
         tokenizer=SimpleNamespace(vocab_size=8), widths=dict.fromkeys(SlotKind, 4),
         api_types=[], param_keys=[],
-    ), frozenset(), facts=loop.facts, seed=loop.seed, device=loop.device)
+    ), frozenset(), device=loop.device)
 
 
 class TestTheBatchersTheLoopBuilds:
@@ -293,8 +297,11 @@ class TestTheBatchersTheLoopBuilds:
 
     def test_the_checkpoint_records_the_sweep_flags(self, monkeypatch):
         settings = training_settings(
-            TrainEffectModelConfig(corpus="unused", e_noise=0.05, value_weight=0.1),
-            seed=7, api_types=["Draw"], param_keys=["NumCards"],
+            RunSpec(
+                TrainEffectModelConfig(corpus="unused", e_noise=0.05, value_weight=0.1),
+                CorpusFacts(), seed=7,
+            ),
+            api_types=["Draw"], param_keys=["NumCards"],
         )
         assert settings["e_noise"] == 0.05 and settings["value_weight"] == 0.1
         assert settings["api_types"] == ["Draw"]
@@ -308,4 +315,4 @@ class TestTheBatchersTheLoopBuilds:
     def test_the_checkpoint_records_the_seed_the_run_drew(self, monkeypatch):
         """A run with no --seed is reproducible only through the one it drew."""
         run = _built_run(monkeypatch)
-        assert run.training_settings["seed"] == run.seed
+        assert run.training_settings["seed"] == run.spec.seed

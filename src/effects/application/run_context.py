@@ -28,8 +28,8 @@ from effects.application.train_effect_model import (
     LEARNING_RATE,
     SWEEP_FLAGS,
     WEIGHT_DECAY,
-    CorpusFacts,
     EarlyStopper,
+    RunSpec,
     TrainEffectModelConfig,
     fields_for_epoch,
     warmup_steps,
@@ -69,11 +69,7 @@ def parameter_groups(encoder, model, identity_table=None) -> list[dict]:
 class RunContext:
     """What every step of a run trains with, and where the run has got to."""
 
-    config: TrainEffectModelConfig
-    facts: CorpusFacts
-    #: Resolved once, so the seed logged and checkpointed is the one every
-    #: draw used.
-    seed: int
+    spec: RunSpec
     device: torch.device
     encoder_config: AbilityEncoderConfig
     model_config: EffectModelConfig
@@ -114,11 +110,9 @@ def api_vocabularies(config: TrainEffectModelConfig) -> tuple[list[str], list[st
     return script_vocabularies(folders)
 
 
-def preparer_settings(
-    config: TrainEffectModelConfig, *, seed: int, facts: CorpusFacts,
-    widths: dict[SlotKind, int],
-) -> PreparerSettings:
+def preparer_settings(spec: RunSpec, *, widths: dict[SlotKind, int]) -> PreparerSettings:
     """What every preparer of this run is built from, here or in a worker."""
+    config, facts = spec.config, spec.facts
     api_types, param_keys = api_vocabularies(config)
     if api_types:
         logger.info(
@@ -126,7 +120,7 @@ def preparer_settings(
             len(api_types), len(param_keys),
         )
     return PreparerSettings(
-        config=config, seed=seed, split=facts.split,
+        config=config, seed=spec.seed, split=facts.split,
         rarity=facts.rarity, api_types=tuple(api_types),
         param_keys=tuple(param_keys), widths=dict(widths),
         heads=training_heads(config, api_types=api_types),
@@ -134,19 +128,18 @@ def preparer_settings(
     )
 
 
-def training_settings(
-    config: TrainEffectModelConfig, *, seed: int, api_types, param_keys,
-) -> dict:
+def training_settings(spec: RunSpec, *, api_types, param_keys) -> dict:
     """The flags a sweep arm differs by, the seed, and the script-API
     vocabularies (FR-063). ``lethality_copies`` is written only when set, so a
     run without copies resumes against the settings it always had."""
+    config = spec.config
     copies = (
         {"lethality_copies": config.lethality_copies}
         if config.lethality_copies else {}
     )
     return {
         **copies,
-        "seed": seed,
+        "seed": spec.seed,
         **{name: getattr(config, name) for name in SWEEP_FLAGS},
         "api_types": list(api_types),
         "param_keys": list(param_keys),
@@ -156,12 +149,12 @@ def training_settings(
 
 
 def build_run(
-    config: TrainEffectModelConfig, preparer: StepPreparer,
-    present: frozenset[str], *, facts: CorpusFacts, seed: int,
+    spec: RunSpec, preparer: StepPreparer, present: frozenset[str], *,
     device: torch.device,
 ) -> RunContext:
     """The encoder, the model, the optimizer and both device halves, sized by
     ``preparer``."""
+    config = spec.config
     vocab_size = preparer.tokenizer.vocab_size
     widths = preparer.widths
     encoder_config = AbilityEncoderConfig(
@@ -191,7 +184,7 @@ def build_run(
     )
     noise = NoiseState(config.e_noise, config.steps_per_epoch)
     return RunContext(
-        config=config, facts=facts, seed=seed, device=device,
+        spec=spec, device=device,
         encoder_config=encoder_config, model_config=model_config,
         encoder=encoder, model=model,
         optimizer=torch.optim.AdamW(
@@ -207,8 +200,7 @@ def build_run(
         noise=noise,
         identity_table=identity_table,
         training_settings=training_settings(
-            config, seed=seed, api_types=preparer.api_types,
-            param_keys=preparer.param_keys,
+            spec, api_types=preparer.api_types, param_keys=preparer.param_keys,
         ),
         fields={
             epoch: fields_for_epoch(config, present=present, epoch=epoch)

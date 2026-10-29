@@ -412,9 +412,7 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     config = gen1_training_config(corpus, corpus.root / "unused")
     loop = make_training_loop(config, rarity={"x": 3})
-    settings = preparer_settings(
-        config, seed=loop.seed, facts=loop.facts, widths=feature_widths(records),
-    )
+    settings = preparer_settings(loop.spec, widths=feature_widths(records))
     assert settings.heads == frozenset({"value", "api", "mlm"})
     fields = fields_for_epoch(
         config, present=frozenset(sampling_class(r) for r in records), epoch=1,

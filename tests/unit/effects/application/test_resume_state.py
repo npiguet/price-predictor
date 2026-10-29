@@ -10,7 +10,7 @@ from effects.application.resume_state import (
     compared_flags,
     resume_settings,
 )
-from effects.application.train_effect_model import TrainEffectModelConfig
+from effects.application.train_effect_model import CorpusFacts, RunSpec, TrainEffectModelConfig
 from effects.infrastructure.effect_model_store import resume_mismatches
 
 FLAGS = {spec.name for spec in fields(TrainEffectModelConfig)}
@@ -18,7 +18,8 @@ FLAGS = {spec.name for spec in fields(TrainEffectModelConfig)}
 
 def _settings(config: TrainEffectModelConfig, **training_settings) -> dict:
     return resume_settings(
-        config, seed=7, corpus_digest="d", training_settings=training_settings,
+        RunSpec(config, CorpusFacts(digest="d"), seed=7),
+        training_settings=training_settings,
     )
 
 

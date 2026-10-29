@@ -294,6 +294,17 @@ class CorpusFacts:
         )
 
 
+@dataclass(frozen=True)
+class RunSpec:
+    """What one training run is: its flags, the facts its corpus's manifest
+    gave, and the seed, resolved once so the seed logged and checkpointed is
+    the one every draw used."""
+
+    config: TrainEffectModelConfig
+    facts: CorpusFacts
+    seed: int
+
+
 class SurfaceMismatchError(ValueError):
     """A curated dataset's rarity table was keyed on the other surface."""
 

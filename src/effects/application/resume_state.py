@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from effects.application.train_effect_model import SWEEP_FLAGS, TrainEffectModelConfig
+from effects.application.train_effect_model import SWEEP_FLAGS, RunSpec, TrainEffectModelConfig
 from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
     RESUME_NAME,
@@ -54,16 +54,15 @@ def compared_flags() -> tuple[str, ...]:
     )
 
 
-def resume_settings(
-    config: TrainEffectModelConfig, *, seed: int, corpus_digest: str,
-    training_settings: dict,
-) -> dict:
+def resume_settings(spec: RunSpec, *, training_settings: dict) -> dict:
     """Every setting a resumed epoch has to share with the interrupted run:
     every flag but :data:`RESUME_MAY_CHANGE`, so a flag added later is checked
-    by default, and the training settings as recorded."""
+    by default, the corpus by its digest, and the training settings as
+    recorded."""
+    config = spec.config
     return {
-        "seed": seed,
-        "corpus_digest": corpus_digest,
+        "seed": spec.seed,
+        "corpus_digest": spec.facts.digest,
         "vocab_hash": content_hash(config.vocab_path),
         "keyword_definitions_hash": content_hash(config.keyword_definitions),
         **{name: getattr(config, name) for name in compared_flags()},
@@ -72,10 +71,7 @@ def resume_settings(
 
 
 def _settings_of(run: RunContext) -> dict:
-    return resume_settings(
-        run.config, seed=run.seed, corpus_digest=run.facts.digest,
-        training_settings=run.training_settings,
-    )
+    return resume_settings(run.spec, training_settings=run.training_settings)
 
 
 def save_resume(
@@ -83,7 +79,7 @@ def save_resume(
 ) -> None:
     """Everything the next epoch needs, written once the epoch is scored,
     training-only heads included."""
-    directory = run.config.resolved_model_output()
+    directory = run.spec.config.resolved_model_output()
     save_resume_state(directory, {
         "epoch": epoch,
         "step": run.step,
@@ -117,7 +113,7 @@ def restore_resume(run: RunContext) -> int | None:
     """The first epoch to train, with ``run`` where it left off; None when
     nothing is left. Raises ``ResumeMismatchError`` for a resume file written
     under other settings."""
-    state = load_resume_state(run.config.resolved_model_output())
+    state = load_resume_state(run.spec.config.resolved_model_output())
     mismatches = resume_mismatches(state["settings"], _settings_of(run))
     if mismatches:
         raise ResumeMismatchError(
@@ -141,7 +137,7 @@ def restore_resume(run: RunContext) -> int | None:
     # Recomputed under this run's patience rather than read from the file, so
     # a run that stopped early continues when given more patience, or none
     # (FR-063f).
-    if run.stopper.should_stop or epoch >= run.config.epochs:
+    if run.stopper.should_stop or epoch >= run.spec.config.epochs:
         logger.info(
             "The resume file records a finished run (epoch %d); nothing to "
             "resume.", epoch,

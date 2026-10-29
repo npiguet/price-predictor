@@ -124,7 +124,7 @@ def test_the_startup_line_counts_held_out_texts_not_only_cards(config, caplog):
 
 def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, started):
     assert run(config) == 0
-    facts = started[-1].facts
+    facts = started[-1].spec.facts
     manifest = corpus.load()
     assert facts == CorpusFacts.of(manifest)
     assert facts.split.card_disjoint_games == frozenset({"cg"})
@@ -241,7 +241,7 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
 def test_the_trainer_takes_the_manifests_unit_when_the_flag_is_absent(config, started):
     """A gen-1 manifest records no unit and reads as ``text``."""
     assert run(config) == 0
-    assert started[-1].facts.holdout.unit is HoldoutUnit.TEXT
+    assert started[-1].spec.facts.holdout.unit is HoldoutUnit.TEXT
     assert config.holdout_unit is None
 
 
@@ -282,7 +282,7 @@ def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
     )
 
     assert run(config) == 0
-    assert started[-1].facts.holdout.unit is HoldoutUnit.TEXT
+    assert started[-1].spec.facts.holdout.unit is HoldoutUnit.TEXT
 
 
 def test_a_records_set_mixing_generations_is_refused(corpus, config, make_record):

@@ -39,6 +39,7 @@ from effects.application.train_effect_model import (
     MAX_GRAD_NORM,
     CorpusFacts,
     EpochResult,
+    RunSpec,
     TrainEffectModelConfig,
     epoch_shards,
     learning_rate_at,
@@ -126,20 +127,18 @@ class TrainingLoop:
         validation_samples: Mapping[str, Path],
     ) -> None:
         self.config = config
-        self.facts = facts
         #: Processes preparing steps; 0 prepares them in this one. Not a
         #: training setting: it moves where the host half runs, not what it
         #: computes.
         self.prefetch_workers = max(int(config.prefetch_workers), 0)
         self.training_shards = list(training_shards)
         self.validation_samples = dict(validation_samples)
-        #: Resolved once, so the seed logged and checkpointed is the one every
-        #: draw used.
-        self.seed = (
+        self.spec = RunSpec(
+            config, facts,
             config.seed if config.seed is not None
-            else random.SystemRandom().getrandbits(32)
+            else random.SystemRandom().getrandbits(32),
         )
-        torch.manual_seed(self.seed)
+        torch.manual_seed(self.spec.seed)
         self.device = default_device()
         #: The device half of every step, training's and validation's.
         self.losses = StepLossComputer(config, self.device)
@@ -156,17 +155,13 @@ class TrainingLoop:
         if not samples.probe:
             self.reporter.no_probe()
             return 1
-        self.reporter.run_start(self.seed, samples, shards=len(self.training_shards))
+        self.reporter.run_start(self.spec.seed, samples, shards=len(self.training_shards))
         self.reporter.thin_holdout(samples)
         self._cap_cuda_memory()
-        settings = preparer_settings(
-            self.config, seed=self.seed, facts=self.facts,
-            widths=feature_widths(samples.probe),
-        )
+        settings = preparer_settings(self.spec, widths=feature_widths(samples.probe))
         run = build_run(
-            self.config,
-            StepPreparer(settings, truncations=self.reporter.truncations),
-            samples.present, facts=self.facts, seed=self.seed, device=self.device,
+            self.spec, StepPreparer(settings, truncations=self.reporter.truncations),
+            samples.present, device=self.device,
         )
         first_epoch = 1
         if self.config.resume:
@@ -248,7 +243,7 @@ class TrainingLoop:
             model_config=run.model_config,
             encoder_state=run.encoder.state_dict(),
             model_state=run.model.state_dict(),
-            provenance=self.facts.provenance(self.config),
+            provenance=self.spec.facts.provenance(self.config),
             variant=self.config.variant,
             best_val_loss=run.stopper.best,
             epoch=epoch,
@@ -268,7 +263,7 @@ class TrainingLoop:
         """
         shards = epoch_shards(
             self.training_shards, epoch=epoch,
-            per_epoch=self.config.shards_per_epoch, seed=self.seed,
+            per_epoch=self.config.shards_per_epoch, seed=self.spec.seed,
         )
         allocation = steps_per_shard(self.config.steps_per_epoch, len(shards))
         return len(shards), [
