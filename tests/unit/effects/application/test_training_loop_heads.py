@@ -21,14 +21,14 @@ from effects.application.surface_batching import EncodedBatch, PreparedBatch
 from effects.application.text_staging import MlmMasker
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_log import format_shares
-from effects.domain.aux_heads import Head
-from effects.domain.effect_losses import LossParts
-from effects.domain.effect_model import EffectModel, EffectModelConfig
-from effects.domain.effect_targets import (
+from effects.domain.aux_head_targets import (
     created_objects_targets,
     supervises_created_objects,
     verdict_targets,
 )
+from effects.domain.aux_heads import Head
+from effects.domain.effect_losses import LossParts
+from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.event_schema import EventType
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.records import (

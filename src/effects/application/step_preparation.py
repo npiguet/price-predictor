@@ -25,17 +25,17 @@ from effects.application.text_staging import MaskedTokens, TextStager, pinned
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.domain.ability_encoder import TruncationLog, surface_of
 from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
+from effects.domain.aux_head_targets import (
+    created_objects_targets,
+    supervises_created_objects,
+    verdict_targets,
+)
 from effects.domain.aux_heads import TRAINING_HEADS, Head
 from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH, FieldSpec
-from effects.domain.effect_targets import (
-    created_objects_targets,
-    derive_targets,
-    supervises_created_objects,
-    verdict_targets,
-)
+from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.provenance import SidecarLine
@@ -47,11 +47,12 @@ from effects.domain.sampling import (
     sample_weights,
     sampling_class,
 )
+from effects.domain.script_text import params, segments
 from effects.domain.split import (
     CorpusSplit,
 )
 from effects.domain.surface_collation import entity_target_tensors
-from effects.domain.value_targets import params, segments, value_targets
+from effects.domain.value_targets import value_targets
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 
