@@ -1,7 +1,6 @@
 """The ability tokenizer a command reads with, built from the files it names.
 
-Torch-free at import, so ``build-vocab`` can read the keyword definitions
-through it without loading the GPU stack.
+Torch-free at import, so ``build-vocab`` can use it without the GPU stack.
 """
 
 from __future__ import annotations
@@ -14,12 +13,8 @@ from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
 
 def load_definitions(keyword_path: Path) -> dict:
-    """The keyword definitions at ``keyword_path``; none where it is absent.
-
-    A missing table tokenizes with no definitions rather than failing: a run
-    without one is degraded, not broken, and a checkpoint trained before the
-    table existed recorded none.
-    """
+    """The keyword definitions at ``keyword_path``; none where it is absent,
+    since a checkpoint trained before the table existed recorded none."""
     if not Path(keyword_path).exists():
         return {}
     from effects.application.extract_keyword_definitions import (
@@ -35,11 +30,9 @@ def load_tokenizer(
 ) -> AbilityTokenizer:
     """The tokenizer over ``vocab_path`` and the definitions at ``keyword_path``.
 
-    Without ``training_settings`` it applies the vocabulary's own surface's
-    rules, which is what a training run tokenizes with. With a loaded
-    checkpoint's, it applies the rules that checkpoint trained under
-    (:func:`tokenizer_surface`): for a gen-1 checkpoint, the prose grammar even
-    on its script vocabulary.
+    With a loaded checkpoint's ``training_settings`` it applies the rules that
+    checkpoint trained under (:func:`tokenizer_surface`); without, the
+    vocabulary's own surface's.
     """
     from effects.domain.ability_encoder import surface_of
 

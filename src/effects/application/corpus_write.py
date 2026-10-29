@@ -1,10 +1,8 @@
 """The write pass of ``build-corpus``: every record to its stratum, by the plan.
 
-A worker re-reads one raw shard through the same :class:`WorkerContext` the
-survey used, routes each record by its game (:class:`GameStrata`) and writes
-one part per output stratum; ``build()`` repacks the parts afterwards. Every
-number the manifest reports about what was written is tallied here, in four
-value objects that :func:`merge_into` adds shard by shard.
+A worker re-reads one raw shard through the survey's :class:`WorkerContext`
+and writes one part per output stratum, which ``build()`` repacks; every number
+the manifest reports about what was written is tallied here.
 """
 
 from __future__ import annotations
@@ -34,14 +32,13 @@ from effects.domain.tally_merge import merge_into
 class WritePlan:
     """What the write pass applies, decided once in the main process."""
 
-    #: A **parts** directory per output: a worker writes one part per source
-    #: shard, and ``build()`` repacks the parts into uniform shards.
+    #: One part per source shard goes here, for ``build()`` to repack.
     parts_dirs: dict[Stratum, str]
     strata: GameStrata
     plans: dict[tuple[Cell, Keys], CopyPlan]
     keyless_plans: dict[Cell, CopyPlan]
-    #: Kept records per legality mode, which places a legality record in its
-    #: rarest mode's family exactly as the survey's supply was folded.
+    #: Places a legality record in its rarest mode's family exactly as the
+    #: survey's supply was folded.
     mode_counts: dict[str, int] = field(default_factory=dict)
 
 
@@ -58,16 +55,12 @@ class WriteConfig:
 class StratumTally:
     """Records written to each stratum and the acting keys behind them.
 
-    Also counts what reaches no output: held-out games the card-disjoint cap
-    declined, and training records acting through a held-out text. FR-145
-    wants the report per stratum, and a stratum nobody counted is a stratum
-    nobody notices is empty. ``keys`` folds through the build's key-to-text
-    map into each output's unique-ability-text count (FR-143).
+    The dropped strata are counted too (FR-145), and ``keys`` folds into each
+    output's unique-ability-text count (FR-143).
     """
 
     records: Counter[Stratum] = field(default_factory=Counter)
     keys: dict[Stratum, set[Keys]] = field(default_factory=dict)
-    #: The held-out texts the gate-one slice holds a record of.
     gate_one_texts: set[str] = field(default_factory=set)
 
     def note(self, stratum: Stratum, keys: Keys | None, count: int = 1) -> None:
@@ -80,11 +73,10 @@ class StratumTally:
 class TrainingTally:
     """Per sampling class: records kept by the rules, written, dropped by the plan."""
 
-    #: Records the quality rules kept, in every stratum.
+    #: In every stratum.
     read: Counter[SamplingClass] = field(default_factory=Counter)
-    #: Records written to the training output, copies included.
+    #: Copies included.
     kept: Counter[SamplingClass] = field(default_factory=Counter)
-    #: Training records a copy plan wrote zero times.
     dropped_by_cap: Counter[SamplingClass] = field(default_factory=Counter)
     kept_keys: dict[SamplingClass, set[Keys]] = field(default_factory=dict)
 
@@ -93,8 +85,7 @@ class TrainingTally:
 class FamilyTally:
     """What the training output holds per family, signature, policy and decision (FR-053)."""
 
-    #: ``(class, family label) ->`` records written, copies included, and the
-    #: distinct records behind them: the difference is the family's repeats.
+    #: Written counts copies, distinct does not: the difference is repeats.
     written: Counter[tuple[SamplingClass, str]] = field(default_factory=Counter)
     distinct: Counter[tuple[SamplingClass, str]] = field(default_factory=Counter)
     signatures: Counter[tuple[SamplingClass, str, str]] = field(default_factory=Counter)
@@ -122,9 +113,8 @@ class WriteResult:
     strata: StratumTally = field(default_factory=StratumTally)
     training: TrainingTally = field(default_factory=TrainingTally)
     families: FamilyTally = field(default_factory=FamilyTally)
-    #: Kept records whose events name no producing clause (FR-148). Watched
-    #: rather than refused: a clause the collector could not find on the
-    #: acting chain does not make the outcome another ability's.
+    #: Kept records whose events name no producing clause (FR-148), watched
+    #: rather than refused.
     unattributed: int = 0
 
 
@@ -132,29 +122,20 @@ class WriteResult:
 
 _WRITE: tuple[WritePlan, WorkerContext] | None = None
 
-#: The plan of a cell the decision gave nothing: written zero times.
 _NO_COPIES = CopyPlan()
 
 
 def init_write_worker(config: WriteConfig) -> None:
-    """Pool initializer: one context per worker process, built once."""
     global _WRITE
     _WRITE = (config.plan, WorkerContext(config.read))
 
 
 def output_name(relative: str) -> str:
-    """A flat, **injective** part name for a source that may sit in a subdirectory.
+    """A flat, **injective** part name for a source in a subdirectory.
 
-    ``depleted/run.0-a.jsonl.gz`` and ``full-strength/run.0-a.jsonl.gz`` are
-    different shards and must not write to one file -- and neither may any
-    other pair of distinct relative paths, because ``write_shard`` opens in
-    truncate mode, so a collision is a silent overwrite with no stable answer,
-    under ``workers > 1``, as to which source survives.
-
-    A plain ``"/" -> "__"`` substitution is not injective: ``"a_/b"`` and
-    ``"a/_b"`` both become ``"a___b"``. Escaping the escape character first
-    makes it so: every ``_`` in the result opens a two-character escape --
-    ``_u`` for an original ``_``, ``_s`` for an original ``/``.
+    Injective because ``write_shard`` truncates, so a collision is a silent
+    overwrite; escaping ``_`` first makes it so, where a plain ``/ -> __``
+    would map ``a_/b`` and ``a/_b`` alike.
     """
     return relative.replace("_", "_u").replace("/", "_s")
 
@@ -175,8 +156,6 @@ def write_shard_with(plan: WritePlan, context: WorkerContext, relative: str) -> 
         write_record(record, plan, context, out, outputs)
 
     name = output_name(relative)
-    # Only where there is something to write: a source shard contributes to
-    # one stratum far more often than to every one.
     for stratum, records in outputs.items():
         if records:
             write_shard(Path(plan.parts_dirs[stratum]) / name, records)
@@ -200,7 +179,6 @@ def write_record(
     keys = acting_keys(record) or None
     stratum = plan.strata.stratum_of(record.game_id)
     if stratum is Stratum.DROPPED_HELD_OUT:
-        # Held out but not admitted to the stratum: dropped, never trained on.
         out.strata.note(stratum, None)
         return
     if stratum is not Stratum.TRAINING:
@@ -215,10 +193,8 @@ def write_record(
         return
 
     if context.held_out_text(keys) is not None:
-        # A training game's record acting through a held-out text -- a token
-        # or a variant printing it, or its template. The game carries no
-        # held-out card, so the rest of it still trains; this record would
-        # train on the very text the card-disjoint stratum measures.
+        # A token or variant printing a held-out text: the rest of the game
+        # still trains, this record would train on the measured text.
         out.strata.note(Stratum.DROPPED_HELD_OUT_TEXT, None)
         return
     cell = context.cell_of(record, plan.mode_counts)

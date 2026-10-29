@@ -1,23 +1,11 @@
 """What actually happened, as the per-entity head's targets.
 
-A record stores *events* — "this creature moved to the graveyard", "this player
-lost 3 life" — and the head predicts *fields*. This module is the bridge, and it
-is the only place the event vocabulary meets the field layout, so a new event
-type has exactly one place to say what it supervises.
-
-Two rules run through it:
-
-- **An entity is affected when any event names it.** The gate's target is that,
-  and nothing else. It is deliberately not "some field changed": a spell that
-  targets a creature and deals 0 damage to it still affected it, and a model
-  that learns otherwise will predict "nothing happens" for every fizzle.
-- **A field with no event is absent, not zero, unless silence is itself the
-  answer.** An entity's ``fields`` hold only what the record wrote, and
-  :meth:`EntityTargets.supervised` decides what the head is scored on: a written
-  value, else the field's silent value where the layout gives one for this
-  record's class and this kind of entity (:mod:`effect_head_layout`), else
-  nothing. Writing 0 for every unmentioned field would teach the head that a
-  destroyed creature was untapped and a player's zone did not change.
+The one place the event vocabulary meets the field layout. An entity is
+affected when any event names it, not when some field changed: a 0-damage hit
+still affected its target. A field no event wrote is absent rather than zero
+unless the layout gives it a silent value for this record's class and entity
+kind (:meth:`EntityTargets.supervised`); zero everywhere would teach the head
+that a destroyed creature was untapped.
 """
 
 from __future__ import annotations
@@ -56,10 +44,8 @@ from effects.domain.records import (
 from effects.domain.sampling import sampling_class
 from effects.domain.state_snapshot import COLORS
 
-#: Event types that move an entity out of where it was, and the zone outcome
-#: each implies. A destroy and a sacrifice both end in the graveyard, but they
-#: are different game actions with different replacement effects, so the record
-#: keeps them apart and the target collapses them.
+#: The zone outcome each moving event implies; the record keeps destroy and
+#: sacrifice apart, the target collapses them.
 _ZONE_BY_EVENT: dict[EventType, str] = {
     EventType.DESTROYED: "died",
     EventType.SACRIFICED: "died",
@@ -68,7 +54,6 @@ _ZONE_BY_EVENT: dict[EventType, str] = {
     EventType.SPELL_COUNTERED: "countered",
 }
 
-#: Destination zones a ``zone_change`` event maps to.
 _ZONE_BY_DESTINATION: dict[str, str] = {
     "graveyard": "died",
     "exile": "exiled",
@@ -85,7 +70,6 @@ _LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
     EventType.CARD_REVEALED: "reveal",
 }
 
-#: Event types that add one parameter to one field:
 #: ``type -> (field, parameter, default when absent, sign)``.
 _ADDITIVE: dict[EventType, tuple[str, str, float, float]] = {
     EventType.DAMAGE_DEALT: ("damage_taken", "amount", 0, 1.0),
@@ -97,7 +81,6 @@ _ADDITIVE: dict[EventType, tuple[str, str, float, float]] = {
     EventType.CARD_MILLED: ("cards_milled", "count", 1, 1.0),
 }
 
-#: Event types that set one field to a constant.
 _SETTERS: dict[EventType, tuple[str, int]] = {
     EventType.TAPPED: ("tap_state", 1),
     EventType.UNTAPPED: ("tap_state", 0),
@@ -123,10 +106,9 @@ def overlay_index(raw: str) -> int | None:
 class EntityTargets:
     """One entity's targets for this record.
 
-    ``affected`` is the gate. ``fields`` holds what the record wrote and
-    nothing else; ``unknown`` the fields it declares it cannot say. The record's
-    sampling class and the entity's kind decide which silent values apply
-    (:meth:`supervised`); without them only written values are scored.
+    ``fields`` holds what the record wrote and nothing else, ``unknown`` what
+    it declares it cannot say; without ``record_class`` and ``scope`` only
+    written values are scored.
     """
 
     affected: bool = False
@@ -185,13 +167,8 @@ def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:
 
 
 def _outcome_events(record: EffectRecord) -> tuple[Event, ...]:
-    """The events that are this record's outcome, which is not every event it carries.
-
-    A fired trigger's event is what caused it, read as the pending-event overlay
-    on its input; what the trigger then does arrives as the resolution record
-    of the ability it put on the stack. A trigger record supervises the verdict
-    head's fired bit alone (base spec, record-kind table).
-    """
+    """The events that are this record's outcome: none on a trigger record,
+    whose events caused it and whose effect is its resolution's record."""
     if isinstance(record.payload, TriggerPayload):
         return ()
     return events_of(record)
@@ -253,16 +230,8 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
 
 
 def _apply_duration(entry: EntityTargets, name: str, duration: str | None) -> None:
-    """How long a lasting change lasts, where the record says.
-
-    The two duration fields were the only ones in the head no path wrote, and
-    the cause was upstream: an ``Event``'s ``duration`` had a setter nothing
-    called, so a pump until end of turn and a permanent one recorded
-    identically and there was nothing to learn the difference from.
-
-    An unrecognised or absent duration leaves the field unset rather than
-    guessing a bucket, which reads as "this record does not say".
-    """
+    """How long a lasting change lasts, where the record says; an unrecognised
+    or absent duration leaves the field unset rather than guessing a bucket."""
     if duration in DURATIONS:
         entry.set(name, DURATIONS.index(duration))
 
@@ -332,9 +301,7 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
             entry.add("power_delta", float(contribution.pt_boost[0]))
             entry.add("toughness_delta", float(contribution.pt_boost[1]))
         for keyword in contribution.keywords:
-            # Same "-" convention as the type and colour channels: a static
-            # that takes a keyword away marks it, because the contribution is
-            # one flat list and the head has a field for each direction.
+            # The type and colour channels' "-" convention.
             lost = keyword.startswith("-")
             _flag_keyword(
                 entry, "keywords_lost" if lost else "keywords_gained",
@@ -354,20 +321,10 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
 def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
     """One contribution channel, split into what it grants and what it takes.
 
-    The collector writes a channel as one list because the record schema fixes
-    the field, so a removal is marked with a leading ``-`` and a lone ``=``
-    marks the channel as one the static sets outright rather than adds to.
-
-    A replacement reports only what it sets. What it displaced is not in the
-    record: the snapshot beside it is the board after the static applied, so
-    reading the entity's current types back would name what it still has, not
-    what it lost. The caller marks the lost field unknown, which is the one
-    honest answer: the loss skips it rather than scoring it as an empty set.
-
-    Tokens naming a whole class of type -- ``all-creature-types`` and the
-    ``-all-*`` removals -- match nothing in ``CARD_TYPES`` and drop here. They
-    are kept in the record because they are real, and the model has no field
-    for "every creature type at once" to put them in.
+    A removal carries a leading ``-``; a lone ``=`` marks a channel the static
+    sets outright, whose displaced values the record cannot name (the snapshot
+    is the board after the static), so the caller marks the lost field
+    unknown. Whole-class tokens (``all-creature-types``) match no slot and drop.
     """
     gained: list[str] = []
     lost: list[str] = []
@@ -389,12 +346,9 @@ def verdict_targets(
 ) -> tuple[list[float], list[bool]] | None:
     """The verdict head's targets at ``[ACT]`` and which of them this record sets.
 
-    Three kinds supervise it, each a different slice: a ``decision`` record its
-    candidate's three verdict bits (Java writes one candidate per record, so the
-    candidate is the payload's first), a cost half the mana it paid by colour,
-    and a ``trigger`` record whether it fired. None for every other record, and
-    each column the record says nothing about is left out of its mask — a cost
-    half is no evidence that the ability was playable.
+    A ``decision`` record sets its candidate's verdict bits, a cost half the
+    mana it paid by colour, a ``trigger`` record whether it fired; every other
+    column is masked out, since a cost half is no evidence of playability.
     """
     target = [0.0] * VERDICT_WIDTH
     mask = [False] * VERDICT_WIDTH
@@ -424,12 +378,8 @@ def verdict_targets(
 
 
 def supervises_created_objects(record: EffectRecord) -> bool:
-    """Effect halves and in-place rewrites carry created-objects targets.
-
-    A rewrite only where ``outgoing`` is non-null: every other result was
-    carried out by running another ability, whose own effect half supervises
-    what it made (base spec § Output heads).
-    """
+    """Effect halves and in-place rewrites carry created-objects targets; any
+    other rewrite ran another ability, whose effect half supervises it."""
     if record.kind is RecordKind.RESOLUTION:
         return record.moment is Moment.RESOLUTION
     if record.kind is RecordKind.REWRITE:
@@ -440,12 +390,8 @@ def supervises_created_objects(record: EffectRecord) -> bool:
 def created_objects_targets(record: EffectRecord) -> list[float]:
     """The created-objects head's targets at ``[GLOBAL]`` (FR-078).
 
-    One group per distinct token: by token-script id where the event names one
-    (scripted), otherwise by its characteristics. Slots are in canonical order —
-    scripted groups sorted by id, characteristics-only groups after them by
-    descending count — and the flag past the last slot marks more than K
-    groups. Every slot carries the group's count, power, toughness and type and
-    keyword flags, read from the event's ``characteristics``.
+    Scripted groups first by id, then characteristics-only groups by
+    descending count; the flag past the last slot marks more than K groups.
     """
     groups: dict[tuple, TokenGroup] = {}
     for event in events_of(record):
@@ -469,11 +415,8 @@ def created_objects_targets(record: EffectRecord) -> list[float]:
 
 @dataclass
 class TokenGroup:
-    """Tokens one record created that the head counts as one group (FR-078).
-
-    Grouped by token-script id where the event names one, otherwise by the
-    token's characteristics.
-    """
+    """Tokens one record created that the head counts as one group (FR-078):
+    by token-script id where the event names one, else by characteristics."""
 
     scripted: bool
     id: str

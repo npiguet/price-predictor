@@ -1,27 +1,13 @@
 """The survey pass of ``build-corpus``: what every raw shard holds (FR-135).
 
-The survey keys on the provenance key rather than the ability text on purpose.
-Resolving a key to its text needs a ``SidecarCache`` over tens of thousands of
-sidecar files; each worker builds one lazily for the refusal rule and the
-held-out test, which touch only the scripts its shards name, while the full
-fold of every key to its text happens once, in the main process.
-
-What it counts falls in two populations, kept apart on purpose:
-
-- **The whole corpus** -- every record the quality rules keep: rarity (FR-141
-  wants effective games over the whole raw corpus), the legality mode table,
-  the games and the held-out games, and the held-out texts' games.
-- **The training-bound records** alone -- the :class:`TrainingSupply` every
-  class budget, family share and copy plan is sized on. A game's records are
-  buffered to the end of its shard and counted only once the game is known to
-  route to training: a raw shard is one JVM lifetime, so a game never spans
-  two, and :class:`GameRouting` decides a game from the game alone. A
-  supply counted over held-out and game-disjoint games too planned training
-  slots the write pass then routed away.
-
-Both passes read their shards through one :class:`WorkerContext`, so the
-refusal rule, the held-out test and a record's cell cannot drift apart between
-them.
+Keyed on the provenance key rather than the ability text: folding every key to
+its text needs the whole sidecar tree, so it happens once, in the main process.
+Rarity, the legality mode table and the game sets count the whole corpus
+(FR-141); the :class:`TrainingSupply` the plan is sized on counts
+training-bound records only, so a game's records are buffered to the end of
+its shard (one JVM lifetime, which no game outlives) and counted once its
+route is known. Both passes read through one :class:`WorkerContext`, so the
+refusal rule, the held-out test and a record's cell cannot drift apart.
 """
 
 from __future__ import annotations
@@ -74,22 +60,14 @@ logger = logging.getLogger(__name__)
 
 
 def game_hash(game_id: str) -> int:
-    """A stable 32-bit id for a game, for counting distinct games cheaply.
-
-    Rarity needs the *number* of distinct games per text, not their names, and
-    holding tens of millions of game-id strings across worker results costs
-    hundreds of megabytes for a figure that is a cardinality. ``crc32`` rather
-    than the built-in ``hash()``, which is salted per process (FR-088a).
-    """
+    """A stable 32-bit id for counting distinct games without holding their
+    names; not ``hash()``, which is salted per process (FR-088a)."""
     return zlib.crc32(game_id.encode("utf-8"))
 
 
 def selection_half(record: EffectRecord, klass: SamplingClass) -> str:
-    """``real`` / ``what-if`` on a legality record, empty on every other.
-
-    The two halves of the legality class (FR-049 step 3): a gen-1 record,
-    whose decision is unknown, selects as a what-if.
-    """
+    """``real`` / ``what-if`` on a legality record (FR-049 step 3), empty on
+    every other; a gen-1 record, whose decision is unknown, is a what-if."""
     if klass != SamplingClass.PLAYABILITY_LEGALITY:
         return ""
     if LegalityDecision.of(record) is LegalityDecision.REAL:
@@ -103,14 +81,10 @@ def cell_of(
 ) -> Cell:
     """The cell a record is selected in. Both passes call this one function.
 
-    ``random_seat`` is deliberately not a component (FR-050): off-policy
-    records compete for the same share as on-policy ones, and the manifest
-    reports how many of each were written instead.
-
-    A legality record's family is its rarest mode, which only the whole
-    corpus can say. Without ``legality_mode_counts`` -- the survey -- its cell
-    carries the record's modes, which :meth:`Cell.resolved` folds once the
-    counts exist; with them -- the write pass -- the cell comes back resolved.
+    ``random_seat`` is not a component (FR-050). A legality record's family is
+    its rarest mode, which only the whole corpus can say, so without
+    ``legality_mode_counts`` (the survey) its cell carries the modes for
+    :meth:`Cell.resolved` to fold later.
     """
     from effects.domain.rule_families import FamilySentinel, legality_modes, rule_family
 
@@ -140,25 +114,18 @@ class ReadConfig:
     """How both passes read and judge a record; pickled into every worker."""
 
     records_dir: str
-    #: Tree name -> converted root, so a worker can build its own
-    #: SidecarCache: a cache holds open-ended per-card state and does not
-    #: pickle.
+    #: Roots rather than a ``SidecarCache``, which does not pickle.
     sidecar_roots: dict[str, str]
-    #: ``--max-events-per-record``, passed through to ``quality_defect``.
+    #: ``--max-events-per-record``.
     max_events: int
     held_out: HeldOutCards
     seed: int
 
 
 class WorkerContext:
-    """One process's read side: its config, sidecar cache, resolver and memo.
-
-    Built once per worker process by the pool initializers, and by the main
-    process for a ``workers=1`` run and for the validation samples. The cache
-    and the keyword resolver are built on first use and live as long as the
-    context, so a process reads each sidecar once rather than once per shard,
-    and a context built for one build never answers for another's tree.
-    """
+    """One process's read side: its config, sidecar cache, resolver and memo,
+    built lazily and kept for the context's life, so a process reads each
+    sidecar once rather than once per shard."""
 
     def __init__(self, read: ReadConfig) -> None:
         self.read = read
@@ -178,7 +145,6 @@ class WorkerContext:
 
     @property
     def resolver(self):
-        """The combat keyword resolver; it memoizes per provenance key."""
         if self._resolver is None:
             from effects.domain.damage_step_keywords import KeywordResolver
 
@@ -191,7 +157,7 @@ class WorkerContext:
         return read_shard(Path(self.read.records_dir) / relative)
 
     def refusal(self, record: EffectRecord) -> str | None:
-        """The one refusal rule both passes apply, so they cannot drift apart."""
+        """The one refusal rule both passes apply."""
         defect = quality_defect(record, max_events=self.read.max_events)
         if defect is not None:
             return defect
@@ -210,15 +176,9 @@ class WorkerContext:
         return record_hash(record.record_id, seed=self.read.seed)
 
     def held_out_text(self, keys: Keys | None) -> str | None:
-        """The held-out script text these acting keys resolve to, or None.
-
-        Normalized, as the holdout keys its texts. On the script surface
-        whatever ``--vocab-path`` says, because that is the surface the
-        holdout is chosen on, and by the holdout's unit, so a variant or a
-        token printing a text whose template is held out is held out too.
-        Memoized per key tuple: a corpus repeats the same cards millions of
-        times.
-        """
+        """The held-out script text these acting keys resolve to, normalized,
+        or None. Always the script surface, whatever ``--vocab-path`` says,
+        since that is the surface the holdout is chosen on."""
         if not keys or not self.read.held_out.keys:
             return None
         if keys in self._held_text:
@@ -241,14 +201,9 @@ class WorkerContext:
 
 @dataclass(slots=True)
 class RefusalTally:
-    """Records the quality rules refused (FR-148), as both passes count them.
-
-    By reason, and by sampling class -- the axis ``MAX_REFUSED_SHARE`` is
-    judged on, since a corpus can be a few percent junk overall and still have
-    lost one whole class -- and the two join refusals by the acting key's
-    script, so a converter regression or a stale sidecar names the cards it is
-    costing.
-    """
+    """Records the quality rules refused (FR-148), by reason, by sampling class
+    (the axis ``MAX_REFUSED_SHARE`` is judged on) and, for the two join
+    refusals, by script, so a stale sidecar names the cards it costs."""
 
     by_reason: Counter[QualityDefect] = field(default_factory=Counter)
     by_class: Counter[SamplingClass] = field(default_factory=Counter)
@@ -268,13 +223,8 @@ class RefusalTally:
 
 @dataclass(slots=True)
 class RarityTally:
-    """Records and distinct games per acting-key tuple, over the whole corpus.
-
-    The whole corpus rather than the training stratum (FR-141): rarity is how
-    often the game shows an ability at all, and the coverage and variant
-    collectors exist to raise exactly the counts a training-only tally would
-    understate.
-    """
+    """Records and distinct games per acting-key tuple, over the whole corpus
+    rather than the training stratum (FR-141)."""
 
     key_records: Counter[Keys] = field(default_factory=Counter)
     key_games: dict[Keys, set[int]] = field(default_factory=dict)
@@ -290,14 +240,11 @@ class GameTally:
 
     #: Games holding at least one record the quality rules keep.
     games: set[str] = field(default_factory=set)
-    #: Games naming a held-out card, refused records included: a game that
-    #: played a held-out card played it whether or not the record saying so
-    #: survives the rules.
+    #: Refused records included: the game played the card either way.
     held_out: set[str] = field(default_factory=set)
-    #: Games :class:`GameRouting` placed in the game-disjoint stratum.
     game_disjoint: set[str] = field(default_factory=set)
     #: Held-out text -> games holding a resolution record acting through it,
-    #: which the card-disjoint cap counts (FR-142) and gate 1 scores.
+    #: which the card-disjoint cap counts (FR-142).
     held_out_text_games: dict[str, set[str]] = field(default_factory=dict)
 
 
@@ -312,7 +259,6 @@ class ShardSurvey:
     rarity: RarityTally = field(default_factory=RarityTally)
     games: GameTally = field(default_factory=GameTally)
     refusals: RefusalTally = field(default_factory=RefusalTally)
-    #: Kept records per single legality mode, over the whole corpus.
     mode_counts: Counter[str] = field(default_factory=Counter)
     #: Training-bound records per class acting through a held-out text.
     held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
@@ -331,16 +277,12 @@ class Survey:
     refusals: RefusalTally = field(default_factory=RefusalTally)
     mode_counts: Counter[str] = field(default_factory=Counter)
     held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
-    #: Distinct games per top-level source directory, and how many of those
-    #: name a held-out card. What FR-149's report is computed from: a
-    #: directory of depleted shards whose held-out count is not zero is a leak
-    #: in collection, and nothing else in the build would notice.
+    #: Per top-level source directory (FR-149): held-out games in a depleted
+    #: directory are a collection leak nothing else would notice.
     games_by_source: dict[str, int] = field(default_factory=dict)
     held_out_games_by_source: dict[str, int] = field(default_factory=dict)
-    #: Games found in more than one shard. A game routes at the end of its
-    #: shard, so a game split across two shards was planned from one shard's
-    #: view of it: still placed correctly by the write pass, which reads the
-    #: merged sets, but possibly counted toward training slots it never fills.
+    #: Games found in more than one shard, each planned from one shard's view
+    #: and so possibly counted toward training slots it never fills.
     split_games: int = 0
 
 
@@ -355,9 +297,7 @@ class SurveyConfig:
     #: How many smallest hashes the supply keeps per cell and key.
     heap_cap: int
     routing: GameRouting
-    #: ``--game-disjoint-keywords`` in gate 2's spelling (``first_strike``):
-    #: a game holding a combat record gate 2 qualifies for one of these is
-    #: placed at the keyword threshold (FR-045).
+    #: In gate 2's spelling (FR-045).
     game_disjoint_keywords: tuple[str, ...] = ()
 
 
@@ -365,7 +305,6 @@ _SURVEY: tuple[SurveyConfig, WorkerContext] | None = None
 
 
 def init_survey_worker(config: SurveyConfig) -> None:
-    """Pool initializer: one context per worker process, built once."""
     global _SURVEY
     _SURVEY = (config, WorkerContext(config.read))
 
@@ -399,7 +338,7 @@ class _PendingRecord:
     cell: Cell
     keys: Keys | None
     value: int
-    #: Acts through a held-out text, so it never trains even in a training game.
+    #: Never trains, even in a training game.
     acts_through_held_out_text: bool
 
 
@@ -430,12 +369,8 @@ class _ShardSurveyor:
         self.pending.append(self._kept(record, klass))
 
     def _note_game_properties(self, record: EffectRecord) -> None:
-        """The keyword threshold and the held-out test, read off any record.
-
-        Both are properties of the game (FR-046), so both are read above the
-        quality check: a game does not stop holding a combat, or a held-out
-        card, because the record saying so was refused.
-        """
+        """The keyword threshold and the held-out test: properties of the game
+        (FR-046), so read before the quality check refuses the record."""
         game = record.game_id
         if (
             self.keyword_rows and record.kind is RecordKind.COMBAT
@@ -493,12 +428,7 @@ class _ShardSurveyor:
 
 
 def source_of(relative: str) -> str:
-    """The top-level directory a raw shard sits in: ``depleted``, ``full-strength``…
-
-    ``"."`` for a shard at the root. What FR-149 reports held-out games
-    against: a collection run is a directory, and a leak is a directory that
-    should hold none.
-    """
+    """The top-level directory a raw shard sits in, ``"."`` at the root."""
     return relative.split("/", 1)[0] if "/" in relative else "."
 
 

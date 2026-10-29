@@ -1,14 +1,8 @@
-"""Spawns the Java mains that run to completion rather than being supervised.
+"""Spawns the Java mains that run once to completion rather than supervised.
 
-Each reads or judges something once, with no game to play out, so it is one
-blocking JVM launch. Every one of them calls
-``ForgeEnvironmentInitializer.initialize()``, which reaches ``GuiBase`` /
-``FModel`` in forge-gui and pulls forge-ai subsystems, so each needs the same
-full-runtime classpath the converter does, dependency glob included.
-
-Each raises ``FileNotFoundError`` if the connector JAR is missing (the error
-names the build command, ``mvn install -DskipTests`` in ``forge-connector``) or
-java is not on PATH.
+Each initializes Forge's GUI-side static state, so each needs the converter's
+full-runtime classpath, dependency glob included. Each raises
+``FileNotFoundError`` when the connector JAR or java is missing.
 """
 
 from __future__ import annotations
@@ -39,12 +33,9 @@ def write_keyword_definitions(output_path: Path) -> int:
 def write_variant_sidecars(variants_path: Path) -> int:
     """Write a sidecar beside every script in ``variants_path``; return the exit code.
 
-    Why the sidecars come from Java at all: a provenance key's
-    ``index_within_kind`` is the trait's position in Forge's own runtime trait
-    list, and the collectors read that list directly. Numbering the traits in
-    Python would be a second implementation of Forge's parser, and the two
-    would drift silently — the join only fails loudly when a key is missing,
-    not when it points at the wrong line.
+    From Java because a key's ``index_within_kind`` is the trait's position in
+    Forge's runtime trait list; a Python numbering would be a second parser
+    that drifts silently, since the join fails loudly only on a missing key.
     """
     return _run("VariantSidecarMain", ["--variants-path", str(variants_path)])
 
@@ -52,17 +43,9 @@ def write_variant_sidecars(variants_path: Path) -> int:
 def castability_verdicts(names: list[str]) -> dict[str, str]:
     """``card name -> "castable" | "uncastable"`` for every name it judged.
 
-    Needs a live Forge because "can this card be cast at all" is a question
-    about the engine's own legality rules, not about the card's text.
-
-    The consult **only ranks**. Its verdict never drops a card from deck
-    building, because being in a game is the precondition a stage-three
-    intervention forks from — a card the consult calls uncastable is exactly
-    the one an intervention has to force into play.
-
-    A name the worker does not answer for is simply absent, and the caller
-    treats that as ``unknown`` — which ranks it as castable, the safe
-    direction, since an under-ranked card only takes longer to cover.
+    The verdict only ranks, never drops a card (an uncastable card is exactly
+    the one an intervention has to force into play). A name left unanswered is
+    absent, which the caller ranks as castable, the safe direction.
     """
     with tempfile.TemporaryDirectory(prefix="effects-consult-") as scratch:
         request = Path(scratch) / "cards.txt"

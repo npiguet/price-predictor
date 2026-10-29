@@ -1,20 +1,10 @@
 """The fixed validation samples a curated corpus ships (FR-135, FR-089).
 
-The trainer used to sweep every validation shard at startup to draw a
-mixture-matched sample, and drew 20 gate-1 records into a 2,048-record
-card-disjoint sample because it filled each class with whatever arrived
-first. The sample is a property of the corpus, drawn once here by smallest
-seeded record hash — the same device the per-text cap uses — and written
-beside the strata so the trainer reads it and the evaluator can name it.
-
-For the card-disjoint stratum the two resolution classes draw from the
-gate-one slice first: that is the population the model ships on, and the
-number that selects checkpoints should measure it. They draw from it
-**round-robin over the held-out texts** (FR-051), a few records per text per
-round by smallest record hash within the text, so a text with thousands of
-records cannot fill the slots a text with ten needs: the number that selects
-checkpoints then weighs held-out texts alike rather than by how often Forge
-happened to cast them.
+Drawn once, by smallest seeded record hash, and written beside the strata. The
+card-disjoint stratum's resolution classes draw from the gate-one slice first,
+the population checkpoints are selected on, and round-robin over the held-out
+texts (FR-051), so that number weighs held-out texts alike rather than by how
+often Forge cast them.
 """
 
 from __future__ import annotations
@@ -46,12 +36,8 @@ def _sample_hash(record: EffectRecord, seed: int) -> int:
 
 def round_robin(by_text: Mapping[str, list[int]], quota: int,
                 per_round: int = RECORDS_PER_TEXT_PER_ROUND) -> list[int]:
-    """Values taken ``per_round`` at a time from each text in turn, smallest first.
-
-    Texts are visited in sorted order and each text's values in ascending
-    order, so the result is a pure function of its inputs. Stops at ``quota``
-    or when every text is exhausted.
-    """
+    """Values taken ``per_round`` at a time from each text in sorted order,
+    smallest first, until ``quota`` or every text is exhausted."""
     ordered = {text: sorted(values) for text, values in sorted(by_text.items())}
     taken: list[int] = []
     start = 0
@@ -77,9 +63,8 @@ def _gate_one_round_robin(
 ) -> dict[str, list[EffectRecord]]:
     """Each gate-one class's records, chosen round-robin over held-out texts.
 
-    Two reads of the slice: the first keeps only hashes, at most a class's
-    quota per text, which bounds memory by the quota rather than by the
-    slice; the second collects the chosen records.
+    Two reads, the first keeping only hashes, so memory is bounded by the
+    quota rather than by the slice.
     """
     from effects.domain.sampling import sampling_class
     from effects.infrastructure.record_io import read_records
@@ -136,9 +121,8 @@ def _collect(
         name = sampling_class(record)
         if name not in heaps or (only is not None and name not in only):
             continue
-        # The tie-break ends in a counter so it never ties: a repeated
-        # record_id -- the defect validate-corpus exists to catch -- would
-        # otherwise compare two EffectRecords, which have no ordering.
+        # A counter ends the tie-break: a repeated record_id would otherwise
+        # compare two EffectRecords, which have no ordering.
         offered += 1
         heaps[name].offer(_sample_hash(record, seed), record, (record.record_id, offered))
     return heaps
@@ -151,13 +135,9 @@ def draw_samples(
 ) -> dict[str, list[EffectRecord]]:
     """One mixture-matched sample per stratum, seeded and shuffled.
 
-    ``size <= 0`` means no fixed validation sample at all: nothing is read
-    and both strata come back empty (``--validation-sample 0``).
-
-    ``held_out_text_of`` (record → the held-out text it acts through, or
-    None) turns on FR-051's round-robin for the card-disjoint resolution
-    slots; without it the gate-one slice is drawn by smallest hash alone, as
-    feature 023 did.
+    ``size <= 0`` reads nothing and returns both strata empty. Without
+    ``held_out_text_of`` the gate-one slice is drawn by smallest hash alone
+    rather than round-robin.
     """
     if size <= 0:
         return {stratum: [] for stratum in VALIDATION_STRATA}

@@ -1,9 +1,7 @@
 """Reading and writing the ability cache under ``output/effects/abilities/``.
 
-One ``.npz`` per source file, holding a ``(n_lines, e_dim)`` float32 array under
-the key ``e``, row-aligned with that source's sidecar. The tree layout mirrors
-the source tree, so a consumer that knows a provenance key's ``script_file``
-knows where its vectors are without an index.
+The tree mirrors the source tree, so a provenance key's ``script_file`` locates
+its vectors without an index.
 """
 
 from __future__ import annotations
@@ -63,12 +61,8 @@ class AbilityCacheStore:
         return path
 
     def written_files(self) -> list[Path]:
-        """Every cache file this variant wrote under ``root``.
-
-        A variant's files are picked out by the suffix ``cache_path_for`` gave
-        them, which is what lets ``--clean`` remove only what this command
-        wrote and leave the shipping cache — or another variant's — in place.
-        """
+        """Every cache file this variant wrote under ``root``, by the suffix
+        ``cache_path_for`` gave it, so ``--clean`` leaves other variants'."""
         if not self.root.is_dir():
             return []
         return sorted(

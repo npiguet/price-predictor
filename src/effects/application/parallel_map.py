@@ -1,10 +1,4 @@
-"""One task over many shards, in a process pool or in process, with progress.
-
-Every corpus-wide pass in this package — the ``build-corpus`` survey and write
-passes, the coverage counters — reads shards independently and folds what each
-returns, so they all share the one shape: map over a pool, consume results in
-input order, and say how far along the pass is.
-"""
+"""One task over many shards, in a process pool or in process, with progress."""
 
 from __future__ import annotations
 
@@ -18,12 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def progress_line(*, done: int, total: int, elapsed: float) -> str:
-    """``done of total`` with the rate and the time left.
-
-    A bare count says the run is alive. It does not say whether the rest is ten
-    minutes away or two hours, and on a pass over thousands of shards that is
-    the question actually being asked.
-    """
+    """``done of total`` with the rate and the time left."""
     rate = done / elapsed if elapsed > 0 else 0.0
     left = (total - done) / rate if rate > 0 else 0.0
     if rate <= 0:
@@ -46,15 +35,10 @@ def run_parallel[T, R](
 ) -> Iterator[R]:
     """``task`` over every item, results in input order, logging progress.
 
-    ``workers`` defaults to the machine's usable cores and never exceeds the
-    item count. One or fewer runs the initializer and the task in this
-    process, so a small pass or a test needs no pool — a pool costs more to
-    start than it saves on a handful of shards. Otherwise ``task`` and
-    ``initializer`` must pickle, since the pool ships them to every process.
-
-    Progress is logged every ``progress_every`` items and at the end, and not
-    at all on a pass no longer than one interval or with ``progress_every``
-    zero.
+    ``workers`` defaults to the usable cores, capped at the item count; one or
+    fewer runs everything in this process, otherwise ``task`` and
+    ``initializer`` must pickle. Progress is logged every ``progress_every``
+    items and at the end, never on a pass no longer than one interval.
     """
     total = len(items)
     started = time.monotonic()

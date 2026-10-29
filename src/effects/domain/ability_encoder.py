@@ -1,31 +1,12 @@
 """The ability encoder: one ability line to its bottleneck vector ``e``.
 
-A transformer over the line's tokens, pooled through a ``[CLS]`` aggregation
-token to a fixed width (`--e-dim`, default 64). The bottleneck is the point of
-the whole design: ``e`` is small enough that the effect head cannot route around
-it, so whatever the head needs about an ability has to be *in* the vector, and
-the vector is what ships in the cache.
-
-Three embeddings are added to each token, not one:
-
-- **token** — the word itself;
-- **position** — where it sits in the line;
-- **role** — ``cost`` / ``effect`` / ``trigger-condition`` / ``target-spec``, read
-  from the sidecar's spans over the converted prose (FR-069). Without it ``{R}``
-  in a cost and ``{R}`` in an effect are the same input, and they mean opposite
-  things. The spans index the prose, so only a prose text carries roles; the
-  script surface spells the difference in its own keys (``Cost$``) and every
-  token there reads "no role".
-
-Numbers get a fourth: a **monotone numeric embedding**, a shared learned base
-vector plus ``log1p(n)`` times a learned direction. A number's magnitude is
-ordered, so an embedding table indexed by digit would have to learn that 3 sits
-between 2 and 4 from data; this puts it in the geometry.
-
-Torch lives in ``domain`` here for the same reason it does in
-``sealed/domain/encoder_model.py`` and ``draft/domain/draft_agent_model.py``: a
-model architecture *is* domain in this project, and torch is its notation
-(constitution Principle IV, as amended).
+A transformer pooled through ``[CLS]`` to a small fixed width, so whatever the
+effect head needs about an ability has to be in the vector that ships in the
+cache. Each token adds a role embedding (FR-069), because ``{R}`` in a cost and
+in an effect mean opposite things; only prose carries roles, since the spans
+index the prose. A number adds a monotone embedding, so its order is in the
+geometry rather than learned per digit. A model architecture is domain in this
+project (constitution Principle IV).
 """
 
 from __future__ import annotations
@@ -42,37 +23,26 @@ from effects.domain.ability_tokenizer import (
     Token,
 )
 
-#: Role vocabulary, in a fixed order so an embedding row means the same thing
-#: across checkpoints. Index 0 is "no role" — the token sat outside every span.
+#: Fixed order, so an embedding row means the same role across checkpoints.
+#: Row 0 is "no role", a token outside every span.
 ROLE_ORDER: tuple[str, ...] = ("cost", "effect", "trigger-condition", "target-spec")
 NO_ROLE_INDEX = 0
 
 # Defaults of `--encoder-d-model` and `--encoder-layers` (FR-061), and the size
-# a checkpoint that records neither loads at. The head count stays pinned: a
-# width must divide by it, which `train-effect-model` checks before training.
+# a checkpoint that records neither loads at.
 ENCODER_D_MODEL = 256
 ENCODER_N_LAYERS = 4
 ENCODER_N_HEADS = 4
 FF_MULTIPLIER = 4
 DROPOUT = 0.1
 
-#: Longest line the position table covers. Ability lines are short; a keyword
-#: expansion is the case that lengthens them, and none reach this.
 MAX_ABILITY_TOKENS = 512
 
 
 @dataclass(frozen=True, slots=True)
 class AbilityEncoderConfig:
-    """Architecture of the ability encoder.
-
-    ``e_dim``, ``d_model`` and ``n_layers`` are flags; the rest are pinned
-    constants, carried here so a checkpoint is self-describing. ``ff_dim``
-    follows the width (``d_model × 4``) unless a checkpoint recorded its own.
-
-    There is no noise here (FR-057): noise on ``e`` is applied in the batcher,
-    scaled to the spread of the vectors themselves, so ``e`` receives it from
-    one place only.
-    """
+    """Architecture of the ability encoder, carried so a checkpoint is
+    self-describing. No noise here: the batcher applies it (FR-057)."""
 
     vocab_size: int
     e_dim: int = 64
@@ -99,12 +69,8 @@ class AbilityEncoderConfig:
 
 
 class MonotoneNumberEmbedding(nn.Module):
-    """``base + log1p(n) * direction`` — an ordered embedding for a number.
-
-    ``log1p`` rather than ``n`` because the useful range is heavily skewed: the
-    difference between 1 and 2 damage decides a combat, the difference between
-    17 and 18 rarely decides anything.
-    """
+    """``base + log1p(n) * direction``: ``log1p`` because 1 against 2 damage
+    decides a combat and 17 against 18 rarely does."""
 
     def __init__(self, d_model: int) -> None:
         super().__init__()
@@ -155,20 +121,10 @@ class AbilityEncoder(nn.Module):
         numbers: torch.Tensor | None = None,
         number_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Encode a padded batch of lines.
+        """Encode a padded batch of ``(batch, seq)`` lines, ``[CLS]`` first.
 
-        Args:
-            token_ids: ``(batch, seq)``; position 0 must be ``[CLS]``.
-            attention_mask: ``(batch, seq)``, 1 for real tokens.
-            role_ids: ``(batch, seq)`` indices into :data:`ROLE_ORDER` shifted by
-                one, 0 meaning no role. Absent, every token reads "no role".
-            numbers: ``(batch, seq)`` numeric values, 0 where not numeric.
-            number_mask: ``(batch, seq)``, 1 where ``numbers`` is meaningful.
-
-        Returns:
-            ``(e, hidden)`` — the ``(batch, e_dim)`` bottleneck read from the
-            ``[CLS]`` position, and the ``(batch, seq, d_model)`` token outputs
-            the MLM auxiliary reads.
+        Returns ``(e, hidden)``: the ``(batch, e_dim)`` bottleneck and the
+        ``(batch, seq, d_model)`` token outputs the MLM auxiliary reads.
         """
         batch, seq = token_ids.shape
         positions = torch.arange(seq, device=token_ids.device).unsqueeze(0)
@@ -186,9 +142,7 @@ class AbilityEncoder(nn.Module):
         hidden = self.encoder(hidden, src_key_padding_mask=padding_mask)
         hidden = self.norm(hidden)
 
-        # [CLS] pooling: position 0 by construction, so no masked reduction is
-        # needed and the pooled vector cannot be diluted by padding.
-        e = self.to_e(hidden[:, 0, :])
+        e =self.to_e(hidden[:, 0, :])
         return e, hidden
 
 
@@ -196,13 +150,8 @@ class AbilityEncoder(nn.Module):
 
 
 def surface_of(vocab_path) -> str:
-    """Which surface a vocabulary path implies.
-
-    The surface follows the loaded ``--vocab-path`` rather than a flag of its
-    own, so a stage-one-to-three checkpoint keeps encoding against the
-    vocabulary it recorded even after a stage-four rebuild exists. A flag would
-    let the two disagree, and the disagreement would look like a working run.
-    """
+    """Which surface a vocabulary path implies: never a flag of its own, which
+    could disagree with the vocabulary and still look like a working run."""
     from pathlib import Path
 
     return (
@@ -213,13 +162,9 @@ def surface_of(vocab_path) -> str:
 
 
 def encoding_text(line, prose: str | None, surface: str) -> str | None:
-    """The text a line is encoded from, on the given surface.
-
-    Script from stage four, prose before it — and each falls back to the other
-    where its own is missing. A keyword-derived line has no Forge script of its
-    own, and a variant script has no prose at all, so a surface that dropped
-    what it lacked would drop a different slice of the corpus in each direction.
-    """
+    """The text a line is encoded from on ``surface``, falling back to the
+    other surface's where its own is missing (a keyword-derived line has no
+    script, a variant script no prose)."""
     script = getattr(line, "script_text", None)
     if surface == SURFACE_SCRIPT:
         return script or prose
@@ -227,13 +172,8 @@ def encoding_text(line, prose: str | None, surface: str) -> str | None:
 
 
 def encoding_role_spans(line, text: str | None, surface: str) -> tuple:
-    """The role spans a line's encoding text is tokenized with (FR-069).
-
-    The sidecar's spans index the line's converted prose, so they apply on the
-    prose surface to a text that is that prose, and to nothing else: not the
-    script surface, and not a variant's script, which is what the prose
-    surface falls back to where there is no prose.
-    """
+    """The role spans a line's encoding text is tokenized with (FR-069): only
+    on a prose text, since the spans index the converted prose."""
     if surface != SURFACE_PROSE or line is None or text is None:
         return ()
     if text == getattr(line, "script_text", None):
@@ -242,7 +182,6 @@ def encoding_role_spans(line, text: str | None, surface: str) -> tuple:
 
 
 def role_index(role: str | None) -> int:
-    """The embedding row for a role tag; 0 for a token outside every span."""
     if role is None:
         return NO_ROLE_INDEX
     return ROLE_ORDER.index(role) + 1
@@ -271,11 +210,8 @@ def prepare_line(
 ) -> EncodedLine:
     """Prefix ``[CLS]`` and lay a token list out as parallel arrays.
 
-    Truncation keeps ``[CLS]`` and drops from the tail, so the pooled vector
-    always exists even for a line whose keyword expansions overran the window.
-    The result says whether it truncated, so the command that encoded the line
-    can report it (FR-006): a chained script text can run long, and a tail
-    dropped silently is a sub-ability the model never read.
+    Truncation keeps ``[CLS]`` and drops the tail, and says so, because a tail
+    dropped silently is a sub-ability the model never read (FR-006).
     """
     token_ids = [tokenizer.cls_id]
     role_ids = [NO_ROLE_INDEX]
@@ -293,12 +229,7 @@ def prepare_line(
 
 
 class TruncationLog:
-    """Reports each truncated line once per run, by provenance key (FR-006).
-
-    Shared by every command that encodes: the trainer hands one instance to
-    every per-batch batcher, so a text truncated in every epoch is reported
-    once rather than once per batch.
-    """
+    """Reports each truncated line once per run, by provenance key (FR-006)."""
 
     def __init__(self, report) -> None:
         """``report(text, keys)`` is called the first time a text truncates."""
@@ -337,12 +268,7 @@ def _key_label(key) -> str:
 def collate_lines(
     lines: list[EncodedLine], pad_id: int,
 ) -> dict[str, torch.Tensor]:
-    """Pad a batch of prepared lines to the longest, as encoder kwargs.
-
-    Padded per batch rather than to a fixed width, so a batch of short lines
-    costs what short lines cost — the corpus's ability texts are mostly one
-    clause and occasionally a paragraph.
-    """
+    """Pad a batch of prepared lines to its own longest, as encoder kwargs."""
     width = max((len(line) for line in lines), default=1)
     token_ids, role_ids, numbers, number_mask, attention = [], [], [], [], []
     for line in lines:

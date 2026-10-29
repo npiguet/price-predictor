@@ -1,29 +1,11 @@
 """``build-vocab``: the effects-side tokenizer vocabulary (FR-064, FR-065).
 
-A thin wrapper over ``price_predictor.application.build_vocabulary``, mirroring
-``sealed``'s, with the differences that matter:
-
-- the scan covers **three** sources — converted cards, converted token scripts,
-  and the keyword-definition file — because a token a card creates and a
-  keyword's reminder text are both text the encoder has to read;
-- ``[CLS]`` and ``[SEG]`` are seeded alongside ``[MASK]``: the ability encoder
-  pools through ``[CLS]`` to the bottleneck ``e``, and ``[SEG]`` separates the
-  segments of a chained script text;
-- every word of every keyword template is **seeded** (FR-019), so a
-  ``--target-size`` truncation can never turn an expansion into ``[UNK]``, and
-  the build fails if any definition would still expand to one;
-- on the script surface the sidecars' script lines are tokenized by the
-  script surface's own rules and counted **before** the prose files, so a
-  truncation drops prose tokens first; the chain labels ``sv1…svN`` and every
-  part a parameter key splits into are seeded (FR-002a, FR-009b). They cannot
-  go through the shared builder, whose tokenizer lowercases before splitting
-  and would erase the camel case the script rules split on;
-- the prose and script surfaces write **separate files**, so a script rebuild
-  never overwrites the vocabulary a prose checkpoint recorded and can still be
-  loaded against.
-
-The keyword definitions' generated scripts are not scanned (FR-020): no
-expansion substitutes them, on either surface.
+A wrapper over ``price_predictor.application.build_vocabulary``. Script lines
+are tokenized here rather than by the shared builder, whose tokenizer
+lowercases before splitting and would erase the camel case the script rules
+split on; they are counted before the prose, so a truncation drops prose
+first. Every template word is seeded (FR-019), so no truncation can turn an
+expansion into ``[UNK]``.
 """
 
 from __future__ import annotations
@@ -62,24 +44,19 @@ DEFAULT_VOCAB_PATH = Path("models/effects/vocab.txt")
 DEFAULT_SCRIPT_VOCAB_PATH = Path("models/effects/vocab-script.txt")
 DEFAULT_TARGET_SIZE = 5000
 
-#: Seeded into every effects vocabulary regardless of corpus frequency.
-#: ``[PAD]``, ``[UNK]`` and ``cardname`` come from the shared builder;
-#: ``[MASK]`` is the MLM auxiliary's, ``[CLS]`` is the pooling token the
-#: bottleneck ``e`` is read from, and ``[SEG]`` separates script segments.
+#: Seeded into every effects vocabulary at the lowest ids, whatever their
+#: corpus frequency.
 SEEDED_SPECIALS: tuple[str, ...] = (
     "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", SEG,
 )
 
-#: Script-line frequency floor, the shared builder's production threshold.
+#: The shared builder's production threshold.
 _FREQ_THRESHOLD = 2
 
-#: A chain label in its FR-002a form, and the number it carries.
 _LABEL_RE = re.compile(r"(?<![A-Za-z0-9])SV(\d+)(?![A-Za-z0-9])")
 #: A parameter key, or a ``$``-prefix glued to its value (``Count$Valid``).
 _KEY_RE = re.compile(r"([A-Za-z]+)\$")
-#: A ``*Description$`` parameter with its value, up to the next separator:
-#: free prose, so its words say nothing about how well the vocabulary covers
-#: the script syntax (FR-011).
+#: Free prose, so left out of the script coverage figure (FR-011).
 _DESCRIPTION_PARAM_RE = re.compile(r"\w*Description\$[^|\[]*")
 
 
@@ -94,7 +71,8 @@ class BuildVocabConfig:
     target_size: int = DEFAULT_TARGET_SIZE
 
     def resolved_vocab_path(self) -> Path:
-        """``--vocab-path``, defaulting per surface so the two never collide."""
+        """``--vocab-path``, defaulting per surface so a script rebuild never
+        overwrites the vocabulary a prose checkpoint recorded."""
         if self.vocab_path is not None:
             return Path(self.vocab_path)
         return (
@@ -137,11 +115,8 @@ def _scan_sources(config: BuildVocabConfig) -> list[Path]:
 
 
 def _keyword_corpus_text(definitions: dict) -> str:
-    """What a keyword expands to, as a blob for the frequency scan.
-
-    The reminder template on both surfaces, because that is what expansion
-    substitutes in on both. The captured script is never scanned (FR-020).
-    """
+    """What a keyword expands to, as a blob for the frequency scan; never the
+    captured script, which no expansion substitutes (FR-020)."""
     lines: list[str] = []
     for definition in definitions.values():
         lines.append(definition.keyword)
@@ -166,12 +141,8 @@ def script_lines(folders: list[Path]) -> list[str]:
 
 
 def staging_tokenizer(surface: str, definitions: dict | None = None) -> AbilityTokenizer:
-    """A tokenizer applying the surface's rules, with no corpus vocabulary yet.
-
-    It knows the multi-word keywords, because the shared builder seeds them and
-    the final tokenizer will merge them; anything else it splits exactly as the
-    final tokenizer will.
-    """
+    """A tokenizer applying the surface's rules before the vocabulary exists,
+    knowing the multi-word keywords the final one will merge."""
     vocab = {token: index for index, token in enumerate(SEEDED_SPECIALS)}
     for keyword in MULTI_WORD_KEYWORDS:
         vocab.setdefault(keyword, len(vocab))
@@ -183,13 +154,9 @@ def template_texts(
     definitions: dict,
     staged: list[str] | tuple[str, ...] = (),
 ) -> list[str]:
-    """Every text a keyword can expand to in this corpus.
-
-    Each definition's generic wording, plus — for every staged keyword line —
-    the template filled with that line's own values as Forge formats them, so
-    the words a formatter writes ("pays", "a basic land card") are as readable
-    as the template's own (SC-002).
-    """
+    """Every text a keyword can expand to in this corpus: each generic
+    wording, plus each staged keyword line's filled template, so a formatter's
+    own words are seeded too (SC-002)."""
     texts = [
         tokenizer.expansion_text(name)
         for name, definition in definitions.items()
@@ -205,12 +172,9 @@ def template_texts(
 def seed_tokens(
     surface: str, definitions: dict, staged: list[str],
 ) -> SeededTokens:
-    """The tokens seeded ahead of the corpus, so no truncation can drop them.
-
-    Template words on both surfaces (FR-019); on the script surface also the
-    chain labels up to the longest chain's count (FR-002a) and every part of
-    every parameter key and ``$``-prefix in the staged lines (FR-009b).
-    """
+    """The tokens seeded ahead of the corpus, so no truncation can drop them:
+    template words (FR-019), and on the script surface the chain labels and
+    every key part (FR-002a, FR-009b)."""
     stager = staging_tokenizer(surface, definitions)
     seeded = SeededTokens()
     for text in template_texts(stager, definitions, staged):
@@ -244,8 +208,8 @@ def run(config: BuildVocabConfig) -> int:
     staged_tokens = [stager.tokenize(line) for line in staged]
     seeded = seed_tokens(config.surface, definitions, staged)
 
-    # The shared builder scans one directory tree, so the keyword file is
-    # staged as a text file in a scratch tree it can walk alongside the corpus.
+    # The shared builder scans directory trees, so the keyword file is staged
+    # in a scratch one.
     import tempfile
 
     with tempfile.TemporaryDirectory(prefix="effects-vocab-") as scratch:
@@ -255,11 +219,8 @@ def run(config: BuildVocabConfig) -> int:
                 _keyword_corpus_text(definitions), encoding="utf-8",
             )
         results = [
-            # No printings file: the shared builder seeds every set code from
-            # it for the price model, whose enriched card texts carry
-            # `set: MH3`. The effect model encodes one ability line, which
-            # never names a set, so those would be hundreds of rows no text
-            # ever reaches.
+            # No printings file: its set codes are for the price model's card
+            # texts, and an ability line never names a set.
             build_vocabulary(
                 cards_path=source,
                 freq_threshold=_FREQ_THRESHOLD,
@@ -267,14 +228,11 @@ def run(config: BuildVocabConfig) -> int:
             )
             for source in [*folders, extra]
         ]
-        # Counted inside the scratch tree's lifetime: the staged sources are
-        # real sources, and reporting only the card folders understates the
-        # scan the docs describe as covering three.
+        # Inside the scratch tree's lifetime: the staged sources count too.
         scanned = len(folders) + len(list(extra.glob("*.txt"))) + bool(staged)
 
-    # Specials first, so they hold the lowest ids; then everything seeded;
-    # then the shared builder's fixed domain terms. All of it sits below
-    # ``domain_token_count``, which a truncation never drops.
+    # Specials, seeded tokens and the shared builder's domain terms all sit
+    # below ``domain_token_count``, which a truncation never drops.
     vocab: dict[str, int] = {}
     for token in [*SEEDED_SPECIALS, *seeded.all()]:
         vocab.setdefault(token, len(vocab))
@@ -283,8 +241,7 @@ def run(config: BuildVocabConfig) -> int:
             if index < result.domain_token_count:
                 vocab.setdefault(token, len(vocab))
     domain_token_count = len(vocab)
-    # Script lines before prose: a truncation drops from the tail, so the
-    # script syntax the surface encodes outlasts the prose it falls back to.
+    # Script lines before prose: a truncation drops from the tail.
     for token in _frequent(staged_tokens):
         vocab.setdefault(token, len(vocab))
     for result in results:

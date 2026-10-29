@@ -1,16 +1,9 @@
 """Runs a trained ability encoder over the corpus's ability lines, on the GPU.
 
-``encode-abilities`` computes one vector per ability line for the whole corpus —
-roughly a hundred thousand lines. The corpus repeats itself heavily (every
-"Flying", every "deals 3 damage to any target"), so the command hands the
-runner each distinct encoder input once for the whole tree, and the runner
-encodes them through the trainer's own path: tokenized by ``TextStager``, sorted
-by length and run by ``encode_by_length``, so a short line never pays for a long
-one's padding.
-
-The surface a line is encoded on follows the checkpoint's vocabulary rather than
-a flag, so a cache can never be built on a different surface from the model that
-reads it.
+Each distinct encoder input is encoded once, through the trainer's own path
+(``TextStager``, then ``encode_by_length``). The surface follows the
+checkpoint's vocabulary rather than a flag, so a cache can never be built on a
+different surface from the model that reads it.
 """
 
 from __future__ import annotations
@@ -41,19 +34,13 @@ from effects.infrastructure.torch_device import default_device
 
 logger = logging.getLogger(__name__)
 
-#: Texts collated per ``encode_by_length`` call. They are length-sorted first,
-#: so a block pads to about its own texts' length; the bound keeps the host from
-#: holding the whole tree's inputs padded at once, which at the corpus's longest
-#: line would be most of a gigabyte.
+#: Texts collated per ``encode_by_length`` call, so the host never holds the
+#: whole tree's inputs padded at once.
 BLOCK_TEXTS = 1024
 
 
 class AbilityEncoderRunner:
-    """A loaded encoder plus its text stager, reused across every source file.
-
-    Load-once: the checkpoint is read and the weights moved to the device a
-    single time for the whole run, rather than per card.
-    """
+    """A loaded encoder plus its text stager, loaded once for the whole run."""
 
     def __init__(
         self,
@@ -69,15 +56,10 @@ class AbilityEncoderRunner:
         self.device = device or default_device()
         self.encoder = AbilityEncoder(config).to(self.device)
         self.encoder.load_state_dict(state)
-        # eval() turns dropout off, without which a cache would not be
-        # reproducible. The encoder carries no noise of its own: noise on e is
-        # a training-batch concern (FR-056) and never reaches this path.
+        # Dropout off, without which a cache would not be reproducible.
         self.encoder.eval()
-        # A known keyword stays the token it trained as and only an unknown one
-        # expands (FR-012): the shared inference probability is zero, and the
-        # cache is an artifact, so a sampled expansion would make two runs of
-        # the same command disagree. The keyword the checkpoint trained without
-        # expands as it did in training, its token dropped.
+        # Inference probability zero, so two runs write the same cache; the
+        # withheld keyword expands as it did in training.
         self.stager = TextStager(
             tokenizer, surface, withhold_keyword=withheld_keyword,
             keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P, truncations=truncations,
@@ -127,7 +109,6 @@ class AbilityEncoderRunner:
                     [prepared[row] for row in block], self.stager.tokenizer.pad_id,
                 )
                 vectors, _hidden = encode_by_length(self.encoder, inputs, self.device)
-                # One transfer per block rather than per line.
                 rows[block] = vectors.cpu().numpy()
         return rows
 
