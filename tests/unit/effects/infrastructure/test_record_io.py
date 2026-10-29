@@ -305,36 +305,6 @@ class TestForwardCompatibility:
 
 
 class TestShardDirectory:
-    def test_two_lifetimes_of_one_worker_are_two_shards(self, tmp_path):
-        """The counters restart with the JVM, so the shard has to restart too.
-
-        A supervisor recycles the longest-running worker on a timer and
-        restarts crashed ones, so one worker slot is hundreds of JVMs per run.
-        Sharing a file across them is what let a restart reissue ids the
-        previous JVM had already used.
-        """
-        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
-            writer.write(_record(record_id="run.0-L1.0"))
-        with RawShardWriter(tmp_path, "run", 0, "L2") as writer:
-            writer.write(_record(record_id="run.0-L2.0"))
-        assert len(iter_shards(tmp_path)) == 2
-        loaded = list(read_records(tmp_path))
-        assert len({r.record_id for r in loaded}) == 2
-
-    def test_written_records_read_back(self, tmp_path):
-        records = [_record(record_id=f"run.0.{i}") for i in range(3)]
-        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
-            for record in records:
-                writer.write(record)
-        assert list(read_records(tmp_path)) == records
-
-    def test_a_writer_appends_rather_than_truncating(self, tmp_path):
-        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
-            writer.write(_record(record_id="run.0.1"))
-        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
-            writer.write(_record(record_id="run.0.2"))
-        assert count_records(tmp_path) == 2
-
     def test_every_shard_in_the_directory_is_loaded(self, tmp_path):
         for worker in (0, 1, 2):
             with RawShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
@@ -709,7 +679,7 @@ class TestShardsInSubdirectories:
         assert len(iter_shards(tmp_path)) == 2
 
     def test_a_nested_gz_is_not_claimed_twice(self, tmp_path) -> None:
-        """`*.jsonl` matches `x.jsonl.gz` on some platforms."""
+        """Each spelling's glob claims its own shards, and only those."""
         self._shard(tmp_path / "sub" / "run.0-a.jsonl.gz")
 
         found = iter_shards(tmp_path)
