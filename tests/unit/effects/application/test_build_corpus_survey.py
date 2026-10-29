@@ -270,14 +270,14 @@ def test_merging_supplies_kept_at_different_heap_sizes_fails_loudly():
 
 def test_a_defective_record_is_counted_and_otherwise_ignored(tmp_path):
     """A record with no acting ability is not a key, a class or a game (FR-148)."""
-    from effects.domain.record_quality import NO_ABILITY
+    from effects.domain.record_quality import QualityDefect
 
     out = _survey_one(tmp_path, [
         a_record(record_id="clean", game_id="g1", ability=_BOLT),
         a_record(record_id="junk", game_id="g2", ability=()),
     ], sidecar_roots=converted_tree(tmp_path, *_BOLT))
 
-    assert out.refusals.by_reason == {NO_ABILITY: 1}
+    assert out.refusals.by_reason == {QualityDefect.NO_ABILITY: 1}
     assert out.records == 2
     assert out.games.games == {"g1"}
 

@@ -36,9 +36,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.collect_coverage import (
+    DEFAULT_CARDS_FOLDERS,
+    HoldoutSource,
     build_coverage_decks,
     collector_supervisor,
-    load_exclusions,
     play_decks,
 )
 from effects.domain.collection_caps import CollectionCaps
@@ -99,7 +100,7 @@ class CollectVariantsConfig:
     #: The converted trees and the rule the holdout is chosen by, so a variant
     #: printing a held-out text or template is dropped. The same as
     #: ``build-corpus``'s, which must agree for the drop to mean anything.
-    cards_folders: tuple[str, ...] = ("output/cardsfolder", "output/tokenscripts")
+    cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
     holdout_permille: int = HOLDOUT_PERMILLE
     holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
     holdout_unit: str = "template"
@@ -344,9 +345,10 @@ def _size_budget(config: CollectVariantsConfig) -> int:
 
 
 def _generate(config: CollectVariantsConfig, budget: int) -> list[GeneratedVariant]:
-    held_out = load_exclusions(
-        split_from=config.split_from, exclude_cards=config.exclude_cards,
-    )
+    held_out = HoldoutSource(
+        effect_records=config.effect_records, exclude_cards=config.exclude_cards,
+        split_from=config.split_from,
+    ).exclusions()
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
         held_out=held_out, limit=budget, seed=config.seed,
@@ -440,25 +442,20 @@ def _keep_unheld(
     config: CollectVariantsConfig, variants: list[GeneratedVariant],
 ) -> list[GeneratedVariant]:
     """:func:`drop_held_out_variants` under the holdout ``build-corpus`` chooses."""
-    from effects.domain.split import text_keyed_holdout
-    from effects.infrastructure.card_sources import load_card_files, load_card_texts
-    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
+    from effects.infrastructure.converted_trees import ConvertedTrees
 
-    roots = sidecar_roots(config.cards_folders)
-    cards_folder = roots.get("cardsfolder")
-    if cards_folder is None or not cards_folder.is_dir():
+    trees = ConvertedTrees.from_folders(config.cards_folders)
+    if trees.cards_folder is None or not trees.cards_folder.is_dir():
         logger.warning(
             "No converted card tree among %s, so no variant is checked against "
             "the held-out texts; build-corpus drops a training record acting "
             "through one, but the variant still reaches training games' boards.",
-            ", ".join(config.cards_folders),
+            ", ".join(str(folder) for folder in config.cards_folders),
         )
         return variants
-    card_files = load_card_files(cards_folder)
-    held_out = text_keyed_holdout(
-        card_files, load_card_texts(card_files, SidecarCache(roots)),
+    held_out = trees.holdout(
         permille=config.holdout_permille, max_carriers=config.holdout_max_carriers,
-        unit=config.holdout_unit, token_texts=load_tree_texts(roots.get("tokenscripts")),
+        unit=config.holdout_unit,
     )
     kept = drop_held_out_variants(variants, held_out)
     if len(kept) < len(variants):

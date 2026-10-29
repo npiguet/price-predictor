@@ -32,22 +32,19 @@ import time
 from pathlib import Path
 
 from effects.domain.provenance import (
-    SOURCE_TREES,
     KeyResolution,
     ProvenanceKey,
     ProvenanceSidecar,
     RoleSpan,
     SidecarLine,
+    SourceTree,
     SubAbilityLink,
+    split_script_file,
 )
 
 logger = logging.getLogger(__name__)
 
 SIDECAR_SUFFIX = ".provenance.json"
-
-#: The one tree whose sidecars sit beside a *source* script rather than a
-#: converted one, and which therefore has no prose surface at all.
-VARIANT_SCRIPTS_TREE = "variant-scripts"
 
 _JSON_SEPARATORS = (",", ":")
 
@@ -61,10 +58,10 @@ def tree_of_folder(folder: Path) -> str:
     original (FR-063b), and the copy's keys still name ``cardsfolder/…``.
     """
     name = Path(folder).name
-    for tree in SOURCE_TREES:
+    for tree in SourceTree:
         if name == tree or name.endswith(f"-{tree}"):
             return tree
-    return name or "cardsfolder"
+    return name or SourceTree.CARDSFOLDER
 
 
 def sidecar_roots(
@@ -73,7 +70,7 @@ def sidecar_roots(
     """``tree -> folder`` for a ``SidecarCache``, from ``--cards-folder`` values."""
     roots = {tree_of_folder(folder): Path(folder) for folder in folders}
     if variant_scripts:
-        roots[VARIANT_SCRIPTS_TREE] = Path(variant_scripts)
+        roots[SourceTree.VARIANT_SCRIPTS] = Path(variant_scripts)
     return roots
 
 
@@ -357,7 +354,9 @@ class SidecarCache:
         Path("output/tokenscripts")}``. A key's ``script_file`` names its tree,
         which is what lets one filename resolve differently in two trees.
         """
-        self._roots = {name: Path(root) for name, root in roots.items()}
+        # Plain strings, so the unconfigured-tree message lists tree names
+        # rather than a SourceTree's repr.
+        self._roots = {str(name): Path(root) for name, root in roots.items()}
         self._cache: dict[str, ProvenanceSidecar] = {}
         #: Script files found to have no sidecar, so a miss stats the disk once.
         self._missing: set[str] = set()
@@ -372,7 +371,7 @@ class SidecarCache:
         self.undescribed: dict[str, int] = {}
 
     def path_for(self, script_file: str) -> Path:
-        tree, _, relative = script_file.partition("/")
+        tree, relative = split_script_file(script_file)
         if tree not in self._roots:
             raise UnconfiguredTree(
                 f"no converted root configured for source tree {tree!r}; "
@@ -448,7 +447,7 @@ class SidecarCache:
         prose surface fall back to the script for a variant instead of encoding
         a source-script line as if it were card text.
         """
-        if key.script_file.startswith(f"{VARIANT_SCRIPTS_TREE}/"):
+        if key.tree == SourceTree.VARIANT_SCRIPTS:
             return None
         line = self.line_for(key)
         if line is None:

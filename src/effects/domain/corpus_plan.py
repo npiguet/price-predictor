@@ -34,6 +34,7 @@ from effects.domain.corpus_curation import (
     text_capacity,
 )
 from effects.domain.provenance import ProvenanceKey
+from effects.domain.sampling import SamplingClass
 from effects.domain.strata import Stratum
 
 #: A record's acting keys: the whole tuple, hashable and picklable as it is.
@@ -73,7 +74,7 @@ class Cell:
     in this one place, and every cell the planner sorts is resolved.
     """
 
-    klass: str
+    klass: SamplingClass
     half: str = ""
     family: str = ""
     signature: str = ""

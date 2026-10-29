@@ -9,9 +9,7 @@ import pytest
 from effects.application.validation_samples import _Smallest, class_quota, draw_samples
 from effects.domain.records import CombatPayload, Moment, RecordKind
 from effects.domain.sampling import (
-    CLASS_COMBAT,
-    CLASS_RESOLUTION_COST,
-    CLASS_RESOLUTION_EFFECT,
+    SamplingClass,
     sampling_class,
 )
 from effects.infrastructure.record_io import write_shard
@@ -41,7 +39,7 @@ def strata(tmp_path, make_record):  # noqa: F811 -- shadows the imported fixture
     return tmp_path
 
 
-MIX = {CLASS_RESOLUTION_EFFECT: 0.5, CLASS_COMBAT: 0.5}
+MIX = {SamplingClass.RESOLUTION_EFFECT: 0.5, SamplingClass.COMBAT: 0.5}
 
 
 def test_each_stratum_holds_the_quota_per_class(strata):
@@ -49,7 +47,7 @@ def test_each_stratum_holds_the_quota_per_class(strata):
                            gate_one=strata / "gate", mix=MIX, size=20, seed=1)
     for stratum in ("card-disjoint", "game-disjoint"):
         by_class = Counter(sampling_class(r) for r in samples[stratum])
-        assert by_class == {CLASS_RESOLUTION_EFFECT: 10, CLASS_COMBAT: 10}
+        assert by_class == {SamplingClass.RESOLUTION_EFFECT: 10, SamplingClass.COMBAT: 10}
 
 
 def test_card_disjoint_resolutions_come_from_the_gate_one_slice_first(strata):
@@ -79,7 +77,7 @@ def test_the_draw_is_seeded_and_shuffled(strata):
 def test_a_short_class_takes_what_there_is(strata):
     samples = draw_samples(
         card_disjoint=strata / "card", game_disjoint=strata / "game",
-        gate_one=strata / "gate", mix={CLASS_RESOLUTION_COST: 1.0}, size=5, seed=1,
+        gate_one=strata / "gate", mix={SamplingClass.RESOLUTION_COST: 1.0}, size=5, seed=1,
     )
     assert samples["card-disjoint"] == []
 
@@ -148,7 +146,7 @@ def test_card_disjoint_resolution_slots_spread_over_held_out_texts(tmp_path, mak
 
     samples = draw_samples(
         card_disjoint=tmp_path / "card", game_disjoint=tmp_path / "game",
-        gate_one=tmp_path / "gate", mix={CLASS_RESOLUTION_EFFECT: 1.0}, size=10, seed=1,
+        gate_one=tmp_path / "gate", mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=10, seed=1,
         held_out_text_of=lambda record: text_of[record.ability[0]],
     )
     chosen = [r.record_id for r in samples["card-disjoint"]]

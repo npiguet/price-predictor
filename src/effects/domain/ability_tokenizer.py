@@ -37,6 +37,7 @@ from effects.domain.keyword_formatting import (
     strip_specifiers,
 )
 from effects.domain.provenance import RoleSpan
+from effects.domain.script_text import CHAIN_KEYS, SEG
 from price_predictor.domain.tokenizer import MtgTokenizer
 
 #: The two encoding surfaces, defined here rather than beside the encoder,
@@ -46,10 +47,7 @@ SURFACE_SCRIPT = "script"
 
 #: The bracketed specials the vocabulary seeds. Each is one token wherever it
 #: appears, never ``[``, a word and ``]``.
-SPECIAL_TOKENS: tuple[str, ...] = ("[PAD]", "[UNK]", "[MASK]", "[CLS]", "[SEG]")
-
-#: Separator between the segments of a chained script text (FR-002).
-SEG = "[SEG]"
+SPECIAL_TOKENS: tuple[str, ...] = ("[PAD]", "[UNK]", "[MASK]", "[CLS]", SEG)
 
 _SPECIAL_ALTERNATION = "|".join(re.escape(token) for token in SPECIAL_TOKENS)
 
@@ -69,7 +67,7 @@ _TOKEN_SCRIPT_GRAMMAR = re.compile(r"[A-Za-z]+|\{[^}]+\}|\d+|[^\sA-Za-z0-9_]")
 #: the chain references and the counter type. ``Choices$`` is handled apart.
 _WHOLE_VALUE_RE = re.compile(
     r"(?<![A-Za-z])"
-    r"(?:Execute|SubAbility|RepeatSubAbility|ReplaceWith|CounterType)"
+    rf"(?:{'|'.join((*sorted(CHAIN_KEYS), 'CounterType'))})"
     r"\$[ \t]*([^\s|]+)"
 )
 #: ``Choices$`` names chain labels only on a chooser API; on every other API
@@ -82,7 +80,7 @@ _CHOOSER_API_RE = re.compile(
 )
 #: The label that opens a segment: at the start of the text (an option line's
 #: mode) or right after a ``[SEG]``, in its FR-002a form.
-_SEGMENT_OPENER_RE = re.compile(r"(?:^|\[SEG\])[ \t]*(SV\d+)(?=:)")
+_SEGMENT_OPENER_RE = re.compile(rf"(?:^|{re.escape(SEG)})[ \t]*(SV\d+)(?=:)")
 _TOKEN_SCRIPT_VALUE_RE = re.compile(r"(?<![A-Za-z])TokenScript\$[ \t]*([^\s|]+)")
 
 #: When two role spans cover a token, the more specific one wins. A target

@@ -9,12 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from effects.domain.value_targets import (
-    VALUE_TARGET_NAMES,
-    params,
-    segments,
-    value_targets,
-)
+from effects.domain.value_targets import VALUE_TARGET_NAMES, value_targets
 
 #: Lightning Bolt's script line, as gen-1's sidecar carries it.
 _BOLT = (
@@ -125,14 +120,6 @@ def test_a_charm_root_masks_every_amount():
 def test_the_mask_and_values_align_with_the_target_list():
     targets = value_targets(_TIM)
     assert len(targets.values) == len(targets.mask) == len(VALUE_TARGET_NAMES)
-
-
-def test_segments_drop_their_labels_and_params_split_at_the_first_dollar():
-    parts = segments("SP$ Draw | SubAbility$ SV1 [SEG] SV1: DB$ Pump | NumAtt$ +1")
-    assert parts == ["SP$ Draw | SubAbility$ SV1", "DB$ Pump | NumAtt$ +1"]
-    assert params("NumDmg$ Count$Valid Creature | SP$ DealDamage") == {
-        "NumDmg": "Count$Valid Creature", "SP": "DealDamage",
-    }
 
 
 # ── real gen-2 sidecars ─────────────────────────────────────────────────

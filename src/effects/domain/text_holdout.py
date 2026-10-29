@@ -19,14 +19,24 @@ import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Literal
+from enum import StrEnum
 from zlib import crc32
 
-#: What the holdout keys on. ``template`` (gen-2, FR-039) holds out every text
-#: sharing a masked template together; ``text`` is feature 023's rule, kept so a
-#: corpus collected under it can be rebuilt exactly (spec Story 2 scenario 4).
-HoldoutUnit = Literal["template", "text"]
-HOLDOUT_UNITS: tuple[str, ...] = ("template", "text")
+from effects.domain.script_text import CHAIN_KEYS, SEG, SEGMENT_OPENER
+
+
+class HoldoutUnit(StrEnum):
+    """What the holdout keys on.
+
+    ``template`` (gen-2, FR-039) holds out every text sharing a masked template
+    together; ``text`` is feature 023's rule, kept so a corpus collected under
+    it can be rebuilt exactly (spec Story 2 scenario 4). A string enum, so a
+    unit is spelled in a manifest and on the command line as the bare string
+    always was.
+    """
+
+    TEMPLATE = "template"
+    TEXT = "text"
 
 #: Runs of whitespace differ between scripts that are otherwise the same text,
 #: and the difference is formatting rather than mechanism.
@@ -38,13 +48,6 @@ def normalize_script_text(text: str) -> str:
     return _WHITESPACE.sub(" ", text).strip()
 
 
-#: The parameters whose value names a chain segment (FR-002a). Their digits are
-#: the segment's position, not an amount, so the mask leaves them alone: a text
-#: whose reference names its second segment and one naming its first are two
-#: different mechanisms.
-_CHAIN_KEYS = frozenset({"Execute", "SubAbility", "RepeatSubAbility", "ReplaceWith"})
-_SEGMENT_SEPARATOR = "[SEG]"
-_SEGMENT_OPENER = re.compile(r"^(SV\d+):\s*")
 _DIGITS = re.compile(r"\d+")
 _CHAIN_LABEL = re.compile(r"SV\d+")
 _CARDNAME = re.compile(r"\bCARDNAME\b")
@@ -64,7 +67,10 @@ def _masked_param(param: str) -> str:
     value = value.strip()
     if key.endswith("Description"):
         masked = MASK
-    elif key in _CHAIN_KEYS:
+    elif key in CHAIN_KEYS:
+        # A chain value's digits are the segment's position, not an amount: a
+        # text whose reference names its second segment and one naming its
+        # first are two different mechanisms.
         masked = _label_or_masked(value)
     elif key == "Choices":
         masked = ",".join(_label_or_masked(item) for item in value.split(","))
@@ -88,7 +94,7 @@ def _label_or_masked(value: str) -> str:
 
 def _masked_segment(segment: str) -> str:
     segment = segment.strip()
-    opener = _SEGMENT_OPENER.match(segment)
+    opener = SEGMENT_OPENER.match(segment)
     prefix = ""
     if opener is not None:
         prefix = f"{opener.group(1)}: "
@@ -111,18 +117,21 @@ def masked_template(text: str) -> str:
     The template keys the holdout only. No encoding reads it.
     """
     normalized = normalize_script_text(text)
-    return f" {_SEGMENT_SEPARATOR} ".join(
-        _masked_segment(segment) for segment in normalized.split(_SEGMENT_SEPARATOR)
+    return f" {SEG} ".join(
+        _masked_segment(segment) for segment in normalized.split(SEG)
     )
 
 
 def holdout_key(text: str, unit: HoldoutUnit) -> str:
     """What the holdout counts carriers of and hashes, under ``unit``."""
-    if unit == "template":
+    if unit == HoldoutUnit.TEMPLATE:
         return masked_template(text)
-    if unit == "text":
+    if unit == HoldoutUnit.TEXT:
         return normalize_script_text(text)
-    raise ValueError(f"unknown holdout unit {unit!r}; expected one of {HOLDOUT_UNITS}")
+    raise ValueError(
+        f"unknown holdout unit {unit!r}; "
+        f"expected one of {tuple(known.value for known in HoldoutUnit)}"
+    )
 
 
 def text_is_held_out(text: str, *, permille: int) -> bool:
@@ -153,7 +162,7 @@ def select_holdout(
     *,
     permille: int,
     max_carriers: int,
-    unit: HoldoutUnit = "text",
+    unit: HoldoutUnit = HoldoutUnit.TEXT,
 ) -> HoldoutSelection:
     """Pick the held-out texts, and the cards depletion has to remove.
 

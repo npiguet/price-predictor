@@ -22,46 +22,51 @@ import random
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from effects.domain.records import EffectRecord, Moment, PlayabilitySubkind, RecordKind
 
-#: The eight sampling classes, which are also the granularity FR-085 speaks in:
-#: a field whose classes are all absent from the corpus contributes no loss.
-CLASS_RESOLUTION_COST = "resolution-cost"
-CLASS_RESOLUTION_EFFECT = "resolution-effect"
-CLASS_REWRITE = "rewrite"
-CLASS_CONTINUOUS = "continuous"
-CLASS_TRIGGER = "trigger"
-CLASS_PLAYABILITY_DECISION = "playability-decision"
-CLASS_PLAYABILITY_LEGALITY = "playability-legality"
-CLASS_COMBAT = "combat"
 
-SAMPLING_CLASSES: tuple[str, ...] = (
-    CLASS_RESOLUTION_EFFECT, CLASS_COMBAT, CLASS_CONTINUOUS,
-    CLASS_PLAYABILITY_DECISION, CLASS_RESOLUTION_COST, CLASS_TRIGGER,
-    CLASS_REWRITE, CLASS_PLAYABILITY_LEGALITY,
-)
+class SamplingClass(StrEnum):
+    """The eight sampling classes, which are also the granularity FR-085 speaks in.
+
+    A field whose classes are all absent from the corpus contributes no loss. A
+    string enum, so a class keys the manifest's JSON and ``--class-mix``
+    exactly as the bare string always did. Declared in report order.
+    """
+
+    RESOLUTION_EFFECT = "resolution-effect"
+    COMBAT = "combat"
+    CONTINUOUS = "continuous"
+    PLAYABILITY_DECISION = "playability-decision"
+    RESOLUTION_COST = "resolution-cost"
+    TRIGGER = "trigger"
+    REWRITE = "rewrite"
+    PLAYABILITY_LEGALITY = "playability-legality"
+
+
+SAMPLING_CLASSES: tuple[SamplingClass, ...] = tuple(SamplingClass)
 
 
 #: The eight-class mixture (root spec § Training), now a ``build-corpus``
 #: input: it sets the proportions the training stratum is written in, and the
 #: trainer samples whatever the corpus holds rather than re-mixing per batch.
-DEFAULT_KIND_MIX: dict[str, float] = {
-    CLASS_RESOLUTION_EFFECT: 0.30,
-    CLASS_COMBAT: 0.20,
-    CLASS_CONTINUOUS: 0.12,
-    CLASS_PLAYABILITY_DECISION: 0.10,
-    CLASS_RESOLUTION_COST: 0.08,
-    CLASS_TRIGGER: 0.08,
-    CLASS_REWRITE: 0.07,
-    CLASS_PLAYABILITY_LEGALITY: 0.05,
+DEFAULT_KIND_MIX: dict[SamplingClass, float] = {
+    SamplingClass.RESOLUTION_EFFECT: 0.30,
+    SamplingClass.COMBAT: 0.20,
+    SamplingClass.CONTINUOUS: 0.12,
+    SamplingClass.PLAYABILITY_DECISION: 0.10,
+    SamplingClass.RESOLUTION_COST: 0.08,
+    SamplingClass.TRIGGER: 0.08,
+    SamplingClass.REWRITE: 0.07,
+    SamplingClass.PLAYABILITY_LEGALITY: 0.05,
 }
 
 
 #: Classes whose records have no acting ability text, so rarity weighting has
 #: nothing to key on and they sample uniformly instead (FR-087).
-UNIFORM_CLASSES: frozenset[str] = frozenset({
-    CLASS_COMBAT, CLASS_PLAYABILITY_LEGALITY,
+UNIFORM_CLASSES: frozenset[SamplingClass] = frozenset({
+    SamplingClass.COMBAT, SamplingClass.PLAYABILITY_LEGALITY,
 })
 
 
@@ -75,47 +80,48 @@ RARITY_CAP = 20.0
 RARITY_PERCENTILE = 99.0
 
 
-def sampling_class(record: EffectRecord) -> str:
+def sampling_class(record: EffectRecord) -> SamplingClass:
     """The mixture class a record belongs to."""
     match record.kind:
         case RecordKind.RESOLUTION:
             return (
-                CLASS_RESOLUTION_COST
+                SamplingClass.RESOLUTION_COST
                 if record.moment is Moment.ACTIVATION
-                else CLASS_RESOLUTION_EFFECT
+                else SamplingClass.RESOLUTION_EFFECT
             )
         case RecordKind.COMBAT:
-            return CLASS_COMBAT
+            return SamplingClass.COMBAT
         case RecordKind.CONTINUOUS:
-            return CLASS_CONTINUOUS
+            return SamplingClass.CONTINUOUS
         case RecordKind.TRIGGER:
-            return CLASS_TRIGGER
+            return SamplingClass.TRIGGER
         case RecordKind.REWRITE:
-            return CLASS_REWRITE
+            return SamplingClass.REWRITE
         case RecordKind.PLAYABILITY:
             return (
-                CLASS_PLAYABILITY_DECISION
+                SamplingClass.PLAYABILITY_DECISION
                 if record.subkind is PlayabilitySubkind.DECISION
-                else CLASS_PLAYABILITY_LEGALITY
+                else SamplingClass.PLAYABILITY_LEGALITY
             )
     raise ValueError(f"no sampling class for record kind {record.kind}")
 
 
-def parse_kind_mix(value: str | None) -> dict[str, float]:
+def parse_kind_mix(value: str | None) -> dict[SamplingClass, float]:
     """``build-corpus --class-mix`` as ``class=share,…``; the default when absent."""
     if not value:
         return dict(DEFAULT_KIND_MIX)
-    mix: dict[str, float] = {}
+    mix: dict[SamplingClass, float] = {}
     for part in value.split(","):
         if not part.strip():
             continue
         name, _, share = part.partition("=")
         name = name.strip()
-        if name not in SAMPLING_CLASSES:
+        if name not in SamplingClass:
             raise ValueError(
-                f"unknown sampling class {name!r}; known: {list(SAMPLING_CLASSES)}"
+                f"unknown sampling class {name!r}; "
+                f"known: {[klass.value for klass in SamplingClass]}"
             )
-        mix[name] = float(share)
+        mix[SamplingClass(name)] = float(share)
     return mix
 
 

@@ -39,9 +39,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
 
+from effects.domain.script_text import api_of, params, segments
 from price_predictor.domain.value_objects import ManaCost
-
-SEGMENT_SEPARATOR = "[SEG]"
 
 
 class ValueKind(StrEnum):
@@ -100,9 +99,6 @@ _MANA_TARGETS: tuple[str, ...] = (
 )
 _COST_TARGETS: tuple[str, ...] = (*_MANA_TARGETS, "cost_taps", "cost_sacrifices")
 
-#: The keys whose value names the segment's API type.
-_API_KEYS: tuple[str, ...] = ("SP", "AB", "DB")
-_LABEL_RE = re.compile(r"^\s*SV\d+:\s*")
 _LITERAL_RE = re.compile(r"[+-]?\d+")
 _COST_GROUP_RE = re.compile(r"<[^>]*>")
 
@@ -121,38 +117,6 @@ class ValueTargets:
         """The target by name, or None where it is masked."""
         index = VALUE_TARGET_NAMES.index(name)
         return self.values[index] if self.mask[index] else None
-
-
-def segments(text: str) -> list[str]:
-    """A chained text's segments, each without its ``SVn:`` opener."""
-    return [_LABEL_RE.sub("", part).strip() for part in text.split(SEGMENT_SEPARATOR)]
-
-
-def params(segment: str) -> dict[str, str]:
-    """``key -> raw value`` of one segment's ``Key$ value`` parameters.
-
-    Split at the first ``$`` only, so a value carrying its own ``$``-prefix
-    (``Count$Valid Creature``) stays whole and reads as a non-literal.
-    """
-    found: dict[str, str] = {}
-    for part in segment.split("|"):
-        key, separator, value = part.partition("$")
-        key = key.strip()
-        if separator and key and key not in found:
-            found[key] = value.strip()
-    return found
-
-
-def api_of(found: dict[str, str]) -> str | None:
-    """The segment's effect API, whichever of ``SP$``/``AB$``/``DB$`` names it.
-
-    None where none does, or where the one present is empty: an empty API
-    names no effect.
-    """
-    for key in _API_KEYS:
-        if found.get(key):
-            return found[key]
-    return None
 
 
 @lru_cache(maxsize=None)

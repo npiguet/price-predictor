@@ -63,6 +63,7 @@ from effects.domain.coverage import (
 if TYPE_CHECKING:
     from effects.domain.provenance import ProvenanceKey
     from effects.infrastructure.collector_connector import CollectorSupervisor
+    from effects.infrastructure.converted_trees import ConvertedTrees
 
 logger = logging.getLogger(__name__)
 
@@ -109,19 +110,33 @@ class CollectCoverageConfig:
     #: Distinct games a held-out text must act in to be satisfied (FR-036).
     min_text_games: int = DEFAULT_MIN_TEXT_GAMES
 
-    def coverage_folder(self) -> Path:
-        """The one tree deck candidates and the coverage unit come from.
+    def converted_trees(self) -> ConvertedTrees:
+        """The trees ``--cards-folder`` names.
 
-        ``output/cardsfolder/`` alone (FR-046, FR-048): a token script is not a
-        deckable card and could never be satisfied or retired, so counting one
-        would guarantee the run never terminates.
+        Deck candidates and the coverage unit come from the card tree alone
+        (FR-046, FR-048): a token script is not a deckable card and could never
+        be satisfied or retired, so counting one would guarantee the run never
+        terminates.
         """
-        from effects.infrastructure.sidecar_io import tree_of_folder
+        from effects.infrastructure.converted_trees import ConvertedTrees
 
-        for folder in self.cards_folders:
-            if tree_of_folder(Path(folder)) == "cardsfolder":
-                return Path(folder)
-        return Path(self.cards_folders[0])
+        return ConvertedTrees.from_folders(self.cards_folders)
+
+    def holdout_source(self) -> HoldoutSource:
+        return HoldoutSource(
+            effect_records=self.effect_records, exclude_cards=self.exclude_cards,
+            split_from=self.split_from,
+        )
+
+    def no_converted_cards(self) -> str:
+        """The error for a run whose card tree holds no converted card."""
+        where = self.converted_trees().cards_folder or ", ".join(
+            str(folder) for folder in self.cards_folders
+        )
+        return (
+            f"No converted cards under {where}. Run 'python -m price_predictor "
+            "convert' first."
+        )
 
 
 def count_shard(shard: Path) -> Counter[str]:
@@ -323,26 +338,107 @@ TWO_HOLDOUT_SOURCES = (
 )
 
 
-def load_exclusions(
-    *, split_from: Path | None, exclude_cards: Path | None,
-) -> frozenset[str]:
-    """Cards to keep out of every deck, from whichever source names them.
+#: The name a depletion list takes inside the corpus it depleted.
+HOLDOUT_LIST_NAME = "holdout-cards.txt"
 
-    ``--exclude-cards`` is the ordinary one: the holdout is derived from the
-    converted tree and two flags, so it needs no trained model and this command
+
+@dataclass(frozen=True, slots=True)
+class HoldoutSource:
+    """Where a collector writes, and the one source of the cards it keeps out.
+
+    ``--exclude-cards`` is the ordinary source: the holdout is derived from the
+    converted tree and two flags, so it needs no trained model and a collector
     no longer waits on a training run that is supposed to follow it.
     ``--split-from`` remains for collecting more coverage against a checkpoint
     that already exists, whose recorded split is then the authority.
 
-    Both at once is refused rather than merged. Two spellings of one holdout is
-    precisely the failure this feature has already had once, and a merge would
-    hide a disagreement instead of reporting it.
+    Both at once is refused rather than merged, however the source is built.
+    Two spellings of one holdout is precisely the failure this feature has
+    already had once, and a merge would hide a disagreement instead of
+    reporting it.
     """
-    if split_from is not None and exclude_cards is not None:
-        raise ValueError(TWO_HOLDOUT_SOURCES)
-    if exclude_cards is not None:
-        return read_name_list(exclude_cards)
-    return load_held_out(split_from)
+
+    effect_records: Path = DEFAULT_RECORDS_DIR
+    exclude_cards: Path | None = None
+    split_from: Path | None = None
+
+    def __post_init__(self) -> None:
+        if self.split_from is not None and self.exclude_cards is not None:
+            raise ValueError(TWO_HOLDOUT_SOURCES)
+
+    @classmethod
+    def from_flags(
+        cls, *,
+        effect_records: Path | None,
+        exclude_cards: Path | None,
+        split_from: Path | None,
+        training_corpus: Path | None = None,
+        only_cards: Path | None = None,
+    ) -> HoldoutSource:
+        """The source a collector's flags name, refused before any worker starts.
+
+        ``--training-corpus DIR`` stands for ``--effect-records DIR`` with
+        ``DIR/holdout-cards.txt`` as the depletion list. A corpus and the list
+        that depleted it belong together — the list is what the corpus was
+        built against, and naming them separately is how a run ends up
+        depleted against one holdout and split against another. ``DIR``
+        holding both is the shape an operator naturally produces.
+
+        Raises:
+            ValueError: If ``--only-cards`` comes with any holdout to keep out
+                of the decks; if ``--training-corpus`` comes with either flag
+                it implies, an explicit default ``--effect-records`` included
+                (two sources for one answer); if its directory holds no
+                depletion list, since running undepleted by accident is the
+                failure this whole area already had once; or if two sources
+                name the held-out cards.
+        """
+        if only_cards is not None:
+            clashing = [
+                flag for flag, value in (
+                    ("--exclude-cards", exclude_cards),
+                    ("--training-corpus", training_corpus),
+                    ("--split-from", split_from),
+                ) if value
+            ]
+            if clashing:
+                # FR-038: the round decks the held-out cards on purpose, and
+                # each of these names a holdout to keep out of the decks — the
+                # opposite instruction, so one of them is a mistake.
+                raise ValueError(
+                    f"--only-cards decks the held-out cards; {', '.join(clashing)} "
+                    "keeps a holdout out of every deck. Pass one or the other."
+                )
+        if training_corpus is None:
+            return cls(
+                effect_records=effect_records or DEFAULT_RECORDS_DIR,
+                exclude_cards=exclude_cards, split_from=split_from,
+            )
+        if effect_records is not None or exclude_cards:
+            raise ValueError(
+                "pass one source of the corpus location, not both: "
+                "--training-corpus DIR means --effect-records DIR with its own "
+                f"{HOLDOUT_LIST_NAME}"
+            )
+        listed = training_corpus / HOLDOUT_LIST_NAME
+        if not listed.is_file():
+            raise ValueError(
+                f"{training_corpus} holds no {HOLDOUT_LIST_NAME}. A training "
+                "corpus is depleted against a list, and without it this run "
+                "would deck the held-out cards and contaminate the split. Write "
+                "one with 'python -m effects holdout-cards', or pass "
+                "--effect-records and --exclude-cards separately if they "
+                "genuinely live apart."
+            )
+        return cls(
+            effect_records=training_corpus, exclude_cards=listed, split_from=split_from,
+        )
+
+    def exclusions(self) -> frozenset[str]:
+        """Cards to keep out of every deck, folded, from whichever source names them."""
+        if self.exclude_cards is not None:
+            return read_name_list(self.exclude_cards)
+        return load_held_out(self.split_from)
 
 
 def read_name_list(path: Path) -> frozenset[str]:
@@ -530,20 +626,13 @@ def run(config: CollectCoverageConfig) -> int:
     if config.only_cards is not None:
         return run_text_coverage(config)
 
-    cards_folder = config.coverage_folder()
-    if not cards_folder.is_dir():
-        logger.error(
-            "No converted cards under %s. Run 'python -m price_predictor "
-            "convert' first.", cards_folder,
-        )
+    trees = config.converted_trees()
+    converted = trees.converted_cards
+    if not converted:
+        logger.error("%s", config.no_converted_cards())
         return 1
 
-    held_out = load_exclusions(
-        split_from=config.split_from, exclude_cards=config.exclude_cards,
-    )
-    from effects.infrastructure.card_sources import load_converted_cards
-
-    converted = load_converted_cards(cards_folder)
+    held_out = config.holdout_source().exclusions()
     texts = {name: card.text for name, card in converted.items()}
     non_deck = non_deck_names(texts)
     coverage = build_coverage_units(
@@ -554,7 +643,7 @@ def run(config: CollectCoverageConfig) -> int:
         held_out,
     )
     if not coverage:
-        logger.error("No deckable cards under %s", cards_folder)
+        logger.error("No deckable cards under %s", trees.cards_folder)
         return 1
     logger.info(
         "Coverage unit: %d cards (%d held out, %d of a non-deck type), target "
@@ -749,21 +838,15 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     """The held-out coverage round: listed cards only, keyed by held-out text."""
 
     from effects.domain.card_names import fold_card_name
-    from effects.infrastructure.card_sources import (
-        load_card_texts,
-        load_converted_cards,
-    )
-    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 
-    cards_folder = config.coverage_folder()
-    if not cards_folder.is_dir():
-        logger.error("No converted cards under %s.", cards_folder)
+    trees = config.converted_trees()
+    converted = trees.converted_cards
+    if not converted:
+        logger.error("%s", config.no_converted_cards())
         return 1
     listed = read_name_list(config.only_cards)
-    converted = load_converted_cards(cards_folder)
-    card_files = {name: card.script_file for name, card in converted.items()}
-    roots = sidecar_roots(config.cards_folders)
-    texts_by_card = load_card_texts(card_files, SidecarCache(roots))
+    card_files = trees.card_files
+    texts_by_card = trees.card_texts()
     listed_files = {
         name: script for name, script in card_files.items()
         if fold_card_name(name) in listed
@@ -806,7 +889,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     }
     floor = config.min_text_games
     records_dir = Path(config.effect_records)
-    counter = TextCoverageCounter({tree: str(root) for tree, root in roots.items()})
+    counter = TextCoverageCounter(trees.root_paths)
     counter.update(coverage, records_dir)
     logger.info(
         "Held-out round: %d text(s) on %d card(s); %d already at %d games; %d "

@@ -262,8 +262,6 @@ def load_probe_model(
     runnable = load_runnable(
         config, checkpoint, vocab_path=vocab, keyword_path=keywords, records=records,
     )
-    runnable.encoder.eval()
-    runnable.model.eval()
     return ProbeModel(
         checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,
         batcher=runnable.batcher, fields=runnable.fields,
@@ -281,11 +279,14 @@ def predict(probe_model, records: list, read) -> list:
     import torch
 
     with torch.no_grad():
-        batch, surfaces = probe_model.batcher.build(records, probe_model.encoder)
-        hidden = probe_model.model(**batch)
+        built = probe_model.batcher.build(records, probe_model.encoder)
+        hidden = probe_model.model(**built.inputs)
         outputs = probe_model.model.per_entity(hidden)
         verdict = probe_model.model.verdict(hidden)
-    return [read(outputs, verdict, surface, row) for row, surface in enumerate(surfaces)]
+    return [
+        read(outputs, verdict, surface, row)
+        for row, surface in enumerate(built.surfaces)
+    ]
 
 
 def predict_all(probe_model, records: list, read, *, chunk: int = 32) -> list:

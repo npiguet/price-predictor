@@ -29,6 +29,8 @@ def f1_score(predicted: np.ndarray, observed: np.ndarray) -> float:
     """Binary F1 over the affected/unaffected gate."""
     predicted = np.asarray(predicted).astype(bool)
     observed = np.asarray(observed).astype(bool)
+    if not observed.size:
+        return float("nan")
     true_positive = float(np.sum(predicted & observed))
     if true_positive == 0:
         return 0.0

@@ -24,11 +24,12 @@ import numpy as np
 
 from effects.domain.ability_cache_layout import ARRAY_KEY, CACHE_SUFFIX, pooled_card_vector
 from effects.domain.evaluation_report import (
+    Bound,
     CheckName,
     CheckResult,
     CheckStatus,
-    breaches,
-    margin,
+    Margin,
+    gate_verdict,
 )
 from effects.domain.gate_metrics import (
     GATE3_MAX_MEAN_COSINE,
@@ -38,6 +39,7 @@ from effects.domain.gate_metrics import (
     top_component_share,
 )
 from effects.domain.line_query import LineQuery, normalize_prose
+from effects.domain.provenance import SourceTree
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +221,7 @@ def load_cache(
                     cached.by_prose.setdefault(
                         normalize_prose(prose), {},
                     ).setdefault(text, set()).add(card)
-            if matrix.size and relative.parts[:1] == ("cardsfolder",):
+            if matrix.size and relative.parts[:1] == (SourceTree.CARDSFOLDER,):
                 cached.by_card[sidecar.card] = pooled_card_vector(matrix)
     return cached
 
@@ -234,25 +236,24 @@ def gate_three_verdict(geometry: CacheGeometry) -> CheckResult:
     average-case metric — every prediction is the corpus mean and every mean is
     close — so this is checked on the geometry rather than on the loss.
     """
-    cosine = geometry.mean_pairwise_cosine
-    top = geometry.top_component_share
-    values = {"mean_pairwise_cosine": cosine, "top_component_share": top}
-    failures = breaches(
-        margin(
-            "mean pairwise cosine", cosine, cosine > GATE3_MAX_MEAN_COSINE,
-            f"{cosine:.3f} > {GATE3_MAX_MEAN_COSINE}",
+    return gate_verdict(
+        CheckName.GATE_3,
+        (
+            Margin(
+                "mean_pairwise_cosine", "mean pairwise cosine",
+                geometry.mean_pairwise_cosine, GATE3_MAX_MEAN_COSINE,
+                Bound.CEILING, value_format=".3f",
+            ),
+            Margin(
+                "top_component_share", "top principal component",
+                geometry.top_component_share, GATE3_MAX_TOP_COMPONENT,
+                Bound.CEILING, value_format=".1%", limit_format=".0%",
+                verb="explains",
+            ),
         ),
-        margin(
-            "top principal component", top, top > GATE3_MAX_TOP_COMPONENT,
-            f"explains {top:.1%} > {GATE3_MAX_TOP_COMPONENT:.0%}",
-        ),
+        fail_prefix="the embedding space has collapsed",
+        pass_detail="no collapse",
     )
-    if failures:
-        return CheckResult(
-            CheckName.GATE_3, CheckStatus.FAIL,
-            "the embedding space has collapsed: " + "; ".join(failures), values,
-        )
-    return CheckResult(CheckName.GATE_3, CheckStatus.PASS, "no collapse", values)
 
 
 def run_gate_three(cached: CachedVectors, abilities_root: Path) -> CheckResult:

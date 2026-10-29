@@ -27,12 +27,15 @@ def parse(*argv: str):
 #: ``train-effect-model`` takes no defaults without a corpus any more.
 TRAIN = ("train-effect-model", "--corpus", "output/effects/corpus")
 
+#: What ``--cards-folder`` parses to when it is not passed.
+BOTH_TREES = (Path("output/cardsfolder"), Path("output/tokenscripts"))
+
 
 class TestBuildVocab:
     def test_the_defaults_are_the_contracts(self):
         args = parse("build-vocab")
         assert args.surface == "prose"
-        assert args.cards_folders is None  # resolved to both converted trees
+        assert args.cards_folders == BOTH_TREES
         assert args.vocab_path is None  # resolved per surface
         assert args.keyword_definitions == Path("output/effects/keyword-definitions.json")
         assert args.target_size == 5000
@@ -41,15 +44,12 @@ class TestBuildVocab:
         args = parse(
             "build-vocab", "--cards-folder", "a/", "--cards-folder", "b/",
         )
-        assert args.cards_folders == ["a/", "b/"]
+        assert args.cards_folders == (Path("a/"), Path("b/"))
 
-    def test_the_default_resolves_to_both_converted_trees(self):
-        from effects.infrastructure.cli import resolve_cards_folders
-
-        folders = resolve_cards_folders(parse("build-vocab").cards_folders)
-        assert [f.as_posix() for f in folders] == [
-            "output/cardsfolder", "output/tokenscripts",
-        ]
+    def test_one_cards_folder_replaces_both_defaults(self):
+        """argparse's own ``append`` would add to the default, not replace it."""
+        args = parse("build-vocab", "--cards-folder", "a/")
+        assert args.cards_folders == (Path("a/"),)
 
     def test_the_surface_choices_are_prose_and_script(self):
         assert parse("build-vocab", "--surface", "script").surface == "script"
@@ -310,7 +310,7 @@ class TestBuildCorpus:
         args = parse("build-corpus")
         assert args.records_dir == Path("output/effects/records/")
         assert args.output == Path("output/effects/corpus/")
-        assert args.cards_folders is None  # resolved to both converted trees
+        assert args.cards_folders == BOTH_TREES
         assert args.vocab_path == "models/effects/vocab.txt"
         assert args.variant_scripts is None
 
@@ -367,7 +367,7 @@ class TestBuildCorpus:
         assert config.seed == args.seed
         assert config.workers == args.workers
         assert config.verify == args.verify
-        assert config.cards_folders == ("output/cardsfolder", "output/tokenscripts")
+        assert config.cards_folders == args.cards_folders == BOTH_TREES
 
     def test_the_class_mix_is_parsed_through_the_trainers_own_syntax(self):
         args = parse("build-corpus", "--class-mix", "rewrite=0.5,combat=0.5")
@@ -379,4 +379,4 @@ class TestBuildCorpus:
 
     def test_cards_folder_is_repeatable(self):
         args = parse("build-corpus", "--cards-folder", "a/", "--cards-folder", "b/")
-        assert args.cards_folders == ["a/", "b/"]
+        assert args.cards_folders == (Path("a/"), Path("b/"))

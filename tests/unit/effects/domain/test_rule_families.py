@@ -16,14 +16,9 @@ import pytest
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from effects.domain.records import Candidate, ForbiddenEntity, RecordKind
 from effects.domain.rule_families import (
-    CANNOT_PLAY,
-    NO_LEGAL_TARGET,
-    NO_MODE,
-    NONE,
-    UNAFFORDABLE,
+    FamilySentinel,
     candidate_family,
     legality_modes,
-    root_param,
     rule_family,
 )
 from effects.domain.state_snapshot import GrantedTemporary
@@ -48,7 +43,7 @@ def sidecars():
 
 def _first(records, kind, discriminator=None, test=lambda r: True):
     for record in records:
-        found = (record.moment or record.subkind)
+        found = record.discriminator
         if record.kind is kind and (
             discriminator is None or (found is not None and found.value == discriminator)
         ) and test(record):
@@ -84,7 +79,7 @@ def test_a_trigger_with_no_mode_is_no_mode(records):
     record = _first(records, RecordKind.TRIGGER)
     line = SidecarLine(line_index=0, line_kind="triggered", provenance=record.ability,
                        script_api_type="Draw", script_text="Execute$ SV1 | TriggerZones$ Hand")
-    assert rule_family(record, _Lines({record.ability[0]: line})) == NO_MODE
+    assert rule_family(record, _Lines({record.ability[0]: line})) == FamilySentinel.NO_MODE
 
 
 def test_a_continuous_record_takes_its_static_mode(records, sidecars):
@@ -109,7 +104,7 @@ def test_a_rewrite_takes_its_event(records, sidecars):
 
 def test_a_combat_without_damage_step_keywords_is_none(records, sidecars):
     record = _first(records, RecordKind.COMBAT, test=lambda r: not r.fork)
-    assert rule_family(record, sidecars) == NONE
+    assert rule_family(record, sidecars) == FamilySentinel.NONE
 
 
 def test_a_combat_family_is_the_sorted_keyword_set(records, sidecars):
@@ -135,7 +130,7 @@ def test_a_keyword_acting_line_is_its_keywords_family(records):
 def test_a_decision_with_an_unaffordable_candidate_is_unaffordable(records, sidecars):
     record = _first(records, RecordKind.PLAYABILITY, "decision")
     assert not record.payload.candidates[0].affordable
-    assert rule_family(record, sidecars) == UNAFFORDABLE
+    assert rule_family(record, sidecars) == FamilySentinel.UNAFFORDABLE
 
 
 def test_decision_candidates_by_verdict_and_by_static(records):
@@ -148,17 +143,17 @@ def test_decision_candidates_by_verdict_and_by_static(records):
     unaffordable = Candidate(ability=(), can_play=True, affordable=False, has_legal_target=True)
     forbidden = Candidate(ability=(), can_play=False, affordable=True, has_legal_target=True,
                           responsible_static=(static,))
-    assert candidate_family(unaffordable, lines) == UNAFFORDABLE
+    assert candidate_family(unaffordable, lines) == FamilySentinel.UNAFFORDABLE
     assert candidate_family(forbidden, lines) == "CantBeCast"
     assert candidate_family(dataclasses.replace(forbidden, responsible_static=()), lines) == (
-        CANNOT_PLAY
+        FamilySentinel.CANNOT_PLAY
     )
     assert candidate_family(Candidate(
         ability=(), can_play=True, affordable=True, has_legal_target=False,
-    ), lines) == NO_LEGAL_TARGET
+    ), lines) == FamilySentinel.NO_LEGAL_TARGET
     assert candidate_family(Candidate(
         ability=(), can_play=True, affordable=True, has_legal_target=True,
-    ), lines) == NONE
+    ), lines) == FamilySentinel.NONE
 
 
 def test_a_blockers_record_restricted_by_flying_is_flying(records, sidecars):
@@ -208,18 +203,11 @@ def test_without_mode_counts_the_family_is_still_one_mode(records):
 
 def test_a_legality_record_with_no_static_is_none(records, sidecars):
     record = _first(records, RecordKind.PLAYABILITY, "attackers")
-    assert rule_family(record, sidecars) == NONE
+    assert rule_family(record, sidecars) == FamilySentinel.NONE
 
 
 def test_every_fixture_record_has_a_family(records, sidecars):
     assert all(rule_family(record, sidecars) for record in records)
-
-
-def test_root_param_reads_the_root_segment_only():
-    text = "Mode$ ChangesZone | Execute$ SV1 [SEG] SV1: DB$ Draw | Mode$ Other"
-    assert root_param(text, "Mode") == "ChangesZone"
-    assert root_param(text, "Event") is None
-    assert root_param(None, "Mode") is None
 
 
 class _Lines:

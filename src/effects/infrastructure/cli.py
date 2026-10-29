@@ -25,6 +25,7 @@ from typing import Any, TypeVar
 from effects.application import collect_coverage, collect_variants
 from effects.application.build_corpus import DEFAULT_GAME_DISJOINT_KEYWORDS
 from effects.application.build_vocab import DEFAULT_TARGET_SIZE
+from effects.application.collect_coverage import HOLDOUT_LIST_NAME, HoldoutSource
 from effects.application.train_effect_model import (
     DEFAULT_PREFETCH_WORKERS,
     DEFAULT_SHARDS_PER_EPOCH,
@@ -87,20 +88,30 @@ def _optional_path(text: str) -> Path | None:
 # ── flags several commands share ────────────────────────────────────────
 
 
+class _AppendCardsFolder(argparse.Action):
+    """``--cards-folder``: repeatable, and the first use replaces the default.
+
+    argparse's own ``append`` appends to the default, so both converted trees
+    would always be read beside the ones named. Replacing it here means the
+    parsed value is already the tuple every config takes.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        chosen = getattr(namespace, self.dest)
+        if chosen is self.default:
+            chosen = ()
+        setattr(namespace, self.dest, (*chosen, Path(values)))
+
+
 def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--cards-folder", action="append", dest="cards_folders", default=None,
+        "--cards-folder", action=_AppendCardsFolder, dest="cards_folders",
+        default=tuple(Path(folder) for folder in DEFAULT_CARDS_FOLDERS),
         help=(
             "Converted source tree; repeatable. Defaults to "
             f"{' and '.join(DEFAULT_CARDS_FOLDERS)}."
         ),
     )
-
-
-def resolve_cards_folders(values: list[str] | None) -> tuple[Path, ...]:
-    """``--cards-folder`` values, or both converted trees."""
-    chosen = values or list(DEFAULT_CARDS_FOLDERS)
-    return tuple(Path(value) for value in chosen)
 
 
 def _add_effect_records(
@@ -115,10 +126,6 @@ def _add_effect_records(
     parser.add_argument(
         "--effect-records", type=Path, default=default, help=help_text,
     )
-
-
-#: The name a depletion list takes inside the corpus it depleted.
-HOLDOUT_LIST_NAME = "holdout-cards.txt"
 
 
 def _add_holdout_sources(
@@ -413,10 +420,7 @@ def run_build_vocab(args: argparse.Namespace) -> int:
     )
     from effects.application.build_vocab import run as build_vocab
 
-    config = config_from_args(
-        BuildVocabConfig, args,
-        cards_folders=resolve_cards_folders(args.cards_folders),
-    )
+    config = config_from_args(BuildVocabConfig, args)
     try:
         build_vocab(config)
     except EmptyCardsFolderError as exc:
@@ -513,85 +517,30 @@ def _collect_coverage_parser(subparsers) -> None:
     _add_cap_flags(parser)
 
 
-def holdout_source(args: argparse.Namespace) -> tuple[Path, Path | None]:
-    """:func:`resolve_training_corpus`, refusing a second source beside it.
+def holdout_source(args: argparse.Namespace) -> HoldoutSource:
+    """A collector's :class:`HoldoutSource`, read off its flags.
 
-    Checked here, before any worker starts, so a collector refuses
-    ``--split-from`` beside a depletion list as a message rather than as a
-    traceback out of its first round.
-
-    Raises:
-        ValueError: As :func:`resolve_training_corpus`, or when ``--split-from``
-            names a holdout the depletion list already names.
+    Built before any worker starts, so a collector refuses a contradictory
+    holdout as a message rather than as a traceback out of its first round.
     """
-    records, listed = resolve_training_corpus(args)
-    if args.split_from and listed is not None:
-        raise ValueError(collect_coverage.TWO_HOLDOUT_SOURCES)
-    return records, listed
-
-
-def resolve_training_corpus(args: argparse.Namespace) -> tuple[Path, Path | None]:
-    """``(records dir, depletion list)`` from ``--training-corpus`` or the pair.
-
-    A corpus and the list that depleted it belong together — the list is what
-    the corpus was built against, and naming them separately is how a run ends
-    up depleted against one holdout and split against another. ``DIR`` holding
-    both is the shape an operator naturally produces.
-
-    Raises:
-        ValueError: If ``--training-corpus`` is combined with either flag it
-            implies (two sources for one answer), or if the directory holds no
-            depletion list — running undepleted by accident is the failure this
-            whole area already had once.
-    """
-    corpus = getattr(args, "training_corpus", None)
-    if corpus is None:
-        return args.effect_records or Path(DEFAULT_RECORDS_DIR), args.exclude_cards
-    if args.effect_records is not None or args.exclude_cards:
-        raise ValueError(
-            "pass one source of the corpus location, not both: "
-            "--training-corpus DIR means --effect-records DIR with its own "
-            f"{HOLDOUT_LIST_NAME}"
-        )
-    listed = corpus / HOLDOUT_LIST_NAME
-    if not listed.is_file():
-        raise ValueError(
-            f"{corpus} holds no {HOLDOUT_LIST_NAME}. A training corpus is "
-            "depleted against a list, and without it this run would deck the "
-            "held-out cards and contaminate the split. Write one with "
-            "'python -m effects holdout-cards', or pass --effect-records and "
-            "--exclude-cards separately if they genuinely live apart."
-        )
-    return corpus, listed
+    return HoldoutSource.from_flags(
+        effect_records=args.effect_records,
+        exclude_cards=args.exclude_cards,
+        split_from=args.split_from,
+        training_corpus=args.training_corpus,
+        only_cards=getattr(args, "only_cards", None),
+    )
 
 
 def coverage_config_from(args: argparse.Namespace):
     """The coverage config, with the corpus location already resolved."""
     from effects.application.collect_coverage import CollectCoverageConfig
 
-    only_cards = getattr(args, "only_cards", None)
-    if only_cards is not None:
-        clashing = [
-            flag for flag, value in (
-                ("--exclude-cards", args.exclude_cards),
-                ("--training-corpus", getattr(args, "training_corpus", None)),
-                ("--split-from", args.split_from),
-            ) if value
-        ]
-        if clashing:
-            # FR-038: the round decks the held-out cards on purpose, and each of
-            # these names a holdout to keep out of the decks — the opposite
-            # instruction, so one of them is a mistake.
-            raise ValueError(
-                f"--only-cards decks the held-out cards; {', '.join(clashing)} "
-                "keeps a holdout out of every deck. Pass one or the other."
-            )
-    records, listed = holdout_source(args)
+    source = holdout_source(args)
     return config_from_args(
         CollectCoverageConfig, args,
-        effect_records=records,
-        exclude_cards=listed,
-        cards_folders=resolve_cards_folders(args.cards_folders),
+        effect_records=source.effect_records,
+        exclude_cards=source.exclude_cards,
         caps=CollectionCaps.from_args(args),
     )
 
@@ -793,11 +742,7 @@ def run_build_corpus(args: argparse.Namespace) -> int:
     try:
         # Inside the try: the config validates its own counts on construction.
         config = config_from_args(
-            BuildCorpusConfig, args,
-            cards_folders=tuple(
-                str(path) for path in resolve_cards_folders(args.cards_folders)
-            ),
-            max_events=args.max_events_per_record,
+            BuildCorpusConfig, args, max_events=args.max_events_per_record,
         )
         return build_corpus_module.build(config)
     except BuildCorpusError as exc:
@@ -828,15 +773,12 @@ def _holdout_cards_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_holdout_cards)
     parser.add_argument(
-        "--out", type=str, required=True,
+        "--out", type=Path, required=True,
         help="Destination file, one Forge canonical card name per line",
     )
+    _add_cards_folder(parser)
     parser.add_argument(
-        "--cards-folder", type=str, default=DEFAULT_CARDS_FOLDERS[0],
-        help=f"Converted card tree (default: {DEFAULT_CARDS_FOLDERS[0]})",
-    )
-    parser.add_argument(
-        "--printings-path", type=str, default="resources/AllPrintings.json",
+        "--printings-path", type=Path, default=Path("resources/AllPrintings.json"),
         help=(
             "MTGJSON dump, used only to write the list in Forge's printed "
             "spelling rather than the converted tree's lowercase "
@@ -852,55 +794,23 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
     The share is the number an operator needs: it is what a depleted pool loses,
     and it is the knob the two holdout flags actually turn.
     """
-    from effects.application.holdout_cards import (
-        holdout_report,
-        write_depletion_list,
-    )
-    from effects.infrastructure.card_sources import (
-        load_card_files,
-        load_card_texts,
-        load_first_printings,
-    )
-    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts
+    from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
+    from effects.application.holdout_cards import run as holdout_cards
 
-    cards_folder = Path(args.cards_folder)
-    if not cards_folder.is_dir():
-        print(f"no converted cards under {cards_folder}")
+    config = config_from_args(HoldoutCardsConfig, args)
+    try:
+        report = holdout_cards(config)
+    except HoldoutCardsError as exc:
+        print(exc)
         return 1
-
-    card_files = load_card_files(cards_folder)
-    if not card_files:
-        print(f"no converted cards under {cards_folder}")
-        return 1
-
-    sidecars = SidecarCache({"cardsfolder": cards_folder})
-    texts_by_card = load_card_texts(card_files, sidecars)
-    printings = Path(args.printings_path)
-    canonical = load_first_printings(printings) if printings.exists() else {}
-    if not canonical:
-        print(
-            f"No printings at {printings}: the list keeps the converted tree's "
-            "lowercase spelling. Every comparison folds case, so depletion "
-            "still works."
-        )
-    report = holdout_report(
-        card_files, texts_by_card,
-        permille=args.holdout_permille,
-        max_carriers=args.holdout_max_carriers,
-        unit=args.holdout_unit,
-        canonical_names=canonical,
-        # The converted token tree beside the card tree, as build-corpus reads it.
-        token_texts=load_tree_texts(cards_folder.parent / "tokenscripts"),
-    )
-    written = write_depletion_list(report.names, Path(args.out))
     if report.unit == "template":
         print(f"held-out templates: {report.keys}")
     print(f"held-out texts: {report.texts}")
     print(
-        f"held-out cards: {written} of {len(card_files)} converted "
-        f"({100.0 * report.depleted_share:.1f}% depleted) -> {args.out}"
+        f"held-out cards: {len(report.names)} of {report.converted_cards} converted "
+        f"({100.0 * report.depleted_share:.1f}% depleted) -> {config.out}"
     )
-    if not written:
+    if not report.names:
         print(
             "Nothing to deplete. Raise --holdout-permille, or check that the "
             "converted tree has sidecars with script text."
@@ -1162,9 +1072,7 @@ def _sidecars_for_validation(args: argparse.Namespace):
     """
     from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 
-    roots = sidecar_roots(
-        path for path in resolve_cards_folders(args.cards_folders) if path.is_dir()
-    )
+    roots = sidecar_roots(path for path in args.cards_folders if path.is_dir())
     return SidecarCache(roots) if roots else None
 
 
@@ -1241,15 +1149,15 @@ def run_collect_variants(args: argparse.Namespace) -> int:
         print(f"collect-variants: {error}")
         return 1
     try:
-        records, listed = holdout_source(args)
+        source = holdout_source(args)
     except ValueError as exc:
         print(f"collect-variants: {exc}")
         return 1
     print(announce_probe_state(args.probe_keywords, args.probes_per_game))
     return collect(config_from_args(
         CollectVariantsConfig, args,
-        effect_records=records,
-        exclude_cards=listed,
+        effect_records=source.effect_records,
+        exclude_cards=source.exclude_cards,
         caps=CollectionCaps.from_args(args),
     ))
 
@@ -1447,10 +1355,7 @@ def train_config_from(args: argparse.Namespace):
     """The trainer's config, assembled from parsed arguments."""
     from effects.application.train_effect_model import TrainEffectModelConfig
 
-    return config_from_args(
-        TrainEffectModelConfig, args,
-        cards_folders=resolve_cards_folders(args.cards_folders),
-    )
+    return config_from_args(TrainEffectModelConfig, args)
 
 
 # ── encode-abilities ────────────────────────────────────────────────────
@@ -1484,10 +1389,7 @@ def run_encode_abilities(args: argparse.Namespace) -> int:
     from effects.application.encode_abilities import run as encode
     from effects.infrastructure.effect_model_store import HashMismatchError
 
-    config = config_from_args(
-        EncodeAbilitiesConfig, args,
-        cards_folders=resolve_cards_folders(args.cards_folders),
-    )
+    config = config_from_args(EncodeAbilitiesConfig, args)
     try:
         encode(config)
     except HashMismatchError as exc:
@@ -1557,7 +1459,6 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     config = config_from_args(
         EvaluateEffectModelConfig, args,
         baseline_checkpoints=dict(args.baseline_checkpoints or []),
-        cards_folders=resolve_cards_folders(args.cards_folders),
     )
     try:
         report = evaluate(config)

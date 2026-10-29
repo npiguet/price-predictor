@@ -25,6 +25,7 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass
+from enum import StrEnum
 
 #: Selectors safe to swap between. Every one is a real Forge restriction that
 #: composes with any card type, so a swap yields a script Forge can load.
@@ -46,10 +47,14 @@ NUMERIC_PARAM_KEYS: frozenset[str] = frozenset({
     "Amount", "Num", "NumCounters", "NumTimes", "PowerBonus", "ToughnessBonus",
 })
 
+#: A ``Key$ value`` pair on a Forge *source* line, not a converted chain, so
+#: not :func:`effects.domain.script_text.params`: a source line opens with its
+#: kind (``A:SP$``, ``SVar:DBDraw:DB$``, ``DeckHints:Type$``), and the key is
+#: the word just before ``$`` -- the form :func:`_apply` rewrites by.
 _PARAM_RE = re.compile(r"(\w+)\$\s*([^|]+?)(?=\s*\||\s*$)")
 
 
-class PerturbationKind:
+class PerturbationKind(StrEnum):
     SHIFT = "numeric-shift"
     DOUBLE = "numeric-double"
     SELECTOR = "selector-swap"
@@ -59,7 +64,7 @@ class PerturbationKind:
 class Perturbation:
     """One change to one script line."""
 
-    kind: str
+    kind: PerturbationKind
     key: str
     original: str
     replacement: str

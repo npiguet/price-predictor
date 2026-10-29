@@ -42,6 +42,7 @@ from effects.domain.ability_tokenizer import (
     Token,
     camel_parts,
 )
+from effects.domain.script_text import SEG
 from price_predictor.application.build_vocabulary import (
     MULTI_WORD_KEYWORDS,
     build_vocabulary,
@@ -65,7 +66,7 @@ DEFAULT_TARGET_SIZE = 5000
 #: ``[MASK]`` is the MLM auxiliary's, ``[CLS]`` is the pooling token the
 #: bottleneck ``e`` is read from, and ``[SEG]`` separates script segments.
 SEEDED_SPECIALS: tuple[str, ...] = (
-    "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "[SEG]",
+    "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", SEG,
 )
 
 #: Script-line frequency floor, the shared builder's production threshold.

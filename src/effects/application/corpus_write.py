@@ -22,8 +22,14 @@ from effects.application.corpus_survey import (
 from effects.domain.corpus_curation import CopyPlan
 from effects.domain.corpus_plan import Cell, GameStrata, Keys
 from effects.domain.record_quality import has_unattributed_events
-from effects.domain.records import EffectRecord, LegalityDecision, RecordKind, acting_keys
-from effects.domain.sampling import sampling_class
+from effects.domain.records import (
+    EffectRecord,
+    LegalityDecision,
+    RecordKind,
+    SeatPolicy,
+    acting_keys,
+)
+from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.strata import OUTPUT_STRATA, Stratum
 
 
@@ -84,12 +90,12 @@ class TrainingTally:
     """Per sampling class: records kept by the rules, written, dropped by the plan."""
 
     #: Records the quality rules kept, in every stratum.
-    read: Counter[str] = field(default_factory=Counter)
+    read: Counter[SamplingClass] = field(default_factory=Counter)
     #: Records written to the training output, copies included.
-    kept: Counter[str] = field(default_factory=Counter)
+    kept: Counter[SamplingClass] = field(default_factory=Counter)
     #: Training records a copy plan wrote zero times.
-    dropped_by_cap: Counter[str] = field(default_factory=Counter)
-    kept_keys: dict[str, set[Keys]] = field(default_factory=dict)
+    dropped_by_cap: Counter[SamplingClass] = field(default_factory=Counter)
+    kept_keys: dict[SamplingClass, set[Keys]] = field(default_factory=dict)
 
     def merge(self, other: TrainingTally) -> None:
         self.read.update(other.read)
@@ -105,20 +111,21 @@ class FamilyTally:
 
     #: ``(class, family label) ->`` records written, copies included, and the
     #: distinct records behind them: the difference is the family's repeats.
-    written: Counter[tuple[str, str]] = field(default_factory=Counter)
-    distinct: Counter[tuple[str, str]] = field(default_factory=Counter)
-    signatures: Counter[tuple[str, str, str]] = field(default_factory=Counter)
-    #: ``(class, on_policy | off_policy)``.
-    policy: Counter[tuple[str, str]] = field(default_factory=Counter)
+    written: Counter[tuple[SamplingClass, str]] = field(default_factory=Counter)
+    distinct: Counter[tuple[SamplingClass, str]] = field(default_factory=Counter)
+    signatures: Counter[tuple[SamplingClass, str, str]] = field(default_factory=Counter)
+    policy: Counter[tuple[SamplingClass, SeatPolicy]] = field(default_factory=Counter)
     #: ``(legality subkind, real | what-if | unknown)``.
     legality: Counter[tuple[str, str]] = field(default_factory=Counter)
 
-    def note(self, record: EffectRecord, klass: str, cell: Cell, copies: int) -> None:
+    def note(
+        self, record: EffectRecord, klass: SamplingClass, cell: Cell, copies: int,
+    ) -> None:
         label = cell.label
         self.written[klass, label] += copies
         self.distinct[klass, label] += 1
         self.signatures[klass, label, cell.signature] += copies
-        self.policy[klass, "off_policy" if record.random_seat else "on_policy"] += copies
+        self.policy[klass, SeatPolicy.of(record)] += copies
         if cell.half:
             self.legality[record.subkind.value, LegalityDecision.of(record).value] += copies
 

@@ -35,12 +35,9 @@ from enum import Enum, StrEnum, auto
 
 from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import EntityTargets
-from effects.domain.provenance import ProvenanceKey
-from effects.domain.value_targets import api_of, params, segments
+from effects.domain.provenance import ProvenanceKey, SourceTree
+from effects.domain.script_text import api_of, params, segments
 
-#: The tree a copy's acting key names, so its edited text never shares a key
-#: with the real line's.
-COUNTERFACTUAL_TREE = "counterfactual"
 #: Amounts and toughnesses a copy draws from, uniformly: lethal a little more
 #: than half the time.
 DRAW_RANGE = (1, 8)
@@ -419,8 +416,10 @@ def counterfactual(record, qualified: Qualified, targets: dict[str, EntityTarget
         if script is not None and edited is not None:
             amount = drawn
             original = record.ability[0]
+            # A tree of its own, so the edited text never shares a key with
+            # the real line's.
             key = replace(original, script_file=(
-                f"{COUNTERFACTUAL_TREE}/{amount}/{original.script_file}"))
+                f"{SourceTree.COUNTERFACTUAL}/{amount}/{original.script_file}"))
         else:
             edited, script, spans = None, None, ()
     entities = []

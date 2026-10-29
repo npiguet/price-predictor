@@ -15,9 +15,10 @@ from typing import TYPE_CHECKING
 from effects.application.corpus_survey import Survey
 from effects.application.corpus_write import WriteResult
 from effects.domain.corpus_plan import BuildCorpusError, Keys
-from effects.domain.record_quality import UNJOINABLE_KEY
+from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
 from effects.domain.strata import OUTPUT_STRATA, Stratum
+from effects.domain.text_holdout import HoldoutUnit
 
 if TYPE_CHECKING:
     from effects.application.build_corpus import BuildCorpusConfig, Decisions
@@ -80,7 +81,7 @@ def check_refusals(written: WriteResult) -> None:
     says the sidecars describe other cards.
     """
     refusals = written.refusals
-    unjoinable = refusals.by_reason.get(UNJOINABLE_KEY, 0)
+    unjoinable = refusals.by_reason.get(QualityDefect.UNJOINABLE_KEY, 0)
     total_read = sum(written.training.read.values()) + sum(refusals.by_class.values())
     if (
         unjoinable > MAX_UNJOINABLE_RECORDS
@@ -301,7 +302,7 @@ def build_manifest(
         validation_sample=config.validation_sample,
         max_events_per_record=config.max_events,
         unattributed_records=written.unattributed,
-        holdout_unit=config.holdout_unit,
+        holdout_unit=HoldoutUnit(config.holdout_unit),
         families=families,
         signatures=signatures,
         policy_counts=_nested(written.families.policy),

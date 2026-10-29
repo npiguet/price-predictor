@@ -52,8 +52,7 @@ from effects.domain.corpus_plan import (
     TrainingSupply,
 )
 from effects.domain.record_quality import (
-    NO_ACTING_TEXT,
-    UNJOINABLE_KEY,
+    QualityDefect,
     acting_text_defect,
     quality_defect,
     unjoinable_key_defect,
@@ -64,7 +63,7 @@ from effects.domain.records import (
     RecordKind,
     acting_keys,
 )
-from effects.domain.sampling import CLASS_PLAYABILITY_LEGALITY, sampling_class
+from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.split import HeldOutCards, record_names_held_out_card
 
 if TYPE_CHECKING:
@@ -84,13 +83,13 @@ def game_hash(game_id: str) -> int:
     return zlib.crc32(game_id.encode("utf-8"))
 
 
-def selection_half(record: EffectRecord, klass: str) -> str:
+def selection_half(record: EffectRecord, klass: SamplingClass) -> str:
     """``real`` / ``what-if`` on a legality record, empty on every other.
 
     The two halves of the legality class (FR-049 step 3): a gen-1 record,
     whose decision is unknown, selects as a what-if.
     """
-    if klass != CLASS_PLAYABILITY_LEGALITY:
+    if klass != SamplingClass.PLAYABILITY_LEGALITY:
         return ""
     if LegalityDecision.of(record) is LegalityDecision.REAL:
         return LegalityDecision.REAL
@@ -112,13 +111,14 @@ def cell_of(
     carries the record's modes, which :meth:`Cell.resolved` folds once the
     counts exist; with them -- the write pass -- the cell comes back resolved.
     """
-    from effects.domain.rule_families import NONE, legality_modes, rule_family
+    from effects.domain.rule_families import FamilySentinel, legality_modes, rule_family
 
     klass = sampling_class(record)
     half = selection_half(record, klass)
-    if klass == CLASS_PLAYABILITY_LEGALITY:
+    if klass == SamplingClass.PLAYABILITY_LEGALITY:
         modes = legality_modes(record, sidecars)
-        cell = Cell(klass=klass, half=half, family="" if modes else NONE, modes=modes)
+        family = "" if modes else FamilySentinel.NONE
+        cell = Cell(klass=klass, half=half, family=family, modes=modes)
         return cell if legality_mode_counts is None else cell.resolved(legality_mode_counts)
     return Cell(
         klass=klass,
@@ -249,17 +249,19 @@ class RefusalTally:
     costing.
     """
 
-    by_reason: Counter[str] = field(default_factory=Counter)
-    by_class: Counter[str] = field(default_factory=Counter)
+    by_reason: Counter[QualityDefect] = field(default_factory=Counter)
+    by_class: Counter[SamplingClass] = field(default_factory=Counter)
     textless_scripts: Counter[str] = field(default_factory=Counter)
     unjoinable_scripts: Counter[str] = field(default_factory=Counter)
 
-    def note(self, record: EffectRecord, klass: str, defect: str) -> None:
+    def note(
+        self, record: EffectRecord, klass: SamplingClass, defect: QualityDefect,
+    ) -> None:
         self.by_reason[defect] += 1
         self.by_class[klass] += 1
-        if defect == NO_ACTING_TEXT:
+        if defect is QualityDefect.NO_ACTING_TEXT:
             self.textless_scripts[acting_keys(record)[0].script_file] += 1
-        elif defect == UNJOINABLE_KEY:
+        elif defect is QualityDefect.UNJOINABLE_KEY:
             self.unjoinable_scripts[acting_keys(record)[0].script_file] += 1
 
     def merge(self, other: RefusalTally) -> None:
@@ -330,7 +332,7 @@ class ShardSurvey:
     #: Kept records per single legality mode, over the whole corpus.
     mode_counts: Counter[str] = field(default_factory=Counter)
     #: Training-bound records per class acting through a held-out text.
-    held_out_text_dropped: Counter[str] = field(default_factory=Counter)
+    held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,7 +347,7 @@ class Survey:
     games: GameTally
     refusals: RefusalTally = field(default_factory=RefusalTally)
     mode_counts: Counter[str] = field(default_factory=Counter)
-    held_out_text_dropped: Counter[str] = field(default_factory=Counter)
+    held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
     #: Distinct games per top-level source directory, and how many of those
     #: name a held-out card. What FR-149's report is computed from: a
     #: directory of depleted shards whose held-out count is not zero is a leak
@@ -485,7 +487,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
     games = GameTally()
     refusals = RefusalTally()
     mode_counts: Counter[str] = Counter()
-    held_out_text_dropped: Counter[str] = Counter()
+    held_out_text_dropped: Counter[SamplingClass] = Counter()
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
     split_games = 0

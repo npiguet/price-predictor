@@ -15,13 +15,12 @@ from effects.domain.effect_head_layout import ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets
 from effects.domain.event_schema import Event, EventType
 from effects.domain.lethality_counterfactuals import (
-    COUNTERFACTUAL_TREE,
     counterfactual,
     edit_text,
     lethal,
     qualify,
 )
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, SourceTree
 from effects.domain.records import EffectRecord, ResolutionPayload
 from effects.domain.state_snapshot import (
     EntityState,
@@ -185,7 +184,7 @@ class TestCopies:
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         copy = counterfactual(record, _qualify(record), derive_targets(record), _line(BOLT), BOLT,
                               random.Random(1), 0)
-        assert copy.key.script_file.startswith(f"{COUNTERFACTUAL_TREE}/")
+        assert copy.key.tree == SourceTree.COUNTERFACTUAL
         assert copy.record.ability == (copy.key,)
         assert copy.record.record_id == "r.0-0.1~cf0"
         assert record.state.entity("E1").pt.base == (2, 2)

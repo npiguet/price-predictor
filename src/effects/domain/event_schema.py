@@ -295,7 +295,7 @@ ATTRIBUTION_SENTINELS: frozenset[str] = frozenset(
 )
 
 
-def attribution_kind(attributed_to: str | None) -> str:
+class AttributionKind(StrEnum):
     """Which of the four things an event's ``attributed_to`` is saying.
 
     ``absent`` is the pre-tri-state spelling and means *unknown*, not *root*:
@@ -304,13 +304,22 @@ def attribution_kind(attributed_to: str | None) -> str:
     the ambiguity cannot be resolved after the fact — only reported apart from
     the records that do say.
     """
+
+    ABSENT = "absent"
+    ROOT = "root"
+    UNRESOLVED = "unresolved"
+    SUB_ABILITY = "sub_ability"
+
+
+def attribution_kind(attributed_to: str | None) -> AttributionKind:
+    """The :class:`AttributionKind` an event's ``attributed_to`` is saying."""
     if attributed_to is None:
-        return "absent"
+        return AttributionKind.ABSENT
     if attributed_to == ATTRIBUTION_ROOT:
-        return "root"
+        return AttributionKind.ROOT
     if attributed_to == ATTRIBUTION_UNRESOLVED:
-        return "unresolved"
-    return "sub_ability"
+        return AttributionKind.UNRESOLVED
+    return AttributionKind.SUB_ABILITY
 
 
 @dataclass(frozen=True, slots=True)

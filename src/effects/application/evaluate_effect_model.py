@@ -45,9 +45,6 @@ from effects.domain.strata import VALIDATION_STRATA
 
 logger = logging.getLogger(__name__)
 
-CARD_DISJOINT, GAME_DISJOINT = VALIDATION_STRATA
-
-
 # ── checks FR-116 names that were never built ───────────────────────────
 
 #: What each unbuilt check would measure. Reported on its own line, so a report
@@ -91,7 +88,7 @@ def breakdown_records(context: EvaluationContext) -> dict[str, list]:
 
     store = CorpusStore(context.corpus_path)
     out = {}
-    for stratum in (CARD_DISJOINT, GAME_DISJOINT):
+    for stratum in VALIDATION_STRATA:
         path = store.sample_path(stratum)
         out[stratum] = list(read_shard(path)) if path.exists() else []
     return out
@@ -100,7 +97,7 @@ def breakdown_records(context: EvaluationContext) -> dict[str, list]:
 def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
     """Score both validation strata once and report every breakdown."""
     from effects.application.breakdowns import breakdown_checks
-    from effects.application.gate_one import score_records
+    from effects.application.record_scoring import score_records
 
     strata = breakdown_records(context)
     everything = [record for rows in strata.values() for record in rows]
@@ -114,10 +111,7 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
     mode_counts = manifest.legality_mode_counts or None
     scored = {
         stratum: (
-            score_records(
-                rows, runnable.encoder, runnable.model, runnable.batcher,
-                fields=runnable.fields, legality_mode_counts=mode_counts,
-            )
+            score_records(rows, runnable, legality_mode_counts=mode_counts)
             if rows else []
         )
         for stratum, rows in strata.items()

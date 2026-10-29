@@ -11,8 +11,8 @@ the real legality declarations add (FR-066, FR-067).
 
 Every function here is pure grouping over :class:`RecordResult` rows, and the
 rendering of each group as a report line. Scoring a record — running the
-model, reading its losses — is ``gate_one.score_records``'s job; nothing here
-imports torch, so the grouping rules are testable on plain rows.
+model, reading its losses — is ``record_scoring.score_records``'s job; nothing
+here imports torch, so the grouping rules are testable on plain rows.
 
 A field's mean is taken over the records that supervise it, never over all
 records. A field a record does not supervise has no loss for it, and counting
@@ -30,7 +30,7 @@ from effects.domain.evaluation_report import CheckName, CheckResult, CheckStatus
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, rarity_bucket
 from effects.domain.records import WHAT_IF_SUBKINDS, LegalityDecision
-from effects.domain.strata import VALIDATION_STRATA
+from effects.domain.strata import Stratum
 
 #: The loss key every scored record carries: the per-entity loss summed over
 #: the gate and every supervised field, as the trainer's validation reads it.
@@ -239,10 +239,7 @@ def keyword_slice(
     return _group(results, group)
 
 
-
 # ── the report lines ────────────────────────────────────────────────────
-
-CARD_DISJOINT, GAME_DISJOINT = VALIDATION_STRATA
 
 
 def breakdown_checks(
@@ -256,11 +253,11 @@ def breakdown_checks(
     ``scored`` maps a stratum to its :class:`RecordResult` rows, so the
     report's shape is testable without a model.
     """
-    card = scored.get(CARD_DISJOINT, [])
-    game = scored.get(GAME_DISJOINT, [])
+    card = scored.get(Stratum.CARD_DISJOINT, [])
+    game = scored.get(Stratum.GAME_DISJOINT, [])
     checks = [*_card_disjoint_checks(card, games_by_text)]
     checks += _memorization_gap_checks(card, game)
-    for stratum, rows in ((CARD_DISJOINT, card), (GAME_DISJOINT, game)):
+    for stratum, rows in ((Stratum.CARD_DISJOINT, card), (Stratum.GAME_DISJOINT, game)):
         checks += _slice_checks(
             f"{stratum} policy", policy_slice(rows), present=OFF_POLICY,
             skipped=f"{stratum} off-policy",
@@ -289,18 +286,18 @@ def _card_disjoint_checks(card: list, games_by_text: dict[str, float]) -> list[C
     """The card-disjoint stratum overall, by rarity, by family, and over families."""
     if not card:
         return [CheckResult(
-            CARD_DISJOINT, CheckStatus.SKIPPED,
+            Stratum.CARD_DISJOINT, CheckStatus.SKIPPED,
             "the card-disjoint stratum holds no record to break down",
         )]
-    checks = [_group_check(CARD_DISJOINT, overall(card))]
+    checks = [_group_check(Stratum.CARD_DISJOINT, overall(card))]
     for bucket, group in by_rarity_bucket(card, games_by_text).items():
-        checks.append(_group_check(f"{CARD_DISJOINT} rarity {bucket}", group))
+        checks.append(_group_check(f"{Stratum.CARD_DISJOINT} rarity {bucket}", group))
     families = by_family(card)
     for family, group in families.items():
-        checks.append(_group_check(f"{CARD_DISJOINT} family {family}", group))
+        checks.append(_group_check(f"{Stratum.CARD_DISJOINT} family {family}", group))
     if families:
         checks.append(_group_check(
-            f"{CARD_DISJOINT} mean over families",
+            f"{Stratum.CARD_DISJOINT} mean over families",
             mean_over_families(families),
             detail=f"{len(families)} families, each weighted once",
         ))

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from effects.domain.card_names import fold_card_name
 from effects.domain.records import EffectRecord, key_sites
+from effects.domain.text_holdout import HoldoutUnit, holdout_key, select_holdout
 
 #: An eligible ability text is held out when crc32(text) % 1000 falls below
 #: this. Keyed on the text rather than the card because the model never reads a
@@ -51,7 +52,7 @@ class HeldOutCards:
     #: ``template``, the texts again under ``text``), and that unit: what
     #: :meth:`holds_text` tests a text no carrier prints against.
     keys: frozenset[str] = frozenset()
-    unit: str = "text"
+    unit: HoldoutUnit = HoldoutUnit.TEXT
 
     def __post_init__(self) -> None:
         folded = frozenset(fold_card_name(name) for name in self.names)
@@ -68,8 +69,6 @@ class HeldOutCards:
         or a token can print a text no card carries, and under ``template``
         it is held out whenever its masked template is.
         """
-        from effects.domain.text_holdout import holdout_key
-
         return holdout_key(script_text, self.unit) in self.keys
 
 
@@ -98,7 +97,7 @@ def text_keyed_holdout(
     *,
     permille: int = HOLDOUT_PERMILLE,
     max_carriers: int = HOLDOUT_MAX_CARRIERS,
-    unit: str = "text",
+    unit: HoldoutUnit = HoldoutUnit.TEXT,
     token_texts: Mapping[str, Iterable[str]] | None = None,
 ) -> HeldOutCards:
     """Hold out ability texts, and with them every card carrying one (FR-088).
@@ -127,8 +126,6 @@ def text_keyed_holdout(
     trains on Lightning Strike while holding out Searing Spear, and gate 1 then
     drops those records for having text a training card carries.
     """
-    from effects.domain.text_holdout import select_holdout
-
     tokens = dict(token_texts or {})
     chosen = select_holdout(
         {**texts_by_card, **tokens}, permille=permille, max_carriers=max_carriers,

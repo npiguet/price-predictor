@@ -19,11 +19,30 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-# The three converted source trees a key can name. They differ in layout as well
-# as in content: ``cardsfolder`` is letter-keyed and ``tokenscripts`` is flat, so
-# Ajani's Pridemate is ``cardsfolder/a/ajanis_pridemate.txt`` on one side and
-# ``tokenscripts/ajanis_pridemate.txt`` on the other.
-SOURCE_TREES: tuple[str, ...] = ("cardsfolder", "tokenscripts", "variant-scripts")
+
+class SourceTree(StrEnum):
+    """The tree a script file's first path segment names.
+
+    The values are the on-disk spelling every key and sidecar carries. The
+    trees differ in layout as well as in content: ``cardsfolder`` is
+    letter-keyed and ``tokenscripts`` is flat, so Ajani's Pridemate is
+    ``cardsfolder/a/ajanis_pridemate.txt`` on one side and
+    ``tokenscripts/ajanis_pridemate.txt`` on the other. ``variant-scripts``
+    holds perturbed source scripts, and ``counterfactual`` is no folder at all:
+    it prefixes the copies the trainer stages in memory.
+    """
+
+    CARDSFOLDER = "cardsfolder"
+    TOKENSCRIPTS = "tokenscripts"
+    VARIANT_SCRIPTS = "variant-scripts"
+    COUNTERFACTUAL = "counterfactual"
+
+
+def split_script_file(script_file: str) -> tuple[str, str]:
+    """``(tree, path within the tree)`` of a tree-prefixed script file."""
+    tree, _, relative = script_file.partition("/")
+    return tree, relative
+
 
 #: The fields every key's dict form carries; ``option`` is the one written only
 #: when set. What tells a key dict from any other mapping in a record's raw JSON.
@@ -77,7 +96,7 @@ class ProvenanceKey:
     @property
     def tree(self) -> str:
         """The source tree this key's script file belongs to."""
-        return self.script_file.split("/", 1)[0]
+        return split_script_file(self.script_file)[0]
 
     @property
     def root(self) -> ProvenanceKey:
@@ -268,7 +287,7 @@ class ProvenanceSidecar:
 
     @property
     def tree(self) -> str:
-        return self.script_file.split("/", 1)[0]
+        return split_script_file(self.script_file)[0]
 
     def row_for(self, key: ProvenanceKey) -> int | None:
         """The ability-cache row a key resolves to, or None where it was dropped."""

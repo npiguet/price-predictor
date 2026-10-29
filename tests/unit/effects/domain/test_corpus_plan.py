@@ -13,8 +13,10 @@ from effects.domain.corpus_plan import (
     admit_card_disjoint,
 )
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.sampling import CLASS_PLAYABILITY_LEGALITY as LEGALITY
+from effects.domain.sampling import SamplingClass
 from effects.domain.strata import Stratum
+
+LEGALITY = SamplingClass.PLAYABILITY_LEGALITY
 
 
 def _leaf(supply: int, once: int | None = None) -> AllocationNode:

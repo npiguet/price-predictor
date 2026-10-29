@@ -51,7 +51,7 @@ class TestCollectCoverage:
         assert args.decks_per_round == 500
         assert args.no_progress_rounds == 3
         assert args.split_from is None
-        assert args.cards_folders is None  # both converted trees
+        assert args.cards_folders == (Path("output/cardsfolder"), Path("output/tokenscripts"))
 
     def test_split_from_is_accepted(self):
         args = parse("collect-coverage", "--split-from", "models/x/latest.pt")
@@ -61,7 +61,7 @@ class TestCollectCoverage:
         args = parse(
             "collect-coverage", "--cards-folder", "a/", "--cards-folder", "b/",
         )
-        assert args.cards_folders == ["a/", "b/"]
+        assert args.cards_folders == (Path("a/"), Path("b/"))
 
     def test_the_worker_count_has_the_repos_usual_default(self):
         assert parse("collect-coverage").workers == 12

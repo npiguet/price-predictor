@@ -8,9 +8,9 @@ from effects.application.train_effect_model import (
     fields_for_epoch,
 )
 from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, FieldGroup
-from effects.domain.sampling import CLASS_RESOLUTION_EFFECT
+from effects.domain.sampling import SamplingClass
 
-PRESENT = frozenset({CLASS_RESOLUTION_EFFECT})
+PRESENT = frozenset({SamplingClass.RESOLUTION_EFFECT})
 
 
 def _sparse(fields):

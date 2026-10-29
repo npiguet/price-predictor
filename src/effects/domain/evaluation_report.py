@@ -10,7 +10,7 @@ parse what :meth:`EvaluationReport.render` prints.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -105,21 +105,76 @@ class KeywordVerdict:
         return not self.routed_to_probe
 
 
-def margin(label: str, value: float, breached: bool, comparison: str) -> str | None:
-    """One margin's failure, or None where it holds.
+class Bound(StrEnum):
+    """Which side of its limit a margin's value must stay on."""
 
-    A margin that could not be measured fails rather than passes: NaN compares
-    False against every threshold, so without this an empty stratum or an
-    all-zero embedding read as a gate that held.
+    #: The value must be at least the limit.
+    FLOOR = "floor"
+    #: The value must be at most the limit.
+    CEILING = "ceiling"
+
+
+@dataclass(frozen=True, slots=True)
+class Margin:
+    """One measured quantity a gate holds against a fixed limit.
+
+    ``key`` names the value in the report's figures line and ``label`` in its
+    prose. ``value_format`` and ``limit_format`` are format specs for the
+    rendered comparison, and ``verb`` the word, if any, that reads before the
+    value there (``explains 41.0% > 30%``).
     """
-    if math.isnan(value):
-        return f"{label} not measured"
-    return f"{label} {comparison}" if breached else None
+
+    key: str
+    label: str
+    value: float
+    limit: float
+    bound: Bound
+    value_format: str = ""
+    limit_format: str = ""
+    verb: str = ""
+
+    @property
+    def breached(self) -> bool:
+        """Whether the value is on the wrong side of the limit.
+
+        A margin that cannot be measured fails rather than passes: NaN compares
+        False against every limit, so without this an empty stratum or an
+        all-zero embedding would read as a gate that held.
+        """
+        if math.isnan(self.value):
+            return True
+        if self.bound is Bound.FLOOR:
+            return self.value < self.limit
+        return self.value > self.limit
+
+    @property
+    def failure(self) -> str:
+        """The report's account of this margin breached."""
+        if math.isnan(self.value):
+            return f"{self.label} not measured"
+        breach = "<" if self.bound is Bound.FLOOR else ">"
+        verb = f"{self.verb} " if self.verb else ""
+        return (
+            f"{self.label} {verb}{self.value:{self.value_format}} {breach} "
+            f"{self.limit:{self.limit_format}}"
+        )
 
 
-def breaches(*margins: str | None) -> list[str]:
-    """The margins that failed, in the order given."""
-    return [found for found in margins if found is not None]
+def gate_verdict(
+    name: str, margins: Sequence[Margin], *, fail_prefix: str, pass_detail: str,
+) -> CheckResult:
+    """A gate that holds only when every one of its margins does.
+
+    Every margin's value is reported whatever the verdict, and every breached
+    one is named, in the order given.
+    """
+    values = {margin.key: margin.value for margin in margins}
+    failures = [margin.failure for margin in margins if margin.breached]
+    if failures:
+        return CheckResult(
+            name, CheckStatus.FAIL, f"{fail_prefix}: " + "; ".join(failures), values,
+        )
+    return CheckResult(name, CheckStatus.PASS, pass_detail, values)
 
 
 @dataclass

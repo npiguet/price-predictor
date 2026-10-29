@@ -206,7 +206,7 @@ card name per line, every card carrying a held-out ability text.
 | Flag | Default |
 |---|---|
 | `--out` | required — destination file |
-| `--cards-folder` | `output/cardsfolder/`; the converted token tree beside it (`tokenscripts/`) is read too, its scripts counting as carriers as they do in `build-corpus` |
+| `--cards-folder` | repeatable; `output/cardsfolder/` and `output/tokenscripts/`. Token scripts count as carriers, as they do in `build-corpus` |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `build-corpus` |
 
 Reports the held-out text count, the card count, and the share of the corpus those cards are. The

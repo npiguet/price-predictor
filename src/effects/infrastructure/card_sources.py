@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from effects.domain.provenance import SourceTree
 from effects.infrastructure.sidecar_io import SidecarCache, UnconvertedScript
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ def load_converted_cards(cards_folder: Path) -> dict[str, ConvertedCard]:
         if not name:
             continue
         relative = path.relative_to(cards_folder).as_posix()
-        out[name] = ConvertedCard(f"cardsfolder/{relative}", text)
+        out[name] = ConvertedCard(f"{SourceTree.CARDSFOLDER}/{relative}", text)
     return out
 
 

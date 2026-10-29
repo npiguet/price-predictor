@@ -240,7 +240,7 @@ class TestConfig:
     def test_the_coverage_unit_comes_from_the_card_tree_alone(self):
         """A token script is not a deckable card and could never be retired."""
         config = CollectCoverageConfig()
-        assert config.coverage_folder().name == "cardsfolder"
+        assert config.converted_trees().cards_folder.name == "cardsfolder"
 
     def test_a_reordered_cards_folder_still_finds_the_card_tree(self):
         from pathlib import Path
@@ -248,7 +248,7 @@ class TestConfig:
         config = CollectCoverageConfig(cards_folders=(
             Path("output/tokenscripts/"), Path("output/cardsfolder/"),
         ))
-        assert config.coverage_folder().name == "cardsfolder"
+        assert config.converted_trees().cards_folder.name == "cardsfolder"
 
 
 class TestCoverageDeckBuilding:
@@ -442,12 +442,12 @@ class TestExclusionsWithoutACheckpoint:
     """
 
     def test_the_depletion_list_is_read_and_folded(self, tmp_path) -> None:
-        from effects.application.collect_coverage import load_exclusions
+        from effects.application.collect_coverage import HoldoutSource
 
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\nLim-Dûl's Vault\n", encoding="utf-8")
 
-        excluded = load_exclusions(split_from=None, exclude_cards=listed)
+        excluded = HoldoutSource(exclude_cards=listed).exclusions()
 
         assert excluded == frozenset({"soul echo", "lim-dûl's vault"}), (
             "the file carries Forge's printed case; coverage decks are built "
@@ -455,19 +455,37 @@ class TestExclusionsWithoutACheckpoint:
         )
 
     def test_neither_source_means_no_exclusions(self) -> None:
-        from effects.application.collect_coverage import load_exclusions
+        from effects.application.collect_coverage import HoldoutSource
 
-        assert load_exclusions(split_from=None, exclude_cards=None) == frozenset()
+        assert HoldoutSource().exclusions() == frozenset()
 
     def test_both_sources_at_once_is_refused(self, tmp_path) -> None:
         """Two spellings of the same holdout is the bug this feature just had."""
-        from effects.application.collect_coverage import load_exclusions
+        from effects.application.collect_coverage import HoldoutSource
 
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\n", encoding="utf-8")
 
         with pytest.raises(ValueError, match="one source"):
-            load_exclusions(split_from=tmp_path / "latest.pt", exclude_cards=listed)
+            HoldoutSource(split_from=tmp_path / "latest.pt", exclude_cards=listed)
+
+    def test_both_sources_on_a_config_are_refused_when_it_runs(self, tmp_path) -> None:
+        """A config built in code, not from flags, still names one holdout."""
+        from effects.application import collect_coverage
+
+        listed = tmp_path / "holdout-cards.txt"
+        listed.write_text("Soul Echo\n", encoding="utf-8")
+        cards = tmp_path / "cardsfolder"
+        cards.mkdir()
+        (cards / "bears.txt").write_text(
+            "name: Grizzly Bears\ntypes: creature\n", encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="one source"):
+            collect_coverage.run(collect_coverage.CollectCoverageConfig(
+                cards_folders=(cards,), effect_records=tmp_path / "records",
+                split_from=tmp_path / "latest.pt", exclude_cards=listed,
+            ))
 
 
 class TestTheRoundPlaysTheComputedDecks:
@@ -1291,7 +1309,7 @@ class TestNonDeckTypesLeaveTheUnit:
         with patch.object(collector_connector, "CollectorSupervisor",
                           return_value=MagicMock(interrupted=False)), \
              patch.object(collect_coverage, "consult_castability", _consult), \
-             patch("effects.infrastructure.card_sources.load_card_texts",
+             patch("effects.infrastructure.converted_trees.load_card_texts",
                    return_value=texts_by_card), \
              caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(

@@ -32,15 +32,7 @@ from effects.domain.effect_head_input import (
     COUNTER_TYPES,
     OVERLAY_KEYWORDS,
 )
-from effects.domain.sampling import (
-    CLASS_COMBAT,
-    CLASS_CONTINUOUS,
-    CLASS_PLAYABILITY_DECISION,
-    CLASS_PLAYABILITY_LEGALITY,
-    CLASS_RESOLUTION_COST,
-    CLASS_RESOLUTION_EFFECT,
-    CLASS_REWRITE,
-)
+from effects.domain.sampling import SamplingClass
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS, ValueKind
 
@@ -58,11 +50,12 @@ LIBRARY_EVENTS: tuple[str, ...] = ("scry", "surveil", "tutor", "reveal", "reorde
 #: Classes whose records list every outcome event of what they describe, so an
 #: affected entity no event of a kind names underwent none of that kind.
 _EFFECTFUL = frozenset({
-    CLASS_RESOLUTION_EFFECT, CLASS_REWRITE, CLASS_RESOLUTION_COST, CLASS_COMBAT,
+    SamplingClass.RESOLUTION_EFFECT, SamplingClass.REWRITE, SamplingClass.RESOLUTION_COST,
+    SamplingClass.COMBAT,
 })
 #: The effectful classes plus ``continuous``, whose contribution names every
 #: P/T, keyword, type and colour change its static makes to the entity.
-_STATIC_CHANNELS = _EFFECTFUL | {CLASS_CONTINUOUS}
+_STATIC_CHANNELS = _EFFECTFUL | {SamplingClass.CONTINUOUS}
 
 
 class FieldType(StrEnum):
@@ -105,7 +98,7 @@ class FieldSpec:
     arity: int = 1
     group: FieldGroup = FieldGroup.DENSE
     #: Sampling classes whose records carry a target for this field.
-    supervised_by: frozenset[str] = field(default_factory=lambda: _EFFECTFUL)
+    supervised_by: frozenset[SamplingClass] = field(default_factory=lambda: _EFFECTFUL)
     #: The value an affected entity of ``scope`` takes when a record of a
     #: supervising class names no change to the field; every member of a
     #: multi-binary field. None for a field only a written value supervises.
@@ -230,13 +223,13 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     *_mana_fields(),
     # ── legality bits: only a payload's own marks set them ──
     FieldSpec("target_legal", FieldType.BINARY, FieldScope.LEGALITY,
-              supervised_by=frozenset({CLASS_PLAYABILITY_DECISION})),
+              supervised_by=frozenset({SamplingClass.PLAYABILITY_DECISION})),
     FieldSpec("attacker_legal", FieldType.BINARY, FieldScope.LEGALITY,
-              supervised_by=frozenset({CLASS_PLAYABILITY_LEGALITY})),
+              supervised_by=frozenset({SamplingClass.PLAYABILITY_LEGALITY})),
     FieldSpec("blocker_legal", FieldType.BINARY, FieldScope.LEGALITY,
-              supervised_by=frozenset({CLASS_PLAYABILITY_LEGALITY})),
+              supervised_by=frozenset({SamplingClass.PLAYABILITY_LEGALITY})),
     FieldSpec("min_blockers", FieldType.COUNT, FieldScope.LEGALITY,
-              supervised_by=frozenset({CLASS_PLAYABILITY_LEGALITY})),
+              supervised_by=frozenset({SamplingClass.PLAYABILITY_LEGALITY})),
 )
 
 #: ``{field name: (start, end)}`` into the per-entity head's output vector.

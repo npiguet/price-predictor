@@ -118,6 +118,8 @@ class SplitProvenance:
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
+        # A plain string: an enum member would tie loading to its import path.
+        data["holdout_unit"] = str(self.holdout_unit)
         if self.holdout_unit == "text":
             del data["holdout_unit"]
         return data

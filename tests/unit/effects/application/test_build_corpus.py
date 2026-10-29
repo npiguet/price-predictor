@@ -211,7 +211,7 @@ class CorpusFixture:
     """A small real raw corpus: the raw shard root and the converted trees."""
 
     records: Path
-    cards: tuple[str, ...]
+    cards: tuple[Path, ...]
 
     @staticmethod
     def resolution(
@@ -316,7 +316,7 @@ def a_corpus(tmp_path: Path) -> CorpusFixture:
 
     return CorpusFixture(
         records=records_dir,
-        cards=(str(root / "cardsfolder"), str(root / "tokenscripts")),
+        cards=(root / "cardsfolder", root / "tokenscripts"),
     )
 
 
@@ -506,7 +506,7 @@ def test_build_refuses_a_cards_folder_that_resolved_to_nothing(
         build(BuildCorpusConfig(
         **_LEGACY_RULES,
             records_dir=a_corpus.records,
-            cards_folders=(str(tmp_path / "not-here"), str(tmp_path / "nor-here")),
+            cards_folders=(tmp_path / "not-here", tmp_path / "nor-here"),
             output=tmp_path / "curated", workers=1,
         ))
 
@@ -659,7 +659,7 @@ def a_mixture_corpus(tmp_path: Path) -> CorpusFixture:
         write_shard(records_dir / f"run.0-{shard}.jsonl.gz", rows)
 
     return CorpusFixture(
-        records=records_dir, cards=(str(root / "cardsfolder"),),
+        records=records_dir, cards=(root / "cardsfolder",),
     )
 
 
@@ -1028,7 +1028,7 @@ def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
     rather than the unattributed record it used to be: an unattributed event
     is a watch statistic now, not a refusal (FR-148).
     """
-    from effects.domain.record_quality import EVENT_FLOOD, NO_ABILITY, NO_ACTING_TEXT
+    from effects.domain.record_quality import QualityDefect
     corpus = a_corpus.with_extra_records([
         a_corpus.resolution("junk-train", game="g-clean-1", ability=()),
         a_corpus.resolution(
@@ -1054,7 +1054,8 @@ def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
     # ``no-acting-text`` is the fixture's own ``g-clean-3.cast``, refused by
     # the third rule in every build this file runs.
     assert store.load().quality_dropped == {
-        NO_ABILITY: 1, EVENT_FLOOD: 1, NO_ACTING_TEXT: 1,
+        QualityDefect.NO_ABILITY: 1, QualityDefect.EVENT_FLOOD: 1,
+        QualityDefect.NO_ACTING_TEXT: 1,
     }
 
 
@@ -1089,7 +1090,7 @@ def test_a_record_acting_through_an_unjoinable_key_is_refused_not_fatal(tmp_path
     no converted line carries, inside a range the sidecar declares. The join
     raises on that key; the build refuses the one record and writes the rest.
     """
-    from effects.domain.record_quality import UNJOINABLE_KEY
+    from effects.domain.record_quality import QualityDefect
 
     mode_key = ProvenanceKey(_BEAR_FILE, 0, "spell", 1, option=0)
     corpus = a_corpus.with_extra_records([
@@ -1101,7 +1102,7 @@ def test_a_record_acting_through_an_unjoinable_key_is_refused_not_fatal(tmp_path
         output=out, workers=1, **_LEGACY_RULES,
     )) == 0
     store = CorpusStore(out)
-    assert store.load().quality_dropped.get(UNJOINABLE_KEY) == 1
+    assert store.load().quality_dropped.get(QualityDefect.UNJOINABLE_KEY) == 1
     written = {
         r.record_id
         for d in (store.training_dir, store.card_disjoint_dir, store.game_disjoint_dir)

@@ -56,8 +56,13 @@ def _order(key) -> tuple[str, str]:
     """Sort key over arbitrary hashable members, deterministic across runs.
 
     A set's ``repr`` follows string hashing, which is salted per process, so
-    its members are sorted first; everything else sorts by its ``repr``.
+    its members are sorted first; everything else sorts by its ``repr``. A
+    string enum member sorts as its string: a rule family is a script's own
+    word or a sentinel, siblings either way, and a sentinel's enum ``repr``
+    would move it ahead of every word and change who gets the remainder.
     """
+    if isinstance(key, str):
+        return ("str", repr(str(key)))
     if isinstance(key, (frozenset, set)):
         return (type(key).__name__, repr(sorted(key, key=repr)))
     if isinstance(key, tuple):

@@ -43,6 +43,7 @@ from effects.domain.corpus_plan import (
     plan_selection,
 )
 from effects.domain.keyword_names import normalize_keyword
+from effects.domain.provenance import SourceTree, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
 from effects.domain.sampling import DEFAULT_KIND_MIX
@@ -50,6 +51,7 @@ from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOut
 from effects.domain.strata import OUTPUT_STRATA
 
 if TYPE_CHECKING:
+    from effects.infrastructure.converted_trees import ConvertedTrees
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -73,7 +75,7 @@ class BuildCorpusConfig:
 
     records_dir: Path
     output: Path = Path("output/effects/corpus")
-    cards_folders: tuple[str, ...] = ("output/cardsfolder", "output/tokenscripts")
+    cards_folders: tuple[Path, ...] = (Path("output/cardsfolder"), Path("output/tokenscripts"))
     vocab_path: str = "models/effects/vocab.txt"
     variant_scripts: str | None = None
     holdout_permille: int = HOLDOUT_PERMILLE
@@ -339,23 +341,26 @@ def build(config: BuildCorpusConfig) -> int:
     if config.verify:
         return _verify(config, store)
 
-    sources = _Sources.of(config)
-    held_out = _select_holdout(config, sources)
+    trees = _converted_trees(config)
+    held_out = _select_holdout(config, trees)
     surface = surface_of(config.vocab_path)
     logger.info(
         "Holdout (%s unit): %d ability text(s) on %d card(s) and %d token "
         "script(s); encoding surface %r.",
         config.holdout_unit, len(held_out.texts), len(held_out.names),
-        sum(1 for script in held_out.script_files if script.startswith("tokenscripts/")),
+        sum(
+            1 for script in held_out.script_files
+            if split_script_file(script)[0] == SourceTree.TOKENSCRIPTS
+        ),
         surface,
     )
     _refuse_mixed_generations(Path(config.records_dir))
     read = ReadConfig(
-        records_dir=str(config.records_dir), sidecar_roots=sources.root_paths,
+        records_dir=str(config.records_dir), sidecar_roots=trees.root_paths,
         max_events=config.max_events, held_out=held_out, seed=config.seed,
     )
     survey = _survey(config, read)
-    decisions = _decide_or_refuse(config, survey, sources, surface, held_out)
+    decisions = _decide_or_refuse(config, survey, trees, surface, held_out)
 
     # Before the first output shard, and only on a real build: a rebuild
     # replaces the dataset rather than layering over it (FR-144).
@@ -411,60 +416,23 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
     return 0
 
 
-@dataclass(frozen=True)
-class _Sources:
-    """The converted trees a build reads its ability texts from."""
+def _converted_trees(config: BuildCorpusConfig) -> ConvertedTrees:
+    """The converted trees, the variant tree among them when one is named.
 
-    #: Tree name -> converted root (``cardsfolder``, ``tokenscripts``).
-    folders: dict[str, Path]
-    #: ``folders`` plus the variant tree, when ``--variant-scripts`` names one.
-    roots: dict[str, Path]
-    sidecars: SidecarCache
-    #: ``card name -> script file`` over the converted card tree.
-    card_files: dict[str, str]
-
-    @classmethod
-    def of(cls, config: BuildCorpusConfig) -> _Sources:
-        from effects.infrastructure.card_sources import load_card_files
-        from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
-
-        folders = sidecar_roots(config.cards_folders)
-        roots = dict(folders)
-        if config.variant_scripts:
-            # Keyed "variant-scripts" because that is the tree a variant line's
-            # own provenance names, and the trainer registers it under the same
-            # name. Without it every variant key resolves to no text, and a
-            # resolution acting through one is refused as textless.
-            roots["variant-scripts"] = Path(config.variant_scripts)
-        cards_folder = folders.get("cardsfolder", Path(config.cards_folders[0]))
-        return cls(
-            folders=folders, roots=roots, sidecars=SidecarCache(roots),
-            card_files=load_card_files(cards_folder),
-        )
-
-    @property
-    def root_paths(self) -> dict[str, str]:
-        """``roots`` as strings, which is how a worker process receives them."""
-        return {name: str(path) for name, path in self.roots.items()}
-
-
-def _select_holdout(config: BuildCorpusConfig, sources: _Sources) -> HeldOutCards:
-    """The trainer's own holdout rule over the converted trees; refuses an empty one.
-
-    Token scripts are carriers like cards: a token printing a held-out text
-    puts its script in the holdout, so the games it appears in are held out.
+    Without the variant tree every variant key resolves to no text, and a
+    resolution acting through one is refused as textless.
     """
-    from effects.domain.split import text_keyed_holdout
-    from effects.infrastructure.card_sources import load_card_texts
-    from effects.infrastructure.sidecar_io import load_tree_texts
+    from effects.infrastructure.converted_trees import ConvertedTrees
 
-    held_out = text_keyed_holdout(
-        sources.card_files,
-        load_card_texts(sources.card_files, sources.sidecars),
+    return ConvertedTrees.from_folders(config.cards_folders, config.variant_scripts)
+
+
+def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOutCards:
+    """The trainer's own holdout rule over the converted trees; refuses an empty one."""
+    held_out = trees.holdout(
         permille=config.holdout_permille,
         max_carriers=config.holdout_max_carriers,
         unit=config.holdout_unit,
-        token_texts=load_tree_texts(sources.folders.get("tokenscripts")),
     )
     if not held_out.names:
         tried = ", ".join(
@@ -474,7 +442,7 @@ def _select_holdout(config: BuildCorpusConfig, sources: _Sources) -> HeldOutCard
         raise BuildCorpusError(
             "Nothing is held out, so the card-disjoint stratum would be empty "
             "and gate 1 would have nothing to measure at all. Cards folders "
-            f"tried: {tried}; {len(sources.card_files)} converted card(s) read, "
+            f"tried: {tried}; {len(trees.card_files)} converted card(s) read, "
             f"{len(held_out.texts)} held-out ability text(s), no held-out card. "
             "Run from the repository root so the relative --cards-folder paths "
             "resolve, raise --holdout-permille, or check that the converted "
@@ -523,11 +491,11 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
 
 
 def _decide_or_refuse(
-    config: BuildCorpusConfig, survey: Survey, sources: _Sources, surface: str,
+    config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: str,
     held_out: HeldOutCards,
 ) -> Decisions:
     """:func:`decide`, refusing a dataset gate 1 could not be scored on."""
-    decisions = decide(survey, sidecars=sources.sidecars, surface=surface, config=config)
+    decisions = decide(survey, sidecars=trees.sidecars, surface=surface, config=config)
     if not decisions.strata.card_disjoint:
         raise BuildCorpusError(
             "No game is admitted to the card-disjoint stratum, so the dataset "

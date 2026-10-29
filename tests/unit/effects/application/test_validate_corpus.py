@@ -696,7 +696,7 @@ class TestTheCli:
         assert args.max_trigger_fired_share == 0.65
         assert args.min_zone_change_from_zone_rate is None
         assert args.min_attributed_rate is None
-        assert args.cards_folders is None
+        assert args.cards_folders == (Path("output/cardsfolder"), Path("output/tokenscripts"))
 
     def test_watched_findings_are_counted_apart_from_judged_ones(
         self, tmp_path, capsys,
@@ -761,7 +761,7 @@ class TestTheCli:
                 )
             )
         assert self._run(
-            shards, cards_folders=[str(tmp_path / "cardsfolder")],
+            shards, cards_folders=(tmp_path / "cardsfolder",),
         ) == 1
         out = capsys.readouterr().out
         assert "[FAIL] keyword provenance keys join their sidecar" in out
@@ -781,7 +781,7 @@ class TestTheCli:
                 )
             )
         assert self._run(
-            shards, cards_folders=[str(tmp_path / "cardsfolder")],
+            shards, cards_folders=(tmp_path / "cardsfolder",),
         ) == 0
         assert "[PASS] keyword provenance keys join their sidecar" in (
             capsys.readouterr().out
@@ -795,7 +795,7 @@ class TestTheCli:
             for record in _healthy():
                 writer.write(record)
         assert self._run(
-            tmp_path, cards_folders=[str(tmp_path / "not-here")],
+            tmp_path, cards_folders=(tmp_path / "not-here",),
         ) == 0
         assert "[WATCH] keyword provenance keys join their sidecar" in (
             capsys.readouterr().out

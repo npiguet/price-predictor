@@ -41,6 +41,7 @@ from typing import Protocol
 from effects.domain.canonical_digest import canonical_digest
 from effects.domain.event_schema import (
     CAUSE_BEARING_TYPES,
+    AttributionKind,
     Event,
     EventType,
     attribution_kind,
@@ -95,9 +96,6 @@ _EXAMPLES = 5
 #: ``result``. Kept beside the wire spellings, and printed with them.
 _NO_RESULT = "absent"
 
-#: What :func:`attribution_kind` calls a null pointer: the state that says
-#: nothing, neither the root line nor an explicit unresolved.
-_UNATTRIBUTED = attribution_kind(None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,7 +368,7 @@ def _kind_label(record: EffectRecord) -> str:
     different code: an activation half and an effect half share a ``kind`` and
     nothing else, so a defect in one would be diluted by the other.
     """
-    discriminator = record.moment or record.subkind
+    discriminator = record.discriminator
     return (
         f"{record.kind.value}/{discriminator.value}"
         if discriminator else record.kind.value
@@ -390,44 +388,6 @@ def _digest(record: EffectRecord) -> bytes:
     for name in _IDENTITY_FIELDS:
         data.pop(name, None)
     return canonical_digest(data)
-
-
-def _own_events(record: EffectRecord) -> tuple[Event, ...]:
-    """The events a record lists as its own outcomes.
-
-    Resolution and combat payloads only. A ``trigger`` carries the event it
-    evaluated rather than one it caused, and a ``rewrite`` carries the same
-    event on both sides whenever the replacement edited nothing — counting
-    either as a repeat would report a duplicate on every healthy record of
-    those kinds. That stays true now that ``outgoing`` may be null: the old
-    shards it was written for are still in the corpus.
-    """
-    payload = record.payload
-    if isinstance(payload, (ResolutionPayload, CombatPayload)):
-        return payload.events
-    return ()
-
-
-def _all_events(record: EffectRecord) -> tuple[Event, ...]:
-    """Every event anywhere in a record, for the per-type field measurements.
-
-    Wider than :func:`_own_events`, because "does a ``zone_change`` say where
-    the card came from" is a question about how the collector fills that type's
-    params, and it fills them the same way for every kind that carries one.
-    """
-    payload = record.payload
-    if isinstance(payload, (ResolutionPayload, CombatPayload)):
-        return payload.events
-    if isinstance(payload, TriggerPayload):
-        return (payload.event,)
-    if isinstance(payload, RewritePayload):
-        # `outgoing` is null when the replacement rewrote nothing in place,
-        # which is most of them; there is no second event to measure there.
-        return (
-            (payload.incoming, payload.outgoing)
-            if payload.outgoing else (payload.incoming,)
-        )
-    return ()
 
 
 def _is_deferred_mana_record(record: EffectRecord) -> bool:
@@ -1167,7 +1127,10 @@ class _DuplicateEvents:
 
     def add(self, record: EffectRecord) -> None:
         seen: set[bytes] = set()
-        for event in _own_events(record):
+        # A trigger's event is the one it evaluated, and a rewrite's two sides
+        # are the same event wherever the replacement edited nothing, so
+        # counting either as a repeat would flag every healthy record.
+        for event in record.payload.listed_events():
             digest = canonical_digest(event.as_dict())
             self.events += 1
             if digest in seen:
@@ -1472,7 +1435,7 @@ class _ZoneChanges:
         self.to_zone: Counter[str] = Counter()
 
     def add(self, record: EffectRecord) -> None:
-        for event in _all_events(record):
+        for event in record.payload.all_events():
             if event.type is EventType.ZONE_CHANGE:
                 self.zone_changes += 1
                 self.with_from += bool(event.params.get("from_zone"))
@@ -1509,8 +1472,9 @@ def _resolution_events(record: EffectRecord) -> tuple[Event, ...]:
     — a sub-ability index, the root, or an explicit unresolved — which is
     the number that moves when the attribution channel is wired.
     """
-    payload = record.payload
-    return payload.events if isinstance(payload, ResolutionPayload) else ()
+    if record.kind is not RecordKind.RESOLUTION:
+        return ()
+    return record.payload.listed_events()
 
 
 def _fork_events(record: EffectRecord) -> tuple[Event, ...]:
@@ -1524,7 +1488,7 @@ def _fork_events(record: EffectRecord) -> tuple[Event, ...]:
     events name nothing cannot be compared clause by clause with the record it
     mirrors, which is the entire point of taking it.
     """
-    return _all_events(record) if record.fork else ()
+    return record.payload.all_events() if record.fork else ()
 
 
 class _Attribution:
@@ -1547,7 +1511,7 @@ class _Attribution:
         self.events_of = events_of
         self.floor_of = floor_of
         self.events = 0
-        self.attribution: Counter[str] = Counter()
+        self.attribution: Counter[AttributionKind] = Counter()
 
     def add(self, record: EffectRecord) -> None:
         for event in self.events_of(record):
@@ -1555,7 +1519,7 @@ class _Attribution:
             self.attribution[attribution_kind(event.attributed_to)] += 1
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        named = self.events - self.attribution.get(_UNATTRIBUTED, 0)
+        named = self.events - self.attribution.get(AttributionKind.ABSENT, 0)
         rate = _rate(named, self.events)
         yield _floor_finding(
             name=self.name,
@@ -1601,7 +1565,7 @@ class _CauseBearing:
         self.by_type: dict[str, _CauseCounts] = defaultdict(_CauseCounts)
 
     def add(self, record: EffectRecord) -> None:
-        for event in _all_events(record):
+        for event in record.payload.all_events():
             if event.type in CAUSE_BEARING_TYPES:
                 counts = self.by_type[event.type.value]
                 counts.with_cause += bool(event.params.get("cause"))
@@ -1761,7 +1725,7 @@ class _EventTypes:
         self.seen: set[str] = set()
 
     def add(self, record: EffectRecord) -> None:
-        self.seen.update(event.type.value for event in _all_events(record))
+        self.seen.update(event.type.value for event in record.payload.all_events())
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         declared = {member.value for member in EventType}

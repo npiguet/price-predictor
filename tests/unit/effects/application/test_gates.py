@@ -18,7 +18,7 @@ from effects.application.evaluate_effect_model import (
 )
 from effects.application.evaluation_context import parse_baseline_checkpoint
 from effects.application.gate_one import GateOneMetrics, evaluate_gate_one
-from effects.application.gate_two import evaluate_gate_two, evaluate_keyword
+from effects.application.gate_two import KeywordScore, evaluate_gate_two, evaluate_keyword
 from effects.application.geometry_checks import (
     CacheGeometry,
     evaluate_ward_canary,
@@ -33,7 +33,14 @@ from effects.domain.damage_step_keywords import (
     Subject,
 )
 from effects.domain.effect_head_layout import FIELDS_BY_NAME
-from effects.domain.evaluation_report import CheckName, CheckStatus, EvaluationReport
+from effects.domain.evaluation_report import (
+    Bound,
+    CheckName,
+    CheckStatus,
+    EvaluationReport,
+    Margin,
+    gate_verdict,
+)
 from effects.domain.gate_metrics import (
     balanced_accuracy,
     cosine_distance,
@@ -42,6 +49,13 @@ from effects.domain.gate_metrics import (
     poisson_deviance,
     top_component_share,
 )
+
+
+def _score(qualifying: int, agreeing: int) -> KeywordScore:
+    """One observation per qualifying record: a combat with a single carrier."""
+    return KeywordScore(
+        qualifying=qualifying, agreeing=agreeing, observations=qualifying,
+    )
 
 
 class TestGateOne:
@@ -124,6 +138,10 @@ class TestGateOneMetrics:
     def test_f1_is_zero_when_nothing_true_is_caught(self):
         assert f1_score(np.array([0, 0]), np.array([1, 1])) == 0.0
 
+    def test_f1_of_nothing_is_nan_rather_than_zero(self):
+        """An empty stratum is unmeasured, which gate 1 fails as such."""
+        assert math.isnan(f1_score(np.array([]), np.array([])))
+
     def test_deviance_is_zero_for_an_exact_prediction(self):
         observed = np.array([1.0, 3.0, 5.0])
         assert poisson_deviance(observed, observed) == pytest.approx(0.0, abs=1e-9)
@@ -170,41 +188,31 @@ class TestGateTwo:
                 )
 
     def test_enough_records_and_enough_agreement_passes(self):
-        verdict = evaluate_keyword(
-            KEYWORDS_BY_NAME["deathtouch"],
-            qualifying_records=500, agreeing=400,
-        )
+        verdict = evaluate_keyword(KEYWORDS_BY_NAME["deathtouch"], _score(500, 400))
         assert verdict.passed
         assert not verdict.routed_to_probe
 
     def test_too_few_records_routes_to_a_probe(self):
         """Untested is not passed — that is how a canary stops being one."""
-        verdict = evaluate_keyword(
-            KEYWORDS_BY_NAME["wither"],
-            qualifying_records=40, agreeing=40,
-        )
+        verdict = evaluate_keyword(KEYWORDS_BY_NAME["wither"], _score(40, 40))
         assert verdict.routed_to_probe
         assert "under-sampled" in verdict.reason
 
     def test_too_little_agreement_routes_to_a_probe(self):
-        verdict = evaluate_keyword(
-            KEYWORDS_BY_NAME["trample"],
-            qualifying_records=1000, agreeing=600,
-        )
+        verdict = evaluate_keyword(KEYWORDS_BY_NAME["trample"], _score(1000, 600))
         assert verdict.routed_to_probe
         assert "direction agreement" in verdict.reason
 
     def test_exactly_meeting_both_thresholds_passes(self):
-        verdict = evaluate_keyword(
-            KEYWORDS_BY_NAME["lifelink"],
-            qualifying_records=MIN_QUALIFYING_RECORDS,
-            agreeing=int(MIN_QUALIFYING_RECORDS * MIN_DIRECTION_AGREEMENT),
-        )
+        verdict = evaluate_keyword(KEYWORDS_BY_NAME["lifelink"], _score(
+            MIN_QUALIFYING_RECORDS,
+            int(MIN_QUALIFYING_RECORDS * MIN_DIRECTION_AGREEMENT),
+        ))
         assert verdict.passed
 
     def test_the_gate_blocks_nothing(self):
         verdicts = [
-            evaluate_keyword(row, qualifying_records=10, agreeing=0)
+            evaluate_keyword(row, _score(10, 0))
             for row in DAMAGE_STEP_KEYWORDS
         ]
         result = evaluate_gate_two(verdicts)
@@ -213,14 +221,8 @@ class TestGateTwo:
 
     def test_it_names_the_keywords_it_routed(self):
         verdicts = [
-            evaluate_keyword(
-                KEYWORDS_BY_NAME["infect"], qualifying_records=10,
-                agreeing=10,
-            ),
-            evaluate_keyword(
-                KEYWORDS_BY_NAME["lifelink"], qualifying_records=500,
-                agreeing=500,
-            ),
+            evaluate_keyword(KEYWORDS_BY_NAME["infect"], _score(10, 10)),
+            evaluate_keyword(KEYWORDS_BY_NAME["lifelink"], _score(500, 500)),
         ]
         detail = evaluate_gate_two(verdicts).detail
         assert "infect" in detail
@@ -229,7 +231,7 @@ class TestGateTwo:
     def test_all_passing_says_no_probe_machinery_is_needed(self):
         """That output is the whole reason the gate runs before stage three."""
         verdicts = [
-            evaluate_keyword(row, qualifying_records=500, agreeing=500)
+            evaluate_keyword(row, _score(500, 500))
             for row in DAMAGE_STEP_KEYWORDS
         ]
         assert "no stage-three probe machinery" in evaluate_gate_two(verdicts).detail
@@ -341,6 +343,51 @@ class TestGateThree:
         assert top_component_share(rng.normal(size=(500, 32))) < 0.15
 
 
+class TestMargin:
+    """One gate quantity against its limit, and the verdict over several."""
+
+    def test_a_floor_is_breached_below_its_limit_and_held_at_it(self):
+        assert Margin("k", "gain", 0.04, 0.05, Bound.FLOOR).breached
+        assert not Margin("k", "gain", 0.05, 0.05, Bound.FLOOR).breached
+
+    def test_a_ceiling_is_breached_above_its_limit_and_held_at_it(self):
+        assert Margin("k", "cosine", 0.51, 0.5, Bound.CEILING).breached
+        assert not Margin("k", "cosine", 0.5, 0.5, Bound.CEILING).breached
+
+    def test_a_margin_that_cannot_be_measured_fails(self):
+        margin = Margin("k", "gain", float("nan"), 0.05, Bound.FLOOR)
+        assert margin.breached
+        assert margin.failure == "gain not measured"
+
+    def test_the_failure_shows_both_sides_in_their_formats(self):
+        margin = Margin(
+            "k", "top component", 0.41, 0.3, Bound.CEILING,
+            value_format=".1%", limit_format=".0%", verb="explains",
+        )
+        assert margin.failure == "top component explains 41.0% > 30%"
+
+    def test_the_verdict_names_every_breach_and_reports_every_value(self):
+        result = gate_verdict(
+            CheckName.GATE_1,
+            (
+                Margin("a", "first", 0.0, 0.05, Bound.FLOOR, value_format="+.3f"),
+                Margin("b", "second", 0.1, 0.05, Bound.FLOOR),
+                Margin("c", "third", float("nan"), 0.05, Bound.FLOOR),
+            ),
+            fail_prefix="it failed", pass_detail="it held",
+        )
+        assert result.status is CheckStatus.FAIL
+        assert result.detail == "it failed: first +0.000 < 0.05; third not measured"
+        assert list(result.values) == ["a", "b", "c"]
+
+    def test_the_verdict_passes_when_every_margin_holds(self):
+        result = gate_verdict(
+            CheckName.GATE_3, (Margin("a", "first", 0.1, 0.05, Bound.FLOOR),),
+            fail_prefix="it failed", pass_detail="it held",
+        )
+        assert (result.status, result.detail) == (CheckStatus.PASS, "it held")
+
+
 class TestWardCanary:
     def _vectors(self, twin_distance: float):
         ward = np.array([1.0, 0.0, 0.0])
@@ -425,7 +472,7 @@ class TestReport:
     def test_gate_two_never_stops_it(self):
         report = EvaluationReport()
         report.keyword_verdicts = [
-            evaluate_keyword(row, qualifying_records=1, agreeing=0)
+            evaluate_keyword(row, _score(1, 0))
             for row in DAMAGE_STEP_KEYWORDS
         ]
         report.add(evaluate_gate_two(report.keyword_verdicts))

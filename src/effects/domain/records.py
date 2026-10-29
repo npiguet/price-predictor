@@ -146,7 +146,9 @@ COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
 
 #: The legality subkinds that carry ``what_if`` (FR-031). A ``decision`` record
 #: is always a real evaluation of a real candidate, so the question never arises.
-WHAT_IF_SUBKINDS: frozenset[str] = frozenset({"attackers", "blockers"})
+WHAT_IF_SUBKINDS: frozenset[PlayabilitySubkind] = frozenset({
+    PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS,
+})
 
 
 class LegalityDecision(StrEnum):
@@ -168,16 +170,39 @@ class LegalityDecision(StrEnum):
             return cls.UNKNOWN
         return cls.WHAT_IF if record.what_if else cls.REAL
 
-#: Why a record that does name an acting line carries no key for it. A closed
-#: vocabulary, because the point of the field is to separate "no printed line
-#: exists" from "the resolver failed": an engine-built card (the Monarch, a
-#: dungeon, an emblem) has no script file in any tree and never will, while
-#: ``unindexable`` is the signature of a resolver bug and must not appear in a
-#: healthy run at all.
-UNRESOLVED_REASONS: frozenset[str] = frozenset({
-    "engine_effect", "no_card_state", "unknown_kind",
-    "granted_keyword", "granted_trait", "unindexable",
-})
+
+class SeatPolicy(StrEnum):
+    """Whether the acting seat was Forge's AI or the random seat (FR-030).
+
+    A gen-1 record carries no ``random_seat`` and reads as on-policy. The
+    values key the manifest's ``policy_counts``.
+    """
+
+    ON_POLICY = "on_policy"
+    OFF_POLICY = "off_policy"
+
+    @classmethod
+    def of(cls, record) -> SeatPolicy:
+        return cls.OFF_POLICY if record.random_seat else cls.ON_POLICY
+
+
+class UnresolvedReason(StrEnum):
+    """Why a record that does name an acting line carries no key for it.
+
+    A closed vocabulary, because the point of the field is to separate "no
+    printed line exists" from "the resolver failed": an engine-built card (the
+    Monarch, a dungeon, an emblem) has no script file in any tree and never
+    will, while ``unindexable`` is the signature of a resolver bug and must not
+    appear in a healthy run at all.
+    """
+
+    ENGINE_EFFECT = "engine_effect"
+    NO_CARD_STATE = "no_card_state"
+    UNKNOWN_KIND = "unknown_kind"
+    GRANTED_KEYWORD = "granted_keyword"
+    GRANTED_TRAIT = "granted_trait"
+    UNINDEXABLE = "unindexable"
+
 
 #: Kinds where no single line acts, so the envelope carries no ``ability``.
 #: A combat record's participants each act; a playability record is a verdict
@@ -188,6 +213,38 @@ KINDS_WITHOUT_ACTING_ABILITY: frozenset[RecordKind] = frozenset({
 
 
 # ── per-kind payloads ───────────────────────────────────────────────────
+
+
+class _PayloadQueries:
+    """What every payload answers about its events and keys, whatever its kind.
+
+    Each default is the answer of a payload that carries none of it, so a
+    payload class overrides only the questions its fields answer.
+    """
+
+    __slots__ = ()
+
+    def outcome_events(self) -> tuple[Event, ...]:
+        """The events that happened: the outcome the effect head trains on."""
+        return ()
+
+    def listed_events(self) -> tuple[Event, ...]:
+        """The payload's own ``events`` list, on the kinds that write one."""
+        return ()
+
+    def all_events(self) -> tuple[Event, ...]:
+        """Every event anywhere in the payload, proposed and evaluated ones too."""
+        return ()
+
+    def provenance_keys(self) -> Iterator[ProvenanceKey]:
+        """Every printed-line key the payload carries, in payload order."""
+        return iter(())
+
+    def acting_keys(
+        self, ability: tuple[ProvenanceKey, ...],
+    ) -> tuple[ProvenanceKey, ...]:
+        """The keys ``[ACT]`` reads, given the record's acting ``ability``."""
+        return ability
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,7 +260,7 @@ class Costs:
 
 
 @dataclass(frozen=True, slots=True)
-class ActivationPayload:
+class ActivationPayload(_PayloadQueries):
     """``resolution`` / ``activation``: the cost half of a resolution pair."""
 
     costs: Costs
@@ -215,7 +272,7 @@ class ActivationPayload:
 
 
 @dataclass(frozen=True, slots=True)
-class ResolutionPayload:
+class ResolutionPayload(_PayloadQueries):
     """``resolution`` / ``resolution``: the effect half.
 
     Attribution granularity is the sub-ability; an event attributed to a link
@@ -225,9 +282,18 @@ class ResolutionPayload:
 
     events: tuple[Event, ...] = ()
 
+    def outcome_events(self) -> tuple[Event, ...]:
+        return self.events
+
+    def listed_events(self) -> tuple[Event, ...]:
+        return self.events
+
+    def all_events(self) -> tuple[Event, ...]:
+        return self.events
+
 
 @dataclass(frozen=True, slots=True)
-class RewritePayload:
+class RewritePayload(_PayloadQueries):
     """``rewrite``: what a replacement effect received, and what it did.
 
     The parameter maps are deep-copied at the hook. The handler's own copy is
@@ -265,6 +331,22 @@ class RewritePayload:
         """Whether the event's parameter map was edited in place."""
         return self.outgoing is not None
 
+    def outcome_events(self) -> tuple[Event, ...]:
+        # A rewrite with no outgoing event was carried out by running another
+        # ability rather than by editing this one, which is how Forge implements
+        # most replacements — so the record carries no outcome event of its own.
+        # The incoming event is what was proposed, not what happened, and
+        # returning it here would train the head on the replaced event.
+        return (self.outgoing,) if self.outgoing is not None else ()
+
+    def all_events(self) -> tuple[Event, ...]:
+        if self.outgoing is None:
+            return (self.incoming,)
+        return (self.incoming, self.outgoing)
+
+    def provenance_keys(self) -> Iterator[ProvenanceKey]:
+        return iter(self.replaced_by)
+
 
 @dataclass(frozen=True, slots=True)
 class Contribution:
@@ -295,7 +377,7 @@ class Contribution:
 
 
 @dataclass(frozen=True, slots=True)
-class ContinuousPayload:
+class ContinuousPayload(_PayloadQueries):
     """``continuous``: one record per stable board.
 
     Coalescing per ``(game, static, board_hash)`` is itself the cap — a static
@@ -308,7 +390,7 @@ class ContinuousPayload:
 
 
 @dataclass(frozen=True, slots=True)
-class CombatPayload:
+class CombatPayload(_PayloadQueries):
     """``combat``: one record per damage step.
 
     A first-strike combat therefore yields two records, which is the only way a
@@ -327,9 +409,18 @@ class CombatPayload:
     probed_keyword: str | None = None
     probed_entity: str | None = None
 
+    def outcome_events(self) -> tuple[Event, ...]:
+        return self.events
+
+    def listed_events(self) -> tuple[Event, ...]:
+        return self.events
+
+    def all_events(self) -> tuple[Event, ...]:
+        return self.events
+
 
 @dataclass(frozen=True, slots=True)
-class TriggerPayload:
+class TriggerPayload(_PayloadQueries):
     """``trigger``: an evaluated trigger condition and whether it fired.
 
     Non-fired negatives are drawn from same-event-type evaluations at roughly
@@ -338,6 +429,13 @@ class TriggerPayload:
 
     event: Event
     fired: bool
+
+    def outcome_events(self) -> tuple[Event, ...]:
+        # An unfired trigger's event is the one it evaluated, not one it caused.
+        return (self.event,) if self.fired else ()
+
+    def all_events(self) -> tuple[Event, ...]:
+        return (self.event,)
 
 
 @dataclass(frozen=True, slots=True)
@@ -360,10 +458,22 @@ class Candidate:
 
 
 @dataclass(frozen=True, slots=True)
-class PlayabilityDecisionPayload:
+class PlayabilityDecisionPayload(_PayloadQueries):
     """``playability`` / ``decision``: every candidate at one decision point."""
 
     candidates: tuple[Candidate, ...] = ()
+
+    def provenance_keys(self) -> Iterator[ProvenanceKey]:
+        for candidate in self.candidates:
+            yield from candidate.ability
+            yield from candidate.responsible_static
+
+    def acting_keys(
+        self, ability: tuple[ProvenanceKey, ...],
+    ) -> tuple[ProvenanceKey, ...]:
+        # A decision names no acting line of its own; its ``[ACT]`` carries the
+        # candidate's ``e`` (FR-060a), and Java writes one candidate per record.
+        return self.candidates[0].ability if self.candidates else ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -375,21 +485,32 @@ class ForbiddenEntity:
 
 
 @dataclass(frozen=True, slots=True)
-class PlayabilityAttackersPayload:
+class PlayabilityAttackersPayload(_PayloadQueries):
     """``playability`` / ``attackers``: who may attack, and what stops the rest."""
 
     legal_attackers: tuple[str, ...] = ()
     forbidden: tuple[ForbiddenEntity, ...] = ()
 
+    def provenance_keys(self) -> Iterator[ProvenanceKey]:
+        return _forbidding_statics(self.forbidden)
+
 
 @dataclass(frozen=True, slots=True)
-class PlayabilityBlockersPayload:
+class PlayabilityBlockersPayload(_PayloadQueries):
     """``playability`` / ``blockers``: who may block one anchored attacker."""
 
     anchor_attacker: str
     legal_blockers: tuple[str, ...] = ()
     forbidden: tuple[ForbiddenEntity, ...] = ()
     min_blockers: int = 0
+
+    def provenance_keys(self) -> Iterator[ProvenanceKey]:
+        return _forbidding_statics(self.forbidden)
+
+
+def _forbidding_statics(forbidden: tuple[ForbiddenEntity, ...]) -> Iterator[ProvenanceKey]:
+    for entry in forbidden:
+        yield from entry.responsible_static
 
 
 Payload = (
@@ -405,7 +526,7 @@ Payload = (
 )
 
 #: The payload type each ``(kind, moment/subkind)`` must carry.
-PAYLOAD_TYPES: dict[tuple[RecordKind, str | None], type] = {
+PAYLOAD_TYPES: dict[tuple[RecordKind, Moment | PlayabilitySubkind | None], type] = {
     (RecordKind.RESOLUTION, Moment.ACTIVATION): ActivationPayload,
     (RecordKind.RESOLUTION, Moment.RESOLUTION): ResolutionPayload,
     (RecordKind.REWRITE, None): RewritePayload,
@@ -476,7 +597,7 @@ class EffectRecord:
     #: not the parent ``spell`` line's (FR-017).
     ability: tuple[ProvenanceKey, ...] | None = None
     #: Why ``ability`` came back empty on a kind that does name a line, from
-    #: :data:`UNRESOLVED_REASONS`. Set only where there was a line to look for
+    #: :class:`UnresolvedReason`. Set only where there was a line to look for
     #: and none was found, so an empty ``ability`` alone no longer conflates
     #: "the Monarch has no printed line anywhere" with "the resolver regressed"
     #: — the ambiguity that hid a broken resolver for a whole collection run.
@@ -507,7 +628,7 @@ class EffectRecord:
                 f"subkind is the playability kind's discriminator; kind="
                 f"{self.kind.value} carries subkind={self.subkind}"
             )
-        discriminator = self.moment or self.subkind
+        discriminator = self.discriminator
         expected = PAYLOAD_TYPES[(self.kind, discriminator)]
         if not isinstance(self.payload, expected):
             raise ValueError(
@@ -537,10 +658,10 @@ class EffectRecord:
                 "a record cannot both name an acting line and say it could not "
                 f"find one (ability_unresolved={self.ability_unresolved!r})"
             )
-        if self.ability_unresolved not in UNRESOLVED_REASONS:
+        if self.ability_unresolved not in UnresolvedReason:
             raise ValueError(
                 f"ability_unresolved={self.ability_unresolved!r} is outside the "
-                f"closed vocabulary {sorted(UNRESOLVED_REASONS)}"
+                f"closed vocabulary {sorted(reason.value for reason in UnresolvedReason)}"
             )
 
     def _check_flags(self) -> None:
@@ -557,7 +678,7 @@ class EffectRecord:
         if self.variant_of is not None and not self.synthetic:
             raise ValueError("variant_of names the card a synthetic script came from")
         if self.what_if is not None and (
-            self.subkind is None or self.subkind.value not in WHAT_IF_SUBKINDS
+            self.subkind not in WHAT_IF_SUBKINDS
         ):
             raise ValueError(
                 "what_if classes a legality record; "
@@ -582,6 +703,11 @@ class EffectRecord:
     # ── derived views ───────────────────────────────────────────────────
 
     @property
+    def discriminator(self) -> Moment | PlayabilitySubkind | None:
+        """The ``moment`` or ``subkind`` that, with ``kind``, picks the payload type."""
+        return self.moment or self.subkind
+
+    @property
     def is_probe(self) -> bool:
         """A damage-step probe: a combat fork that intervened in nothing."""
         return (
@@ -592,24 +718,12 @@ class EffectRecord:
 
 
 def events_of(record: EffectRecord) -> tuple[Event, ...]:
-    """Every event a record's payload carries, whatever its kind.
+    """The events that happened in a record, whatever its kind.
 
     Here rather than beside target derivation because the coverage counter's
     pool workers read it per record, and target derivation imports torch.
     """
-    payload = record.payload
-    if isinstance(payload, (ResolutionPayload, CombatPayload)):
-        return payload.events
-    if isinstance(payload, RewritePayload):
-        # A rewrite with no outgoing event was carried out by running another
-        # ability rather than by editing this one, which is how Forge implements
-        # most replacements — so the record carries no outcome event of its own.
-        # The incoming event is what was proposed, not what happened, and
-        # returning it here would train the head on the replaced event.
-        return (payload.outgoing,) if payload.outgoing is not None else ()
-    if isinstance(payload, TriggerPayload):
-        return (payload.event,) if payload.fired else ()
-    return ()
+    return record.payload.outcome_events()
 
 
 def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
@@ -619,8 +733,8 @@ def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
     ``granted_temporary`` keys; and every key its payload carries — a
     decision's candidates and their ``responsible_static``, a legality
     record's ``forbidden`` statics, a rewrite's ``replaced_by``. One walk, so a
-    payload field that gains keys is added here once rather than in each
-    consumer that has to see every key.
+    payload field that gains keys is added to its payload once rather than in
+    each consumer that has to see every key.
 
     Emblems are left out: an emblem's traits are built by the engine and key to
     a script path that exists in no converted tree, so a consumer joining keys
@@ -632,28 +746,14 @@ def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
         yield from entity.printed
         yield from entity.granted_attached
         yield from entity.granted_temporary.abilities
-    payload = record.payload
-    if isinstance(payload, PlayabilityDecisionPayload):
-        for candidate in payload.candidates:
-            yield from candidate.ability
-            yield from candidate.responsible_static
-    elif isinstance(payload, (PlayabilityAttackersPayload, PlayabilityBlockersPayload)):
-        for forbidden in payload.forbidden:
-            yield from forbidden.responsible_static
-    elif isinstance(payload, RewritePayload):
-        yield from payload.replaced_by
+    yield from record.payload.provenance_keys()
 
 
 def acting_keys(record: EffectRecord) -> tuple[ProvenanceKey, ...]:
     """The keys ``[ACT]`` reads: the acting line, or a decision's candidate.
 
-    A ``decision`` record names no acting line of its own; its ``[ACT]``
-    carries the candidate's ``e`` (FR-060a), and Java writes one candidate per
-    record, so it is the payload's first. Rarity, the per-text caps and gate 1's
-    stratum all key on this, because a text keyed one way there and read
-    another way at ``[ACT]`` weighs the whole decision class as textless.
+    Rarity, the per-text caps and gate 1's stratum all key on this, because a
+    text keyed one way there and read another way at ``[ACT]`` weighs the
+    whole decision class as textless.
     """
-    payload = record.payload
-    if isinstance(payload, PlayabilityDecisionPayload):
-        return payload.candidates[0].ability if payload.candidates else ()
-    return record.ability or ()
+    return record.payload.acting_keys(record.ability or ())

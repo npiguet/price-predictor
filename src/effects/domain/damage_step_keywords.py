@@ -49,6 +49,7 @@ from enum import StrEnum
 
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind
+from effects.domain.script_text import is_bare_keyword
 from effects.domain.state_snapshot import EntityState, StateSnapshot
 
 
@@ -656,7 +657,7 @@ def keyword_of_line(line) -> str | None:
     module importing the evaluator to ask would be a cycle.
     """
     script = getattr(line, "script_text", None)
-    if not script or "$" in script or "|" in script:
+    if not is_bare_keyword(script):
         return None
     return normalize_keyword(script)
 

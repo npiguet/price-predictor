@@ -59,11 +59,8 @@ from effects.domain.loss_floor import (
 )
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import (
-    CLASS_COMBAT,
-    CLASS_PLAYABILITY_DECISION,
-    CLASS_PLAYABILITY_LEGALITY,
-    CLASS_RESOLUTION_EFFECT,
     SAMPLING_CLASSES,
+    SamplingClass,
 )
 from effects.domain.state_snapshot import COLORS
 from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
@@ -159,7 +156,7 @@ class TestFieldActivation:
     def test_a_stage_one_corpus_trains_the_fields_its_kinds_supervise(self):
         """FR-085: three of eight classes, and the same heads still train."""
         stage_one = frozenset({
-            CLASS_RESOLUTION_EFFECT, CLASS_COMBAT, "resolution-cost",
+            SamplingClass.RESOLUTION_EFFECT, SamplingClass.COMBAT, "resolution-cost",
         })
         active = {s.name for s in active_fields(
             present_classes=stage_one, step=0, curriculum_step=0,
@@ -168,7 +165,7 @@ class TestFieldActivation:
         assert "life_delta" in active
 
     def test_a_field_no_present_class_supervises_contributes_nothing(self):
-        stage_one = frozenset({CLASS_RESOLUTION_EFFECT, CLASS_COMBAT})
+        stage_one = frozenset({SamplingClass.RESOLUTION_EFFECT, SamplingClass.COMBAT})
         active = {s.name for s in active_fields(
             present_classes=stage_one, step=0, curriculum_step=0,
         )}
@@ -178,7 +175,7 @@ class TestFieldActivation:
     def test_the_legality_bits_arrive_with_their_own_records(self):
         active = {s.name for s in active_fields(
             present_classes=frozenset({
-                CLASS_PLAYABILITY_LEGALITY, CLASS_PLAYABILITY_DECISION,
+                SamplingClass.PLAYABILITY_LEGALITY, SamplingClass.PLAYABILITY_DECISION,
             }),
             step=0, curriculum_step=0,
         )}

@@ -1538,6 +1538,38 @@ class TestProbeContext:
             context.load_probe_set(tmp_path)
 
 
+class TestPredict:
+    def test_it_reads_the_batch_the_batcher_builds(self):
+        """``build`` returns inputs, surfaces and encoded texts, not a pair."""
+        from effects.application.surface_batching import Materialized
+
+        seen = {}
+
+        class Model:
+            def __call__(self, **inputs):
+                seen.update(inputs)
+                return "hidden"
+
+            def per_entity(self, hidden):
+                return f"per-entity of {hidden}"
+
+            def verdict(self, hidden):
+                return f"verdict of {hidden}"
+
+        batcher = SimpleNamespace(build=lambda records, encoder: Materialized(
+            inputs={"x": 1}, surfaces=["s0", "s1"], encoded=None,
+        ))
+        probe_model = SimpleNamespace(batcher=batcher, encoder=None, model=Model())
+
+        rows = common.predict(probe_model, ["r0", "r1"], lambda o, v, s, r: (o, v, s, r))
+
+        assert seen == {"x": 1}
+        assert rows == [
+            ("per-entity of hidden", "verdict of hidden", "s0", 0),
+            ("per-entity of hidden", "verdict of hidden", "s1", 1),
+        ]
+
+
 # ── the line ladder's held-out split ────────────────────────────────────
 
 

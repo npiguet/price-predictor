@@ -763,13 +763,15 @@ class _AbilityCountingModel:
         return row[:, None, :].expand(-1, slot_kinds.shape[1], -1)
 
 
+def _runnable() -> Runnable:
+    return Runnable(_NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS)
+
+
 class TestScoreKeywords:
     def test_it_scores_the_qualifying_records(self):
         records = [_printed_board(game=f"g{i}") for i in range(3)]
         scores = score_keywords(
-            records, (KEYWORDS_BY_NAME["first_strike"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(),
-            fields=_FIELDS,
+            records, (KEYWORDS_BY_NAME["first_strike"],), _runnable(),
         )
         score = scores["first_strike"]
         assert score.qualifying == 3
@@ -778,9 +780,7 @@ class TestScoreKeywords:
     def test_it_reports_agreement_per_field(self):
         records = [_printed_board()]
         scores = score_keywords(
-            records, (KEYWORDS_BY_NAME["first_strike"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(),
-            fields=_FIELDS,
+            records, (KEYWORDS_BY_NAME["first_strike"],), _runnable(),
         )
         assert set(scores["first_strike"].per_field) == {
             "opponent.damage_taken", "opponent.zone_outcome/died",
@@ -788,17 +788,13 @@ class TestScoreKeywords:
 
     def test_a_keyword_no_record_qualifies_for_scores_nothing(self):
         scores = score_keywords(
-            [_printed_board()], (KEYWORDS_BY_NAME["wither"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(),
-            fields=_FIELDS,
+            [_printed_board()], (KEYWORDS_BY_NAME["wither"],), _runnable(),
         )
         assert scores["wither"] == KeywordScore()
 
     def test_an_empty_corpus_scores_every_row_at_zero(self):
         scores = score_keywords(
-            [], (KEYWORDS_BY_NAME["lifelink"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(),
-            fields=_FIELDS,
+            [], (KEYWORDS_BY_NAME["lifelink"],), _runnable(),
         )
         assert scores["lifelink"].qualifying == 0
 
@@ -815,13 +811,13 @@ class TestEvaluatorWiring:
     """
 
     @staticmethod
-    def _runnable(_records):
-        return Runnable(_NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS)
+    def _load(_records):
+        return _runnable()
 
     def test_it_scores_the_game_disjoint_combat_records(self):
         from effects.application.gate_two import run_gate_two
 
-        verdicts = run_gate_two([_printed_board(game="gd-1")], self._runnable)
+        verdicts = run_gate_two([_printed_board(game="gd-1")], self._load)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert first_strike.qualifying_records == 1
@@ -830,7 +826,7 @@ class TestEvaluatorWiring:
     def test_the_reason_lists_agreement_per_field(self):
         from effects.application.gate_two import run_gate_two
 
-        verdicts = run_gate_two([_printed_board(game="gd-1")], self._runnable)
+        verdicts = run_gate_two([_printed_board(game="gd-1")], self._load)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert "damage_taken 100%" in first_strike.reason
@@ -871,8 +867,7 @@ def _two_first_strikers() -> EffectRecord:
 
 def _scores(records):
     return score_keywords(
-        records, (KEYWORDS_BY_NAME["first_strike"],),
-        _NoEncoder(), _AbilityCountingModel(), _batcher(), fields=_FIELDS,
+        records, (KEYWORDS_BY_NAME["first_strike"],), _runnable(),
     )["first_strike"]
 
 
@@ -899,8 +894,8 @@ class TestPopulation:
         from effects.application.gate_two import evaluate_keyword
 
         verdict = evaluate_keyword(
-            KEYWORDS_BY_NAME["first_strike"], qualifying_records=300,
-            observations=400, agreeing=300,
+            KEYWORDS_BY_NAME["first_strike"],
+            KeywordScore(qualifying=300, agreeing=300, observations=400),
         )
         assert verdict.qualifying_records == 300
         assert verdict.observations == 400

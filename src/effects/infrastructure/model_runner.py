@@ -19,8 +19,9 @@ from __future__ import annotations
 import logging
 import random
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from itertools import batched
 from pathlib import Path
 
 import torch
@@ -45,6 +46,7 @@ from effects.domain.ability_tokenizer import (
     tokenizer_surface,
 )
 from effects.domain.baselines import baseline_masks
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_input import (
     INPUT_LAYOUT_KEY,
     feature_widths,
@@ -105,6 +107,14 @@ def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTo
     )
 
 
+#: Records per forward pass when gate 1 and the breakdowns score a checkpoint.
+BATCH_RECORDS = 32
+
+#: Observations per forward pass in gate 2: half the record batch, because
+#: every observation is built twice — as collected and perturbed — in one batch.
+BATCH_OBSERVATIONS = BATCH_RECORDS // 2
+
+
 @dataclass(frozen=True, slots=True)
 class Runnable:
     """One checkpoint, ready to run over one set of records.
@@ -118,6 +128,30 @@ class Runnable:
     model: EffectModel
     batcher: SurfaceBatcher
     fields: tuple[FieldSpec, ...]
+
+    def inference_chunks[T](self, items: Iterable[T], size: int) -> Iterator[list[T]]:
+        """``items`` in chunks of ``size``, each yielded under inference mode.
+
+        Sets evaluation mode first although a loaded checkpoint is already in
+        it: a caller that builds its own ``Runnable``, such as a probe, may
+        hand over modules that were training, and dropout would then make the
+        numbers depend on a coin flip.
+        """
+        self.encoder.eval()
+        self.model.eval()
+        with torch.inference_mode():
+            for chunk in batched(items, size):
+                yield list(chunk)
+
+    def keyword_resolver(self) -> KeywordResolver:
+        """A resolver over the batcher's own sidecar cache, never a second one.
+
+        The resolver decides which entity carries a keyword and the surface
+        builder decides which slot to drop for it, and the two reading
+        different joins is exactly how a perturbation strips nothing. One per
+        pass: it memoizes each provenance key's keyword.
+        """
+        return KeywordResolver(self.batcher.sidecars)
 
 
 @dataclass(frozen=True, slots=True)

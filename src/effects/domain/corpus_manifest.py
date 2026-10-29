@@ -13,6 +13,7 @@ from dataclasses import MISSING, Field, asdict, dataclass, field, fields
 from typing import Any
 
 from effects.domain.canonical_digest import canonical_digest
+from effects.domain.text_holdout import HoldoutUnit
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,7 +220,9 @@ class CorpusManifest:
     # the same digest and every checkpoint pinned to it stays evaluable. ──
 
     #: ``template`` or ``text`` (FR-042); absent reads as ``text``.
-    holdout_unit: str = field(default="text", metadata=_gen1_implied(str))
+    holdout_unit: HoldoutUnit = field(
+        default=HoldoutUnit.TEXT, metadata=_gen1_implied(HoldoutUnit),
+    )
     #: ``class -> family -> {available, share, written, repeats, shortfall}``.
     families: dict[str, dict[str, dict[str, int]]] = field(
         default_factory=dict, metadata=_gen1_implied(_doubly_nested_int_map),

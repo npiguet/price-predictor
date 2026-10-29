@@ -48,15 +48,25 @@ one rule in one line.
 from __future__ import annotations
 
 from collections.abc import Callable
+from enum import StrEnum
 
 from effects.domain.event_schema import ATTRIBUTION_UNRESOLVED
 from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.records import EffectRecord, RecordKind, acting_keys, events_of
 
-NO_ABILITY = "no-ability"
-EVENT_FLOOD = "event-flood"
-NO_ACTING_TEXT = "no-acting-text"
-UNJOINABLE_KEY = "unjoinable-key"
+
+class QualityDefect(StrEnum):
+    """Why a record is refused: the four rules above, as the manifest spells them.
+
+    A string enum, so a reason keys ``quality_dropped`` in the manifest's JSON
+    exactly as the bare string always did.
+    """
+
+    NO_ABILITY = "no-ability"
+    EVENT_FLOOD = "event-flood"
+    NO_ACTING_TEXT = "no-acting-text"
+    UNJOINABLE_KEY = "unjoinable-key"
+
 
 #: More events than this on one record is a game, not an ability. The
 #: heaviest legitimate resolutions in the first corpus (board wipes over
@@ -66,7 +76,7 @@ MAX_EVENTS_PER_RECORD = 64
 
 def quality_defect(
     record: EffectRecord, *, max_events: int = MAX_EVENTS_PER_RECORD,
-) -> str | None:
+) -> QualityDefect | None:
     """The first reason this record is refused, or None when it is clean.
 
     Ordered so the most specific reason wins: a record with no ability is
@@ -81,16 +91,16 @@ def quality_defect(
     is unconditional: it has no number to turn off.
     """
     if record.kind is RecordKind.RESOLUTION and not record.ability:
-        return NO_ABILITY
+        return QualityDefect.NO_ABILITY
     events = events_of(record)
     if max_events > 0 and len(events) > max_events:
-        return EVENT_FLOOD
+        return QualityDefect.EVENT_FLOOD
     return None
 
 
 def unjoinable_key_defect(
     record: EffectRecord, resolve: Callable[[ProvenanceKey], KeyResolution],
-) -> str | None:
+) -> QualityDefect | None:
     """``UNJOINABLE_KEY`` when an acting key is one its sidecar cannot place.
 
     Every kind with acting keys, not only resolutions: the surface builder and
@@ -107,13 +117,13 @@ def unjoinable_key_defect(
         try:
             resolve(key)
         except KeyError:
-            return UNJOINABLE_KEY
+            return QualityDefect.UNJOINABLE_KEY
     return None
 
 
 def acting_text_defect(
     record: EffectRecord, resolve: Callable[[ProvenanceKey], KeyResolution],
-) -> str | None:
+) -> QualityDefect | None:
     """``NO_ACTING_TEXT`` when every acting key maps to no rendered line.
 
     A resolution record whose acting key is Forge's implicit permanent spell
@@ -140,7 +150,7 @@ def acting_text_defect(
     outcomes = {resolve(key) for key in record.ability}
     if KeyResolution.LINE in outcomes or KeyResolution.RUNTIME_ONLY in outcomes:
         return None
-    return NO_ACTING_TEXT
+    return QualityDefect.NO_ACTING_TEXT
 
 
 def has_unattributed_events(record: EffectRecord) -> bool:

@@ -20,6 +20,7 @@ from effects.application.gate_one import measure
 from effects.application.training_loop import TrainingLoop
 from effects.domain.effect_model import EffectModel
 from effects.domain.split import CorpusSplit
+from effects.infrastructure.model_runner import Runnable
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.application.test_training_loop_workers import (  # noqa: F401
     _config,
@@ -44,11 +45,11 @@ def scored(corpus, records, tmp_path_factory):  # noqa: F811
     def validate_epoch(self, epoch, run, tally, fields):
         result, parts, metrics = real(self, epoch, run, tally, fields)
         seen["fed"] = metrics
-        seen["measured"] = measure(
-            self.card_disjoint, run.encoder, run.model,
+        seen["measured"] = measure(self.card_disjoint, Runnable(
+            run.encoder, run.model,
             self.preparer.batcher(training=False, materializer=self._scoring),
-            fields=fields,
-        )
+            fields,
+        ))
         seen["loss"] = result.card_disjoint_loss
         seen["loss without margins"] = self._validate(
             self.card_disjoint, run, fields=fields, parts={},

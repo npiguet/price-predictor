@@ -27,17 +27,16 @@ from pathlib import Path
 
 from effects.domain.corpus_curation import record_hash
 from effects.domain.records import EffectRecord
-from effects.domain.sampling import (
-    CLASS_RESOLUTION_COST,
-    CLASS_RESOLUTION_EFFECT,
-)
+from effects.domain.sampling import SamplingClass
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 
 logger = logging.getLogger(__name__)
 
 SAMPLE_SEED_OFFSET = 0x2545F491
 #: Card-disjoint classes drawn from the gate-one slice before the stratum.
-GATE_ONE_CLASSES = frozenset({CLASS_RESOLUTION_EFFECT, CLASS_RESOLUTION_COST})
+GATE_ONE_CLASSES = frozenset({
+    SamplingClass.RESOLUTION_EFFECT, SamplingClass.RESOLUTION_COST,
+})
 #: Records each held-out text gives per round of the round-robin (FR-051).
 RECORDS_PER_TEXT_PER_ROUND = 4
 

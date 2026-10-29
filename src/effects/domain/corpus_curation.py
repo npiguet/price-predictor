@@ -22,12 +22,7 @@ import zlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from effects.domain.sampling import (
-    CLASS_COMBAT,
-    CLASS_CONTINUOUS,
-    CLASS_RESOLUTION_EFFECT,
-    CLASS_REWRITE,
-)
+from effects.domain.sampling import SamplingClass
 
 #: uint64, which is the width the threshold comparison is over.
 _HASH_BYTES = 8
@@ -140,8 +135,9 @@ def class_targets(
 #: The sampling classes whose families split further by outcome signature
 #: (FR-049 step 2). The others have no per-entity outcome to sort by: a cost
 #: half's outcome is its payment, a trigger's is whether it fired.
-SIGNATURE_CLASSES: frozenset[str] = frozenset({
-    CLASS_RESOLUTION_EFFECT, CLASS_REWRITE, CLASS_COMBAT, CLASS_CONTINUOUS,
+SIGNATURE_CLASSES: frozenset[SamplingClass] = frozenset({
+    SamplingClass.RESOLUTION_EFFECT, SamplingClass.REWRITE, SamplingClass.COMBAT,
+    SamplingClass.CONTINUOUS,
 })
 
 

@@ -203,13 +203,10 @@ def prose_of(sidecar: ProvenanceSidecar, sidecar_path: Path) -> list[str]:
     script, and read as prose it would encode a script line as card text where
     the trainer (``SidecarCache.prose_for``) encodes the variant's script.
     """
-    from effects.infrastructure.sidecar_io import (
-        VARIANT_SCRIPTS_TREE,
-        converted_text_path,
-        prose_lines,
-    )
+    from effects.domain.provenance import SourceTree
+    from effects.infrastructure.sidecar_io import converted_text_path, prose_lines
 
-    if sidecar.script_file.startswith(f"{VARIANT_SCRIPTS_TREE}/"):
+    if sidecar.tree == SourceTree.VARIANT_SCRIPTS:
         return []
     return prose_lines(converted_text_path(sidecar_path))
 
