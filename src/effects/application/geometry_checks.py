@@ -8,7 +8,7 @@ Only gate 3 is a verdict; the rest are reported.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from effects.domain.ability_cache_layout import pooled_card_vector
-from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
     Bound,
@@ -130,26 +129,6 @@ class CachedVectors:
 
     def __len__(self) -> int:
         return len(self.by_text)
-
-
-def load_cache(
-    abilities_root: Path,
-    sidecar_roots: Path | Iterable[Path],
-    *,
-    surface: Surface,
-    variant: str = Baseline.FULL,
-) -> CachedVectors:
-    """Load a variant's cache, keyed by the ability text each row encodes.
-
-    ``surface`` comes from the checkpoint and has no default: keyed on the
-    other surface, a script checkpoint's cache silently merges every pair of
-    scripts sharing a prose line.
-    """
-    from effects.infrastructure.ability_cache_store import SidecarIndex
-
-    return cached_vectors(
-        SidecarIndex(sidecar_roots, surface=surface), abilities_root, variant=variant,
-    )
 
 
 def cached_vectors(

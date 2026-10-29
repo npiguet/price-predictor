@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import random
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import lru_cache, partial
@@ -407,13 +407,12 @@ def load_held_out(split_from: Path | None) -> frozenset[str]:
 
 
 def build_coverage_units(
-    card_files: dict[str, str], held_out: frozenset[str],
+    names: Iterable[str], held_out: frozenset[str],
 ) -> dict[str, CardCoverage]:
-    """Every deckable card, minus the holdout. Takes the loaded ``name ->
-    script`` mapping because ``run`` has already paid for reading the tree."""
+    """Every deckable card, minus the holdout."""
     return {
         name: CardCoverage(name=name)
-        for name in card_files
+        for name in names
         if name not in held_out
     }
 
@@ -529,7 +528,7 @@ def play_rounds(
     round_number = 0
     while not is_complete(rounds.awaited, rounds.target):
         round_number += 1
-        previous = {key: unit.records for key, unit in rounds.units.items()}
+        previous = {key: unit.progress for key, unit in rounds.units.items()}
         weights = rounds.weights()
         if not weights:
             break
@@ -624,11 +623,7 @@ def run(config: CollectCoverageConfig) -> int:
     texts = {name: card.text for name, card in converted.items()}
     non_deck = non_deck_names(texts)
     coverage = build_coverage_units(
-        {
-            name: card.script_file for name, card in converted.items()
-            if name not in non_deck
-        },
-        held_out,
+        (name for name in converted if name not in non_deck), held_out,
     )
     if not coverage:
         logger.error("No deckable cards under %s", trees.cards_folder)

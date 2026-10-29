@@ -65,14 +65,6 @@ def load_converted_cards(cards_folder: Path) -> dict[str, ConvertedCard]:
     return out
 
 
-def load_card_files(cards_folder: Path) -> dict[str, str]:
-    """``card name -> tree-prefixed script file`` for one converted tree."""
-    return {
-        name: card.script_file
-        for name, card in load_converted_cards(cards_folder).items()
-    }
-
-
 def load_first_printings(printings_path: Path) -> dict[str, str]:
     """``card name -> earliest release date`` from an MTGJSON dump, faces
     indexed under their own names as well as the combined one."""

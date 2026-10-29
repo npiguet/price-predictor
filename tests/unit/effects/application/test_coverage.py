@@ -334,7 +334,7 @@ class TestHeldOutExclusion:
 
     def test_held_out_cards_are_absent_from_the_coverage_unit(self, tmp_path):
         from effects.application.collect_coverage import build_coverage_units
-        from effects.infrastructure.card_sources import load_card_files
+        from effects.infrastructure.converted_trees import ConvertedTrees
 
         (tmp_path / "s").mkdir()
         for stem, name in (("serra_angel", "Serra Angel"), ("shock", "Shock")):
@@ -342,7 +342,7 @@ class TestHeldOutExclusion:
                 f"name: {name}\ntypes: creature\n", encoding="utf-8",
             )
         units = build_coverage_units(
-            load_card_files(tmp_path), frozenset({"Shock"}),
+            ConvertedTrees({"cardsfolder": tmp_path}).card_files, frozenset({"Shock"}),
         )
         assert set(units) == {"Serra Angel"}
 
@@ -843,7 +843,7 @@ class TestIncrementalCounting:
 class TestCountingCrossesTheNameBoundary:
     """Coverage units are converted names; record entities are Forge's (T174).
 
-    `build_coverage_units` keys off `load_card_files`, which reads names out of
+    `build_coverage_units` keys off `ConvertedTrees.card_files`, which reads names out of
     converted card text — lowercased, `soul echo`. A record's `EntityState.name`
     is Forge's own, `Soul Echo`. Looking one up in the other matches nothing, so
     every card counts zero records forever: nothing is ever satisfied, the
@@ -1134,7 +1134,7 @@ class TestHeldOutTextUnit:
         unit = TextCoverage(text="t", games={"g1", "g2", "g3", "g4"})
         assert not unit.satisfied(5)
         unit.games.add("g5")
-        assert unit.satisfied(5) and unit.records == 5
+        assert unit.satisfied(5) and unit.progress == 5
 
     def test_the_round_ends_without_waiting_on_uncastable_texts(self):
         """FR-037 / spec Story 2 scenario 6."""

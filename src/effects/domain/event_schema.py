@@ -193,16 +193,10 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
 }
 
 
-#: Retired event types, and where the fact each named is recorded instead. No
-#: corpus ever contained one.
-SUPERSEDED_EVENT_TYPES: dict[str, str] = {
-    "cost_adjusted":
-        "playability/decision payload, candidates[].cost_after_adjustment",
-    "damage_assignment_ordered":
-        "combat payload, assignment_choices",
-    "name_change":
-        "continuous payload, contributions[].name",
-}
+# Retired types, never in a corpus, each recorded elsewhere: ``cost_adjusted``
+# as a decision candidate's ``cost_after_adjustment``,
+# ``damage_assignment_ordered`` as the combat payload's ``assignment_choices``,
+# and ``name_change`` as a continuous contribution's ``name``.
 
 
 #: The types whose own parameter row declares ``cause``: the set the validator
@@ -220,12 +214,6 @@ ATTRIBUTION_ROOT = "root"
 #: ``attributed_to`` when the collector looked for a producing clause and the
 #: pointer named nothing on the acting chain.
 ATTRIBUTION_UNRESOLVED = "unresolved"
-
-#: The sentinels, apart from a sub-ability's chain index.
-ATTRIBUTION_SENTINELS: frozenset[str] = frozenset(
-    {ATTRIBUTION_ROOT, ATTRIBUTION_UNRESOLVED}
-)
-
 
 class AttributionKind(StrEnum):
     """Which of the four things an event's ``attributed_to`` is saying.

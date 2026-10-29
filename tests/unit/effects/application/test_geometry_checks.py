@@ -22,7 +22,6 @@ from effects.application.geometry_checks import (
     check_nearest_neighbours,
     check_umap,
     check_ward,
-    load_cache,
     nearest_neighbours,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY
@@ -31,6 +30,7 @@ from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from tests.unit.effects.builders import read_cache
 
 
 def _write_source(
@@ -114,33 +114,35 @@ TAX_PROSE = "spells your opponents cast that target CARDNAME cost {2} more to ca
 class TestLoadingTheCache:
     def test_rows_are_keyed_by_the_text_they_encode(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         assert set(loaded.texts) == {
             "Flying", "Vigilance", "DealDamage | NumDmg$ 2",
         }
 
     def test_the_prose_surface_keys_on_prose(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="prose")
+        loaded = read_cache(abilities, cards, surface="prose")
         assert "CARDNAME deals 2 damage to any target." in loaded.texts
 
     def test_the_surface_is_never_defaulted(self, cache):
         """A default is how the evaluator came to key a script model on prose."""
-        cards, abilities = cache
+        from effects.infrastructure.ability_cache_store import SidecarIndex
+
+        cards, _ = cache
         with pytest.raises(TypeError):
-            load_cache(abilities, cards)
+            SidecarIndex(cards)
 
     def test_one_prose_on_two_scripts_is_two_points_on_the_script_surface(
         self, tmp_path,
     ):
         """The model read two different texts; merging them hides one."""
         cards, abilities = _two_cards_one_prose(tmp_path)
-        assert len(load_cache(abilities, cards, surface="script")) == 2
-        assert len(load_cache(abilities, cards, surface="prose")) == 1
+        assert len(read_cache(abilities, cards, surface="script")) == 2
+        assert len(read_cache(abilities, cards, surface="prose")) == 1
 
     def test_a_row_carries_the_vector_its_sidecar_line_points_at(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         np.testing.assert_allclose(loaded.by_text["Flying"], [1.0, 0.0])
         np.testing.assert_allclose(loaded.by_text["Vigilance"], [0.0, 1.0])
 
@@ -151,7 +153,7 @@ class TestLoadingTheCache:
         abilities = tmp_path / "abilities"
         for stem in ("a/one", "a/two"):
             _write_source(cards, abilities, stem, stem, ["flying"], [[1.0, 0.0]])
-        assert len(load_cache(abilities, cards, surface="script")) == 1
+        assert len(read_cache(abilities, cards, surface="script")) == 1
 
     def test_a_reprint_is_one_point_even_when_its_vectors_differ_in_float_noise(
         self, tmp_path,
@@ -168,11 +170,11 @@ class TestLoadingTheCache:
         _write_source(
             cards, abilities, "two", "a/two", ["Flying"], [[1.0 + 1.5e-5, 0.0]],
         )
-        assert len(load_cache(abilities, cards, surface="script")) == 1
+        assert len(read_cache(abilities, cards, surface="script")) == 1
 
     def test_pooled_card_vectors_are_mean_then_max(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         np.testing.assert_allclose(
             loaded.by_card["Serra Angel"], [0.5, 0.5, 1.0, 1.0],
         )
@@ -185,12 +187,12 @@ class TestLoadingTheCache:
             cards, abilities, "Broken", "s/broken", ["a", "b"], [[1.0, 0.0]],
         )
         with caplog.at_level("WARNING"):
-            assert len(load_cache(abilities, cards, surface="script")) == 0
+            assert len(read_cache(abilities, cards, surface="script")) == 0
         assert "cache rows" in caplog.text
 
     def test_an_absent_cache_loads_empty_rather_than_raising(self, tmp_path):
         assert len(
-            load_cache(tmp_path / "nothing", tmp_path, surface="script"),
+            read_cache(tmp_path / "nothing", tmp_path, surface="script"),
         ) == 0
 
     def test_a_variant_cache_loads_separately(self, cache):
@@ -200,12 +202,12 @@ class TestLoadingTheCache:
             ["Flying", "Vigilance"], [[9.0, 9.0], [9.0, 9.0]],
             variant="no-state", prose=["flying", "vigilance"],
         )
-        variant = load_cache(
+        variant = read_cache(
             abilities, cards, variant="no-state", surface="script",
         )
         assert variant.by_text["Flying"].tolist() == [9.0, 9.0]
         np.testing.assert_allclose(
-            load_cache(abilities, cards, surface="script").by_text["Flying"],
+            read_cache(abilities, cards, surface="script").by_text["Flying"],
             [1.0, 0.0],
         )
 
@@ -222,7 +224,7 @@ class TestLoadingTheCache:
             variant="no-state", prose=["flying", "vigilance"],
         )
         expected = {
-            variant: load_cache(abilities, cards, surface="script", variant=variant)
+            variant: read_cache(abilities, cards, surface="script", variant=variant)
             for variant in ("full", "no-state")
         }
         index = SidecarIndex(cards, surface="script")
@@ -266,7 +268,7 @@ class TestTheShippingCache:
 
     def _load(self, tmp_path):
         config = self._config(tmp_path)
-        return load_cache(
+        return read_cache(
             config.abilities_root, config.cards_folders, surface="script",
         )
 
@@ -287,7 +289,7 @@ class TestTheShippingCache:
 class TestResolvingAQuery:
     def test_a_query_resolves_by_prose_to_the_script_the_model_read(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         resolved = loaded.resolve(
             LineQuery("cardname deals 2 damage to any target."),
         )
@@ -295,14 +297,14 @@ class TestResolvingAQuery:
 
     def test_matching_ignores_case_and_whitespace_only(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         assert loaded.resolve(LineQuery("  FLYING ")).key == "Flying"
         assert loaded.resolve(LineQuery("flying.")).key is None
         assert loaded.resolve(LineQuery("fly")).key is None
 
     def test_an_absent_line_says_so(self, cache):
         cards, abilities = cache
-        resolved = load_cache(abilities, cards, surface="script").resolve(
+        resolved = read_cache(abilities, cards, surface="script").resolve(
             LineQuery("draw a card."),
         )
         assert resolved.key is None
@@ -312,7 +314,7 @@ class TestResolvingAQuery:
         self, tmp_path,
     ):
         cards, abilities = _two_cards_one_prose(tmp_path)
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         ambiguous = loaded.resolve(LineQuery(TAX_PROSE))
         assert ambiguous.key is None
         assert "2 scripts" in ambiguous.problem
@@ -322,7 +324,7 @@ class TestResolvingAQuery:
 
     def test_a_card_that_does_not_print_the_line_does_not_resolve(self, cache):
         cards, abilities = cache
-        resolved = load_cache(abilities, cards, surface="script").resolve(
+        resolved = read_cache(abilities, cards, surface="script").resolve(
             LineQuery("flying", card="shock"),
         )
         assert resolved.key is None
@@ -330,7 +332,7 @@ class TestResolvingAQuery:
 
     def test_a_line_is_displayed_in_prose(self, cache):
         cards, abilities = cache
-        loaded = load_cache(abilities, cards, surface="script")
+        loaded = read_cache(abilities, cards, surface="script")
         assert loaded.label("DealDamage | NumDmg$ 2") == (
             "CARDNAME deals 2 damage to any target."
         )
@@ -364,7 +366,7 @@ class TestNearestNeighbours:
     def test_the_check_reports_and_blocks_nothing(self, cache):
         cards, abilities = cache
         result = check_nearest_neighbours(
-            load_cache(abilities, cards, surface="script"),
+            read_cache(abilities, cards, surface="script"),
             (LineQuery("flying"),),
         )
         assert result.status is CheckStatus.REPORTED
@@ -373,7 +375,7 @@ class TestNearestNeighbours:
     def test_neighbours_are_listed_in_prose_for_the_reader(self, cache):
         cards, abilities = cache
         result = check_nearest_neighbours(
-            load_cache(abilities, cards, surface="script"),
+            read_cache(abilities, cards, surface="script"),
             (LineQuery("flying"),),
         )
         assert "CARDNAME deals 2 damage to any target." in result.detail
@@ -383,7 +385,7 @@ class TestNearestNeighbours:
         """A silently dropped query shrinks the comparison without saying so."""
         cards, abilities = cache
         result = check_nearest_neighbours(
-            load_cache(abilities, cards, surface="script"),
+            read_cache(abilities, cards, surface="script"),
             (LineQuery("flying"), LineQuery("draw a card.")),
         )
         assert "draw a card." in result.detail
@@ -401,7 +403,7 @@ class TestUmap:
     def test_too_few_vectors_skips(self, cache):
         cards, abilities = cache
         assert check_umap(
-            load_cache(abilities, cards, surface="script"),
+            read_cache(abilities, cards, surface="script"),
         ).status is CheckStatus.SKIPPED
 
     def test_a_populated_cache_projects(self):
@@ -437,13 +439,13 @@ def _ward_cache(tmp_path, *, missing: tuple[LineQuery, ...] = ()):
             [keyword.prose.title()], [rng.normal(size=3).tolist()],
             prose=[keyword.prose],
         )
-    return load_cache(abilities, cards, surface="script")
+    return read_cache(abilities, cards, surface="script")
 
 
 class TestWardCanary:
     def test_it_skips_when_ward_is_not_in_the_cache(self, cache):
         cards, abilities = cache
-        result = check_ward(load_cache(abilities, cards, surface="script"))
+        result = check_ward(read_cache(abilities, cards, surface="script"))
         assert result.status is CheckStatus.SKIPPED
         assert "ward {2}" in result.detail
 
@@ -517,7 +519,7 @@ class TestDecodability:
     def test_it_skips_without_a_win_rate_table(self, cache):
         cards, abilities = cache
         result = check_decodability(
-            load_cache(abilities, cards, surface="script"), cards / "absent.txt",
+            read_cache(abilities, cards, surface="script"), cards / "absent.txt",
         )
         assert result.status is CheckStatus.SKIPPED
         assert "win-rate table" in result.detail
@@ -527,7 +529,7 @@ class TestDecodability:
         win_rates = tmp_path / "cards-win-rates.txt"
         win_rates.write_text("card_name;a\n", encoding="utf-8")
         result = check_decodability(
-            load_cache(abilities, cards, surface="script"), win_rates,
+            read_cache(abilities, cards, surface="script"), win_rates,
         )
         assert result.status is CheckStatus.SKIPPED
         assert "too few" in result.detail
@@ -577,7 +579,7 @@ class TestBaselineComparison:
     def test_it_skips_without_the_variant_cache(self, cache):
         cards, abilities = cache
         result = check_baseline_geometry(
-            load_cache(abilities, cards, surface="script"), CachedVectors(), "no-state",
+            read_cache(abilities, cards, surface="script"), CachedVectors(), "no-state",
         )
         assert result.status is CheckStatus.SKIPPED
         assert "--variant no-state" in result.detail

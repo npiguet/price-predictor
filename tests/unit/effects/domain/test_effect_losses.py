@@ -19,11 +19,11 @@ from effects.domain.effect_head_layout import (
     FIELD_SLICES,
     FIELDS_BY_NAME,
     GATE_INDEX,
+    PER_ENTITY_FIELDS,
     PER_ENTITY_WIDTH,
     VERDICT_WIDTH,
     ZONE_OUTCOMES,
     FieldType,
-    per_entity_fields_of_type,
 )
 from effects.domain.effect_losses import (
     api_loss,
@@ -84,7 +84,9 @@ class TestLosses:
         fields = tuple(
             FIELDS_BY_NAME[name]
             for name in ("tap_state", "damage_taken", "life_delta", "zone_outcome")
-        ) + per_entity_fields_of_type(FieldType.MULTI_BINARY)[:1]
+        ) + tuple(
+            spec for spec in PER_ENTITY_FIELDS if spec.type is FieldType.MULTI_BINARY
+        )[:1]
         values = {
             spec.name: (
                 torch.randint(0, 2, (2, 3, spec.arity)).float()

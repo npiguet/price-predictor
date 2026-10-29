@@ -13,11 +13,9 @@ import pytest
 
 from effects.domain.event_schema import (
     ATTRIBUTION_ROOT,
-    ATTRIBUTION_SENTINELS,
     ATTRIBUTION_UNRESOLVED,
     CAUSE_BEARING_TYPES,
     EVENT_PARAMS,
-    SUPERSEDED_EVENT_TYPES,
     Event,
     EventType,
     attribution_kind,
@@ -189,7 +187,9 @@ class TestAttributionIsTriState:
         assert len(seen) == 4
 
     def test_a_sentinel_is_not_mistakable_for_a_chain_index(self):
-        assert all(not value.isdigit() for value in ATTRIBUTION_SENTINELS)
+        assert all(
+            not value.isdigit() for value in (ATTRIBUTION_ROOT, ATTRIBUTION_UNRESOLVED)
+        )
 
     def test_a_sentinel_survives_the_wire_form_unchanged(self):
         """Widening a value set, not redefining the field: it stays a string."""
@@ -534,16 +534,6 @@ class TestSupersededTypes:
     """
 
     def test_the_superseded_types_are_out_of_the_vocabulary(self):
-        for retired in SUPERSEDED_EVENT_TYPES:
+        for retired in ("cost_adjusted", "damage_assignment_ordered", "name_change"):
             assert retired not in EVENT_PARAMS
-
-    def test_each_names_where_the_information_lives(self):
-        assert SUPERSEDED_EVENT_TYPES == {
-            "cost_adjusted":
-                "playability/decision payload, candidates[].cost_after_adjustment",
-            "damage_assignment_ordered":
-                "combat payload, assignment_choices",
-            "name_change":
-                "continuous payload, contributions[].name",
-        }
 

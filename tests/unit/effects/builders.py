@@ -387,3 +387,14 @@ def make_entity_targets(gate, fields=None, mask=None, index=None):
     if index is None:
         index = torch.zeros(gate.shape, dtype=torch.long)
     return EntityTargetBatch(gate, fields, mask, index)
+
+
+def read_cache(abilities_root, sidecar_roots, *, surface, variant: str = "full"):
+    """One variant's cache over freshly read sidecars, the way the evaluator
+    reads it: :func:`cached_vectors` over a ``SidecarIndex``."""
+    from effects.application.geometry_checks import cached_vectors
+    from effects.infrastructure.ability_cache_store import SidecarIndex
+
+    return cached_vectors(
+        SidecarIndex(sidecar_roots, surface=surface), abilities_root, variant=variant,
+    )

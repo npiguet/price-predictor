@@ -8,12 +8,20 @@ can refuse a dataset rebuilt since (FR-147).
 from __future__ import annotations
 
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields
-from typing import Any
+from typing import Any, NamedTuple
 
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.canonical_digest import canonical_digest
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
+
+
+class ManifestDrift(NamedTuple):
+    """The source shards that changed since a build, each sorted by name."""
+
+    added: tuple[str, ...]
+    removed: tuple[str, ...]
+    resized: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -284,9 +292,7 @@ class CorpusManifest:
         payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
         return canonical_digest(payload).hex()
 
-    def drift(
-        self, current: tuple[SourceShard, ...],
-    ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    def drift(self, current: tuple[SourceShard, ...]) -> ManifestDrift:
         """Shards added, removed and resized since the build, each sorted: what
         ``--verify`` reports (FR-144)."""
         was = {shard.name: shard.size for shard in self.sources}
@@ -296,7 +302,7 @@ class CorpusManifest:
         resized = tuple(
             sorted(name for name in set(was) & set(now) if was[name] != now[name])
         )
-        return added, removed, resized
+        return ManifestDrift(added, removed, resized)
 
 
 _FIELDS = {spec.name: spec for spec in fields(CorpusManifest)}

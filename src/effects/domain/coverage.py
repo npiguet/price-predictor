@@ -98,7 +98,9 @@ class CoverageUnit(Protocol):
     rounds_without_progress: int
 
     @property
-    def records(self) -> int: ...
+    def progress(self) -> int:
+        """What a round must raise for the unit to count as progressing."""
+        ...
 
     def satisfied(self, target: int) -> bool: ...
 
@@ -114,6 +116,10 @@ class CardCoverage:
     rounds_without_progress: int = 0
     retired: bool = False
     verdict: ConsultVerdict = ConsultVerdict.UNKNOWN
+
+    @property
+    def progress(self) -> int:
+        return self.records
 
     def satisfied(self, target: int) -> bool:
         return self.records >= target
@@ -138,8 +144,8 @@ class TextCoverage:
     castable: bool = True
 
     @property
-    def records(self) -> int:
-        """Distinct games, under the name ``retire_stalled`` compares."""
+    def progress(self) -> int:
+        """Distinct games."""
         return len(self.games)
 
     def satisfied(self, floor: int) -> bool:
@@ -242,7 +248,7 @@ def retire_stalled(
     for name, unit in coverage.items():
         if unit.retired:
             continue
-        if unit.records > previous.get(name, 0):
+        if unit.progress > previous.get(name, 0):
             unit.rounds_without_progress = 0
             continue
         if name not in decked_names:

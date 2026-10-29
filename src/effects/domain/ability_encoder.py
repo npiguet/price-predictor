@@ -142,7 +142,7 @@ class AbilityEncoder(nn.Module):
         hidden = self.encoder(hidden, src_key_padding_mask=padding_mask)
         hidden = self.norm(hidden)
 
-        e =self.to_e(hidden[:, 0, :])
+        e = self.to_e(hidden[:, 0, :])
         return e, hidden
 
 

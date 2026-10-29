@@ -207,7 +207,7 @@ def _cat(chunks: list[np.ndarray]) -> np.ndarray:
 
 def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
     """Score both models on the split's unique-text stratum and compare."""
-    games =context.main.provenance.card_disjoint_games
+    games = context.main.provenance.card_disjoint_games
     if not games:
         return CheckResult(
             CheckName.GATE_1, CheckStatus.SKIPPED,

@@ -33,12 +33,6 @@ def split_script_file(script_file: str) -> tuple[str, str]:
     return tree, relative
 
 
-#: The fields every key's dict form carries (``option`` is written only when
-#: set); what tells a key dict from any other mapping in a record's raw JSON.
-KEY_DICT_FIELDS: frozenset[str] = frozenset({
-    "script_file", "face", "trait_kind", "index_within_kind",
-})
-
 class KeyResolution(StrEnum):
     """What a provenance key resolves to at the join.
 

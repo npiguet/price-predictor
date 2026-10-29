@@ -28,10 +28,8 @@ from effects.domain.split import (
 )
 from effects.domain.state_snapshot import EntityState
 from effects.domain.text_holdout import HoldoutUnit
-from effects.infrastructure.card_sources import (
-    load_card_files,
-    load_first_printings,
-)
+from effects.infrastructure.card_sources import load_first_printings
+from effects.infrastructure.converted_trees import ConvertedTrees
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 
@@ -83,13 +81,13 @@ class TestCorpusLoaders:
         (tmp_path / "s" / "serra_angel.txt").write_text(
             "name: Serra Angel\ntypes: creature angel\n", encoding="utf-8",
         )
-        assert load_card_files(tmp_path) == {
+        assert ConvertedTrees({"cardsfolder": tmp_path}).card_files == {
             "Serra Angel": "cardsfolder/s/serra_angel.txt",
         }
 
     def test_a_file_without_a_name_line_is_skipped(self, tmp_path):
         (tmp_path / "broken.txt").write_text("types: creature\n", encoding="utf-8")
-        assert load_card_files(tmp_path) == {}
+        assert ConvertedTrees({"cardsfolder": tmp_path}).card_files == {}
 
     def test_first_printings_take_the_earliest_release(self, tmp_path):
         path = tmp_path / "AllPrintings.json"
@@ -176,7 +174,7 @@ def test_a_corpus_shaped_holdout_carries_its_texts_too() -> None:
 class TestTheConvertedToRuntimeNameBoundary:
     """Card names change case crossing from the converted tree to Forge.
 
-    `load_card_files` reads names out of converted card text, which is
+    `ConvertedTrees.card_files` reads names out of converted card text, which is
     lowercased (`name: soul echo`). Forge's own `getName()` and every record's
     `EntityState.name` are printed case (`Soul Echo`). Matching one against the
     other silently never fires, which is how a depleted collection run came back

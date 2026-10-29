@@ -326,12 +326,6 @@ for _name, _kind in VALUE_TARGETS:
 VALUE_WIDTH = _value_offset
 
 
-def per_entity_fields_of_type(*types: FieldType) -> tuple[FieldSpec, ...]:
-    """Every per-entity field of one of ``types``."""
-    wanted = set(types)
-    return tuple(spec for spec in PER_ENTITY_FIELDS if spec.type in wanted)
-
-
 def active_fields(
     present_classes: frozenset[str], *, sparse: bool,
 ) -> tuple[FieldSpec, ...]:
