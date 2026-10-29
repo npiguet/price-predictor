@@ -517,9 +517,7 @@ def _write_validation_samples(
     from effects.application.validation_samples import draw_samples, write_samples
 
     samples = draw_samples(
-        card_disjoint=store.card_disjoint_dir, game_disjoint=store.game_disjoint_dir,
-        gate_one=store.gate_one_dir, mix=config.mix(), size=config.validation_sample,
-        seed=config.seed,
+        store, mix=config.mix(), size=config.validation_sample, seed=config.seed,
         held_out_text_of=lambda record: context.held_out_text(acting_keys(record)),
     )
     sampled = write_samples(store, samples)
