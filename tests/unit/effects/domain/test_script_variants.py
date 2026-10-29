@@ -11,6 +11,7 @@ from effects.domain.script_variants import (
     PerturbationKind,
     numeric_params,
     perturb,
+    script_mana_cost,
     selector_params,
     shift,
     variant_name,
@@ -77,3 +78,14 @@ class TestSelectorPerturbation:
 def test_variant_name_derives_from_its_source():
     assert variant_name("Lightning Bolt", 0) == "Lightning Bolt Variant 0"
     assert variant_name("Lightning Bolt", 1) != variant_name("Lightning Bolt", 0)
+
+
+class TestScriptManaCost:
+    def test_forge_shards_are_brace_delimited_as_the_converted_corpus_spells_them(self):
+        assert script_mana_cost(["Name:X", "ManaCost:2 R R"]) == "{2}{R}{R}"
+
+    def test_a_lands_no_cost_keeps_the_literal_manacost_parse_special_cases(self):
+        assert script_mana_cost(["ManaCost:no cost"]) == "{no}{cost}"
+
+    def test_a_script_declaring_none_names_none(self):
+        assert script_mana_cost(["Name:X", "Types:Instant"]) is None

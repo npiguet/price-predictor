@@ -24,7 +24,6 @@ from effects.application.collect_variants import (
     RANDOM_SEED,
     CollectVariantsConfig,
     GeneratedVariant,
-    _deck_candidate,
     generate_variants,
     loadable_variants,
     perturb_script,
@@ -34,6 +33,7 @@ from effects.application.collect_variants import (
 from effects.domain.records import EffectRecord
 from effects.domain.script_variants import (
     is_multi_face,
+    script_mana_cost,
     variant_name,
 )
 from effects.domain.split import HoldoutRule
@@ -138,6 +138,16 @@ class TestVariantGeneration:
             source, tmp_path / "variants", held_out=frozenset(), limit=3,
         )
         assert len(variants) == 3
+
+    def test_a_variant_carries_the_cost_its_script_declares(self, tmp_path):
+        """Read once, as the script is written, rather than off disk per deck."""
+        source = tmp_path / "cards"
+        source.mkdir()
+        self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
+        (variant,) = generate_variants(
+            source, tmp_path / "variants", held_out=frozenset(), limit=1,
+        )
+        assert variant.mana_cost == "{R}"
 
     def test_generation_is_reproducible_under_a_seed(self, tmp_path):
         source = tmp_path / "cards"
@@ -265,6 +275,15 @@ class TestVolumeCap:
             for seed in range(1, 21)
         }
         assert len({tuple(v) for v in drawn.values()}) > 1
+
+
+def _written(name: str, source: str, path: Path, *, perturbation: str = "numeric"):
+    """A variant of the script at ``path``, its cost read as generation reads it."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return GeneratedVariant(
+        name=name, source_card=source, path=path, perturbation=perturbation,
+        mana_cost=script_mana_cost(lines),
+    )
 
 
 class TestRunClosesTheSupervisor:
@@ -481,15 +500,12 @@ class TestVariantManaCostIsParseable:
             "A:SP$ DealDamage | NumDmg$ 7 | ValidTgts$ Any\n",
             encoding="utf-8",
         )
-        variant = GeneratedVariant(
-            name="Bolt Variant 0", source_card="Bolt", path=path,
-            perturbation="numeric",
-        )
+        variant = _written("Bolt Variant 0", "Bolt", path)
 
         from effects.application.collector_common import build_coverage_decks
 
         decks = build_coverage_decks(
-            {variant.name: 1.0}, {variant.name: _deck_candidate(variant)}, 1,
+            {variant.name: 1.0}, {variant.name: variant.deck_candidate()}, 1,
             rng=random.Random(0),
         )
 
@@ -515,15 +531,12 @@ class TestVariantManaCostIsParseable:
             "Name:Plains Variant 0\nManaCost:no cost\nTypes:Basic Land\n",
             encoding="utf-8",
         )
-        variant = GeneratedVariant(
-            name="Plains Variant 0", source_card="Plains", path=path,
-            perturbation="selector",
-        )
+        variant = _written("Plains Variant 0", "Plains", path, perturbation="selector")
 
         # Zero pips either way -- the point is this must land in the same
         # all-zero-pips (colorless-fallback) case a missing ManaCost: line
         # does, not raise and not inject a spurious color.
-        lands = compute_basic_lands([_deck_candidate(variant)] * 23)
+        lands = compute_basic_lands([variant.deck_candidate()] * 23)
         assert sum(lands.values()) == 17
         assert set(lands) == {"Plains", "Island", "Swamp", "Mountain", "Forest"}
 
@@ -541,23 +554,18 @@ class TestTheVariantCandidateMatchesAConvertedCard:
             "Name:Bolt Variant 0\nManaCost:2 R R\nTypes:Instant\n",
             encoding="utf-8",
         )
-        variant = GeneratedVariant(
-            name="Bolt Variant 0", source_card="Bolt", path=path,
-            perturbation="numeric",
-        )
+        variant = _written("Bolt Variant 0", "Bolt", path)
 
-        assert _deck_candidate(variant) == DeckCandidate.from_converted_text(
+        assert variant.deck_candidate() == DeckCandidate.from_converted_text(
             "Bolt Variant 0", "name: bolt variant 0\nmana cost: {2}{R}{R}\n",
         )
 
     def test_a_script_without_a_cost_names_none(self, tmp_path):
         path = tmp_path / "x.txt"
         path.write_text("Name:X Variant 0\nTypes:Instant\n", encoding="utf-8")
-        variant = GeneratedVariant(
-            name="X Variant 0", source_card="X", path=path, perturbation="numeric",
-        )
+        variant = _written("X Variant 0", "X", path)
 
-        assert _deck_candidate(variant).mana_cost is None
+        assert variant.deck_candidate().mana_cost is None
 
 
 class TestTheRunReportsWhatItCollected:
