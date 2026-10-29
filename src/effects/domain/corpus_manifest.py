@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields
 from typing import Any
 
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.canonical_digest import canonical_digest
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
@@ -104,7 +105,7 @@ class CorpusManifest:
     seed: int = field(metadata=_reads(int))
     #: The encoding surface (``surface_of(vocab_path)``) the rarity table's
     #: text keys were built on; the other surface keys every text differently.
-    surface: str = field(metadata=_reads(str))
+    surface: Surface = field(metadata=_reads(Surface))
     vocab_path: str = field(metadata=_reads(str))
     #: The variant tree the build resolved keys against, or "" when none.
     variant_scripts: str = field(metadata=_reads(str, absent=""))

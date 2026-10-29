@@ -18,7 +18,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import (
@@ -60,7 +60,7 @@ def game_hash(game_id: str) -> int:
     return zlib.crc32(game_id.encode("utf-8"))
 
 
-def selection_half(record: EffectRecord, klass: SamplingClass) -> str:
+def selection_half(record: EffectRecord, klass: SamplingClass) -> LegalityDecision | Literal[""]:
     """``real`` / ``what-if`` on a legality record (FR-049 step 3), empty on
     every other; a gen-1 record, whose decision is unknown, is a what-if."""
     if klass != SamplingClass.PLAYABILITY_LEGALITY:

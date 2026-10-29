@@ -29,6 +29,7 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
     AbilityTokenizer,
+    Surface,
 )
 from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import baseline_masks
@@ -109,7 +110,7 @@ class LoadedModel:
     model: EffectModel
     tokenizer: AbilityTokenizer
     identity_table: IdentityTable | None
-    surface: str
+    surface: Surface
     device: torch.device
     sidecars: SidecarCache
 

@@ -59,6 +59,7 @@ from effect_knowledge_probes.probe_set import (  # noqa: E402
     probe_set_path,
 )
 from effect_knowledge_probes.scorecard import Scorecard  # noqa: E402
+from effects.domain.ability_tokenizer import Surface  # noqa: E402
 
 
 def progress(message: str) -> None:
@@ -128,7 +129,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 # ── freezing the probe set ──────────────────────────────────────────────
 
 
-def _acting_text_function(sidecars, surface: str):
+def _acting_text_function(sidecars, surface: Surface):
     from effects.domain.ability_encoder import encoding_text
 
     memo: dict = {}
@@ -262,7 +263,7 @@ def _observe_training(args, context: common.ProbeContext, outcomes: ObservedOutc
             outcomes.observe(record)
 
 
-def _label_lines(context: common.ProbeContext, line_items, surface: str,
+def _label_lines(context: common.ProbeContext, line_items, surface: Surface,
                  outcomes: ObservedOutcomes) -> list[FrozenLineItem]:
     """Every encoded line's script labels, plus what its records were seen to do."""
     from effects.infrastructure.sidecar_io import converted_text_path
@@ -319,7 +320,7 @@ def _interaction_pairs(scan: ProbeGameScan, line_items) -> list[dict]:
 
 def freeze(args, context: common.ProbeContext) -> ProbeSet:
     """Enumerate and label every probe item once for this corpus."""
-    surface = getattr(context.manifest, "surface", None) or "script"
+    surface = getattr(context.manifest, "surface", None) or Surface.SCRIPT
     acting_text = _acting_text_function(context.sidecars(), surface)
     outcomes = ObservedOutcomes(acting_text)
     scan = _scan_probe_games(args, context, acting_text, outcomes)

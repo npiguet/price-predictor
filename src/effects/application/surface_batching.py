@@ -25,6 +25,7 @@ from effects.application.text_staging import (
     pinned,
 )
 from effects.domain.ability_encoder import AbilityEncoder, EncodedLine
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks
 from effects.domain.damage_step_keywords import keyword_of_line
 from effects.domain.effect_head_input import (
@@ -337,7 +338,7 @@ class SurfaceBatcher:
         return self.resolver.sidecars
 
     @property
-    def surface(self) -> str:
+    def surface(self) -> Surface:
         return self.stager.surface
 
     def _resolve(self, key) -> tuple[str | None, object]:

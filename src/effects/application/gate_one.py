@@ -19,7 +19,7 @@ import torch
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
 from effects.domain.ability_encoder import surface_of
-from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX
+from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, HeadField
 from effects.domain.effect_losses import magnitude_target
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityFieldTargets
@@ -54,8 +54,6 @@ from effects.infrastructure.corpus_store import (
 from effects.infrastructure.model_runner import BATCH_RECORDS, Runnable
 
 logger = logging.getLogger(__name__)
-
-ZONE_OUTCOME = "zone_outcome"
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,12 +185,13 @@ class MarginAccumulator:
         self._gate_true.append(gate[real].numpy().astype(np.int8))
 
         affected = real & gate.bool()
-        if ZONE_OUTCOME in field_targets:
-            scored = affected & field_targets.present[ZONE_OUTCOME]
-            logits = field_outputs(gathered, FIELDS_BY_NAME[ZONE_OUTCOME])[scored]
+        zone = HeadField.ZONE_OUTCOME
+        if zone in field_targets:
+            scored = affected & field_targets.present[zone]
+            logits = field_outputs(gathered, FIELDS_BY_NAME[zone])[scored]
             if logits.numel():
                 self._zone_pred.append(logits.argmax(-1).numpy())
-                self._zone_true.append(field_targets.values[ZONE_OUTCOME][scored].numpy())
+                self._zone_true.append(field_targets.values[zone][scored].numpy())
         for spec in self._magnitude_specs:
             target = field_targets.values.get(spec.name)
             if target is None:

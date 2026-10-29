@@ -13,19 +13,25 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass, replace
+from enum import StrEnum
 
 from effects.domain.keyword_formatting import (
     format_reminder,
     java_format,
     strip_specifiers,
 )
-from effects.domain.provenance import RoleSpan
+from effects.domain.provenance import Role, RoleSpan
 from effects.domain.script_text import CHAIN_KEYS, SEG
 from price_predictor.domain.tokenizer import MtgTokenizer
 
-#: Defined here rather than beside the encoder, which loads torch.
-SURFACE_PROSE = "prose"
-SURFACE_SCRIPT = "script"
+
+class Surface(StrEnum):
+    """Which text of an ability line is encoded: the converted prose or the
+    Forge script. Defined here rather than beside the encoder, which loads torch."""
+
+    PROSE = "prose"
+    SCRIPT = "script"
+
 
 #: Each is one token wherever it appears, never ``[``, a word and ``]``.
 SPECIAL_TOKENS: tuple[str, ...] = ("[PAD]", "[UNK]", "[MASK]", "[CLS]", SEG)
@@ -60,8 +66,8 @@ _TOKEN_SCRIPT_VALUE_RE = re.compile(r"(?<![A-Za-z])TokenScript\$[ \t]*([^\s|]+)"
 
 #: When two role spans cover a token, the more specific one wins: a target
 #: phrase sits inside the clause it restricts.
-_ROLE_PRIORITY: tuple[str, ...] = (
-    "target-spec", "cost", "trigger-condition", "effect",
+_ROLE_PRIORITY: tuple[Role, ...] = (
+    Role.TARGET_SPEC, Role.COST, Role.TRIGGER_CONDITION, Role.EFFECT,
 )
 
 #: Keywords whose body is printed on the host card rather than in a reminder
@@ -82,11 +88,11 @@ TOKENIZER_RULES_KEY = "tokenizer_rules"
 TOKENIZER_RULES = "gen-2"
 
 
-def tokenizer_surface(vocab_surface: str, training_settings) -> str:
+def tokenizer_surface(vocab_surface: Surface, training_settings) -> Surface:
     """The surface whose rules a loaded checkpoint's tokenizer applies: the
     vocabulary's under the gen-2 rules, else the prose grammar it trained on."""
     rules = (training_settings or {}).get(TOKENIZER_RULES_KEY)
-    return vocab_surface if rules == TOKENIZER_RULES else SURFACE_PROSE
+    return vocab_surface if rules == TOKENIZER_RULES else Surface.PROSE
 
 
 def keyword_token(display_name: str) -> str:
@@ -133,7 +139,7 @@ class Token:
     token_id: int
     start: int | None = None
     end: int | None = None
-    role: str | None = None
+    role: Role | None = None
     expanded_from: str | None = None
     number: float | None = None
     #: Set on the first token of a keyword line only: the line expands whole.
@@ -154,12 +160,12 @@ class AbilityTokenizer:
         vocab: dict[str, int],
         keyword_definitions: dict | None = None,
         *,
-        surface: str = SURFACE_PROSE,
+        surface: Surface = Surface.PROSE,
     ) -> None:
         """``surface`` is fixed for the tokenizer's life, which keeps the
         per-text cache valid (FR-010). Without ``keyword_definitions`` no
         keyword expands."""
-        if surface not in (SURFACE_PROSE, SURFACE_SCRIPT):
+        if surface not in (Surface.PROSE, Surface.SCRIPT):
             raise ValueError(f"unknown surface {surface!r}")
         self._vocab = vocab
         self._reverse = {i: t for t, i in vocab.items()}
@@ -245,7 +251,7 @@ class AbilityTokenizer:
         return list(tokens)
 
     def _split_with_offsets(self, text: str) -> list[Token]:
-        if self.surface == SURFACE_SCRIPT:
+        if self.surface == Surface.SCRIPT:
             return self._split_script(text)
         return [
             self._token(match.group(0), match.start(), match.end())
@@ -344,7 +350,7 @@ class AbilityTokenizer:
         return None
 
     @staticmethod
-    def _role_at(token: Token, spans: tuple[RoleSpan, ...]) -> str | None:
+    def _role_at(token: Token, spans: tuple[RoleSpan, ...]) -> Role | None:
         covering = [
             span.role for span in spans
             if token.start is not None
@@ -500,7 +506,7 @@ class AbilityTokenizer:
         return self._as_expansion(text, role=token.role, keyword=token.text)
 
     def _as_expansion(
-        self, text: str, *, role: str | None, keyword: str,
+        self, text: str, *, role: Role | None, keyword: str,
     ) -> list[Token]:
         expanded = self._merge_multi_word(self._split_with_offsets(text))
         return [

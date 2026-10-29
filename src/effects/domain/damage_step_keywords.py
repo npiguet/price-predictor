@@ -20,6 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from effects.domain.effect_head_layout import HeadField, ZoneOutcome
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.records import RecordKind
 from effects.domain.script_text import is_bare_keyword
@@ -357,17 +358,17 @@ def _first_strike_step_effects(keyword: str) -> tuple[KeywordEffect, ...]:
     """
     return (
         KeywordEffect(
-            "damage_taken", Subject.OPPONENT, direction=1,
+            HeadField.DAMAGE_TAKEN, Subject.OPPONENT, direction=1,
             applies=_strikes_first_and(
                 keyword, lambda participant, _: _lone_opponent(participant) is not None,
             ),
         ),
         KeywordEffect(
-            "zone_outcome", Subject.OPPONENT, direction=1, category="died",
+            HeadField.ZONE_OUTCOME, Subject.OPPONENT, direction=1, category=ZoneOutcome.DIED,
             applies=_strikes_first_and(keyword, _kills_outright),
         ),
         KeywordEffect(
-            "life_delta", Subject.DEFENDING_PLAYER, direction=-1,
+            HeadField.LIFE_DELTA, Subject.DEFENDING_PLAYER, direction=-1,
             applies=_strikes_first_and(
                 keyword, lambda participant, _: _is_unblocked_attacker(participant),
             ),
@@ -401,7 +402,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         ),
         effects=(
             KeywordEffect(
-                "zone_outcome", Subject.OPPONENT, direction=1, category="died",
+                HeadField.ZONE_OUTCOME, Subject.OPPONENT, direction=1, category=ZoneOutcome.DIED,
                 applies=_an_opponent_survives_a_normal_hit,
             ),
         ),
@@ -411,7 +412,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         qualifies_when="the carrier deals combat damage to a creature or player",
         effects=(
             KeywordEffect(
-                "life_delta", Subject.CONTROLLER, direction=1,
+                HeadField.LIFE_DELTA, Subject.CONTROLLER, direction=1,
                 applies=_damages_anything,
             ),
         ),
@@ -424,7 +425,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         ),
         effects=(
             KeywordEffect(
-                "life_delta", Subject.DEFENDING_PLAYER, direction=-1,
+                HeadField.LIFE_DELTA, Subject.DEFENDING_PLAYER, direction=-1,
                 applies=_runs_over_its_blockers,
             ),
         ),
@@ -438,7 +439,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         ),
         effects=(
             KeywordEffect(
-                "zone_outcome", Subject.CARRIER, direction=-1, category="died",
+                HeadField.ZONE_OUTCOME, Subject.CARRIER, direction=-1, category=ZoneOutcome.DIED,
                 applies=_would_be_destroyed,
             ),
         ),
@@ -452,7 +453,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
                 applies=_damages_a_creature,
             ),
             KeywordEffect(
-                "damage_taken", Subject.OPPONENT, direction=-1,
+                HeadField.DAMAGE_TAKEN, Subject.OPPONENT, direction=-1,
                 applies=_damages_a_creature,
             ),
         ),
@@ -466,16 +467,16 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
                 applies=_damages_a_creature,
             ),
             KeywordEffect(
-                "damage_taken", Subject.OPPONENT, direction=-1,
+                HeadField.DAMAGE_TAKEN, Subject.OPPONENT, direction=-1,
                 applies=_damages_a_creature,
             ),
             KeywordEffect(
-                "poison_delta", Subject.DEFENDING_PLAYER, direction=1,
+                HeadField.POISON_DELTA, Subject.DEFENDING_PLAYER, direction=1,
                 applies=_damages_the_defending_player,
             ),
             # Poison instead of life loss: life moves up with infect.
             KeywordEffect(
-                "life_delta", Subject.DEFENDING_PLAYER, direction=1,
+                HeadField.LIFE_DELTA, Subject.DEFENDING_PLAYER, direction=1,
                 applies=_damages_the_defending_player,
             ),
         ),

@@ -253,6 +253,7 @@ def set_damage_amount(text: str, amount: int) -> str:
 
 
 def _damaged_creature(record):
+    from effects.domain.effect_head_layout import HeadField
     from effects.domain.effect_targets import derive_targets
 
     targets = derive_targets(record)
@@ -260,7 +261,7 @@ def _damaged_creature(record):
         entry = targets.get(entity.id)
         if (entry is not None and entity.zone == "battlefield"
                 and "creature" in entity.types
-                and (entry.fields.get("damage_taken") or 0) > 0):
+                and (entry.fields.get(HeadField.DAMAGE_TAKEN) or 0) > 0):
             return entity.id
     return None
 
@@ -329,11 +330,12 @@ def select_sweep_records(records, sidecars, *, per_sweep: int = RECORDS_PER_SWEE
 
 def death(outputs, surface, row, entity_id) -> float:
     """One card's predicted death, gated (:class:`HeadReading`); NaN off the board."""
+    from effects.domain.effect_head_layout import ZoneOutcome
     from effects.domain.head_decoding import HeadReading
 
     for index, slot in enumerate(surface.slots):
         if slot.entity_id == entity_id and slot.kind.name == "CARD":
-            return float(HeadReading(outputs[row, index]).p_zone("died"))
+            return float(HeadReading(outputs[row, index]).p_zone(ZoneOutcome.DIED))
     return float("nan")
 
 

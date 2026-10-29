@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from effects.application.corpus_survey import RefusalTally, Survey
 from effects.application.corpus_write import WriteResult
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_plan import BuildCorpusError, Keys
 from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
@@ -199,7 +200,7 @@ def _unique_texts(keys: Iterable[Keys], key_text: Mapping[Keys, str]) -> int:
 
 
 def build_manifest(
-    config: BuildCorpusConfig, *, surface: str, held_out: HeldOutCards, survey: Survey,
+    config: BuildCorpusConfig, *, surface: Surface, held_out: HeldOutCards, survey: Survey,
     decisions: Decisions, written: WriteResult,
 ) -> CorpusManifest:
     """Everything the build decided and wrote, as the manifest records it."""

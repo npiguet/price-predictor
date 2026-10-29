@@ -22,7 +22,7 @@ from effects.application.build_vocab import (
     EmptyCardsFolderError,
     run,
 )
-from effects.domain.ability_tokenizer import SURFACE_SCRIPT
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
@@ -158,7 +158,7 @@ class TestTheKeywordScanFollowsTheSurface:
         """No expansion substitutes the generated script, on either surface
         (FR-020), so scanning it would only seed tokens nothing reads."""
         config = _config(
-            scripted, tmp_path, surface=SURFACE_SCRIPT,
+            scripted, tmp_path, surface=Surface.SCRIPT,
             vocab_path=tmp_path / "vocab-script.txt", target_size=5000,
         )
         run(config)
@@ -266,13 +266,13 @@ class TestSurfaces:
         assert DEFAULT_VOCAB_PATH != DEFAULT_SCRIPT_VOCAB_PATH
         assert BuildVocabConfig().resolved_vocab_path() == DEFAULT_VOCAB_PATH
         assert BuildVocabConfig(
-            surface=SURFACE_SCRIPT,
+            surface=Surface.SCRIPT,
         ).resolved_vocab_path() == DEFAULT_SCRIPT_VOCAB_PATH
 
     def test_an_explicit_path_overrides_the_surface_default(self, tmp_path):
         chosen = tmp_path / "elsewhere.txt"
         assert BuildVocabConfig(
-            surface=SURFACE_SCRIPT, vocab_path=chosen,
+            surface=Surface.SCRIPT, vocab_path=chosen,
         ).resolved_vocab_path() == chosen
 
     def test_an_unknown_surface_is_rejected(self, corpus, tmp_path):
@@ -304,7 +304,7 @@ class TestSurfaces:
                 sidecar_path_for(cards / f"{stem}.txt"),
             )
         config = _config(
-            corpus, tmp_path, surface=SURFACE_SCRIPT,
+            corpus, tmp_path, surface=Surface.SCRIPT,
             vocab_path=tmp_path / "vocab-script.txt",
         )
         run(config)
@@ -321,7 +321,7 @@ class TestSurfaces:
         run(_config(corpus, tmp_path, vocab_path=prose_path))
         before = prose_path.read_bytes()
         run(_config(
-            corpus, tmp_path, surface=SURFACE_SCRIPT,
+            corpus, tmp_path, surface=Surface.SCRIPT,
             vocab_path=tmp_path / "vocab-script.txt",
         ))
         assert prose_path.read_bytes() == before
@@ -377,7 +377,7 @@ class TestScriptSurfaceSeeding:
 
     def _script(self, corpus, tmp_path, **overrides) -> BuildVocabConfig:
         return _config(
-            corpus, tmp_path, surface=SURFACE_SCRIPT,
+            corpus, tmp_path, surface=Surface.SCRIPT,
             vocab_path=tmp_path / "vocab-script.txt", **overrides,
         )
 
@@ -442,7 +442,7 @@ class TestScriptSurfaceReport:
     def test_the_report_lines_are_printed(self, corpus, tmp_path, caplog):
         _scripted_corpus(corpus, [_CHAIN, "Description$ Some free prose. | DB$ Draw"])
         config = _config(
-            corpus, tmp_path, surface=SURFACE_SCRIPT,
+            corpus, tmp_path, surface=Surface.SCRIPT,
             vocab_path=tmp_path / "vocab-script.txt",
         )
         with caplog.at_level("INFO"):

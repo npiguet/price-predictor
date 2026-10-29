@@ -127,13 +127,26 @@ class SubAbilityLink:
     label: str
 
 
+class Role(StrEnum):
+    """What a span of converted prose does, as ``convert`` tags it.
+
+    Declaration order is the encoder's role-embedding row order, after row 0
+    for no role, so a role is appended and never reordered.
+    """
+
+    COST = "cost"
+    EFFECT = "effect"
+    TRIGGER_CONDITION = "trigger-condition"
+    TARGET_SPEC = "target-spec"
+
+
 @dataclass(frozen=True, slots=True)
 class RoleSpan:
     """A character range over the converted prose, tagged with its role."""
 
     start: int
     end: int
-    role: str
+    role: Role
 
 
 @dataclass(frozen=True, slots=True)

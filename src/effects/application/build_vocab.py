@@ -19,9 +19,8 @@ from pathlib import Path
 
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import (
-    SURFACE_PROSE,
-    SURFACE_SCRIPT,
     AbilityTokenizer,
+    Surface,
     Token,
     camel_parts,
 )
@@ -62,7 +61,7 @@ _DESCRIPTION_PARAM_RE = re.compile(r"\w*Description\$[^|\[]*")
 
 @dataclass
 class BuildVocabConfig:
-    surface: str = SURFACE_PROSE
+    surface: Surface = Surface.PROSE
     cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
     vocab_path: Path | None = None
     keyword_definitions: Path = field(
@@ -77,7 +76,7 @@ class BuildVocabConfig:
             return Path(self.vocab_path)
         return (
             DEFAULT_SCRIPT_VOCAB_PATH
-            if self.surface == SURFACE_SCRIPT
+            if self.surface == Surface.SCRIPT
             else DEFAULT_VOCAB_PATH
         )
 
@@ -140,7 +139,7 @@ def script_lines(folders: list[Path]) -> list[str]:
     return lines
 
 
-def staging_tokenizer(surface: str, definitions: dict | None = None) -> AbilityTokenizer:
+def staging_tokenizer(surface: Surface, definitions: dict | None = None) -> AbilityTokenizer:
     """A tokenizer applying the surface's rules before the vocabulary exists,
     knowing the multi-word keywords the final one will merge."""
     vocab = {token: index for index, token in enumerate(SEEDED_SPECIALS)}
@@ -170,7 +169,7 @@ def template_texts(
 
 
 def seed_tokens(
-    surface: str, definitions: dict, staged: list[str],
+    surface: Surface, definitions: dict, staged: list[str],
 ) -> SeededTokens:
     """The tokens seeded ahead of the corpus, so no truncation can drop them:
     template words (FR-019), and on the script surface the chain labels and
@@ -179,7 +178,7 @@ def seed_tokens(
     seeded = SeededTokens()
     for text in template_texts(stager, definitions, staged):
         seeded.template_words.extend(t.text for t in stager.tokenize(text))
-    if surface == SURFACE_SCRIPT:
+    if surface == Surface.SCRIPT:
         longest = max(
             (int(n) for line in staged for n in _LABEL_RE.findall(line)), default=0,
         )
@@ -196,14 +195,14 @@ def seed_tokens(
 
 def run(config: BuildVocabConfig) -> int:
     """Build and write the vocabulary. Returns the resulting size."""
-    if config.surface not in (SURFACE_PROSE, SURFACE_SCRIPT):
+    if config.surface not in (Surface.PROSE, Surface.SCRIPT):
         raise ValueError(
-            f"--surface must be {SURFACE_PROSE!r} or {SURFACE_SCRIPT!r}, "
+            f"--surface must be {Surface.PROSE.value!r} or {Surface.SCRIPT.value!r}, "
             f"got {config.surface!r}"
         )
     folders = _scan_sources(config)
     definitions = _load_definitions(Path(config.keyword_definitions))
-    staged = script_lines(folders) if config.surface == SURFACE_SCRIPT else []
+    staged = script_lines(folders) if config.surface == Surface.SCRIPT else []
     stager = staging_tokenizer(config.surface, definitions)
     staged_tokens = [stager.tokenize(line) for line in staged]
     seeded = seed_tokens(config.surface, definitions, staged)
@@ -302,7 +301,7 @@ def _check_expansions(tokenizer: AbilityTokenizer, definitions: dict) -> None:
 
 
 def _report(
-    surface: str,
+    surface: Surface,
     seeded: SeededTokens,
     staged: list[str],
     staged_tokens: list[list[Token]],
@@ -314,7 +313,7 @@ def _report(
         len(SEEDED_SPECIALS), len(seeded.labels), len(seeded.template_words),
         len(seeded.key_parts),
     )
-    if surface != SURFACE_SCRIPT or not staged:
+    if surface != Surface.SCRIPT or not staged:
         return
     from effects.domain.ability_encoder import MAX_ABILITY_TOKENS
 

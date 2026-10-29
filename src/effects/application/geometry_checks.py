@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from effects.domain.ability_cache_layout import pooled_card_vector
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
     Bound,
@@ -131,7 +132,7 @@ def load_cache(
     abilities_root: Path,
     sidecar_roots: Path | Iterable[Path],
     *,
-    surface: str,
+    surface: Surface,
     variant: str = Baseline.FULL,
 ) -> CachedVectors:
     """Load a variant's cache, keyed by the ability text each row encodes.

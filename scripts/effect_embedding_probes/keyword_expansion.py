@@ -76,6 +76,7 @@ from effects.domain.ability_encoder import (  # noqa: E402
 from effects.domain.ability_tokenizer import (  # noqa: E402
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
+    Surface,
     keyword_token,
     tokenizer_surface,
 )
@@ -319,7 +320,7 @@ def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one l
         vocab, definitions,
         surface=tokenizer_surface(paths.surface, settings),
     )
-    script_tok = AbilityTokenizer(vocab, definitions, surface="script")
+    script_tok = AbilityTokenizer(vocab, definitions, surface=Surface.SCRIPT)
     UNK_ID = tok.unk_id
     summary: list[str] = [
         f"checkpoint {paths.checkpoint}",

@@ -176,9 +176,9 @@ def qualifying_records(directories, count: int, shards: int, keywords_of):
 def _may_block(outputs, surface, row, entity_id) -> float:
     import torch
 
-    from effects.domain.effect_head_layout import FIELD_SLICES
+    from effects.domain.effect_head_layout import FIELD_SLICES, HeadField
 
-    start, _ = FIELD_SLICES["blocker_legal"]
+    start, _ = FIELD_SLICES[HeadField.BLOCKER_LEGAL]
     for index, slot in enumerate(surface.slots):
         if slot.entity_id == entity_id and slot.kind.name == "CARD":
             return float(torch.sigmoid(outputs[row, index, start]))

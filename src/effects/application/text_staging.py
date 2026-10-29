@@ -21,7 +21,7 @@ from effects.domain.ability_encoder import (
     encoding_role_spans,
     prepare_line,
 )
-from effects.domain.ability_tokenizer import AbilityTokenizer, withheld_keyword_tokens
+from effects.domain.ability_tokenizer import AbilityTokenizer, Surface, withheld_keyword_tokens
 from effects.domain.baselines import BaselineMasks
 
 #: Texts per length-sorted encoder pass. Padded to the batch's longest instead,
@@ -117,7 +117,7 @@ class TextStager:
     """Ability texts to encoder inputs, the one way every caller agrees on."""
 
     tokenizer: AbilityTokenizer
-    surface: str
+    surface: Surface
     withhold_keyword: str | None = None
     keyword_expand_p: float = 0.0
     truncations: TruncationLog | None = None

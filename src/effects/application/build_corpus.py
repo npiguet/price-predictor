@@ -30,6 +30,7 @@ from effects.application.corpus_survey import (
 )
 from effects.application.corpus_write import WriteConfig, WritePlan, WriteResult, run_write_pass
 from effects.domain import default_paths
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.corpus_plan import (
     BuildCorpusError,
     GameRouting,
@@ -222,7 +223,7 @@ class Decisions:
     mode_counts: dict[str, int]
 
 
-def _text_of_keys(keys: Keys, sidecars: SidecarCache, surface: str) -> str | None:
+def _text_of_keys(keys: Keys, sidecars: SidecarCache, surface: Surface) -> str | None:
     """The text a key tuple folds to, through the trainer's own definition."""
     from effects.application.ability_text import text_for_key
 
@@ -262,7 +263,7 @@ def decide(
     survey: Survey,
     *,
     sidecars: SidecarCache,
-    surface: str,
+    surface: Surface,
     config: BuildCorpusConfig,
 ) -> Decisions:
     """Fold keys to texts, split the games, and plan every record's copies.
@@ -474,7 +475,7 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
 
 
 def _decide_or_refuse(
-    config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: str,
+    config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: Surface,
     held_out: HeldOutCards,
 ) -> Decisions:
     """:func:`decide`, refusing a corpus the quality rules reject or a dataset

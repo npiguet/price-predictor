@@ -49,6 +49,7 @@ from effects.domain.records import (
     ResolutionPayload,
     RewritePayload,
     TriggerPayload,
+    UnresolvedReason,
     key_sites,
 )
 from effects.infrastructure.sidecar_io import UnconfiguredTree
@@ -632,7 +633,7 @@ class _ActingLines:
 
     def __init__(self) -> None:
         self.acting: dict[str, _ActingCounts] = defaultdict(_ActingCounts)
-        self.unresolved: Counter[str] = Counter()
+        self.unresolved: Counter[UnresolvedReason] = Counter()
         #: Records whose ``ability`` is empty and which say nothing about why.
         self.silent_empty = 0
         self.silent_empty_examples: list[str] = []

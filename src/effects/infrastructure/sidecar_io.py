@@ -16,6 +16,7 @@ from effects.domain.provenance import (
     KeyResolution,
     ProvenanceKey,
     ProvenanceSidecar,
+    Role,
     RoleSpan,
     SidecarLine,
     SourceTree,
@@ -146,7 +147,7 @@ def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
                 script_text=line.get("script_text"),
                 role_spans=tuple(
                     RoleSpan(
-                        start=span["start"], end=span["end"], role=span["role"],
+                        start=span["start"], end=span["end"], role=Role(span["role"]),
                     )
                     for span in line.get("role_spans", ())
                 ),

@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from effects.domain.ability_encoder import encoding_text
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.records import EffectRecord, acting_keys
 from effects.infrastructure.sidecar_io import (
     SIDECAR_SUFFIX,
@@ -20,7 +21,7 @@ from effects.infrastructure.sidecar_io import (
 )
 
 
-def resolve_key(key, sidecars, surface: str) -> tuple[str | None, object]:
+def resolve_key(key, sidecars, surface: Surface) -> tuple[str | None, object]:
     """``(text, line)`` for one provenance key on ``surface``; ``(None, None)``
     where the key names no line.
 
@@ -41,12 +42,12 @@ def resolve_key(key, sidecars, surface: str) -> tuple[str | None, object]:
     )
 
 
-def text_for_key(key, sidecars, surface: str) -> str | None:
+def text_for_key(key, sidecars, surface: Surface) -> str | None:
     """One provenance key's text on ``surface``, or None where it has none."""
     return resolve_key(key, sidecars, surface)[0]
 
 
-def known_texts(roots: Mapping[str, Path], surface: str) -> list[str]:
+def known_texts(roots: Mapping[str, Path], surface: Surface) -> list[str]:
     """Every distinct text a line under ``roots`` (tree name -> folder) encodes
     as on ``surface``, sorted, spelled as a training batch looks it up."""
     sidecars = SidecarCache(roots)
@@ -70,7 +71,7 @@ class KeyResolver:
     fail-loudly case would go quiet.
     """
 
-    def __init__(self, sidecars, surface: str) -> None:
+    def __init__(self, sidecars, surface: Surface) -> None:
         self.sidecars = sidecars
         self.surface = surface
         self._resolved: dict[object, tuple[str | None, object]] = {}

@@ -185,9 +185,9 @@ def report_counts(chosen, readings) -> None:
 
 
 def report_zones(chosen, readings) -> None:
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 
-    stayed = ZONE_OUTCOMES.index("stayed")
+    stayed = ZONE_OUTCOMES.index(ZoneOutcome.STAYED)
     rows = defaultdict(lambda: {"right": [], "top": [], "instead": defaultdict(int)})
     moved = defaultdict(lambda: ([], []))
     for (record, _, _, targets), reading in zip(chosen, readings):
@@ -196,7 +196,7 @@ def report_zones(chosen, readings) -> None:
                 continue
             probs = reading["cards"][entity.id]
             entry = targets.get(entity.id)
-            outcome = entry.fields.get("zone_outcome") if entry is not None else None
+            outcome = entry.fields.get(HeadField.ZONE_OUTCOME) if entry is not None else None
             went = outcome is not None and outcome != stayed
             moved[entity.zone][0].append(went)
             moved[entity.zone][1].append(float(probs.sum() - probs[stayed]))

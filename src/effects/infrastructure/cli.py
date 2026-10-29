@@ -40,6 +40,7 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
 )
 from effects.application.validate_corpus import Thresholds
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import DEFAULT_RANDOM_SEAT_PROBABILITY, CollectionCaps
 from effects.domain.default_paths import (
@@ -308,7 +309,7 @@ def _build_vocab_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_build_vocab)
     parser.add_argument(
-        "--surface", choices=("prose", "script"), default="prose",
+        "--surface", type=Surface, choices=list(Surface), default=Surface.PROSE,
         help=(
             "prose reads the converted text; script adds the sidecars' script "
             "lines and switches the --vocab-path default (default: %(default)s)"

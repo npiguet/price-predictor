@@ -501,9 +501,9 @@ class EffectRecord:
     #: The acting line, several keys where the line merged several traits; on a
     #: modal resolution, the chosen ``option`` line's key (FR-017).
     ability: tuple[ProvenanceKey, ...] | None = None
-    #: An :class:`UnresolvedReason`, set only where a line was looked for and
-    #: none found.
-    ability_unresolved: str | None = None
+    #: Set only where a line was looked for and none found; a reason given as
+    #: its string is read as the member.
+    ability_unresolved: UnresolvedReason | None = None
     #: Envelope keys a newer writer added that this code does not model, kept
     #: verbatim so a read-and-rewrite round trip is lossless (compatibility
     #: rule 1).
@@ -558,6 +558,9 @@ class EffectRecord:
                 f"ability_unresolved={self.ability_unresolved!r} is outside the "
                 f"closed vocabulary {sorted(reason.value for reason in UnresolvedReason)}"
             )
+        object.__setattr__(
+            self, "ability_unresolved", UnresolvedReason(self.ability_unresolved),
+        )
 
     def _check_flags(self) -> None:
         if self.interventional:

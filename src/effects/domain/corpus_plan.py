@@ -15,7 +15,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import partial
-from typing import Any
+from typing import Any, Literal
 
 from effects.domain.budget_allocation import allocate
 from effects.domain.corpus_curation import (
@@ -29,6 +29,7 @@ from effects.domain.corpus_curation import (
     text_capacity,
 )
 from effects.domain.provenance import ProvenanceKey
+from effects.domain.records import LegalityDecision
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import Stratum
 
@@ -58,7 +59,7 @@ class Cell:
     """
 
     klass: SamplingClass
-    half: str = ""
+    half: LegalityDecision | Literal[""] = ""
     family: str = ""
     signature: str = ""
     modes: frozenset[str] = frozenset()

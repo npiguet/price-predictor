@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.domain import default_paths
+from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
 from effects.domain.effect_head_layout import active_fields
 from effects.domain.records import (
@@ -294,7 +295,7 @@ class SurfaceMismatchError(ValueError):
 
 
 def require_matching_surface(
-    *, manifest_surface: str, vocab_path: Path, corpus: str,
+    *, manifest_surface: Surface, vocab_path: Path, corpus: str,
 ) -> None:
     """Refuse a vocabulary whose encoding surface is not the dataset's (FR-141).
 

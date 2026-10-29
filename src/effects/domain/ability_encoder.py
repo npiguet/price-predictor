@@ -17,15 +17,15 @@ import torch
 import torch.nn as nn
 
 from effects.domain.ability_tokenizer import (
-    SURFACE_PROSE,
-    SURFACE_SCRIPT,
     AbilityTokenizer,
+    Surface,
     Token,
 )
+from effects.domain.provenance import Role
 
 #: Fixed order, so an embedding row means the same role across checkpoints.
 #: Row 0 is "no role", a token outside every span.
-ROLE_ORDER: tuple[str, ...] = ("cost", "effect", "trigger-condition", "target-spec")
+ROLE_ORDER: tuple[Role, ...] = tuple(Role)
 NO_ROLE_INDEX = 0
 
 # Defaults of `--encoder-d-model` and `--encoder-layers` (FR-061), and the size
@@ -149,39 +149,39 @@ class AbilityEncoder(nn.Module):
 # ── surfaces (FR-062, stage four) ───────────────────────────────────────
 
 
-def surface_of(vocab_path) -> str:
+def surface_of(vocab_path) -> Surface:
     """Which surface a vocabulary path implies: never a flag of its own, which
     could disagree with the vocabulary and still look like a working run."""
     from pathlib import Path
 
     return (
-        SURFACE_SCRIPT
+        Surface.SCRIPT
         if "vocab-script" in Path(vocab_path).name
-        else SURFACE_PROSE
+        else Surface.PROSE
     )
 
 
-def encoding_text(line, prose: str | None, surface: str) -> str | None:
+def encoding_text(line, prose: str | None, surface: Surface) -> str | None:
     """The text a line is encoded from on ``surface``, falling back to the
     other surface's where its own is missing (a keyword-derived line has no
     script, a variant script no prose)."""
     script = getattr(line, "script_text", None)
-    if surface == SURFACE_SCRIPT:
+    if surface == Surface.SCRIPT:
         return script or prose
     return prose or script
 
 
-def encoding_role_spans(line, text: str | None, surface: str) -> tuple:
+def encoding_role_spans(line, text: str | None, surface: Surface) -> tuple:
     """The role spans a line's encoding text is tokenized with (FR-069): only
     on a prose text, since the spans index the converted prose."""
-    if surface != SURFACE_PROSE or line is None or text is None:
+    if surface != Surface.PROSE or line is None or text is None:
         return ()
     if text == getattr(line, "script_text", None):
         return ()
     return tuple(getattr(line, "role_spans", ()) or ())
 
 
-def role_index(role: str | None) -> int:
+def role_index(role: Role | None) -> int:
     if role is None:
         return NO_ROLE_INDEX
     return ROLE_ORDER.index(role) + 1

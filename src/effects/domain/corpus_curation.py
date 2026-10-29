@@ -15,7 +15,7 @@ import zlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from effects.domain.effect_head_layout import ZONE_OUTCOMES
+from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
 from effects.domain.effect_targets import derive_targets
 from effects.domain.sampling import SamplingClass
 
@@ -160,8 +160,9 @@ def outcome_signature(record) -> frozenset[tuple[str, bool]]:
     """
     pairs = set()
     for entry in derive_targets(record).values():
-        zone = entry.fields.get("zone_outcome")
-        pairs.add((ZONE_OUTCOMES[zone] if zone is not None else "stayed", entry.affected))
+        zone = entry.fields.get(HeadField.ZONE_OUTCOME)
+        outcome = ZONE_OUTCOMES[zone] if zone is not None else ZoneOutcome.STAYED
+        pairs.add((outcome, entry.affected))
     return frozenset(pairs)
 
 

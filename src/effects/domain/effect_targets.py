@@ -25,6 +25,8 @@ from effects.domain.effect_head_layout import (
     CreatedSlot,
     FieldScope,
     FieldSpec,
+    HeadField,
+    ZoneOutcome,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.keyword_names import overlay_keyword
@@ -46,23 +48,23 @@ from effects.domain.state_snapshot import COLORS
 
 #: The zone outcome each moving event implies; the record keeps destroy and
 #: sacrifice apart, the target collapses them.
-_ZONE_BY_EVENT: dict[EventType, str] = {
-    EventType.DESTROYED: "died",
-    EventType.SACRIFICED: "died",
-    EventType.PHASED: "phased_out",
-    EventType.FACE_CHANGE: "face_changed",
-    EventType.SPELL_COUNTERED: "countered",
+_ZONE_BY_EVENT: dict[EventType, ZoneOutcome] = {
+    EventType.DESTROYED: ZoneOutcome.DIED,
+    EventType.SACRIFICED: ZoneOutcome.DIED,
+    EventType.PHASED: ZoneOutcome.PHASED_OUT,
+    EventType.FACE_CHANGE: ZoneOutcome.FACE_CHANGED,
+    EventType.SPELL_COUNTERED: ZoneOutcome.COUNTERED,
 }
 
-_ZONE_BY_DESTINATION: dict[str, str] = {
-    "graveyard": "died",
-    "exile": "exiled",
-    "hand": "to_hand",
-    "library": "library_top",
-    "battlefield": "blinked",
+_ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
+    "graveyard": ZoneOutcome.DIED,
+    "exile": ZoneOutcome.EXILED,
+    "hand": ZoneOutcome.TO_HAND,
+    "library": ZoneOutcome.LIBRARY_TOP,
+    "battlefield": ZoneOutcome.BLINKED,
 }
 #: The outcome of a ``zone_change`` to a destination the table does not name.
-_STAYED = "stayed"
+_STAYED = ZoneOutcome.STAYED
 
 _LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
     EventType.CARD_LOOKED_AT: "scry",
@@ -72,21 +74,21 @@ _LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
 
 #: ``type -> (field, parameter, default when absent, sign)``.
 _ADDITIVE: dict[EventType, tuple[str, str, float, float]] = {
-    EventType.DAMAGE_DEALT: ("damage_taken", "amount", 0, 1.0),
-    EventType.DAMAGE_HEALED: ("damage_taken", "amount", 0, -1.0),
-    EventType.LIFE_CHANGE: ("life_delta", "delta", 0, 1.0),
-    EventType.POISON_CHANGE: ("poison_delta", "delta", 0, 1.0),
-    EventType.CARD_DRAWN: ("cards_drawn", "count", 1, 1.0),
-    EventType.CARD_DISCARDED: ("cards_discarded", "count", 1, 1.0),
-    EventType.CARD_MILLED: ("cards_milled", "count", 1, 1.0),
+    EventType.DAMAGE_DEALT: (HeadField.DAMAGE_TAKEN, "amount", 0, 1.0),
+    EventType.DAMAGE_HEALED: (HeadField.DAMAGE_TAKEN, "amount", 0, -1.0),
+    EventType.LIFE_CHANGE: (HeadField.LIFE_DELTA, "delta", 0, 1.0),
+    EventType.POISON_CHANGE: (HeadField.POISON_DELTA, "delta", 0, 1.0),
+    EventType.CARD_DRAWN: (HeadField.CARDS_DRAWN, "count", 1, 1.0),
+    EventType.CARD_DISCARDED: (HeadField.CARDS_DISCARDED, "count", 1, 1.0),
+    EventType.CARD_MILLED: (HeadField.CARDS_MILLED, "count", 1, 1.0),
 }
 
 _SETTERS: dict[EventType, tuple[str, int]] = {
-    EventType.TAPPED: ("tap_state", 1),
-    EventType.UNTAPPED: ("tap_state", 0),
-    EventType.CONTROL_CHANGE: ("control_change", 1),
-    EventType.ATTACHED: ("attached_to_change", 1),
-    EventType.UNATTACHED: ("attached_to_change", 1),
+    EventType.TAPPED: (HeadField.TAP_STATE, 1),
+    EventType.UNTAPPED: (HeadField.TAP_STATE, 0),
+    EventType.CONTROL_CHANGE: (HeadField.CONTROL_CHANGE, 1),
+    EventType.ATTACHED: (HeadField.ATTACHED_TO_CHANGE, 1),
+    EventType.UNATTACHED: (HeadField.ATTACHED_TO_CHANGE, 1),
 }
 
 _OVERLAY_INDEX: dict[str, int] = {
@@ -185,11 +187,11 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
         entry.set(*_SETTERS[event.type])
         return
     if event.type in _ZONE_BY_EVENT:
-        entry.set("zone_outcome", ZONE_OUTCOMES.index(_ZONE_BY_EVENT[event.type]))
+        entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(_ZONE_BY_EVENT[event.type]))
         return
     if event.type in _LIBRARY_EVENT_BY_TYPE:
         entry.flag(
-            "library_events",
+            HeadField.LIBRARY_EVENTS,
             LIBRARY_EVENTS.index(_LIBRARY_EVENT_BY_TYPE[event.type]),
             len(LIBRARY_EVENTS),
         )
@@ -198,7 +200,7 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
         case EventType.ZONE_CHANGE:
             destination = str(params.get("to_zone", "")).lower()
             entry.set(
-                "zone_outcome",
+                HeadField.ZONE_OUTCOME,
                 ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)),
             )
         case EventType.COUNTER_CHANGE:
@@ -206,23 +208,23 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
             name = (
                 f"counters_delta_{counter.lower()}"
                 if counter in COUNTER_TYPES
-                else "counters_delta_other"
+                else HeadField.COUNTERS_DELTA_OTHER
             )
             entry.add(name, float(params.get("delta", 0)))
         case EventType.PT_CHANGE:
-            entry.add("power_delta", float(params.get("power_delta", 0)))
-            entry.add("toughness_delta", float(params.get("toughness_delta", 0)))
-            _apply_duration(entry, "pt_duration", event.duration)
+            entry.add(HeadField.POWER_DELTA, float(params.get("power_delta", 0)))
+            entry.add(HeadField.TOUGHNESS_DELTA, float(params.get("toughness_delta", 0)))
+            _apply_duration(entry, HeadField.PT_DURATION, event.duration)
         case EventType.KEYWORD_CHANGE:
             _apply_keywords(entry, params)
         case EventType.TYPE_CHANGE:
-            _apply_multi(entry, "types_gained", params.get("types_added"), _TYPE_SLOTS)
-            _apply_multi(entry, "types_lost", params.get("types_removed"), _TYPE_SLOTS)
-            _apply_duration(entry, "type_color_duration", event.duration)
+            _apply_multi(entry, HeadField.TYPES_GAINED, params.get("types_added"), _TYPE_SLOTS)
+            _apply_multi(entry, HeadField.TYPES_LOST, params.get("types_removed"), _TYPE_SLOTS)
+            _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
         case EventType.COLOR_CHANGE:
-            _apply_multi(entry, "colors_gained", params.get("colors"), _COLOR_SLOTS)
-            _apply_multi(entry, "colors_lost", params.get("colors_removed"), _COLOR_SLOTS)
-            _apply_duration(entry, "type_color_duration", event.duration)
+            _apply_multi(entry, HeadField.COLORS_GAINED, params.get("colors"), _COLOR_SLOTS)
+            _apply_multi(entry, HeadField.COLORS_LOST, params.get("colors_removed"), _COLOR_SLOTS)
+            _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
         case EventType.MANA_PRODUCED:
             _apply_mana(entry, params.get("mana_by_color"), sign=1)
         case EventType.MANA_LOST:
@@ -244,7 +246,7 @@ def _apply_multi(entry: EntityTargets, name: str, values, slots: dict[str, int])
 
 
 def _apply_keywords(entry: EntityTargets, params: dict) -> None:
-    name = "keywords_lost" if params.get("removed") else "keywords_gained"
+    name = HeadField.KEYWORDS_LOST if params.get("removed") else HeadField.KEYWORDS_GAINED
     for keyword in params.get("keywords") or ():
         _flag_keyword(entry, name, str(keyword))
 
@@ -274,19 +276,19 @@ def _apply_playability(record: EffectRecord, slot) -> None:
     if isinstance(payload, PlayabilityDecisionPayload):
         for candidate in payload.candidates:
             for target in candidate.legal_targets:
-                mark(target, "target_legal", 1)
+                mark(target, HeadField.TARGET_LEGAL, 1)
     elif isinstance(payload, PlayabilityAttackersPayload):
         for entity in payload.legal_attackers:
-            mark(entity, "attacker_legal", 1)
+            mark(entity, HeadField.ATTACKER_LEGAL, 1)
         for forbidden in payload.forbidden:
-            mark(forbidden.entity, "attacker_legal", 0)
+            mark(forbidden.entity, HeadField.ATTACKER_LEGAL, 0)
     elif isinstance(payload, PlayabilityBlockersPayload):
         for entity in payload.legal_blockers:
-            mark(entity, "blocker_legal", 1)
+            mark(entity, HeadField.BLOCKER_LEGAL, 1)
         for forbidden in payload.forbidden:
-            mark(forbidden.entity, "blocker_legal", 0)
+            mark(forbidden.entity, HeadField.BLOCKER_LEGAL, 0)
         # min_blockers is read at the anchored attacker, not at the blockers.
-        mark(payload.anchor_attacker, "min_blockers", payload.min_blockers)
+        mark(payload.anchor_attacker, HeadField.MIN_BLOCKERS, payload.min_blockers)
 
 
 def _apply_continuous(record: EffectRecord, slot) -> None:
@@ -298,24 +300,24 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
         entry = slot(contribution.entity)
         entry.affected = True
         if contribution.pt_boost != (0, 0):
-            entry.add("power_delta", float(contribution.pt_boost[0]))
-            entry.add("toughness_delta", float(contribution.pt_boost[1]))
+            entry.add(HeadField.POWER_DELTA, float(contribution.pt_boost[0]))
+            entry.add(HeadField.TOUGHNESS_DELTA, float(contribution.pt_boost[1]))
         for keyword in contribution.keywords:
             # The type and colour channels' "-" convention.
             lost = keyword.startswith("-")
             _flag_keyword(
-                entry, "keywords_lost" if lost else "keywords_gained",
+                entry, HeadField.KEYWORDS_LOST if lost else HeadField.KEYWORDS_GAINED,
                 keyword.lstrip("-"),
             )
-        for channel, slots, name in (
-            (contribution.types, _TYPE_SLOTS, "types"),
-            (contribution.colors, _COLOR_SLOTS, "colors"),
+        for channel, slots, gained_field, lost_field in (
+            (contribution.types, _TYPE_SLOTS, HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
+            (contribution.colors, _COLOR_SLOTS, HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
         ):
             gained, lost = _split_contribution(channel)
-            _apply_multi(entry, f"{name}_gained", gained, slots)
-            _apply_multi(entry, f"{name}_lost", lost, slots)
-            if "=" in channel and f"{name}_lost" not in entry.fields:
-                entry.unknown.add(f"{name}_lost")
+            _apply_multi(entry, gained_field, gained, slots)
+            _apply_multi(entry, lost_field, lost, slots)
+            if "=" in channel and lost_field not in entry.fields:
+                entry.unknown.add(lost_field)
 
 
 def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
