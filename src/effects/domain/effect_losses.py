@@ -235,21 +235,20 @@ def created_objects_loss(
         rows = rows.to(prediction.device, non_blocking=True)
         prediction = prediction.index_select(0, rows)
         target = target.to(prediction.device).index_select(0, rows)
-    total = prediction.new_zeros(())
-    for slot in range(CREATED_OBJECT_SLOTS):
-        base = slot * CREATED_SLOT_WIDTH
-        flags = slice(base + CreatedSlot.PRESENT, base + CreatedSlot.COUNT)
-        total = total + functional.binary_cross_entropy_with_logits(
-            prediction[:, flags], target[:, flags], reduction="sum",
-        )
-        magnitudes = slice(base + CreatedSlot.COUNT, base + CreatedSlot.TYPES)
-        total = total + _poisson(
-            prediction[:, magnitudes], capped(target[:, magnitudes]),
-        )
-        rest = slice(base + CreatedSlot.TYPES, base + CREATED_SLOT_WIDTH)
-        total = total + functional.binary_cross_entropy_with_logits(
-            prediction[:, rest], target[:, rest], reduction="sum",
-        )
+    # Every slot at once, as ``(records, slots, slot width)``.
+    slots = (-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
+    predicted = prediction[:, :-1].reshape(slots)
+    wanted = target[:, :-1].reshape(slots)
+    flags = slice(CreatedSlot.PRESENT, CreatedSlot.COUNT)
+    magnitudes = slice(CreatedSlot.COUNT, CreatedSlot.TYPES)
+    rest = slice(CreatedSlot.TYPES, CREATED_SLOT_WIDTH)
+    total = functional.binary_cross_entropy_with_logits(
+        predicted[..., flags], wanted[..., flags], reduction="sum",
+    )
+    total = total + _poisson(predicted[..., magnitudes], capped(wanted[..., magnitudes]))
+    total = total + functional.binary_cross_entropy_with_logits(
+        predicted[..., rest], wanted[..., rest], reduction="sum",
+    )
     total = total + functional.binary_cross_entropy_with_logits(
         prediction[:, -1], target[:, -1], reduction="sum",
     )
