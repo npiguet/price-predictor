@@ -25,5 +25,7 @@ class Stratum(StrEnum):
 OUTPUT_STRATA: tuple[Stratum, ...] = (
     Stratum.TRAINING, Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT, Stratum.GATE_ONE,
 )
+#: The strata a build counts and never writes, in report order.
+DROPPED_STRATA: tuple[Stratum, ...] = (Stratum.DROPPED_HELD_OUT, Stratum.DROPPED_HELD_OUT_TEXT)
 #: The two strata the trainer validates on, each with a fixed sample.
 VALIDATION_STRATA: tuple[Stratum, ...] = (Stratum.CARD_DISJOINT, Stratum.GAME_DISJOINT)

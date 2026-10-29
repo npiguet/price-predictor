@@ -9,17 +9,19 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Iterable, Mapping
+from dataclasses import asdict
 from typing import TYPE_CHECKING
 
 from effects.application.corpus_survey import RefusalTally, Survey
 from effects.application.corpus_write import WriteResult
 from effects.domain.ability_tokenizer import Surface
+from effects.domain.corpus_manifest import FamilyRow
 from effects.domain.corpus_plan import BuildCorpusError, Keys
 from effects.domain.coverage import HELD_OUT_GAME_FLOOR
 from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
 from effects.domain.sampling import SamplingClass
-from effects.domain.strata import OUTPUT_STRATA, Stratum
+from effects.domain.strata import DROPPED_STRATA, OUTPUT_STRATA, Stratum
 
 if TYPE_CHECKING:
     from effects.application.build_corpus import BuildCorpusConfig, Decisions
@@ -159,14 +161,14 @@ def family_tables(
         for label, row in per_family.items():
             wrote = written.families.written.get((klass, label), 0)
             distinct = written.families.distinct.get((klass, label), 0)
-            families.setdefault(klass, {})[label] = {
-                "available": row.available,
-                "share": row.share,
-                "planned": row.planned,
-                "written": wrote,
-                "repeats": wrote - distinct,
-                "shortfall": max(0, row.share - wrote),
-            }
+            families.setdefault(klass, {})[label] = asdict(FamilyRow(
+                available=row.available,
+                share=row.share,
+                planned=row.planned,
+                written=wrote,
+                repeats=wrote - distinct,
+                shortfall=max(0, row.share - wrote),
+            ))
     signatures: dict[str, dict[str, dict[str, int]]] = {}
     for (klass, label, signature), count in sorted(written.families.signatures.items()):
         if signature:
@@ -301,7 +303,7 @@ def _log_counts(manifest: CorpusManifest) -> None:
             "%-22s %9d record(s)  %7d unique text(s)",
             name, manifest.per_stratum[name], manifest.unique_texts[name],
         )
-    for stratum in (Stratum.DROPPED_HELD_OUT, Stratum.DROPPED_HELD_OUT_TEXT):
+    for stratum in DROPPED_STRATA:
         logger.info("%-22s %9d record(s)", stratum, manifest.per_stratum[stratum])
     for subkind, counts in sorted(manifest.legality_counts.items()):
         logger.info(
@@ -331,8 +333,8 @@ def _log_refusals(written: WriteResult) -> None:
     for reason, count in sorted(written.refusals.by_reason.items()):
         logger.info("%-22s %9d record(s) refused", reason, count)
     for label, scripts in (
-        ("no-acting-text", written.refusals.textless_scripts),
-        ("unjoinable-key", written.refusals.unjoinable_scripts),
+        (QualityDefect.NO_ACTING_TEXT, written.refusals.textless_scripts),
+        (QualityDefect.UNJOINABLE_KEY, written.refusals.unjoinable_scripts),
     ):
         if scripts:
             logger.info(
@@ -364,11 +366,12 @@ def _log_mixture(manifest: CorpusManifest) -> None:
             "more than the corpus can supply at this mixture.", name, missing,
         )
     for klass, per_family in sorted(manifest.families.items()):
-        for family, row in sorted(per_family.items()):
-            if row["shortfall"]:
+        for family, counts in sorted(per_family.items()):
+            row = FamilyRow(**counts)
+            if row.shortfall:
                 logger.warning(
                     "%-22s family %-28s short %7d of its share %d (%d available, "
                     "%d written, %d repeats) — collect more",
-                    klass, family, row["shortfall"], row["share"], row["available"],
-                    row["written"], row["repeats"],
+                    klass, family, row.shortfall, row.share, row.available,
+                    row.written, row.repeats,
                 )

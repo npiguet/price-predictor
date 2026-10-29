@@ -48,6 +48,7 @@ from effects.domain.records import (
     RecordKind,
     ResolutionPayload,
     RewritePayload,
+    RewriteResult,
     TriggerPayload,
     UnresolvedReason,
     key_sites,
@@ -72,10 +73,9 @@ _COST_FIELDS_ALWAYS_PAID = ("mana_by_color", "tapped")
 #: How many offending examples a finding's detail carries.
 _EXAMPLES = 5
 
-#: The ``rewrite_results`` row for a rewrite written before the hook passed a
+#: How the rewrite histogram prints a rewrite written before the hook passed a
 #: ``result``.
-_NO_RESULT = "absent"
-
+_NO_RESULT_LABEL = "absent"
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,12 +295,20 @@ class FieldPresence:
         )
 
 
-def _joined(halves: list[tuple[str, tuple[ProvenanceKey, ...]]]) -> bool:
+class _LinkHalf(NamedTuple):
+    """One record carrying a ``link_id``: which half it is, and what it acts through."""
+
+    #: None on a record of a kind with no halves, which never pairs.
+    moment: Moment | None
+    keys: tuple[ProvenanceKey, ...]
+
+
+def _joined(halves: list[_LinkHalf]) -> bool:
     """Whether one link's halves form a valid resolution (FR-029d): one cost
     half and one effect half, or several effect halves all acting through mode
     keys (``option`` set) of one charm root."""
-    costs = [keys for moment, keys in halves if moment == Moment.ACTIVATION.value]
-    effects = [keys for moment, keys in halves if moment == Moment.RESOLUTION.value]
+    costs = [half.keys for half in halves if half.moment is Moment.ACTIVATION]
+    effects = [half.keys for half in halves if half.moment is Moment.RESOLUTION]
     if len(costs) != 1 or not effects or len(costs) + len(effects) != len(halves):
         return False
     if len(effects) == 1:
@@ -561,15 +569,14 @@ class _Links:
     """Every half carrying each ``link_id``, joined after the pass."""
 
     def __init__(self) -> None:
-        #: link_id -> [(moment, acting keys)] for every half carrying it.
-        self.links: dict[str, list[tuple[str, tuple[ProvenanceKey, ...]]]] = defaultdict(list)
+        #: link_id -> every half carrying it.
+        self.links: dict[str, list[_LinkHalf]] = defaultdict(list)
 
     def add(self, record: EffectRecord) -> None:
         if record.link_id is not None:
-            self.links[record.link_id].append((
-                record.moment.value if record.moment else "?",
-                tuple(record.ability or ()),
-            ))
+            self.links[record.link_id].append(
+                _LinkHalf(record.moment, tuple(record.ability or ())),
+            )
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         paired = sum(1 for halves in self.links.values() if _joined(halves))
@@ -845,17 +852,17 @@ class _Modes:
     read as scarcity."""
 
     def __init__(self) -> None:
-        self.modes: Counter[str] = Counter()
-        self.examples: dict[str, str] = {}
+        self.modes: Counter[CollectionMode] = Counter()
+        self.examples: dict[CollectionMode, str] = {}
 
     def add(self, record: EffectRecord) -> None:
-        self.modes[record.mode.value] += 1
-        self.examples.setdefault(record.mode.value, record.record_id)
+        self.modes[record.mode] += 1
+        self.examples.setdefault(record.mode, record.record_id)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         total = sum(self.modes.values())
         shown = _histogram(sorted(self.modes.items()))
-        degraded = total - self.modes.get(CollectionMode.PATCHED.value, 0)
+        degraded = total - self.modes.get(CollectionMode.PATCHED, 0)
         yield Finding(
             name="every record was collected in patched mode",
             ok=degraded == 0,
@@ -863,7 +870,7 @@ class _Modes:
             detail=tuple(
                 f"first {name} record: {self.examples[name]}"
                 for name in sorted(self.modes)
-                if name != CollectionMode.PATCHED.value
+                if name is not CollectionMode.PATCHED
             ),
         )
 
@@ -1128,8 +1135,8 @@ class _Rewrites:
 
     def __init__(self) -> None:
         self.rewrites = 0
-        #: Keyed by the wire spelling, plus :data:`_NO_RESULT`.
-        self.results: dict[str, _ResultCounts] = defaultdict(_ResultCounts)
+        #: Keyed by result; None for a rewrite written before the hook passed one.
+        self.results: dict[RewriteResult | None, _ResultCounts] = defaultdict(_ResultCounts)
         #: Result-carrying rewrites whose ``outgoing`` equals ``incoming``.
         self.identity = 0
         self.identity_examples: list[str] = []
@@ -1143,9 +1150,7 @@ class _Rewrites:
         if not isinstance(payload, RewritePayload):
             return
         self.rewrites += 1
-        counts = self.results[
-            payload.result.value if payload.result else _NO_RESULT
-        ]
+        counts = self.results[payload.result]
         counts.with_outgoing += payload.outgoing is not None
         counts.with_replaced_by += bool(payload.replaced_by)
         counts.seen += 1
@@ -1174,14 +1179,22 @@ class _Rewrites:
     def _without_a_result(self) -> int:
         """Rewrites written before the hook passed a result. Read through
         ``.get`` so a healthy window grows no ``absent`` row."""
-        counts = self.results.get(_NO_RESULT)
+        counts = self.results.get(None)
         return counts.seen if counts else 0
+
+    def _by_name(self) -> list[tuple[str, _ResultCounts]]:
+        """Each result's counts under its wire spelling, in spelling order."""
+        return sorted(
+            (
+                (_NO_RESULT_LABEL if result is None else result.value, counts)
+                for result, counts in self.results.items()
+            ),
+            key=lambda row: row[0],
+        )
 
     def _shown(self) -> str:
         """The result histogram, for whichever rewrite finding is printing."""
-        return _histogram(
-            (name, counts.seen) for name, counts in sorted(self.results.items())
-        )
+        return _histogram((name, counts.seen) for name, counts in self._by_name())
 
     def _say_what_happened(self) -> Finding:
         """Which of the five replacement outcomes the handler reported.
@@ -1232,7 +1245,7 @@ class _Rewrites:
         ran = ", ".join(
             f"{name} {counts.with_outgoing}/{counts.seen} with outgoing, "
             f"{counts.with_replaced_by}/{counts.seen} with replaced_by"
-            for name, counts in sorted(self.results.items())
+            for name, counts in self._by_name()
         ) or "none"
         cannot = sorted(r.value for r in REWRITE_RESULTS_WITHOUT_ABILITY)
         return Finding(
@@ -1250,7 +1263,7 @@ class _Rewrites:
         that keys nothing reads zero here."""
         seen = named = 0
         for result in REWRITE_RESULTS_RUNNING_AN_ABILITY:
-            counts = self.results.get(result.value)
+            counts = self.results.get(result)
             if counts:
                 named += counts.with_replaced_by
                 seen += counts.seen
@@ -1266,7 +1279,7 @@ class _Rewrites:
             ),
             detail=(
                 f"{name}: {counts.with_replaced_by}/{counts.seen} name one"
-                for name, counts in sorted(self.results.items())
+                for name, counts in self._by_name()
             ),
         )
 
