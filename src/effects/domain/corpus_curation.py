@@ -36,73 +36,92 @@ def record_hash(record_id: str, *, seed: int) -> int:
     return int.from_bytes(digest, "big")
 
 
-class CapHeap:
-    """The ``cap`` smallest record hashes seen, as a max-heap of negated hashes.
+class _BoundedHeap:
+    """The ``cap`` largest entries pushed, as a min-heap: what both cap heaps
+    keep, each entry a negated hash first so the largest is the smallest hash."""
 
-    Bounded because no quota a text is given exceeds the cap; entries are bare
-    ints because the survey holds one heap per text slot.
-    """
-
-    __slots__ = ("cap", "_heap")
+    __slots__ = ("cap", "entries")
 
     def __init__(self, cap: int) -> None:
         self.cap = cap
-        self._heap: list = []
+        self.entries: list = []
 
-    def offer(self, value: int) -> None:
-        self._push(-value)
-
-    def _push(self, entry) -> None:
+    def push(self, entry) -> None:
         if self.cap <= 0:
             return
-        if len(self._heap) < self.cap:
-            heapq.heappush(self._heap, entry)
-        elif entry > self._heap[0]:
-            heapq.heappushpop(self._heap, entry)
+        if len(self.entries) < self.cap:
+            heapq.heappush(self.entries, entry)
+        elif entry > self.entries[0]:
+            heapq.heappushpop(self.entries, entry)
 
-    @staticmethod
-    def _negated(entry) -> int:
-        return entry
+    def merge(self, other: _BoundedHeap) -> None:
+        """Absorb another heap's entries, keeping the cap largest of the union.
 
-    def merge(self, other: CapHeap) -> None:
-        """Absorb another heap's values, keeping the cap smallest of the union.
-
-        Refused across caps: a smaller cap has already lost values for good.
+        Refused across caps: a smaller cap has already lost entries for good.
         """
         if self.cap != other.cap:
             raise ValueError(
                 f"cannot merge heaps with mismatched caps: "
                 f"self.cap={self.cap}, other.cap={other.cap}"
             )
-        for entry in other._heap:
-            self._push(entry)
+        for entry in other.entries:
+            self.push(entry)
+
+
+class CapHeap:
+    """The ``cap`` smallest record hashes seen.
+
+    Bounded because no quota a text is given exceeds the cap; entries are bare
+    ints because the survey holds one heap per text slot.
+    """
+
+    __slots__ = ("_heap",)
+
+    def __init__(self, cap: int) -> None:
+        self._heap = _BoundedHeap(cap)
+
+    @property
+    def cap(self) -> int:
+        return self._heap.cap
+
+    def offer(self, value: int) -> None:
+        self._heap.push(-value)
+
+    def merge(self, other: CapHeap) -> None:
+        """Absorb another heap's values, keeping the cap smallest of the union."""
+        self._heap.merge(other._heap)
 
     def values(self) -> tuple[int, ...]:
-        return tuple(-self._negated(entry) for entry in self._heap)
+        return tuple(-entry for entry in self._heap.entries)
 
     def __len__(self) -> int:
-        return len(self._heap)
+        return len(self._heap.entries)
 
 
-class KeyedCapHeap[T](CapHeap):
-    """A :class:`CapHeap` that carries an item with each hash.
+class KeyedCapHeap[T]:
+    """The ``cap`` smallest hashes seen, each carrying an item.
 
     Among equal hashes the larger ``tiebreak`` is kept; it must never tie, or
     two equal hashes would compare the items.
     """
 
-    __slots__ = ()
+    __slots__ = ("_heap",)
 
-    def offer(self, value: int, item: T, tiebreak: tuple) -> None:  # type: ignore[override]
-        self._push((-value, tiebreak, item))
+    def __init__(self, cap: int) -> None:
+        self._heap = _BoundedHeap(cap)
 
-    @staticmethod
-    def _negated(entry) -> int:
-        return entry[0]
+    def offer(self, value: int, item: T, tiebreak: tuple) -> None:
+        self._heap.push((-value, tiebreak, item))
+
+    def merge(self, other: KeyedCapHeap[T]) -> None:
+        self._heap.merge(other._heap)
 
     def items(self) -> list[T]:
         """The retained items, smallest hash first."""
-        return [item for _, _, item in sorted(self._heap, reverse=True)]
+        return [item for _, _, item in sorted(self._heap.entries, reverse=True)]
+
+    def __len__(self) -> int:
+        return len(self._heap.entries)
 
 
 def class_targets(

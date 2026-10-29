@@ -200,16 +200,17 @@ class Member:
     distinct: int = 0
     heap: CapHeap | None = None
 
-    def once(self, name: str, text_cap: int) -> int:
-        """Records this member can supply once each: the text cap, or all of them."""
-        if name == KEYLESS or text_cap <= 0:
+    def once(self, text_cap: int) -> int:
+        """Records this member can supply once each: the text cap, or all of
+        them, which the keyless member always can."""
+        if self.heap is None or text_cap <= 0:
             return self.distinct
         return min(self.distinct, text_cap)
 
-    def capacity(self, name: str, *, text_cap: int, reuse_cap: int) -> int:
+    def capacity(self, *, text_cap: int, reuse_cap: int) -> int:
         """Records this member can supply with repeats."""
         return text_capacity(
-            self.distinct, text_cap=0 if name == KEYLESS else text_cap,
+            self.distinct, text_cap=0 if self.heap is None else text_cap,
             reuse_cap=reuse_cap,
         )
 
@@ -228,7 +229,9 @@ def members_of(
         if text is None:
             members[cell].setdefault(KEYLESS, Member()).distinct += count
             continue
-        member = members[cell].setdefault(text, Member(heap=CapHeap(supply.heap_cap)))
+        member = members[cell].get(text)
+        if member is None:
+            member = members[cell][text] = Member(heap=CapHeap(supply.heap_cap))
         member.distinct += count
         member.heap.merge(supply.heaps[cell, keys])
         keys_of[cell, text].append(keys)
@@ -381,8 +384,8 @@ def _available(members: Mapping[Cell, Mapping[str, Member]], text_cap: int) -> d
     """Distinct records each class can supply under the text cap, with no repeats."""
     available: Counter[str] = Counter()
     for cell, cell_members in members.items():
-        for name, member in cell_members.items():
-            available[cell.klass] += member.once(name, text_cap)
+        for member in cell_members.values():
+            available[cell.klass] += member.once(text_cap)
     return dict(available)
 
 
@@ -395,8 +398,8 @@ def _allocation_tree(
         cell_node = tree.child(cell.klass).child(cell.half).child(cell.family).child(cell)
         for name, member in cell_members.items():
             cell_node.children[name] = AllocationNode(
-                supply=member.capacity(name, text_cap=text_cap, reuse_cap=reuse_cap),
-                once=member.once(name, text_cap),
+                supply=member.capacity(text_cap=text_cap, reuse_cap=reuse_cap),
+                once=member.once(text_cap),
             )
     return tree
 

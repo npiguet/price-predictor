@@ -511,6 +511,17 @@ class TestActingLines:
         assert not finding.ok
         assert "unindexable" in " ".join(finding.detail)
 
+    def test_a_reason_is_reported_under_its_own_kind_alone(self):
+        records = _healthy() + [
+            _resolution(
+                f"run.0-L1.{index}", ability=(), ability_unresolved="unindexable",
+            )
+            for index in range(400, 410)
+        ]
+        findings = validate_corpus(records)
+        assert "unindexable" in " ".join(_named(findings, "resolution records name").detail)
+        assert "unindexable" not in " ".join(_named(findings, "trigger and rewrite").detail)
+
     def test_the_keyed_floor_is_configurable(self):
         records = _healthy() + [
             _resolution(

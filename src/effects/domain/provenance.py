@@ -247,24 +247,24 @@ class ProvenanceSidecar:
 
     def row_for(self, key: ProvenanceKey) -> int | None:
         """The ability-cache row a key resolves to, or None where it was dropped."""
-        row = self._row_by_key.get(key)
-        if row is not None:
-            return row
-        if key in self._dropped or self.is_runtime_only(key):
-            return None
-        raise KeyError(self._mismatch_message(key))
+        return self._resolve(key)[1]
 
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
         """Which of the join's answers this key gets; raises on a mismatch.
 
         Unlike ``row_for``, tells a dropped key from a runtime-only one.
         """
-        if key in self._row_by_key:
-            return KeyResolution.LINE
+        return self._resolve(key)[0]
+
+    def _resolve(self, key: ProvenanceKey) -> tuple[KeyResolution, int | None]:
+        """The join's answer for a key and its row, the one place it is decided."""
+        row = self._row_by_key.get(key)
+        if row is not None:
+            return KeyResolution.LINE, row
         if key in self._dropped:
-            return KeyResolution.DROPPED
+            return KeyResolution.DROPPED, None
         if self.is_runtime_only(key):
-            return KeyResolution.RUNTIME_ONLY
+            return KeyResolution.RUNTIME_ONLY, None
         raise KeyError(self._mismatch_message(key))
 
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:

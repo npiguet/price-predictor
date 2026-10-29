@@ -19,6 +19,7 @@ from typing import Protocol
 
 from effects.domain.keyword_names import overlay_keyword
 from effects.domain.provenance import ProvenanceKey
+from effects.domain.recorded_version import recorded_version
 from effects.domain.records import (
     ActivationPayload,
     CombatPayload,
@@ -112,7 +113,7 @@ class InputLayout:
         """The layout a checkpoint's training settings record; the earlier one
         where they record none (gen-1, and gen-2 arms trained before the
         layout existed)."""
-        if (training_settings or {}).get(INPUT_LAYOUT_KEY) is None:
+        if recorded_version(training_settings, INPUT_LAYOUT_KEY, (INPUT_LAYOUT.name,)) is None:
             return EARLIER_LAYOUT
         return INPUT_LAYOUT
 
@@ -175,6 +176,15 @@ def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
     return out
 
 
+#: What :func:`_push_scalar` appends per scalar.
+_SCALAR_WIDTH = 2
+
+
+def _one_hot_width(vocabulary: tuple[str, ...]) -> int:
+    """What :func:`_one_hot` returns over ``vocabulary``."""
+    return len(vocabulary) + 1
+
+
 def _push_scalar(out: list[float], value: float) -> None:
     """A scalar as raw plus signed ``log1p``, onto the caller's list; nothing
     is binned (FR-074). Appended rather than returned: a list per scalar made
@@ -184,10 +194,12 @@ def _push_scalar(out: list[float], value: float) -> None:
     out.append(math.copysign(math.log1p(abs(raw)), raw))
 
 
-_NO_PT: tuple[float, ...] = (0.0,) * 13
-#: One scalar (two zeros) per counter type plus the catch-all.
-_NO_COUNTERS: tuple[float, ...] = (0.0,) * (2 * (len(COUNTER_TYPES) + 1))
-_NO_STACK_EXTRAS: tuple[float, ...] = (0.0,) * 6
+#: Power and toughness of the base, boosts and counters, then the present flag.
+_NO_PT: tuple[float, ...] = (0.0,) * (3 * 2 * _SCALAR_WIDTH + 1)
+#: One scalar per counter type plus the catch-all.
+_NO_COUNTERS: tuple[float, ...] = (0.0,) * (_SCALAR_WIDTH * (len(COUNTER_TYPES) + 1))
+#: Targets, per-target amounts and up-to counts.
+_NO_STACK_EXTRAS: tuple[float, ...] = (0.0,) * (3 * _SCALAR_WIDTH)
 
 
 def _multi_hot(present, vocabulary: tuple[str, ...]) -> list[float]:
@@ -270,7 +282,7 @@ def global_features(
 
 #: Width of the kind, moment and subkind one-hots that end every ``[GLOBAL]``
 #: slot; the ``no-state`` baseline keeps exactly these (FR-094).
-KIND_FLAG_WIDTH = len(_RECORD_KINDS) + len(_MOMENTS) + len(_PLAYABILITY_SUBKINDS) + 3
+KIND_FLAG_WIDTH = sum(map(_one_hot_width, (_RECORD_KINDS, _MOMENTS, _PLAYABILITY_SUBKINDS)))
 
 ACT_SLOT = 1
 
@@ -299,10 +311,12 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
     return tuple(out)
 
 
-_ACT_FEATURE_WIDTH = 1 + 2 + 1 + 2 + 2 + 2 + (len(ResolutionOutcome) + 1)
 _RESOLUTION_OUTCOMES: tuple[str, ...] = tuple(
     o.value for o in ResolutionOutcome
 )
+#: The populated and X-present flags, the X, mode, target and choice scalars,
+#: and the outcome one-hot.
+_ACT_FEATURE_WIDTH = 2 + 4 * _SCALAR_WIDTH + _one_hot_width(_RESOLUTION_OUTCOMES)
 
 
 def player_features(
@@ -390,8 +404,7 @@ def _push_overlay(
         granted = [overlay_keyword(keyword) for keyword in granted]
     out += _multi_hot(granted, layout.overlay_keywords)
     _push_scalar(out, len(entity.granted_temporary.abilities))
-    out.append(1.0 if state.controller_tag(
-        entity.controller, record.actor_player) == "mine" else 0.0)
+    out.append(1.0 if entity.controller == record.actor_player else 0.0)
     out.append(1.0 if entity.id in state.refs.targets else 0.0)
     out.append(1.0 if entity.id == state.refs.source else 0.0)
 

@@ -22,6 +22,7 @@ from effects.domain.keyword_formatting import (
     strip_specifiers,
 )
 from effects.domain.provenance import Role, RoleSpan
+from effects.domain.recorded_version import recorded_version
 from effects.domain.script_text import CHAIN_KEYS, SEG
 from price_predictor.domain.tokenizer import MtgTokenizer
 
@@ -92,8 +93,8 @@ TOKENIZER_RULES = "gen-2"
 def tokenizer_surface(vocab_surface: Surface, training_settings) -> Surface:
     """The surface whose rules a loaded checkpoint's tokenizer applies: the
     vocabulary's under the gen-2 rules, else the prose grammar it trained on."""
-    rules = (training_settings or {}).get(TOKENIZER_RULES_KEY)
-    return vocab_surface if rules == TOKENIZER_RULES else Surface.PROSE
+    rules = recorded_version(training_settings, TOKENIZER_RULES_KEY, (TOKENIZER_RULES,))
+    return Surface.PROSE if rules is None else vocab_surface
 
 
 def keyword_token(display_name: str) -> str:

@@ -804,6 +804,13 @@ class TestTokenizerRulesByCheckpoint:
         assert tokenizer_surface("script", settings) == "script"
         assert tokenizer_surface("prose", settings) == "prose"
 
+    def test_rules_this_code_does_not_know_are_refused(self):
+        from effects.domain.ability_tokenizer import tokenizer_surface
+        from effects.domain.recorded_version import UnknownRecordedVersion
+
+        with pytest.raises(UnknownRecordedVersion, match="gen-3"):
+            tokenizer_surface("script", {"tokenizer_rules": "gen-3"})
+
     def test_the_two_grammars_differ_on_a_gen1_line(self):
         vocab = _vocab(("validtgts", "creature", "youctrl", "defined"))
         legacy = [t.text for t in AbilityTokenizer(vocab, surface="prose").tokenize(
