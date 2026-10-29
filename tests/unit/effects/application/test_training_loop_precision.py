@@ -19,7 +19,7 @@ from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import StepLoss, TrainingLoop, autocast_enabled
 from effects.domain.effect_losses import LossParts
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.builders import (
@@ -103,9 +103,10 @@ def _run_device_loss(monkeypatch, loop, *, autocast: bool):
     # whether autocast encloses it is not the question.
     prepared = loop_module.DeviceStep(
         batch=None, fields=("dummy",),
-        gate=torch.zeros((1, 1)), field_targets=EntityFieldTargets({}, {}),
-        mask=torch.zeros((1, 1)),
-        index=torch.zeros((1, 1), dtype=torch.long),
+        targets=EntityTargetBatch(
+            torch.zeros((1, 1)), EntityFieldTargets({}, {}), torch.zeros((1, 1)),
+            torch.zeros((1, 1), dtype=torch.long),
+        ),
         heads=loop_module.HeadTargets(),
     )
 

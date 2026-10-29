@@ -32,7 +32,7 @@ from effects.domain.effect_head_layout import (
     FieldSpec,
     FieldType,
 )
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS, ValueKind
 
@@ -136,9 +136,7 @@ def field_loss(
 
 def per_entity_loss(
     outputs: torch.Tensor,
-    gate_target: torch.Tensor,
-    field_targets: EntityFieldTargets,
-    entity_mask: torch.Tensor,
+    targets: EntityTargetBatch,
     *,
     fields: tuple[FieldSpec, ...],
     report_parts: bool = False,
@@ -147,9 +145,8 @@ def per_entity_loss(
     ``report_parts`` (scaled alike, so they sum to the loss).
 
     Args:
-        outputs: ``(batch, entities, PER_ENTITY_WIDTH)``.
-        gate_target: ``(batch, entities)``, 1 where the entity was affected.
-        entity_mask: ``(batch, entities)``, 1 for a real entity.
+        outputs: ``(batch, entities, PER_ENTITY_WIDTH)``, already gathered
+            column for column with ``targets``.
         fields: the fields active at this step.
 
     The gate trains on every real entity, players included. A field trains
@@ -160,8 +157,9 @@ def per_entity_loss(
     names: list[str] = []
     terms: list[torch.Tensor] = []
     device = outputs.device
-    real_mask = entity_mask.detach().bool().cpu()
-    gate_host = gate_target.detach().cpu()
+    field_targets = targets.fields
+    real_mask = targets.mask.detach().bool().cpu()
+    gate_host = targets.gate.detach().cpu()
     real = real_mask.flatten().nonzero().squeeze(1)
     hit_mask = real_mask & gate_host.bool()
     flat_outputs = outputs.reshape(-1, outputs.shape[-1])

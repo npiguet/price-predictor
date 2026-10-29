@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 import torch
 
@@ -23,7 +22,7 @@ from effects.domain.effect_head_layout import (
     FieldType,
 )
 from effects.domain.effect_losses import LossParts, capped, counted, per_entity_loss
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.entity_field_targets import EntityTargetBatch
 
 #: A guard on dividing by a floor, not the degenerate-field detector.
 FLOOR_EPSILON = 1e-9
@@ -31,16 +30,6 @@ FLOOR_EPSILON = 1e-9
 #: Rates are clamped away from zero and one before a log, or an outcome the
 #: sample never showed would make the floor nan.
 _RATE_FLOOR = 1e-6
-
-
-@dataclass(frozen=True, slots=True)
-class EntityTargetBatch:
-    """One scored batch's per-entity targets, kept so the floor is measured
-    over exactly the entities the head was."""
-
-    gate: torch.Tensor
-    fields: EntityFieldTargets
-    mask: torch.Tensor
 
 
 def _mean(values: torch.Tensor) -> torch.Tensor:
@@ -147,8 +136,7 @@ def constant_predictor_floor(
     means = PartsMean()
     for batch in batches:
         _, parts = per_entity_loss(
-            vector.expand(*batch.gate.shape, PER_ENTITY_WIDTH),
-            batch.gate, batch.fields, batch.mask,
+            vector.expand(*batch.gate.shape, PER_ENTITY_WIDTH), batch,
             fields=fields, report_parts=True,
         )
         means.add(parts)

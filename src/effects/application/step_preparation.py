@@ -39,7 +39,7 @@ from effects.domain.effect_targets import (
     supervises_created_objects,
     verdict_targets,
 )
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.provenance import SidecarLine
 from effects.domain.rarity import rarity_bucket
@@ -100,19 +100,17 @@ class DeviceStep:
 
     batch: PreparedBatch
     fields: tuple[FieldSpec, ...]
-    #: ``entity_target_tensors``' four outputs.
-    gate: torch.Tensor
-    field_targets: EntityFieldTargets
-    mask: torch.Tensor
-    index: torch.Tensor
+    targets: EntityTargetBatch
     heads: HeadTargets
 
     def pin(self) -> None:
         self.batch.pin()
-        self.field_targets = replace(
-            self.field_targets, values=pinned(dict(self.field_targets.values)),
+        targets = self.targets
+        self.targets = replace(
+            targets,
+            fields=replace(targets.fields, values=pinned(dict(targets.fields.values))),
+            index=targets.index.pin_memory(),
         )
-        self.index = self.index.pin_memory()
         self.heads.pin()
 
 
@@ -317,13 +315,10 @@ class StepPreparer:
     ) -> DeviceStep:
         """The surfaces, the per-entity targets and ``heads``' targets."""
         batch = batcher.prepare(records)
-        gate, field_targets, mask, index = entity_target_tensors(
-            batch.surfaces, targets, fields,
-        )
         return DeviceStep(
             batch=replace(batch, texts={}, prepared=[], surfaces=[]),
-            fields=fields, gate=gate, field_targets=field_targets, mask=mask,
-            index=index,
+            fields=fields,
+            targets=entity_target_tensors(batch.surfaces, targets, fields),
             heads=self._head_targets(records, batcher, batch, heads=heads),
         )
 

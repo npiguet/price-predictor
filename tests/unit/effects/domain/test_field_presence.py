@@ -34,7 +34,12 @@ from effects.domain.records import (
 )
 from effects.domain.state_snapshot import PlayerState
 from effects.domain.surface_collation import entity_target_tensors
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.builders import (
+    make_entity,
+    make_entity_targets,
+    make_record,
+    make_snapshot,
+)
 
 
 @dataclass
@@ -70,12 +75,8 @@ def _resolution(*events):
 
 def _losses(record, names, outputs):
     fields = tuple(FIELDS_BY_NAME[name] for name in names)
-    gate, targets, mask, _index = entity_target_tensors(
-        [_SURFACE], [derive_targets(record)], fields,
-    )
-    return per_entity_loss(
-        outputs, gate, targets, mask, fields=fields, report_parts=True,
-    )
+    targets = entity_target_tensors([_SURFACE], [derive_targets(record)], fields)
+    return per_entity_loss(outputs, targets, fields=fields, report_parts=True)
 
 
 def _moves(record, scored: str, perturbed: str | None = None) -> bool:
@@ -175,13 +176,13 @@ class TestTheFloorReadsPresenceToo:
     def test_an_absent_target_does_not_move_the_constant_predictor(self):
         """The floor is scored on the entities the loss is, absent ones excluded."""
         from effects.domain.entity_field_targets import EntityFieldTargets
-        from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
+        from effects.domain.loss_floor import constant_predictor_floor
 
         spec = FIELDS_BY_NAME["tap_state"]
         gate = torch.ones(1, 4)
 
         def floor(present):
-            batch = EntityTargetBatch(
+            batch = make_entity_targets(
                 gate=gate,
                 fields=EntityFieldTargets(
                     {"tap_state": torch.tensor([[1.0, 0.0, 0.0, 0.0]])},

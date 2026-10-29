@@ -514,14 +514,12 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
         with torch.no_grad():
             batch, surfaces, _encoded = batcher.build(chunk, encoder)
         outputs = shallow.per_entity(shallow(**batch))
-        gate, targets, mask, index = entity_target_tensors(
+        targets = entity_target_tensors(
             surfaces, [derive_targets(r) for r in chunk], fields)
         device = outputs.device
         gathered = outputs.gather(
-            1, index.to(device).unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
-        loss, _ = per_entity_loss(gathered, gate.to(device),
-                                  targets.to(device),
-                                  mask.to(device), fields=fields)
+            1, targets.index.to(device).unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
+        loss, _ = per_entity_loss(gathered, targets.fields_on(device), fields=fields)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

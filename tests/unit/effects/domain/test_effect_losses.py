@@ -34,7 +34,8 @@ from effects.domain.effect_losses import (
     verdict_loss,
 )
 from effects.domain.entity_field_targets import EntityFieldTargets
-from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_outputs
+from effects.domain.loss_floor import constant_predictor_outputs
+from tests.unit.effects.builders import make_entity_targets
 
 
 class TestLosses:
@@ -48,11 +49,11 @@ class TestLosses:
         targets = EntityFieldTargets.everywhere({"damage_taken": torch.zeros(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
         off = per_entity_loss(
-            outputs, torch.zeros(2, 3), targets, entity_mask, fields=fields,
+            outputs, make_entity_targets(torch.zeros(2, 3), targets, entity_mask), fields=fields,
             report_parts=True,
         )[1]
         on = per_entity_loss(
-            outputs, torch.ones(2, 3), targets, entity_mask, fields=fields,
+            outputs, make_entity_targets(torch.ones(2, 3), targets, entity_mask), fields=fields,
             report_parts=True,
         )[1]
         assert "damage_taken" not in off.names
@@ -60,7 +61,7 @@ class TestLosses:
 
     def test_the_gate_trains_on_every_entity_including_unaffected_ones(self):
         _, parts = per_entity_loss(
-            self._outputs(), torch.zeros(2, 3), {}, torch.ones(2, 3), fields=(),
+            self._outputs(), make_entity_targets(torch.zeros(2, 3)), fields=(),
             report_parts=True,
         )
         assert parts.as_dict()["gate"] > 0.0
@@ -69,7 +70,7 @@ class TestLosses:
         """The training loop discards the terms on every step but the one that
         logs them — so the caller has to ask."""
         _, parts = per_entity_loss(
-            self._outputs(), torch.zeros(2, 3), {}, torch.ones(2, 3), fields=(),
+            self._outputs(), make_entity_targets(torch.zeros(2, 3)), fields=(),
         )
         assert not parts
         assert parts.as_dict() == {}
@@ -95,8 +96,8 @@ class TestLosses:
             for spec in fields
         }
         _, parts = per_entity_loss(
-            outputs, torch.ones(2, 3), EntityFieldTargets.everywhere(values),
-            torch.ones(2, 3), fields=fields, report_parts=True,
+            outputs, make_entity_targets(torch.ones(2, 3), values),
+            fields=fields, report_parts=True,
         )
 
         flat = outputs.reshape(6, PER_ENTITY_WIDTH)
@@ -116,10 +117,10 @@ class TestLosses:
         """Reporting must not change what is optimized."""
         outputs = self._outputs()
         quiet, _ = per_entity_loss(
-            outputs, torch.ones(2, 3), {}, torch.ones(2, 3), fields=(),
+            outputs, make_entity_targets(torch.ones(2, 3), {}, torch.ones(2, 3)), fields=(),
         )
         loud, _ = per_entity_loss(
-            outputs, torch.ones(2, 3), {}, torch.ones(2, 3), fields=(),
+            outputs, make_entity_targets(torch.ones(2, 3), {}, torch.ones(2, 3)), fields=(),
             report_parts=True,
         )
         assert float(quiet) == pytest.approx(float(loud))
@@ -130,16 +131,16 @@ class TestLosses:
         wide = torch.zeros(1, 12, PER_ENTITY_WIDTH)
         narrow = torch.zeros(1, 2, PER_ENTITY_WIDTH)
         wide_loss, _ = per_entity_loss(
-            wide, torch.zeros(1, 12), {}, torch.ones(1, 12), fields=(),
+            wide, make_entity_targets(torch.zeros(1, 12), {}, torch.ones(1, 12)), fields=(),
         )
         narrow_loss, _ = per_entity_loss(
-            narrow, torch.zeros(1, 2), {}, torch.ones(1, 2), fields=(),
+            narrow, make_entity_targets(torch.zeros(1, 2), {}, torch.ones(1, 2)), fields=(),
         )
         # Both divide by one record; the wide board's larger sum is the point,
         # but doubling the batch must halve neither.
         two_records = torch.zeros(2, 2, PER_ENTITY_WIDTH)
         batched, _ = per_entity_loss(
-            two_records, torch.zeros(2, 2), {}, torch.ones(2, 2), fields=(),
+            two_records, make_entity_targets(torch.zeros(2, 2), {}, torch.ones(2, 2)), fields=(),
         )
         assert batched == pytest.approx(float(narrow_loss), rel=1e-5)
         assert wide_loss > narrow_loss
@@ -154,7 +155,7 @@ class TestLosses:
         targets = EntityFieldTargets.everywhere({"damage_taken": torch.ones(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
         total, reported = per_entity_loss(
-            outputs, torch.ones(2, 3), targets, torch.ones(2, 3),
+            outputs, make_entity_targets(torch.ones(2, 3), targets, torch.ones(2, 3)),
             fields=fields, report_parts=True,
         )
         parts = reported.as_dict()
@@ -164,12 +165,15 @@ class TestLosses:
     def test_padded_entities_contribute_nothing(self):
         outputs = self._outputs()
         full = per_entity_loss(
-            outputs, torch.ones(2, 3), {}, torch.ones(2, 3), fields=(),
+            outputs, make_entity_targets(torch.ones(2, 3), {}, torch.ones(2, 3)), fields=(),
             report_parts=True,
         )[1].as_dict()["gate"]
         masked = per_entity_loss(
-            outputs, torch.ones(2, 3), {},
-            torch.tensor([[1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]), fields=(),
+            outputs,
+            make_entity_targets(
+                torch.ones(2, 3), mask=torch.tensor([[1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]),
+            ),
+            fields=(),
             report_parts=True,
         )[1].as_dict()["gate"]
         assert masked < full
@@ -408,7 +412,9 @@ class TestHostPickedRowsMatchBooleanMasks:
         gate = torch.randint(0, 2, (batch, entities), generator=generator)
         fields, targets = self._targets(generator, batch, entities)
         expected = self._reference(outputs, gate, targets, entity_mask, fields)
-        got, _ = per_entity_loss(outputs, gate, targets, entity_mask, fields=fields)
+        got, _ = per_entity_loss(
+            outputs, make_entity_targets(gate, targets, entity_mask), fields=fields,
+        )
         assert torch.allclose(got, expected, rtol=1e-6, atol=1e-6)
 
     def test_a_batch_with_nothing_affected_scores_the_gate_alone(self):
@@ -416,7 +422,7 @@ class TestHostPickedRowsMatchBooleanMasks:
         outputs = torch.randn(3, 4, PER_ENTITY_WIDTH, generator=generator)
         fields, targets = self._targets(generator, 3, 4)
         gate = torch.zeros(3, 4)
-        got, _ = per_entity_loss(outputs, gate, targets, torch.ones(3, 4), fields=fields)
+        got, _ = per_entity_loss(outputs, make_entity_targets(gate, targets), fields=fields)
         expected = self._reference(outputs, gate, targets, torch.ones(3, 4), fields)
         assert torch.allclose(got, expected)
 
@@ -471,7 +477,7 @@ class TestMagnitudeCap:
         from effects.domain.effect_head_input import MAGNITUDE_CAP
 
         def floor(value):
-            batch = EntityTargetBatch(
+            batch = make_entity_targets(
                 gate=torch.ones(1, 2),
                 fields=EntityFieldTargets.everywhere(
                     {"damage_taken": torch.tensor([[2.0, value]])},
@@ -512,7 +518,7 @@ class TestCountTargetsAreNonnegative:
 
     def test_the_floor_reads_a_negative_count_as_zero(self):
         def floor(value):
-            batch = EntityTargetBatch(
+            batch = make_entity_targets(
                 gate=torch.ones(1, 2),
                 fields=EntityFieldTargets.everywhere(
                     {"damage_taken": torch.tensor([[2.0, value]])},

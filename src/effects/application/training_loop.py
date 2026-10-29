@@ -99,11 +99,8 @@ from effects.domain.effect_losses import (
     per_entity_loss,
 )
 from effects.domain.effect_model import EffectModel, EffectModelConfig
-from effects.domain.loss_floor import (
-    EntityTargetBatch,
-    PartsMean,
-    constant_predictor_floor,
-)
+from effects.domain.entity_field_targets import EntityTargetBatch
+from effects.domain.loss_floor import PartsMean, constant_predictor_floor
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES, BatchPlan, sampling_class
 from effects.domain.strata import VALIDATION_STRATA, Stratum
@@ -414,10 +411,7 @@ class _HostCopy:
     def fold_into(self, margins: MarginAccumulator) -> None:
         if self.done is not None:
             self.done.synchronize()
-        prepared = self.prepared
-        margins.add(
-            self.gathered, prepared.gate, prepared.field_targets, prepared.mask,
-        )
+        margins.add(self.gathered, self.prepared.targets)
 
 
 def _optimizer_step(optimizer) -> dict[str, torch.Tensor]:
@@ -585,16 +579,13 @@ class TrainingLoop:
             )
             hidden = run.model(**batch)
             outputs = run.model.per_entity(hidden)
+            targets = prepared.targets
             gathered = gather_entities(
-                outputs, prepared.index.to(self.device, non_blocking=True),
+                outputs, targets.index.to(self.device, non_blocking=True),
             )
-            # The gate and masks stay on the host, so picking the loss's rows
-            # never waits on the device.
             loss, parts = per_entity_loss(
-                gathered, prepared.gate,
-                prepared.field_targets.to(self.device, non_blocking=True),
-                prepared.mask, fields=prepared.fields,
-                report_parts=report_parts,
+                gathered, targets.fields_on(self.device, non_blocking=True),
+                fields=prepared.fields, report_parts=report_parts,
             )
             terms = self._head_terms(prepared.heads, encoded, run.model, hidden)
         total, shipped = combine_terms(loss, terms, self._head_weights())
@@ -1121,9 +1112,7 @@ class TrainingLoop:
                     BatchPlan(dict(grouped)), fields,
                 )
                 if collect is not None:
-                    collect.append(EntityTargetBatch(
-                        prepared.gate, prepared.field_targets, prepared.mask,
-                    ))
+                    collect.append(prepared.targets)
                 computed = self._device_loss(
                     prepared, run, run.scoring, report_parts=parts is not None,
                 )

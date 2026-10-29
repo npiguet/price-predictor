@@ -328,3 +328,20 @@ def write_validation_samples(directory, records) -> dict:
         samples[stratum] = directory / f"{stratum}.jsonl.gz"
         write_shard(samples[stratum], records)
     return samples
+
+
+def make_entity_targets(gate, fields=None, mask=None, index=None):
+    """An ``EntityTargetBatch`` for a loss test. A mapping of ``fields`` is
+    present everywhere; ``mask`` defaults to every entity real and ``index``
+    to column zero, which no loss reads."""
+    import torch
+
+    from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
+
+    if not isinstance(fields, EntityFieldTargets):
+        fields = EntityFieldTargets.everywhere(fields or {})
+    if mask is None:
+        mask = torch.ones_like(gate)
+    if index is None:
+        index = torch.zeros(gate.shape, dtype=torch.long)
+    return EntityTargetBatch(gate, fields, mask, index)

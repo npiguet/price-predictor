@@ -25,7 +25,7 @@ from effects.domain.records import (
     acting_keys,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.builders import make_entity_targets, make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -154,7 +154,7 @@ class TestMarginAccumulator:
             ),
             "damage_taken": torch.tensor([[observed_damage, 0.0]]),
         })
-        return gathered, torch.tensor([[1.0, 0.0]]), targets, torch.ones(1, 2)
+        return gathered, make_entity_targets(torch.tensor([[1.0, 0.0]]), targets)
 
     def test_a_perfect_chunk_scores_perfectly(self):
         from effects.application.gate_one import MarginAccumulator

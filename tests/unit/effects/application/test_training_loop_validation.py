@@ -18,12 +18,12 @@ from effects.application.training_loop import FloorCache
 from effects.domain.effect_head_layout import FIELDS_BY_NAME
 from effects.domain.effect_losses import LossParts
 from effects.domain.entity_field_targets import EntityFieldTargets
-from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
+from effects.domain.loss_floor import constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
 from effects.domain.split import HoldoutRule
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.builders import make_preparer, make_training_loop
+from tests.unit.effects.builders import make_entity_targets, make_preparer, make_training_loop
 
 
 @pytest.fixture
@@ -208,7 +208,7 @@ def test_a_field_whose_targets_never_vary_reads_not_applicable_end_to_end():
     reporting the ratio the rate clamp would otherwise produce.
     """
     gate = torch.ones(2, 2)
-    batch = EntityTargetBatch(
+    batch = make_entity_targets(
         gate=gate,
         fields=EntityFieldTargets.everywhere({"damage_taken": torch.zeros(2, 2)}),
         mask=gate,

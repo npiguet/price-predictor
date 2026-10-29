@@ -21,7 +21,7 @@ from effects.domain.ability_encoder import surface_of
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, HeadField
 from effects.domain.effect_losses import magnitude_target
 from effects.domain.effect_targets import derive_targets
-from effects.domain.entity_field_targets import EntityFieldTargets
+from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
@@ -110,33 +110,35 @@ def unique_text_stratum(corpus_path, card_disjoint_games, text_of: TextOf) -> li
     )
 
 
-def forward_chunks(records, runnable: Runnable) -> Iterator[tuple[list, tuple]]:
-    """``(chunk, (gathered, gate, field_targets, mask))`` per chunk of ``records``,
-    shared by the margins and :mod:`effects.application.record_scoring`."""
+def forward_chunks(
+    records, runnable: Runnable,
+) -> Iterator[tuple[list, torch.Tensor, EntityTargetBatch]]:
+    """``(chunk, gathered, targets)`` per chunk of ``records``, shared by the
+    margins and :mod:`effects.application.record_scoring`."""
     for chunk in runnable.inference_chunks(records, BATCH_RECORDS):
-        yield chunk, _forward(chunk, runnable)
+        yield chunk, *_forward(chunk, runnable)
 
 
 def measure(records, runnable: Runnable) -> GateOneMetrics:
     """Run the model over ``records`` and score the three margins."""
     margins = MarginAccumulator(runnable.fields)
-    for _chunk, forward in forward_chunks(records, runnable):
-        margins.add(*forward)
+    for _chunk, gathered, targets in forward_chunks(records, runnable):
+        margins.add(gathered, targets)
     return margins.metrics()
 
 
-def _forward(chunk, runnable: Runnable):
-    """``(gathered, gate, field_targets, mask)`` for one chunk, on the host,
-    ``gathered`` aligned column for column with the targets."""
+def _forward(chunk, runnable: Runnable) -> tuple[torch.Tensor, EntityTargetBatch]:
+    """``(gathered, targets)`` for one chunk, on the host, ``gathered``
+    aligned column for column with the targets."""
     model = runnable.model
     batch, surfaces, _encoded = runnable.batcher.build(chunk, runnable.encoder)
     outputs = model.per_entity(model(**batch))
     targets = [derive_targets(record) for record in chunk]
-    gate, field_targets, mask, index = entity_target_tensors(
-        surfaces, targets, runnable.fields,
-    )
-    gathered = gather_entities(outputs, index.to(outputs.device)).float().cpu()
-    return gathered, gate, field_targets, mask
+    batch_targets = entity_target_tensors(surfaces, targets, runnable.fields)
+    gathered = gather_entities(
+        outputs, batch_targets.index.to(outputs.device),
+    ).float().cpu()
+    return gathered, batch_targets
 
 
 class MarginAccumulator:
@@ -157,13 +159,11 @@ class MarginAccumulator:
         self._count_pred: list[np.ndarray] = []
         self._count_true: list[np.ndarray] = []
 
-    def add(
-        self, gathered: torch.Tensor, gate: torch.Tensor,
-        field_targets: EntityFieldTargets, mask: torch.Tensor,
-    ) -> None:
+    def add(self, gathered: torch.Tensor, targets: EntityTargetBatch) -> None:
         """Fold one chunk in: the gate over every real entity, zone and
         magnitude only where they train (target affected, field present)."""
-        real = mask.bool()
+        gate, field_targets = targets.gate, targets.fields
+        real = targets.mask.bool()
         self._gate_pred.append(
             (gathered[..., GATE_INDEX][real] > 0).numpy().astype(np.int8)
         )
