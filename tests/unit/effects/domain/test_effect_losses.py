@@ -33,9 +33,8 @@ from effects.domain.effect_losses import (
     per_entity_loss,
     verdict_loss,
 )
-from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.loss_floor import constant_predictor_outputs
-from tests.unit.effects.builders import make_entity_targets
+from tests.unit.effects.builders import fields_everywhere, make_entity_targets
 
 
 class TestLosses:
@@ -46,7 +45,7 @@ class TestLosses:
     def test_a_conditional_field_contributes_nothing_where_the_gate_is_off(self):
         outputs = self._outputs()
         entity_mask = torch.ones(2, 3)
-        targets = EntityFieldTargets.everywhere({"damage_taken": torch.zeros(2, 3)})
+        targets = fields_everywhere({"damage_taken": torch.zeros(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
         off = per_entity_loss(
             outputs, make_entity_targets(torch.zeros(2, 3), targets, entity_mask), fields=fields,
@@ -154,7 +153,7 @@ class TestLosses:
         count, so a two-record batch printed fields summing to twice its loss.
         """
         outputs = self._outputs()
-        targets = EntityFieldTargets.everywhere({"damage_taken": torch.ones(2, 3)})
+        targets = fields_everywhere({"damage_taken": torch.ones(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
         total, reported = per_entity_loss(
             outputs, make_entity_targets(torch.ones(2, 3), targets, torch.ones(2, 3)),
@@ -281,14 +280,11 @@ class TestLosses:
         assert float(mlm_loss(right, targets, rows=1)) < 1e-3
         assert float(mlm_loss(torch.zeros(2, 32), targets, rows=1)) > 1.0
 
-    def test_api_loss_accepts_either_target_alone(self):
-        types = api_loss(torch.randn(2, 5), torch.tensor([0, 1]), None, None)
-        keys = api_loss(None, None, torch.randn(2, 7), torch.zeros(2, 7))
-        assert float(types) > 0.0 and float(keys) > 0.0
-
-    def test_api_loss_needs_at_least_one_target(self):
-        with pytest.raises(ValueError, match="at least one"):
-            api_loss(None, None, None, None)
+    def test_api_loss_adds_the_keys_to_the_types_where_there_are_keys(self):
+        logits = torch.randn(2, 5)
+        types = api_loss(logits, torch.tensor([0, 1]), None, None)
+        both = api_loss(logits, torch.tensor([0, 1]), torch.randn(2, 7), torch.zeros(2, 7))
+        assert 0.0 < float(types) < float(both)
 
 
 class TestGen2Losses:
@@ -386,7 +382,7 @@ class TestHostPickedRowsMatchBooleanMasks:
                 case FieldType.CATEGORICAL:
                     out[spec.name] = torch.randint(
                         0, spec.arity, (batch, entities), generator=generator)
-        return PER_ENTITY_FIELDS, EntityFieldTargets.everywhere(out)
+        return PER_ENTITY_FIELDS, fields_everywhere(out)
 
     def _reference(self, outputs, gate_target, field_targets, entity_mask, fields):
         from effects.domain.effect_head_layout import FIELD_SLICES
@@ -481,7 +477,7 @@ class TestMagnitudeCap:
         def floor(value):
             batch = make_entity_targets(
                 gate=torch.ones(1, 2),
-                fields=EntityFieldTargets.everywhere(
+                fields=fields_everywhere(
                     {"damage_taken": torch.tensor([[2.0, value]])},
                 ),
                 mask=torch.ones(1, 2),
@@ -522,7 +518,7 @@ class TestCountTargetsAreNonnegative:
         def floor(value):
             batch = make_entity_targets(
                 gate=torch.ones(1, 2),
-                fields=EntityFieldTargets.everywhere(
+                fields=fields_everywhere(
                     {"damage_taken": torch.tensor([[2.0, value]])},
                 ),
                 mask=torch.ones(1, 2),
@@ -551,7 +547,8 @@ class TestOneReductionPolicy:
 
     def test_the_api_keys_term_sums_a_texts_keys(self):
         keys = 1245
-        loss = api_loss(None, None, torch.zeros(4, keys), torch.zeros(4, keys))
+        no_types = torch.full((4,), -1)
+        loss = api_loss(torch.zeros(4, 5), no_types, torch.zeros(4, keys), torch.zeros(4, keys))
         assert float(loss) == pytest.approx(keys * math.log(2), rel=1e-5)
 
     def test_the_api_types_term_averages_over_every_text(self):

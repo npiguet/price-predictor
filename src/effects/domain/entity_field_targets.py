@@ -22,17 +22,6 @@ class EntityFieldTargets:
     values: Mapping[str, torch.Tensor]
     present: Mapping[str, torch.Tensor]
 
-    @classmethod
-    def everywhere(cls, values: Mapping[str, torch.Tensor]) -> EntityFieldTargets:
-        """``values`` present at every entity."""
-        return cls(
-            dict(values),
-            {
-                name: torch.ones(value.shape[:2], dtype=torch.bool)
-                for name, value in values.items()
-            },
-        )
-
     def __contains__(self, name: str) -> bool:
         return name in self.values
 

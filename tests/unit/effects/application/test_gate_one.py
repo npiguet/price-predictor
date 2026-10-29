@@ -28,7 +28,7 @@ from effects.domain.records import (
     acting_keys,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
-from tests.unit.effects.builders import make_entity_targets, make_record
+from tests.unit.effects.builders import fields_everywhere, make_entity_targets, make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -142,7 +142,6 @@ class TestMarginAccumulator:
             PER_ENTITY_WIDTH,
             ZONE_OUTCOMES,
         )
-        from effects.domain.entity_field_targets import EntityFieldTargets
 
         gathered = torch.zeros(1, 2, PER_ENTITY_WIDTH)
         gathered[0, 0, GATE_INDEX] = 3.0   # predicted affected
@@ -151,7 +150,7 @@ class TestMarginAccumulator:
         gathered[0, 0, start + ZONE_OUTCOMES.index("died")] = 5.0
         damage, _ = FIELD_SLICES["damage_taken"]
         gathered[0, 0, damage] = torch.log(torch.tensor(affected_damage))
-        targets = EntityFieldTargets.everywhere({
+        targets = fields_everywhere({
             "zone_outcome": torch.tensor(
                 [[float(ZONE_OUTCOMES.index("died")), 0.0]],
             ),

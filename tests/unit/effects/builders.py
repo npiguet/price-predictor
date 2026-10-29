@@ -372,6 +372,29 @@ def write_validation_samples(directory, records) -> dict:
     return samples
 
 
+def fields_everywhere(values):
+    """``EntityFieldTargets`` holding ``values``, each present at every entity."""
+    import torch
+
+    from effects.domain.entity_field_targets import EntityFieldTargets
+
+    return EntityFieldTargets(
+        dict(values),
+        {name: torch.ones(value.shape[:2], dtype=torch.bool) for name, value in values.items()},
+    )
+
+
+def stated_targets(text: str) -> dict[str, float | None]:
+    """The value head's targets for ``text`` by name, None where masked."""
+    from effects.domain.value_targets import VALUE_TARGET_NAMES, value_targets
+
+    targets = value_targets(text)
+    return {
+        name: value if stated else None
+        for name, value, stated in zip(VALUE_TARGET_NAMES, targets.values, targets.mask)
+    }
+
+
 def make_entity_targets(gate, fields=None, mask=None, index=None):
     """An ``EntityTargetBatch`` for a loss test. A mapping of ``fields`` is
     present everywhere; ``mask`` defaults to every entity real and ``index``
@@ -381,7 +404,7 @@ def make_entity_targets(gate, fields=None, mask=None, index=None):
     from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
 
     if not isinstance(fields, EntityFieldTargets):
-        fields = EntityFieldTargets.everywhere(fields or {})
+        fields = fields_everywhere(fields or {})
     if mask is None:
         mask = torch.ones_like(gate)
     if index is None:

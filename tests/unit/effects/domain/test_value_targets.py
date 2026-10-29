@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 from effects.domain.value_targets import VALUE_TARGET_NAMES, value_targets
+from tests.unit.effects.builders import stated_targets
 
 #: Lightning Bolt's script line, as gen-1's sidecar carries it.
 _BOLT = (
@@ -31,7 +32,7 @@ _CHARM = "CharmNum$ 2 | Choices$ SV1,SV2,SV3,SV4 | SP$ Charm"
 
 
 def test_a_one_segment_gen1_text_reads_its_amount():
-    targets = value_targets(_BOLT)
+    targets = stated_targets(_BOLT)
     assert targets.get("damage") == 3
     assert targets.get("cards_drawn") == 0
 
@@ -42,7 +43,7 @@ def test_amounts_sum_over_segments():
         "AB$ DealDamage | Cost$ 2 R | NumDmg$ 3 | SubAbility$ SV1 | ValidTgts$ Creature"
         " [SEG] SV1: DB$ DealDamage | Defined$ You | NumDmg$ 2"
     )
-    assert value_targets(text).get("damage") == 5
+    assert stated_targets(text).get("damage") == 5
 
 
 def test_a_variable_amount_in_any_segment_masks_the_target():
@@ -50,17 +51,17 @@ def test_a_variable_amount_in_any_segment_masks_the_target():
         "AB$ DealDamage | Cost$ X R | NumDmg$ X | SubAbility$ SV1"
         " [SEG] SV1: DB$ DealDamage | NumDmg$ 2"
     )
-    assert value_targets(text).get("damage") is None
+    assert stated_targets(text).get("damage") is None
 
 
 def test_a_count_svar_amount_is_masked():
     text = "NumDmg$ Count$Valid Creature.YouCtrl | SP$ DealDamage | ValidTgts$ Any"
-    assert value_targets(text).get("damage") is None
+    assert stated_targets(text).get("damage") is None
 
 
 def test_a_signed_pump_reads_plus_and_minus_literals():
     text = "AB$ Pump | Cost$ G | NumAtt$ +2 | NumDef$ -1 | ValidTgts$ Creature"
-    targets = value_targets(text)
+    targets = stated_targets(text)
     assert targets.get("power_change") == 2
     assert targets.get("toughness_change") == -1
 
@@ -70,12 +71,12 @@ def test_cards_drawn_counts_draw_segments_only():
         "SP$ Draw | NumCards$ 2 | SubAbility$ SV1"
         " [SEG] SV1: DB$ Discard | Mode$ TgtChoose | NumCards$ 1"
     )
-    assert value_targets(text).get("cards_drawn") == 2
+    assert stated_targets(text).get("cards_drawn") == 2
 
 
 def test_bone_splinters_masks_mana_and_sets_the_sacrifice():
     """A spell line's mana is masked even where Cost$ carries mana (FR-058a)."""
-    targets = value_targets(_BONE_SPLINTERS)
+    targets = stated_targets(_BONE_SPLINTERS)
     for name in ("mana_w", "mana_u", "mana_b", "mana_r", "mana_g", "mana_c",
                  "mana_generic"):
         assert targets.get(name) is None, name
@@ -85,7 +86,7 @@ def test_bone_splinters_masks_mana_and_sets_the_sacrifice():
 
 def test_an_activated_cost_reads_its_mana_and_tap():
     text = "AB$ Draw | Cost$ 2 U T | NumCards$ 1"
-    targets = value_targets(text)
+    targets = stated_targets(text)
     assert targets.get("mana_u") == 1
     assert targets.get("mana_generic") == 2
     assert targets.get("cost_taps") == 1.0
@@ -93,25 +94,25 @@ def test_an_activated_cost_reads_its_mana_and_tap():
 
 
 def test_a_tap_only_cost_states_zero_mana():
-    targets = value_targets(_TIM)
+    targets = stated_targets(_TIM)
     assert targets.get("mana_generic") == 0
     assert targets.get("cost_taps") == 1.0
     assert targets.get("damage") == 1
 
 
 def test_an_x_cost_masks_the_mana_targets():
-    targets = value_targets("AB$ DealDamage | Cost$ X R | NumDmg$ 1")
+    targets = stated_targets("AB$ DealDamage | Cost$ X R | NumDmg$ 1")
     assert targets.get("mana_r") is None
 
 
 def test_no_cost_masks_every_cost_target():
-    targets = value_targets(_BOLT)
+    targets = stated_targets(_BOLT)
     for name in ("mana_r", "cost_taps", "cost_sacrifices"):
         assert targets.get(name) is None
 
 
 def test_a_charm_root_masks_every_amount():
-    targets = value_targets(_CHARM)
+    targets = stated_targets(_CHARM)
     for name in ("damage", "power_change", "toughness_change",
                  "counters_placed", "cards_drawn"):
         assert targets.get(name) is None, name
@@ -133,19 +134,19 @@ def _texts(card: str) -> list[str]:
 
 
 def test_arc_trail_sums_its_two_segments():
-    assert value_targets(_texts("a/arc_trail")[0]).get("damage") == 3
+    assert stated_targets(_texts("a/arc_trail")[0]).get("damage") == 3
 
 
 def test_a_trigger_reads_the_damage_of_its_executed_segment():
     (text,) = [t for t in _texts("a/abraded_bluffs") if "NumDmg" in t]
-    assert value_targets(text).get("damage") == 1
+    assert stated_targets(text).get("damage") == 1
 
 
 def test_cryptic_commands_root_masks_amounts_and_its_draw_mode_reads_one():
     root, *modes = _texts("c/cryptic_command")
-    assert value_targets(root).get("damage") is None
-    assert value_targets(modes[3]).get("cards_drawn") == 1
-    assert value_targets(modes[0]).get("cards_drawn") == 0
+    assert stated_targets(root).get("damage") is None
+    assert stated_targets(modes[3]).get("cards_drawn") == 1
+    assert stated_targets(modes[0]).get("cards_drawn") == 0
 
 
 class TestStaticAndCounterAmounts:
@@ -153,7 +154,7 @@ class TestStaticAndCounterAmounts:
 
     def test_an_anthem_reads_its_add_power_and_add_toughness(self):
         """Glorious Anthem: a static's pump is AddPower$/AddToughness$, never NumAtt$."""
-        targets = value_targets(
+        targets = stated_targets(
             "Mode$ Continuous | Affected$ Creature.YouCtrl | AddPower$ 1 | "
             "AddToughness$ 1 | Description$ Creatures you control get +1/+1."
         )
@@ -161,12 +162,12 @@ class TestStaticAndCounterAmounts:
         assert targets.get("toughness_change") == 1.0
 
     def test_a_variable_static_pump_is_masked(self):
-        targets = value_targets("Mode$ Continuous | Affected$ Creature | AddPower$ X")
+        targets = stated_targets("Mode$ Continuous | Affected$ Creature | AddPower$ X")
         assert targets.get("power_change") is None
 
     def test_a_put_counter_reads_placed_and_a_remove_counter_reads_removed(self):
-        put = value_targets("AB$ PutCounter | Cost$ T | CounterType$ P1P1 | CounterNum$ 2")
-        remove = value_targets(
+        put = stated_targets("AB$ PutCounter | Cost$ T | CounterType$ P1P1 | CounterNum$ 2")
+        remove = stated_targets(
             "AB$ RemoveCounter | Cost$ T | CounterType$ CHARGE | CounterNum$ 3"
         )
         assert put.get("counters_placed") == 2.0
@@ -175,22 +176,22 @@ class TestStaticAndCounterAmounts:
         assert remove.get("counters_removed") == 3.0
 
     def test_a_counter_api_without_a_count_moves_one_as_forge_does(self):
-        targets = value_targets("AB$ PutCounter | Cost$ T | CounterType$ P1P1")
+        targets = stated_targets("AB$ PutCounter | Cost$ T | CounterType$ P1P1")
         assert targets.get("counters_placed") == 1.0
 
     def test_a_draw_without_a_count_draws_one_as_forge_does(self):
-        assert value_targets("SP$ Draw | Defined$ You").get("cards_drawn") == 1.0
+        assert stated_targets("SP$ Draw | Defined$ You").get("cards_drawn") == 1.0
 
     def test_moving_or_choosing_counters_masks_both_counter_targets(self):
         for api in ("MoveCounter", "AddOrRemoveCounter"):
-            targets = value_targets(f"AB$ {api} | Cost$ T | CounterType$ P1P1 | CounterNum$ 1")
+            targets = stated_targets(f"AB$ {api} | Cost$ T | CounterType$ P1P1 | CounterNum$ 1")
             assert targets.get("counters_placed") is None, api
             assert targets.get("counters_removed") is None, api
 
     def test_a_count_on_another_api_is_not_a_counter_placed(self):
-        targets = value_targets("SP$ DealDamage | NumDmg$ 2 | CounterNum$ 4")
+        targets = stated_targets("SP$ DealDamage | NumDmg$ 2 | CounterNum$ 4")
         assert targets.get("counters_placed") == 0.0
 
     def test_a_non_numeric_count_is_masked(self):
-        targets = value_targets("AB$ RemoveCounter | Cost$ T | CounterType$ Any | CounterNum$ All")
+        targets = stated_targets("AB$ RemoveCounter | Cost$ T | CounterType$ Any | CounterNum$ All")
         assert targets.get("counters_removed") is None

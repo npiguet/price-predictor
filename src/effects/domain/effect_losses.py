@@ -330,33 +330,31 @@ def mlm_loss(
 
 
 def api_loss(
-    type_logits: torch.Tensor | None,
-    type_targets: torch.Tensor | None,
+    type_logits: torch.Tensor,
+    type_targets: torch.Tensor,
     key_logits: torch.Tensor | None,
     key_targets: torch.Tensor | None,
 ) -> torch.Tensor:
     """Script-API classification from ``e``, one row per text: the API type's
-    cross-entropy plus every parameter key's binary cross-entropy."""
-    given = type_logits if type_logits is not None else key_logits
-    rows = int(given.shape[0]) if given is not None else 0
+    cross-entropy plus every parameter key's binary cross-entropy. The keys
+    are None for a run whose sidecars name no parameter key, which builds no
+    key head."""
+    rows = int(type_logits.shape[0])
     total = None
-    if type_logits is not None and type_targets is not None:
-        # A line with no API type carries -1 and is skipped.
-        known = (type_targets.detach().cpu() >= 0).nonzero().squeeze(1)
-        if known.numel():
-            known = known.to(type_logits.device, non_blocking=True)
-            total = functional.cross_entropy(
-                type_logits.index_select(0, known),
-                type_targets.to(type_logits.device).index_select(0, known),
-                reduction="sum",
-            )
+    # A line with no API type carries -1 and is skipped.
+    known = (type_targets.detach().cpu() >= 0).nonzero().squeeze(1)
+    if known.numel():
+        known = known.to(type_logits.device, non_blocking=True)
+        total = functional.cross_entropy(
+            type_logits.index_select(0, known),
+            type_targets.to(type_logits.device).index_select(0, known),
+            reduction="sum",
+        )
     if key_logits is not None and key_targets is not None:
         keys = functional.binary_cross_entropy_with_logits(
             key_logits, key_targets.float(), reduction="sum",
         )
         total = keys if total is None else total + keys
     if total is None:
-        if type_targets is None and key_targets is None:
-            raise ValueError("api_loss needs at least one of its two targets")
-        return given.new_zeros(())
+        return type_logits.new_zeros(())
     return per_row(total, rows)

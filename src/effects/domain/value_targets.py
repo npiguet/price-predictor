@@ -92,11 +92,6 @@ class ValueTargets:
     values: tuple[float, ...]
     mask: tuple[bool, ...]
 
-    def get(self, name: str) -> float | None:
-        """The target by name, or None where it is masked."""
-        index = VALUE_TARGET_NAMES.index(name)
-        return self.values[index] if self.mask[index] else None
-
 
 @lru_cache(maxsize=None)
 def value_targets(text: str) -> ValueTargets:
