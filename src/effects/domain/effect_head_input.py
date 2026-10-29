@@ -509,142 +509,129 @@ class LineLookup(Protocol):
         """The charm-mode keys whose slots follow the key's (FR-063a)."""
 
 
-def build_effect_head_input(
-    record: EffectRecord,
-    *,
-    lines: LineLookup,
-    e_dim: int,
-    rng: random.Random,
-    candidate_index: int | None = None,
-    context_dropout: float = 0.0,
-    masked_keywords: dict[str, frozenset[str]] | None = None,
-    stripped_keywords: dict[str, frozenset[str]] | None = None,
-    layout: InputLayout = INPUT_LAYOUT,
-) -> EffectHeadInput:
-    """Lay one record out as the token surface.
+class SurfaceBuilder:
+    """Lays records out as the token surface, under one batch's constants.
 
-    Args:
-        candidate_index: which candidate's ``e`` a ``decision`` record's
-            ``[ACT]`` reads.
-        context_dropout: per-token drop probability for every entity's
-            abilities but the acting one's, drawn from ``rng``.
-        masked_keywords: per-entity keywords to hide from the temporary-grant
-            channel, e.g. a ``continuous`` record's own contribution.
-        stripped_keywords: gate 2's perturbation: per-entity keywords removed
-            from the overlay *and* as ability slots, since a printed keyword
-            reaches the model as a token. Kept apart from ``masked_keywords``,
-            which must not silence a printed line of the same keyword.
-        layout: :data:`INPUT_LAYOUT`, or the one a checkpoint recorded
-            (:meth:`InputLayout.of`).
+    ``rng`` draws the context dropout: each entity's abilities but the acting
+    one's lose their token with probability ``context_dropout``, drawn in
+    board order. ``layout`` is :data:`INPUT_LAYOUT`, or the one a checkpoint
+    recorded (:meth:`InputLayout.of`).
     """
-    masked = masked_keywords or {}
-    stripped = stripped_keywords or {}
-    zero = tuple([0.0] * e_dim)
-    slots: list[Slot] = []
-    position = 0
 
-    slots.append(Slot(
-        kind=SlotKind.GLOBAL, position=position,
-        features=global_features(record, layout=layout),
-    ))
-    position += 1
+    def __init__(
+        self, lines: LineLookup, *, e_dim: int, rng: random.Random,
+        context_dropout: float = 0.0, layout: InputLayout = INPUT_LAYOUT,
+    ) -> None:
+        self.lines = lines
+        self.rng = rng
+        self.context_dropout = context_dropout
+        self.layout = layout
+        self._zero = tuple([0.0] * e_dim)
 
-    slots.append(Slot(
-        kind=SlotKind.ACT, position=position,
-        features=act_features(record),
-        e=_act_vector(record, lines.e_for, zero, candidate_index),
-    ))
-    position += 1
+    def build(
+        self, record: EffectRecord, stripped: dict[str, frozenset[str]] | None = None,
+    ) -> EffectHeadInput:
+        """One record's surface.
 
-    entity_slots: list[int] = []
-    for player in record.state.players:
-        entity_slots.append(len(slots))
-        slots.append(Slot(
-            kind=SlotKind.PLAYER, position=position,
-            features=player_features(player, record, layout=layout),
-            player_id=player.id,
-        ))
-        position += 1
-
-    source_id = record.state.refs.source
-    for entity in record.state.entities:
-        gone = stripped.get(entity.id, frozenset())
-        entity_slots.append(len(slots))
-        slots += _entity_block(
-            entity, record, lines=lines, zero=zero,
-            masked=masked.get(entity.id, frozenset()) | gone, layout=layout,
-            keeps=lambda key, entity=entity, gone=gone: _keeps_ability(
-                key, lines=lines, gone=gone,
-                dropout=context_dropout if entity.id != source_id else 0.0, rng=rng,
+        A ``decision`` record's ``[ACT]`` reads its candidate's ``e``
+        (FR-060a), and a ``continuous`` record's own keywords are hidden from
+        the temporary-grant channel (:func:`continuous_masked_keywords`).
+        ``stripped`` is gate 2's perturbation: per-entity keywords removed from
+        the overlay *and* as ability slots, since a printed keyword reaches the
+        model as a token; the continuous mask must not silence a printed line
+        of the same keyword, so the two stay apart.
+        """
+        layout = self.layout
+        slots = [
+            Slot(
+                kind=SlotKind.GLOBAL, position=0,
+                features=global_features(record, layout=layout),
             ),
-        )
-
-    return EffectHeadInput(slots=tuple(slots), entity_slots=tuple(entity_slots))
-
-
-def _entity_block(
-    entity: EntityState, record: EffectRecord, *, lines: LineLookup, zero, masked, layout,
-    keeps,
-) -> list[Slot]:
-    """One entity's ``CARD`` slot, then an ``ABILITY`` slot per ability it
-    keeps, each charm root followed by its mode lines; positions restart."""
-    block = [Slot(
-        kind=SlotKind.CARD, position=0,
-        features=card_features(entity, record, masked_keywords=masked, layout=layout),
-        entity_id=entity.id,
-    )]
-    for key in entity.ability_keys:
-        if not keeps(key):
-            continue
-        modes = lines.options_for(key)
-        for mode_key, option in ((key, False), *((mode, True) for mode in modes)):
-            resolved = lines.e_for(mode_key)
-            block.append(Slot(
-                kind=SlotKind.ABILITY, position=len(block),
-                # Explicitly against None: row 0 is a valid matrix row and
-                # ``or`` would read it as a miss.
-                e=zero if resolved is None else resolved,
-                entity_id=entity.id, option=option,
+            Slot(
+                kind=SlotKind.ACT, position=ACT_SLOT,
+                features=act_features(record), e=self._act_vector(record),
+            ),
+        ]
+        entity_slots: list[int] = []
+        for player in record.state.players:
+            entity_slots.append(len(slots))
+            slots.append(Slot(
+                kind=SlotKind.PLAYER, position=len(slots),
+                features=player_features(player, record, layout=layout),
+                player_id=player.id,
             ))
-    return block
 
+        masked = continuous_masked_keywords(record)
+        stripped = stripped or {}
+        source_id = record.state.refs.source
+        for entity in record.state.entities:
+            gone = stripped.get(entity.id, frozenset())
+            entity_slots.append(len(slots))
+            slots += self._entity_block(
+                entity, record, masked=masked.get(entity.id, frozenset()) | gone,
+                gone=gone,
+                dropout=self.context_dropout if entity.id != source_id else 0.0,
+            )
+        return EffectHeadInput(slots=tuple(slots), entity_slots=tuple(entity_slots))
 
-def _keeps_ability(key, *, lines: LineLookup, gone, dropout: float, rng) -> bool:
-    """Whether one of an entity's abilities gets a slot."""
-    if not lines.has_line(key):
-        return False
-    if gone and lines.keyword_of(key) in gone:
-        # Dropped rather than zeroed: a zero token still says an ability is
-        # here.
-        return False
-    return not (dropout > 0.0 and rng.random() < dropout)
+    def _entity_block(
+        self, entity: EntityState, record: EffectRecord, *,
+        masked: frozenset[str], gone: frozenset[str], dropout: float,
+    ) -> list[Slot]:
+        """One entity's ``CARD`` slot, then an ``ABILITY`` slot per ability it
+        keeps, each charm root followed by its mode lines; positions restart."""
+        block = [Slot(
+            kind=SlotKind.CARD, position=0,
+            features=card_features(
+                entity, record, masked_keywords=masked, layout=self.layout,
+            ),
+            entity_id=entity.id,
+        )]
+        for key in entity.ability_keys:
+            if not self._keeps(key, gone=gone, dropout=dropout):
+                continue
+            modes = self.lines.options_for(key)
+            for mode_key, option in ((key, False), *((mode, True) for mode in modes)):
+                resolved = self.lines.e_for(mode_key)
+                block.append(Slot(
+                    kind=SlotKind.ABILITY, position=len(block),
+                    # Explicitly against None: row 0 is a valid matrix row and
+                    # ``or`` would read it as a miss.
+                    e=self._zero if resolved is None else resolved,
+                    entity_id=entity.id, option=option,
+                ))
+        return block
 
+    def _keeps(self, key: ProvenanceKey, *, gone: frozenset[str], dropout: float) -> bool:
+        """Whether one of an entity's abilities gets a slot."""
+        if not self.lines.has_line(key):
+            return False
+        if gone and self.lines.keyword_of(key) in gone:
+            # Dropped rather than zeroed: a zero token still says an ability is
+            # here.
+            return False
+        return not (dropout > 0.0 and self.rng.random() < dropout)
 
-def _act_vector(
-    record: EffectRecord, e_for, zero: tuple[float, ...],
-    candidate_index: int | None,
-):
-    if not record.has_act_line:
-        return zero
-    payload = record.payload
-    if isinstance(payload, PlayabilityDecisionPayload):
-        if candidate_index is None or candidate_index >= len(payload.candidates):
-            return zero
-        keys = payload.candidates[candidate_index].ability
-        return _first_vector(keys, e_for, zero)
-    if record.ability:
-        return _first_vector(record.ability, e_for, zero)
-    return zero
+    def _act_vector(self, record: EffectRecord):
+        if not record.has_act_line:
+            return self._zero
+        payload = record.payload
+        if isinstance(payload, PlayabilityDecisionPayload):
+            if not payload.candidates:
+                return self._zero
+            return self._first_vector(payload.candidates[0].ability)
+        if record.ability:
+            return self._first_vector(record.ability)
+        return self._zero
 
-
-def _first_vector(keys, e_for, zero: tuple[float, ...]):
-    """The first key that resolves; zeros if none do. A merged line's keys
-    all name the same row."""
-    for key in keys:
-        vector = e_for(key)
-        if vector is not None:
-            return vector
-    return zero
+    def _first_vector(self, keys):
+        """The first key that resolves; zeros if none do. A merged line's keys
+        all name the same row."""
+        for key in keys:
+            vector = self.lines.e_for(key)
+            if vector is not None:
+                return vector
+        return self._zero
 
 
 def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]]:

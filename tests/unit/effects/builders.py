@@ -240,7 +240,11 @@ def make_batcher(
     import torch
 
     from effects.application.ability_text import KeyResolver
-    from effects.application.surface_batching import Materializer, SurfaceBatcher
+    from effects.application.surface_batching import (
+        Materializer,
+        SurfaceBatcher,
+        SurfaceSpec,
+    )
     from effects.application.text_staging import TextStager
     from effects.domain.baselines import BaselineMasks
     from effects.domain.effect_head_input import INPUT_LAYOUT
@@ -252,12 +256,11 @@ def make_batcher(
             keyword_expand_p=keyword_expand_p, truncations=truncations,
         ),
         resolver=resolver or KeyResolver(sidecars, surface),
-        masks=masks, e_dim=e_dim, widths=widths or {},
+        spec=SurfaceSpec(e_dim, widths or {}, masks, input_layout or INPUT_LAYOUT),
         materializer=Materializer(
             device or torch.device("cpu"), masks, identity_table, noise,
         ),
         context_dropout=context_dropout, rng=rng,
-        input_layout=input_layout or INPUT_LAYOUT,
     )
 
 

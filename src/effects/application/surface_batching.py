@@ -25,7 +25,7 @@ from effects.application.text_staging import (
 )
 from effects.domain.ability_encoder import AbilityEncoder, EncodedLine
 from effects.domain.ability_tokenizer import Surface
-from effects.domain.baselines import BaselineMasks
+from effects.domain.baselines import BaselineMasks, baseline_masks
 from effects.domain.damage_step_keywords import keyword_of_line
 from effects.domain.effect_head_input import (
     ACT_SLOT,
@@ -33,11 +33,11 @@ from effects.domain.effect_head_input import (
     KIND_FLAG_WIDTH,
     InputLayout,
     SlotKind,
-    build_effect_head_input,
-    continuous_masked_keywords,
+    SurfaceBuilder,
+    feature_widths,
 )
 from effects.domain.provenance import SidecarLookup
-from effects.domain.records import PlayabilityDecisionPayload, acting_keys
+from effects.domain.records import acting_keys
 from effects.domain.surface_collation import TrunkInputs, collate_surfaces
 
 #: Running-covariance decay for the noise on ``e`` (FR-056).
@@ -279,6 +279,37 @@ class Materializer:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class SurfaceSpec:
+    """What one model's surfaces are laid out by: the width of ``e``, each
+    slot kind's feature width, the variant's masks and the input layout.
+
+    Built from the run's config in training and from the checkpoint wherever
+    a saved model runs, so the two are assembled one way.
+    """
+
+    e_dim: int
+    widths: dict[SlotKind, int]
+    masks: BaselineMasks
+    #: Training's own, or the one a loaded checkpoint recorded (FR-063c).
+    layout: InputLayout = INPUT_LAYOUT
+
+    @classmethod
+    def for_training(cls, config, widths: dict[SlotKind, int]) -> SurfaceSpec:
+        """A training run's, under the layout every run records."""
+        return cls(config.e_dim, dict(widths), baseline_masks(config.variant))
+
+    @classmethod
+    def for_checkpoint(cls, checkpoint, records) -> SurfaceSpec:
+        """A saved model's, each width measured from ``records`` under the
+        layout the checkpoint recorded."""
+        layout = InputLayout.of(checkpoint.training_settings)
+        return cls(
+            checkpoint.encoder_config.e_dim, feature_widths(records, layout=layout),
+            baseline_masks(checkpoint.variant), layout,
+        )
+
+
 class SurfaceBatcher:
     """Turns a list of records into the trunk's inputs.
 
@@ -291,27 +322,20 @@ class SurfaceBatcher:
         *,
         stager: TextStager,
         resolver: KeyResolver,
-        masks: BaselineMasks,
-        e_dim: int,
-        widths: dict[SlotKind, int],
+        spec: SurfaceSpec,
         materializer: Materializer | None = None,
         context_dropout: float = 0.0,
         rng: random.Random | None = None,
-        input_layout: InputLayout = INPUT_LAYOUT,
     ) -> None:
         self.stager = stager
         #: The memoised key-to-text join; a step's batcher borrows the run's.
         self.resolver = resolver
-        self.masks = masks
-        self.e_dim = e_dim
-        self.widths = widths
+        self.spec = spec
         self.materializer = materializer
         self.context_dropout = context_dropout
         #: The step's generator: keyword expansion, context dropout and the MLM
         #: mask draw from it, in that order.
         self.rng = rng or random.Random(0)
-        #: Training's own, or the one a loaded checkpoint recorded (FR-063c).
-        self.input_layout = input_layout
         #: ``key -> (text, line)`` for :meth:`stand_in` keys, apart from the
         #: resolver's memo because a copy's text belongs to its step alone.
         self._staged: dict[object, tuple[str, object]] = {}
@@ -401,7 +425,7 @@ class SurfaceBatcher:
 
     def stage(self, texts: Mapping[str, object]) -> StagedTexts:
         return self.stager.stage(
-            texts, masks=self.masks, e_dim=self.e_dim, rng=self.rng,
+            texts, masks=self.spec.masks, e_dim=self.spec.e_dim, rng=self.rng,
             keys_of=self._keys_of,
         )
 
@@ -426,32 +450,12 @@ class SurfaceBatcher:
         """Which damage-step keyword one ability key's line *is*, if any."""
         return keyword_of_line(self._resolve(key)[1])
 
-    def surface_for(
-        self,
-        record,
-        rows: dict[str, int],
-        strip_keywords: dict[str, frozenset[str]] | None = None,
-    ):
-        """One record's token surface.
-
-        ``strip_keywords`` is gate 2's perturbation: per entity, the keywords
-        to remove from that entity's input through both channels.
-        """
-
-        return build_effect_head_input(
-            record,
-            lines=_StagedLines(self, rows),
-            e_dim=self.e_dim,
-            rng=self.rng,
-            # A decision record's [ACT] reads its candidate's e (FR-060a).
-            candidate_index=(
-                0 if isinstance(record.payload, PlayabilityDecisionPayload)
-                else None
-            ),
-            context_dropout=self.context_dropout,
-            masked_keywords=continuous_masked_keywords(record),
-            stripped_keywords=strip_keywords,
-            layout=self.input_layout,
+    def surface_builder(self, rows: dict[str, int]) -> SurfaceBuilder:
+        """The builder of one batch's surfaces, each ``e`` a row of ``rows``;
+        it draws context dropout from the batcher's generator."""
+        return SurfaceBuilder(
+            _StagedLines(self, rows), e_dim=self.spec.e_dim, rng=self.rng,
+            context_dropout=self.context_dropout, layout=self.spec.layout,
         )
 
     def build(self, records, encoder: AbilityEncoder, strip_per_record=None) -> Materialized:
@@ -470,19 +474,17 @@ class SurfaceBatcher:
         texts = self.batch_texts(records)
         staged = self.stage(texts)
         strips = strip_per_record or [None] * len(records)
-        surfaces = [
-            self.surface_for(record, staged.rows, strip)
-            for record, strip in zip(records, strips)
-        ]
+        builder = self.surface_builder(staged.rows)
+        surfaces = [builder.build(record, strip) for record, strip in zip(records, strips)]
         inputs = self._masked(collate_surfaces(
-            surfaces, e_dim=self.e_dim, widths=self.widths,
+            surfaces, e_dim=self.spec.e_dim, widths=self.spec.widths,
         ))
         return PreparedBatch(texts=texts, staged=staged, surfaces=surfaces, inputs=inputs)
 
     def _masked(self, inputs: TrunkInputs) -> TrunkInputs:
         """The collated inputs with the variant's masks applied (FR-094),
         zeroed rather than dropped so the per-entity targets keep their shape."""
-        masks = self.masks
+        masks = self.spec.masks
         features = inputs.slot_features
         if masks.zero_state:
             for kind in (SlotKind.PLAYER, SlotKind.CARD):

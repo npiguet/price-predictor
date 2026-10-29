@@ -31,11 +31,11 @@ from effects.domain.effect_head_input import (
     THERMOMETER_STEPS,
     ZONES,
     SlotKind,
+    SurfaceBuilder,
     _multi_hot,
     _one_hot,
     _push_scalar,
     act_features,
-    build_effect_head_input,
     card_features,
     continuous_masked_keywords,
     global_features,
@@ -148,15 +148,18 @@ def _record(**overrides) -> EffectRecord:
     return make_record(kind, **defaults)
 
 
-def _build(record, *, rng=None, e_for=_e_for, has_line=None, options_for=None, **kwargs):
+def _build(
+    record, *, rng=None, e_for=_e_for, has_line=None, options_for=None,
+    context_dropout=0.0, stripped=None,
+):
     lines = _Lines(e_for=e_for)
     if has_line is not None:
         lines = replace(lines, has_line=has_line)
     if options_for is not None:
         lines = replace(lines, options_for=options_for)
-    return build_effect_head_input(
-        record, lines=lines, e_dim=E_DIM, rng=rng or random.Random(0), **kwargs,
-    )
+    return SurfaceBuilder(
+        lines, e_dim=E_DIM, rng=rng or random.Random(0), context_dropout=context_dropout,
+    ).build(record, stripped)
 
 
 class TestSurfaceShape:
@@ -261,7 +264,7 @@ class TestActSlot:
         assert act_features(_record())[0] == 1.0
         assert act_features(_record(kind=RecordKind.COMBAT, ability=None))[0] == 0.0
 
-    def test_a_decision_record_puts_the_candidates_vector_in_act(self):
+    def test_a_decision_record_puts_its_candidates_vector_in_act(self):
         record = _record(
             kind=RecordKind.PLAYABILITY, moment=None, ability=None,
             subkind=PlayabilitySubkind.DECISION,
@@ -272,8 +275,7 @@ class TestActSlot:
                           has_legal_target=False),
             )),
         )
-        assert _build(record, candidate_index=0).slots[1].e == _VECTORS[_BOLT]
-        assert _build(record, candidate_index=1).slots[1].e == _VECTORS[_ANTHEM]
+        assert _build(record).slots[1].e == _VECTORS[_BOLT]
 
     def test_an_unresolvable_key_contributes_zeros_rather_than_dropping(self):
         missing = ProvenanceKey("cardsfolder/x/absent.txt", 0, "spell", 0)

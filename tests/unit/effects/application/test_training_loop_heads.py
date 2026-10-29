@@ -271,7 +271,8 @@ def _built_run(monkeypatch, **config):
         monkeypatch, encoder_layers=1, encoder_d_model=8, **config,
     )
     return build_run(loop.spec, SimpleNamespace(
-        tokenizer=SimpleNamespace(vocab_size=8), widths=dict.fromkeys(SlotKind, 4),
+        tokenizer=SimpleNamespace(vocab_size=8),
+        surface_spec=SimpleNamespace(widths=dict.fromkeys(SlotKind, 4)),
         api_types=[], param_keys=[],
     ), frozenset(), device=loop.device)
 

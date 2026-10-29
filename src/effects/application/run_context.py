@@ -156,7 +156,7 @@ def build_run(
     ``preparer``."""
     config = spec.config
     vocab_size = preparer.tokenizer.vocab_size
-    widths = preparer.widths
+    widths = preparer.surface_spec.widths
     encoder_config = AbilityEncoderConfig(
         vocab_size=vocab_size,
         e_dim=config.e_dim,

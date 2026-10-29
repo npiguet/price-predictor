@@ -18,6 +18,7 @@ from effects.application.surface_batching import (
     IdentityTable,
     Materializer,
     SurfaceBatcher,
+    SurfaceSpec,
 )
 from effects.application.text_staging import TextStager
 from effects.domain.ability_encoder import (
@@ -34,7 +35,6 @@ from effects.domain.ability_tokenizer import (
 from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
-from effects.domain.effect_head_input import InputLayout, feature_widths
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
@@ -134,8 +134,7 @@ class LoadedModel:
 
     def _batcher(self, records) -> SurfaceBatcher:
         checkpoint = self.checkpoint
-        layout = InputLayout.of(checkpoint.training_settings)
-        masks = baseline_masks(checkpoint.variant)
+        spec = SurfaceSpec.for_checkpoint(checkpoint, records)
         return SurfaceBatcher(
             stager=TextStager(
                 tokenizer=self.tokenizer,
@@ -145,13 +144,10 @@ class LoadedModel:
                 truncations=TruncationLog(log_truncation(logger, "evaluation")),
             ),
             resolver=KeyResolver(self.sidecars, self.surface),
-            masks=masks,
-            e_dim=checkpoint.encoder_config.e_dim,
-            widths=feature_widths(records, layout=layout),
-            materializer=Materializer(self.device, masks, self.identity_table),
+            spec=spec,
+            materializer=Materializer(self.device, spec.masks, self.identity_table),
             context_dropout=0.0,
             rng=random.Random(EVALUATION_SEED),
-            input_layout=layout,
         )
 
 

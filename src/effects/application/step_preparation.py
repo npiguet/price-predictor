@@ -21,6 +21,7 @@ from effects.application.surface_batching import (
     Materializer,
     PreparedBatch,
     SurfaceBatcher,
+    SurfaceSpec,
 )
 from effects.application.text_staging import MaskedTokens, TextStager, pinned
 from effects.application.train_effect_model import TrainEffectModelConfig
@@ -32,7 +33,6 @@ from effects.domain.aux_head_targets import (
     verdict_targets,
 )
 from effects.domain.aux_heads import TRAINING_HEADS, Head
-from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH, FieldSpec
@@ -222,7 +222,7 @@ class StepPreparer:
         self.config = settings.config
         self.seed = settings.seed
         self.surface = surface_of(settings.config.vocab_path)
-        self.masks = baseline_masks(settings.config.variant)
+        self.surface_spec = SurfaceSpec.for_training(settings.config, settings.widths)
         self.split = settings.split
         self.rarity = settings.rarity
         self.legality_mode_counts = settings.legality_mode_counts
@@ -230,7 +230,6 @@ class StepPreparer:
         self.param_keys = list(settings.param_keys)
         self._api_type_index = {name: i for i, name in enumerate(self.api_types)}
         self._api_key_index = {name: i for i, name in enumerate(self.param_keys)}
-        self.widths = settings.widths
         self.heads = settings.heads
         self.truncated: list[tuple[str, tuple]] = []
         self.truncations = truncations or TruncationLog(
@@ -271,9 +270,7 @@ class StepPreparer:
                 truncations=self.truncations,
             ),
             resolver=self.resolver,
-            masks=self.masks,
-            e_dim=self.config.e_dim,
-            widths=self.widths,
+            spec=self.surface_spec,
             materializer=materializer,
             context_dropout=self.config.context_dropout if training else 0.0,
             rng=(
