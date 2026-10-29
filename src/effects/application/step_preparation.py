@@ -12,6 +12,7 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import NamedTuple
 
 import torch
 
@@ -109,6 +110,13 @@ class DeviceStep:
             index=targets.index.pin_memory(),
         )
         self.heads.pin()
+
+
+class RecordLabels(NamedTuple):
+    """Where one trained record is counted on the epoch line (FR-055)."""
+
+    bucket: str
+    family: str
 
 
 @dataclass(frozen=True)
@@ -443,14 +451,14 @@ class StepPreparer:
 
     def _shard_labels(
         self, records: list, texts: Mapping[str, str | None], games: TextGames,
-    ) -> dict[str, tuple[str, str]]:
-        """``record_id -> (rarity bucket, rule family)`` for one shard's
-        records, bucketed by the games the weights read."""
-        labels: dict[str, tuple[str, str]] = {}
+    ) -> dict[str, RecordLabels]:
+        """``record_id -> labels`` for one shard's records, bucketed by the
+        games the weights read."""
+        labels: dict[str, RecordLabels] = {}
         for record in records:
             text = texts[record.record_id]
             bucket = NO_TEXT_BUCKET if text is None else games.bucket(text)
-            labels[record.record_id] = (
+            labels[record.record_id] = RecordLabels(
                 bucket, rule_family(
                     record, self.sidecars, resolver=self._keywords,
                     legality_mode_counts=self.legality_mode_counts,
@@ -485,9 +493,9 @@ class StepPreparer:
             buckets: Counter[str] = Counter()
             families: Counter[str] = Counter()
             for record in plan.records:
-                bucket, family = labels[record.record_id]
-                buckets[bucket] += 1
-                families[family] += 1
+                counted = labels[record.record_id]
+                buckets[counted.bucket] += 1
+                families[counted.family] += 1
             step, copies = self.prepare_training_step(
                 plan, fields=task.fields, pin=pin,
                 rng=step_rng(self.seed, task.epoch, task.position, index),

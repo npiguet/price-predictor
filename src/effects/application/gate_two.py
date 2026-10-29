@@ -38,6 +38,7 @@ from effects.domain.evaluation_report import (
     KeywordVerdict,
 )
 from effects.domain.head_decoding import HeadReading
+from effects.domain.records import EffectRecord
 from effects.infrastructure.model_runner import BATCH_OBSERVATIONS
 
 if TYPE_CHECKING:
@@ -50,6 +51,15 @@ logger = logging.getLogger(__name__)
 SLOT_WIDTH_SAMPLE = 8
 
 PROGRESS_EVERY_RECORDS = 50_000
+
+
+class Observation(NamedTuple):
+    """One qualifying perturbation: a combat, the keyword row it qualifies
+    for, and the carrier whose keyword the twin build strips."""
+
+    record: EffectRecord
+    row: DamageStepKeyword
+    participant: CombatParticipant
 
 
 class FieldAgreement(NamedTuple):
@@ -202,8 +212,8 @@ class _Progress:
 def _qualifying(
     records, rows: tuple[DamageStepKeyword, ...], resolver: KeywordResolver,
     progress: _Progress,
-) -> Iterator[tuple]:
-    """Every qualifying ``(record, row, participant)``, read lazily.
+) -> Iterator[Observation]:
+    """Every qualifying observation, read lazily.
 
     A fork never qualifies: it re-runs a real board the population already
     holds, so it would count that combat twice toward the threshold.
@@ -216,18 +226,18 @@ def _qualifying(
             continue
         for row, participant in qualifying_observations(record, rows, resolver):
             progress.observed += 1
-            yield record, row, participant
+            yield Observation(record, row, participant)
 
 
 def _score_chunk(
-    chunk: list, runnable: Runnable, tallies: dict[str, _Tally], *,
+    chunk: list[Observation], runnable: Runnable, tallies: dict[str, _Tally], *,
     active: frozenset[str], keywords_of: KeywordsOf,
 ) -> None:
     """Run one chunk of observations, paired, and fold it into ``tallies``."""
-    built = [record for record, _row, _participant in chunk] * 2
+    built = [observation.record for observation in chunk] * 2
     strips = [None] * len(chunk) + [
-        {participant.carrier.id: frozenset({row.keyword})}
-        for _record, row, participant in chunk
+        {observation.participant.carrier.id: frozenset({observation.row.keyword})}
+        for observation in chunk
     ]
     outputs, surfaces = runnable.per_entity_outputs(built, strips)
 
