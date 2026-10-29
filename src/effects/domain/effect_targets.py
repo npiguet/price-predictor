@@ -13,7 +13,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from effects.domain.effect_head_input import CARD_TYPES, COUNTER_TYPES, OVERLAY_KEYWORDS
+from effects.domain.effect_head_input import (
+    CARD_TYPES,
+    COUNTER_TYPES,
+    OVERLAY_KEYWORDS,
+    vocabulary_slot,
+)
 from effects.domain.effect_head_layout import (
     CREATED_OBJECT_SLOTS,
     CREATED_OBJECTS_WIDTH,
@@ -93,17 +98,10 @@ _SETTERS: dict[EventType, tuple[str, int]] = {
     EventType.UNATTACHED: (HeadField.ATTACHED_TO_CHANGE, 1),
 }
 
-_OVERLAY_INDEX: dict[str, int] = {
-    keyword: index for index, keyword in enumerate(OVERLAY_KEYWORDS)
-}
-#: ``lower-cased member -> its flag``, for the type and colour channels.
-_TYPE_SLOTS: dict[str, int] = {t.lower(): i for i, t in enumerate(CARD_TYPES)}
-_COLOR_SLOTS: dict[str, int] = {c.lower(): i for i, c in enumerate(COLORS)}
-
 
 def overlay_index(raw: str) -> int | None:
     """The overlay slot a keyword, in any spelling Forge writes, sets."""
-    return _OVERLAY_INDEX.get(overlay_keyword(raw))
+    return vocabulary_slot(overlay_keyword(raw), OVERLAY_KEYWORDS)
 
 
 @dataclass
@@ -233,15 +231,15 @@ def _apply_pt_change(entry: EntityTargets, event: Event) -> None:
 
 def _apply_type_change(entry: EntityTargets, event: Event) -> None:
     params = event.params
-    _apply_multi(entry, HeadField.TYPES_GAINED, params.get("types_added"), _TYPE_SLOTS)
-    _apply_multi(entry, HeadField.TYPES_LOST, params.get("types_removed"), _TYPE_SLOTS)
+    _apply_multi(entry, HeadField.TYPES_GAINED, params.get("types_added"), CARD_TYPES)
+    _apply_multi(entry, HeadField.TYPES_LOST, params.get("types_removed"), CARD_TYPES)
     _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
 
 
 def _apply_color_change(entry: EntityTargets, event: Event) -> None:
     params = event.params
-    _apply_multi(entry, HeadField.COLORS_GAINED, params.get("colors"), _COLOR_SLOTS)
-    _apply_multi(entry, HeadField.COLORS_LOST, params.get("colors_removed"), _COLOR_SLOTS)
+    _apply_multi(entry, HeadField.COLORS_GAINED, params.get("colors"), COLORS)
+    _apply_multi(entry, HeadField.COLORS_LOST, params.get("colors_removed"), COLORS)
     _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
 
 
@@ -252,11 +250,13 @@ def _apply_duration(entry: EntityTargets, name: str, duration: str | None) -> No
         entry.set(name, DURATIONS.index(duration))
 
 
-def _apply_multi(entry: EntityTargets, name: str, values, slots: dict[str, int]) -> None:
+def _apply_multi(
+    entry: EntityTargets, name: str, values, vocabulary: tuple[str, ...],
+) -> None:
     for value in values or ():
-        index = slots.get(str(value).strip().lower())
+        index = vocabulary_slot(str(value), vocabulary)
         if index is not None:
-            entry.flag(name, index, len(slots))
+            entry.flag(name, index, len(vocabulary))
 
 
 def _apply_keywords(entry: EntityTargets, params: dict) -> None:
@@ -342,13 +342,13 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
                 entry, HeadField.KEYWORDS_LOST if lost else HeadField.KEYWORDS_GAINED,
                 keyword.lstrip("-"),
             )
-        for channel, slots, gained_field, lost_field in (
-            (contribution.types, _TYPE_SLOTS, HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
-            (contribution.colors, _COLOR_SLOTS, HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
+        for channel, vocabulary, gained_field, lost_field in (
+            (contribution.types, CARD_TYPES, HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
+            (contribution.colors, COLORS, HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
         ):
             gained, lost = _split_contribution(channel)
-            _apply_multi(entry, gained_field, gained, slots)
-            _apply_multi(entry, lost_field, lost, slots)
+            _apply_multi(entry, gained_field, gained, vocabulary)
+            _apply_multi(entry, lost_field, lost, vocabulary)
             if "=" in channel and lost_field not in entry.fields:
                 entry.unknown.add(lost_field)
 
@@ -485,9 +485,9 @@ class TokenGroup:
         target[base + CreatedSlot.COUNT] = float(self.count)
         target[base + CreatedSlot.POWER] = max(_number(self.power), 0.0)
         target[base + CreatedSlot.TOUGHNESS] = max(_number(self.toughness), 0.0)
-        card_types = self.types.split(" - ", 1)[0].lower().split()
-        for index, card_type in enumerate(CARD_TYPES):
-            if card_type in card_types:
+        for card_type in self.types.split(" - ", 1)[0].split():
+            index = vocabulary_slot(card_type, CARD_TYPES)
+            if index is not None:
                 target[base + CreatedSlot.TYPES + index] = 1.0
         for keyword in self.keywords:
             index = overlay_index(str(keyword))
