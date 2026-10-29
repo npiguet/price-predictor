@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import pytest
 import torch
 
-from effects.domain.effect_head_input import SlotKind
+from effects.domain.effect_head_input import Slot, SlotKind
 from effects.domain.effect_head_layout import (
     FIELD_SLICES,
     FIELDS_BY_NAME,
@@ -43,13 +43,6 @@ from tests.unit.effects.builders import (
 
 
 @dataclass
-class _Slot:
-    kind: SlotKind
-    entity_id: str | None = None
-    player_id: str | None = None
-
-
-@dataclass
 class _Surface:
     slots: tuple
     entity_slots: tuple
@@ -57,9 +50,9 @@ class _Surface:
 
 _SURFACE = _Surface(
     slots=(
-        _Slot(SlotKind.GLOBAL), _Slot(SlotKind.ACT),
-        _Slot(SlotKind.PLAYER, player_id="P0"),
-        _Slot(SlotKind.CARD, entity_id="E1"),
+        Slot(SlotKind.GLOBAL, 0), Slot(SlotKind.ACT, 1),
+        Slot(SlotKind.PLAYER, 2, player_id="P0"),
+        Slot(SlotKind.CARD, 0, entity_id="E1"),
     ),
     entity_slots=(2, 3),
 )
