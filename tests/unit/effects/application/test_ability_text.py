@@ -38,7 +38,8 @@ class FakeSidecarCache:
     """The smallest double for ``SidecarCache``: an explicit key -> line map.
 
     ``text_for_key`` (and, through it, ``KeyResolver``) calls only
-    ``line_for`` and ``prose_for``, so this fake implements exactly those two.
+    ``line_for`` and ``prose_for``; ``get``, which only a charm root's options
+    read, raises as a script with no sidecar does.
     No sidecar fake existed anywhere in the test tree before this one; a later
     task that needs a sidecar double should import this rather than write a
     third.
@@ -79,6 +80,9 @@ class FakeSidecarCache:
 
     def prose_for(self, key: ProvenanceKey) -> str | None:
         return self._prose.get(key)
+
+    def get(self, script_file: str):
+        raise KeyError(f"{script_file}: the fake holds lines, not sidecars")
 
 
 def test_text_for_key_and_the_acting_text_agree_on_one_key():

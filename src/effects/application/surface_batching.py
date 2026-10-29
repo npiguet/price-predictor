@@ -37,6 +37,7 @@ from effects.domain.effect_head_input import (
     build_effect_head_input,
     continuous_masked_keywords,
 )
+from effects.domain.provenance import SidecarLookup
 from effects.domain.records import PlayabilityDecisionPayload, acting_keys
 from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
 
@@ -334,7 +335,7 @@ class SurfaceBatcher:
         self._staged: dict[object, tuple[str, object]] = {}
 
     @property
-    def sidecars(self):
+    def sidecars(self) -> SidecarLookup:
         return self.resolver.sidecars
 
     @property

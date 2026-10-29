@@ -12,6 +12,7 @@ from pathlib import Path
 
 from effects.domain.ability_encoder import encoding_text
 from effects.domain.ability_tokenizer import Surface
+from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import EffectRecord, acting_keys
 from effects.infrastructure.sidecar_io import (
     SIDECAR_SUFFIX,
@@ -21,7 +22,9 @@ from effects.infrastructure.sidecar_io import (
 )
 
 
-def resolve_key(key, sidecars, surface: Surface) -> tuple[str | None, object]:
+def resolve_key(
+    key: ProvenanceKey, sidecars: SidecarLookup, surface: Surface,
+) -> tuple[str | None, SidecarLine | None]:
     """``(text, line)`` for one provenance key on ``surface``; ``(None, None)``
     where the key names no line.
 
@@ -42,7 +45,7 @@ def resolve_key(key, sidecars, surface: Surface) -> tuple[str | None, object]:
     )
 
 
-def text_for_key(key, sidecars, surface: Surface) -> str | None:
+def text_for_key(key: ProvenanceKey, sidecars: SidecarLookup, surface: Surface) -> str | None:
     """One provenance key's text on ``surface``, or None where it has none."""
     return resolve_key(key, sidecars, surface)[0]
 
@@ -71,15 +74,15 @@ class KeyResolver:
     fail-loudly case would go quiet.
     """
 
-    def __init__(self, sidecars, surface: Surface) -> None:
+    def __init__(self, sidecars: SidecarLookup, surface: Surface) -> None:
         self.sidecars = sidecars
         self.surface = surface
-        self._resolved: dict[object, tuple[str | None, object]] = {}
-        self._options: dict[object, tuple] = {}
+        self._resolved: dict[ProvenanceKey, tuple[str | None, SidecarLine | None]] = {}
+        self._options: dict[ProvenanceKey, tuple[ProvenanceKey, ...]] = {}
         #: ``text -> keys resolved to it``: how a truncated text is named.
-        self._keys_by_text: dict[str, list] = defaultdict(list)
+        self._keys_by_text: dict[str, list[ProvenanceKey]] = defaultdict(list)
 
-    def resolve(self, key) -> tuple[str | None, object]:
+    def resolve(self, key: ProvenanceKey) -> tuple[str | None, SidecarLine | None]:
         cached = self._resolved.get(key)
         if cached is None:
             cached = self._resolved[key] = resolve_key(key, self.sidecars, self.surface)
@@ -87,7 +90,7 @@ class KeyResolver:
                 self._keys_by_text[cached[0]].append(key)
         return cached
 
-    def text_of(self, key) -> str | None:
+    def text_of(self, key: ProvenanceKey) -> str | None:
         return self.resolve(key)[0]
 
     def acting_text(self, record: EffectRecord) -> str | None:
@@ -99,23 +102,22 @@ class KeyResolver:
                 return text
         return None
 
-    def keys_of(self, text: str) -> list:
+    def keys_of(self, text: str) -> list[ProvenanceKey]:
         """The keys resolved to ``text`` so far."""
         return list(self._keys_by_text.get(text, ()))
 
-    def options_for(self, key) -> tuple:
+    def options_for(self, key: ProvenanceKey) -> tuple[ProvenanceKey, ...]:
         """The keys of the charm-mode lines that follow ``key``'s line (FR-063a);
-        empty for a non-root line or a sidecar source that cannot say."""
+        empty for a non-root line or a key no sidecar describes."""
         cached = self._options.get(key)
         if cached is not None:
             return cached
-        found: tuple = ()
-        get = getattr(self.sidecars, "get", None)
+        found: tuple[ProvenanceKey, ...] = ()
         # A mode is never a root: its siblings follow it in the sidecar too,
         # and must not be read as its own options.
-        if get is not None and getattr(key, "option", None) is None:
+        if key.option is None:
             try:
-                sidecar = get(key.script_file)
+                sidecar = self.sidecars.get(key.script_file)
                 row = sidecar.row_for(key)
             except KeyError:
                 row = None

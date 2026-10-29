@@ -52,7 +52,7 @@ from effects.domain.records import (
     UnresolvedReason,
     key_sites,
 )
-from effects.infrastructure.sidecar_io import UnconfiguredTree
+from effects.infrastructure.sidecar_io import SidecarCache, UnconfiguredTree
 
 #: Envelope fields that say when a record was written rather than what it says,
 #: blanked before hashing; ``mode`` is constant within a run.
@@ -202,16 +202,15 @@ class Findings(list[Finding]):
 def validate_corpus(
     records: Iterable[EffectRecord],
     thresholds: Thresholds | None = None,
-    sidecars=None,
+    sidecars: SidecarCache | None = None,
     presence: FieldPresence | None = None,
 ) -> Findings:
     """Every invariant, measured over one pass of ``records``.
 
-    ``sidecars`` is a :class:`~effects.infrastructure.sidecar_io.SidecarCache`;
-    ``None`` reports the key-join checks as unchecked rather than as holding.
-    ``presence`` is the per-shard envelope tally :func:`read_window` fills from
-    the raw lines (FR-033), since a parsed record cannot say whether a field was
-    on the wire.
+    ``sidecars`` of ``None`` reports the key-join checks as unchecked rather
+    than as holding. ``presence`` is the per-shard envelope tally
+    :func:`read_window` fills from the raw lines (FR-033), since a parsed
+    record cannot say whether a field was on the wire.
     """
     checks = _checks(sidecars)
     for record in records:
@@ -397,7 +396,7 @@ _UNCHECKED = object()
 _RUNTIME_ONLY = object()
 
 
-def _join_result(sidecars, key: ProvenanceKey):
+def _join_result(sidecars: SidecarCache, key: ProvenanceKey):
     """``None`` where ``key`` joins, a sentinel, or why it does not.
 
     ``resolution_of`` rather than ``row_for``, which answers ``None`` both to a
@@ -726,7 +725,7 @@ class _KeyJoins:
     of its face there, so the keyword finding names that count too.
     """
 
-    def __init__(self, sidecars) -> None:
+    def __init__(self, sidecars: SidecarCache | None) -> None:
         self.sidecars = sidecars
         #: Every distinct printed-line key the window named, joined once.
         self.keys: set[ProvenanceKey] = set()
@@ -1528,7 +1527,7 @@ class _EventTypes:
         )
 
 
-def _checks(sidecars) -> tuple[_Check, ...]:
+def _checks(sidecars: SidecarCache | None) -> tuple[_Check, ...]:
     """Every invariant, in the order the report prints them."""
     record_ids = _RecordIds()
     return (

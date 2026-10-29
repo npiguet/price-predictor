@@ -41,6 +41,7 @@ from effects.domain.effect_targets import (
 )
 from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
+from effects.domain.provenance import SidecarLine
 from effects.domain.rarity import rarity_bucket
 from effects.domain.records import EffectRecord
 from effects.domain.rule_families import rule_family
@@ -160,18 +161,19 @@ class ShardClosed:
     truncated: tuple[tuple[str, tuple], ...] = ()
 
 
+def _script_of(line: SidecarLine | None) -> str | None:
+    return line.script_text if line is not None else None
+
+
 def value_batch(
-    texts: Sequence[str], lines: Mapping[str, object],
+    texts: Sequence[str], lines: Mapping[str, SidecarLine],
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """``(values, mask)`` of the value head's targets, one row per text (FR-058).
 
     Read from the sidecar line's script whatever the surface, since prose
     holds no ``$`` parameter; a text with no line reads itself.
     """
-    rows = [
-        value_targets(getattr(lines.get(text), "script_text", None) or text)
-        for text in texts
-    ]
+    rows = [value_targets(_script_of(lines.get(text)) or text) for text in texts]
     return (
         torch.tensor([row.values for row in rows]),
         torch.tensor([row.mask for row in rows]),
@@ -393,7 +395,7 @@ class StepPreparer:
         return targets
 
     def _api_batch(
-        self, texts: Sequence[str], lines: Mapping[str, object],
+        self, texts: Sequence[str], lines: Mapping[str, SidecarLine],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """The script-API head's ``(types, keys)`` for the batch's texts, in
         row order: the API type (``-1`` when none or unknown) and the
@@ -404,9 +406,9 @@ class StepPreparer:
             cached = self._api_targets.get(text)
             if cached is None:
                 line = lines.get(text)
-                api = getattr(line, "script_api_type", None)
-                found = set(getattr(line, "script_param_keys", ()) or ())
-                for segment in segments(getattr(line, "script_text", None) or ""):
+                api = line.script_api_type if line is not None else None
+                found = set(line.script_param_keys if line is not None else ())
+                for segment in segments(_script_of(line) or ""):
                     found.update(params(segment))
                 cached = (
                     self._api_type_index.get(api, -1),

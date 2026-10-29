@@ -21,7 +21,7 @@ from effects.domain.ability_tokenizer import (
     Surface,
     Token,
 )
-from effects.domain.provenance import Role
+from effects.domain.provenance import ProvenanceKey, Role, RoleSpan, SidecarLine
 
 #: Fixed order, so an embedding row means the same role across checkpoints.
 #: Row 0 is "no role", a token outside every span.
@@ -161,24 +161,26 @@ def surface_of(vocab_path) -> Surface:
     )
 
 
-def encoding_text(line, prose: str | None, surface: Surface) -> str | None:
+def encoding_text(line: SidecarLine | None, prose: str | None, surface: Surface) -> str | None:
     """The text a line is encoded from on ``surface``, falling back to the
     other surface's where its own is missing (a keyword-derived line has no
     script, a variant script no prose)."""
-    script = getattr(line, "script_text", None)
+    script = line.script_text if line is not None else None
     if surface == Surface.SCRIPT:
         return script or prose
     return prose or script
 
 
-def encoding_role_spans(line, text: str | None, surface: Surface) -> tuple:
+def encoding_role_spans(
+    line: SidecarLine | None, text: str | None, surface: Surface,
+) -> tuple[RoleSpan, ...]:
     """The role spans a line's encoding text is tokenized with (FR-069): only
     on a prose text, since the spans index the converted prose."""
     if surface != Surface.PROSE or line is None or text is None:
         return ()
-    if text == getattr(line, "script_text", None):
+    if text == line.script_text:
         return ()
-    return tuple(getattr(line, "role_spans", ()) or ())
+    return line.role_spans
 
 
 def role_index(role: Role | None) -> int:
@@ -256,9 +258,8 @@ def log_truncation(logger, command: str):
     return report
 
 
-def _key_label(key) -> str:
-    option = getattr(key, "option", None)
-    suffix = f" option {option}" if option is not None else ""
+def _key_label(key: ProvenanceKey) -> str:
+    suffix = f" option {key.option}" if key.option is not None else ""
     return (
         f"{key.script_file} face {key.face} {key.trait_kind}"
         f"[{key.index_within_kind}]{suffix}"

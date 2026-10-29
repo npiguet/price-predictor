@@ -31,7 +31,7 @@ from enum import StrEnum
 
 from effects.domain.ability_tokenizer import display_name_of
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, KeywordResolver
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import (
     Candidate,
     EffectRecord,
@@ -84,12 +84,12 @@ def _declared_mode(line) -> str | None:
     return root_param(line.script_text, "Mode") or line.script_api_type
 
 
-def static_mode(keys: Iterable[ProvenanceKey], sidecars) -> str | None:
+def static_mode(keys: Iterable[ProvenanceKey], sidecars: SidecarLookup) -> str | None:
     line = sidecars.first_line(keys)
     return None if line is None else _declared_mode(line)
 
 
-def candidate_family(candidate: Candidate, sidecars) -> str:
+def candidate_family(candidate: Candidate, sidecars: SidecarLookup) -> str:
     """One ``decision`` candidate's family (FR-047a): the responsible static's
     mode, else the first false verdict bit, else ``none``."""
     if candidate.responsible_static:
@@ -105,7 +105,7 @@ def candidate_family(candidate: Candidate, sidecars) -> str:
     return FamilySentinel.NONE
 
 
-def legality_modes(record: EffectRecord, sidecars) -> frozenset[str]:
+def legality_modes(record: EffectRecord, sidecars: SidecarLookup) -> frozenset[str]:
     """Every single static mode restricting a creature on a legality record.
 
     A ``Mode$`` list (Pacifism's ``CantAttack,CantBlock``) is split; a keyword
@@ -149,7 +149,8 @@ def combat_family(record: EffectRecord, resolver: KeywordResolver) -> str:
 
 
 def rule_family(
-    record: EffectRecord, sidecars, *, resolver: KeywordResolver | None = None,
+    record: EffectRecord, sidecars: SidecarLookup, *,
+    resolver: KeywordResolver | None = None,
     legality_mode_counts: Mapping[str, int] | None = None,
 ) -> str:
     """The rules category ``record`` belongs to (module docstring).

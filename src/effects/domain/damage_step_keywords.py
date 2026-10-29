@@ -22,6 +22,7 @@ from enum import StrEnum
 
 from effects.domain.effect_head_layout import HeadField, ZoneOutcome
 from effects.domain.keyword_names import normalize_keyword
+from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import RecordKind
 from effects.domain.script_text import is_bare_keyword
 from effects.domain.state_snapshot import EntityState, StateSnapshot
@@ -512,10 +513,10 @@ def subject_id(
     raise ValueError(f"unhandled subject {effect.subject}")
 
 
-def keyword_of_line(line) -> str | None:
+def keyword_of_line(line: SidecarLine | None) -> str | None:
     """The keyword a sidecar line *is* (a bare ``First Strike``), in the
     gate's spelling, or None."""
-    script = getattr(line, "script_text", None)
+    script = line.script_text if line is not None else None
     if not is_bare_keyword(script):
         return None
     return normalize_keyword(script)
@@ -535,11 +536,11 @@ class KeywordResolver:
     overlay alone misses the common case.
     """
 
-    def __init__(self, sidecars=None) -> None:
+    def __init__(self, sidecars: SidecarLookup | None = None) -> None:
         self._sidecars = sidecars
-        self._by_key: dict[object, str | None] = {}
+        self._by_key: dict[ProvenanceKey, str | None] = {}
 
-    def _keyword_for(self, key) -> str | None:
+    def _keyword_for(self, key: ProvenanceKey) -> str | None:
         if key not in self._by_key:
             line = self._sidecars.line_or_none(key)
             self._by_key[key] = keyword_of_line(line) if line is not None else None

@@ -49,6 +49,8 @@ from effects.domain.split import HeldOutCards, record_names_held_out_card
 from effects.domain.tally_merge import NOT_MERGED, merge_into
 
 if TYPE_CHECKING:
+    from effects.domain.damage_step_keywords import KeywordResolver
+    from effects.domain.provenance import SidecarLookup
     from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
@@ -71,7 +73,7 @@ def selection_half(record: EffectRecord, klass: SamplingClass) -> LegalityDecisi
 
 
 def cell_of(
-    record: EffectRecord, sidecars, resolver,
+    record: EffectRecord, sidecars: SidecarLookup, resolver: KeywordResolver,
     legality_mode_counts: Mapping[str, int] | None = None,
 ) -> Cell:
     """The cell a record is selected in. Both passes call this one function.
@@ -139,7 +141,7 @@ class WorkerContext:
         return self._sidecars
 
     @property
-    def resolver(self):
+    def resolver(self) -> KeywordResolver:
         if self._resolver is None:
             from effects.domain.damage_step_keywords import KeywordResolver
 

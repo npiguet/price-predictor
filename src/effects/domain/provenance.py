@@ -7,8 +7,10 @@ rendered lines and aligns the ability cache. Pure dataclasses; the JSON is
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Protocol
 
 
 class SourceTree(StrEnum):
@@ -288,3 +290,36 @@ class ProvenanceSidecar:
             "the card this record was collected against (reconversion between "
             "collection and training?)"
         )
+
+
+class SidecarLookup(Protocol):
+    """The sidecar join as its readers use it, by provenance key.
+
+    ``infrastructure.sidecar_io.SidecarCache`` implements it over the converted
+    trees; a test double need implement only what its caller reads.
+    """
+
+    def get(self, script_file: str) -> ProvenanceSidecar:
+        """The sidecar of one script file; ``KeyError`` where none was written."""
+        ...
+
+    def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
+        """The line a key names, None where there is none; ``KeyError`` on a key
+        the sidecar does not describe."""
+        ...
+
+    def line_or_none(self, key: ProvenanceKey) -> SidecarLine | None:
+        """:meth:`line_for`, with every join failure read as no line."""
+        ...
+
+    def first_line(self, keys: Iterable[ProvenanceKey]) -> SidecarLine | None:
+        """The first line any of ``keys`` names, under :meth:`line_or_none`."""
+        ...
+
+    def prose_for(self, key: ProvenanceKey) -> str | None:
+        """The converted prose of the line a key names."""
+        ...
+
+    def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
+        """The join's answer for a key."""
+        ...

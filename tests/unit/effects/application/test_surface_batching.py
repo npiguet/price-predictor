@@ -56,6 +56,9 @@ class _Sidecars:
     def prose_for(self, key):
         return None
 
+    def get(self, script_file):
+        raise KeyError(f"{script_file}: no sidecar, so no charm options")
+
 
 def _record() -> EffectRecord:
     return make_record(
