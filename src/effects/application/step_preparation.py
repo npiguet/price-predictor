@@ -393,7 +393,8 @@ class StepPreparer:
         row order: the API type (``-1`` when none or unknown) and the
         multi-hot of parameter keys over every chained segment."""
         types: list[int] = []
-        keys = torch.zeros(len(texts), max(len(self.param_keys), 1))
+        rows: list[int] = []
+        columns: list[int] = []
         for row, text in enumerate(texts):
             cached = self._api_targets.get(text)
             if cached is None:
@@ -410,8 +411,12 @@ class StepPreparer:
                 )
                 self._api_targets[text] = cached
             types.append(cached[0])
-            for column in cached[1]:
-                keys[row, column] = 1.0
+            rows += [row] * len(cached[1])
+            columns += cached[1]
+        # One indexed write: torch dispatches every element assignment on the
+        # host half of the step.
+        keys = torch.zeros(len(texts), max(len(self.param_keys), 1))
+        keys[torch.tensor(rows, dtype=torch.long), torch.tensor(columns, dtype=torch.long)] = 1.0
         return torch.tensor(types, dtype=torch.long), keys
 
     def _texts(self, records: Sequence[EffectRecord]) -> dict[str, str | None]:
