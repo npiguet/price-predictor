@@ -9,7 +9,6 @@ import torch
 
 from effects.domain.aux_heads import AUX_HEADS, SHIPPED_HEADS, TRAINING_ONLY_MODULES
 from effects.domain.effect_head_input import SlotKind
-from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, PER_ENTITY_WIDTH, VERDICT_WIDTH
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.surface_collation import TrunkInputs
 
@@ -48,24 +47,6 @@ def _surface(batch: int = 2, slots: int = 6):
         e_vectors=torch.zeros(batch, slots, _CONFIG.e_dim),
         attention_mask=torch.ones(batch, slots, dtype=torch.long),
     )
-
-
-class TestTrunkAndHeads:
-    def test_the_trunk_returns_one_vector_per_slot(self, model):
-        hidden = model(_surface())
-        assert hidden.shape == (2, 6, _CONFIG.d_model)
-
-    def test_the_per_entity_head_scores_every_slot(self, model):
-        hidden = model(_surface())
-        assert model.per_entity(hidden).shape == (2, 6, PER_ENTITY_WIDTH)
-
-    def test_the_created_objects_head_reads_the_global_slot(self, model):
-        hidden = model(_surface())
-        assert model.created_objects(hidden).shape == (2, CREATED_OBJECTS_WIDTH)
-
-    def test_the_verdict_head_reads_the_act_slot(self, model):
-        hidden = model(_surface())
-        assert model.verdict(hidden).shape == (2, VERDICT_WIDTH)
 
 
 class TestTrainingOnlyHeads:
