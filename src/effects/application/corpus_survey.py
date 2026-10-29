@@ -259,6 +259,8 @@ class ShardSurvey:
     rarity: RarityTally = field(default_factory=RarityTally)
     games: GameTally = field(default_factory=GameTally)
     refusals: RefusalTally = field(default_factory=RefusalTally)
+    #: Records per class the quality rules keep, the refusal guard's other half.
+    kept: Counter[SamplingClass] = field(default_factory=Counter)
     mode_counts: Counter[str] = field(default_factory=Counter)
     #: Training-bound records per class acting through a held-out text.
     held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
@@ -275,6 +277,7 @@ class Survey:
     supply: TrainingSupply
     games: GameTally
     refusals: RefusalTally = field(default_factory=RefusalTally)
+    kept: Counter[SamplingClass] = field(default_factory=Counter)
     mode_counts: Counter[str] = field(default_factory=Counter)
     held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
     #: Per top-level source directory (FR-149): held-out games in a depleted
@@ -366,6 +369,7 @@ class _ShardSurveyor:
         if defect is not None:
             self.out.refusals.note(record, klass, defect)
             return
+        self.out.kept[klass] += 1
         self.pending.append(self._kept(record, klass))
 
     def _note_game_properties(self, record: EffectRecord) -> None:
@@ -455,6 +459,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         supply=total.supply,
         games=total.games,
         refusals=total.refusals,
+        kept=total.kept,
         mode_counts=total.mode_counts,
         held_out_text_dropped=total.held_out_text_dropped,
         games_by_source={s: len(g) for s, g in games_by_source.items()},

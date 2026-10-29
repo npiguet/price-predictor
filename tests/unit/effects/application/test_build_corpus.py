@@ -48,7 +48,6 @@ from effects.application.build_corpus import (
 from effects.application.corpus_report import check_refusals as _check_refusals
 from effects.application.corpus_report import check_samples as _check_samples
 from effects.application.corpus_survey import RefusalTally, source_of
-from effects.application.corpus_write import TrainingTally, WriteResult
 from effects.application.corpus_write import output_name as _output_name
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
@@ -60,6 +59,7 @@ from effects.domain.records import (
     RewritePayload,
 )
 from effects.domain.state_snapshot import StateSnapshot
+from effects.domain.strata import Stratum
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
@@ -982,23 +982,21 @@ def test_a_record_acting_through_an_unjoinable_key_is_refused_not_fatal(tmp_path
     assert "g-clean-3.level" in written
 
 
-def _written(
+def _tallies(
     *, read: Counter, refused_by_class: Counter, quality_dropped: Counter,
     unjoinable_scripts: Counter | None = None,
-) -> WriteResult:
-    """A write pass's tallies holding only what the refusal guard reads."""
-    return WriteResult(
-        refusals=RefusalTally(
-            by_reason=quality_dropped, by_class=refused_by_class,
-            unjoinable_scripts=unjoinable_scripts or Counter(),
-        ),
-        training=TrainingTally(read=read),
+) -> tuple[RefusalTally, Counter]:
+    """A survey's refusals and kept counts, the two halves the guard reads."""
+    refusals = RefusalTally(
+        by_reason=quality_dropped, by_class=refused_by_class,
+        unjoinable_scripts=unjoinable_scripts or Counter(),
     )
+    return refusals, read
 
 
 def test_unjoinable_keys_past_the_share_stop_the_build():
     """Many records failing the join is a reconversion, not a collector gap."""
-    written = _written(
+    tallies = _tallies(
         read=Counter({"resolution-effect": 990}),
         refused_by_class=Counter({"resolution-effect": 30}),
         quality_dropped=Counter({"unjoinable-key": 30}),
@@ -1006,7 +1004,7 @@ def test_unjoinable_keys_past_the_share_stop_the_build():
     )
 
     with pytest.raises(BuildCorpusError) as raised:
-        _check_refusals(written)
+        _check_refusals(*tallies)
 
     message = str(raised.value)
     assert "reconverted" in message
@@ -1014,7 +1012,7 @@ def test_unjoinable_keys_past_the_share_stop_the_build():
 
 
 def test_unjoinable_keys_under_the_share_raise_nothing():
-    _check_refusals(_written(
+    _check_refusals(*_tallies(
         read=Counter({"resolution-effect": 99_970}),
         refused_by_class=Counter({"resolution-effect": 30}),
         quality_dropped=Counter({"unjoinable-key": 30}),
@@ -1023,7 +1021,7 @@ def test_unjoinable_keys_under_the_share_raise_nothing():
 
 def test_a_few_unjoinable_keys_in_a_small_corpus_raise_nothing():
     """A pilot of a few hundred records holding one Flashback cast builds."""
-    _check_refusals(_written(
+    _check_refusals(*_tallies(
         read=Counter({"resolution-effect": 14}),
         refused_by_class=Counter({"resolution-effect": 1}),
         quality_dropped=Counter({"unjoinable-key": 1}),
@@ -1157,6 +1155,35 @@ def test_a_class_refused_past_the_share_stops_the_build(tmp_path, a_corpus):
     assert "unresolved" in message and "degraded" in message
 
 
+def test_a_refused_rebuild_leaves_the_previous_dataset_in_place(tmp_path, a_corpus):
+    """The survey sees every refusal the write pass would, so a corpus the
+    rules reject is refused before the old strata are cleared."""
+    out = tmp_path / "out"
+    a_corpus.build(out)
+    before = CorpusStore(out).load().digest()
+    flooded = a_corpus.with_extra_records([
+        replace(
+            _combat(f"g-clean-1.flood-{n}", "g-clean-1"),
+            payload=CombatPayload(
+                attackers=("E0",),
+                events=tuple(
+                    Event(type=EventType.DAMAGE_DEALT, subjects=("P0",),
+                          attributed_to="root")
+                    for _ in range(100)
+                ),
+            ),
+        )
+        for n in range(5)
+    ])
+
+    with pytest.raises(BuildCorpusError, match="combat"):
+        flooded.build(out)
+
+    store = CorpusStore(out)
+    assert store.load().digest() == before
+    assert any(store.output_dir(Stratum.TRAINING).iterdir())
+
+
 # ── I3: a stratum with an empty sample is a build that failed quietly ──
 
 
@@ -1219,14 +1246,14 @@ def test_a_class_lost_to_no_acting_text_is_told_to_reconvert():
     the traits whose text its lines carry. An operator reading only "unpatched
     checkout" would go looking at Forge, and the corpus is the thing to fix.
     """
-    written = _written(
+    tallies = _tallies(
         read=Counter({"resolution-effect": 10}),
         refused_by_class=Counter({"resolution-effect": 90}),
         quality_dropped=Counter({"no-acting-text": 88, "no-ability": 2}),
     )
 
     with pytest.raises(BuildCorpusError) as raised:
-        _check_refusals(written)
+        _check_refusals(*tallies)
 
     message = str(raised.value)
     assert "no-acting-text" in message
@@ -1236,7 +1263,7 @@ def test_a_class_lost_to_no_acting_text_is_told_to_reconvert():
 def test_a_class_that_keeps_most_of_its_records_raises_nothing():
     """The guard is for a class lost whole, not for the few percent the rules
     are there to take."""
-    _check_refusals(_written(
+    _check_refusals(*_tallies(
         read=Counter({"resolution-effect": 95}),
         refused_by_class=Counter({"resolution-effect": 5}),
         quality_dropped=Counter({"no-acting-text": 5}),

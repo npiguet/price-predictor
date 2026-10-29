@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from effects.application.corpus_report import (
     build_manifest,
+    check_refusals,
     check_samples,
     log_report,
     report_write_pass,
@@ -487,7 +488,9 @@ def _decide_or_refuse(
     config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: str,
     held_out: HeldOutCards,
 ) -> Decisions:
-    """:func:`decide`, refusing a dataset gate 1 could not be scored on."""
+    """:func:`decide`, refusing a corpus the quality rules reject or a dataset
+    gate 1 could not be scored on."""
+    check_refusals(survey.refusals, survey.kept)
     decisions = decide(survey, sidecars=trees.sidecars, surface=surface, config=config)
     if not decisions.strata.card_disjoint:
         raise BuildCorpusError(

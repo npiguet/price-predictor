@@ -11,11 +11,12 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING
 
-from effects.application.corpus_survey import Survey
+from effects.application.corpus_survey import RefusalTally, Survey
 from effects.application.corpus_write import WriteResult
 from effects.domain.corpus_plan import BuildCorpusError, Keys
 from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
+from effects.domain.sampling import SamplingClass
 from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.domain.text_holdout import HoldoutUnit
 
@@ -49,13 +50,16 @@ _LEAK_SHARE = 0.05
 _DELIVERY_TOLERANCE = 0.01
 
 
-def check_refusals(written: WriteResult) -> None:
+def check_refusals(refusals: RefusalTally, kept: Mapping[SamplingClass, int]) -> None:
     """Stop when the quality rules refused most of any one sampling class, or
     past both unjoinable-key limits over every record read: those are the join
-    failing, not a record being poor."""
-    refusals = written.refusals
+    failing, not a record being poor.
+
+    Read from the survey, which judges every record under the write pass's own
+    rule, so a refused build stops before it clears the previous dataset.
+    """
     unjoinable = refusals.by_reason.get(QualityDefect.UNJOINABLE_KEY, 0)
-    total_read = sum(written.training.read.values()) + sum(refusals.by_class.values())
+    total_read = sum(kept.values()) + sum(refusals.by_class.values())
     if (
         unjoinable > MAX_UNJOINABLE_RECORDS
         and unjoinable > MAX_UNJOINABLE_SHARE * total_read
@@ -76,7 +80,7 @@ def check_refusals(written: WriteResult) -> None:
         )
     for name in sorted(refusals.by_class):
         refused = refusals.by_class[name]
-        total = refused + written.training.read.get(name, 0)
+        total = refused + kept.get(name, 0)
         if not total or refused <= MAX_REFUSED_SHARE * total:
             continue
         raise BuildCorpusError(
@@ -114,8 +118,7 @@ def check_samples(counts: Mapping[str, int], *, size: int) -> None:
 
 
 def report_write_pass(survey: Survey, written: WriteResult) -> None:
-    """The write pass's refusals and attribution, checked and logged."""
-    check_refusals(written)
+    """The write pass's refusals and attribution, logged."""
     kept_records = sum(written.training.read.values())
     logger.info(
         "%-22s %9d record(s) kept (%.1f%%) name no producing clause for at "
