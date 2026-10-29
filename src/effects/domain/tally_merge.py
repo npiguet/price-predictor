@@ -1,10 +1,7 @@
 """Adding one tally into another, field by field, by what each field holds.
 
-The corpus passes count per shard in a worker and fold the shards together in
-the main process. Every tally they keep is a dataclass of counters, sets, maps
-of sets and plain counts, and each kind adds one way, so one function adds
-them all rather than a hand-written ``merge`` per class that a new field can
-be forgotten in.
+One function rather than a hand-written ``merge`` per tally class, so a new
+field cannot be forgotten in one.
 """
 
 from __future__ import annotations
@@ -21,11 +18,9 @@ def merge_into(target, other) -> None:
     """Add every field of the dataclass ``other`` into ``target``'s.
 
     A ``Counter`` adds, a set unions, a dict unions its set values key by key,
-    an ``int`` sums, an object with a ``merge`` method of its own merges
-    through it (one that has an invariant to check, such as a heap size), and
-    a nested dataclass merges field by field. Anything else is a field this
-    function does not know how to add, and raises rather than keeping one
-    side's value.
+    an ``int`` sums, an object with its own ``merge`` merges through it, and a
+    nested dataclass recurses. Anything else raises ``TypeError`` rather than
+    keeping one side's value.
     """
     for spec in fields(target):
         if not spec.metadata.get("merge", True):

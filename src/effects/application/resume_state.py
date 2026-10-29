@@ -1,11 +1,8 @@
 """``resume.pt``: everything an interrupted training run needs to continue.
 
-Not a checkpoint. It carries the full model with the training-only heads, the
-optimizer, the step, the early stopper, the noise on ``e`` and the CPU/CUDA
-generator states — everything a checkpoint drops. No other state needs saving,
-because every draw a run takes is seeded by ``(seed, epoch, position, step)``;
-for the same reason a resume under a different seed, corpus, size or batching is
-refused, while the epoch count and the patience may change.
+Not a checkpoint: it keeps what a checkpoint drops. Every draw is seeded by
+``(seed, epoch, position, step)``, so no other state needs saving, and a resume
+under different settings is refused.
 """
 
 from __future__ import annotations
@@ -29,10 +26,9 @@ from effects.infrastructure.effect_model_store import (
 
 logger = logging.getLogger(__name__)
 
-#: Flags a resumed run may set differently from the run it continues: how long
-#: and how patiently it trains, at what rate, what it keeps and where, how it
-#: prepares steps, and the paths it reads — the corpus is compared by its digest
-#: instead, and the holdout unit is the corpus's own.
+#: Flags a resumed run may set differently from the run it continues. The
+#: corpus is compared by its digest instead, and the holdout unit is the
+#: corpus's own.
 RESUME_MAY_CHANGE: frozenset[str] = frozenset({
     "epochs", "patience", "lr_scale", "save_every_epoch", "model_output",
     "prefetch_workers", "resume", "corpus", "cards_folders", "variant_scripts",
@@ -74,15 +70,9 @@ class ResumeState:
         self.device = device
 
     def settings(self) -> dict:
-        """Every setting a resumed epoch has to share with the interrupted run.
-
-        The draws need no state of their own: every shard draw, shuffle and
-        per-step draw is seeded by the seed, the epoch and the step's place in
-        it, so the seed and the shapes that place a step are what must match.
-        Every flag is compared but :data:`RESUME_MAY_CHANGE`, so a flag added
-        later is checked unless it is named there, and the training settings
-        the checkpoint records are compared as recorded.
-        """
+        """Every setting a resumed epoch has to share with the interrupted run:
+        every flag but :data:`RESUME_MAY_CHANGE`, so a flag added later is
+        checked by default, and the training settings as recorded."""
         return {
             "seed": self.seed,
             "corpus_digest": self.corpus_digest,
@@ -94,13 +84,8 @@ class ResumeState:
         self, epoch: int, run, stopper: EarlyStopper, *, finished: bool,
         best: bool = False,
     ) -> None:
-        """Everything the next epoch needs, written once the epoch is scored.
-
-        The model's whole state, training-only heads included — the saved
-        checkpoint drops those, and a resumed run would have to relearn them —
-        with the optimizer's moments, the noise's running covariance and the
-        random generators, which dropout and the noise draw read on the device.
-        """
+        """Everything the next epoch needs, written once the epoch is scored,
+        training-only heads included."""
         directory = self.config.resolved_model_output()
         save_resume_state(directory, {
             "epoch": epoch,
@@ -131,12 +116,8 @@ class ResumeState:
 
     def restore(self, run, stopper: EarlyStopper) -> int | None:
         """The first epoch to train, with ``run`` where it left off; None when
-        nothing is left.
-
-        Refuses a resume file written under other settings: resumed from a
-        different seed or corpus, the run would be neither the interrupted one
-        nor a fresh one.
-        """
+        nothing is left. Raises ``ResumeMismatchError`` for a resume file
+        written under other settings."""
         state = load_resume_state(self.config.resolved_model_output())
         mismatches = resume_mismatches(state["settings"], self.settings())
         if mismatches:
