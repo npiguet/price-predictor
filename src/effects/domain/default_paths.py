@@ -29,6 +29,8 @@ DEFAULT_REPORTS_DIR = "output/effects/reports/"
 DEFAULT_CORPUS_OUTPUT = "output/effects/corpus/"
 #: Forge's source card scripts: a variant is a script Forge must load.
 DEFAULT_FORGE_CARDS_PATH = "../forge/forge-gui/res/cardsfolder/"
+#: MTGJSON's card dump, read for Forge's printed card names.
+DEFAULT_PRINTINGS_PATH = "resources/AllPrintings.json"
 #: The sealed pipeline's per-card win rates; an operator's data, not a repo
 #: artifact, so the decodability battery skips when it is absent.
 DEFAULT_WIN_RATES = "output/sealed/cards-win-rates.txt"

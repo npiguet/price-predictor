@@ -203,9 +203,9 @@ def test_the_config_refuses_an_encoder_shape_it_cannot_build(shape):
 
 
 def test_the_size_flags_reach_the_trainers_config(tmp_path):
-    from effects.infrastructure.cli import train_config_from
+    from effects.infrastructure.cli import config_from_args
 
-    config = train_config_from(_train_args(
+    config = config_from_args(TrainEffectModelConfig, _train_args(
         tmp_path, "--encoder-layers", "6", "--encoder-d-model", "384",
         "--value-weight", "0.2", "--e-noise", "0.05",
     ))

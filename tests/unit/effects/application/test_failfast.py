@@ -423,7 +423,7 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
             )
 
         monkeypatch.setattr(train_effect_model, "run", refuse)
-        monkeypatch.setattr(cli, "train_config_from", lambda args: None)
+        monkeypatch.setattr(cli, "config_from_args", lambda cls, args: None)
         args = argparse.Namespace(
             variant="full", corpus="x",
             encoder_d_model=256, encoder_layers=4,

@@ -33,6 +33,7 @@ from effects.application.collect_coverage import (
 )
 from effects.application.collect_variants import CollectVariantsConfig
 from effects.application.evaluation_context import CorpusMismatchError
+from effects.application.holdout_cards import HoldoutCardsConfig
 from effects.application.train_effect_model import (
     EmptyHoldoutError,
     HoldoutMismatchError,
@@ -107,6 +108,9 @@ def add_config_flags(
         spec = specs[name]
         kind = _flag_type(config, name, hints[name])
         default = spec.default if spec.default is not MISSING else spec.default_factory()
+        if isinstance(default, Path):
+            # Spelled as typed in --help; argparse parses a string default too.
+            default = default.as_posix()
         flag, help_text = "--" + name.replace("_", "-"), spec.metadata.get("help")
         if kind is bool and default is False:
             parser.add_argument(flag, action="store_true", help=help_text)
@@ -116,10 +120,14 @@ def add_config_flags(
             raise TypeError(f"{config.__name__}.{name} defaults to True; declare its flag")
 
 
-def _flag_type(config: type, name: str, hint: Any) -> type:
+def _flag_type(config: type, name: str, hint: Any) -> Callable[[str], Any]:
+    """The flag's parser: the scalar itself, or a path, where an optional one
+    reads an empty value as None."""
     kinds = [kind for kind in typing.get_args(hint) or (hint,) if kind is not type(None)]
     if len(kinds) == 1 and kinds[0] in (int, float, str, bool):
         return kinds[0]
+    if kinds == [Path]:
+        return _optional_path if type(None) in typing.get_args(hint) else Path
     raise TypeError(f"{config.__name__}.{name} is {hint}; declare its flag")
 
 
@@ -591,14 +599,7 @@ def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
         "a variant line resolves to no ability text, so it escapes the rarity "
         "table and the per-text cap"
     ))
-    parser.add_argument(
-        "--keyword-definitions", type=_optional_path, default=DEFAULT_KEYWORD_DEFINITIONS,
-        help=(
-            "The keyword table the tokenizer expands with; the build fails when "
-            "a display-name match would expand a non-keyword line "
-            "(default: %(default)s)"
-        ),
-    )
+    add_config_flags(parser, BuildCorpusConfig, only=("keyword_definitions",))
 
 
 # A bare ValueError is NOT mapped: `decide`'s cap-mismatch guard and
@@ -630,20 +631,14 @@ def _holdout_cards_parser(subparsers) -> None:
         help="Destination file, one Forge canonical card name per line",
     )
     _add_cards_folder(parser)
-    parser.add_argument(
-        "--printings-path", type=Path, default=Path("resources/AllPrintings.json"),
-        help=(
-            "MTGJSON dump, read only to write names in Forge's printed spelling "
-            "(default: %(default)s)"
-        ),
-    )
+    add_config_flags(parser, HoldoutCardsConfig, only=("printings_path",))
     _add_holdout_flags(parser)
 
 
 def run_holdout_cards(args: argparse.Namespace) -> int:
     """Write the list, and report the share of the corpus it removes: what a
     depleted pool loses, and the knob the two holdout flags turn."""
-    from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
+    from effects.application.holdout_cards import HoldoutCardsError
     from effects.application.holdout_cards import run as holdout_cards
 
     config = config_from_args(HoldoutCardsConfig, args, holdout=holdout_rule(args))
@@ -787,17 +782,6 @@ def _train_effect_model_parser(subparsers) -> None:
     _add_cards_folder(parser)
     _add_holdout_unit(parser, default=None)
     _add_variant_scripts(parser)
-    parser.add_argument("--vocab-path", type=Path, default=DEFAULT_VOCAB_PATH)
-    parser.add_argument(
-        "--keyword-definitions", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
-    )
-    parser.add_argument(
-        "--model-output", type=_optional_path, default=None,
-        help=(
-            "Checkpoint directory (default: models/effects/effect-model/, under "
-            "{variant}/ for a baseline)"
-        ),
-    )
     _add_variant(parser)
     add_config_flags(parser, TrainEffectModelConfig)
 
@@ -815,17 +799,13 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import run as train
 
     try:
-        config = train_config_from(args)
+        config = config_from_args(TrainEffectModelConfig, args)
     except ValueError as exc:
         # An encoder shape the config refuses; a ValueError out of training
         # itself is an invariant and keeps its traceback.
         logger.error("%s", exc)
         return 2
     return train(config)
-
-
-def train_config_from(args: argparse.Namespace) -> TrainEffectModelConfig:
-    return config_from_args(TrainEffectModelConfig, args)
 
 
 # ── encode-abilities ────────────────────────────────────────────────────

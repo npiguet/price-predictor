@@ -107,7 +107,13 @@ class BuildCorpusConfig:
     game_disjoint_keywords: tuple[str, ...] = DEFAULT_GAME_DISJOINT_KEYWORDS
     #: Read by FR-015's check; None or a missing file skips it, since nothing
     #: can expand without a table.
-    keyword_definitions: Path | None = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
+    keyword_definitions: Path | None = field(
+        default=Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS), metadata={"help": (
+            "The keyword table the tokenizer expands with; the build fails when "
+            "a display-name match would expand a non-keyword line "
+            "(default: %(default)s)"
+        )},
+    )
     card_disjoint_text_cap: int = field(default=50, metadata={"help": (
         "Max card-disjoint games admitted per held-out ability text, so each "
         "weighs comparably in gate 1; 0 means no cap (default: %(default)s)"

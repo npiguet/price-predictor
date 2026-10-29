@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from effects.domain import default_paths
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 
@@ -31,9 +32,13 @@ class HoldoutCardsConfig:
     """The ``holdout-cards`` flags."""
 
     out: Path
-    cards_folders: tuple[Path, ...] = (Path("output/cardsfolder"), Path("output/tokenscripts"))
-    #: Read only to write the list in Forge's printed spelling.
-    printings_path: Path = Path("resources/AllPrintings.json")
+    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
+    printings_path: Path = field(
+        default=Path(default_paths.DEFAULT_PRINTINGS_PATH), metadata={"help": (
+            "MTGJSON dump, read only to write names in Forge's printed spelling "
+            "(default: %(default)s)"
+        )},
+    )
     holdout: HoldoutRule = HoldoutRule()
 
 

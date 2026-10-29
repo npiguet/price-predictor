@@ -9,12 +9,27 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from effects.application.breakdowns import breakdown_checks
 from effects.application.evaluation_context import (
     EvaluateEffectModelConfig,
     EvaluationContext,
     load_baselines,
     load_context,
 )
+from effects.application.gate_one import run_gate_one
+from effects.application.gate_two import evaluate_gate_two, gate_two_records, run_gate_two
+from effects.application.geometry_checks import (
+    NEIGHBOUR_QUERIES,
+    cached_vectors,
+    check_baseline_geometry,
+    check_decodability,
+    check_nearest_neighbours,
+    check_umap,
+    check_ward,
+    run_gate_three,
+)
+from effects.application.record_scoring import score_records
+from effects.domain.ability_encoder import surface_of
 from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
     CheckName,
@@ -23,6 +38,9 @@ from effects.domain.evaluation_report import (
     EvaluationReport,
 )
 from effects.domain.strata import VALIDATION_STRATA
+from effects.infrastructure.ability_cache_store import SidecarIndex
+from effects.infrastructure.corpus_store import CorpusStore
+from effects.infrastructure.record_io import read_shard
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +73,6 @@ def not_implemented(name: CheckName) -> CheckResult:
 def breakdown_records(context: EvaluationContext) -> dict[str, list]:
     """Both validation strata, as the curated dataset's fixed samples: what
     best-checkpoint selection scored."""
-    from effects.infrastructure.corpus_store import CorpusStore
-    from effects.infrastructure.record_io import read_shard
-
     store = CorpusStore(context.corpus_path)
     out = {}
     for stratum in VALIDATION_STRATA:
@@ -68,9 +83,6 @@ def breakdown_records(context: EvaluationContext) -> dict[str, list]:
 
 def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
     """Score both validation strata once and report every breakdown."""
-    from effects.application.breakdowns import breakdown_checks
-    from effects.application.record_scoring import score_records
-
     strata = breakdown_records(context)
     everything = [record for rows in strata.values() for record in rows]
     if not everything:
@@ -97,13 +109,6 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
 
 def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     """Load the checkpoints, run every check, and report."""
-    from effects.application.gate_two import (
-        evaluate_gate_two,
-        gate_two_records,
-        run_gate_two,
-    )
-    from effects.application.geometry_checks import run_gate_three
-
     context = load_context(config)
     variants = load_baselines(config, context.main)
 
@@ -130,16 +135,11 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 def _sidecar_index(context: EvaluationContext):
     """The card and token trees' sidecars (FR-123), keyed on the checkpoint's
     surface once for every variant's cache."""
-    from effects.domain.ability_encoder import surface_of
-    from effects.infrastructure.ability_cache_store import SidecarIndex
-
     return SidecarIndex(context.config.cards_folders, surface=surface_of(context.vocab_path))
 
 
 def _load_cache(context: EvaluationContext, sidecars, variant: str = "full"):
     """One variant's cache: a vector per unique text on the checkpoint's surface."""
-    from effects.application.geometry_checks import cached_vectors
-
     root = context.config.abilities_root
     logger.info("loading the %s ability cache under %s", variant, root)
     return cached_vectors(sidecars, root, variant=variant)
@@ -147,8 +147,6 @@ def _load_cache(context: EvaluationContext, sidecars, variant: str = "full"):
 
 def _gate_one(context: EvaluationContext, variants: dict) -> CheckResult:
     """Gate 1, which is defined against the identity baseline and needs it."""
-    from effects.application.gate_one import run_gate_one
-
     if Baseline.IDENTITY not in variants:
         return CheckResult(
             CheckName.GATE_1, CheckStatus.SKIPPED,
@@ -160,15 +158,6 @@ def _gate_one(context: EvaluationContext, variants: dict) -> CheckResult:
 
 def _geometry_checks(context: EvaluationContext, cached, sidecars) -> list[CheckResult]:
     """The e-geometry checks, all reported, none gating."""
-    from effects.application.geometry_checks import (
-        NEIGHBOUR_QUERIES,
-        check_baseline_geometry,
-        check_decodability,
-        check_nearest_neighbours,
-        check_umap,
-        check_ward,
-    )
-
     logger.info("reported checks: ward, neighbours, UMAP, decodability, baselines")
     checks = [
         check_ward(cached),

@@ -140,7 +140,10 @@ class TrainEffectModelConfig:
     keyword_definitions: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS),
     )
-    model_output: Path | None = None
+    model_output: Path | None = field(default=None, metadata={"help": (
+        "Checkpoint directory (default: models/effects/effect-model/, under "
+        "{variant}/ for a baseline)"
+    )})
     variant: str = Baseline.FULL
     e_dim: int = 64
     e_noise: float = field(default=0.1, metadata={"help": (
@@ -394,10 +397,6 @@ def load_shard(path: Path) -> list[EffectRecord]:
     return list(read_shard(Path(path)))
 
 
-def corpus_shards(records_dir: Path) -> list[Path]:
-    return iter_shards(Path(records_dir))
-
-
 class HoldoutMismatchError(ValueError):
     """The trainer's own holdout disagrees with the one its corpus recorded."""
 
@@ -465,7 +464,7 @@ def run(config: TrainEffectModelConfig) -> int:
         manifest_surface=manifest.surface, vocab_path=Path(config.vocab_path),
         corpus=config.corpus,
     )
-    training_shards = corpus_shards(store.training_dir)
+    training_shards = iter_shards(store.training_dir)
     if not training_shards:
         logger.error("No training shards under %s.", store.training_dir)
         return 1
