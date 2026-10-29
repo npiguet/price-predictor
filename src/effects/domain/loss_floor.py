@@ -7,7 +7,7 @@ the floor it says whether the head learned the field or only how often it fires.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import torch
 
@@ -73,28 +73,31 @@ def _supervised(
     return selected if selected.numel() else None
 
 
-def _degenerate(batches: Sequence[EntityTargetBatch], name: str) -> bool:
+def _degenerate(target: torch.Tensor | None) -> bool:
     """Whether a field's supervised targets never vary, whole rows compared.
 
     Such a field has no deviance to explain, and the clamp leaves a near-zero
     floor any head would read as enormously worse than constant.
     """
-    target = _supervised(batches, name)
     return target is None or bool((target == target[0]).all())
 
 
 def constant_predictor_outputs(
     batches: Sequence[EntityTargetBatch], *, fields: tuple[FieldSpec, ...],
+    supervised: Mapping[str, torch.Tensor | None] | None = None,
 ) -> torch.Tensor:
     """The best constant prediction for the gate and each active field: one
     ``(PER_ENTITY_WIDTH,)`` vector, each slice the maximum-likelihood constant
-    under that field's own loss."""
+    under that field's own loss. ``supervised`` holds each field's
+    :func:`_supervised` targets where the caller selected them already."""
+    if supervised is None:
+        supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
     vector = torch.zeros(PER_ENTITY_WIDTH)
     real = [batch.gate[batch.mask.bool()] for batch in batches]
     vector[GATE_INDEX] = _logit(_mean(torch.cat(real or [torch.zeros(0)])))
 
     for spec in fields:
-        target = _supervised(batches, spec.name)
+        target = supervised[spec.name]
         if target is None:
             continue
         start, end = FIELD_SLICES[spec.name]
@@ -135,10 +138,10 @@ def constant_predictor_floor(
     loss's own masking and normalization. A field whose targets never vary
     reports exactly zero: no floor.
     """
-    vector = constant_predictor_outputs(batches, fields=fields)
-    degenerate = {
-        spec.name for spec in fields if _degenerate(batches, spec.name)
-    }
+    # Selected once: each field's targets are a concatenation over every batch.
+    supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
+    vector = constant_predictor_outputs(batches, fields=fields, supervised=supervised)
+    degenerate = {name for name, target in supervised.items() if _degenerate(target)}
     means = PartsMean()
     for batch in batches:
         _, parts = per_entity_loss(

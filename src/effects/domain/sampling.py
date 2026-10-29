@@ -150,12 +150,11 @@ def sample_weights(
     texts = [text_of(record) for record in records]
     if games is None:
         games = TextGames.of(records, text_of)
-    classes = [
-        class_of(record) if class_of is not None else "" for record in records
-    ]
+    by_class: dict[str, list[int]] = defaultdict(list)
+    for i, record in enumerate(records):
+        by_class[class_of(record) if class_of is not None else ""].append(i)
     out = [1.0] * len(records)
-    for name in set(classes):
-        members = [i for i, value in enumerate(classes) if value == name]
+    for members in by_class.values():
         present = {texts[i] for i in members if texts[i] is not None}
         weights = rarity_weights({text: games.games(text) for text in present})
         for i in members:
