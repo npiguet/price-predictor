@@ -776,11 +776,11 @@ class TestGen2EnvelopeFields:
         a dataset built from gen-1 shards read as gen-2, and the mixed-
         generation guard on ``--corpus`` could never fire.
         """
-        from effects.infrastructure.record_io import GEN_1, shard_generation, write_shard
+        from effects.infrastructure.record_io import ShardGeneration, shard_generation, write_shard
 
         rewritten = tmp_path / "curated.jsonl.gz"
         write_shard(rewritten, read_shard(_GEN1_FIXTURE))
-        assert shard_generation(rewritten) == GEN_1
+        assert shard_generation(rewritten) is ShardGeneration.GEN_1
         for line in iter_shard_lines(rewritten):
             assert "random_seat" not in json.loads(line)
 
@@ -828,14 +828,14 @@ class TestShardGeneration:
         return path
 
     def test_the_real_gen1_fixture_is_gen1(self):
-        from effects.infrastructure.record_io import GEN_1, shard_generation
+        from effects.infrastructure.record_io import ShardGeneration, shard_generation
 
-        assert shard_generation(_GEN1_FIXTURE) == GEN_1
+        assert shard_generation(_GEN1_FIXTURE) is ShardGeneration.GEN_1
 
     def test_a_shard_carrying_random_seat_is_gen2(self, tmp_path):
-        from effects.infrastructure.record_io import GEN_2, shard_generation
+        from effects.infrastructure.record_io import ShardGeneration, shard_generation
 
-        assert shard_generation(self._gen2_shard(tmp_path / "g2.jsonl.gz")) == GEN_2
+        assert shard_generation(self._gen2_shard(tmp_path / "g2.jsonl.gz")) is ShardGeneration.GEN_2
 
     def test_an_empty_shard_has_no_generation(self, tmp_path):
         from effects.infrastructure.record_io import shard_generation
@@ -855,11 +855,11 @@ class TestShardGeneration:
             refuse_mixed_generations([_GEN1_FIXTURE, gen2])
 
     def test_a_single_generation_set_passes(self, tmp_path):
-        from effects.infrastructure.record_io import GEN_2, refuse_mixed_generations
+        from effects.infrastructure.record_io import refuse_mixed_generations
 
         gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
-        assert refuse_mixed_generations([gen2, gen2]) == GEN_2
-        assert refuse_mixed_generations([]) is None
+        refuse_mixed_generations([gen2, gen2])
+        refuse_mixed_generations([])
 
 
 class TestReadRecordsMatching:

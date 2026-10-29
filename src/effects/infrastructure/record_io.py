@@ -1003,36 +1003,40 @@ def count_shard_records(shard: Path) -> int:
 
 # ── shard generation (FR-033) ───────────────────────────────────────────
 
-#: The two record generations a shard can hold. A gen-2 record always carries
-#: ``random_seat``; a gen-1 one never does, and on gen-1 ``playability``
-#: records ``actor_player`` keeps feature 023's meaning rather than naming the
-#: deciding player (FR-030a).
-GEN_1, GEN_2 = "gen-1", "gen-2"
+class ShardGeneration(StrEnum):
+    """The two record generations a shard can hold.
+
+    A gen-2 record always carries ``random_seat``; a gen-1 one never does, and
+    on gen-1 ``playability`` records ``actor_player`` keeps feature 023's
+    meaning rather than naming the deciding player (FR-030a).
+    """
+
+    GEN_1 = "gen-1"
+    GEN_2 = "gen-2"
 
 
 class MixedGenerationsError(ValueError):
     """A records set holds both gen-1 and gen-2 shards."""
 
 
-def shard_generation(path: Path) -> str | None:
-    """``gen-1`` or ``gen-2`` by the shard's first complete record; None if empty.
+def shard_generation(path: Path) -> ShardGeneration | None:
+    """The shard's generation by its first complete record; None if empty.
 
     One record speaks for its shard: ``validate-corpus`` fails a shard whose
     records disagree.
     """
     for data in iter_record_dicts(path):
-        return GEN_2 if "random_seat" in data else GEN_1
+        return ShardGeneration.GEN_2 if "random_seat" in data else ShardGeneration.GEN_1
     return None
 
 
-def refuse_mixed_generations(paths: Iterable[Path]) -> str | None:
-    """The one generation ``paths`` hold, or raise when they hold both.
+def refuse_mixed_generations(paths: Iterable[Path]) -> None:
+    """Raise when ``paths`` hold both generations.
 
     Every reader of a records set calls this first (FR-033): the redefined
-    ``actor_player`` has no version field of its own. None for a set of empty
-    shards.
+    ``actor_player`` has no version field of its own.
     """
-    seen: dict[str, Path] = {}
+    seen: dict[ShardGeneration, Path] = {}
     for path in paths:
         generation = shard_generation(path)
         if generation is not None:
@@ -1040,8 +1044,8 @@ def refuse_mixed_generations(paths: Iterable[Path]) -> str | None:
     if len(seen) > 1:
         raise MixedGenerationsError(
             "this records set mixes gen-1 shards (no random_seat field) with "
-            f"gen-2 shards, e.g. {seen[GEN_1]} and {seen[GEN_2]}. The two read "
+            f"gen-2 shards, e.g. {seen[ShardGeneration.GEN_1]} and "
+            f"{seen[ShardGeneration.GEN_2]}. The two read "
             "actor_player on playability records differently (FR-030a); keep "
             "them in separate directories and read one at a time."
         )
-    return next(iter(seen), None)
