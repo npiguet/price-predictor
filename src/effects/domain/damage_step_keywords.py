@@ -120,15 +120,7 @@ def _defending_player(
     return others[0] if len(others) == 1 else None
 
 
-# ── the arithmetic the predicates read ──────────────────────────────────
-
-
-def _power(entity: EntityState) -> int:
-    return entity.pt.total[0] if entity.pt else 0
-
-
-def _remaining_toughness(entity: EntityState) -> int:
-    return (entity.pt.total[1] if entity.pt else 0) - entity.damage
+# ── what the predicates read ────────────────────────────────────────────
 
 
 def _has_opponents(participant: CombatParticipant) -> bool:
@@ -143,7 +135,7 @@ def _is_unblocked_attacker(participant: CombatParticipant) -> bool:
 def _deals_damage(participant: CombatParticipant) -> bool:
     """Checked by every damage-dealing row: removing lifelink from a 0/3 wall
     moves nothing, and counting it would be a coin flip against the keyword."""
-    return _power(participant.carrier) >= 1
+    return participant.carrier.power >= 1
 
 
 _STRIKES_FIRST = frozenset({"first_strike", "double_strike"})
@@ -169,10 +161,10 @@ def _kills_outright(
     opponent = _lone_opponent(participant)
     if opponent is None:
         return False
-    power = _power(participant.carrier)
+    power = participant.carrier.power
     if "deathtouch" in keywords_of(participant.carrier):
         return power >= 1
-    return power >= _remaining_toughness(opponent)
+    return power >= opponent.remaining_toughness
 
 
 def _survives_a_normal_hit(participant: CombatParticipant) -> bool:
@@ -183,7 +175,7 @@ def _survives_a_normal_hit(participant: CombatParticipant) -> bool:
     """
     opponent = _lone_opponent(participant)
     return opponent is not None and (
-        _remaining_toughness(opponent) > _power(participant.carrier)
+        opponent.remaining_toughness > participant.carrier.power
     )
 
 
@@ -260,10 +252,10 @@ def _runs_over_its_blockers(
     if not combat or combat.attacking is None or not participant.opponents:
         return False
     soaked = sum(
-        max(0, _remaining_toughness(blocker))
+        max(0, blocker.remaining_toughness)
         for blocker in participant.opponents
     )
-    return soaked < _power(participant.carrier)
+    return soaked < participant.carrier.power
 
 
 def _would_be_destroyed(
@@ -273,15 +265,15 @@ def _would_be_destroyed(
     over every opponent, or any of it from a deathtouch creature."""
     if not _has_opponents(participant):
         return False
-    hitters = [o for o in participant.opponents if _power(o) >= 1]
+    hitters = [o for o in participant.opponents if o.power >= 1]
     if any(_COUNTER_DAMAGE & keywords_of(opponent) for opponent in hitters):
         # -1/-1 counters kill an indestructible creature without destroying
         # it, so the keyword saves nothing the record could show.
         return False
     if any("deathtouch" in keywords_of(opponent) for opponent in hitters):
         return True
-    incoming = sum(_power(opponent) for opponent in participant.opponents)
-    return incoming >= _remaining_toughness(participant.carrier)
+    incoming = sum(opponent.power for opponent in participant.opponents)
+    return incoming >= participant.carrier.remaining_toughness
 
 
 # ── the table ───────────────────────────────────────────────────────────
@@ -551,7 +543,7 @@ class KeywordResolver:
         found = set(entity.granted_temporary.keywords)
         if self._sidecars is None:
             return found
-        for key in (*entity.printed, *entity.granted_attached):
+        for key in entity.ability_keys:
             keyword = self._keyword_for(key)
             if keyword is not None:
                 found.add(keyword)

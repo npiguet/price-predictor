@@ -61,7 +61,7 @@ def main() -> int:
         for record in itertools.islice(read_shard(Path(path)), args.records_per_shard):
             records += 1
             for entity in record.state.entities:
-                for key in (*entity.printed, *entity.granted_attached):
+                for key in entity.ability_keys:
                     slots += 1
                     outcome = sidecars.resolution_of(key)
                     if outcome is not KeyResolution.LINE:

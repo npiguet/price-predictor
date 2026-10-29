@@ -409,7 +409,7 @@ class SurfaceBatcher:
                 if note(key) is not None:
                     break
             for entity in record.state.entities:
-                for key in (*entity.printed, *entity.granted_attached):
+                for key in entity.ability_keys:
                     if note(key) is not None:
                         for mode in self.options_for(key):
                             note(mode)

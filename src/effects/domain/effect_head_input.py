@@ -166,12 +166,19 @@ def _spelling(value: str) -> str:
     return value.strip().lower().replace(" ", "_")
 
 
+def vocabulary_slot(value: str, vocabulary: tuple[str, ...]) -> int | None:
+    """``value``'s slot in ``vocabulary``, matched in the vocabulary's
+    spelling; None for a value it does not list. The input surface and the
+    head's targets both look a member up here, so they cannot normalize apart."""
+    return _positions(vocabulary).get(_spelling(value))
+
+
 def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
     """One-hot over ``vocabulary`` plus a trailing "other/absent" slot."""
     out = [0.0] * (len(vocabulary) + 1)
     if value is None:
         return out
-    index = _positions(vocabulary).get(_spelling(value))
+    index = vocabulary_slot(value, vocabulary)
     out[-1 if index is None else index] = 1.0
     return out
 
@@ -580,7 +587,7 @@ def _entity_block(
         features=card_features(entity, record, masked_keywords=masked, layout=layout),
         entity_id=entity.id,
     )]
-    for key in _ability_keys(entity):
+    for key in entity.ability_keys:
         if not keeps(key):
             continue
         modes = lines.options_for(key)
@@ -605,12 +612,6 @@ def _keeps_ability(key, *, lines: LineLookup, gone, dropout: float, rng) -> bool
         # here.
         return False
     return not (dropout > 0.0 and rng.random() < dropout)
-
-
-def _ability_keys(entity: EntityState) -> tuple[ProvenanceKey, ...]:
-    """An entity's ability tokens: printed and attachment-granted only;
-    temporary grants ride the overlay (FR-073)."""
-    return (*entity.printed, *entity.granted_attached)
 
 
 def _act_vector(

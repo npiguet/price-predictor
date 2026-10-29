@@ -9,8 +9,8 @@ inclusion tier means uncollected, not empty.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import IntEnum
+from dataclasses import dataclass, field, replace
+from enum import IntEnum, StrEnum
 
 from effects.domain.event_schema import Event
 from effects.domain.provenance import ProvenanceKey
@@ -38,6 +38,22 @@ STAGE_ONE_TIERS: frozenset[InclusionTier] = frozenset(
 )
 
 COLORS: tuple[str, ...] = ("W", "U", "B", "R", "G", "C")
+
+
+class Zone(StrEnum):
+    """The zones an entity's ``zone`` names, in the collector's spelling.
+
+    An entity keeps its zone as the string the record carries, so a zone this
+    enum predates still reads; the enum is what code compares it against.
+    """
+
+    BATTLEFIELD = "battlefield"
+    STACK = "stack"
+    HAND = "hand"
+    GRAVEYARD = "graveyard"
+    LIBRARY = "library"
+    EXILE = "exile"
+    COMMAND = "command"
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +203,48 @@ class EntityState:
     printed: tuple[ProvenanceKey, ...] = ()
 
     stack_extras: StackExtras | None = None
+
+    @property
+    def ability_keys(self) -> tuple[ProvenanceKey, ...]:
+        """The entity's ability tokens: printed and attachment-granted lines.
+
+        Temporary grants are not among them: they ride the overlay (FR-073).
+        """
+        return (*self.printed, *self.granted_attached)
+
+    @property
+    def power(self) -> int:
+        """Total power; zero for an entity that has none."""
+        return self.pt.total[0] if self.pt else 0
+
+    @property
+    def toughness(self) -> int:
+        """Total toughness; zero for an entity that has none."""
+        return self.pt.total[1] if self.pt else 0
+
+    @property
+    def remaining_toughness(self) -> int:
+        """Total toughness less the damage already marked on it."""
+        return self.toughness - self.damage
+
+    @property
+    def is_creature(self) -> bool:
+        return "creature" in self.types
+
+    @property
+    def on_battlefield(self) -> bool:
+        return self.zone == Zone.BATTLEFIELD
+
+    def with_total_toughness(self, toughness: int) -> EntityState:
+        """This entity at total toughness ``toughness`` with no marked damage.
+
+        The base toughness absorbs the change, so the boosts and the counters
+        keep their own channels; damage is cleared so the toughness is what an
+        ability faces.
+        """
+        pt = self.pt or PowerToughness(base=(0, 0))
+        base = toughness - pt.boosts[1] - pt.counters[1]
+        return replace(self, pt=replace(pt, base=(pt.base[0], base)), damage=0)
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,6 +11,7 @@ from effects.domain.state_snapshot import (
     STAGE_ONE_TIERS,
     EntityState,
     GlobalState,
+    GrantedTemporary,
     InclusionTier,
     PlayerState,
     PowerToughness,
@@ -71,6 +72,39 @@ class TestCharacteristics:
         by_counter = PowerToughness(base=(2, 2), counters=(1, 1))
         assert by_boost.total == by_counter.total
         assert by_boost != by_counter
+
+class TestEntityArithmetic:
+    def test_an_entity_reads_its_totals_less_its_damage(self):
+        entity = EntityState(
+            id="E1", name="A", zone="battlefield", controller="P0", damage=1,
+            pt=PowerToughness(base=(2, 2), boosts=(1, 0), counters=(0, 1)),
+        )
+        assert (entity.power, entity.toughness, entity.remaining_toughness) == (3, 3, 2)
+
+    def test_an_entity_without_power_and_toughness_reads_zero(self):
+        entity = EntityState(id="E1", name="A", zone="hand", controller="P0")
+        assert (entity.power, entity.toughness) == (0, 0)
+
+    def test_a_new_total_toughness_moves_the_base_and_clears_damage(self):
+        entity = EntityState(
+            id="E1", name="A", zone="battlefield", controller="P0", damage=2,
+            pt=PowerToughness(base=(2, 2), boosts=(0, 1), counters=(0, 1)),
+        ).with_total_toughness(6)
+        assert entity.pt == PowerToughness(base=(2, 4), boosts=(0, 1), counters=(0, 1))
+        assert (entity.toughness, entity.damage) == (6, 0)
+
+    def test_ability_keys_hold_printed_then_attached_lines_only(self):
+        from effects.domain.provenance import ProvenanceKey
+
+        printed, attached, temporary = (
+            ProvenanceKey("cardsfolder/a/a.txt", 0, "spell", i) for i in range(3))
+        entity = EntityState(
+            id="E1", name="A", zone="battlefield", controller="P0",
+            printed=(printed,), granted_attached=(attached,),
+            granted_temporary=GrantedTemporary(abilities=(temporary,)),
+        )
+        assert entity.ability_keys == (printed, attached)
+
 
 class TestLookups:
     def test_an_entity_resolves_by_id(self):
