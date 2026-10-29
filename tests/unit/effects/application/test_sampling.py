@@ -31,7 +31,6 @@ from effects.domain.sampling import (
     sample_weights,
     sampling_class,
 )
-from effects.domain.split import CorpusSplit
 from tests.unit.effects.builders import make_record
 
 
@@ -228,33 +227,26 @@ class TestProvenanceRecordsTheCorpus:
     split, so ``evaluate-effect-model`` can refuse one rebuilt since."""
 
     def test_a_corpus_runs_provenance_records_the_manifest_digest(self):
-        from effects.application.train_effect_model import TrainEffectModelConfig
-        from effects.application.training_loop import TrainingLoop
-
-        loop = TrainingLoop(
-            TrainEffectModelConfig(corpus="output/effects/corpus"),
-            split=CorpusSplit(), training_shards=[], validation_samples={},
-            holdout_permille=20, holdout_max_carriers=8,
-            corpus_digest="abc123",
+        from effects.application.train_effect_model import (
+            CorpusFacts,
+            TrainEffectModelConfig,
         )
 
-        provenance = loop._provenance()
+        provenance = CorpusFacts(digest="abc123").provenance(
+            TrainEffectModelConfig(corpus="output/effects/corpus"),
+        )
 
         assert provenance.corpus_path == "output/effects/corpus"
         assert provenance.corpus_digest == "abc123"
 
     def test_a_run_without_a_digest_records_no_corpus(self):
         """Nothing is pinned until a manifest has been read."""
-        from effects.application.train_effect_model import TrainEffectModelConfig
-        from effects.application.training_loop import TrainingLoop
-
-        loop = TrainingLoop(
-            TrainEffectModelConfig(),
-            split=CorpusSplit(), training_shards=[], validation_samples={},
-            holdout_permille=20, holdout_max_carriers=8,
+        from effects.application.train_effect_model import (
+            CorpusFacts,
+            TrainEffectModelConfig,
         )
 
-        provenance = loop._provenance()
+        provenance = CorpusFacts().provenance(TrainEffectModelConfig())
 
         assert provenance.corpus_path == ""
         assert provenance.corpus_digest == ""

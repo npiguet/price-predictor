@@ -49,6 +49,7 @@ from effects.domain.event_schema import (
 from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
+    PAYLOAD_TYPES,
     REWRITE_RESULTS_RUNNING_AN_ABILITY,
     REWRITE_RESULTS_WITHOUT_ABILITY,
     WHAT_IF_SUBKINDS,
@@ -58,6 +59,7 @@ from effects.domain.records import (
     Costs,
     EffectRecord,
     Moment,
+    PlayabilitySubkind,
     RecordKind,
     ResolutionPayload,
     RewritePayload,
@@ -368,10 +370,18 @@ def _kind_label(record: EffectRecord) -> str:
     different code: an activation half and an effect half share a ``kind`` and
     nothing else, so a defect in one would be diluted by the other.
     """
-    discriminator = record.discriminator
-    return (
-        f"{record.kind.value}/{discriminator.value}"
-        if discriminator else record.kind.value
+    return _label(record.kind, record.discriminator)
+
+
+def _label(kind: RecordKind, discriminator: Moment | PlayabilitySubkind | None) -> str:
+    return f"{kind.value}/{discriminator.value}" if discriminator else kind.value
+
+
+def _labels_of(*kinds: RecordKind) -> tuple[str, ...]:
+    """Every kind label a record of one of ``kinds`` can carry."""
+    return tuple(
+        _label(kind, discriminator)
+        for kind, discriminator in PAYLOAD_TYPES if kind in kinds
     )
 
 
@@ -458,6 +468,27 @@ def _join_result(sidecars, key: ProvenanceKey):
 def _rate(part: int, whole: int) -> float:
     """``part`` as a share of ``whole``, and 0.0 of an empty one."""
     return part / whole if whole else 0.0
+
+
+@dataclass(slots=True)
+class _Share:
+    """How many of the cases ``seen`` were a hit."""
+
+    hit: int = 0
+    seen: int = 0
+
+    def note(self, hit: bool) -> None:
+        self.hit += hit
+        self.seen += 1
+
+    @property
+    def rate(self) -> float:
+        return _rate(self.hit, self.seen)
+
+
+def _histogram(counts: Iterable[tuple[str, int]]) -> str:
+    """``name count, name count``, in the order given, or ``none`` when empty."""
+    return ", ".join(f"{name} {count}" for name, count in counts) or "none"
 
 
 def _keep_example(examples: list[str], example: str) -> None:
@@ -651,9 +682,9 @@ class _ActingLines:
 
     #: Finding name -> the kind labels it groups.
     GROUPS = {
-        "trigger and rewrite": ("trigger", "rewrite"),
-        "resolution": ("resolution/activation", "resolution/resolution"),
-        "continuous": ("continuous",),
+        "trigger and rewrite": _labels_of(RecordKind.TRIGGER, RecordKind.REWRITE),
+        "resolution": _labels_of(RecordKind.RESOLUTION),
+        "continuous": _labels_of(RecordKind.CONTINUOUS),
     }
 
     def __init__(self) -> None:
@@ -921,9 +952,7 @@ class _Modes:
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         total = sum(self.modes.values())
-        shown = ", ".join(
-            f"{name} {count}" for name, count in sorted(self.modes.items())
-        ) or "none"
+        shown = _histogram(sorted(self.modes.items()))
         degraded = total - self.modes.get(CollectionMode.PATCHED.value, 0)
         yield Finding(
             name="every record was collected in patched mode",
@@ -950,9 +979,7 @@ class _Outcomes:
             self.outcomes[record.payload.outcome.value] += 1
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        shown = ", ".join(
-            f"{name} {count}" for name, count in sorted(self.outcomes.items())
-        ) or "none"
+        shown = _histogram(sorted(self.outcomes.items()))
         yield Finding(
             name="outcome takes more than one value",
             # An empty window cannot answer this. Reported as holding rather
@@ -1002,9 +1029,9 @@ class _Costs:
         # Nothing paid anywhere is a defect at any size; a single dead channel
         # only means something once the window is big enough for its absence to
         # be about the collector rather than about the pool.
-        broken = self.activations and (
+        broken = bool(self.activations and (
             not self.populated or (enough and dead)
-        )
+        ))
         detail: tuple[str, ...] = ()
         if broken:
             detail = (
@@ -1156,14 +1183,6 @@ class _DuplicateEvents:
         )
 
 
-@dataclass(slots=True)
-class _FireCounts:
-    """One evaluated trigger mode: how often it fired, of how often it was asked."""
-
-    fired: int = 0
-    evaluated: int = 0
-
-
 class _Triggers:
     """Fired against not-fired, aggregate and per evaluated mode.
 
@@ -1175,7 +1194,8 @@ class _Triggers:
 
     def __init__(self) -> None:
         self.fired: Counter[bool] = Counter()
-        self.modes: dict[str, _FireCounts] = defaultdict(_FireCounts)
+        #: Per evaluated mode: how often it fired, of how often it was asked.
+        self.modes: dict[str, _Share] = defaultdict(_Share)
 
     def add(self, record: EffectRecord) -> None:
         payload = record.payload
@@ -1186,19 +1206,14 @@ class _Triggers:
         # vocabulary is a closed set of outcomes and Forge has some two
         # hundred trigger modes, so this is the only per-mode axis there is.
         mode = payload.event.params.get("mode") or payload.event.type.value
-        counts = self.modes[str(mode)]
-        counts.fired += payload.fired
-        counts.evaluated += 1
+        self.modes[str(mode)].note(payload.fired)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         fired = self.fired[True]
         total = fired + self.fired[False]
         share = _rate(fired, total)
         skewed = sorted(
-            (
-                (counts.fired / counts.evaluated, mode, counts)
-                for mode, counts in self.modes.items()
-            ),
+            ((counts.rate, mode, counts) for mode, counts in self.modes.items()),
             reverse=True,
         )
         yield Finding(
@@ -1210,7 +1225,7 @@ class _Triggers:
                 f"{limits.max_trigger_fired_share:.1%})"
             ),
             detail=tuple(
-                f"{mode}: {counts.fired}:{counts.evaluated - counts.fired} "
+                f"{mode}: {counts.hit}:{counts.seen - counts.hit} "
                 f"({rate:.1%} fired)"
                 for rate, mode, counts in skewed[:_EXAMPLES]
             ),
@@ -1291,10 +1306,9 @@ class _Rewrites:
 
     def _shown(self) -> str:
         """The result histogram, for whichever rewrite finding is printing."""
-        return ", ".join(
-            f"{name} {counts.seen}"
-            for name, counts in sorted(self.results.items())
-        ) or "none"
+        return _histogram(
+            (name, counts.seen) for name, counts in sorted(self.results.items())
+        )
 
     def _say_what_happened(self) -> Finding:
         """Which of the five replacement outcomes the handler reported.
@@ -1537,14 +1551,6 @@ class _Attribution:
         )
 
 
-@dataclass(slots=True)
-class _CauseCounts:
-    """One cause-bearing event type: how often it names a cause, of how often seen."""
-
-    with_cause: int = 0
-    seen: int = 0
-
-
 class _CauseBearing:
     """Whether the events that declare a ``cause`` populate it.
 
@@ -1562,17 +1568,16 @@ class _CauseBearing:
     """
 
     def __init__(self) -> None:
-        self.by_type: dict[str, _CauseCounts] = defaultdict(_CauseCounts)
+        #: Per cause-bearing event type: how often it names a cause, of how often seen.
+        self.by_type: dict[str, _Share] = defaultdict(_Share)
 
     def add(self, record: EffectRecord) -> None:
         for event in record.payload.all_events():
             if event.type in CAUSE_BEARING_TYPES:
-                counts = self.by_type[event.type.value]
-                counts.with_cause += bool(event.params.get("cause"))
-                counts.seen += 1
+                self.by_type[event.type.value].note(bool(event.params.get("cause")))
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        with_cause = sum(counts.with_cause for counts in self.by_type.values())
+        with_cause = sum(counts.hit for counts in self.by_type.values())
         seen = sum(counts.seen for counts in self.by_type.values())
         rate = _rate(with_cause, seen)
         yield _floor_finding(
@@ -1585,7 +1590,7 @@ class _CauseBearing:
                 f"cause-bearing types carry a cause ({rate:.1%}, {limit})"
             ),
             detail=(
-                f"{event_type}: {counts.with_cause}/{counts.seen}"
+                f"{event_type}: {counts.hit}/{counts.seen}"
                 for event_type, counts in sorted(self.by_type.items())
             ),
         )
@@ -1676,10 +1681,7 @@ class _ProbeForks:
             self.interventions += 1
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        shown = ", ".join(
-            f"{keyword} {count}"
-            for keyword, count in self.probed_keywords.most_common()
-        ) or "none"
+        shown = _histogram(self.probed_keywords.most_common())
         yield Finding(
             name="probe forks were taken",
             ok=True,

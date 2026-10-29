@@ -51,7 +51,7 @@ from effects.infrastructure.record_io import read_shard, write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.step_workers import pack, unpack
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
-from tests.unit.effects.builders import make_batcher
+from tests.unit.effects.builders import make_batcher, make_training_loop
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 _CARDS = (
@@ -178,7 +178,7 @@ def _run(
     monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
-        loop = TrainingLoop(
+        loop = make_training_loop(
             _config(
                 corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
                 **config,
@@ -191,8 +191,6 @@ def _run(
             validation_samples={
                 "card-disjoint": corpus.sample, "game-disjoint": corpus.sample,
             },
-            holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
-            rarity={}, corpus_digest="",
         )
         try:
             code = loop.execute()
@@ -454,10 +452,7 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     """The worker's resources, built from settings, and the packing between."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     config = _config(corpus, corpus.root / "unused")
-    loop = TrainingLoop(
-        config, split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8, rarity={"x": 3},
-    )
+    loop = make_training_loop(config, rarity={"x": 3})
     loop.api_types, loop.param_keys = loop._script_vocabularies()
     settings = loop._preparer_settings(feature_widths(records))
     assert settings.heads == frozenset({"value", "api", "mlm"})

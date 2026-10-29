@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+from effects.application import step_preparation
 from effects.application import training_loop as loop_module
 from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import (
@@ -21,8 +22,8 @@ from effects.application.train_effect_model import (
 from effects.application.training_loop import StepLoss, TrainingLoop
 from effects.domain.effect_losses import LossParts
 from effects.domain.records import CombatPayload, RecordKind
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
+from tests.unit.effects.builders import make_training_loop
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
     make_record,
@@ -57,8 +58,8 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
     monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
     monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
     monkeypatch.setattr(
-        StepPreparer, "_build_tokenizer",
-        lambda self: type("T", (), {"vocab_size": 8})(),
+        step_preparation, "load_tokenizer",
+        lambda *a, **k: type("T", (), {"vocab_size": 8})(),
     )
     # The script-API vocabulary is read off every real sidecar; none here.
     monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
@@ -100,11 +101,7 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         # real ones.
         prefetch_workers=0,
     )
-    code = TrainingLoop(
-        config, split=CorpusSplit(), training_shards=[shard], validation_samples=samples,
-        holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
-        rarity={}, corpus_digest="",
-    ).execute()
+    code = make_training_loop(config, training_shards=[shard], validation_samples=samples).execute()
     return code, events, resets, model
 
 

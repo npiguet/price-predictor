@@ -26,8 +26,11 @@ from effects.domain.effect_head_layout import (
     AT_LEAST_STEPS,
     CREATED_OBJECT_SLOTS,
     CREATED_SLOT_WIDTH,
+    DIRECTIONS,
     FIELD_SLICES,
     GATE_INDEX,
+    SIGNED_DIRECTIONS,
+    SIGNED_MAGNITUDE,
     VALUE_SLICES,
     VERDICT_BITS,
     CreatedSlot,
@@ -116,10 +119,12 @@ def _signed_delta_loss(
     Splitting them is what makes "gains 2 life" and "loses 2 life" different
     predictions rather than a regression that can hedge between them.
     """
-    direction_logits, log_magnitude = prediction[..., :3], prediction[..., 3]
+    direction_logits = prediction[..., SIGNED_DIRECTIONS]
+    log_magnitude = prediction[..., SIGNED_MAGNITUDE]
     direction = torch.sign(target).long() + 1  # -1,0,1 -> 0,1,2
     loss = functional.cross_entropy(
-        direction_logits.reshape(-1, 3), direction.reshape(-1), reduction="sum",
+        direction_logits.reshape(-1, len(DIRECTIONS)), direction.reshape(-1),
+        reduction="sum",
     )
     return loss + _poisson(log_magnitude, target.abs())
 

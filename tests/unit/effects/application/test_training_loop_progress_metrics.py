@@ -19,7 +19,6 @@ from effects.application import training_loop as loop_module
 from effects.application.gate_one import measure
 from effects.application.training_loop import TrainingLoop
 from effects.domain.effect_model import EffectModel
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.model_runner import Runnable
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.application.test_training_loop_workers import (  # noqa: F401
@@ -27,6 +26,7 @@ from tests.unit.effects.application.test_training_loop_workers import (  # noqa:
     corpus,
     records,
 )
+from tests.unit.effects.builders import make_training_loop
 
 BATCH_SIZE = 32
 
@@ -67,16 +67,13 @@ def scored(corpus, records, tmp_path_factory):  # noqa: F811
             )),
         )
         monkeypatch.setattr(TrainingLoop, "_validate_epoch", validate_epoch)
-        code = TrainingLoop(
+        code = make_training_loop(
             _config(
                 corpus, root / "out", prefetch_workers=0, epochs=1,
                 batch_size=BATCH_SIZE,
             ),
-            split=CorpusSplit(),
             training_shards=corpus.shards,
             validation_samples={"card-disjoint": sample, "game-disjoint": corpus.sample},
-            holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
-            rarity={}, corpus_digest="",
         ).execute()
     assert code == 0
     return seen

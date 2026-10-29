@@ -457,7 +457,7 @@ class TestRunClosesTheSupervisor:
         the sidecar writer (which otherwise needs a real JVM).
 
         The sidecar writer is patched on ``collect_variants`` itself, not on
-        ``effects.infrastructure.variant_sidecar_connector`` where the class
+        ``effects.infrastructure.one_shot_workers`` where the function
         lives -- ``run()`` now resolves the name at module scope (so
         ``TestTheVariantRoundPlaysTheVariants`` can patch it there too), and
         patching the source module no longer reaches a name ``run()`` never
@@ -482,11 +482,8 @@ class TestRunClosesTheSupervisor:
         monkeypatch.setattr(
             collect_variants, "loadable_variants", lambda generated, _root: generated,
         )
-        sidecar = MagicMock()
-        sidecar.run.return_value = 0
         monkeypatch.setattr(
-            collect_variants, "VariantSidecarConnector",
-            MagicMock(return_value=sidecar),
+            collect_variants, "write_variant_sidecars", MagicMock(return_value=0),
         )
         return collect_variants
 
@@ -579,13 +576,13 @@ class TestTheVariantRoundPlaysTheVariants:
         supervisor = MagicMock()
         with patch.object(collector_connector, "CollectorSupervisor",
                           return_value=supervisor) as ctor, \
-             patch.object(collect_variants, "VariantSidecarConnector") as sidecar, \
+             patch.object(collect_variants, "write_variant_sidecars",
+                          return_value=0), \
              patch.object(collect_variants, "loadable_variants",
                           side_effect=lambda generated, _root: generated):
-            # The loadable list is written by the sidecar connector, which is
+            # The loadable list is written by the sidecar writer, which is
             # mocked here, so the file it would leave behind does not exist.
             # TestOnlyLoadableVariantsAreDecked covers the filter itself.
-            sidecar.return_value.run.return_value = 0
             collect_variants.run(
                 collect_variants.CollectVariantsConfig(
                     effect_records=records,
@@ -755,11 +752,8 @@ class TestTheRunReportsWhatItCollected:
         monkeypatch.setattr(
             collect_variants, "loadable_variants", lambda generated, _root: generated,
         )
-        sidecar = MagicMock()
-        sidecar.run.return_value = 0
         monkeypatch.setattr(
-            collect_variants, "VariantSidecarConnector",
-            MagicMock(return_value=sidecar),
+            collect_variants, "write_variant_sidecars", MagicMock(return_value=0),
         )
         records = tmp_path / "records"
         _writes_a_shard(records, 7, name="earlier.0-a.jsonl")()

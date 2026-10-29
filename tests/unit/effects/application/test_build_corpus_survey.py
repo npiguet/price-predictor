@@ -24,10 +24,10 @@ from effects.application.corpus_survey import (
     game_hash,
     init_survey_worker,
     merge_surveys,
-    progress_line,
     run_survey,
     survey_shard,
 )
+from effects.application.parallel_map import progress_line
 from effects.domain.corpus_curation import game_disjoint_draw
 from effects.domain.corpus_plan import Cell, GameRouting, TrainingSupply
 from effects.domain.event_schema import Event, EventType

@@ -197,7 +197,7 @@ def make_batcher(
     *, tokenizer=None, sidecars=None, masks=None, surface: str = "script",
     e_dim: int = 4, widths=None, device=None, withhold_keyword=None,
     keyword_expand_p: float = 0.0, context_dropout: float = 0.0, rng=None,
-    identity_table=None, noise=None, truncations=None, input_layout="gen-2",
+    identity_table=None, noise=None, truncations=None, input_layout=None,
     resolver=None,
 ):
     """A ``SurfaceBatcher`` and its collaborators from one flat set of settings."""
@@ -207,6 +207,7 @@ def make_batcher(
     from effects.application.surface_batching import Materializer, SurfaceBatcher
     from effects.application.text_staging import TextStager
     from effects.domain.baselines import BaselineMasks
+    from effects.domain.effect_head_input import INPUT_LAYOUT
 
     masks = masks or BaselineMasks()
     return SurfaceBatcher(
@@ -219,5 +220,30 @@ def make_batcher(
         materializer=Materializer(
             device or torch.device("cpu"), masks, identity_table, noise,
         ),
-        context_dropout=context_dropout, rng=rng, input_layout=input_layout,
+        context_dropout=context_dropout, rng=rng,
+        input_layout=input_layout or INPUT_LAYOUT,
+    )
+
+
+def make_training_loop(
+    config, *, training_shards=(), validation_samples=None, prefetch_batches=True,
+    **facts,
+):
+    """A ``TrainingLoop`` over ``config`` and a corpus described by ``facts``.
+
+    ``facts`` override ``CorpusFacts`` fields; by default the fixture holdout
+    rule (20 permille, at most 8 carriers) and an empty rarity table.
+    """
+    from effects.application.train_effect_model import CorpusFacts
+    from effects.application.training_loop import TrainingLoop
+
+    return TrainingLoop(
+        config,
+        facts=CorpusFacts(**{
+            "holdout_permille": 20, "holdout_max_carriers": 8, "rarity": {},
+            **facts,
+        }),
+        training_shards=list(training_shards),
+        validation_samples=validation_samples or {},
+        prefetch_batches=prefetch_batches,
     )

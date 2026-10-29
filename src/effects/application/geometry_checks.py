@@ -22,7 +22,8 @@ from pathlib import Path
 
 import numpy as np
 
-from effects.domain.ability_cache_layout import ARRAY_KEY, CACHE_SUFFIX, pooled_card_vector
+from effects.domain.ability_cache_layout import pooled_card_vector
+from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
@@ -159,7 +160,7 @@ def load_cache(
     sidecar_roots: Path | Iterable[Path],
     *,
     surface: str,
-    variant: str = "full",
+    variant: str = Baseline.FULL,
 ) -> CachedVectors:
     """Load a variant's cache, keyed by the ability text each row encodes.
 
@@ -175,6 +176,7 @@ def load_cache(
     is not a card the sealed pipeline scores.
     """
     from effects.domain.ability_encoder import encoding_text
+    from effects.infrastructure.ability_cache_store import AbilityCacheStore
     from effects.infrastructure.sidecar_io import (
         SIDECAR_SUFFIX,
         converted_text_path,
@@ -187,25 +189,23 @@ def load_cache(
         (Path(sidecar_roots),) if isinstance(sidecar_roots, (str, Path))
         else tuple(Path(r) for r in sidecar_roots)
     )
-    suffix = CACHE_SUFFIX if variant == "full" else f".{variant}{CACHE_SUFFIX}"
     cached = CachedVectors()
-    root = Path(abilities_root)
-    if not root.is_dir():
+    store = AbilityCacheStore(abilities_root, variant=variant)
+    if not store.root.is_dir():
         return cached
 
     for sidecar_root in roots:
         for sidecar_path in sorted(sidecar_root.rglob(f"*{SIDECAR_SUFFIX}")):
             sidecar = read_sidecar(sidecar_path)
             relative = Path(sidecar.script_file)
-            cache_path = root / relative.parent / f"{relative.stem}{suffix}"
-            if not cache_path.exists():
+            matrix = store.read(sidecar.script_file)
+            if matrix is None:
                 continue
-            with np.load(cache_path) as data:
-                matrix = data[ARRAY_KEY]
             if matrix.shape[0] != len(sidecar.lines):
                 logger.warning(
                     "skipping %s: %d cache rows for %d sidecar lines",
-                    cache_path, matrix.shape[0], len(sidecar.lines),
+                    store.path_for(sidecar.script_file), matrix.shape[0],
+                    len(sidecar.lines),
                 )
                 continue
             rendered = prose_lines(converted_text_path(sidecar_path))

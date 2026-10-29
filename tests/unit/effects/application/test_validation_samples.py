@@ -6,7 +6,7 @@ from collections import Counter
 
 import pytest
 
-from effects.application.validation_samples import _Smallest, class_quota, draw_samples
+from effects.application.validation_samples import _collect, class_quota, draw_samples
 from effects.domain.records import CombatPayload, Moment, RecordKind
 from effects.domain.sampling import (
     SamplingClass,
@@ -95,17 +95,22 @@ def test_zero_validation_sample_reads_nothing_and_draws_nothing(strata, monkeypa
     assert samples == {"card-disjoint": [], "game-disjoint": []}
 
 
-def test_two_records_with_one_id_do_not_compare_the_records_themselves(make_record):  # noqa: F811
-    """``_Smallest`` broke its tie on the record when hash and id both matched.
+def test_two_records_with_one_id_do_not_compare_the_records_themselves(
+    tmp_path, make_record,  # noqa: F811
+):
+    """The sample heap once broke its tie on the record when hash and id both matched.
 
     ``EffectRecord`` is a dataclass with no ordering, so the comparison the
     heap falls through to raises ``TypeError`` rather than picking a winner.
     A monotonic counter never ties, so the record is never reached.
     """
-    heap = _Smallest(4)
-    heap.offer(7, make_record(record_id="same", game_id="g1"))
-    heap.offer(7, make_record(record_id="same", game_id="g2"))
-    assert len(heap.records()) == 2
+    write_shard(tmp_path / "shard-00001.jsonl.gz", [
+        make_record(record_id="same", game_id="g1"),
+        make_record(record_id="same", game_id="g2"),
+        make_record(record_id="same", game_id="g3"),
+    ])
+    heaps = _collect(tmp_path, {SamplingClass.RESOLUTION_EFFECT: 2}, seed=1)
+    assert [r.game_id for r in heaps[SamplingClass.RESOLUTION_EFFECT].items()] == ["g3", "g2"]
 
 
 # ── FR-051: round-robin over held-out texts (T081) ──────────────────────

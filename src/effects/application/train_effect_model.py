@@ -34,10 +34,7 @@ from effects.domain.baselines import Baseline
 from effects.domain.records import (
     EffectRecord,
 )
-from effects.domain.split import (
-    CorpusSplit,
-    text_keyed_holdout,
-)
+from effects.domain.split import CorpusSplit
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 
 logger = logging.getLogger(__name__)
@@ -248,10 +245,22 @@ class TrainEffectModelConfig:
     #: ``--model-output`` after its last completed epoch.
     resume: bool = False
 
-    @property
-    def curriculum_step(self) -> int:
-        """The optimizer step the sparse group enables at; 0 for epoch 1."""
-        return max(0, self.curriculum_epoch - 1) * self.steps_per_epoch
+    def __post_init__(self) -> None:
+        # Refused before anything is read (FR-062): the encoder's attention
+        # splits its width across a fixed head count. Imported here because
+        # the encoder module loads torch, which this module does not.
+        from effects.domain.ability_encoder import ENCODER_N_HEADS
+
+        if self.encoder_d_model <= 0 or self.encoder_d_model % ENCODER_N_HEADS:
+            raise ValueError(
+                f"--encoder-d-model {self.encoder_d_model} is not divisible by "
+                f"the encoder's {ENCODER_N_HEADS} attention heads; pick a "
+                f"multiple of {ENCODER_N_HEADS}."
+            )
+        if self.encoder_layers <= 0:
+            raise ValueError(
+                f"--encoder-layers must be at least 1, got {self.encoder_layers}."
+            )
 
     def resolved_model_output(self) -> Path:
         from effects.infrastructure.effect_model_store import model_output_for
@@ -259,6 +268,85 @@ class TrainEffectModelConfig:
         if self.model_output is not None:
             return Path(self.model_output)
         return model_output_for(self.variant)
+
+
+@dataclass(frozen=True)
+class CorpusFacts:
+    """What a run reads off its curated corpus's manifest, once, at startup.
+
+    The trainer derives none of it (FR-125 withdrawn): ``build-corpus``
+    decided the split, the holdout and the rarity table, and a run reads them
+    here and stamps them onto every checkpoint it saves.
+    """
+
+    #: The split, enumerated: the host half keeps its validation games out of
+    #: training, and the checkpoint records it.
+    split: CorpusSplit = field(default_factory=CorpusSplit)
+    #: The holdout rule the corpus was composed against. The trainer has no
+    #: flags for it: a depleted collection run was generated against these,
+    #: and re-deriving them here could only disagree.
+    holdout_permille: int = 0
+    holdout_max_carriers: int = 0
+    holdout_unit: str = "text"
+    #: Records in the manifest's gate-1 slice — resolution records whose
+    #: acting text is on no training card. Read rather than counted (FR-088b):
+    #: the build already sized the slice.
+    gate_one_records: int = 0
+    #: The corpus-wide ``text -> games`` table (FR-146), threaded into every
+    #: ``sample_weights`` call the run makes.
+    rarity: Mapping[str, int] | None = None
+    #: Records per legality mode, so the epoch line places a legality record
+    #: in the family the build balanced it in; None without one.
+    legality_mode_counts: Mapping[str, int] | None = None
+    #: The manifest's digest at read time (FR-147).
+    digest: str = ""
+
+    @classmethod
+    def of(cls, manifest) -> CorpusFacts:
+        return cls(
+            split=CorpusSplit(
+                held_out_cards=manifest.held_out_cards,
+                card_disjoint_games=frozenset(manifest.card_disjoint_games),
+                game_disjoint_games=frozenset(manifest.game_disjoint_games),
+            ),
+            holdout_permille=manifest.holdout_permille,
+            holdout_max_carriers=manifest.holdout_max_carriers,
+            holdout_unit=manifest.holdout_unit,
+            gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
+            rarity=manifest.rarity,
+            legality_mode_counts=manifest.legality_mode_counts or None,
+            digest=manifest.digest(),
+        )
+
+    def provenance(self, config: TrainEffectModelConfig):
+        """What a checkpoint of this run records about the data it saw.
+
+        Both strata are the corpus's own, so every run against one dataset
+        records the same split whatever it read or how early it stopped. That
+        is what the evaluator needs: it scores the games the checkpoint names,
+        and a boundary recomputed against a grown corpus would not be the one
+        the model trained against.
+        """
+        from effects.infrastructure.effect_model_store import (
+            SplitProvenance,
+            content_hash,
+        )
+
+        return SplitProvenance(
+            held_out_cards=self.split.held_out_cards,
+            card_disjoint_games=tuple(sorted(self.split.card_disjoint_games)),
+            game_disjoint_games=tuple(sorted(self.split.game_disjoint_games)),
+            vocab_path=str(config.vocab_path),
+            keyword_definitions_path=str(config.keyword_definitions),
+            vocab_hash=content_hash(Path(config.vocab_path)),
+            keyword_definitions_hash=content_hash(Path(config.keyword_definitions)),
+            withheld_keyword=config.withhold_keyword,
+            holdout_permille=self.holdout_permille,
+            holdout_max_carriers=self.holdout_max_carriers,
+            corpus_path=config.corpus or "",
+            corpus_digest=self.digest,
+            holdout_unit=self.holdout_unit,
+        )
 
 
 class SurfaceMismatchError(ValueError):
@@ -320,14 +408,14 @@ def warmup_steps(*, epochs: int, steps_per_epoch: int) -> int:
 
 
 def fields_for_epoch(config: TrainEffectModelConfig, *, present: frozenset[str], epoch: int):
-    """The field set every step of ``epoch`` trains with, and validation scores."""
+    """The field set every step of ``epoch`` trains with, and validation scores.
+
+    The sparse group is on from the first step of ``--curriculum-epoch``; at 1
+    or below, from the run's first step.
+    """
     from effects.domain.effect_head_layout import active_fields
 
-    return active_fields(
-        present_classes=present,
-        step=(epoch - 1) * config.steps_per_epoch,
-        curriculum_step=config.curriculum_step,
-    )
+    return active_fields(present, sparse=epoch >= config.curriculum_epoch)
 
 
 def learning_rate_at(step: int, *, warmup: int) -> float:
@@ -431,8 +519,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
     so it is refused before any step rather than discovered at evaluation.
     """
     from effects.domain.text_holdout import normalize_script_text
-    from effects.infrastructure.card_sources import load_card_files, load_card_texts
-    from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
+    from effects.infrastructure.converted_trees import ConvertedTrees
 
     unit = manifest.holdout_unit
     if config.holdout_unit is not None and config.holdout_unit != unit:
@@ -442,8 +529,8 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
             "the corpus's; rebuild it with build-corpus --holdout-unit "
             f"{config.holdout_unit}, or drop the flag."
         )
-    roots = sidecar_roots(config.cards_folders)
-    cards_folder = roots.get("cardsfolder")
+    trees = ConvertedTrees.from_folders(config.cards_folders)
+    cards_folder = trees.cards_folder
     if cards_folder is None or not cards_folder.is_dir():
         raise HoldoutMismatchError(
             "the holdout cannot be recomputed: no converted card tree among "
@@ -452,17 +539,14 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
     import time
 
     started = time.monotonic()
-    card_files = load_card_files(cards_folder)
     logger.info(
         "Recomputing the %s holdout over %d cards' sidecars under %s.",
-        unit, len(card_files), cards_folder,
+        unit, len(trees.card_files), cards_folder,
     )
-    recomputed = text_keyed_holdout(
-        card_files, load_card_texts(card_files, SidecarCache(roots)),
+    recomputed = trees.holdout(
         permille=manifest.holdout_permille,
         max_carriers=manifest.holdout_max_carriers,
         unit=unit,
-        token_texts=load_tree_texts(roots.get("tokenscripts")),
     )
     logger.info(
         "Holdout recomputed in %.0fs: %d held-out text(s).",
@@ -534,32 +618,17 @@ def run(config: TrainEffectModelConfig) -> int:
     except (HoldoutMismatchError, MixedGenerationsError) as exc:
         logger.error("%s", exc)
         return 1
-    # Copied into the checkpoint's split (FR-042), so evaluation knows the
-    # unit without re-reading the manifest.
-    config.holdout_unit = manifest.holdout_unit
-    split = CorpusSplit(
-        held_out_cards=manifest.held_out_cards,
-        card_disjoint_games=frozenset(manifest.card_disjoint_games),
-        game_disjoint_games=frozenset(manifest.game_disjoint_games),
-    )
+    facts = CorpusFacts.of(manifest)
     logger.info(
         "Curated corpus at %s: %d training shards, %d gate-one record(s), "
         "%d held-out ability text(s) on %d card(s).",
-        config.corpus, len(training_shards), manifest.per_stratum.get(Stratum.GATE_ONE, 0),
+        config.corpus, len(training_shards), facts.gate_one_records,
         len(manifest.held_out_texts), len(manifest.held_out_cards),
     )
 
     from effects.application.training_loop import TrainingLoop
 
     return TrainingLoop(
-        config,
-        split=split,
-        training_shards=training_shards,
+        config, facts=facts, training_shards=training_shards,
         validation_samples=validation_samples,
-        holdout_permille=manifest.holdout_permille,
-        holdout_max_carriers=manifest.holdout_max_carriers,
-        gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
-        rarity=manifest.rarity,
-        legality_mode_counts=manifest.legality_mode_counts or None,
-        corpus_digest=manifest.digest(),
     ).execute()

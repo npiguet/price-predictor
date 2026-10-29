@@ -31,17 +31,16 @@ are constructed.
 from __future__ import annotations
 
 import logging
-import os
 import random
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterator, Mapping
-from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import lru_cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from effects.application.parallel_map import run_parallel
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
     CardCoverage,
@@ -192,10 +191,9 @@ class _ShardCounter:
         Applying adds, which is associative, so the answer cannot depend on
         how the shards were divided or in what order they finished.
 
-        ``workers`` defaults to the machine's usable cores. One means in-process
-        — what the tests use for the serial reference, and what a handful of
-        shards wants, since a process pool costs more to start than it saves.
-        ``count`` must pickle, since a pool ships it to every process.
+        ``workers`` is :func:`run_parallel`'s; one is what the tests use for
+        the serial reference. ``count`` must pickle, since a pool ships it to
+        every process.
         """
         from effects.infrastructure.record_io import iter_shards
 
@@ -203,33 +201,13 @@ class _ShardCounter:
             shard for shard in iter_shards(Path(records_dir))
             if shard not in self._counted
         ]
-        if not fresh:
-            return 0
-
-        workers = workers or (os.process_cpu_count() or 1)
-        workers = max(1, min(workers, len(fresh)))
-        if workers == 1:
-            for done, shard in enumerate(fresh, start=1):
-                apply(count(shard))
-                self._note_progress(done, len(fresh))
-        else:
-            with ProcessPoolExecutor(max_workers=workers) as pool:
-                parts = pool.map(count, fresh, chunksize=1)
-                for done, part in enumerate(parts, start=1):
-                    apply(part)
-                    self._note_progress(done, len(fresh))
-
+        for part in run_parallel(
+            fresh, count, workers=workers, label="Counted",
+            progress_every=self._progress_every,
+        ):
+            apply(part)
         self._counted.update(fresh)
         return len(fresh)
-
-    def _note_progress(self, done: int, total: int) -> None:
-        if not self._progress_every or total <= self._progress_every:
-            return
-        if done % self._progress_every == 0 or done == total:
-            logger.info(
-                "Counted %d of %d shard(s) (%.0f%%)",
-                done, total, 100.0 * done / total,
-            )
 
 
 class CoverageCounter(_ShardCounter):
@@ -703,10 +681,10 @@ def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
     ``unknown``, which ranks them as castable — the safe direction, since the
     consult only ranks and an under-ranked card merely takes longer.
     """
-    from effects.infrastructure.castability_connector import CastabilityConnector
+    from effects.infrastructure.one_shot_workers import castability_verdicts
 
     try:
-        verdicts = CastabilityConnector().consult(names)
+        verdicts = castability_verdicts(names)
     except (FileNotFoundError, OSError) as exc:
         logger.warning(
             "Castability consult unavailable (%s); every card ranks as "

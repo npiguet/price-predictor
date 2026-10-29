@@ -45,6 +45,7 @@ from effects.domain.effect_head_input import (
     ACT_SLOT,
     INPUT_LAYOUT,
     KIND_FLAG_WIDTH,
+    InputLayout,
     SlotKind,
     build_effect_head_input,
     continuous_masked_keywords,
@@ -366,7 +367,7 @@ class SurfaceBatcher:
         materializer: Materializer | None = None,
         context_dropout: float = 0.0,
         rng: random.Random | None = None,
-        input_layout: str | None = INPUT_LAYOUT,
+        input_layout: InputLayout = INPUT_LAYOUT,
     ) -> None:
         self.stager = stager
         #: The key-to-text join, memoised. A training step's batcher borrows

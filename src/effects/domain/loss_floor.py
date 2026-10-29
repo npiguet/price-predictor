@@ -13,9 +13,12 @@ from dataclasses import dataclass
 import torch
 
 from effects.domain.effect_head_layout import (
+    DIRECTIONS,
     FIELD_SLICES,
     GATE_INDEX,
     PER_ENTITY_WIDTH,
+    SIGNED_DIRECTIONS,
+    SIGNED_MAGNITUDE,
     EntityFieldTargets,
     FieldSpec,
     FieldType,
@@ -136,10 +139,11 @@ def constant_predictor_outputs(
             case FieldType.SIGNED_DELTA:
                 target = capped(target)
                 direction = torch.sign(target).long().reshape(-1) + 1
-                vector[start:start + 3] = _log_frequencies(
-                    torch.bincount(direction, minlength=3).float()
+                columns = vector[start:end]
+                columns[SIGNED_DIRECTIONS] = _log_frequencies(
+                    torch.bincount(direction, minlength=len(DIRECTIONS)).float()
                 )
-                vector[start + 3] = torch.log(
+                columns[SIGNED_MAGNITUDE] = torch.log(
                     _mean(target.abs()).clamp(min=_RATE_FLOOR)
                 )
             case FieldType.CATEGORICAL:

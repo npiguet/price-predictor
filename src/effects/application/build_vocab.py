@@ -43,6 +43,7 @@ from effects.domain.ability_tokenizer import (
     camel_parts,
 )
 from effects.domain.script_text import SEG
+from effects.infrastructure.tokenizer_loading import load_definitions
 from price_predictor.application.build_vocabulary import (
     MULTI_WORD_KEYWORDS,
     build_vocabulary,
@@ -313,12 +314,7 @@ def _load_definitions(path: Path) -> dict:
             "[UNK] tokens. Run extract-keyword-definitions first.",
             path,
         )
-        return {}
-    from effects.application.extract_keyword_definitions import (
-        load_keyword_definitions,
-    )
-
-    return load_keyword_definitions(path)
+    return load_definitions(path)
 
 
 def _frequent(staged_tokens: list[list[Token]]) -> list[str]:

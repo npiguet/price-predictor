@@ -13,21 +13,25 @@ from effects.domain.effect_head_input import (
     EARLIER_LAYOUT,
     INPUT_LAYOUT,
     THERMOMETER_STEPS,
+    InputLayout,
     SlotKind,
     feature_widths,
 )
-from effects.infrastructure.model_runner import input_layout_of
 from tests.unit.effects.domain.test_effect_head_input import _record
 
 
 def test_a_checkpoint_recording_no_layout_reads_the_earlier_one():
-    assert input_layout_of(SimpleNamespace(training_settings={})) is EARLIER_LAYOUT
-    assert input_layout_of(SimpleNamespace(training_settings=None)) is EARLIER_LAYOUT
+    assert InputLayout.of({}) is EARLIER_LAYOUT
+    assert InputLayout.of(None) is EARLIER_LAYOUT
 
 
 def test_a_checkpoint_recording_the_layout_reads_it():
-    settings = {"input_layout": INPUT_LAYOUT}
-    assert input_layout_of(SimpleNamespace(training_settings=settings)) == INPUT_LAYOUT
+    assert InputLayout.of({"input_layout": "gen-2"}) is INPUT_LAYOUT
+
+
+def test_a_run_records_its_layout_under_the_value_checkpoints_on_disk_hold():
+    assert INPUT_LAYOUT.name == "gen-2"
+    assert EARLIER_LAYOUT.name is None
 
 
 def test_the_widths_follow_the_layout():

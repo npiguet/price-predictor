@@ -4,7 +4,7 @@ A worker re-reads one raw shard through the same :class:`WorkerContext` the
 survey used, routes each record by its game (:class:`GameStrata`) and writes
 one part per output stratum; ``build()`` repacks the parts afterwards. Every
 number the manifest reports about what was written is tallied here, in four
-value objects that each merge on their own.
+value objects that :func:`merge_into` adds shard by shard.
 """
 
 from __future__ import annotations
@@ -13,12 +13,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from effects.application.corpus_survey import (
-    ReadConfig,
-    RefusalTally,
-    WorkerContext,
-    run_parallel,
-)
+from effects.application.corpus_survey import ReadConfig, RefusalTally, WorkerContext
+from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import CopyPlan
 from effects.domain.corpus_plan import Cell, GameStrata, Keys
 from effects.domain.record_quality import has_unattributed_events
@@ -31,6 +27,7 @@ from effects.domain.records import (
 )
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.strata import OUTPUT_STRATA, Stratum
+from effects.domain.tally_merge import merge_into
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,12 +75,6 @@ class StratumTally:
         if keys:
             self.keys.setdefault(stratum, set()).add(keys)
 
-    def merge(self, other: StratumTally) -> None:
-        self.records.update(other.records)
-        for stratum, keys in other.keys.items():
-            self.keys.setdefault(stratum, set()).update(keys)
-        self.gate_one_texts |= other.gate_one_texts
-
 
 @dataclass(slots=True)
 class TrainingTally:
@@ -96,13 +87,6 @@ class TrainingTally:
     #: Training records a copy plan wrote zero times.
     dropped_by_cap: Counter[SamplingClass] = field(default_factory=Counter)
     kept_keys: dict[SamplingClass, set[Keys]] = field(default_factory=dict)
-
-    def merge(self, other: TrainingTally) -> None:
-        self.read.update(other.read)
-        self.kept.update(other.kept)
-        self.dropped_by_cap.update(other.dropped_by_cap)
-        for klass, keys in other.kept_keys.items():
-            self.kept_keys.setdefault(klass, set()).update(keys)
 
 
 @dataclass(slots=True)
@@ -129,13 +113,6 @@ class FamilyTally:
         if cell.half:
             self.legality[record.subkind.value, LegalityDecision.of(record).value] += copies
 
-    def merge(self, other: FamilyTally) -> None:
-        self.written.update(other.written)
-        self.distinct.update(other.distinct)
-        self.signatures.update(other.signatures)
-        self.policy.update(other.policy)
-        self.legality.update(other.legality)
-
 
 @dataclass(slots=True)
 class WriteResult:
@@ -149,13 +126,6 @@ class WriteResult:
     #: rather than refused: a clause the collector could not find on the
     #: acting chain does not make the outcome another ability's.
     unattributed: int = 0
-
-    def merge(self, other: WriteResult) -> None:
-        self.refusals.merge(other.refusals)
-        self.strata.merge(other.strata)
-        self.training.merge(other.training)
-        self.families.merge(other.families)
-        self.unattributed += other.unattributed
 
 
 # ── the pass ────────────────────────────────────────────────────────────
@@ -277,5 +247,5 @@ def run_write_pass(
         names, write_shard_pass, initializer=init_write_worker, initargs=(config,),
         workers=workers, label="Wrote", progress_every=progress_every,
     ):
-        total.merge(part)
+        merge_into(total, part)
     return total

@@ -21,6 +21,7 @@ from effects.application.surface_batching import EncodedBatch, PreparedBatch
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_log import format_shares
 from effects.application.training_loop import StepLoss, TrainingLoop
+from effects.domain.aux_heads import Head
 from effects.domain.effect_losses import LossParts
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.effect_targets import (
@@ -38,9 +39,8 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import read_shard
-from tests.unit.effects.builders import make_preparer
+from tests.unit.effects.builders import make_preparer, make_training_loop
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 
@@ -52,12 +52,7 @@ def records():
 
 def _loop(monkeypatch, **config) -> TrainingLoop:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    return TrainingLoop(
-        TrainEffectModelConfig(corpus="unused", **config),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
-    )
+    return make_training_loop(TrainEffectModelConfig(corpus="unused", **config))
 
 
 def _model(**overrides) -> EffectModel:
@@ -119,7 +114,7 @@ def _terms(monkeypatch, preparer, loop, records, batcher, model, hidden, *, trai
     ))
     loss = StepLoss(
         total=torch.zeros(()), shipped=torch.zeros(()), parts=LossParts(), terms=terms,
-        pending_mlm=targets.mlm,
+        pending_mlm=targets.get(Head.MLM),
     )
     loop._mlm_backward(loss, None, model)
     return loss.terms

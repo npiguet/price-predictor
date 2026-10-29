@@ -9,19 +9,19 @@ import pytest
 import torch
 
 from effects.application.train_effect_model import (
+    CorpusFacts,
     TrainEffectModelConfig,
     run,
 )
 from effects.application.training_log import format_floor, format_parts
-from effects.application.training_loop import FloorCache, TrainingLoop
+from effects.application.training_loop import FloorCache
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, EntityFieldTargets
 from effects.domain.effect_losses import LossParts
 from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.builders import make_preparer
+from tests.unit.effects.builders import make_preparer, make_training_loop
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
     make_record,
@@ -42,11 +42,9 @@ def samples(tmp_path, make_record):  # noqa: F811
 
 
 def test_the_loop_loads_both_samples_and_the_probe(samples):
-    loop = TrainingLoop(
+    loop = make_training_loop(
         TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples=samples,
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
+        validation_samples=samples,
     )
     loop._load_validation()
     assert [r.record_id for r in loop.card_disjoint] == [f"c{i}" for i in range(5)]
@@ -67,14 +65,9 @@ def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
     anything but the defaults would be described by a checkpoint that never
     read it.
     """
-    loop = TrainingLoop(
+    provenance = CorpusFacts(holdout_permille=30, holdout_max_carriers=5).provenance(
         TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=30, holdout_max_carriers=5,
-        gate_one_records=0, rarity={}, corpus_digest="",
     )
-
-    provenance = loop._provenance()
 
     assert provenance.holdout_permille == 30
     assert provenance.holdout_max_carriers == 5
@@ -120,11 +113,9 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):  # noq
     write_shard(paths["game-disjoint"],
                 [make_record(record_id="g0", game_id="gg",
                              kind=RecordKind.COMBAT, payload=CombatPayload())])
-    loop = TrainingLoop(
+    loop = make_training_loop(
         TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples=paths,
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
+        validation_samples=paths,
     )
     loop._load_validation()
 
@@ -138,12 +129,7 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):  # noq
 
 
 def test_a_sample_naming_every_class_says_nothing(caplog):
-    loop = TrainingLoop(
-        TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
-    )
+    loop = make_training_loop(TrainEffectModelConfig(corpus="unused"))
     loop.present = set(SAMPLING_CLASSES)
 
     with caplog.at_level(logging.WARNING):
@@ -250,12 +236,7 @@ def test_validation_scores_the_shipped_objective_not_the_backward_total():
 
     from effects.application.training_loop import StepLoss
 
-    loop = TrainingLoop(
-        TrainEffectModelConfig(corpus="unused", batch_size=2),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
-    )
+    loop = make_training_loop(TrainEffectModelConfig(corpus="unused", batch_size=2))
     loop.preparer = SimpleNamespace(prepare_step=lambda *a, **k: SimpleNamespace())
     loop._device_loss = lambda *a, **k: StepLoss(
         total=torch.tensor(5.0), shipped=torch.tensor(1.0), parts=LossParts(), terms={},

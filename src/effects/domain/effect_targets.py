@@ -76,11 +76,34 @@ _ZONE_BY_DESTINATION: dict[str, str] = {
     "library": "library_top",
     "battlefield": "blinked",
 }
+#: The outcome of a ``zone_change`` to a destination the table does not name.
+_STAYED = "stayed"
 
 _LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
     EventType.CARD_LOOKED_AT: "scry",
     EventType.LIBRARY_REORDERED: "reorder",
     EventType.CARD_REVEALED: "reveal",
+}
+
+#: Event types that add one parameter to one field:
+#: ``type -> (field, parameter, default when absent, sign)``.
+_ADDITIVE: dict[EventType, tuple[str, str, float, float]] = {
+    EventType.DAMAGE_DEALT: ("damage_taken", "amount", 0, 1.0),
+    EventType.DAMAGE_HEALED: ("damage_taken", "amount", 0, -1.0),
+    EventType.LIFE_CHANGE: ("life_delta", "delta", 0, 1.0),
+    EventType.POISON_CHANGE: ("poison_delta", "delta", 0, 1.0),
+    EventType.CARD_DRAWN: ("cards_drawn", "count", 1, 1.0),
+    EventType.CARD_DISCARDED: ("cards_discarded", "count", 1, 1.0),
+    EventType.CARD_MILLED: ("cards_milled", "count", 1, 1.0),
+}
+
+#: Event types that set one field to a constant.
+_SETTERS: dict[EventType, tuple[str, int]] = {
+    EventType.TAPPED: ("tap_state", 1),
+    EventType.UNTAPPED: ("tap_state", 0),
+    EventType.CONTROL_CHANGE: ("control_change", 1),
+    EventType.ATTACHED: ("attached_to_change", 1),
+    EventType.UNATTACHED: ("attached_to_change", 1),
 }
 
 _OVERLAY_INDEX: dict[str, int] = {
@@ -177,28 +200,30 @@ def _outcome_events(record: EffectRecord) -> tuple[Event, ...]:
 def _apply_event(entry: EntityTargets, event: Event) -> None:
     """Fold one event into an entity's targets."""
     params = event.params
+    if event.type in _ADDITIVE:
+        name, parameter, default, sign = _ADDITIVE[event.type]
+        entry.add(name, sign * float(params.get(parameter, default)))
+        return
+    if event.type in _SETTERS:
+        entry.set(*_SETTERS[event.type])
+        return
+    if event.type in _ZONE_BY_EVENT:
+        entry.set("zone_outcome", ZONE_OUTCOMES.index(_ZONE_BY_EVENT[event.type]))
+        return
+    if event.type in _LIBRARY_EVENT_BY_TYPE:
+        entry.flag(
+            "library_events",
+            LIBRARY_EVENTS.index(_LIBRARY_EVENT_BY_TYPE[event.type]),
+            len(LIBRARY_EVENTS),
+        )
+        return
     match event.type:
         case EventType.ZONE_CHANGE:
             destination = str(params.get("to_zone", "")).lower()
             entry.set(
                 "zone_outcome",
-                ZONE_OUTCOMES.index(
-                    _ZONE_BY_DESTINATION.get(destination, "stayed")
-                ),
+                ZONE_OUTCOMES.index(_ZONE_BY_DESTINATION.get(destination, _STAYED)),
             )
-        case (
-            EventType.DESTROYED | EventType.SACRIFICED | EventType.PHASED
-            | EventType.FACE_CHANGE | EventType.SPELL_COUNTERED
-        ):
-            entry.set("zone_outcome", ZONE_OUTCOMES.index(_ZONE_BY_EVENT[event.type]))
-        case EventType.TAPPED:
-            entry.set("tap_state", 1)
-        case EventType.UNTAPPED:
-            entry.set("tap_state", 0)
-        case EventType.DAMAGE_DEALT:
-            entry.add("damage_taken", float(params.get("amount", 0)))
-        case EventType.DAMAGE_HEALED:
-            entry.add("damage_taken", -float(params.get("amount", 0)))
         case EventType.COUNTER_CHANGE:
             counter = str(params.get("counter_type", "OTHER")).upper()
             name = (
@@ -221,33 +246,10 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
             _apply_multi(entry, "colors_gained", params.get("colors"), _COLOR_SLOTS)
             _apply_multi(entry, "colors_lost", params.get("colors_removed"), _COLOR_SLOTS)
             _apply_duration(entry, "type_color_duration", event.duration)
-        case EventType.CONTROL_CHANGE:
-            entry.set("control_change", 1)
-        case EventType.ATTACHED | EventType.UNATTACHED:
-            entry.set("attached_to_change", 1)
-        case EventType.LIFE_CHANGE:
-            entry.add("life_delta", float(params.get("delta", 0)))
-        case EventType.POISON_CHANGE:
-            entry.add("poison_delta", float(params.get("delta", 0)))
-        case EventType.CARD_DRAWN:
-            entry.add("cards_drawn", float(params.get("count", 1)))
-        case EventType.CARD_DISCARDED:
-            entry.add("cards_discarded", float(params.get("count", 1)))
-        case EventType.CARD_MILLED:
-            entry.add("cards_milled", float(params.get("count", 1)))
         case EventType.MANA_PRODUCED:
             _apply_mana(entry, params.get("mana_by_color"), sign=1)
         case EventType.MANA_LOST:
             _apply_mana(entry, params.get("mana_by_color"), sign=-1)
-        case (
-            EventType.CARD_LOOKED_AT | EventType.LIBRARY_REORDERED
-            | EventType.CARD_REVEALED
-        ):
-            entry.flag(
-                "library_events",
-                LIBRARY_EVENTS.index(_LIBRARY_EVENT_BY_TYPE[event.type]),
-                len(LIBRARY_EVENTS),
-            )
 
 
 def _apply_duration(entry: EntityTargets, name: str, duration: str | None) -> None:

@@ -49,9 +49,6 @@ from effects.application.gate_one import GateOneMetrics, MarginAccumulator
 from effects.application.resume_state import ResumeState
 from effects.application.step_preparation import (
     NO_TEXT_BUCKET,
-    SHIPPED_HEADS,
-    TRAINING_HEADS,
-    Head,
     HeadTargets,
     PreparedStep,
     PreparerSettings,
@@ -74,6 +71,7 @@ from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
     WEIGHT_DECAY,
+    CorpusFacts,
     EarlyStopper,
     EpochResult,
     TrainEffectModelConfig,
@@ -103,6 +101,14 @@ from effects.domain.ability_tokenizer import (
     TOKENIZER_RULES,
     TOKENIZER_RULES_KEY,
 )
+from effects.domain.aux_heads import (
+    AUX_HEAD,
+    AUX_HEADS,
+    SHIPPED_HEADS,
+    TRAINING_HEADS,
+    Head,
+    HeadInput,
+)
 from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import (
     INPUT_LAYOUT,
@@ -113,12 +119,8 @@ from effects.domain.effect_head_input import (
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_losses import (
     LossParts,
-    api_loss,
-    created_objects_loss,
     mlm_loss,
     per_entity_loss,
-    value_loss,
-    verdict_loss,
 )
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.loss_floor import (
@@ -128,21 +130,19 @@ from effects.domain.loss_floor import (
 )
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES, BatchPlan, sampling_class
-from effects.domain.split import CorpusSplit
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.surface_collation import gather_entities
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
     EffectCheckpoint,
     EffectModelStore,
-    SplitProvenance,
-    content_hash,
 )
 from effects.infrastructure.model_runner import IDENTITY_TABLE_KEY
 from effects.infrastructure.sidecar_io import (
     script_vocabularies,
     sidecar_roots,
 )
+from effects.infrastructure.torch_device import default_device
 from price_predictor.infrastructure.torch_training import clip_per_group
 
 logger = logging.getLogger(__name__)
@@ -258,15 +258,17 @@ def combine_terms(
 
     The shipped heads join the per-entity loss at unit weight; the
     training-only heads are added at their own weights for backward alone.
+    Summed in :data:`AUX_HEADS` order, which is part of what makes a run
+    repeat bit for bit.
     """
     shipped = loss
-    for head in SHIPPED_HEADS:
-        if head in terms:
-            shipped = shipped + terms[head]
+    for spec in SHIPPED_HEADS:
+        if spec.head in terms:
+            shipped = shipped + terms[spec.head]
     total = shipped
-    for head in TRAINING_HEADS:
-        if head in terms:
-            total = total + weights[head] * terms[head]
+    for spec in TRAINING_HEADS:
+        if spec.head in terms:
+            total = total + weights[spec.head] * terms[spec.head]
     return total, shipped
 
 
@@ -506,18 +508,15 @@ class TrainingLoop:
         self,
         config: TrainEffectModelConfig,
         *,
-        split: CorpusSplit,
+        facts: CorpusFacts,
         training_shards: Sequence[Path],
         validation_samples: Mapping[str, Path],
-        holdout_permille: int,
-        holdout_max_carriers: int,
-        gate_one_records: int = 0,
-        rarity: Mapping[str, int] | None = None,
-        legality_mode_counts: Mapping[str, int] | None = None,
-        corpus_digest: str = "",
         prefetch_batches: bool = True,
     ) -> None:
         self.config = config
+        #: What the run read off its corpus's manifest: the split, the
+        #: holdout rule, the rarity table, the digest.
+        self.facts = facts
         #: Under ``--prefetch-workers 0``, whether each step's host half is
         #: prepared on a background thread one step ahead. Off, the same
         #: function runs in place; every draw a step takes is seeded by its
@@ -528,31 +527,12 @@ class TrainingLoop:
         #: thread above it moves where the host half runs and not what it
         #: computes, so it is not a training setting.
         self.prefetch_workers = max(int(config.prefetch_workers), 0)
-        #: The corpus's own split, read from its manifest: the host half keeps
-        #: its validation games out of training, and the checkpoint records it.
-        self.split = split
         self.training_shards = list(training_shards)
         #: The corpus's fixed validation samples, one file per stratum
         #: (FR-089). Read once by ``_load_validation`` and never redrawn: the
         #: build decided what is in them, so two runs of the same corpus
         #: select their checkpoints on the same records.
         self.validation_samples = dict(validation_samples)
-        #: The holdout rule the corpus was composed against, read from its
-        #: manifest and stamped onto the checkpoint. The trainer has no flags
-        #: for it: a depleted collection run was generated against these two
-        #: numbers, and re-deriving them here could only disagree.
-        self.holdout_permille = holdout_permille
-        self.holdout_max_carriers = holdout_max_carriers
-        #: Records in the manifest's gate-1 slice — resolution records whose
-        #: acting text is on no training card. Read rather than counted here
-        #: (FR-088b): the build already sized the slice.
-        self.gate_one_records = gate_one_records
-        #: The curated dataset's corpus-wide ``text -> games`` table (FR-146),
-        #: threaded into every ``sample_weights`` call this run makes.
-        self.rarity = rarity
-        #: The manifest's records per legality mode, so the epoch line places
-        #: a legality record in the family the build balanced it in.
-        self.legality_mode_counts = legality_mode_counts
         #: Whether this run has already said how much of a shard the
         #: rarity table names. Once per run rather than once per shard:
         #: a table matching nothing is otherwise invisible, since every
@@ -562,9 +542,6 @@ class TrainingLoop:
         #: Unconverted-script lookups the worker processes counted, which
         #: their own sidecar caches hold rather than this process's.
         self._unresolved_elsewhere: Counter[str] = Counter()
-        #: The curated dataset's manifest digest at read time (FR-147), read
-        #: into the checkpoint's provenance by ``_provenance`` below.
-        self.corpus_digest = corpus_digest
         self.masks = baseline_masks(config.variant)
         # The surface follows the vocabulary the run loads, so the text an
         # ability is encoded from and the vocabulary it is tokenized against can
@@ -584,9 +561,7 @@ class TrainingLoop:
             else random.SystemRandom().getrandbits(32)
         )
         torch.manual_seed(self.seed)
-        self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
+        self.device = default_device()
         #: Whether the device half runs the forward pass and loss under bf16
         #: autocast (FR-095). Resolved once here rather than at each call, so
         #: the value logged at startup and the value every batch runs under
@@ -616,6 +591,10 @@ class TrainingLoop:
         #: Each epoch's field set, built once; see ``_fields_for``.
         self._epoch_fields: dict[int, tuple[FieldSpec, ...]] = {}
 
+    @property
+    def is_cuda(self) -> bool:
+        return self.device.type == "cuda"
+
     # ── setup ───────────────────────────────────────────────────────────
 
     def _script_vocabularies(self) -> tuple[list[str], list[str]]:
@@ -633,11 +612,11 @@ class TrainingLoop:
     def _preparer_settings(self, widths: dict[SlotKind, int]) -> PreparerSettings:
         """What every preparer of this run is built from, here or in a worker."""
         return PreparerSettings(
-            config=self.config, seed=self.seed, split=self.split,
-            rarity=self.rarity, api_types=tuple(self.api_types),
+            config=self.config, seed=self.seed, split=self.facts.split,
+            rarity=self.facts.rarity, api_types=tuple(self.api_types),
             param_keys=tuple(self.param_keys), widths=dict(widths),
             heads=training_heads(self.config, api_types=self.api_types),
-            legality_mode_counts=self.legality_mode_counts,
+            legality_mode_counts=self.facts.legality_mode_counts,
         )
 
     def _load_validation(self) -> None:
@@ -686,11 +665,7 @@ class TrainingLoop:
 
     def _head_weights(self) -> dict[Head, float]:
         """The training-only heads' weights in the backward pass."""
-        return {
-            Head.VALUE: self.config.value_weight,
-            Head.MLM: self.config.mlm_weight,
-            Head.API: self.config.api_weight,
-        }
+        return {spec.head: spec.weight(self.config) for spec in TRAINING_HEADS}
 
     def _device_loss(
         self, prepared: PreparedStep, run: RunContext, materializer: Materializer,
@@ -732,7 +707,7 @@ class TrainingLoop:
         total, shipped = combine_terms(loss, terms, self._head_weights())
         return StepLoss(
             total=total, shipped=shipped, parts=parts, terms=terms,
-            pending_mlm=prepared.heads.mlm, gathered=gathered.detach(),
+            pending_mlm=prepared.heads.get(Head.MLM), gathered=gathered.detach(),
         )
 
     def _head_terms(
@@ -747,40 +722,18 @@ class TrainingLoop:
         batch's texts, left for ``_mlm_backward`` to run after the main loss's
         backward has freed the first pass's activations: run here, both
         passes' graphs were alive at once and a batch of long texts overflowed
-        8 GB. The gradient is the same sum either way.
+        8 GB. The gradient is the same sum either way. A head reading the
+        encoded matrix is skipped on a batch that has none.
         """
+        inputs = {HeadInput.TRUNK: hidden, HeadInput.ENCODED: encoded.matrix}
         terms: dict[str, torch.Tensor] = {}
-        if targets.verdict is not None:
-            target, mask = targets.verdict
-            terms[Head.VERDICT] = verdict_loss(
-                model.verdict(hidden).float(),
-                target.to(self.device, non_blocking=True), mask,
-            )
-        if targets.created is not None:
-            target, mask = targets.created
-            terms[Head.CREATED_OBJECTS] = created_objects_loss(
-                model.created_objects(hidden).float(),
-                target.to(self.device, non_blocking=True), mask,
-            )
-        matrix = encoded.matrix
-        if matrix is None:
-            return terms
-        if targets.value is not None:
-            values, mask = targets.value
-            terms[Head.VALUE] = value_loss(
-                model.value_head(matrix).float(),
-                values.to(self.device, non_blocking=True),
-                # Kept on the host: the loss decides which rows it scores there.
-                mask,
-            )
-        if targets.api is not None:
-            types, keys = targets.api
-            terms[Head.API] = api_loss(
-                model.api_type_head(matrix).float(), types,
-                model.param_key_head(matrix).float()
-                if model.param_key_head is not None else None,
-                keys.to(self.device, non_blocking=True)
-                if model.param_key_head is not None else None,
+        for spec in AUX_HEADS:
+            given = targets.get(spec.head)
+            source = inputs.get(spec.reads)
+            if spec.loss is None or given is None or source is None:
+                continue
+            terms[spec.head] = spec.loss(
+                model, source, *spec.to_device(given, self.device),
             )
         return terms
 
@@ -800,7 +753,8 @@ class TrainingLoop:
             term = mlm_loss(
                 model.mlm_head(token_hidden).float(), token_targets, rows=masked.rows,
             )
-        (self.config.mlm_weight * term / self.config.grad_accum).backward()
+        weight = AUX_HEAD[Head.MLM].weight(self.config)
+        (weight * term / self.config.grad_accum).backward()
         loss.terms[Head.MLM] = term.detach()
 
     def _training_settings(self) -> dict:
@@ -825,7 +779,7 @@ class TrainingLoop:
             "api_types": list(self.api_types),
             "param_keys": list(self.param_keys),
             TOKENIZER_RULES_KEY: TOKENIZER_RULES,
-            INPUT_LAYOUT_KEY: INPUT_LAYOUT,
+            INPUT_LAYOUT_KEY: INPUT_LAYOUT.name,
         }
 
     # ── the run ─────────────────────────────────────────────────────────
@@ -899,14 +853,14 @@ class TrainingLoop:
         """
         warning = check_holdout(
             card_disjoint_records=len(self.card_disjoint),
-            unique_text_records=self.gate_one_records,
+            unique_text_records=self.facts.gate_one_records,
         )
         if warning:
             logger.warning("%s", warning)
 
     def _cap_cuda_memory(self) -> None:
         """See :data:`CUDA_MEMORY_FRACTION`."""
-        if self.device.type == "cuda":
+        if self.is_cuda:
             torch.cuda.set_per_process_memory_fraction(CUDA_MEMORY_FRACTION)
 
     def _build_run(self, vocab_size: int, widths) -> RunContext:
@@ -942,7 +896,7 @@ class TrainingLoop:
         )
         self._scoring = Materializer(self.device, self.masks, self.identity_table)
         self._resume = ResumeState(
-            self.config, seed=self.seed, corpus_digest=self.corpus_digest,
+            self.config, seed=self.seed, corpus_digest=self.facts.digest,
             training_settings=self._training_settings, noise=self.noise,
             identity_table=self.identity_table, device=self.device,
         )
@@ -1089,14 +1043,13 @@ class TrainingLoop:
     ) -> bool:
         """Save what the epoch earned and its resume state; True to stop early."""
         best = stopper.update(result.card_disjoint_loss)
-        if best:
-            EffectModelStore(self.config.resolved_model_output()).save(
-                self._checkpoint(epoch, run, stopper),
-            )
-        if self.config.save_every_epoch:
-            EffectModelStore(
-                self.config.resolved_model_output() / EPOCHS_DIR,
-            ).save(self._checkpoint(epoch, run, stopper))
+        if best or self.config.save_every_epoch:
+            checkpoint = self._checkpoint(epoch, run, stopper)
+            output = self.config.resolved_model_output()
+            if best:
+                EffectModelStore(output).save(checkpoint)
+            if self.config.save_every_epoch:
+                EffectModelStore(output / EPOCHS_DIR).save(checkpoint)
         self._resume.save(epoch, run, stopper, finished=stopper.should_stop, best=best)
         if stopper.should_stop:
             logger.info(
@@ -1113,7 +1066,7 @@ class TrainingLoop:
             model_config=run.model_config,
             encoder_state=run.encoder.state_dict(),
             model_state=run.model.state_dict(),
-            provenance=self._provenance(),
+            provenance=self.facts.provenance(self.config),
             variant=self.config.variant,
             best_val_loss=stopper.best,
             epoch=epoch,
@@ -1191,7 +1144,7 @@ class TrainingLoop:
         )
         pool = StepWorkerPool(
             settings, workers=self.prefetch_workers, depth=max(depth, 1),
-            pin=self.device.type == "cuda",
+            pin=self.is_cuda,
         )
         try:
             for task in self._epoch_tasks(first_epoch)[1]:
@@ -1256,7 +1209,7 @@ class TrainingLoop:
         it holds; ``prefetch_batches`` off runs the same generator in place.
         """
         steps = self.preparer.shard_steps(
-            task, records, pin=self.device.type == "cuda",
+            task, records, pin=self.is_cuda,
         )
         if not self.prefetch_batches:
             yield from steps
@@ -1276,7 +1229,7 @@ class TrainingLoop:
         just trained rarely fit the next; releasing them once per shard costs
         a few milliseconds against the paging it prevents.
         """
-        if self.device.type == "cuda":
+        if self.is_cuda:
             torch.cuda.empty_cache()
 
     def _note_opened(self, opened: ShardOpened) -> None:
@@ -1437,8 +1390,7 @@ class TrainingLoop:
                 for record in chunk:
                     grouped[record.game_id].append(record)
                 prepared = self.preparer.prepare_step(
-                    BatchPlan(dict(grouped)), step=run.step, fields=fields,
-                    training=False,
+                    BatchPlan(dict(grouped)), fields=fields, training=False,
                 )
                 if prepared is None:
                     continue
@@ -1465,36 +1417,3 @@ class TrainingLoop:
         if parts is not None:
             parts.update(means.means())
         return float(total) / batches if batches else float("nan")
-
-    def _provenance(self) -> SplitProvenance:
-        """What the checkpoint records about the data it saw.
-
-        Both strata are the corpus's own, read from the manifest rather than
-        derived here, so every run against one dataset records the same split
-        whatever it read or how early it stopped. That is what the evaluator
-        needs: it scores the games the checkpoint names, and a boundary
-        recomputed against a grown corpus would not be the one this model
-        trained against.
-        """
-        split = self.split
-        return SplitProvenance(
-            held_out_cards=split.held_out_cards,
-            card_disjoint_games=tuple(sorted(split.card_disjoint_games)),
-            game_disjoint_games=tuple(sorted(split.game_disjoint_games)),
-            vocab_path=str(self.config.vocab_path),
-            keyword_definitions_path=str(self.config.keyword_definitions),
-            vocab_hash=content_hash(Path(self.config.vocab_path)),
-            keyword_definitions_hash=content_hash(
-                Path(self.config.keyword_definitions)
-            ),
-            withheld_keyword=self.config.withhold_keyword,
-            # The corpus's own, straight off its manifest: `build-corpus`
-            # composed the holdout, and a constant here would be a second
-            # spelling of it that nothing would report disagreeing.
-            holdout_permille=self.holdout_permille,
-            holdout_max_carriers=self.holdout_max_carriers,
-            corpus_path=self.config.corpus or "",
-            corpus_digest=self.corpus_digest,
-            # Resolved from the manifest at startup when the flag was absent.
-            holdout_unit=self.config.holdout_unit or "text",
-        )

@@ -44,11 +44,10 @@ from effects.domain.effect_head_input import SlotKind, feature_widths
 from effects.domain.effect_losses import LossParts
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.sampling import sampling_class
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache, script_vocabularies
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
-from tests.unit.effects.builders import make_batcher, make_preparer
+from tests.unit.effects.builders import make_batcher, make_preparer, make_training_loop
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
 _SIDECAR_ROOTS = {
@@ -100,11 +99,8 @@ def _config(directory: Path, **overrides) -> TrainEffectModelConfig:
 
 def _loop(monkeypatch, directory: Path, *, prefetch: bool, **overrides) -> TrainingLoop:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    return TrainingLoop(
+    return make_training_loop(
         _config(directory, **overrides),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
         prefetch_batches=prefetch,
     )
 

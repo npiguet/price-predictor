@@ -41,6 +41,7 @@ _ALLOWED: dict[str, set[str] | None] = {
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
     "sealed.infrastructure.match_worker_connector": {"MatchWorkerConnector"},
+    "sealed.infrastructure.pool_file_reader": {"format_generated_deck"},
 }
 
 _GOVERNED_PACKAGES = ("price_predictor", "sealed")

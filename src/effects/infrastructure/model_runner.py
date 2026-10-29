@@ -43,26 +43,19 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
     AbilityTokenizer,
-    tokenizer_surface,
 )
+from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
-from effects.domain.effect_head_input import (
-    INPUT_LAYOUT_KEY,
-    feature_widths,
-)
+from effects.domain.effect_head_input import InputLayout, feature_widths
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
-from price_predictor.infrastructure.tokenizer_store import load_vocabulary
+from effects.infrastructure.tokenizer_loading import load_tokenizer
+from effects.infrastructure.torch_device import default_device
 
 logger = logging.getLogger(__name__)
-
-#: The step the evaluator reads the curriculum at. Past every curriculum
-#: threshold, so the sparse fields are active and the gate scores the model as
-#: it finished training rather than as it started.
-EVALUATION_STEP = 1 << 30
 
 IDENTITY_TABLE_KEY = "identity_table"
 
@@ -78,32 +71,15 @@ def build_sidecars(config) -> SidecarCache:
     ))
 
 
-def input_layout_of(checkpoint) -> str | None:
-    """The input layout a checkpoint trained on; None for one that recorded none (FR-063c)."""
-    return (checkpoint.training_settings or {}).get(INPUT_LAYOUT_KEY)
-
-
 def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
     """The tokenizer ``checkpoint`` trained with, over its verified files.
 
-    A missing keyword table tokenizes with no definitions rather than failing:
-    a checkpoint trained before the table existed recorded none.
+    Under the rules the checkpoint recorded rather than a training run's, so a
+    gen-1 checkpoint reads its script vocabulary with the prose grammar.
     """
-    from effects.application.extract_keyword_definitions import (
-        load_keyword_definitions,
-    )
-
-    definitions = (
-        load_keyword_definitions(keyword_path) if Path(keyword_path).exists()
-        else {}
-    )
-    # The grammar the checkpoint trained under, which for gen-1 is the prose
-    # grammar even on its script vocabulary.
-    return AbilityTokenizer(
-        load_vocabulary(Path(vocab_path)), definitions,
-        surface=tokenizer_surface(
-            surface_of(vocab_path), checkpoint.training_settings,
-        ),
+    return load_tokenizer(
+        vocab_path, keyword_path,
+        training_settings=checkpoint.training_settings or {},
     )
 
 
@@ -120,8 +96,8 @@ class Runnable:
     """One checkpoint, ready to run over one set of records.
 
     ``fields`` is the active-field tuple for the classes those records carry,
-    read at a step past every curriculum threshold — the evaluator scores a
-    finished model, not one partway through its schedule.
+    the sparse group included — the evaluator scores a finished model, not one
+    partway through its schedule.
     """
 
     encoder: AbilityEncoder
@@ -186,7 +162,7 @@ class LoadedModel:
         # The inputs the checkpoint learned on: a gen-1 checkpoint, or a gen-2
         # arm trained before the layout was recorded, reads the earlier layout
         # bit for bit (FR-063c).
-        layout = input_layout_of(checkpoint)
+        layout = InputLayout.of(checkpoint.training_settings)
         masks = baseline_masks(checkpoint.variant)
         return SurfaceBatcher(
             stager=TextStager(
@@ -218,7 +194,7 @@ def load_model(
     ``sidecars`` lets several loads share one cache; left out, the roots
     ``config`` names are read into a new one.
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = default_device()
     encoder, model = _load_weights(checkpoint, device)
     return LoadedModel(
         checkpoint=checkpoint,
@@ -247,7 +223,7 @@ def load_runnable(
 #: without it (FR-063a). Anything else missing would run at its random
 #: initial weights while every number it produced still looked like a result.
 OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
-    *(f"{head}." for head in EffectModel.TRAINING_ONLY_HEADS),
+    *(f"{module}." for module in TRAINING_ONLY_MODULES),
     "option_kind_embedding.",
 )
 
@@ -288,11 +264,13 @@ def _identity_table(checkpoint, device) -> IdentityTable | None:
 
 
 def evaluation_fields(records) -> tuple[FieldSpec, ...]:
-    """The fields active for ``records``' classes once training has finished."""
+    """The fields active for ``records``' classes once training has finished.
+
+    The sparse group included: the gates score the model as it finished
+    training, not as it started.
+    """
     return active_fields(
-        present_classes=frozenset(sampling_class(r) for r in records),
-        step=EVALUATION_STEP,
-        curriculum_step=1,
+        frozenset(sampling_class(r) for r in records), sparse=True,
     )
 
 

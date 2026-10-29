@@ -21,11 +21,12 @@ from dataclasses import dataclass
 import torch
 
 from effects.domain.effect_head_layout import (
-    DURATIONS,
+    DIRECTIONS,
     FIELD_SLICES,
     FIELDS_BY_NAME,
     GATE_INDEX,
-    ZONE_OUTCOMES,
+    SIGNED_DIRECTIONS,
+    SIGNED_MAGNITUDE,
     FieldSpec,
     FieldType,
 )
@@ -36,14 +37,6 @@ MAGNITUDE_TYPES: frozenset[FieldType] = frozenset(
     {FieldType.COUNT, FieldType.SIGNED_DELTA},
 )
 
-#: Each categorical field's classes, in the head's column order.
-CATEGORIES: dict[str, tuple[str, ...]] = {
-    "zone_outcome": ZONE_OUTCOMES,
-    "pt_duration": DURATIONS,
-    "type_color_duration": DURATIONS,
-}
-
-
 def field_outputs(outputs: torch.Tensor, spec: FieldSpec) -> torch.Tensor:
     """``spec``'s columns of a per-entity output, over any leading dims."""
     start, end = FIELD_SLICES[spec.name]
@@ -53,12 +46,12 @@ def field_outputs(outputs: torch.Tensor, spec: FieldSpec) -> torch.Tensor:
 def magnitude_log_rate(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
     """The predicted magnitude's log rate, from ``spec``'s columns.
 
-    A count predicts only that column and a signed delta predicts direction
-    then magnitude, so it is the last column either way.
+    A count predicts only that column; a signed delta predicts its directions
+    first.
     """
     if spec.type not in MAGNITUDE_TYPES:
         raise ValueError(f"{spec.name} is a {spec.type} field and has no magnitude")
-    return slice_[..., -1]
+    return slice_[..., SIGNED_MAGNITUDE if spec.type is FieldType.SIGNED_DELTA else 0]
 
 
 def expected_magnitude(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
@@ -70,8 +63,11 @@ def direction_balance(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
     """``P(positive) − P(negative)`` of a signed delta, in ``[-1, 1]``."""
     if spec.type is not FieldType.SIGNED_DELTA:
         raise ValueError(f"{spec.name} is a {spec.type} field and has no direction")
-    probabilities = torch.softmax(slice_[..., :3], dim=-1)
-    return probabilities[..., 2] - probabilities[..., 0]
+    probabilities = torch.softmax(slice_[..., SIGNED_DIRECTIONS], dim=-1)
+    return (
+        probabilities[..., DIRECTIONS.index("positive")]
+        - probabilities[..., DIRECTIONS.index("negative")]
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,7 +125,7 @@ class HeadReading:
         if spec.type is not FieldType.CATEGORICAL:
             raise ValueError(f"{field} is a {spec.type} field and has no classes")
         probabilities = torch.softmax(self._columns(spec), dim=-1)
-        value = probabilities[..., CATEGORIES[field].index(category)]
+        value = probabilities[..., spec.classes.index(category)]
         return self._gated(value, conditional)
 
     def p_zone(self, outcome: str, *, conditional: bool = False) -> torch.Tensor:

@@ -81,12 +81,6 @@ def sidecar_paths(cards_folders: Iterable[Path]) -> list[Path]:
     ]
 
 
-def cache_path(abilities_root: Path, script_file: str) -> Path:
-    """The ``.npz`` of one source file: the tree path the key itself names."""
-    relative = Path(script_file)
-    return Path(abilities_root) / relative.parent / f"{relative.stem}.npz"
-
-
 @dataclass
 class LineItem:
     """One unique ability text, as the checkpoint's cache encodes it.
@@ -118,6 +112,7 @@ def line_items(
     probe item frozen under one key finds its text whichever carrier named it.
     """
     from effects.domain.ability_encoder import encoding_text
+    from effects.infrastructure.ability_cache_store import AbilityCacheStore
     from effects.infrastructure.sidecar_io import (
         converted_text_path,
         prose_for,
@@ -125,15 +120,15 @@ def line_items(
         read_sidecar,
     )
 
+    cache = AbilityCacheStore(abilities_root) if abilities_root is not None else None
     items: dict[str, LineItem] = {}
     for path in sidecar_paths(cards_folders):
         sidecar = read_sidecar(path)
         matrix = None
-        if abilities_root is not None:
-            npz = cache_path(abilities_root, sidecar.script_file)
-            if not npz.exists():
+        if cache is not None:
+            matrix = cache.read(sidecar.script_file)
+            if matrix is None:
                 continue
-            matrix = np.load(npz)["e"]
             if len(matrix) != len(sidecar.lines):
                 continue
         rendered = prose_lines(converted_text_path(path)) if surface == "prose" else []

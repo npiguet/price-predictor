@@ -180,14 +180,19 @@ def run_forge_worker(
     main_args: list[str] | None = None,
     xmx: str | None = None,
     input_text: str | None = None,
+    include_dependency_glob: bool = False,
 ) -> subprocess.CompletedProcess:
     """Run a one-shot forge-connector main class and return the result.
+
+    ``include_dependency_glob`` is passed to :func:`build_forge_classpath`.
 
     Raises FileNotFoundError if ``java`` is not on PATH.
     """
     cmd = build_jvm_command(
         main_class=main_class,
-        classpath=build_forge_classpath(),
+        classpath=build_forge_classpath(
+            include_dependency_glob=include_dependency_glob,
+        ),
         main_args=main_args,
         xmx=xmx,
     )

@@ -19,13 +19,12 @@ happened to cast them.
 
 from __future__ import annotations
 
-import heapq
 import logging
 import random
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 
-from effects.domain.corpus_curation import record_hash
+from effects.domain.corpus_curation import CapHeap, KeyedCapHeap, record_hash
 from effects.domain.records import EffectRecord
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import VALIDATION_STRATA, Stratum
@@ -39,6 +38,10 @@ GATE_ONE_CLASSES = frozenset({
 })
 #: Records each held-out text gives per round of the round-robin (FR-051).
 RECORDS_PER_TEXT_PER_ROUND = 4
+
+
+def _sample_hash(record: EffectRecord, seed: int) -> int:
+    return record_hash(record.record_id, seed=seed + SAMPLE_SEED_OFFSET)
 
 
 def round_robin(by_text: Mapping[str, list[int]], quota: int,
@@ -81,7 +84,7 @@ def _gate_one_round_robin(
     from effects.domain.sampling import sampling_class
     from effects.infrastructure.record_io import read_records
 
-    per_text: dict[str, dict[str, list[int]]] = {
+    per_text: dict[str, dict[str, CapHeap]] = {
         name: {} for name in quota if name in GATE_ONE_CLASSES
     }
     for record in read_records(directory):
@@ -91,15 +94,13 @@ def _gate_one_round_robin(
         text = held_out_text_of(record)
         if text is None:
             continue
-        value = record_hash(record.record_id, seed=seed + SAMPLE_SEED_OFFSET)
-        heap = per_text[name].setdefault(text, [])
-        if len(heap) < quota[name]:
-            heapq.heappush(heap, -value)
-        elif -value > heap[0]:
-            heapq.heappushpop(heap, -value)
+        heap = per_text[name].get(text)
+        if heap is None:
+            heap = per_text[name][text] = CapHeap(quota[name])
+        heap.offer(_sample_hash(record, seed))
     chosen = {
         name: set(round_robin(
-            {text: [-v for v in heap] for text, heap in texts.items()}, quota[name],
+            {text: list(heap.values()) for text, heap in texts.items()}, quota[name],
         ))
         for name, texts in per_text.items()
     }
@@ -109,7 +110,7 @@ def _gate_one_round_robin(
         name = sampling_class(record)
         if name not in chosen or record.record_id in seen:
             continue
-        if record_hash(record.record_id, seed=seed + SAMPLE_SEED_OFFSET) in chosen[name]:
+        if _sample_hash(record, seed) in chosen[name]:
             seen.add(record.record_id)
             out[name].append(record)
     return out
@@ -120,51 +121,26 @@ def class_quota(mix: Mapping[str, float], size: int) -> dict[str, int]:
     return {name: max(1, round(share * size)) for name, share in mix.items()}
 
 
-class _Smallest:
-    """The ``cap`` records with the smallest hashes seen, by heap.
-
-    The tie-break is a monotonic counter rather than the record. ``record_id``
-    is unique across a healthy corpus but the corpus is what this is reading,
-    and a repeated id -- which is exactly the defect ``validate-corpus``
-    exists to catch -- put two records with an equal key into one heap, where
-    the comparison falls through to ``EffectRecord``. That has no ordering, so
-    it raises ``TypeError`` and the build dies drawing a validation sample. A
-    counter never ties, so the record is never compared.
-    """
-
-    def __init__(self, cap: int) -> None:
-        self.cap = cap
-        self._heap: list[tuple[int, str, int, EffectRecord]] = []
-        self._offered = 0
-
-    def offer(self, value: int, record: EffectRecord) -> None:
-        self._offered += 1
-        item = (-value, record.record_id, self._offered, record)
-        if len(self._heap) < self.cap:
-            heapq.heappush(self._heap, item)
-        elif item > self._heap[0]:
-            heapq.heappushpop(self._heap, item)
-
-    def records(self) -> list[EffectRecord]:
-        return [item[-1] for item in sorted(self._heap, reverse=True)]
-
-    def __len__(self) -> int:
-        return len(self._heap)
-
-
 def _collect(
     directory: Path, quota: Mapping[str, int], *, seed: int,
     only: frozenset[str] | None = None,
-) -> dict[str, _Smallest]:
+) -> dict[str, KeyedCapHeap[EffectRecord]]:
     from effects.domain.sampling import sampling_class
     from effects.infrastructure.record_io import read_records
 
-    heaps = {name: _Smallest(cap) for name, cap in quota.items()}
+    heaps: dict[str, KeyedCapHeap[EffectRecord]] = {
+        name: KeyedCapHeap(cap) for name, cap in quota.items()
+    }
+    offered = 0
     for record in read_records(directory):
         name = sampling_class(record)
         if name not in heaps or (only is not None and name not in only):
             continue
-        heaps[name].offer(record_hash(record.record_id, seed=seed + SAMPLE_SEED_OFFSET), record)
+        # The tie-break ends in a counter so it never ties: a repeated
+        # record_id -- the defect validate-corpus exists to catch -- would
+        # otherwise compare two EffectRecords, which have no ordering.
+        offered += 1
+        heaps[name].offer(_sample_hash(record, seed), record, (record.record_id, offered))
     return heaps
 
 
@@ -195,7 +171,7 @@ def draw_samples(
         )
     else:
         gate = _collect(gate_one, quota, seed=seed, only=GATE_ONE_CLASSES)
-        gate_records = {name: heap.records() for name, heap in gate.items()}
+        gate_records = {name: heap.items() for name, heap in gate.items()}
     for stratum, directory in zip(VALIDATION_STRATA, (card_disjoint, game_disjoint)):
         heaps = _collect(directory, quota, seed=seed)
         sample: list[EffectRecord] = []
@@ -204,7 +180,7 @@ def draw_samples(
             if stratum is Stratum.CARD_DISJOINT and name in GATE_ONE_CLASSES:
                 chosen = gate_records.get(name, [])[:cap]
             taken = {r.record_id for r in chosen}
-            for record in heaps[name].records():
+            for record in heaps[name].items():
                 if len(chosen) >= cap:
                     break
                 if record.record_id not in taken:

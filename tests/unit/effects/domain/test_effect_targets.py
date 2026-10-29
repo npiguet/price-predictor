@@ -514,3 +514,55 @@ class TestFieldNames:
                   params={"counter_type": counter, "delta": 1}),
         ))
         assert set(targets["E1"].fields) <= set(FIELDS_BY_NAME)
+
+
+class TestEverySimpleEventType:
+    """Each event type the lookup tables handle, pinned field by field."""
+
+    @pytest.mark.parametrize(("event_type", "params", "expected"), [
+        (EventType.DAMAGE_DEALT, {"amount": 3}, {"damage_taken": 3.0}),
+        (EventType.DAMAGE_DEALT, {}, {"damage_taken": 0.0}),
+        (EventType.DAMAGE_HEALED, {"amount": 2}, {"damage_taken": -2.0}),
+        (EventType.LIFE_CHANGE, {"delta": -4}, {"life_delta": -4.0}),
+        (EventType.POISON_CHANGE, {"delta": 1}, {"poison_delta": 1.0}),
+        (EventType.CARD_DRAWN, {}, {"cards_drawn": 1.0}),
+        (EventType.CARD_DRAWN, {"count": 3}, {"cards_drawn": 3.0}),
+        (EventType.CARD_DISCARDED, {}, {"cards_discarded": 1.0}),
+        (EventType.CARD_MILLED, {"count": 2}, {"cards_milled": 2.0}),
+        (EventType.TAPPED, {}, {"tap_state": 1}),
+        (EventType.UNTAPPED, {}, {"tap_state": 0}),
+        (EventType.CONTROL_CHANGE, {}, {"control_change": 1}),
+        (EventType.ATTACHED, {}, {"attached_to_change": 1}),
+        (EventType.UNATTACHED, {}, {"attached_to_change": 1}),
+        (EventType.DESTROYED, {}, {"zone_outcome": ZONE_OUTCOMES.index("died")}),
+        (EventType.FACE_CHANGE, {}, {"zone_outcome": ZONE_OUTCOMES.index("face_changed")}),
+        (EventType.ZONE_CHANGE, {"to_zone": "Exile"},
+         {"zone_outcome": ZONE_OUTCOMES.index("exiled")}),
+        (EventType.ZONE_CHANGE, {"to_zone": "command"},
+         {"zone_outcome": ZONE_OUTCOMES.index("stayed")}),
+    ])
+    def test_its_fields(self, event_type, params, expected):
+        targets = derive_targets(_resolution(
+            Event(type=event_type, subjects=("E1",), params=params),
+        ))
+        assert targets["E1"].fields == expected
+
+    @pytest.mark.parametrize(("event_type", "flag"), [
+        (EventType.CARD_LOOKED_AT, "scry"),
+        (EventType.LIBRARY_REORDERED, "reorder"),
+        (EventType.CARD_REVEALED, "reveal"),
+    ])
+    def test_its_library_flag(self, event_type, flag):
+        targets = derive_targets(_resolution(
+            Event(type=event_type, subjects=("P0",), params={}),
+        ))
+        expected = [0.0] * len(LIBRARY_EVENTS)
+        expected[LIBRARY_EVENTS.index(flag)] = 1.0
+        assert targets["P0"].fields == {"library_events": expected}
+
+    def test_heals_and_hits_on_one_entity_net(self):
+        targets = derive_targets(_resolution(
+            Event(type=EventType.DAMAGE_DEALT, subjects=("E1",), params={"amount": 5}),
+            Event(type=EventType.DAMAGE_HEALED, subjects=("E1",), params={"amount": 2}),
+        ))
+        assert targets["E1"].fields == {"damage_taken": 3.0}

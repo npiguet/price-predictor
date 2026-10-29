@@ -104,12 +104,8 @@ THIS_TURN_COUNTERS: tuple[str, ...] = (
 # bit for bit.
 
 #: Where a checkpoint records the layout it trained on, in its
-#: ``training_settings`` — beside ``tokenizer_rules``, the precedent. A
-#: checkpoint recording none (gen-1, and the gen-2 arms trained before the
-#: layout existed) reads :data:`EARLIER_LAYOUT`.
+#: ``training_settings`` — beside ``tokenizer_rules``, the precedent.
 INPUT_LAYOUT_KEY = "input_layout"
-INPUT_LAYOUT = "gen-2"
-EARLIER_LAYOUT: str | None = None
 
 PHASE_ALIASES: dict[str, str] = {
     "combat_begin": "begin_combat",
@@ -121,6 +117,46 @@ PHASE_ALIASES: dict[str, str] = {
 COUNTER_ALIASES: dict[str, str] = {"+1/+1": "P1P1", "-1/-1": "M1M1"}
 #: Appended rather than inserted, so every earlier member keeps its slot.
 OVERLAY_KEYWORDS_GEN2: tuple[str, ...] = (*OVERLAY_KEYWORDS, "landwalk")
+
+
+@dataclass(frozen=True, slots=True)
+class InputLayout:
+    """One input layout, as the features it switches (FR-063c)."""
+
+    #: What a checkpoint trained on it records under :data:`INPUT_LAYOUT_KEY`;
+    #: None for the earlier layout, which no checkpoint records.
+    name: str | None
+    #: Forge's own spellings read as the vocabularies' members: its
+    #: ``combat_*`` phases, ``+1/+1``/``-1/-1`` counters and
+    #: ``protection_from_<x>`` keywords.
+    forge_spellings: bool
+    #: The keywords the overlay tracks individually.
+    overlay_keywords: tuple[str, ...]
+    #: Whether each card slot ends with thermometer codes of its power,
+    #: toughness and toughness left, and each player slot with one of life.
+    thermometers: bool
+
+    @classmethod
+    def of(cls, training_settings) -> InputLayout:
+        """The layout a checkpoint's training settings record; the earlier one
+        where they record none (gen-1, and gen-2 arms trained before the
+        layout existed)."""
+        if (training_settings or {}).get(INPUT_LAYOUT_KEY) is None:
+            return EARLIER_LAYOUT
+        return INPUT_LAYOUT
+
+
+#: The layout every training run builds and records.
+INPUT_LAYOUT = InputLayout(
+    name="gen-2", forge_spellings=True, overlay_keywords=OVERLAY_KEYWORDS_GEN2,
+    thermometers=True,
+)
+#: The layout before :data:`INPUT_LAYOUT`, which a checkpoint recording none
+#: reads bit for bit.
+EARLIER_LAYOUT = InputLayout(
+    name=None, forge_spellings=False, overlay_keywords=OVERLAY_KEYWORDS,
+    thermometers=False,
+)
 
 #: The largest magnitude a count or a signed delta is scored at. Above about
 #: forty an amount is the game state compounding — a counter doubling run to two
@@ -148,8 +184,8 @@ def thermometer(value: float) -> list[float]:
 _NO_THERMOMETER: tuple[float, ...] = (0.0,) * THERMOMETER_STEPS
 
 
-def _phase_in(phase: str | None, layout: str | None) -> str | None:
-    if layout is EARLIER_LAYOUT or phase is None:
+def _phase_in(phase: str | None, layout: InputLayout) -> str | None:
+    if not layout.forge_spellings or phase is None:
         return phase
     return PHASE_ALIASES.get(phase.strip().lower(), phase)
 
@@ -283,7 +319,7 @@ _PLAYABILITY_SUBKINDS: tuple[str, ...] = tuple(
 
 
 def global_features(
-    record: EffectRecord, *, layout: str | None = INPUT_LAYOUT,
+    record: EffectRecord, *, layout: InputLayout = INPUT_LAYOUT,
 ) -> tuple[float, ...]:
     """Turn structure, plus the record's own kind flags."""
     g = record.state.global_
@@ -356,7 +392,7 @@ def _act_is_empty(record: EffectRecord) -> bool:
 
 def player_features(
     player: PlayerState, record: EffectRecord, *,
-    layout: str | None = INPUT_LAYOUT,
+    layout: InputLayout = INPUT_LAYOUT,
 ) -> tuple[float, ...]:
     """One player's resources, plus their relation to the acting player.
 
@@ -377,7 +413,7 @@ def player_features(
     out.append(1.0 if player.id == record.actor_player else 0.0)
     out.append(0.0 if player.id == record.actor_player else 1.0)
     out.append(1.0 if player.id in record.state.refs.targets else 0.0)
-    if layout is not EARLIER_LAYOUT:
+    if layout.thermometers:
         out += thermometer(player.life)
     return tuple(out)
 
@@ -387,7 +423,7 @@ def card_features(
     record: EffectRecord,
     *,
     masked_keywords: frozenset[str] = frozenset(),
-    layout: str | None = INPUT_LAYOUT,
+    layout: InputLayout = INPUT_LAYOUT,
 ) -> tuple[float, ...]:
     """One entity's structured characteristics plus its overlay.
 
@@ -407,7 +443,7 @@ def card_features(
     _push_stack_extras(out, entity)
     out += _damage_assignment_features(entity, record)
     out += _pending_event_features(entity, record)
-    if layout is not EARLIER_LAYOUT:
+    if layout.thermometers:
         _push_comparable_amounts(out, entity)
     return tuple(out)
 
@@ -430,7 +466,7 @@ def _push_characteristics(out: list[float], entity: EntityState) -> None:
 
 def _push_overlay(
     out: list[float], entity: EntityState, record: EffectRecord, *,
-    masked_keywords: frozenset[str], layout: str | None,
+    masked_keywords: frozenset[str], layout: InputLayout,
 ) -> None:
     """What the game has done to the card: zone, status, counters, combat,
     temporary grants, and its relation to the acting player and the targets."""
@@ -450,12 +486,9 @@ def _push_overlay(
     granted = entity.granted_temporary.keywords
     if masked_keywords:
         granted = set(granted) - set(masked_keywords)
-    if layout is EARLIER_LAYOUT:
-        out += _multi_hot(granted, OVERLAY_KEYWORDS)
-    else:
-        out += _multi_hot(
-            [overlay_keyword(keyword) for keyword in granted], OVERLAY_KEYWORDS_GEN2,
-        )
+    if layout.forge_spellings:
+        granted = [overlay_keyword(keyword) for keyword in granted]
+    out += _multi_hot(granted, layout.overlay_keywords)
     _push_scalar(out, len(entity.granted_temporary.abilities))
     out.append(1.0 if state.controller_tag(
         entity.controller, record.actor_player) == "mine" else 0.0)
@@ -463,12 +496,12 @@ def _push_overlay(
     out.append(1.0 if entity.id == state.refs.source else 0.0)
 
 
-def _push_counters(out: list[float], counters, layout: str | None) -> None:
+def _push_counters(out: list[float], counters, layout: InputLayout) -> None:
     if not counters:
         # The common case by far, and every one of those scalars is zero.
         out += _NO_COUNTERS
         return
-    if layout is not EARLIER_LAYOUT:
+    if layout.forge_spellings:
         renamed: dict[str, int] = {}
         for name, value in counters.items():
             name = COUNTER_ALIASES.get(name, name)
@@ -547,7 +580,7 @@ def build_effect_head_input(
     stripped_keywords: dict[str, frozenset[str]] | None = None,
     keyword_of=None,
     options_for=None,
-    layout: str | None = INPUT_LAYOUT,
+    layout: InputLayout = INPUT_LAYOUT,
 ) -> EffectHeadInput:
     """Lay one record out as the token surface.
 
@@ -586,8 +619,8 @@ def build_effect_head_input(
         keyword_of: ``ProvenanceKey -> str | None``, which keyword a line *is*.
             Required for ``stripped_keywords`` to reach the ability channel;
             without it only the overlay is stripped.
-        layout: the input layout (FR-063c) — :data:`INPUT_LAYOUT`, or
-            :data:`EARLIER_LAYOUT` for a checkpoint that recorded none.
+        layout: the input layout (FR-063c) — :data:`INPUT_LAYOUT`, or the
+            one a loaded checkpoint recorded (:meth:`InputLayout.of`).
         options_for: ``ProvenanceKey -> tuple[ProvenanceKey, ...]``, the keys of
             the charm-mode ``option`` lines that follow the key's line in its
             sidecar (FR-063a). A snapshot names an entity's abilities by root
@@ -748,7 +781,7 @@ def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]
     }
 
 
-def feature_widths(records, *, layout: str | None = INPUT_LAYOUT) -> dict[SlotKind, int]:
+def feature_widths(records, *, layout: InputLayout = INPUT_LAYOUT) -> dict[SlotKind, int]:
     """Each slot kind's width, measured from real records.
 
     Measured rather than declared: the vocabularies the features are built from

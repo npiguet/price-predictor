@@ -21,17 +21,12 @@ from effects.application.training_loop import (
     TrainingLoop,
 )
 from effects.domain.effect_losses import LossParts
-from effects.domain.split import CorpusSplit
+from tests.unit.effects.builders import make_training_loop
 
 
 def _loop(monkeypatch, **config) -> TrainingLoop:
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    return TrainingLoop(
-        TrainEffectModelConfig(corpus="unused", **config),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
-    )
+    return make_training_loop(TrainEffectModelConfig(corpus="unused", **config))
 
 
 def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkeypatch):

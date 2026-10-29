@@ -75,6 +75,24 @@ class TestBuildForgeClasspath:
         assert os.path.join("dependency", "*") not in cp
 
 
+class TestRunForgeWorker:
+    @pytest.mark.parametrize("glob", [False, True])
+    def test_dependency_glob_reaches_the_classpath(self, tmp_path, glob):
+        jar_dir = tmp_path / "forge-connector" / "target"
+        jar_dir.mkdir(parents=True)
+        (jar_dir / forge_jvm.CONNECTOR_JAR_NAME).write_bytes(b"")
+        with patch.object(forge_jvm, "project_root", return_value=tmp_path), \
+             patch.object(forge_jvm.subprocess, "run") as run:
+            if glob:
+                forge_jvm.run_forge_worker("Main", include_dependency_glob=True)
+            else:
+                forge_jvm.run_forge_worker("Main")
+
+        cmd = run.call_args.args[0]
+        classpath = cmd[cmd.index("-cp") + 1]
+        assert (os.path.join("dependency", "*") in classpath) is glob
+
+
 class TestBuildJvmCommand:
     def test_minimal_command_starts_with_java(self):
         cmd = build_jvm_command(main_class="com.example.Main", classpath="cp")

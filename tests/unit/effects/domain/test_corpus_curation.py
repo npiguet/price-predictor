@@ -7,6 +7,7 @@ import pytest
 from effects.domain.corpus_curation import (
     CapHeap,
     CopyPlan,
+    KeyedCapHeap,
     class_targets,
     copy_plan,
     game_disjoint_draw,
@@ -79,6 +80,17 @@ def test_merging_equal_cap_heaps_with_overlapping_ranges():
         right.offer(value)
     left.merge(right)
     assert sorted(left.values()) == [2, 5, 8]
+
+
+def test_a_heap_keeps_items_with_their_values_and_breaks_ties_on_the_tiebreak():
+    left, right = KeyedCapHeap(3), KeyedCapHeap(3)
+    left.offer(30, "c", (0,))
+    left.offer(10, "a", (1,))
+    right.offer(10, "b", (2,))
+    right.offer(20, "z", (0,))
+    left.merge(right)
+    assert left.items() == ["b", "a", "z"]
+    assert len(left) == 3
 
 
 def test_class_targets_are_set_by_the_scarcest_class():

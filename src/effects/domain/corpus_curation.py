@@ -45,46 +45,77 @@ def record_hash(record_id: str, *, seed: int) -> int:
 
 
 class CapHeap:
-    """The ``cap`` smallest record hashes seen for one ability text.
+    """The ``cap`` smallest record hashes seen.
 
-    A max-heap of negated values, so the largest retained hash sits at the root
+    A max-heap of negated hashes, so the largest retained hash sits at the root
     and is the first one a smaller arrival displaces. Held bounded rather than
     collecting every hash: the corpus has tens of millions of records, and no
-    quota a text is given exceeds the cap.
+    quota a text is given exceeds the cap. Entries are bare ints because the
+    survey holds one heap per text slot.
     """
 
     __slots__ = ("cap", "_heap")
 
     def __init__(self, cap: int) -> None:
         self.cap = cap
-        self._heap: list[int] = []
+        self._heap: list = []
 
     def offer(self, value: int) -> None:
+        self._push(-value)
+
+    def _push(self, entry) -> None:
         if self.cap <= 0:
             return
         if len(self._heap) < self.cap:
-            heapq.heappush(self._heap, -value)
-        elif -value > self._heap[0]:
-            heapq.heappushpop(self._heap, -value)
+            heapq.heappush(self._heap, entry)
+        elif entry > self._heap[0]:
+            heapq.heappushpop(self._heap, entry)
+
+    @staticmethod
+    def _negated(entry) -> int:
+        return entry
 
     def merge(self, other: CapHeap) -> None:
         """Absorb another heap's values, keeping the cap smallest of the union.
 
         Valid only when both heaps share the same cap, because the k smallest of
-        a union are drawn from each side's own k smallest. This precondition is
-        enforced to prevent silent data loss: if the other heap discarded values
-        due to a smaller cap, they are irrecoverably lost here.
+        a union are drawn from each side's own k smallest; a smaller cap on the
+        other side has already lost values for good, so it is refused.
         """
         if self.cap != other.cap:
             raise ValueError(
                 f"cannot merge heaps with mismatched caps: "
                 f"self.cap={self.cap}, other.cap={other.cap}"
             )
-        for negated in other._heap:
-            self.offer(-negated)
+        for entry in other._heap:
+            self._push(entry)
 
     def values(self) -> tuple[int, ...]:
-        return tuple(-negated for negated in self._heap)
+        return tuple(-self._negated(entry) for entry in self._heap)
+
+    def __len__(self) -> int:
+        return len(self._heap)
+
+
+class KeyedCapHeap[T](CapHeap):
+    """A :class:`CapHeap` that carries an item with each hash.
+
+    Among equal hashes the larger ``tiebreak`` is kept; it must never tie, or
+    two equal hashes would compare the items.
+    """
+
+    __slots__ = ()
+
+    def offer(self, value: int, item: T, tiebreak: tuple) -> None:  # type: ignore[override]
+        self._push((-value, tiebreak, item))
+
+    @staticmethod
+    def _negated(entry) -> int:
+        return entry[0]
+
+    def items(self) -> list[T]:
+        """The retained items, smallest hash first."""
+        return [item for _, _, item in sorted(self._heap, reverse=True)]
 
 
 def class_targets(

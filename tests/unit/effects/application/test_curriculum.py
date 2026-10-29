@@ -17,17 +17,18 @@ def _sparse(fields):
     return [f for f in fields if f.group is not FieldGroup.DENSE]
 
 
-def test_the_curriculum_step_is_the_first_step_of_the_curriculum_epoch():
-    config = TrainEffectModelConfig(steps_per_epoch=5000, curriculum_epoch=3)
-    assert config.curriculum_step == 10_000
-    assert TrainEffectModelConfig(steps_per_epoch=5000, curriculum_epoch=1).curriculum_step == 0
-
-
 def test_sparse_fields_are_off_before_the_curriculum_epoch_and_on_from_it():
     config = TrainEffectModelConfig(steps_per_epoch=5000, curriculum_epoch=3)
     assert _sparse(fields_for_epoch(config, present=PRESENT, epoch=2)) == []
     on = _sparse(fields_for_epoch(config, present=PRESENT, epoch=3))
     assert on and all(f in PER_ENTITY_FIELDS for f in on)
+    assert _sparse(fields_for_epoch(config, present=PRESENT, epoch=4)) == on
+
+
+def test_a_first_epoch_curriculum_enables_the_sparse_group_from_the_first_step():
+    for epoch in (0, 1):
+        config = TrainEffectModelConfig(curriculum_epoch=epoch)
+        assert _sparse(fields_for_epoch(config, present=PRESENT, epoch=1))
 
 
 def test_the_stopper_resets():

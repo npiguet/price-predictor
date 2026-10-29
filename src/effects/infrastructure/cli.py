@@ -1317,22 +1317,13 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
         EmptyHoldoutError,
         SurfaceMismatchError,
     )
-    from effects.domain.ability_encoder import ENCODER_N_HEADS
 
-    # Refused here, before anything is read (FR-062): the encoder's attention
-    # splits its width across a fixed head count.
-    if args.encoder_d_model <= 0 or args.encoder_d_model % ENCODER_N_HEADS:
-        logger.error(
-            "--encoder-d-model %d is not divisible by the encoder's %d "
-            "attention heads; pick a multiple of %d.",
-            args.encoder_d_model, ENCODER_N_HEADS, ENCODER_N_HEADS,
-        )
+    try:
+        config = train_config_from(args)
+    except ValueError as exc:
+        # An encoder shape the config refuses, before anything is read.
+        logger.error("%s", exc)
         return 2
-    if args.encoder_layers <= 0:
-        logger.error("--encoder-layers must be at least 1, got %d.", args.encoder_layers)
-        return 2
-
-    config = train_config_from(args)
 
     from effects.application.train_effect_model import run as train
 

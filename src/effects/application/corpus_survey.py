@@ -27,15 +27,14 @@ them.
 from __future__ import annotations
 
 import logging
-import time
 import zlib
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import (
     SIGNATURE_CLASSES,
     outcome_signature,
@@ -51,6 +50,7 @@ from effects.domain.corpus_plan import (
     Keys,
     TrainingSupply,
 )
+from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
 from effects.domain.record_quality import (
     QualityDefect,
     acting_text_defect,
@@ -65,6 +65,7 @@ from effects.domain.records import (
 )
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.split import HeldOutCards, record_names_held_out_card
+from effects.domain.tally_merge import NOT_MERGED, merge_into
 
 if TYPE_CHECKING:
     from effects.infrastructure.sidecar_io import SidecarCache
@@ -264,12 +265,6 @@ class RefusalTally:
         elif defect is QualityDefect.UNJOINABLE_KEY:
             self.unjoinable_scripts[acting_keys(record)[0].script_file] += 1
 
-    def merge(self, other: RefusalTally) -> None:
-        self.by_reason.update(other.by_reason)
-        self.by_class.update(other.by_class)
-        self.textless_scripts.update(other.textless_scripts)
-        self.unjoinable_scripts.update(other.unjoinable_scripts)
-
 
 @dataclass(slots=True)
 class RarityTally:
@@ -288,11 +283,6 @@ class RarityTally:
         self.key_records[keys] += 1
         self.key_games.setdefault(keys, set()).add(game_hash(game_id))
 
-    def merge(self, other: RarityTally) -> None:
-        self.key_records.update(other.key_records)
-        for keys, games in other.key_games.items():
-            self.key_games.setdefault(keys, set()).update(games)
-
 
 @dataclass(slots=True)
 class GameTally:
@@ -310,20 +300,13 @@ class GameTally:
     #: which the card-disjoint cap counts (FR-142) and gate 1 scores.
     held_out_text_games: dict[str, set[str]] = field(default_factory=dict)
 
-    def merge(self, other: GameTally) -> None:
-        self.games |= other.games
-        self.held_out |= other.held_out
-        self.game_disjoint |= other.game_disjoint
-        for text, games in other.held_out_text_games.items():
-            self.held_out_text_games.setdefault(text, set()).update(games)
-
 
 @dataclass(slots=True)
 class ShardSurvey:
     """One shard's contribution. Plain data, so it pickles back cheaply."""
 
-    name: str
-    size: int
+    name: str = field(metadata=NOT_MERGED)
+    size: int = field(metadata=NOT_MERGED)
     supply: TrainingSupply
     records: int = 0
     rarity: RarityTally = field(default_factory=RarityTally)
@@ -398,43 +381,74 @@ def survey_shard_with(
     config: SurveyConfig, context: WorkerContext, relative: str,
 ) -> ShardSurvey:
     """One shard's survey, its games routed at the end of the shard."""
-    from effects.domain.damage_step_keywords import (
-        KEYWORDS_BY_NAME,
-        qualifying_observations,
-    )
-
     path = Path(config.read.records_dir) / relative
-    out = ShardSurvey(
+    surveyor = _ShardSurveyor(config, context, ShardSurvey(
         name=relative, size=path.stat().st_size, supply=TrainingSupply(config.heap_cap),
-    )
-    rows = tuple(
-        KEYWORDS_BY_NAME[name] for name in config.game_disjoint_keywords
-        if name in KEYWORDS_BY_NAME
-    )
-    keyword_games: set[str] = set()
-    #: ``(game, class, cell, keys, hash, acts through a held-out text)`` per
-    #: kept record, counted into the supply once its game's route is known.
-    pending: list[tuple[str, str, Cell, Keys | None, int, bool]] = []
-
+    ))
     for record in context.records(relative):
-        out.records += 1
-        game = record.game_id
-        # The keyword threshold and the held-out test are properties of the
-        # game (FR-046), so both are read above the quality check: a game does
-        # not stop holding a combat, or a held-out card, because the record
-        # saying so was refused.
-        if (
-            rows and record.kind is RecordKind.COMBAT and game not in keyword_games
-            and qualifying_observations(record, rows, context.resolver)
-        ):
-            keyword_games.add(game)
-        if record_names_held_out_card(record, config.read.held_out):
-            out.games.held_out.add(game)
+        surveyor.observe(record)
+    return surveyor.finish()
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingRecord:
+    """A kept record, counted into the supply once its game's route is known."""
+
+    game: str
+    klass: SamplingClass
+    cell: Cell
+    keys: Keys | None
+    value: int
+    #: Acts through a held-out text, so it never trains even in a training game.
+    acts_through_held_out_text: bool
+
+
+class _ShardSurveyor:
+    """One shard's survey in progress: every record observed, then every game routed."""
+
+    def __init__(
+        self, config: SurveyConfig, context: WorkerContext, out: ShardSurvey,
+    ) -> None:
+        self.config = config
+        self.context = context
+        self.out = out
+        self.keyword_rows = tuple(
+            KEYWORDS_BY_NAME[name] for name in config.game_disjoint_keywords
+            if name in KEYWORDS_BY_NAME
+        )
+        self.keyword_games: set[str] = set()
+        self.pending: list[_PendingRecord] = []
+
+    def observe(self, record: EffectRecord) -> None:
+        self.out.records += 1
+        self._note_game_properties(record)
         klass = sampling_class(record)
-        defect = context.refusal(record)
+        defect = self.context.refusal(record)
         if defect is not None:
-            out.refusals.note(record, klass, defect)
-            continue
+            self.out.refusals.note(record, klass, defect)
+            return
+        self.pending.append(self._kept(record, klass))
+
+    def _note_game_properties(self, record: EffectRecord) -> None:
+        """The keyword threshold and the held-out test, read off any record.
+
+        Both are properties of the game (FR-046), so both are read above the
+        quality check: a game does not stop holding a combat, or a held-out
+        card, because the record saying so was refused.
+        """
+        game = record.game_id
+        if (
+            self.keyword_rows and record.kind is RecordKind.COMBAT
+            and game not in self.keyword_games
+            and qualifying_observations(record, self.keyword_rows, self.context.resolver)
+        ):
+            self.keyword_games.add(game)
+        if record_names_held_out_card(record, self.config.read.held_out):
+            self.out.games.held_out.add(game)
+
+    def _kept(self, record: EffectRecord, klass: SamplingClass) -> _PendingRecord:
+        """Count a kept record into the whole-corpus tallies; return it pending."""
+        out, context, game = self.out, self.context, record.game_id
         out.games.games.add(game)
         cell = context.cell_of(record)
         out.mode_counts.update(cell.modes)
@@ -444,28 +458,38 @@ def survey_shard_with(
         held_text = context.held_out_text(keys)
         if held_text is not None and record.kind is RecordKind.RESOLUTION:
             out.games.held_out_text_games.setdefault(held_text, set()).add(game)
-        pending.append((
-            game, klass, cell, keys, context.hash_of(record), held_text is not None,
-        ))
-
-    routes = {
-        game: config.routing.route(
-            game, held_out=game in out.games.held_out,
-            keyword_combat=game in keyword_games,
+        return _PendingRecord(
+            game=game, klass=klass, cell=cell, keys=keys,
+            value=context.hash_of(record),
+            acts_through_held_out_text=held_text is not None,
         )
-        for game in out.games.games
-    }
-    out.games.game_disjoint = {
-        game for game, route in routes.items() if route is GameRoute.GAME_DISJOINT
-    }
-    for game, klass, cell, keys, value, held_text in pending:
-        if routes[game] is not GameRoute.TRAINING:
-            continue
-        if held_text:
-            out.held_out_text_dropped[klass] += 1
-            continue
-        out.supply.add(cell, keys, value)
-    return out
+
+    def finish(self) -> ShardSurvey:
+        self._fold_training_supply(self._route_games())
+        return self.out
+
+    def _route_games(self) -> dict[str, GameRoute]:
+        games = self.out.games
+        routes = {
+            game: self.config.routing.route(
+                game, held_out=game in games.held_out,
+                keyword_combat=game in self.keyword_games,
+            )
+            for game in games.games
+        }
+        games.game_disjoint = {
+            game for game, route in routes.items() if route is GameRoute.GAME_DISJOINT
+        }
+        return routes
+
+    def _fold_training_supply(self, routes: Mapping[str, GameRoute]) -> None:
+        for pending in self.pending:
+            if routes[pending.game] is not GameRoute.TRAINING:
+                continue
+            if pending.acts_through_held_out_text:
+                self.out.held_out_text_dropped[pending.klass] += 1
+                continue
+            self.out.supply.add(pending.cell, pending.keys, pending.value)
 
 
 def source_of(relative: str) -> str:
@@ -480,61 +504,32 @@ def source_of(relative: str) -> str:
 
 def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
     """Combine shard surveys into one corpus-wide picture."""
+    total = ShardSurvey(name="", size=0, supply=TrainingSupply(heap_cap))
     shards: list[SourceShard] = []
-    records = 0
-    rarity = RarityTally()
-    supply = TrainingSupply(heap_cap)
-    games = GameTally()
-    refusals = RefusalTally()
-    mode_counts: Counter[str] = Counter()
-    held_out_text_dropped: Counter[SamplingClass] = Counter()
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
     split_games = 0
 
     for part in parts:
         shards.append(SourceShard(name=part.name, size=part.size))
-        records += part.records
-        split_games += len(part.games.games & games.games)
-        games.merge(part.games)
-        rarity.merge(part.rarity)
-        supply.merge(part.supply)
-        refusals.merge(part.refusals)
-        mode_counts.update(part.mode_counts)
-        held_out_text_dropped.update(part.held_out_text_dropped)
+        split_games += len(part.games.games & total.games.games)
+        merge_into(total, part)
         source = source_of(part.name)
         games_by_source[source] |= part.games.games
         held_by_source[source] |= part.games.held_out
 
     return Survey(
         shards=tuple(sorted(shards, key=lambda s: s.name)),
-        records=records,
-        rarity=rarity,
-        supply=supply,
-        games=games,
-        refusals=refusals,
-        mode_counts=mode_counts,
-        held_out_text_dropped=held_out_text_dropped,
+        records=total.records,
+        rarity=total.rarity,
+        supply=total.supply,
+        games=total.games,
+        refusals=total.refusals,
+        mode_counts=total.mode_counts,
+        held_out_text_dropped=total.held_out_text_dropped,
         games_by_source={s: len(g) for s, g in games_by_source.items()},
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
         split_games=split_games,
-    )
-
-
-def progress_line(*, done: int, total: int, elapsed: float) -> str:
-    """``done of total`` with the rate and the time left.
-
-    A bare count says the run is alive. It does not say whether the rest is ten
-    minutes away or two hours, and on a pass over thousands of shards that is
-    the question actually being asked.
-    """
-    rate = done / elapsed if elapsed > 0 else 0.0
-    left = (total - done) / rate if rate > 0 else 0.0
-    if rate <= 0:
-        return f"{done} of {total} shard(s)"
-    return (
-        f"{done} of {total} shard(s), {rate * 60:.0f}/min, "
-        f"~{left / 60:.0f} min left"
     )
 
 
@@ -544,37 +539,6 @@ def shard_names(records_dir: Path) -> list[str]:
 
     root = Path(records_dir)
     return [shard.relative_to(root).as_posix() for shard in iter_shards(root)]
-
-
-def run_parallel(
-    names: list[str], task, *, initializer, initargs: tuple, workers: int | None,
-    label: str, progress_every: int = 50,
-) -> Iterator:
-    """``task`` over every shard name, in a pool or in process, logging progress.
-
-    ``workers <= 1`` runs the initializer and the task in this process, so a
-    small build or a test needs no pool.
-    """
-    started = time.monotonic()
-
-    def report(index: int) -> None:
-        if index % progress_every == 0:
-            logger.info("%s %s", label, progress_line(
-                done=index, total=len(names), elapsed=time.monotonic() - started,
-            ))
-
-    if workers is not None and workers <= 1:
-        initializer(*initargs)
-        for index, name in enumerate(names, start=1):
-            yield task(name)
-            report(index)
-        return
-    with ProcessPoolExecutor(
-        max_workers=workers, initializer=initializer, initargs=initargs,
-    ) as pool:
-        for index, part in enumerate(pool.map(task, names, chunksize=1), start=1):
-            yield part
-            report(index)
 
 
 def run_survey(

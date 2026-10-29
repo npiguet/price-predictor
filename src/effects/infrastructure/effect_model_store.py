@@ -27,14 +27,16 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import asdict, dataclass, field
+import shutil
+from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import Baseline
-from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.effect_model import EffectModelConfig
 from price_predictor.infrastructure.torch_checkpoint import (
     load_checkpoint,
     save_checkpoint,
@@ -76,6 +78,12 @@ class HashMismatchError(RuntimeError):
 
 class SplitMismatchError(RuntimeError):
     """A variant checkpoint records a different split than the main one."""
+
+
+def _like(default, value):
+    """A stored ``value`` as its field's type, which a tuple's or a count's
+    serialized form may not keep."""
+    return type(default)(value) if isinstance(default, (tuple, int)) else value
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,21 +134,22 @@ class SplitProvenance:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SplitProvenance:
-        return cls(
-            held_out_cards=tuple(data.get("held_out_cards", ())),
-            card_disjoint_games=tuple(data.get("card_disjoint_games", ())),
-            game_disjoint_games=tuple(data.get("game_disjoint_games", ())),
-            vocab_path=data.get("vocab_path", ""),
-            keyword_definitions_path=data.get("keyword_definitions_path", ""),
-            vocab_hash=data.get("vocab_hash", ""),
-            keyword_definitions_hash=data.get("keyword_definitions_hash", ""),
-            withheld_keyword=data.get("withheld_keyword"),
-            holdout_permille=int(data.get("holdout_permille", 0)),
-            holdout_max_carriers=int(data.get("holdout_max_carriers", 0)),
-            corpus_path=data.get("corpus_path", ""),
-            corpus_digest=data.get("corpus_digest", ""),
-            holdout_unit=data.get("holdout_unit", "text"),
-        )
+        """The provenance ``as_dict`` wrote; a field it lacks takes its default.
+
+        A checkpoint saved before a field existed lacks it, and reads as the
+        default says such a checkpoint trained.
+        """
+        return cls(**{
+            spec.name: _like(spec.default, data[spec.name])
+            for spec in fields(cls) if spec.name in data
+        })
+
+    def file_hashes(self) -> dict[str, str]:
+        """``label -> recorded hash`` of each file inference re-hashes."""
+        return {
+            "vocabulary": self.vocab_hash,
+            "keyword definitions": self.keyword_definitions_hash,
+        }
 
     def describes_same_split(self, other: SplitProvenance) -> bool:
         return (
@@ -156,9 +165,8 @@ class SplitProvenance:
             HashMismatchError: naming the recorded and actual hashes, because
                 the operator needs to know which file moved under them.
         """
-        for label, path, recorded in (
-            ("vocabulary", vocab_path, self.vocab_hash),
-            ("keyword definitions", keyword_path, self.keyword_definitions_hash),
+        for (label, recorded), path in zip(
+            self.file_hashes().items(), (vocab_path, keyword_path),
         ):
             actual = content_hash(path)
             if recorded and actual != recorded:
@@ -186,11 +194,14 @@ class EffectCheckpoint:
     #: The sidecar roots the run resolved keys against (FR-063b). Empty on a
     #: checkpoint saved before the field existed.
     cards_folders: tuple[str, ...] = ()
-    #: The training flags a sweep arm differs by and the script-API head's
-    #: vocabularies (FR-063): ``e_noise``, ``value_weight``, ``mlm_weight``,
-    #: ``mlm_mask_prob``, ``api_weight``, ``api_types``, ``param_keys``. The
-    #: encoder's size is in ``encoder_config`` and the holdout unit in the
-    #: provenance; neither is repeated here.
+    #: The training flags a sweep arm differs by, the seed, the script-API
+    #: head's vocabularies and the rules the inputs were built under (FR-063):
+    #: ``seed``, ``e_noise``, ``value_weight``, ``mlm_weight``,
+    #: ``mlm_mask_prob``, ``api_weight``, ``api_types``, ``param_keys``,
+    #: ``tokenizer_rules`` and ``input_layout``, and ``lethality_copies`` when
+    #: set. Empty on a checkpoint saved before the field existed, and partial on
+    #: one saved before a key did. The encoder's size is in ``encoder_config``
+    #: and the holdout unit in the provenance; neither is repeated here.
     training_settings: dict[str, Any] = field(default_factory=dict)
 
 
@@ -200,7 +211,7 @@ def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
     They shape the encoder during training and have no meaning at inference, so
     shipping them would only invite someone to read them.
     """
-    prefixes = tuple(f"{name}." for name in EffectModel.TRAINING_ONLY_HEADS)
+    prefixes = tuple(f"{name}." for name in TRAINING_ONLY_MODULES)
     return {
         key: value for key, value in state.items()
         if not key.startswith(prefixes)
@@ -267,7 +278,7 @@ class EffectModelStore:
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         path = self.directory / f"{stamp}.pt"
         save_checkpoint(path, payload, checkpoint.model_config)
-        save_checkpoint(self.latest_path(), payload, checkpoint.model_config)
+        shutil.copyfile(path, self.latest_path())
         logger.info("Saved %s checkpoint to %s", checkpoint.variant, path)
         return path
 
@@ -320,14 +331,9 @@ def require_same_split(
             f"Retrain it on the --corpus {main_path} trained on: a baseline "
             "that saw different games is not a baseline."
         )
-    for label, recorded, actual in (
-        ("vocabulary", main.provenance.vocab_hash, baseline.provenance.vocab_hash),
-        (
-            "keyword definitions",
-            main.provenance.keyword_definitions_hash,
-            baseline.provenance.keyword_definitions_hash,
-        ),
-    ):
+    recorded_by_main = main.provenance.file_hashes()
+    for label, actual in baseline.provenance.file_hashes().items():
+        recorded = recorded_by_main[label]
         if recorded != actual:
             raise SplitMismatchError(
                 f"{baseline_path} recorded a different {label} hash than "

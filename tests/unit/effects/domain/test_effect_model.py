@@ -15,6 +15,7 @@ import pytest
 import torch
 import torch.nn.functional as functional
 
+from effects.domain.aux_heads import AUX_HEADS, SHIPPED_HEADS, TRAINING_ONLY_MODULES
 from effects.domain.effect_head_input import (
     COUNTER_TYPES,
     EffectHeadInput,
@@ -158,47 +159,36 @@ class TestFieldActivation:
         stage_one = frozenset({
             SamplingClass.RESOLUTION_EFFECT, SamplingClass.COMBAT, "resolution-cost",
         })
-        active = {s.name for s in active_fields(
-            present_classes=stage_one, step=0, curriculum_step=0,
-        )}
+        active = {s.name for s in active_fields(stage_one, sparse=True)}
         assert "zone_outcome" in active
         assert "life_delta" in active
 
     def test_a_field_no_present_class_supervises_contributes_nothing(self):
         stage_one = frozenset({SamplingClass.RESOLUTION_EFFECT, SamplingClass.COMBAT})
-        active = {s.name for s in active_fields(
-            present_classes=stage_one, step=0, curriculum_step=0,
-        )}
+        active = {s.name for s in active_fields(stage_one, sparse=True)}
         assert "attacker_legal" not in active
         assert "target_legal" not in active
 
     def test_the_legality_bits_arrive_with_their_own_records(self):
         active = {s.name for s in active_fields(
-            present_classes=frozenset({
+            frozenset({
                 SamplingClass.PLAYABILITY_LEGALITY, SamplingClass.PLAYABILITY_DECISION,
             }),
-            step=0, curriculum_step=0,
+            sparse=True,
         )}
         assert {"attacker_legal", "blocker_legal", "min_blockers",
                 "target_legal"} <= active
 
-    def test_sparse_fields_wait_for_the_curriculum_step(self):
+    def test_sparse_fields_wait_for_the_curriculum(self):
         classes = frozenset(SAMPLING_CLASSES)
-        before = {s.name for s in active_fields(
-            present_classes=classes, step=9_999, curriculum_step=10_000,
-        )}
-        after = {s.name for s in active_fields(
-            present_classes=classes, step=10_000, curriculum_step=10_000,
-        )}
+        before = {s.name for s in active_fields(classes, sparse=False)}
+        after = {s.name for s in active_fields(classes, sparse=True)}
         assert "keywords_gained" not in before
         assert "keywords_gained" in after
         assert before < after
 
     def test_dense_fields_train_from_step_zero(self):
-        active = {s.name for s in active_fields(
-            present_classes=frozenset(SAMPLING_CLASSES), step=0,
-            curriculum_step=10_000,
-        )}
+        active = {s.name for s in active_fields(frozenset(SAMPLING_CLASSES), sparse=False)}
         assert "damage_taken" in active
         assert "zone_outcome" in active
 
@@ -232,12 +222,18 @@ class TestTrainingOnlyHeads:
         assert model.param_key_head is not None
 
     def test_they_are_all_named_for_filtering_at_save_time(self, model):
-        for name in EffectModel.TRAINING_ONLY_HEADS:
+        for name in TRAINING_ONLY_MODULES:
             assert hasattr(model, name)
+
+    def test_every_auxiliary_head_names_modules_the_model_has(self, model):
+        for spec in AUX_HEADS:
+            for name in spec.modules:
+                assert hasattr(model, name), (spec.head, name)
 
     def test_no_shipped_head_is_in_the_filter_list(self):
         shipped = {"per_entity_head", "created_objects_head", "verdict_head"}
-        assert not shipped & set(EffectModel.TRAINING_ONLY_HEADS)
+        assert not shipped & set(TRAINING_ONLY_MODULES)
+        assert {m for spec in SHIPPED_HEADS for m in spec.modules} <= shipped
 
     def test_the_auxiliaries_are_absent_when_unconfigured(self):
         bare = EffectModel(EffectModelConfig(
@@ -882,7 +878,7 @@ class TestGen2Heads:
         from effects.domain.effect_head_layout import VALUE_WIDTH
 
         assert model.value_head(torch.randn(3, _CONFIG.e_dim)).shape == (3, VALUE_WIDTH)
-        assert "value_head" in EffectModel.TRAINING_ONLY_HEADS
+        assert "value_head" in TRAINING_ONLY_MODULES
 
     def test_the_mlm_head_is_sized_from_the_encoders_width(self):
         model = EffectModel(EffectModelConfig(

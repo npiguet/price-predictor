@@ -29,7 +29,7 @@ Whatever the kind, a record acting through a keyword line belongs to that
 keyword's family (FR-048): a ward trigger and a ward resolution both teach ward.
 
 Prior art: none for the classification itself; ``sampling_class`` in
-``train_effect_model`` is the sibling one level up, and the combat case reuses
+``domain/sampling.py`` is the sibling one level up, and the combat case reuses
 gate 2's :class:`KeywordResolver`.
 """
 
@@ -79,14 +79,18 @@ class FamilySentinel(StrEnum):
 KEYWORD_API_TYPE = "Keyword"
 
 
+def _is_keyword_line(line) -> bool:
+    return line.script_api_type == KEYWORD_API_TYPE and bool(line.script_text)
+
+
 def _keyword_family(line) -> str | None:
-    if line is not None and line.script_api_type == KEYWORD_API_TYPE and line.script_text:
+    if line is not None and _is_keyword_line(line):
         return display_name_of(line.script_text)
     return None
 
 
-def static_mode(keys: Iterable[ProvenanceKey], sidecars) -> str | None:
-    """The ``Mode$`` of the static ``keys`` name, through the sidecar.
+def _declared_mode(line) -> str | None:
+    """The mode a static line declares: its keyword family, else ``Mode$``.
 
     A static's ``script_api_type`` is its ``Mode$`` (1,218 of 1,234 static
     lines), but the root segment is read first because the two part company on
@@ -94,13 +98,16 @@ def static_mode(keys: Iterable[ProvenanceKey], sidecars) -> str | None:
     ``CantBlockBy``, say) has no script of its own there, and answers with the
     keyword's display name, which is the family FR-048 gives it anyway.
     """
-    line = sidecars.first_line(keys)
-    if line is None:
-        return None
     keyword = _keyword_family(line)
     if keyword is not None:
         return keyword
     return root_param(line.script_text, "Mode") or line.script_api_type
+
+
+def static_mode(keys: Iterable[ProvenanceKey], sidecars) -> str | None:
+    """The mode of the static ``keys`` name, through the sidecar (:func:`_declared_mode`)."""
+    line = sidecars.first_line(keys)
+    return None if line is None else _declared_mode(line)
 
 
 def candidate_family(candidate: Candidate, sidecars) -> str:
@@ -138,12 +145,10 @@ def legality_modes(record: EffectRecord, sidecars) -> frozenset[str]:
         line = sidecars.first_line(entry.responsible_static)
         if line is None:
             continue
-        keyword = _keyword_family(line)
-        if keyword is not None:
-            modes.add(keyword)
-            continue
-        declared = root_param(line.script_text, "Mode") or line.script_api_type
-        if declared:
+        declared = _declared_mode(line)
+        if _is_keyword_line(line):
+            modes.add(declared)
+        elif declared:
             modes.update(part.strip() for part in declared.split(",") if part.strip())
     return frozenset(modes)
 

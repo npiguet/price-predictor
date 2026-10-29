@@ -58,6 +58,16 @@ _EFFECTFUL = frozenset({
 _STATIC_CHANNELS = _EFFECTFUL | {SamplingClass.CONTINUOUS}
 
 
+#: A signed delta's direction classes, in the head's column order; a target's
+#: sign plus one is its class.
+DIRECTIONS: tuple[str, ...] = ("negative", "zero", "positive")
+#: A signed delta's columns: a logit per direction, then the magnitude's log
+#: rate under the count loss.
+SIGNED_DIRECTIONS = slice(0, len(DIRECTIONS))
+SIGNED_MAGNITUDE = len(DIRECTIONS)
+SIGNED_WIDTH = SIGNED_MAGNITUDE + 1
+
+
 class FieldType(StrEnum):
     BINARY = "binary"
     MULTI_BINARY = "multi_binary"
@@ -94,8 +104,9 @@ class FieldSpec:
     name: str
     type: FieldType
     scope: FieldScope
-    #: Categorical classes / multi-binary members. 1 for the scalar types.
-    arity: int = 1
+    #: A categorical field's classes or a multi-binary field's members, in the
+    #: head's column order; empty for the scalar types.
+    classes: tuple[str, ...] = ()
     group: FieldGroup = FieldGroup.DENSE
     #: Sampling classes whose records carry a target for this field.
     supervised_by: frozenset[SamplingClass] = field(default_factory=lambda: _EFFECTFUL)
@@ -103,6 +114,11 @@ class FieldSpec:
     #: supervising class names no change to the field; every member of a
     #: multi-binary field. None for a field only a written value supervises.
     silent: float | None = None
+
+    @property
+    def arity(self) -> int:
+        """Categorical classes / multi-binary members; 1 for the scalar types."""
+        return len(self.classes) or 1
 
     @property
     def width(self) -> int:
@@ -113,9 +129,7 @@ class FieldSpec:
             case FieldType.MULTI_BINARY | FieldType.CATEGORICAL:
                 return self.arity
             case FieldType.SIGNED_DELTA:
-                # Three direction logits (negative, zero, positive) plus one
-                # nonnegative magnitude under the count loss.
-                return 4
+                return SIGNED_WIDTH
         raise ValueError(f"unhandled field type {self.type}")
 
     def supervised_value(
@@ -171,7 +185,7 @@ def _mana_fields() -> tuple[FieldSpec, ...]:
 PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     # ── permanents and stack entities ──
     FieldSpec("zone_outcome", FieldType.CATEGORICAL, FieldScope.PERMANENT,
-              arity=len(ZONE_OUTCOMES), silent=float(ZONE_OUTCOMES.index("stayed"))),
+              classes=ZONE_OUTCOMES, silent=float(ZONE_OUTCOMES.index("stayed"))),
     # Tapped or untapped only where an event says so: a creature no event
     # mentions is neither.
     FieldSpec("tap_state", FieldType.BINARY, FieldScope.PERMANENT),
@@ -181,29 +195,29 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec("toughness_delta", FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("pt_duration", FieldType.CATEGORICAL, FieldScope.PERMANENT,
-              arity=len(DURATIONS), group=FieldGroup.SPARSE,
+              classes=DURATIONS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS),
     *_counter_fields(),
     FieldSpec("types_gained", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(CARD_TYPES), group=FieldGroup.SPARSE,
+              classes=CARD_TYPES, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("types_lost", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(CARD_TYPES), group=FieldGroup.SPARSE,
+              classes=CARD_TYPES, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("colors_gained", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(COLORS), group=FieldGroup.SPARSE,
+              classes=COLORS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("colors_lost", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(COLORS), group=FieldGroup.SPARSE,
+              classes=COLORS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("type_color_duration", FieldType.CATEGORICAL, FieldScope.PERMANENT,
-              arity=len(DURATIONS), group=FieldGroup.SPARSE,
+              classes=DURATIONS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS),
     FieldSpec("keywords_gained", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(OVERLAY_KEYWORDS), group=FieldGroup.SPARSE,
+              classes=OVERLAY_KEYWORDS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("keywords_lost", FieldType.MULTI_BINARY, FieldScope.PERMANENT,
-              arity=len(OVERLAY_KEYWORDS), group=FieldGroup.SPARSE,
+              classes=OVERLAY_KEYWORDS, group=FieldGroup.SPARSE,
               supervised_by=_STATIC_CHANNELS, silent=0.0),
     FieldSpec("control_change", FieldType.BINARY, FieldScope.PERMANENT,
               group=FieldGroup.SPARSE, silent=0.0),
@@ -215,7 +229,7 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec("cards_discarded", FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
     FieldSpec("cards_milled", FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
     FieldSpec("library_events", FieldType.MULTI_BINARY, FieldScope.PLAYER,
-              arity=len(LIBRARY_EVENTS), silent=0.0),
+              classes=LIBRARY_EVENTS, silent=0.0),
     # Poison is not in FR-077's player group, but the snapshot tracks it and
     # gate 2's infect row has nowhere else to land: infect's whole player-side
     # effect is poison, so without this field that row could never fire.
@@ -270,10 +284,10 @@ CREATED_OBJECTS_WIDTH = CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
 VERDICT_BITS: tuple[str, ...] = ("can_play", "affordable", "has_legal_target")
 VERDICT_WIDTH = len(VERDICT_BITS) + len(COLORS) + 1
 
-#: Value head (FR-058): one output per count or binary target, four per signed
-#: target (the direction-and-magnitude split every signed field uses).
+#: Value head (FR-058): one output per count or binary target, and a signed
+#: target the direction-and-magnitude columns every signed field uses.
 _VALUE_WIDTHS: dict[ValueKind, int] = {
-    ValueKind.COUNT: 1, ValueKind.BINARY: 1, ValueKind.SIGNED: 4,
+    ValueKind.COUNT: 1, ValueKind.BINARY: 1, ValueKind.SIGNED: SIGNED_WIDTH,
 }
 #: ``target -> (start, end)`` into the value head's output.
 VALUE_SLICES: dict[str, tuple[int, int]] = {}
@@ -313,22 +327,22 @@ def per_entity_fields_of_type(*types: FieldType) -> tuple[FieldSpec, ...]:
 
 
 def active_fields(
-    *, present_classes: frozenset[str], step: int, curriculum_step: int,
+    present_classes: frozenset[str], *, sparse: bool,
 ) -> tuple[FieldSpec, ...]:
     """Fields that contribute loss right now.
 
     Two filters, for two different reasons. A field none of the corpus's record
     kinds supervises is dropped because nothing could teach it — that is what
     makes a stage-one corpus with three of the eight classes trainable on the
-    same heads as a full one (FR-085). A sparse field is dropped before
-    ``curriculum_step`` because it fires rarely, and a head that meets it
-    alongside the dense fields from step zero learns to output zero for it and
-    never recovers (FR-082).
+    same heads as a full one (FR-085). A sparse field is dropped until
+    ``sparse`` turns the group on, because it fires rarely, and a head that
+    meets it alongside the dense fields from step zero learns to output zero
+    for it and never recovers (FR-082).
     """
     return tuple(
         spec for spec in PER_ENTITY_FIELDS
         if spec.supervised_by & present_classes
-        and (spec.group is FieldGroup.DENSE or step >= curriculum_step)
+        and (spec.group is FieldGroup.DENSE or sparse)
     )
 
 

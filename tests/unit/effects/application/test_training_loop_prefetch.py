@@ -18,16 +18,16 @@ from pathlib import Path
 import pytest
 import torch
 
+from effects.application import step_preparation
 from effects.application import training_loop as loop_module
-from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     epoch_shards,
 )
 from effects.application.training_loop import TrainingLoop
 from effects.domain.records import CombatPayload, RecordKind
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
+from tests.unit.effects.builders import make_training_loop
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
     make_record,
@@ -130,8 +130,8 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
             lambda self, records, *args, **kwargs: 1.0,
         )
         monkeypatch.setattr(
-            StepPreparer, "_build_tokenizer",
-            lambda self: type("T", (), {"vocab_size": 8})(),
+            step_preparation, "load_tokenizer",
+            lambda *a, **k: type("T", (), {"vocab_size": 8})(),
         )
         # The script-API vocabulary is read off every real sidecar; none here.
         monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
@@ -146,11 +146,9 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
             # The in-process path is the one with a loader thread.
             prefetch_workers=0,
         )
-        return TrainingLoop(
+        return make_training_loop(
             config,
-            split=CorpusSplit(), training_shards=shards, validation_samples=samples,
-            holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
-            rarity={}, corpus_digest="",
+            training_shards=shards, validation_samples=samples,
         ).execute()
 
     drawn = epoch_shards(shards, epoch=1, per_epoch=SHARDS, seed=SEED)

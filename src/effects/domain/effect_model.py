@@ -125,7 +125,8 @@ class EffectModel(nn.Module):
         self.created_objects_head = _mlp(d, d, CREATED_OBJECTS_WIDTH)
         self.verdict_head = _mlp(d, d, VERDICT_WIDTH)
 
-        # ── training-only auxiliaries (FR-063), filtered at save time ──
+        # ── training-only auxiliaries (FR-063), filtered at save time by
+        # ``aux_heads.TRAINING_ONLY_MODULES`` ──
         self.mlm_head = (
             nn.Linear(config.encoder_d_model, config.vocab_size)
             if config.vocab_size else None
@@ -140,11 +141,6 @@ class EffectModel(nn.Module):
         )
         # Amounts and costs the script states, read from e alone (FR-058).
         self.value_head = _mlp(config.e_dim, d, VALUE_WIDTH)
-
-    #: Head names filtered out of the saved artifact (FR-076, FR-059).
-    TRAINING_ONLY_HEADS: tuple[str, ...] = (
-        "mlm_head", "api_type_head", "param_key_head", "value_head",
-    )
 
     def forward(
         self,

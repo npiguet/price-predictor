@@ -37,6 +37,7 @@ from effects.domain.ability_tokenizer import (
     AbilityTokenizer,
 )
 from effects.domain.provenance import SidecarLine
+from effects.infrastructure.torch_device import default_device
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +66,7 @@ class AbilityEncoderRunner:
         withheld_keyword: str | None = None,
         truncations: TruncationLog | None = None,
     ) -> None:
-        self.device = device or torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
+        self.device = device or default_device()
         self.encoder = AbilityEncoder(config).to(self.device)
         self.encoder.load_state_dict(state)
         # eval() turns dropout off, without which a cache would not be

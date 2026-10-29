@@ -42,18 +42,6 @@ _MODEL_CONFIG = EffectModelConfig(
 )
 
 
-class _Cache:
-    """What ``encode-abilities`` wrote for one variant, read back as a consumer reads it."""
-
-    def __init__(self, root, variant: str) -> None:
-        self.root, self.variant = root, variant
-
-    def read(self, script_file: str) -> np.ndarray:
-        path = cache_path_for(script_file, root=self.root, variant=self.variant)
-        with np.load(path) as data:
-            return data[ARRAY_KEY]
-
-
 def _sidecar(script_file: str, n_lines: int = 2) -> ProvenanceSidecar:
     return ProvenanceSidecar(
         card=script_file.rsplit("/", 1)[-1].removesuffix(".txt"),
@@ -127,14 +115,14 @@ class TestRowAlignment:
     def test_a_source_gets_one_row_per_sidecar_line(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = _Cache(config.output_root, "taxonomy")
+        store = AbilityCacheStore(config.output_root, variant="taxonomy")
         assert store.read("cardsfolder/s/serra_angel.txt").shape == (3, E_DIM)
         assert store.read("tokenscripts/soldier.txt").shape == (1, E_DIM)
 
     def test_rows_are_float32(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = _Cache(config.output_root, "taxonomy")
+        store = AbilityCacheStore(config.output_root, variant="taxonomy")
         assert store.read("cardsfolder/s/serra_angel.txt").dtype == np.float32
 
 
@@ -220,14 +208,31 @@ class TestVariantIsolation:
         assert (root / "cardsfolder" / "s" / "serra_angel.taxonomy.npz").exists()
 
 
+class TestReadingTheCache:
+    def test_a_variant_iterates_only_its_own_files(self, corpus, tmp_path):
+        root = tmp_path / "abilities"
+        run(_config(corpus, tmp_path, variant="taxonomy", output_root=root))
+        shipping = root / "cardsfolder" / "s" / "serra_angel.npz"
+        np.savez_compressed(shipping, **{ARRAY_KEY: np.zeros((5, E_DIM))})
+
+        shapes = {
+            path.name: matrix.shape
+            for path, matrix in AbilityCacheStore(root).iter_matrices()
+        }
+        assert shapes == {"serra_angel.npz": (5, E_DIM)}
+
+    def test_a_source_with_no_cache_reads_none(self, tmp_path):
+        assert AbilityCacheStore(tmp_path).read("cardsfolder/a/absent.txt") is None
+
+
 class TestIdempotence:
     def test_a_second_run_produces_the_same_rows(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = _Cache(config.output_root, "taxonomy")
+        store = AbilityCacheStore(config.output_root, variant="taxonomy")
         first = store.read("cardsfolder/s/serra_angel.txt").copy()
         run(config)
-        second = _Cache(config.output_root, "taxonomy").read("cardsfolder/s/serra_angel.txt")
+        second = store.read("cardsfolder/s/serra_angel.txt")
         np.testing.assert_array_equal(first, second)
 
     def test_the_summary_counts_what_it_wrote(self, corpus, tmp_path):
@@ -385,14 +390,14 @@ class TestTheRealEncoder:
         summary = run(trained)
         assert summary.sources == 1
         assert summary.rows == 3
-        store = _Cache(trained.output_root, "full")
+        store = AbilityCacheStore(trained.output_root, variant="full")
         assert store.read("cardsfolder/s/serra_angel.txt").shape == (3, E_DIM)
 
     def test_the_rows_are_not_all_the_same(self, trained):
         """A cache of one repeated vector would pass every shape check and
         carry no information."""
         run(trained)
-        rows = _Cache(trained.output_root, "full").read(
+        rows = AbilityCacheStore(trained.output_root, variant="full").read(
             "cardsfolder/s/serra_angel.txt"
         )
         assert not np.allclose(rows[0], rows[1]) or not np.allclose(
@@ -404,9 +409,10 @@ class TestTheRealEncoder:
         built without eval() would differ run to run and every consumer reads
         the cache rather than the model."""
         run(trained)
-        first = _Cache(trained.output_root, "full").read("cardsfolder/s/serra_angel.txt").copy()
+        store = AbilityCacheStore(trained.output_root)
+        first = store.read("cardsfolder/s/serra_angel.txt").copy()
         run(trained)
-        second = _Cache(trained.output_root, "full").read("cardsfolder/s/serra_angel.txt")
+        second = store.read("cardsfolder/s/serra_angel.txt")
         np.testing.assert_array_equal(first, second)
 
     def test_a_line_past_the_window_is_reported_by_its_key(self, trained, caplog):

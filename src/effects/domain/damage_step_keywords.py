@@ -279,49 +279,12 @@ def _strikes_first_because_of(keyword: str) -> Applies:
     return strikes_first
 
 
-def _first_hit_lands_on_a_creature(keyword: str) -> Applies:
-    """The carrier's first-step hit lands on the one creature it is fighting.
-
-    One creature only: with several, Forge's own damage assignment decides who
-    takes what, and the opponent effect is read at the first of them.
-    """
+def _strikes_first_and(keyword: str, holds: Applies) -> Applies:
+    """The carrier strikes first because of ``keyword``, and ``holds`` of its hit."""
     strikes_first = _strikes_first_because_of(keyword)
 
     def applies(participant: CombatParticipant, keywords_of: KeywordsOf) -> bool:
-        return (
-            strikes_first(participant, keywords_of)
-            and _lone_opponent(participant) is not None
-        )
-
-    return applies
-
-
-def _first_hit_kills(keyword: str) -> Applies:
-    """...and is lethal to it, by remaining toughness or by deathtouch.
-
-    A hit that does not kill still marks damage, which the damage effect reads,
-    but only a lethal one moves the opponent's death in this step.
-    """
-    strikes_first = _strikes_first_because_of(keyword)
-
-    def applies(participant: CombatParticipant, keywords_of: KeywordsOf) -> bool:
-        return (
-            strikes_first(participant, keywords_of)
-            and _kills_outright(participant, keywords_of)
-        )
-
-    return applies
-
-
-def _first_hit_lands_on_the_defending_player(keyword: str) -> Applies:
-    """An unblocked carrier's first-step hit lands on the defending player."""
-    strikes_first = _strikes_first_because_of(keyword)
-
-    def applies(participant: CombatParticipant, keywords_of: KeywordsOf) -> bool:
-        return (
-            strikes_first(participant, keywords_of)
-            and _is_unblocked_attacker(participant)
-        )
+        return strikes_first(participant, keywords_of) and holds(participant, keywords_of)
 
     return applies
 
@@ -484,20 +447,28 @@ def _first_strike_step_effects(keyword: str) -> tuple[KeywordEffect, ...]:
     the snapshot shows rather than the payload.
     """
     return (
-        # Its hit lands on the creature it is fighting.
+        # Its hit lands on the one creature it is fighting. One creature
+        # only: with several, Forge's own damage assignment decides who takes
+        # what, and the opponent effect is read at the first of them.
         KeywordEffect(
             "damage_taken", Subject.OPPONENT, direction=1,
-            applies=_first_hit_lands_on_a_creature(keyword),
+            applies=_strikes_first_and(
+                keyword, lambda participant, _: _lone_opponent(participant) is not None,
+            ),
         ),
-        # A lethal one kills it in this step.
+        # A lethal one — by remaining toughness or by deathtouch — kills it in
+        # this step. A hit that does not kill still marks damage, which the
+        # damage effect reads, but only a lethal one moves the death.
         KeywordEffect(
             "zone_outcome", Subject.OPPONENT, direction=1, category="died",
-            applies=_first_hit_kills(keyword),
+            applies=_strikes_first_and(keyword, _kills_outright),
         ),
         # Unblocked, the defending player loses the life in this step.
         KeywordEffect(
             "life_delta", Subject.DEFENDING_PLAYER, direction=-1,
-            applies=_first_hit_lands_on_the_defending_player(keyword),
+            applies=_strikes_first_and(
+                keyword, lambda participant, _: _is_unblocked_attacker(participant),
+            ),
         ),
     )
 

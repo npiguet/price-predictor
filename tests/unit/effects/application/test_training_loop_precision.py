@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import torch
 
+from effects.application import step_preparation
 from effects.application import training_loop as loop_module
 from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
@@ -21,8 +22,8 @@ from effects.application.training_loop import StepLoss, TrainingLoop, autocast_e
 from effects.domain.effect_head_layout import EntityFieldTargets
 from effects.domain.effect_losses import LossParts
 from effects.domain.records import CombatPayload, RecordKind
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
+from tests.unit.effects.builders import make_training_loop
 from tests.unit.effects.domain.conftest import (  # noqa: F401
     ability_key,
     make_record,
@@ -85,12 +86,7 @@ def _bare_loop(monkeypatch) -> TrainingLoop:
     would otherwise move this test's tensors onto a real GPU by accident.
     """
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    return TrainingLoop(
-        TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
-    )
+    return make_training_loop(TrainEffectModelConfig(corpus="unused"))
 
 
 def _run_device_loss(monkeypatch, loop, *, autocast: bool):
@@ -183,8 +179,8 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
     monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
     monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
     monkeypatch.setattr(
-        StepPreparer, "_build_tokenizer",
-        lambda self: type("T", (), {"vocab_size": 8})(),
+        step_preparation, "load_tokenizer",
+        lambda *a, **k: type("T", (), {"vocab_size": 8})(),
     )
     # The script-API vocabulary is read off every real sidecar; none here.
     monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
@@ -237,11 +233,7 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
         # real ones.
         prefetch_workers=0,
     )
-    code = TrainingLoop(
-        config, split=CorpusSplit(), training_shards=[shard], validation_samples=samples,
-        holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
-        rarity={}, corpus_digest="",
-    ).execute()
+    code = make_training_loop(config, training_shards=[shard], validation_samples=samples).execute()
     assert code == 0
     return memory_fraction_calls, empty_cache_calls
 

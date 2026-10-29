@@ -19,6 +19,7 @@ from effects.domain.effect_head_input import (
     COMBAT_SUBSTEPS,
     COUNTER_TYPES,
     EARLIER_LAYOUT,
+    INPUT_LAYOUT,
     OVERLAY_KEYWORDS,
     OVERLAY_KEYWORDS_GEN2,
     PHASES,
@@ -847,7 +848,7 @@ class TestGen2Layout:
             priority="P0", stack_size=0,
         ))
         record = _record(state=state)
-        gen2 = self._phase_slot(record, layout="gen-2")
+        gen2 = self._phase_slot(record, layout=INPUT_LAYOUT)
         earlier = self._phase_slot(record, layout=EARLIER_LAYOUT)
         assert gen2[PHASES.index("declare_attackers")] == 1.0
         assert earlier[-1] == 1.0  # the earlier layout's "other" slot
@@ -861,16 +862,16 @@ class TestGen2Layout:
                 turn=3, phase=forge_name, active="P0", priority="P0",
                 stack_size=0,
             ))
-            assert self._phase_slot(_record(state=state), "gen-2")[-1] == 0.0
+            assert self._phase_slot(_record(state=state), INPUT_LAYOUT)[-1] == 0.0
 
     def test_plus_one_counters_read_as_p1p1(self):
         entity = _entity("E1", counters={"+1/+1": 2})
         record = _record(state=_snapshot(entities=(entity,)))
-        gen2 = card_features(entity, record, layout="gen-2")
+        gen2 = card_features(entity, record, layout=INPUT_LAYOUT)
         earlier = card_features(entity, record, layout=EARLIER_LAYOUT)
         plain = _entity("E1", counters={"P1P1": 2})
         reference = card_features(
-            plain, _record(state=_snapshot(entities=(plain,))), layout="gen-2",
+            plain, _record(state=_snapshot(entities=(plain,))), layout=INPUT_LAYOUT,
         )
         assert gen2 == reference
         assert earlier != card_features(
@@ -883,7 +884,7 @@ class TestGen2Layout:
             keywords=("protection_from_red", "landwalk"),
         ))
         record = _record(state=_snapshot(entities=(entity,)))
-        features = card_features(entity, record, layout="gen-2")
+        features = card_features(entity, record, layout=INPUT_LAYOUT)
         tail = 2 + 3 + 6 + 3 + 2 + 3 * THERMOMETER_STEPS
         end = len(features) - tail
         block = features[end - (len(OVERLAY_KEYWORDS_GEN2) + 1):end]
@@ -897,7 +898,7 @@ class TestGen2Layout:
             damage=2,
         )
         record = _record(state=_snapshot(entities=(entity,)))
-        features = card_features(entity, record, layout="gen-2")
+        features = card_features(entity, record, layout=INPUT_LAYOUT)
         steps = THERMOMETER_STEPS
         power, toughness, remaining = (
             features[-3 * steps:-2 * steps],
@@ -911,22 +912,22 @@ class TestGen2Layout:
     def test_an_entity_without_power_and_toughness_carries_zero_codes(self):
         entity = _entity("E1", types=("Enchantment",), pt=None)
         record = _record(state=_snapshot(entities=(entity,)))
-        features = card_features(entity, record, layout="gen-2")
+        features = card_features(entity, record, layout=INPUT_LAYOUT)
         assert features[-3 * THERMOMETER_STEPS:] == (0.0,) * (3 * THERMOMETER_STEPS)
 
     def test_the_player_ends_with_a_life_thermometer(self):
         record = _record()
-        features = player_features(record.state.players[1], record, layout="gen-2")
+        features = player_features(record.state.players[1], record, layout=INPUT_LAYOUT)
         assert sum(features[-THERMOMETER_STEPS:]) == 8  # P1 is at 8 life
 
     def test_the_earlier_layout_is_the_gen2_layout_without_its_additions(self):
         record = _record()
         entity = record.state.entities[0]
-        assert len(card_features(entity, record, layout="gen-2")) == len(
+        assert len(card_features(entity, record, layout=INPUT_LAYOUT)) == len(
             card_features(entity, record, layout=EARLIER_LAYOUT),
         ) + 3 * THERMOMETER_STEPS + 1
         player = record.state.players[0]
-        assert len(player_features(player, record, layout="gen-2")) == len(
+        assert len(player_features(player, record, layout=INPUT_LAYOUT)) == len(
             player_features(player, record, layout=EARLIER_LAYOUT),
         ) + THERMOMETER_STEPS
 
@@ -936,5 +937,5 @@ class TestGen2Layout:
             PlayerState(id="P1", life=8, hand=1, library=30, graveyard=4),
         )
         record = _record(state=_snapshot(players=players))
-        features = player_features(players[0], record, layout="gen-2")
+        features = player_features(players[0], record, layout=INPUT_LAYOUT)
         assert sum(features[-THERMOMETER_STEPS:]) == 33
