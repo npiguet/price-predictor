@@ -39,8 +39,10 @@ from effects.domain.effect_head_layout import (
     FieldSpec,
     FieldType,
     active_fields,
+    per_entity_fields_of_type,
 )
 from effects.domain.effect_losses import (
+    LossParts,
     api_loss,
     created_objects_loss,
     field_loss,
@@ -51,6 +53,7 @@ from effects.domain.effect_losses import (
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.loss_floor import (
     EntityTargetBatch,
+    PartsMean,
     constant_predictor_floor,
     constant_predictor_outputs,
 )
@@ -267,23 +270,62 @@ class TestLosses:
             outputs, torch.ones(2, 3), targets, entity_mask, fields=fields,
             report_parts=True,
         )[1]
-        assert "damage_taken" not in off
-        assert "damage_taken" in on
+        assert "damage_taken" not in off.names
+        assert "damage_taken" in on.names
 
     def test_the_gate_trains_on_every_entity_including_unaffected_ones(self):
         _, parts = per_entity_loss(
             self._outputs(), torch.zeros(2, 3), {}, torch.ones(2, 3), fields=(),
             report_parts=True,
         )
-        assert parts["gate"] > 0.0
+        assert parts.as_dict()["gate"] > 0.0
 
     def test_the_decomposition_is_off_by_default(self):
-        """Each term read back is a device synchronization, and the training
-        loop discards them — so the caller has to ask."""
+        """The training loop discards the terms on every step but the one that
+        logs them — so the caller has to ask."""
         _, parts = per_entity_loss(
             self._outputs(), torch.zeros(2, 3), {}, torch.ones(2, 3), fields=(),
         )
-        assert parts == {}
+        assert not parts
+        assert parts.as_dict() == {}
+
+    def test_the_parts_are_each_term_read_back_on_its_own(self):
+        """Stacked on the device and read once, each term is still the float a
+        read of that term alone gives, divided by the record count — exactly,
+        since the validation means sum these values over batches."""
+        torch.manual_seed(4)
+        outputs = torch.randn(2, 3, PER_ENTITY_WIDTH)
+        fields = tuple(
+            FIELDS_BY_NAME[name]
+            for name in ("tap_state", "damage_taken", "life_delta", "zone_outcome")
+        ) + per_entity_fields_of_type(FieldType.MULTI_BINARY)[:1]
+        values = {
+            spec.name: (
+                torch.randint(0, 2, (2, 3, spec.arity)).float()
+                if spec.type is FieldType.MULTI_BINARY
+                else torch.randint(0, spec.arity, (2, 3)).float()
+                if spec.type is FieldType.CATEGORICAL
+                else torch.randint(-3, 5, (2, 3)).float()
+            )
+            for spec in fields
+        }
+        _, parts = per_entity_loss(
+            outputs, torch.ones(2, 3), EntityFieldTargets.everywhere(values),
+            torch.ones(2, 3), fields=fields, report_parts=True,
+        )
+
+        flat = outputs.reshape(6, PER_ENTITY_WIDTH)
+        expected = {"gate": float(functional.binary_cross_entropy_with_logits(
+            flat[:, GATE_INDEX], torch.ones(6), reduction="sum",
+        )) / 2}
+        for spec in fields:
+            start, end = FIELD_SLICES[spec.name]
+            target = values[spec.name]
+            expected[spec.name] = float(field_loss(
+                spec, flat[:, start:end], target.reshape(6, *target.shape[2:]),
+            )) / 2
+        assert parts.names == ("gate", *(spec.name for spec in fields))
+        assert parts.as_dict() == expected
 
     def test_the_total_is_the_same_either_way(self):
         """Reporting must not change what is optimized."""
@@ -326,10 +368,11 @@ class TestLosses:
         outputs = self._outputs()
         targets = EntityFieldTargets.everywhere({"damage_taken": torch.ones(2, 3)})
         fields = (FIELDS_BY_NAME["damage_taken"],)
-        total, parts = per_entity_loss(
+        total, reported = per_entity_loss(
             outputs, torch.ones(2, 3), targets, torch.ones(2, 3),
             fields=fields, report_parts=True,
         )
+        parts = reported.as_dict()
         assert set(parts) == {"gate", "damage_taken"}
         assert sum(parts.values()) == pytest.approx(float(total), abs=1e-4)
 
@@ -338,12 +381,12 @@ class TestLosses:
         full = per_entity_loss(
             outputs, torch.ones(2, 3), {}, torch.ones(2, 3), fields=(),
             report_parts=True,
-        )[1]["gate"]
+        )[1].as_dict()["gate"]
         masked = per_entity_loss(
             outputs, torch.ones(2, 3), {},
             torch.tensor([[1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]), fields=(),
             report_parts=True,
-        )[1]["gate"]
+        )[1].as_dict()["gate"]
         assert masked < full
 
     def test_a_count_field_uses_a_poisson_loss(self):
@@ -579,10 +622,11 @@ class TestConstantPredictorFloor:
 
         floor = constant_predictor_floor([batch], fields=fields)
         constant = constant_predictor_outputs([batch], fields=fields)
-        _, parts = per_entity_loss(
+        _, reported = per_entity_loss(
             constant.expand(2, 3, PER_ENTITY_WIDTH), batch.gate, batch.fields,
             batch.mask, fields=fields, report_parts=True,
         )
+        parts = reported.as_dict()
 
         assert set(parts) == set(floor) == {"gate", *names}
         for name, value in parts.items():
@@ -604,7 +648,7 @@ class TestConstantPredictorFloor:
             report_parts=True,
         )
 
-        assert 1 - parts["tap_state"] / floor["tap_state"] > 0.99
+        assert 1 - parts.as_dict()["tap_state"] / floor["tap_state"] > 0.99
 
     def test_the_floor_reads_the_gate_over_the_entities_the_mask_keeps(self):
         """A padded entity is not a base rate: it is not an entity at all.
@@ -622,6 +666,28 @@ class TestConstantPredictorFloor:
         floor = constant_predictor_floor([batch], fields=())
 
         assert floor["gate"] == pytest.approx(4 * math.log(2) / 2, abs=1e-5)
+
+
+class TestPartsMean:
+    def test_each_field_is_averaged_over_the_batches_that_carried_it(self):
+        """Summed on the device in float64 and read once, the means are the
+        ones a float read of every part and a Python sum give."""
+        batches = [
+            LossParts(("gate", "tap_state"), torch.tensor([0.1, 0.7], dtype=torch.float64)),
+            LossParts(("gate",), torch.tensor([0.3], dtype=torch.float64)),
+            LossParts(),
+            LossParts(("gate", "tap_state"), torch.tensor([0.2, 0.9], dtype=torch.float64)),
+        ]
+        means = PartsMean()
+        for parts in batches:
+            means.add(parts)
+
+        assert means.means() == {
+            "gate": (0.1 + 0.3 + 0.2) / 3, "tap_state": (0.7 + 0.9) / 2,
+        }
+
+    def test_nothing_added_reads_as_no_fields(self):
+        assert PartsMean().means() == {}
 
 
 class TestDegenerateFields:

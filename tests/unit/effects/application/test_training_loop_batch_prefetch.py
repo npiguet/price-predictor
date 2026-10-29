@@ -41,6 +41,7 @@ from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import SlotKind, feature_widths
+from effects.domain.effect_losses import LossParts
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.sampling import sampling_class
 from effects.domain.split import CorpusSplit
@@ -273,7 +274,7 @@ def _stubbed(monkeypatch, directory, records, *, failing_at: int | None = None):
         time.sleep(PAUSE)
         mark("train", prepared, "finish")
         loss = model.p.sum()
-        return StepLoss(total=loss, shipped=loss, parts={}, terms={})
+        return StepLoss(total=loss, shipped=loss, parts=LossParts(), terms={})
 
     monkeypatch.setattr(StepPreparer, "prepare_step", prepare)
     monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)

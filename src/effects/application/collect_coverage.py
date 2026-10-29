@@ -38,7 +38,7 @@ from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from functools import partial
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -61,6 +61,7 @@ from effects.domain.coverage import (
 )
 
 if TYPE_CHECKING:
+    from effects.domain.provenance import ProvenanceKey
     from effects.infrastructure.collector_connector import CollectorSupervisor
 
 logger = logging.getLogger(__name__)
@@ -381,24 +382,13 @@ def build_coverage_units(
     """Every deckable card, minus the holdout.
 
     Takes the already-loaded ``name -> script`` mapping rather than the folder,
-    because ``run`` needs the same mapping to read each card's converted text
-    and ``load_card_files`` is a full rglob plus a read of some 33,000 files.
+    because ``run`` needs the same read for each card's converted text, and
+    that read is a full rglob plus a read of some 33,000 files.
     """
     return {
         name: CardCoverage(name=name)
         for name in card_files
         if name not in held_out
-    }
-
-
-def read_converted_texts(
-    cards_folder: Path, card_files: Mapping[str, str],
-) -> dict[str, str]:
-    """``name -> converted text`` for every card whose file exists."""
-    return {
-        name: (cards_folder.parent / script).read_text(encoding="utf-8")
-        for name, script in card_files.items()
-        if (cards_folder.parent / script).exists()
     }
 
 
@@ -551,13 +541,16 @@ def run(config: CollectCoverageConfig) -> int:
     held_out = load_exclusions(
         split_from=config.split_from, exclude_cards=config.exclude_cards,
     )
-    from effects.infrastructure.card_sources import load_card_files
+    from effects.infrastructure.card_sources import load_converted_cards
 
-    card_files = load_card_files(cards_folder)
-    texts = read_converted_texts(cards_folder, card_files)
+    converted = load_converted_cards(cards_folder)
+    texts = {name: card.text for name, card in converted.items()}
     non_deck = non_deck_names(texts)
     coverage = build_coverage_units(
-        {name: script for name, script in card_files.items() if name not in non_deck},
+        {
+            name: card.script_file for name, card in converted.items()
+            if name not in non_deck
+        },
         held_out,
     )
     if not coverage:
@@ -643,29 +636,53 @@ def count_text_shard(
     """``held-out text -> the game ids it acted in``, over one shard.
 
     A text acts in a record when the record's acting line resolves to it.
-    Top-level so a process pool can pickle it; each process builds its own
-    sidecar cache, because one does not pickle.
+    Top-level so a process pool can pickle it; each process resolves keys
+    through its own :func:`_script_texts`, because a sidecar cache does not
+    pickle.
     """
-    from effects.domain.text_holdout import normalize_script_text
     from effects.infrastructure.record_io import read_shard
-    from effects.infrastructure.sidecar_io import SidecarCache
 
-    sidecars = SidecarCache({tree: Path(root) for tree, root in roots.items()})
-    text_by_key: dict = {}
+    script_texts = _script_texts(tuple(sorted(roots.items())))
     games: dict[str, set[str]] = defaultdict(set)
     for record in read_shard(shard):
         for key in record.ability or ():
-            if key not in text_by_key:
-                line = sidecars.line_or_none(key)
-                text = (
-                    normalize_script_text(line.script_text)
-                    if line is not None and line.script_text else None
-                )
-                text_by_key[key] = text if text in texts else None
-            text = text_by_key[key]
-            if text is not None:
+            text = script_texts.of(key)
+            if text in texts:
                 games[text].add(record.game_id)
     return dict(games)
+
+
+class _ScriptTexts:
+    """Each provenance key's normalized script text, resolved once per key."""
+
+    def __init__(self, roots: tuple[tuple[str, str], ...]) -> None:
+        from effects.infrastructure.sidecar_io import SidecarCache
+
+        self._sidecars = SidecarCache({tree: Path(root) for tree, root in roots})
+        self._by_key: dict[ProvenanceKey, str | None] = {}
+
+    def of(self, key: ProvenanceKey) -> str | None:
+        from effects.domain.text_holdout import normalize_script_text
+
+        if key not in self._by_key:
+            line = self._sidecars.line_or_none(key)
+            self._by_key[key] = (
+                normalize_script_text(line.script_text)
+                if line is not None and line.script_text else None
+            )
+        return self._by_key[key]
+
+
+@lru_cache(maxsize=1)
+def _script_texts(roots: tuple[tuple[str, str], ...]) -> _ScriptTexts:
+    """The process's resolver for ``roots``, kept across the shards it counts.
+
+    The shards of a corpus name largely the same cards, so a resolver per shard
+    re-read their sidecars once per shard. One is kept, enough for a run's
+    single set of roots, so a process does not also hold the sidecars of roots
+    it counted under before.
+    """
+    return _ScriptTexts(roots)
 
 
 class TextCoverageCounter(_ShardCounter):
@@ -733,8 +750,8 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
 
     from effects.domain.card_names import fold_card_name
     from effects.infrastructure.card_sources import (
-        load_card_files,
         load_card_texts,
+        load_converted_cards,
     )
     from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 
@@ -743,14 +760,15 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         logger.error("No converted cards under %s.", cards_folder)
         return 1
     listed = read_name_list(config.only_cards)
-    card_files = load_card_files(cards_folder)
+    converted = load_converted_cards(cards_folder)
+    card_files = {name: card.script_file for name, card in converted.items()}
     roots = sidecar_roots(config.cards_folders)
     texts_by_card = load_card_texts(card_files, SidecarCache(roots))
     listed_files = {
         name: script for name, script in card_files.items()
         if fold_card_name(name) in listed
     }
-    texts = read_converted_texts(cards_folder, listed_files)
+    texts = {name: converted[name].text for name in listed_files}
     # Which texts are held out is decided over every listed card, non-deck
     # ones included: left out of ``listed``, they would read as unlisted
     # carriers and take the texts they share out of the round. Only then do

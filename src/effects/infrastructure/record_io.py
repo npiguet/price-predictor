@@ -40,9 +40,15 @@ records that cannot be recollected.
 
 from __future__ import annotations
 
+import gzip
 import json
 import logging
+import math
+import random
 import re
+import shutil
+import zlib
+from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -736,8 +742,6 @@ def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
     written in a single pass by a process that either finishes or leaves
     nothing behind. ``read_shard`` reads both shapes.
     """
-    import gzip
-
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
@@ -748,9 +752,11 @@ def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
     return written
 
 
-#: How many bucket files one pass over the parts holds open. A stratum with
-#: more output shards than this is dealt over several passes.
-_OPEN_BUCKETS = 256
+#: How many group files the first deal holds open. Every output shard's lines
+#: pass through the group its index falls in modulo this, so the parts are read
+#: once however many shards a stratum has, without a file open per shard --
+#: a large stratum has thousands, past what one process may hold open.
+_GROUPS = 256
 
 
 def repack_shards(
@@ -772,38 +778,23 @@ def repack_shards(
     with their game to one shard, through it.
 
     Streamed, since a training stratum does not fit in memory: one pass deals
-    the lines into compressed bucket files beside ``out_dir`` (several
-    passes when there are more buckets than :data:`_OPEN_BUCKETS`), then each
-    bucket, which is one shard, is read, shuffled and written. Empty buckets
-    write nothing. ``records`` is the parts' record count when the caller
-    already knows it; otherwise the parts are counted first.
+    the lines into at most :data:`_GROUPS` compressed group files beside
+    ``out_dir``, each holding the shards whose index falls in it, then each
+    group is read, split into its shards, and every shard shuffled and
+    written -- so every line is read twice whatever the shard count. Empty
+    shards write nothing. ``records`` is the parts' record count when the
+    caller already knows it; otherwise the parts are counted first.
 
     ``shard_records <= 0`` writes one shard per part, unshuffled, which is
     what the write pass did before repacking existed. Parts are not deleted.
     """
-    import gzip
-    import math
-    import random
-    import shutil
-
     parts = [Path(p) for p in parts]
     if not parts:
         return []
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    written: list[Path] = []
-
-    def next_path() -> Path:
-        path = out_dir / f"{prefix}-{len(written) + 1:05d}.jsonl.gz"
-        written.append(path)
-        return path
-
     if shard_records <= 0:
-        for part in parts:
-            with gzip.open(next_path(), "wt", encoding="utf-8") as handle:
-                for line in iter_shard_lines(part):
-                    handle.write(line)
-        return written
+        return _copy_parts_unshuffled(parts, out_dir, prefix)
 
     if records is None:
         records = sum(1 for part in parts for _ in iter_shard_lines(part))
@@ -812,37 +803,83 @@ def repack_shards(
     shutil.rmtree(scratch, ignore_errors=True)
     scratch.mkdir(parents=True)
     try:
-        for low in range(0, count, _OPEN_BUCKETS):
-            high = min(count, low + _OPEN_BUCKETS)
-            handles = {
-                index: gzip.open(
-                    scratch / f"{index:05d}.gz", "wt", encoding="utf-8", compresslevel=1,
-                )
-                for index in range(low, high)
-            }
-            try:
-                for part in parts:
-                    for line in iter_shard_lines(part):
-                        if not line.strip():
-                            continue
-                        index = record_hash(_game_of_line(line), seed=seed) % count
-                        handle = handles.get(index)
-                        if handle is not None:
-                            handle.write(line)
-            finally:
-                for handle in handles.values():
-                    handle.close()
-        for index in range(count):
-            with gzip.open(scratch / f"{index:05d}.gz", "rt", encoding="utf-8") as handle:
-                lines = handle.readlines()
-            if not lines:
-                continue
-            random.Random(f"{seed}:{index}").shuffle(lines)
-            with gzip.open(next_path(), "wt", encoding="utf-8") as handle:
-                handle.writelines(lines)
+        filled = _deal_into_buckets(parts, scratch, seed=seed, count=count)
+        # Numbered in index order, which is not the order the groups write
+        # them in, so the names are fixed before any shard is written.
+        names = {
+            index: out_dir / f"{prefix}-{number:05d}.jsonl.gz"
+            for number, index in enumerate(sorted(filled), start=1)
+        }
+        _write_shuffled_buckets(scratch, names, seed=seed, count=count)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+    return list(names.values())
+
+
+def _copy_parts_unshuffled(parts: list[Path], out_dir: Path, prefix: str) -> list[Path]:
+    written = []
+    for number, part in enumerate(parts, start=1):
+        path = out_dir / f"{prefix}-{number:05d}.jsonl.gz"
+        with gzip.open(path, "wt", encoding="utf-8") as handle:
+            for line in iter_shard_lines(part):
+                handle.write(line)
+        written.append(path)
     return written
+
+
+def _bucket_of(line: str, *, seed: int, count: int) -> int:
+    """The index of the output shard a line's game is dealt to."""
+    return record_hash(_game_of_line(line), seed=seed) % count
+
+
+def _group_path(scratch: Path, group: int) -> Path:
+    return scratch / f"{group:05d}.gz"
+
+
+def _deal_into_buckets(
+    parts: list[Path], scratch: Path, *, seed: int, count: int,
+) -> set[int]:
+    """Deal every line into the group of its shard's index; return the indices.
+
+    A group keeps its lines in the parts' order, so each shard's lines reach
+    its shuffle in that order whichever group carried them.
+    """
+    groups = min(count, _GROUPS)
+    filled: set[int] = set()
+    handles = [
+        gzip.open(_group_path(scratch, group), "wt", encoding="utf-8", compresslevel=1)
+        for group in range(groups)
+    ]
+    try:
+        for part in parts:
+            for line in iter_shard_lines(part):
+                if not line.strip():
+                    continue
+                index = _bucket_of(line, seed=seed, count=count)
+                filled.add(index)
+                handles[index % groups].write(line)
+    finally:
+        for handle in handles:
+            handle.close()
+    return filled
+
+
+def _write_shuffled_buckets(
+    scratch: Path, names: dict[int, Path], *, seed: int, count: int,
+) -> None:
+    """Split each group into its shards, shuffle each under ``seed``, write it.
+
+    A group is held whole, which is about ``count / _GROUPS`` shards' lines.
+    """
+    for group in range(min(count, _GROUPS)):
+        buckets: dict[int, list[str]] = defaultdict(list)
+        with gzip.open(_group_path(scratch, group), "rt", encoding="utf-8") as handle:
+            for line in handle:
+                buckets[_bucket_of(line, seed=seed, count=count)].append(line)
+        for index, lines in buckets.items():
+            random.Random(f"{seed}:{index}").shuffle(lines)
+            with gzip.open(names[index], "wt", encoding="utf-8") as handle:
+                handle.writelines(lines)
 
 
 def _game_of_line(line: str) -> str:
@@ -885,9 +922,6 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
     if path.suffix != ".gz":
         yield from iter_complete_lines(path)
         return
-
-    import gzip
-    import zlib
 
     try:
         with gzip.open(path, "rt", encoding="utf-8") as handle:
@@ -1025,13 +1059,17 @@ def count_records(directory: Path, *, ceiling: int = 0) -> int:
     """
     total = 0
     for shard in iter_shards(directory):
-        if shard.suffix == ".gz":
-            total += sum(1 for line in iter_shard_lines(shard) if line.strip())
-        else:
-            total += count_complete_lines(shard)
+        total += count_shard_records(shard)
         if ceiling and total >= ceiling:
             return ceiling
     return total
+
+
+def count_shard_records(shard: Path) -> int:
+    """Complete records in one shard, counted as :func:`count_records` does."""
+    if shard.suffix == ".gz":
+        return sum(1 for line in iter_shard_lines(shard) if line.strip())
+    return count_complete_lines(shard)
 
 
 # ── shard generation (FR-033) ───────────────────────────────────────────

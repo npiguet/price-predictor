@@ -15,6 +15,8 @@ of number on every head.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn.functional as functional
 
@@ -35,6 +37,31 @@ from effects.domain.effect_head_layout import (
 )
 from effects.domain.state_snapshot import COLORS
 from effects.domain.value_targets import VALUE_TARGETS, ValueKind
+
+
+@dataclass(frozen=True, slots=True)
+class LossParts:
+    """The per-entity loss by term, still on the device: names beside one tensor.
+
+    ``values`` is float64, each term per record like the total. One stacked
+    tensor rather than a float per term because reading a device value back
+    is a synchronization: with forty-odd active fields a dict of floats was
+    forty-odd stalls per batch, where one read serves them all. Float64 so the
+    values read back are the ones ``float()`` read term by term before, and a
+    caller summing them over batches sums exactly what it summed then.
+    """
+
+    names: tuple[str, ...] = ()
+    values: torch.Tensor | None = None
+
+    def __bool__(self) -> bool:
+        return bool(self.names)
+
+    def as_dict(self) -> dict[str, float]:
+        """The terms as floats by name: one read for all of them."""
+        if self.values is None:
+            return {}
+        return dict(zip(self.names, self.values.tolist()))
 
 
 def per_row(total: torch.Tensor, rows: int) -> torch.Tensor:
@@ -130,7 +157,7 @@ def per_entity_loss(
     *,
     fields: tuple[FieldSpec, ...],
     report_parts: bool = False,
-) -> tuple[torch.Tensor, dict[str, float]]:
+) -> tuple[torch.Tensor, LossParts]:
     """The per-entity head's loss, normalized per record over entity count.
 
     Args:
@@ -140,12 +167,12 @@ def per_entity_loss(
             each is present.
         entity_mask: ``(batch, entities)``, 1 for a real entity.
         fields: the fields active at this step, from :func:`active_fields`.
-        report_parts: read each term back as a Python float for logging. Off by
-            default: every read is a device synchronization, and with fifteen
-            active fields that is fifteen stalls on a path the training loop
-            walks once per batch and whose result it discards. Each reported
-            term is divided by the same record count the total is, so the
-            breakdown a log line prints sums to the loss printed beside it.
+        report_parts: return each term as well, stacked on the device
+            (:class:`LossParts`). Off by default: the training loop walks this
+            once per batch and keeps the terms only on the step whose line
+            prints them. Each reported term is divided by the same record
+            count the total is, so the breakdown a log line prints sums to the
+            loss printed beside it.
 
     The gate trains on every entity — players included, since the head is mapped
     over ``[PLAYER]`` outputs too. A conditional field trains only where the
@@ -158,7 +185,8 @@ def per_entity_loss(
     from outweighing a two-permanent one; each record is one observation of an
     ability, whatever the board size.
     """
-    parts: dict[str, float] = {}
+    names: list[str] = []
+    terms: list[torch.Tensor] = []
     device = outputs.device
     # The rows are picked on the host, where the masks were built, and gathered
     # by index: a device mask tested or indexed by stalls the step until the GPU
@@ -175,7 +203,8 @@ def per_entity_loss(
         reduction="sum",
     )
     if report_parts:
-        parts["gate"] = float(gate.detach())
+        names.append("gate")
+        terms.append(gate.detach())
     total = gate
 
     for spec in fields:
@@ -196,15 +225,20 @@ def per_entity_loss(
             ).to(device, non_blocking=True),
         )
         if report_parts:
-            parts[spec.name] = float(loss.detach())
+            names.append(spec.name)
+            terms.append(loss.detach())
         total = total + loss
 
     records = int(outputs.shape[0])
     # The parts were summed over the batch like the total; dividing them by the
     # same record count is what makes the printed breakdown add up to the
     # printed loss rather than to `records` times it.
+    parts = LossParts()
     if report_parts:
-        parts = {name: value / max(records, 1) for name, value in parts.items()}
+        parts = LossParts(
+            tuple(names),
+            torch.stack([term.double() for term in terms]) / max(records, 1),
+        )
     return per_row(total, records), parts
 
 

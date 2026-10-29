@@ -21,6 +21,7 @@ from effects.application.surface_batching import EncodedBatch, PreparedBatch
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_log import format_shares
 from effects.application.training_loop import StepLoss, TrainingLoop
+from effects.domain.effect_losses import LossParts
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.effect_targets import (
     created_objects_targets,
@@ -117,7 +118,7 @@ def _terms(monkeypatch, preparer, loop, records, batcher, model, hidden, *, trai
         ),
     ))
     loss = StepLoss(
-        total=torch.zeros(()), shipped=torch.zeros(()), parts={}, terms=terms,
+        total=torch.zeros(()), shipped=torch.zeros(()), parts=LossParts(), terms=terms,
         pending_mlm=targets.mlm,
     )
     loop._mlm_backward(loss, None, model)

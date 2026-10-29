@@ -14,9 +14,10 @@ import torch
 
 from effects.application.encode_abilities import (
     EncodeAbilitiesConfig,
-    encode_sidecar,
+    encode_tree,
     iter_sidecars,
     run,
+    taxonomy_matrix,
     taxonomy_vector,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY, cache_path_for
@@ -239,7 +240,7 @@ class TestTaxonomyBaseline:
     def test_it_emits_into_the_same_row_layout_without_an_encoder(self):
         """Every e-geometry check reads one file shape (FR-102)."""
         sidecar = _sidecar("cardsfolder/s/serra_angel.txt", 3)
-        matrix = encode_sidecar(sidecar, variant="taxonomy", e_dim=E_DIM)
+        matrix = taxonomy_matrix(sidecar, E_DIM)
         assert matrix.shape == (3, E_DIM)
 
     def test_the_vector_is_a_function_of_the_api_type_and_params(self):
@@ -266,16 +267,58 @@ class TestTaxonomyBaseline:
         bare = SidecarLine(line_index=0, line_kind="text", provenance=())
         assert taxonomy_vector(bare, E_DIM).shape == (E_DIM,)
 
-    def test_another_variant_without_an_encoder_is_rejected(self):
-        sidecar = _sidecar("cardsfolder/s/serra_angel.txt", 1)
-        with pytest.raises(ValueError, match="needs an encoder"):
-            encode_sidecar(sidecar, variant="full", e_dim=E_DIM)
-
     def test_a_source_with_no_lines_yields_an_empty_matrix(self):
         empty = ProvenanceSidecar(card="x", script_file="cardsfolder/x.txt", lines=())
-        assert encode_sidecar(
-            empty, variant="taxonomy", e_dim=E_DIM,
-        ).shape == (0, E_DIM)
+        assert taxonomy_matrix(empty, E_DIM).shape == (0, E_DIM)
+
+
+class TestOneEncodeForTheTree:
+    """The encoder sees each distinct input once for the whole tree, not per card."""
+
+    class _Runner:
+        def __init__(self) -> None:
+            self.calls: list[list] = []
+
+        def unit_of(self, line, prose):
+            return line.script_text, ()
+
+        def encode(self, units, keys_of):
+            self.calls.append(list(units))
+            return np.arange(len(units) * E_DIM, dtype=np.float32).reshape(-1, E_DIM)
+
+    @staticmethod
+    def _card(name: str, texts: list[str]) -> ProvenanceSidecar:
+        script_file = f"variant-scripts/{name}.txt"
+        return ProvenanceSidecar(
+            card=name, script_file=script_file,
+            lines=tuple(
+                SidecarLine(
+                    line_index=i, line_kind="static",
+                    provenance=(ProvenanceKey(script_file, 0, "static", i),),
+                    script_text=text,
+                )
+                for i, text in enumerate(texts)
+            ),
+        )
+
+    def test_a_line_shared_across_cards_is_encoded_once(self, tmp_path):
+        runner = self._Runner()
+        sources = [
+            (tmp_path / "a.provenance.json", self._card("a", ["Flying", "Draw"])),
+            (tmp_path / "b.provenance.json", self._card("b", ["Flying"])),
+        ]
+        encode_tree(runner, sources)
+        assert runner.calls == [[("Flying", ()), ("Draw", ())]]
+
+    def test_rows_scatter_back_in_sidecar_line_order(self, tmp_path):
+        runner = self._Runner()
+        sources = [
+            (tmp_path / "a.provenance.json", self._card("a", ["Flying", "Draw"])),
+            (tmp_path / "b.provenance.json", self._card("b", ["Draw", "Flying"])),
+        ]
+        first, second = encode_tree(runner, sources)
+        np.testing.assert_array_equal(first, second[::-1])
+        assert not np.array_equal(first[0], first[1])
 
 
 class TestTheRealEncoder:
@@ -433,11 +476,11 @@ class TestTheWithheldKeyword:
                 device=torch.device("cpu"), withheld_keyword=withheld,
             )
 
-        withheld = runner("Flying").encode_texts(["flying"])
-        expansion = runner(None).encode_texts(
-            ["cant be blocked except by creatures with or reach"],
+        withheld = runner("Flying").encode([("flying", ())])
+        expansion = runner(None).encode(
+            [("cant be blocked except by creatures with or reach", ())],
         )
-        token = runner(None).encode_texts(["flying"])
+        token = runner(None).encode([("flying", ())])
         assert np.allclose(withheld, expansion, atol=1e-6)
         assert not np.allclose(withheld, token, atol=1e-6)
 

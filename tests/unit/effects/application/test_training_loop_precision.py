@@ -19,6 +19,7 @@ from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import StepLoss, TrainingLoop, autocast_enabled
 from effects.domain.effect_head_layout import EntityFieldTargets
+from effects.domain.effect_losses import LossParts
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
@@ -108,7 +109,7 @@ def _run_device_loss(monkeypatch, loop, *, autocast: bool):
     monkeypatch.setattr(loop_module.torch, "autocast", _AutocastSpy)
     monkeypatch.setattr(
         loop_module, "per_entity_loss",
-        lambda *a, **k: (torch.tensor(0.0), {}),
+        lambda *a, **k: (torch.tensor(0.0), LossParts()),
     )
     monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: {})
 
@@ -200,7 +201,7 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
     monkeypatch.setattr(
         TrainingLoop, "_device_loss",
         lambda self, prepared, *a, **k: StepLoss(
-            total=model.p.sum(), shipped=model.p.sum(), parts={}, terms={},
+            total=model.p.sum(), shipped=model.p.sum(), parts=LossParts(), terms={},
         ),
     )
     # The step's host half would pin its tensors on this fake device; the plan

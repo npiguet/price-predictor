@@ -94,46 +94,21 @@ def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
     return vector / norm if norm > 0 else vector
 
 
-def encode_sidecar(
-    sidecar: ProvenanceSidecar,
-    sidecar_path: Path | None = None,
-    *,
-    variant: str,
-    e_dim: int,
-    encode_lines=None,
-) -> np.ndarray:
-    """One source's ``(n_lines, e_dim)`` matrix, row-aligned to its sidecar.
-
-    ``encode_lines`` maps a whole sidecar to its ``(n_lines, e_dim)`` matrix —
-    the whole card at once rather than a line at a time, so the encoder runs one
-    batched forward pass per card instead of one per ability. It is given the
-    sidecar's own path because the prose surface reads the converted text beside
-    it. The ``taxonomy`` variant needs neither and has no encoder at all.
-    """
+def taxonomy_matrix(sidecar: ProvenanceSidecar, e_dim: int) -> np.ndarray:
+    """The ``taxonomy`` variant's ``(n_lines, e_dim)`` matrix, row-aligned to
+    its sidecar, with no encoder at all."""
     if not sidecar.lines:
         return np.zeros((0, e_dim), dtype=np.float32)
-    if variant == Baseline.TAXONOMY:
-        rows = [taxonomy_vector(line, e_dim) for line in sidecar.lines]
-        return np.stack(rows).astype(np.float32)
-    if encode_lines is None:
-        raise ValueError(
-            f"--variant {variant} needs an encoder; only {Baseline.TAXONOMY} "
-            "can be emitted without one"
-        )
-    return encode_lines(sidecar, sidecar_path).astype(np.float32)
+    return np.stack([taxonomy_vector(line, e_dim) for line in sidecar.lines])
 
 
-def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
+def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
     """Encode every source under the configured trees.
 
     Idempotent: re-running rewrites the same rows from the same checkpoint. The
     hash check runs before anything is written, so a vocabulary that moved since
     training stops the run rather than filling the cache with vectors that mean
     nothing.
-
-    ``encode_lines`` is injected so the pure pass is testable with no torch;
-    left out, it is :func:`build_encode_lines` over the checkpoint already
-    loaded here, which builds the encoder once and batches.
     """
     store = AbilityCacheStore(config.output_root, variant=config.variant)
     cleaned = store.clean() if config.clean else 0
@@ -145,8 +120,6 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     )
     e_dim = loaded.checkpoint.encoder_config.e_dim
     provenance = loaded.checkpoint.provenance
-    if encode_lines is None and config.variant != Baseline.TAXONOMY:
-        encode_lines = build_encode_lines(loaded)
 
     folders = [Path(f) for f in config.cards_folders]
     if config.variant_scripts:
@@ -157,44 +130,70 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     if missing:
         raise FileNotFoundError(f"no source tree at {', '.join(missing)}")
 
-    sources = rows = skipped = 0
-    for folder in folders:
-        for sidecar_path in iter_sidecars(folder):
-            sidecar = read_sidecar(sidecar_path)
-            if not sidecar.lines:
-                skipped += 1
-                continue
-            matrix = encode_sidecar(
-                sidecar, sidecar_path, variant=config.variant, e_dim=e_dim,
-                encode_lines=encode_lines,
-            )
-            store.write(sidecar.script_file, matrix, sidecar)
-            sources += 1
-            rows += matrix.shape[0]
+    sources, skipped = read_sources(folders)
+    if config.variant == Baseline.TAXONOMY:
+        matrices = (taxonomy_matrix(sidecar, e_dim) for _path, sidecar in sources)
+    else:
+        matrices = encode_tree(build_runner(loaded), sources)
+    rows = 0
+    for (_path, sidecar), matrix in zip(sources, matrices, strict=True):
+        store.write(sidecar.script_file, matrix, sidecar)
+        rows += matrix.shape[0]
 
     logger.info(
         "Encoded %d sources (%d ability rows) into %s [variant=%s]%s",
-        sources, rows, config.output_root, config.variant,
+        len(sources), rows, config.output_root, config.variant,
         f", withheld keyword {provenance.withheld_keyword}"
         if provenance.withheld_keyword else "",
     )
-    return EncodeSummary(sources=sources, rows=rows, skipped=skipped, cleaned=cleaned)
+    return EncodeSummary(
+        sources=len(sources), rows=rows, skipped=skipped, cleaned=cleaned,
+    )
 
 
-def truncated_lines(
-    runner, sidecar: ProvenanceSidecar, prose: list[str],
-) -> list[tuple[SidecarLine, str]]:
-    """The lines of one source the encoder's window cuts short, with their text.
+def read_sources(
+    folders: list[Path],
+) -> tuple[list[tuple[Path, ProvenanceSidecar]], int]:
+    """Every sidecar with a line to encode, beside its path; and how many had none."""
+    sources, skipped = [], 0
+    for folder in folders:
+        for sidecar_path in iter_sidecars(folder):
+            sidecar = read_sidecar(sidecar_path)
+            if sidecar.lines:
+                sources.append((sidecar_path, sidecar))
+            else:
+                skipped += 1
+    return sources, skipped
 
-    Measured through the runner's own ``unit_of`` and ``prepare``, so a line
-    is tokenized exactly as the cache encodes it (FR-006).
+
+def encode_tree(
+    runner, sources: list[tuple[Path, ProvenanceSidecar]],
+) -> list[np.ndarray]:
+    """Each source's ``(n_lines, e_dim)`` matrix, from one encode of the tree.
+
+    A line is keyed by exactly what the encoder reads, its text and role spans,
+    so every card printing *Flying* shares one encoding, and the forward passes
+    run over the whole tree's distinct inputs in length-sorted groups rather
+    than a card at a time. A truncated text is reported under the first line
+    that printed it.
     """
-    cut: list[tuple[SidecarLine, str]] = []
-    for line in sidecar.lines:
-        text, spans = runner.unit_of(line, prose)
-        if text and runner.prepare(text, spans).truncated:
-            cut.append((line, text))
-    return cut
+    index: dict[tuple[str, tuple], int] = {}
+    keys: dict[str, tuple] = {}
+    rows_of: list[list[int]] = []
+    for sidecar_path, sidecar in sources:
+        prose = prose_of(sidecar, sidecar_path)
+        rows = []
+        for line in sidecar.lines:
+            unit = runner.unit_of(line, prose)
+            rows.append(index.setdefault(unit, len(index)))
+            keys.setdefault(unit[0], line.provenance)
+        rows_of.append(rows)
+    logger.info(
+        "Encoding %d distinct ability inputs for %d sources",
+        len(index), len(sources),
+    )
+    encoded = runner.encode(list(index), keys_of=keys.__getitem__)
+    return [encoded[rows] for rows in rows_of]
 
 
 def prose_of(sidecar: ProvenanceSidecar, sidecar_path: Path) -> list[str]:
@@ -215,11 +214,11 @@ def prose_of(sidecar: ProvenanceSidecar, sidecar_path: Path) -> list[str]:
     return prose_lines(converted_text_path(sidecar_path))
 
 
-def build_encode_lines(loaded: InferenceCheckpoint):
-    """The real encoder as a ``sidecar -> (n_lines, e_dim)`` callable.
+def build_runner(loaded: InferenceCheckpoint):
+    """The checkpoint's encoder, built once for the whole run.
 
-    Built once for the whole run: moving the weights to the device is the
-    expensive part, and doing it per card would dominate the encode.
+    Moving the weights to the device is the expensive part, and doing it per
+    card would dominate the encode.
     """
     from effects.domain.ability_encoder import TruncationLog, log_truncation
     from effects.infrastructure.ability_encoder_runner import (
@@ -228,16 +227,8 @@ def build_encode_lines(loaded: InferenceCheckpoint):
     from effects.infrastructure.model_runner import tokenizer_for
 
     checkpoint, vocab_path, keyword_path = loaded
-    tokenizer = tokenizer_for(checkpoint, vocab_path, keyword_path)
-    runner = AbilityEncoderRunner.from_checkpoint(
-        checkpoint, tokenizer, vocab_path=vocab_path,
+    return AbilityEncoderRunner.from_checkpoint(
+        checkpoint, tokenizer_for(checkpoint, vocab_path, keyword_path),
+        vocab_path=vocab_path,
+        truncations=TruncationLog(log_truncation(logger, "encode-abilities")),
     )
-    truncations = TruncationLog(log_truncation(logger, "encode-abilities"))
-
-    def encode_lines(sidecar: ProvenanceSidecar, sidecar_path: Path) -> np.ndarray:
-        prose = prose_of(sidecar, sidecar_path)
-        for line, text in truncated_lines(runner, sidecar, prose):
-            truncations.note(text, line.provenance)
-        return runner.encode_sidecar_lines(sidecar, prose)
-
-    return encode_lines

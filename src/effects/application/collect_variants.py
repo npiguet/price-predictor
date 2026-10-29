@@ -475,7 +475,11 @@ def _play_and_check_growth(
     config: CollectVariantsConfig, variants: list[GeneratedVariant], budget: int,
 ) -> int:
     """Play one round of variant decks and fail it when it collected nothing."""
-    from effects.infrastructure.record_io import count_records
+    from effects.infrastructure.record_io import (
+        count_records,
+        count_shard_records,
+        iter_shards,
+    )
 
     # Every variant is weighted equally: coverage's shortfall weighting has
     # nothing to weight against here, since a variant round exists to get
@@ -492,9 +496,12 @@ def _play_and_check_growth(
         workers=config.workers, effect_records=config.effect_records,
         caps=config.caps, variant_scripts=Path(config.variant_scripts),
     ) as supervisor:
-        # The destination's own count, which is what the growth check compares
+        # The destination's own shards, which is what the growth check compares
         # against. The budget's count may have come from another directory.
-        before = count_records(config.effect_records)
+        # Listed rather than counted: a shard is one worker JVM's lifetime and
+        # is never reopened, so what the round wrote is exactly the shards it
+        # added, and counting those alone spares gunzipping the corpus twice.
+        before = set(iter_shards(config.effect_records))
         play_decks(
             supervisor, decks, decks_file,
             label="variant", matches=config.decks_per_round,
@@ -507,7 +514,10 @@ def _play_and_check_growth(
     # Forge's card database under the names the decks file spells, every deck
     # materializes as 17 basics, every game plays, every progress line is
     # appended, and the run exits 0 having collected nothing.
-    collected = count_records(config.effect_records) - before
+    collected = sum(
+        count_shard_records(shard)
+        for shard in iter_shards(config.effect_records) if shard not in before
+    )
     if supervisor.interrupted:
         logger.warning(
             "Interrupted after %d new effect records; the variant round did "
@@ -520,7 +530,7 @@ def _play_and_check_growth(
             "records at all (%s still holds %d). The staged scripts most "
             "likely never reached Forge's card database under the names %s "
             "spells, so every deck materialized as basics only.",
-            config.effect_records, before, decks_file,
+            config.effect_records, count_records(config.effect_records), decks_file,
         )
         return 1
     logger.info(

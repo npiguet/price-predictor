@@ -20,6 +20,7 @@ from effects.application.training_loop import (
     StepLoss,
     TrainingLoop,
 )
+from effects.domain.effect_losses import LossParts
 from effects.domain.split import CorpusSplit
 
 
@@ -39,7 +40,7 @@ def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkey
 
     def loss(*_args, **_kwargs):
         value = weight * 2.0
-        return StepLoss(total=value, shipped=value.detach(), parts={}, terms={})
+        return StepLoss(total=value, shipped=value.detach(), parts=LossParts(), terms={})
 
     monkeypatch.setattr(TrainingLoop, "_device_loss", lambda self, *a, **k: loss())
     updates: list[tuple[int, int]] = []

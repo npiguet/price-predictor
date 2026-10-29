@@ -112,6 +112,7 @@ from effects.domain.effect_head_input import (
 )
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_losses import (
+    LossParts,
     api_loss,
     created_objects_loss,
     mlm_loss,
@@ -238,8 +239,8 @@ class StepLoss:
     #: heads, so the train and validation numbers printed side by side measure
     #: one objective.
     shipped: torch.Tensor
-    #: The per-entity loss by field, as floats, when the step asked for them.
-    parts: dict[str, float]
+    #: The per-entity loss by field, on the device, when the step asked for them.
+    parts: LossParts
     #: Every head's own term, by head.
     terms: dict[str, torch.Tensor]
     #: The MLM pass's masked tokens, left for after the main backward.
@@ -314,7 +315,7 @@ class EpochTally:
 
     def mean_terms(self) -> dict[str, float]:
         steps = max(self.taken, 1)
-        return {name: float(value) / steps for name, value in self.terms.items()}
+        return {name: value / steps for name, value in _read_back(self.terms).items()}
 
 
 @dataclass
@@ -336,9 +337,9 @@ class ShardStats:
         self.loss += loss.shipped.detach()
         self.steps += 1
         if reported:
-            self.heads = {term: float(value.detach()) for term, value in loss.terms.items()}
+            self.heads = _read_back(loss.terms)
         if loss.parts:
-            self.parts = loss.parts
+            self.parts = loss.parts.as_dict()
 
     def log(self, task: ShardTask, of: int, opened: ShardOpened | None, *, trained: float) -> None:
         name = Path(task.shard).name
@@ -380,6 +381,23 @@ def _timed(steps, task: ShardTask, of: int):
         yield message, time.perf_counter() - waiting
 
 
+def _read_back(scalars: Mapping[str, torch.Tensor]) -> dict[str, float]:
+    """Device scalars as floats by name, in one synchronization rather than one each.
+
+    Stacked in float64, so each value is the one ``float()`` would have read
+    on its own, whatever its dtype; moved to the first one's device, because a
+    group with no gradient reports its norm as a host zero.
+    """
+    if not scalars:
+        return {}
+    values = list(scalars.values())
+    device = values[0].device
+    stacked = torch.stack([
+        value.detach().to(device, torch.float64) for value in values
+    ])
+    return dict(zip(scalars, stacked.tolist()))
+
+
 def _optimizer_step(optimizer, *, read: bool) -> dict[str, float]:
     """Clip each group, step and zero; the pre-clip norms only when ``read``.
 
@@ -387,7 +405,7 @@ def _optimizer_step(optimizer, *, read: bool) -> dict[str, float]:
     the GPU drains.
     """
     clipped = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM, read=False)
-    norms = {group: float(value) for group, value in clipped.items()} if read else {}
+    norms = _read_back(clipped) if read else {}
     optimizer.step()
     optimizer.zero_grad(set_to_none=True)
     return norms
@@ -627,10 +645,10 @@ class TrainingLoop:
     ) -> StepLoss:
         """One prepared step's losses: the device half.
 
-        ``report_parts`` reads each field's term back as a float, which is one
-        device synchronization per active field. Training passes it only on a
-        shard's last step, whose line reports the breakdown, so the cost lands
-        once per shard rather than on every step of an epoch.
+        ``report_parts`` keeps each field's term, stacked on the device.
+        Training asks for it only on a shard's last step, whose line reports
+        the breakdown; validation asks on every card-disjoint batch and reads
+        the terms back once, when the pass ends.
 
         Both training and validation go through here, so both run under
         autocast. Backward and the optimizer step stay outside it (bf16 needs

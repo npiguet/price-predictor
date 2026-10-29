@@ -468,14 +468,9 @@ class TestRunClosesTheSupervisor:
         import effects.application.collect_variants as collect_variants
         import effects.infrastructure.record_io as record_io
 
-        # Growing, not constant: `run` now compares the corpus before and
-        # after the round and refuses to report success when it did not move.
-        # Three calls: the volume source, then the destination before and
-        # after the round.
-        readings = iter([1000, 1000, 1100])
-        monkeypatch.setattr(
-            record_io, "count_records", lambda path, **_: next(readings),
-        )
+        # The volume source's size alone: the growth check counts the shards
+        # the round adds, which a test's supervisor writes itself.
+        monkeypatch.setattr(record_io, "count_records", lambda path, **_: 1000)
         monkeypatch.setattr(
             collect_variants, "generate_variants",
             lambda *a, **k: [variant],
@@ -504,6 +499,7 @@ class TestRunClosesTheSupervisor:
         collect_variants = self._patch_prerequisites(monkeypatch, variant)
         supervisor = MagicMock()
         supervisor.interrupted = False
+        supervisor.play_round.side_effect = _writes_a_shard(tmp_path / "records", 100)
         monkeypatch.setattr(
             collector_connector, "CollectorSupervisor",
             MagicMock(return_value=supervisor),
@@ -723,15 +719,15 @@ class TestTheRunReportsWhatItCollected:
     0 having collected nothing, and nothing said so.
     """
 
-    def _fixture(self, tmp_path, monkeypatch, counts):
-        """A run whose only unknown is what ``count_records`` reports.
+    def _fixture(self, tmp_path, monkeypatch, source_records, added):
+        """A run whose only unknowns are the corpus sizes.
 
-        ``counts`` is consumed one value per call, and there are three: the
-        pre-flight size of the *volume source* the budget is taken from, then
-        the destination before the round and after it. The first can name a
-        different directory from the other two -- that is what
-        ``--corpus-records`` is for -- so the growth check must never subtract
-        it from either.
+        ``source_records`` is what ``count_records`` reports for the *volume
+        source* the budget is taken from, which can name a different directory
+        from the destination -- that is what ``--corpus-records`` is for -- so
+        the growth check must never subtract it. ``added`` is how many records
+        the round writes, in a shard of its own beside one already in the
+        destination, which must not count as growth either.
         """
         from unittest.mock import MagicMock
 
@@ -748,10 +744,8 @@ class TestTheRunReportsWhatItCollected:
             name="Bolt Variant 0", source_card="Bolt", path=path,
             perturbation="numeric",
         )
-        readings = iter(counts)
         monkeypatch.setattr(
-            record_io, "count_records",
-            lambda directory, **_: next(readings),
+            record_io, "count_records", lambda directory, **_: source_records,
         )
         monkeypatch.setattr(
             collect_variants, "generate_variants", lambda *a, **k: [variant],
@@ -767,8 +761,12 @@ class TestTheRunReportsWhatItCollected:
             collect_variants, "VariantSidecarConnector",
             MagicMock(return_value=sidecar),
         )
+        records = tmp_path / "records"
+        _writes_a_shard(records, 7, name="earlier.0-a.jsonl")()
         supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
         supervisor.interrupted = False
+        if added:
+            supervisor.play_round.side_effect = _writes_a_shard(records, added)
         monkeypatch.setattr(
             collector_connector, "CollectorSupervisor",
             MagicMock(return_value=supervisor),
@@ -776,7 +774,7 @@ class TestTheRunReportsWhatItCollected:
         forge_cards = tmp_path / "forge-cards"
         forge_cards.mkdir()
         config = CollectVariantsConfig(
-            effect_records=tmp_path / "records",
+            effect_records=records,
             forge_cards_path=forge_cards,
             variant_scripts=tmp_path / "variant-scripts",
         )
@@ -788,7 +786,7 @@ class TestTheRunReportsWhatItCollected:
         import logging
 
         collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, [1000, 1000, 1000],
+            tmp_path, monkeypatch, 1000, added=0,
         )
 
         with caplog.at_level(logging.ERROR):
@@ -809,7 +807,7 @@ class TestTheRunReportsWhatItCollected:
         import logging
 
         collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, [1000, 1000, 1042],
+            tmp_path, monkeypatch, 1000, added=42,
         )
 
         with caplog.at_level(logging.INFO):
@@ -817,7 +815,8 @@ class TestTheRunReportsWhatItCollected:
 
         assert code == 0
         assert any(
-            "42" in record.getMessage() for record in caplog.records
+            "Collected 42 new effect records" in record.getMessage()
+            for record in caplog.records
         ), "the run never reported how many records it added"
 
     def test_a_corpus_counted_elsewhere_never_enters_the_growth_figure(
@@ -833,7 +832,7 @@ class TestTheRunReportsWhatItCollected:
         import logging
 
         collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, [39_000_000, 0, 42],
+            tmp_path, monkeypatch, 39_000_000, added=42,
         )
 
         with caplog.at_level(logging.INFO):
@@ -852,11 +851,21 @@ class TestTheRunReportsWhatItCollected:
         swallows SIGINT, so a round the operator stopped returns exactly like
         one that finished."""
         collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, [1000, 1000, 1042],
+            tmp_path, monkeypatch, 1000, added=42,
         )
         supervisor.interrupted = True
 
         assert collect_variants.run(config) == 130
+
+
+def _writes_a_shard(directory: Path, records: int, *, name: str = "round.0-b.jsonl"):
+    """A stand-in for a round's workers: one new shard of ``records`` lines."""
+
+    def write(*_args, **_kwargs) -> None:
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / name).write_text("{}\n" * records, encoding="utf-8")
+
+    return write
 
 
 class TestOnlyLoadableVariantsAreDecked:

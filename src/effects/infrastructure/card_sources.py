@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 from effects.infrastructure.sidecar_io import SidecarCache, UnconvertedScript
@@ -40,16 +41,26 @@ def load_card_texts(
     return out
 
 
-def load_card_files(cards_folder: Path) -> dict[str, str]:
-    """``card name -> tree-prefixed script file`` for one converted tree.
+@dataclass(frozen=True, slots=True)
+class ConvertedCard:
+    """One converted card file: its tree-prefixed script file and its text."""
+
+    script_file: str
+    text: str
+
+
+def load_converted_cards(cards_folder: Path) -> dict[str, ConvertedCard]:
+    """``card name -> its converted file`` for one converted tree.
 
     Names come from each file's ``name:`` line, which is authoritative — the
-    filename is a sanitized derivative and several cards share a stem.
+    filename is a sanitized derivative and several cards share a stem. The
+    text rides along because the name is read out of it anyway, and a caller
+    that wants both would otherwise read some 33,000 files twice.
     """
     from price_predictor.domain.tokenizer import extract_card_name
 
     cards_folder = Path(cards_folder)
-    out: dict[str, str] = {}
+    out: dict[str, ConvertedCard] = {}
     for path in sorted(cards_folder.rglob("*.txt")):
         try:
             text = path.read_text(encoding="utf-8")
@@ -59,8 +70,16 @@ def load_card_files(cards_folder: Path) -> dict[str, str]:
         if not name:
             continue
         relative = path.relative_to(cards_folder).as_posix()
-        out[name] = f"cardsfolder/{relative}"
+        out[name] = ConvertedCard(f"cardsfolder/{relative}", text)
     return out
+
+
+def load_card_files(cards_folder: Path) -> dict[str, str]:
+    """``card name -> tree-prefixed script file`` for one converted tree."""
+    return {
+        name: card.script_file
+        for name, card in load_converted_cards(cards_folder).items()
+    }
 
 
 def load_first_printings(printings_path: Path) -> dict[str, str]:

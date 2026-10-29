@@ -19,6 +19,7 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
 )
 from effects.application.training_loop import StepLoss, TrainingLoop
+from effects.domain.effect_losses import LossParts
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
@@ -75,7 +76,7 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
     def device_loss(self, prepared, *args, **kwargs):
         events.append(("loss", id(prepared["fields"]), model.training))
         loss = model.p.sum()
-        return StepLoss(total=loss, shipped=loss, parts={}, terms={})
+        return StepLoss(total=loss, shipped=loss, parts=LossParts(), terms={})
 
     def validate(self, records, *args, parts=None, fields=None, **kwargs):
         events.append(("validate", id(fields), model.training))

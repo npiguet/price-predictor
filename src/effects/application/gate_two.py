@@ -173,7 +173,7 @@ def score_observation(
     present: dict[str, torch.Tensor],
     stripped: dict[str, torch.Tensor],
     *,
-    fields: tuple[FieldSpec, ...],
+    active: frozenset[str],
     keywords_of: KeywordsOf,
 ) -> tuple[bool, dict[str, bool]]:
     """Whether one perturbation moved every field it should have.
@@ -190,9 +190,9 @@ def score_observation(
     counts it by. Infect is the case that makes it necessary: its creature-side
     fields and its player-side fields are exclusive, so scoring all four on
     every combat would fail half of them by construction. A field the run never
-    trained is skipped for the same reason — there is no prediction to compare.
+    trained — one not named in ``active`` — is skipped for the same reason:
+    there is no prediction to compare.
     """
-    active = {spec.name for spec in fields}
     per_effect: dict[str, bool] = {}
     for effect in row.effects:
         if effect.field not in active:
@@ -242,6 +242,7 @@ def score_keywords(
     resolver = KeywordResolver(batcher.sidecars)
     tallies = {row.keyword: _Tally() for row in rows}
     progress = _Progress()
+    active = frozenset(spec.name for spec in fields)
 
     encoder.eval()
     model.eval()
@@ -250,7 +251,7 @@ def score_keywords(
         for chunk in batched(observations, BATCH_OBSERVATIONS):
             _score_chunk(
                 chunk, encoder, model, batcher, tallies,
-                fields=fields, keywords_of=resolver.keywords_of,
+                active=active, keywords_of=resolver.keywords_of,
             )
     progress.log()
     return {keyword: tally.score() for keyword, tally in tallies.items()}
@@ -294,7 +295,7 @@ def _qualifying(
 
 def _score_chunk(
     chunk: tuple, encoder, model, batcher, tallies: dict[str, _Tally], *,
-    fields, keywords_of: KeywordsOf,
+    active: frozenset[str], keywords_of: KeywordsOf,
 ) -> None:
     """Run one chunk of observations, paired, and fold it into ``tallies``."""
     # Every observation twice: as collected, then with its keyword removed from
@@ -314,7 +315,7 @@ def _score_chunk(
             row, participant,
             _subject_vectors(surfaces[offset], outputs[offset], row, participant),
             _subject_vectors(surfaces[twin], outputs[twin], row, participant),
-            fields=fields, keywords_of=keywords_of,
+            active=active, keywords_of=keywords_of,
         )
         tallies[row.keyword].add(record.record_id, agreed, per_effect)
 

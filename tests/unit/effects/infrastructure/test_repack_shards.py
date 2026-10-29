@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
-from collections import Counter
+import random
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import pytest
 
-from effects.infrastructure.record_io import read_records, read_shard, repack_shards, write_shard
+from effects.domain.corpus_curation import record_hash
+from effects.infrastructure import record_io
+from effects.infrastructure.record_io import (
+    iter_shard_lines,
+    parse_record_line,
+    read_records,
+    read_shard,
+    repack_shards,
+    write_shard,
+)
 
 
 @pytest.fixture
@@ -113,6 +123,37 @@ def test_names_are_zero_padded_and_sequential(tmp_path, runs):
     written = repack_shards(runs, tmp_path / "out", shard_records=40)
     assert [p.name for p in written] == [
         f"shard-{index:05d}.jsonl.gz" for index in range(1, len(written) + 1)
+    ]
+
+
+@pytest.mark.parametrize("groups", [3, 256])
+def test_the_deal_is_the_in_memory_deal(tmp_path, runs, monkeypatch, groups):
+    """Every game to ``hash(game_id) % count``, each shard shuffled under
+    ``seed:index`` from the parts' order, numbered in index order.
+
+    Three groups make every group carry several shards, the path a stratum
+    with more shards than :data:`record_io._GROUPS` takes, without writing
+    hundreds of files to get there.
+    """
+    monkeypatch.setattr(record_io, "_GROUPS", groups)
+    seed, count = 7, 32
+    lines = [line for part in runs for line in iter_shard_lines(part)]
+    expected: dict[int, list[str]] = defaultdict(list)
+    for line in lines:
+        game = parse_record_line(line)["game_id"]
+        expected[record_hash(game, seed=seed) % count].append(line)
+    for index, bucket in expected.items():
+        random.Random(f"{seed}:{index}").shuffle(bucket)
+
+    written = repack_shards(
+        runs, tmp_path / "out", shard_records=10, seed=seed, records=len(lines),
+    )
+
+    assert [p.name for p in written] == [
+        f"shard-{number:05d}.jsonl.gz" for number in range(1, len(expected) + 1)
+    ]
+    assert [list(iter_shard_lines(p)) for p in written] == [
+        expected[index] for index in sorted(expected)
     ]
 
 

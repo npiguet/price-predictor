@@ -120,14 +120,14 @@ class TestLoadingTheCache:
     def test_rows_are_keyed_by_the_text_they_encode(self, cache):
         cards, abilities = cache
         loaded = load_cache(abilities, cards, surface="script")
-        assert set(loaded.texts()) == {
+        assert set(loaded.texts) == {
             "Flying", "Vigilance", "DealDamage | NumDmg$ 2",
         }
 
     def test_the_prose_surface_keys_on_prose(self, cache):
         cards, abilities = cache
         loaded = load_cache(abilities, cards, surface="prose")
-        assert "CARDNAME deals 2 damage to any target." in loaded.texts()
+        assert "CARDNAME deals 2 damage to any target." in loaded.texts
 
     def test_the_surface_is_never_defaulted(self, cache):
         """A default is how the evaluator came to key a script model on prose."""
@@ -251,12 +251,12 @@ class TestTheShippingCache:
 
     def test_it_spans_the_card_and_token_trees(self, tmp_path):
         loaded = self._load(tmp_path)
-        assert set(loaded.texts()) == {"Flying", "Sacrifice | GainLife$ 3"}
+        assert set(loaded.texts) == {"Flying", "Sacrifice | GainLife$ 3"}
 
     def test_synthetic_variant_scripts_are_not_in_it(self, tmp_path):
         """A perturbed script is collection input, not a line the cache serves."""
         loaded = self._load(tmp_path)
-        assert "DealDamage | NumDmg$ 5" not in loaded.texts()
+        assert "DealDamage | NumDmg$ 5" not in loaded.texts
 
     def test_a_token_is_not_a_card_for_the_pooled_vectors(self, tmp_path):
         loaded = self._load(tmp_path)

@@ -15,6 +15,7 @@ from effects.application.train_effect_model import (
 from effects.application.training_log import format_floor, format_parts
 from effects.application.training_loop import FloorCache, TrainingLoop
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, EntityFieldTargets
+from effects.domain.effect_losses import LossParts
 from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
@@ -257,7 +258,7 @@ def test_validation_scores_the_shipped_objective_not_the_backward_total():
     )
     loop.preparer = SimpleNamespace(prepare_step=lambda *a, **k: SimpleNamespace())
     loop._device_loss = lambda *a, **k: StepLoss(
-        total=torch.tensor(5.0), shipped=torch.tensor(1.0), parts={}, terms={},
+        total=torch.tensor(5.0), shipped=torch.tensor(1.0), parts=LossParts(), terms={},
     )
     module = SimpleNamespace(eval=lambda: None, train=lambda: None)
     run = SimpleNamespace(encoder=module, model=module, step=0)

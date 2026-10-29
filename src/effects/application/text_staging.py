@@ -71,7 +71,8 @@ def encode_by_length(
         }
         vectors, tokens = encoder(**batch)
         parts.append(vectors)
-        outputs.append(tokens)
+        if hidden:
+            outputs.append(tokens)
     order = torch.cat([rows for rows, _ in chunks])
     inverse = torch.empty_like(order)
     inverse[order] = torch.arange(order.numel())
@@ -175,20 +176,29 @@ class TextStager:
         expansion too, so the model never reads it. ``lines_of`` maps a text to
         its sidecar line, whose role spans a prose text is tokenized with.
         """
-        withheld = withheld_keyword_tokens(self.withhold_keyword)
         lines_of = lines_of or {}
-        lines = []
-        for text in ordered:
-            tokens = self.tokenizer.encoding_tokens(
-                text, withheld=withheld,
-                role_spans=encoding_role_spans(lines_of.get(text), text, self.surface),
-                probability=self.keyword_expand_p, rng=rng,
+        return [
+            self.prepare(
+                text, encoding_role_spans(lines_of.get(text), text, self.surface),
+                rng=rng, keys_of=keys_of,
             )
-            line = prepare_line(self.tokenizer, tokens)
-            if line.truncated and self.truncations is not None:
-                self.truncations.note(text, keys_of(text))
-            lines.append(line)
-        return lines
+            for text in ordered
+        ]
+
+    def prepare(
+        self, text: str, role_spans: tuple = (), *, rng: random.Random,
+        keys_of: Callable[[str], list] = lambda text: [],
+    ) -> EncodedLine:
+        """One text tokenized with ``role_spans``, as :meth:`prepare_texts` does
+        each of its texts; a truncation is reported under ``keys_of(text)``."""
+        tokens = self.tokenizer.encoding_tokens(
+            text, withheld=withheld_keyword_tokens(self.withhold_keyword),
+            role_spans=role_spans, probability=self.keyword_expand_p, rng=rng,
+        )
+        line = prepare_line(self.tokenizer, tokens)
+        if line.truncated and self.truncations is not None:
+            self.truncations.note(text, keys_of(text))
+        return line
 
 
 def _taxonomy_vectors(

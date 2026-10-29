@@ -307,11 +307,12 @@ def _record_losses(
     is, so scoring a record costs no device synchronization.
     """
     rows = slice(row, row + 1)
-    _total, losses = per_entity_loss(
+    _total, parts = per_entity_loss(
         gathered[rows], gate[rows],
         field_targets.select(rows),
         mask[rows], fields=fields, report_parts=True,
     )
+    losses = parts.as_dict()
     losses[TOTAL] = sum(losses.values())
     return losses
 

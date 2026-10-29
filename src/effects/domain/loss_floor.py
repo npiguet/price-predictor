@@ -7,7 +7,7 @@ the floor it says whether the head learned the field or only how often it fires.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import torch
@@ -20,7 +20,7 @@ from effects.domain.effect_head_layout import (
     FieldSpec,
     FieldType,
 )
-from effects.domain.effect_losses import capped, counted, per_entity_loss
+from effects.domain.effect_losses import LossParts, capped, counted, per_entity_loss
 
 #: A guard on the division, not the detector: a field whose targets never vary
 #: is given a floor of exactly zero by :func:`constant_predictor_floor`, and
@@ -192,17 +192,28 @@ class PartsMean:
 
     Over those batches rather than every batch: a field a batch did not
     supervise contributes no zero, which would read as the model having got
-    it right.
+    it right. Summed on the device, where the parts are, and read back once
+    in :meth:`means`, so a pass costs one synchronization rather than one per
+    field per batch.
     """
 
     def __init__(self) -> None:
-        self._summed: dict[str, float] = defaultdict(float)
+        self._summed: dict[str, torch.Tensor] = {}
         self._counted: dict[str, int] = defaultdict(int)
 
-    def add(self, parts: Mapping[str, float]) -> None:
-        for name, value in parts.items():
-            self._summed[name] += value
+    def add(self, parts: LossParts) -> None:
+        if parts.values is None:
+            return
+        for name, value in zip(parts.names, parts.values.unbind()):
+            held = self._summed.get(name)
+            self._summed[name] = value if held is None else held + value
             self._counted[name] += 1
 
     def means(self) -> dict[str, float]:
-        return {name: self._summed[name] / self._counted[name] for name in self._summed}
+        if not self._summed:
+            return {}
+        sums = torch.stack(list(self._summed.values())).tolist()
+        return {
+            name: summed / self._counted[name]
+            for name, summed in zip(self._summed, sums)
+        }

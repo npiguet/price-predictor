@@ -1070,6 +1070,34 @@ class TestHeldOutTextUnit:
         counted = count_text_shard(shard, roots=roots, texts=frozenset(expected))
         assert counted == expected
 
+    def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
+        """A sidecar cache per shard re-read every sidecar the shard named."""
+        from effects.application import collect_coverage
+        from effects.infrastructure import sidecar_io
+
+        reads: list[Path] = []
+        real_read = sidecar_io.read_sidecar
+
+        def counting_read(path):
+            reads.append(Path(path))
+            return real_read(path)
+
+        monkeypatch.setattr(sidecar_io, "read_sidecar", counting_read)
+        collect_coverage._script_texts.cache_clear()
+        roots = {
+            "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
+            "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
+        }
+        shard = _FIXTURES / "gen1-records.jsonl.gz"
+        first = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
+        read_by_one = len(reads)
+        second = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
+        collect_coverage._script_texts.cache_clear()
+
+        assert read_by_one > 0
+        assert len(reads) == read_by_one
+        assert first == second == {}
+
     def test_satisfaction_is_distinct_games_at_the_floor(self):
         from effects.domain.coverage import TextCoverage
 

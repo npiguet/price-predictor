@@ -131,7 +131,7 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
             field_targets.to(device),
             mask.to(device), fields=fields, report_parts=True,
         )
-        return parts
+        return parts.as_dict()
 
     with torch.no_grad():
         for start in range(0, len(records), batch_size):
@@ -207,7 +207,7 @@ def field_losses(model, probe_model, records: list, *, batch_size: int = 32) -> 
                 field_targets.to(device),
                 mask.to(device), fields=probe_model.fields, report_parts=True,
             )
-            for name, value in parts.items():
+            for name, value in parts.as_dict().items():
                 totals[name] += value * len(chunk)
             count += len(chunk)
     return {name: value / max(count, 1) for name, value in totals.items()}

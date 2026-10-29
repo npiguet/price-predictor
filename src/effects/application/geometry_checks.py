@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 
 import numpy as np
@@ -85,27 +86,38 @@ class CachedVectors:
     the first reconversion, so queries name lines in prose and results print in
     prose; ``by_prose`` maps each normalized prose line to the keys it encodes
     to, with the cards printing each.
+
+    ``matrix``, ``texts``, ``unit`` and ``geometry`` are computed on first use
+    and kept — every nearest-neighbour query reads the whole matrix — so
+    nothing may add to ``by_text`` once any of them has been read.
     """
 
     by_text: dict[str, np.ndarray] = field(default_factory=dict)
     by_card: dict[str, np.ndarray] = field(default_factory=dict)
     display: dict[str, str] = field(default_factory=dict)
     by_prose: dict[str, dict[str, set[str]]] = field(default_factory=dict)
-    _geometry: CacheGeometry | None = field(default=None, repr=False)
 
+    @cached_property
     def matrix(self) -> np.ndarray:
+        """One row per text, in ``texts`` order."""
         if not self.by_text:
             return np.zeros((0, 0), dtype=np.float32)
         return np.stack(list(self.by_text.values()))
 
-    def geometry(self) -> CacheGeometry:
-        """The cache's collapse measures, computed on first use and kept."""
-        if self._geometry is None:
-            self._geometry = CacheGeometry.of(self.matrix())
-        return self._geometry
+    @cached_property
+    def unit(self) -> np.ndarray:
+        """``matrix`` with every row scaled to unit length."""
+        norms = np.linalg.norm(self.matrix, axis=1, keepdims=True)
+        return self.matrix / np.clip(norms, 1e-12, None)
 
+    @cached_property
     def texts(self) -> list[str]:
         return list(self.by_text)
+
+    @cached_property
+    def geometry(self) -> CacheGeometry:
+        """The cache's collapse measures."""
+        return CacheGeometry.of(self.matrix)
 
     def label(self, key: str) -> str:
         """``key`` as a person reads it: its prose, where it has any."""
@@ -252,7 +264,7 @@ def run_gate_three(cached: CachedVectors, abilities_root: Path) -> CheckResult:
             f"no ability cache under {abilities_root}; run "
             "encode-abilities first",
         )
-    return gate_three_verdict(cached.geometry())
+    return gate_three_verdict(cached.geometry)
 
 
 # ── nearest neighbours ──────────────────────────────────────────────────
@@ -284,12 +296,9 @@ def nearest_neighbours(
     target = cached.by_text.get(query)
     if target is None or len(cached) < 2:
         return []
-    texts = cached.texts()
-    matrix = cached.matrix()
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    unit = matrix / np.clip(norms, 1e-12, None)
+    texts = cached.texts
     target_unit = target / max(float(np.linalg.norm(target)), 1e-12)
-    scores = unit @ target_unit
+    scores = cached.unit @ target_unit
     order = np.argsort(-scores)
     out: list[tuple[str, float]] = []
     for index in order:
@@ -353,7 +362,7 @@ def check_nearest_neighbours(
 
 
 def check_umap(cached: CachedVectors) -> CheckResult:
-    projection = umap_projection(cached.matrix())
+    projection = umap_projection(cached.matrix)
     if projection is None:
         return CheckResult(
             CheckName.UMAP, CheckStatus.SKIPPED,
@@ -530,7 +539,7 @@ def check_baseline_geometry(
             CheckName.baseline_comparison(name), CheckStatus.SKIPPED,
             f"no {name} cache; run encode-abilities --variant {name}",
         )
-    shipping, baseline = full.geometry(), baseline_vectors.geometry()
+    shipping, baseline = full.geometry, baseline_vectors.geometry
     return CheckResult(
         CheckName.baseline_comparison(name), CheckStatus.REPORTED,
         f"mean pairwise cosine {shipping.mean_pairwise_cosine:.3f} vs "
