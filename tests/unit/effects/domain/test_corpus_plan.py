@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections import Counter
 
-from effects.domain.corpus_curation import CapHeap, CopyPlan
+from effects.domain.corpus_curation import CapHeap, CopyPlan, game_disjoint_draw
 from effects.domain.corpus_plan import (
     AllocationNode,
     Cell,
     FamilyShare,
+    GameRouting,
     GameStrata,
     TrainingSupply,
     admit_card_disjoint,
@@ -258,3 +259,27 @@ def test_the_supply_keeps_each_slots_smallest_hashes():
     assert supply.keyed[Cell("rewrite"), key] == 3
     assert sorted(supply.heaps[Cell("rewrite"), key].values()) == [1, 5]
     assert isinstance(supply.heaps[Cell("rewrite"), key], CapHeap)
+
+
+class TestGameDisjointPlacement:
+    """Spec Story 4 scenarios 5 and 6."""
+
+    ROUTING = GameRouting(game_disjoint_share=0.01, keyword_share=0.15)
+
+    def test_a_game_below_the_share_enters(self):
+        game = next(f"g{i}" for i in range(1000) if game_disjoint_draw(f"g{i}") < 0.01)
+        assert self.ROUTING.game_disjoint(game, keyword_combat=False)
+
+    def test_a_keyword_combat_game_uses_the_keyword_share(self):
+        game = next(
+            f"g{i}" for i in range(1000) if 0.01 <= game_disjoint_draw(f"g{i}") < 0.15
+        )
+        assert not self.ROUTING.game_disjoint(game, keyword_combat=False)
+        assert self.ROUTING.game_disjoint(game, keyword_combat=True)
+
+    def test_placement_depends_on_the_game_alone(self):
+        routing = GameRouting(game_disjoint_share=0.05, keyword_share=0.15)
+        games = [f"g{i}" for i in range(2000)]
+        first = {g for g in games[:500] if routing.game_disjoint(g, keyword_combat=False)}
+        grown = {g for g in games if routing.game_disjoint(g, keyword_combat=False)}
+        assert first <= grown
