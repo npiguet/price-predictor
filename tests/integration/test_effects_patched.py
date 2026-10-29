@@ -19,8 +19,9 @@ from pathlib import Path
 import pytest
 
 from effects.infrastructure.record_io import read_records
-from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
+from price_predictor.infrastructure.forge_jvm import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from tests.integration.conftest import require_jar
 
 pytestmark = pytest.mark.integration
 
@@ -39,10 +40,7 @@ def _require_patched(records_dir: Path, wants: str | None = None) -> list:
     so a test about continuous records has to keep going or it asserts nothing
     and reports a skip that looks like a pass.
     """
-    try:
-        resolve_connector_jar()
-    except FileNotFoundError:
-        pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
+    require_jar()
 
     process = MatchWorkerConnector().start(
         None,

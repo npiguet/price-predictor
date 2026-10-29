@@ -1,33 +1,24 @@
-"""Variant matches never touch the sealed corpora (T139).
+"""Variant scripts Forge can read, and only on the script surface (T139).
 
-The other half of SC-007. A variant deck is made of cards nobody printed, so a
-variant run that appended to ``match-outcomes.txt`` would put synthetic cards
-into the scorer's training data — and the rows would look like ordinary
-self-play rows, so nothing would flag it.
-
-Byte-identical, like the coverage check: nothing is supposed to be appended at
-all.
+A variant deck is made of cards nobody printed, so a variant run that appended
+to ``match-outcomes.txt`` would put synthetic cards into the scorer's training
+data. Variant rounds play through the same records-only worker as coverage
+rounds, so ``test_effects_coverage_isolation.py`` is the check that no sealed
+file is ever constructed; this module checks what is particular to variants.
 """
 
 from __future__ import annotations
 
-import time
-import uuid
 from pathlib import Path
 
 import pytest
 
 from effects.application.collect_variants import generate_variants
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
-from effects.infrastructure.record_io import read_records
 from effects.infrastructure.sidecar_io import read_sidecar, sidecar_path_for
-from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
-from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from tests.integration.conftest import require_jar
 
 pytestmark = pytest.mark.integration
-
-_COLLECTION_SECONDS = 180
-_POLL_SECONDS = 5
 
 _BOLT = (
     "Name:Test Bolt\nManaCost:R\nTypes:Instant\n"
@@ -35,52 +26,6 @@ _BOLT = (
     "SpellDescription$ CARDNAME deals 3 damage to any target.\n"
     "Oracle:Test Bolt deals 3 damage to any target.\n"
 )
-
-
-def _require_jar() -> None:
-    try:
-        resolve_connector_jar()
-    except FileNotFoundError:
-        pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
-
-
-def _run_records_only(records_dir: Path) -> int:
-    process = MatchWorkerConnector().start(
-        None,
-        run_id=str(uuid.uuid4()),
-        best_of=1,
-        effect_records_dir=records_dir,
-        worker_index=0,
-    )
-    try:
-        deadline = time.monotonic() + _COLLECTION_SECONDS
-        while time.monotonic() < deadline:
-            time.sleep(_POLL_SECONDS)
-            if process.poll() is not None:
-                pytest.fail(f"worker exited early with {process.returncode}")
-            if sum(1 for _ in read_records(records_dir)) >= 5:
-                break
-        return sum(1 for _ in read_records(records_dir))
-    finally:
-        kill_process_tree(process)
-
-
-def test_a_variant_run_leaves_the_sealed_corpora_byte_identical(
-    tmp_path: Path,
-) -> None:
-    _require_jar()
-    sealed_dir = tmp_path / "sealed"
-    sealed_dir.mkdir()
-    outcomes = sealed_dir / "match-outcomes.txt"
-    cards_played = sealed_dir / "cards-played.txt"
-    outcomes.write_bytes(b"pre-existing;row\n")
-    cards_played.write_bytes(b"pre-existing;row\n")
-    before = (outcomes.read_bytes(), cards_played.read_bytes())
-
-    if _run_records_only(tmp_path / "records") == 0:
-        pytest.skip("worker produced no records within the collection window")
-
-    assert (outcomes.read_bytes(), cards_played.read_bytes()) == before
 
 
 def test_generated_variants_are_scripts_forge_can_read(tmp_path: Path) -> None:
@@ -125,7 +70,7 @@ def test_every_variant_script_gets_a_sidecar(tmp_path: Path) -> None:
     """FR-056's other half. Without a sidecar a variant's records name a key
     the reader cannot resolve, and the join fails loudly on a corpus that is in
     fact correct — so the sidecar pass runs before the first game."""
-    _require_jar()
+    require_jar()
     source = tmp_path / "cards"
     source.mkdir()
     (source / "test_bolt.txt").write_text(_BOLT, encoding="utf-8")
