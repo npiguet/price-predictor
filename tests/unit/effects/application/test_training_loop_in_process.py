@@ -29,7 +29,7 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     epoch_shards,
 )
-from effects.application.training_loop import EpochTally, TrainingLoop
+from effects.application.training_loop import EpochTally
 from effects.domain.records import CombatPayload, RecordKind
 from tests.unit.effects.builders import (
     EFFECTS_FIXTURES,
@@ -40,6 +40,7 @@ from tests.unit.effects.builders import (
     make_training_loop,
     one_parameter_module,
     stub_below_the_loop,
+    stub_validator,
     write_validation_samples,
 )
 
@@ -105,9 +106,6 @@ def epoch(tmp_path, make_record, monkeypatch):
                 ),
             ]),
         )
-        monkeypatch.setattr(
-            TrainingLoop, "_validate", lambda self, records, *args, **kwargs: 1.0,
-        )
         config = TrainEffectModelConfig(
             corpus=str(tmp_path), epochs=1, steps_per_epoch=SHARDS,
             shards_per_epoch=SHARDS, batch_size=2, seed=SEED,
@@ -117,6 +115,7 @@ def epoch(tmp_path, make_record, monkeypatch):
             config, training_shards=shards, validation_samples=samples,
         )
         loop.losses = StubLosses(train)
+        stub_validator(loop)
         return loop.execute()
 
     drawn = epoch_shards(shards, epoch=1, per_epoch=SHARDS, seed=SEED)

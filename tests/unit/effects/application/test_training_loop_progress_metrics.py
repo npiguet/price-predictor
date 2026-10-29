@@ -17,7 +17,7 @@ import torch
 
 from effects.application import run_context
 from effects.application.gate_one import measure
-from effects.application.training_loop import TrainingLoop
+from effects.application.validation_pass import Validator
 from effects.domain.effect_model import EffectModel
 from effects.infrastructure.model_runner import Runnable
 from effects.infrastructure.record_io import write_shard
@@ -40,24 +40,26 @@ def scored(corpus, records, tmp_path_factory):  # noqa: F811
     sample = root / "card-disjoint.jsonl.gz"
     write_shard(sample, records)
     seen: dict = {}
-    real = TrainingLoop._validate_epoch
 
-    def validate_epoch(self, epoch, run, tally, samples):
-        result, parts, metrics = real(self, epoch, run, tally, samples)
-        fields = run.fields[epoch]
-        seen["fed"] = metrics
-        seen["measured"] = measure(samples.card_disjoint, Runnable(
-            run.encoder, run.model,
-            run.preparer.batcher(training=False, materializer=run.scoring),
-            fields,
-        ))
-        seen["loss"] = result.card_disjoint_loss
-        seen["loss without margins"] = self._validate(
-            samples.card_disjoint, run, fields=fields, parts={},
-        )
-        run.encoder.train()
-        run.model.train()
-        return result, parts, metrics
+    class _Measured(Validator):
+        """The real validator, setting each epoch's margins beside the old
+        way's on the weights it scored."""
+
+        def epoch(self, run, samples, fields):
+            card, game = super().epoch(run, samples, fields)
+            seen["fed"] = card.progress()
+            seen["measured"] = measure(samples.card_disjoint, Runnable(
+                run.encoder, run.model,
+                run.preparer.batcher(training=False, materializer=run.scoring),
+                fields,
+            ))
+            seen["loss"] = card.loss
+            seen["loss without margins"] = self.score(
+                samples.card_disjoint, run, fields, parts=True,
+            ).loss
+            run.encoder.train()
+            run.model.train()
+            return card, game
 
     with pytest.MonkeyPatch.context() as monkeypatch:
         monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
@@ -67,15 +69,16 @@ def scored(corpus, records, tmp_path_factory):  # noqa: F811
                 config, d_model=32, n_layers=1, n_heads=2, ff_dim=64,
             )),
         )
-        monkeypatch.setattr(TrainingLoop, "_validate_epoch", validate_epoch)
-        code = make_training_loop(
+        loop = make_training_loop(
             _config(
                 corpus, root / "out", prefetch_workers=0, epochs=1,
                 batch_size=BATCH_SIZE,
             ),
             training_shards=corpus.shards,
             validation_samples={"card-disjoint": sample, "game-disjoint": corpus.sample},
-        ).execute()
+        )
+        loop.validator = _Measured(loop.config, loop.device, loop.losses)
+        code = loop.execute()
     assert code == 0
     return seen
 

@@ -11,15 +11,13 @@ from __future__ import annotations
 import logging
 import random
 import time
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
 
-from effects.application.gate_one import GateOneMetrics, MarginAccumulator
 from effects.application.resume_state import restore_resume, save_resume
 from effects.application.run_context import (
     RunContext,
@@ -52,12 +50,12 @@ from effects.application.train_effect_model import (
     steps_per_shard,
 )
 from effects.application.training_log import (
-    format_floor,
     format_norms,
     format_parts,
     format_shares,
     format_terms,
 )
+from effects.application.validation_pass import ValidationSamples, Validator
 from effects.domain.ability_encoder import (
     TruncationLog,
     log_truncation,
@@ -65,12 +63,8 @@ from effects.domain.ability_encoder import (
 from effects.domain.effect_head_input import (
     feature_widths,
 )
-from effects.domain.effect_head_layout import FieldSpec
-from effects.domain.entity_field_targets import EntityTargetBatch
-from effects.domain.loss_floor import PartsMean, constant_predictor_floor
 from effects.domain.rarity import RARITY_BUCKETS
-from effects.domain.sampling import SAMPLING_CLASSES, BatchPlan, sampling_class
-from effects.domain.strata import VALIDATION_STRATA, Stratum
+from effects.domain.sampling import SAMPLING_CLASSES
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
     EffectCheckpoint,
@@ -81,9 +75,6 @@ from effects.infrastructure.torch_device import default_device
 from price_predictor.infrastructure.torch_training import clip_per_group
 
 logger = logging.getLogger(__name__)
-
-#: Records kept aside to measure feature widths from, before any shard loads.
-PROBE_RECORDS = 64
 
 #: The most prepared steps one worker process may hold queued: room for one
 #: shard's steps, capped to bound the shared memory of a run with long shards.
@@ -106,33 +97,6 @@ def resets_at(config, *, epoch: int) -> bool:
     """Whether the early stopper forgets its best at the start of ``epoch``:
     at the curriculum epoch, where the objective gains the sparse fields."""
     return config.curriculum_epoch > 1 and epoch == config.curriculum_epoch
-
-
-@dataclass(frozen=True)
-class ValidationSamples:
-    """The corpus's fixed validation samples, one per stratum, read once and
-    never redrawn (FR-089)."""
-
-    card_disjoint: list
-    game_disjoint: list
-    #: Records to measure feature widths from, before any shard loads.
-    probe: list
-    #: The sampling classes the two samples hold; every epoch's field set is
-    #: built from these.
-    present: frozenset[str]
-
-
-@contextmanager
-def evaluating(run: RunContext) -> Iterator[None]:
-    """Both modules in evaluation mode for the block, back in training mode
-    however it ends: every training step assumes training mode."""
-    run.encoder.eval()
-    run.model.eval()
-    try:
-        yield
-    finally:
-        run.encoder.train()
-        run.model.train()
 
 
 @dataclass
@@ -230,40 +194,6 @@ def _timed(steps, task: ShardTask, of: int):
         yield message, time.perf_counter() - waiting
 
 
-def _progress_metrics(margins: MarginAccumulator) -> GateOneMetrics:
-    """Gate 1's three numbers on the whole card-disjoint sample, every epoch.
-
-    A progress reading, not the gate: the evaluator scores only the
-    unique-text stratum, and in float32 where this pass runs under bf16
-    autocast, so a logit near zero can land on the other side here.
-    """
-    return margins.metrics()
-
-
-@dataclass(frozen=True, slots=True)
-class _HostCopy:
-    """One validation batch's gathered outputs on their way to the host,
-    queued without waiting and read a batch later so the device never idles."""
-
-    gathered: torch.Tensor
-    done: torch.cuda.Event | None
-    prepared: DeviceStep
-
-    @classmethod
-    def queue(cls, gathered: torch.Tensor, prepared: DeviceStep) -> _HostCopy:
-        host = gathered.float().to("cpu", non_blocking=True)
-        done = None
-        if gathered.device.type == "cuda":
-            done = torch.cuda.Event()
-            done.record()
-        return cls(host, done, prepared)
-
-    def fold_into(self, margins: MarginAccumulator) -> None:
-        if self.done is not None:
-            self.done.synchronize()
-        margins.add(self.gathered, self.prepared.targets)
-
-
 def _optimizer_step(optimizer) -> dict[str, torch.Tensor]:
     """Clip each group, step and zero; the pre-clip norms unread, since each
     read stalls until the GPU drains."""
@@ -271,27 +201,6 @@ def _optimizer_step(optimizer) -> dict[str, torch.Tensor]:
     optimizer.step()
     optimizer.zero_grad(set_to_none=True)
     return norms
-
-
-class FloorCache:
-    """The constant-predictor floor, keyed by the active field set.
-
-    The validation targets never move (FR-089), so the floor changes only when
-    the field set does, at the curriculum epoch.
-    """
-
-    def __init__(self) -> None:
-        self._fields: tuple[FieldSpec, ...] | None = None
-        self.floor: dict[str, float] = {}
-
-    def stale(self, fields: tuple[FieldSpec, ...]) -> bool:
-        return self._fields != fields
-
-    def update(
-        self, fields: tuple[FieldSpec, ...], floor: Mapping[str, float],
-    ) -> None:
-        self._fields = fields
-        self.floor = dict(floor)
 
 
 class TrainingLoop:
@@ -331,33 +240,11 @@ class TrainingLoop:
         self.device = default_device()
         #: The device half of every step, training's and validation's.
         self.losses = StepLossComputer(config, self.device)
-        self.floor = FloorCache()
+        self.validator = Validator(config, self.device, self.losses)
 
     @property
     def is_cuda(self) -> bool:
         return self.device.type == "cuda"
-
-    def _load_validation(self) -> ValidationSamples:
-        logger.info(
-            "Reading the corpus's validation samples: %s.",
-            ", ".join(str(path) for path in self.validation_samples.values()),
-        )
-        card_disjoint = load_shard(self.validation_samples[Stratum.CARD_DISJOINT])
-        game_disjoint = load_shard(self.validation_samples[Stratum.GAME_DISJOINT])
-        for stratum, records in zip(VALIDATION_STRATA, (card_disjoint, game_disjoint)):
-            logger.info(
-                "%s validation: %d records over %d games, %d classes",
-                stratum, len(records), len({r.game_id for r in records}),
-                len({sampling_class(r) for r in records}),
-            )
-        return ValidationSamples(
-            card_disjoint=card_disjoint,
-            game_disjoint=game_disjoint,
-            probe=card_disjoint[:PROBE_RECORDS] or game_disjoint[:PROBE_RECORDS],
-            present=frozenset(
-                sampling_class(record) for record in (*card_disjoint, *game_disjoint)
-            ),
-        )
 
     def _warn_missing_classes(self, present: frozenset[str]) -> None:
         """Say which sampling classes the validation samples do not name: the
@@ -373,7 +260,7 @@ class TrainingLoop:
         )
 
     def execute(self) -> int:
-        samples = self._load_validation()
+        samples = ValidationSamples.load(self.validation_samples)
         self._warn_missing_classes(samples.present)
         if not samples.probe:
             logger.error(
@@ -449,8 +336,12 @@ class TrainingLoop:
                 "the early stopper starts over", epoch, len(run.fields[epoch]),
             )
         self._train_epoch(epoch, run, tally)
-        result, card_parts, metrics = self._validate_epoch(epoch, run, tally, samples)
-        self._log_epoch(result, metrics, card_parts, tally)
+        card, game = self.validator.epoch(run, samples, run.fields[epoch])
+        result = EpochResult(
+            epoch=epoch, train_loss=tally.train_loss,
+            card_disjoint_loss=card.loss, game_disjoint_loss=game.loss,
+        )
+        self._log_epoch(result, card.progress(), card.parts, tally)
         self._log_unresolved(run.preparer)
         return self._close_epoch(epoch, run, result)
 
@@ -469,39 +360,6 @@ class TrainingLoop:
             for task in self._epoch_tasks(epoch + 1, run)[1]:
                 run.pool.submit(task)
 
-    def _validate_epoch(
-        self, epoch: int, run: RunContext, tally: EpochTally,
-        samples: ValidationSamples,
-    ) -> tuple[EpochResult, dict[str, float], GateOneMetrics]:
-        """Both strata's loss, the card-disjoint one by field, the floor, and
-        gate 1's progress margins."""
-        fields = run.fields[epoch]
-        card_parts: dict[str, float] = {}
-        margins = MarginAccumulator(fields)
-        # Collected only on an epoch with a floor to compute: a copy of the
-        # whole sample's targets.
-        collected: list[EntityTargetBatch] | None = (
-            [] if self.floor.stale(fields) else None
-        )
-        result = EpochResult(
-            epoch=epoch,
-            train_loss=tally.train_loss,
-            card_disjoint_loss=self._validate(
-                samples.card_disjoint, run, parts=card_parts, fields=fields,
-                collect=collected, margins=margins,
-            ),
-            game_disjoint_loss=self._validate(samples.game_disjoint, run, fields=fields),
-        )
-        if collected is not None:
-            self.floor.update(
-                fields, constant_predictor_floor(collected, fields=fields),
-            )
-            logger.info(
-                "Constant-predictor floor (card-disjoint): %s",
-                format_floor(self.floor.floor),
-            )
-        return result, card_parts, _progress_metrics(margins)
-
     def _log_epoch(
         self, result: EpochResult, metrics, card_parts: dict[str, float],
         tally: EpochTally,
@@ -513,7 +371,7 @@ class TrainingLoop:
             result.epoch, result.train_loss, result.card_disjoint_loss,
             result.game_disjoint_loss, metrics.affected_gate_f1,
             metrics.zone_outcome_accuracy, metrics.mean_poisson_deviance,
-            format_parts(card_parts, self.floor.floor),
+            format_parts(card_parts, self.validator.floor.floor),
         )
         logger.info(
             "epoch %d | trained records by rarity bucket: %s%s\n"
@@ -729,53 +587,3 @@ class TrainingLoop:
         tally.add_step(computed)
         stats.add_step(computed, reported=due)
         run.step += 1
-
-    def _validate(
-        self, records, run: RunContext, *, fields,
-        parts: dict[str, float] | None = None,
-        collect: list[EntityTargetBatch] | None = None,
-        margins: MarginAccumulator | None = None,
-    ) -> float:
-        """Mean loss over the stratum, in fixed-size batches, not one per game:
-        one game's outlier would move a per-game mean many times over.
-
-        ``fields`` is the epoch's set, so validation and training score one
-        objective. ``parts`` collects the loss by field, averaged over batches;
-        ``collect`` takes each batch's host targets for the floor and
-        ``margins`` its outputs for gate 1's progress margins, so neither needs
-        a second pass. Records are grouped by game within a batch, so one
-        encode of a text serves the whole game.
-        """
-        if not records:
-            return float("nan")
-        size = self.config.batch_size
-        total = torch.zeros((), device=self.device)
-        batches = 0
-        means = PartsMean()
-        pending: _HostCopy | None = None
-        with evaluating(run), torch.no_grad():
-            for start in range(0, len(records), size):
-                grouped: dict[str, list] = defaultdict(list)
-                for record in records[start:start + size]:
-                    grouped[record.game_id].append(record)
-                prepared = run.preparer.prepare_scoring_step(
-                    BatchPlan(dict(grouped)), fields,
-                )
-                if collect is not None:
-                    collect.append(prepared.targets)
-                computed = self.losses.device_loss(
-                    prepared, run, run.scoring, report_parts=parts is not None,
-                )
-                total += computed.shipped
-                batches += 1
-                means.add(computed.parts)
-                if margins is not None:
-                    copy = _HostCopy.queue(computed.gathered, prepared)
-                    if pending is not None:
-                        pending.fold_into(margins)
-                    pending = copy
-            if pending is not None:
-                pending.fold_into(margins)
-        if parts is not None:
-            parts.update(means.means())
-        return float(total) / batches if batches else float("nan")

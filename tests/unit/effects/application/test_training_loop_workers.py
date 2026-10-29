@@ -150,8 +150,10 @@ class _RecordedLosses(StepLossComputer):
 
 
 def record_losses(loop, sink: list[float], *, interrupt_at=None) -> None:
-    """Swap ``loop``'s device half for one that records into ``sink``."""
-    loop.losses = _RecordedLosses(loop.config, loop.device, sink, interrupt_at)
+    """Swap ``loop``'s device half, training's and validation's, for one that
+    records into ``sink``."""
+    recorded = _RecordedLosses(loop.config, loop.device, sink, interrupt_at)
+    loop.losses = loop.validator.losses = recorded
 
 
 def _run(

@@ -312,6 +312,28 @@ class StubLosses:
         return None
 
 
+def stub_validator(loop, on_score=None) -> None:
+    """Swap ``loop``'s validator for one that scores every pass 1.0 without
+    running the model, calling ``on_score(fields, margins)`` for each pass.
+
+    Only ``score`` is stood in for, so the epoch's own choice of which pass
+    feeds the margins and the floor is still the real one.
+    """
+    from effects.application.gate_one import MarginAccumulator
+    from effects.application.validation_pass import ValidationPass, Validator
+
+    class _Scored(Validator):
+        def score(self, records, run, fields, *, parts=False, margins=False, targets=False):
+            if on_score is not None:
+                on_score(fields, margins)
+            return ValidationPass(
+                1.0, {}, MarginAccumulator(fields) if margins else None,
+                [] if targets else None,
+            )
+
+    loop.validator = _Scored(loop.config, loop.device, loop.losses)
+
+
 def stub_below_the_loop(monkeypatch):
     """Replace what a ``TrainingLoop`` builds beneath itself — the encoder, the
     head, the tokenizer, the script-API vocabulary and the feature widths — so

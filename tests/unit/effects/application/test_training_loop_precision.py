@@ -20,7 +20,6 @@ from effects.application import training_loop as loop_module
 from effects.application.step_loss import StepLossComputer, autocast_enabled
 from effects.application.step_preparation import DeviceStep, HeadTargets, StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
-from effects.application.training_loop import TrainingLoop
 from effects.domain.effect_losses import LossParts
 from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
 from effects.domain.records import CombatPayload, RecordKind
@@ -29,6 +28,7 @@ from tests.unit.effects.builders import (
     StubLosses,
     make_training_loop,
     stub_below_the_loop,
+    stub_validator,
     write_validation_samples,
 )
 
@@ -166,9 +166,6 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):
     monkeypatch.setattr(
         StepPreparer, "prepare_training_step", lambda self, plan, *a, **k: (plan, 0),
     )
-    monkeypatch.setattr(
-        TrainingLoop, "_validate", lambda self, records, *a, **k: 1.0,
-    )
 
     memory_fraction_calls: list[float] = []
     empty_cache_calls: list[None] = []
@@ -204,6 +201,7 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):
     )
     loop = make_training_loop(config, training_shards=[shard], validation_samples=samples)
     loop.losses = StubLosses(lambda prepared: model.p.sum())
+    stub_validator(loop)
     assert loop.execute() == 0
     return memory_fraction_calls, empty_cache_calls
 

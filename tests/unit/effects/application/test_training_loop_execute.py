@@ -16,13 +16,13 @@ from effects.application.train_effect_model import (
     EarlyStopper,
     TrainEffectModelConfig,
 )
-from effects.application.training_loop import TrainingLoop
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.builders import (
     StubLosses,
     make_training_loop,
     stub_below_the_loop,
+    stub_validator,
     write_validation_samples,
 )
 
@@ -44,9 +44,8 @@ def run(tmp_path, make_record, monkeypatch):
         events.append(("loss", id(prepared["fields"]), model.training))
         return model.p.sum()
 
-    def validate(self, records, *args, parts=None, fields=None, margins=None, **kwargs):
-        events.append(("validate", id(fields), margins is not None))
-        return 1.0
+    def validate(fields, margins):
+        events.append(("validate", id(fields), margins))
 
     # The step's host half reads real surfaces off real records; what it is
     # handed stands in for what it would have prepared.
@@ -54,7 +53,6 @@ def run(tmp_path, make_record, monkeypatch):
         StepPreparer, "prepare_training_step",
         lambda self, plan, *a, fields=None, **k: ({"fields": fields}, 0),
     )
-    monkeypatch.setattr(TrainingLoop, "_validate", validate)
 
     resets = []
     original = EarlyStopper.reset
@@ -73,6 +71,7 @@ def run(tmp_path, make_record, monkeypatch):
     )
     loop = make_training_loop(config, training_shards=[shard], validation_samples=samples)
     loop.losses = StubLosses(device_loss)
+    stub_validator(loop, validate)
     return loop.execute(), events, resets, model
 
 
