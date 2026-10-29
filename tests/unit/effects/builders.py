@@ -35,6 +35,10 @@ GEN1_SIDECAR_FOLDERS = (
     EFFECTS_FIXTURES / "gen1-sidecars" / "cardsfolder",
     EFFECTS_FIXTURES / "gen1-sidecars" / "tokenscripts",
 )
+GEN1_KEYWORD_DEFINITIONS = EFFECTS_FIXTURES / "keyword-definitions.json"
+#: The seed and shard count of the short real runs over the gen-1 records.
+GEN1_TRAINING_SEED = 11
+GEN1_TRAINING_SHARDS = 3
 
 _EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
 
@@ -442,3 +446,34 @@ def keyword_score(qualifying: int, agreeing: int):
     return KeywordScore(
         qualifying=qualifying, agreeing=agreeing, observations=qualifying,
     )
+
+
+def gen1_training_config(corpus, out, **overrides):
+    """A short real run's config over the application conftest's ``corpus``
+    fixture, every draw the host half takes switched on."""
+    from effects.application.train_effect_model import TrainEffectModelConfig
+
+    settings = dict(
+        corpus=str(corpus.root), cards_folders=GEN1_SIDECAR_FOLDERS,
+        keyword_definitions=GEN1_KEYWORD_DEFINITIONS, vocab_path=corpus.vocab,
+        model_output=out, seed=GEN1_TRAINING_SEED, batch_size=8, steps_per_epoch=7,
+        shards_per_epoch=GEN1_TRAINING_SHARDS, epochs=2, curriculum_epoch=2, patience=5,
+        e_dim=16, encoder_layers=1, encoder_d_model=32,
+        # Every draw the host half takes, at rates that make each one fire.
+        keyword_expand_p=0.5, context_dropout=0.2, mlm_weight=0.1,
+        mlm_mask_prob=0.3, value_weight=0.05, api_weight=0.05, e_noise=0.1,
+    )
+    settings.update(overrides)
+    return TrainEffectModelConfig(**settings)
+
+
+def write_sidecar(sidecar, path: Path) -> None:
+    """Write one sidecar where ``convert`` would, so a test can produce one
+    without Forge; the inverse of ``sidecar_io.read_sidecar``."""
+    import json
+
+    from effects.infrastructure.sidecar_io import sidecar_to_dict
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sidecar_to_dict(sidecar)), encoding="utf-8")

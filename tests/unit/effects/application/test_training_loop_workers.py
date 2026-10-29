@@ -26,7 +26,6 @@ import torch
 
 from effects.application import run_context
 from effects.application import training_loop as loop_module
-from effects.application.extract_keyword_definitions import load_keyword_definitions
 from effects.application.run_context import preparer_settings
 from effects.application.step_loss import StepLossComputer
 from effects.application.step_preparation import (
@@ -36,94 +35,23 @@ from effects.application.step_preparation import (
     StepReady,
 )
 from effects.application.train_effect_model import (
-    TrainEffectModelConfig,
     fields_for_epoch,
 )
 from effects.domain.ability_encoder import AbilityEncoder
-from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
-from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import feature_widths
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
 from effects.domain.split import (
     CorpusSplit,
 )
-from effects.infrastructure.record_io import read_shard, write_shard
-from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.step_workers import pack, unpack
-from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 from tests.unit.effects.builders import (
-    EFFECTS_FIXTURES,
-    GEN1_SIDECAR_FOLDERS,
-    make_batcher,
+    GEN1_TRAINING_SEED,
+    gen1_training_config,
     make_training_loop,
 )
 
-_DEFINITIONS = EFFECTS_FIXTURES / "keyword-definitions.json"
-SEED = 11
-SHARDS = 3
-
-
-@pytest.fixture(scope="module")
-def records():
-    return list(read_shard(EFFECTS_FIXTURES / "gen1-records.jsonl.gz"))
-
-
-@pytest.fixture(scope="module")
-def corpus(tmp_path_factory, records):
-    """Three training shards, the validation sample, and a vocabulary file."""
-    root = tmp_path_factory.mktemp("corpus")
-    games = sorted({record.game_id for record in records})
-    held = games[0]
-    shards = []
-    for index in range(SHARDS):
-        path = root / f"train{index}.jsonl.gz"
-        # Every shard keeps a few of the held game's records, which the
-        # inherited split must keep out of training wherever it lands.
-        write_shard(path, [
-            r for i, r in enumerate(records)
-            if i % SHARDS == index or r.game_id == held
-        ])
-        shards.append(path)
-    sample = root / "validation.jsonl.gz"
-    write_shard(sample, records[:24])
-
-    cards, tokens = GEN1_SIDECAR_FOLDERS
-    sidecars = SidecarCache({"cardsfolder": cards, "tokenscripts": tokens})
-    definitions = load_keyword_definitions(_DEFINITIONS)
-    base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
-    bare = AbilityTokenizer(base, definitions, surface="script")
-    batcher = make_batcher(
-        tokenizer=bare, sidecars=sidecars, masks=baseline_masks("full"),
-        surface="script", e_dim=16, widths={}, device=torch.device("cpu"),
-    )
-    texts = [*batcher.batch_texts(records)]
-    texts += [d.reminder_template for d in definitions.values() if d.reminder_template]
-    vocab = dict(base)
-    for text in texts:
-        for token in bare.tokenize(text):
-            vocab.setdefault(token.text, len(vocab))
-    vocab_path = root / "vocab-script.txt"
-    save_vocabulary(vocab, vocab_path)
-    return type("Corpus", (), {
-        "root": root, "shards": shards, "sample": sample, "held": held,
-        "vocab": vocab_path,
-    })
-
-
-def _config(corpus, out: Path, **overrides) -> TrainEffectModelConfig:
-    settings = dict(
-        corpus=str(corpus.root), cards_folders=GEN1_SIDECAR_FOLDERS,
-        keyword_definitions=_DEFINITIONS, vocab_path=corpus.vocab,
-        model_output=out, seed=SEED, batch_size=8, steps_per_epoch=7,
-        shards_per_epoch=SHARDS, epochs=2, curriculum_epoch=2, patience=5,
-        e_dim=16, encoder_layers=1, encoder_d_model=32,
-        # Every draw the host half takes, at rates that make each one fire.
-        keyword_expand_p=0.5, context_dropout=0.2, mlm_weight=0.1,
-        mlm_mask_prob=0.3, value_weight=0.05, api_weight=0.05, e_noise=0.1,
-    )
-    settings.update(overrides)
-    return TrainEffectModelConfig(**settings)
+SEED = GEN1_TRAINING_SEED
 
 
 class _Interrupted(Exception):
@@ -202,7 +130,7 @@ def _run(
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="effects.application"):
         loop = make_training_loop(
-            _config(
+            gen1_training_config(
                 corpus, out, prefetch_workers=workers, seed=seed, resume=resume,
                 **config,
             ),
@@ -482,7 +410,7 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
 ):
     """The worker's resources, built from settings, and the packing between."""
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    config = _config(corpus, corpus.root / "unused")
+    config = gen1_training_config(corpus, corpus.root / "unused")
     loop = make_training_loop(config, rarity={"x": 3})
     settings = preparer_settings(
         config, seed=loop.seed, facts=loop.facts, widths=feature_widths(records),

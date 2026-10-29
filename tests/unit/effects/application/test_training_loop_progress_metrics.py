@@ -21,18 +21,13 @@ from effects.application.validation_pass import FieldParts, Validator
 from effects.domain.effect_model import EffectModel
 from effects.infrastructure.model_runner import Runnable
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.application.test_training_loop_workers import (  # noqa: F401
-    _config,
-    corpus,
-    records,
-)
-from tests.unit.effects.builders import make_training_loop
+from tests.unit.effects.builders import gen1_training_config, make_training_loop
 
 BATCH_SIZE = 32
 
 
 @pytest.fixture(scope="module")
-def scored(corpus, records, tmp_path_factory):  # noqa: F811
+def scored(corpus, records, tmp_path_factory):
     """One epoch's margins both ways, and its card-disjoint loss with and
     without the margins being fed."""
     assert len(records) > BATCH_SIZE
@@ -70,7 +65,7 @@ def scored(corpus, records, tmp_path_factory):  # noqa: F811
             )),
         )
         loop = make_training_loop(
-            _config(
+            gen1_training_config(
                 corpus, root / "out", prefetch_workers=0, epochs=1,
                 batch_size=BATCH_SIZE,
             ),
