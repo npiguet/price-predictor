@@ -26,10 +26,10 @@ from effects.application.run_context import (
     build_run,
     preparer_settings,
 )
+from effects.application.step_loss import StepLoss, StepLossComputer, read_back
 from effects.application.step_preparation import (
     NO_TEXT_BUCKET,
     DeviceStep,
-    HeadTargets,
     PreparerSettings,
     ShardClosed,
     ShardOpened,
@@ -39,10 +39,7 @@ from effects.application.step_preparation import (
 )
 from effects.application.surface_batching import (
     IDENTITY_TABLE_KEY,
-    EncodedBatch,
-    Materializer,
 )
-from effects.application.text_staging import MaskedTokens, MlmMasker
 from effects.application.train_effect_model import (
     MAX_GRAD_NORM,
     CorpusFacts,
@@ -65,29 +62,15 @@ from effects.domain.ability_encoder import (
     TruncationLog,
     log_truncation,
 )
-from effects.domain.aux_heads import (
-    AUX_HEAD,
-    AUX_HEADS,
-    SHIPPED_HEADS,
-    TRAINING_HEADS,
-    Head,
-    HeadInput,
-)
 from effects.domain.effect_head_input import (
     feature_widths,
 )
 from effects.domain.effect_head_layout import FieldSpec
-from effects.domain.effect_losses import (
-    LossParts,
-    mlm_loss,
-    per_entity_loss,
-)
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.loss_floor import PartsMean, constant_predictor_floor
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES, BatchPlan, sampling_class
 from effects.domain.strata import VALIDATION_STRATA, Stratum
-from effects.domain.surface_collation import gather_entities
 from effects.infrastructure.effect_model_store import (
     EPOCHS_DIR,
     EffectCheckpoint,
@@ -113,21 +96,6 @@ MAX_STEPS_AHEAD = 32
 CUDA_MEMORY_FRACTION = 0.9
 
 
-def autocast_enabled(device: torch.device) -> bool:
-    """Whether the forward pass and loss run under bf16 autocast: CUDA only,
-    and only when the card supports bf16.
-
-    Guarded on ``device_count()`` because under ``CUDA_VISIBLE_DEVICES=""``
-    ``is_available()`` can still be true and ``is_bf16_supported()`` would
-    raise rather than read as unsupported.
-    """
-    return (
-        device.type == "cuda"
-        and torch.cuda.device_count() > 0
-        and torch.cuda.is_bf16_supported()
-    )
-
-
 def reports_now(*, index: int, budget: int) -> bool:
     """Whether the step at zero-based ``index`` reads its numbers back: only a
     shard's last, since each read is a device synchronization."""
@@ -138,44 +106,6 @@ def resets_at(config, *, epoch: int) -> bool:
     """Whether the early stopper forgets its best at the start of ``epoch``:
     at the curriculum epoch, where the objective gains the sparse fields."""
     return config.curriculum_epoch > 1 and epoch == config.curriculum_epoch
-
-
-@dataclass
-class StepLoss:
-    """One batch's losses, on the device."""
-
-    #: What backward runs on: ``shipped`` plus the weighted training-only heads.
-    total: torch.Tensor
-    #: The objective validation scores and the train line prints: the
-    #: per-entity loss and the shipped heads.
-    shipped: torch.Tensor
-    parts: LossParts
-    terms: dict[str, torch.Tensor]
-    #: The MLM pass's masked tokens, left for after the main backward.
-    pending_mlm: MaskedTokens | None = None
-    #: The per-entity head's output at each target entity, detached.
-    gathered: torch.Tensor | None = None
-
-
-def combine_terms(
-    loss: torch.Tensor, terms: Mapping[str, torch.Tensor],
-    weights: Mapping[Head, float],
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """``(total, shipped)`` from the per-entity loss and the head terms (FR-060a).
-
-    Shipped heads join at unit weight, training-only heads at their own
-    weights for backward alone. Summed in :data:`AUX_HEADS` order, which is
-    part of what makes a run repeat bit for bit.
-    """
-    shipped = loss
-    for spec in SHIPPED_HEADS:
-        if spec.head in terms:
-            shipped = shipped + terms[spec.head]
-    total = shipped
-    for spec in TRAINING_HEADS:
-        if spec.head in terms:
-            total = total + weights[spec.head] * terms[spec.head]
-    return total, shipped
 
 
 @dataclass(frozen=True)
@@ -233,7 +163,7 @@ class EpochTally:
 
     def mean_terms(self) -> dict[str, float]:
         steps = max(self.taken, 1)
-        return {name: value / steps for name, value in _read_back(self.terms).items()}
+        return {name: value / steps for name, value in read_back(self.terms).items()}
 
 
 @dataclass
@@ -256,7 +186,7 @@ class ShardStats:
         self.loss += loss.shipped.detach()
         self.steps += 1
         if reported:
-            self.heads = _read_back(loss.terms)
+            self.heads = read_back(loss.terms)
         if loss.parts:
             self.parts = loss.parts.as_dict()
 
@@ -298,23 +228,6 @@ def _timed(steps, task: ShardTask, of: int):
         if message is None:
             return
         yield message, time.perf_counter() - waiting
-
-
-def _read_back(scalars: Mapping[str, torch.Tensor]) -> dict[str, float]:
-    """Device scalars as floats by name, in one synchronization.
-
-    Stacked in float64, so each value is the one ``float()`` would have read;
-    moved to the first one's device, because a group with no gradient reports
-    its norm as a host zero.
-    """
-    if not scalars:
-        return {}
-    values = list(scalars.values())
-    device = values[0].device
-    stacked = torch.stack([
-        value.detach().to(device, torch.float64) for value in values
-    ])
-    return dict(zip(scalars, stacked.tolist()))
 
 
 def _progress_metrics(margins: MarginAccumulator) -> GateOneMetrics:
@@ -416,7 +329,8 @@ class TrainingLoop:
         )
         torch.manual_seed(self.seed)
         self.device = default_device()
-        self.autocast: bool = autocast_enabled(self.device)
+        #: The device half of every step, training's and validation's.
+        self.losses = StepLossComputer(config, self.device)
         self.floor = FloorCache()
 
     @property
@@ -457,84 +371,6 @@ class TrainingLoop:
             "supervise carry no loss this run.",
             len(present), len(SAMPLING_CLASSES), ", ".join(missing),
         )
-
-    def _autocast(self):
-        """bf16 autocast on CUDA (FR-095); a no-op context elsewhere."""
-        return torch.autocast(
-            device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
-        )
-
-    def _head_weights(self) -> dict[Head, float]:
-        return {spec.head: spec.weight(self.config) for spec in TRAINING_HEADS}
-
-    def _device_loss(
-        self, prepared: DeviceStep, run: RunContext, materializer: Materializer,
-        *, step: int | None = None, report_parts: bool = False,
-    ) -> StepLoss:
-        """One prepared step's losses: the device half, for training and
-        validation alike.
-
-        ``step`` is a training step's place in the run, for the noise on ``e``;
-        ``report_parts`` keeps each field's term, stacked on the device.
-        Autocast encloses ``materialize`` too, because the encoder's forward
-        runs there; backward and the optimizer step stay outside it (bf16
-        needs no grad scaler).
-        """
-        with self._autocast():
-            batch, _surfaces, encoded = materializer.materialize(
-                prepared.batch, run.encoder, step=step,
-            )
-            hidden = run.model(**batch)
-            outputs = run.model.per_entity(hidden)
-            targets = prepared.targets
-            gathered = gather_entities(
-                outputs, targets.index.to(self.device, non_blocking=True),
-            )
-            loss, parts = per_entity_loss(
-                gathered, targets.fields_on(self.device, non_blocking=True),
-                fields=prepared.fields, report_parts=report_parts,
-            )
-            terms = self._head_terms(prepared.heads, encoded, run.model, hidden)
-        total, shipped = combine_terms(loss, terms, self._head_weights())
-        return StepLoss(
-            total=total, shipped=shipped, parts=parts, terms=terms,
-            pending_mlm=prepared.heads.get(Head.MLM), gathered=gathered.detach(),
-        )
-
-    def _head_terms(
-        self, targets: HeadTargets, encoded: EncodedBatch, model, hidden,
-    ) -> dict[str, torch.Tensor]:
-        """Every head's loss term but the MLM pass's, as device tensors; a head
-        the host half prepared no targets for is not computed."""
-        inputs = {HeadInput.TRUNK: hidden, HeadInput.ENCODED: encoded.matrix}
-        terms: dict[str, torch.Tensor] = {}
-        for spec in AUX_HEADS:
-            given = targets.get(spec.head)
-            source = inputs.get(spec.reads)
-            if spec.loss is None or given is None or source is None:
-                continue
-            terms[spec.head] = spec.loss(
-                model, source, *spec.to_device(given, self.device),
-            )
-        return terms
-
-    def _mlm_backward(self, loss: StepLoss, encoder, model) -> None:
-        """The MLM term's forward and backward, after the main loss's backward
-        has freed its activations: with both graphs alive at once, long texts
-        overflowed 8 GB. The accumulated gradient is the same sum either way.
-        """
-        masked: MaskedTokens | None = loss.pending_mlm
-        if masked is None:
-            return
-        loss.pending_mlm = None
-        with self._autocast():
-            token_hidden, token_targets = MlmMasker.forward(encoder, masked, self.device)
-            term = mlm_loss(
-                model.mlm_head(token_hidden).float(), token_targets, rows=masked.rows,
-            )
-        weight = AUX_HEAD[Head.MLM].weight(self.config)
-        (weight * term / self.config.grad_accum).backward()
-        loss.terms[Head.MLM] = term.detach()
 
     def execute(self) -> int:
         samples = self._load_validation()
@@ -879,17 +715,17 @@ class TrainingLoop:
     ) -> None:
         """One step's device half: forward, backward, and the optimizer on the
         accumulation boundary."""
-        computed = self._device_loss(
+        computed = self.losses.device_loss(
             prepared, run, run.training, step=run.step, report_parts=due,
         )
         (computed.total / self.config.grad_accum).backward()
-        self._mlm_backward(computed, run.encoder, run.model)
+        self.losses.mlm_backward(computed, run.encoder, run.model)
         # Counted within the epoch, not by run.step: each epoch drops any
         # partial accumulation, so the run's step would misplace boundaries.
         if (tally.taken + 1) % self.config.grad_accum == 0:
             stats.unread_norms = _optimizer_step(run.optimizer)
         if due:
-            stats.norms = _read_back(stats.unread_norms)
+            stats.norms = read_back(stats.unread_norms)
         tally.add_step(computed)
         stats.add_step(computed, reported=due)
         run.step += 1
@@ -927,7 +763,7 @@ class TrainingLoop:
                 )
                 if collect is not None:
                     collect.append(prepared.targets)
-                computed = self._device_loss(
+                computed = self.losses.device_loss(
                     prepared, run, run.scoring, report_parts=parts is not None,
                 )
                 total += computed.shipped

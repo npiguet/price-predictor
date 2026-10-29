@@ -292,6 +292,26 @@ def one_parameter_module():
     return module
 
 
+class StubLosses:
+    """Stands in for a loop's ``StepLossComputer``: a step's loss is
+    ``loss(prepared)``, a ``StepLoss`` or a scalar tensor, and no MLM pass runs."""
+
+    def __init__(self, loss) -> None:
+        self.loss = loss
+
+    def device_loss(self, prepared, modules, materializer, **kwargs):
+        from effects.application.step_loss import StepLoss
+        from effects.domain.effect_losses import LossParts
+
+        computed = self.loss(prepared)
+        if isinstance(computed, StepLoss):
+            return computed
+        return StepLoss(total=computed, shipped=computed.detach(), parts=LossParts(), terms={})
+
+    def mlm_backward(self, loss, encoder, model) -> None:
+        return None
+
+
 def stub_below_the_loop(monkeypatch):
     """Replace what a ``TrainingLoop`` builds beneath itself — the encoder, the
     head, the tokenizer, the script-API vocabulary and the feature widths — so

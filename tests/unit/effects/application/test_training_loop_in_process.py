@@ -19,17 +19,22 @@ import pytest
 import torch
 
 from effects.application import training_loop as loop_module
-from effects.application.step_preparation import ShardTask, StepPreparer
+from effects.application.step_preparation import (
+    ShardOpened,
+    ShardTask,
+    StepPreparer,
+    StepReady,
+)
 from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     epoch_shards,
 )
-from effects.application.training_loop import EpochTally, StepLoss, TrainingLoop
-from effects.domain.effect_losses import LossParts
+from effects.application.training_loop import EpochTally, TrainingLoop
 from effects.domain.records import CombatPayload, RecordKind
 from tests.unit.effects.builders import (
     EFFECTS_FIXTURES,
     GEN1_SIDECAR_FOLDERS,
+    StubLosses,
     make_cpu_training_loop,
     make_preparer,
     make_training_loop,
@@ -80,19 +85,25 @@ def epoch(tmp_path, make_record, monkeypatch):
                 raise RuntimeError(f"unreadable shard {path.name}")
             return [f"{path.name} records"]
 
-        def train_on_shard(self, task, steps, run, tally, **kwargs):
-            _mark(marks, "train", task.shard.name, "start")
-            trained.append((task.shard.name, list(steps)))
+        def train(prepared):
+            name, records = prepared
+            _mark(marks, "train", name, "start")
+            trained.append((name, records))
             time.sleep(PAUSE)
-            _mark(marks, "train", task.shard.name, "finish")
+            _mark(marks, "train", name, "finish")
+            return model.p.sum()
 
-        stub_below_the_loop(monkeypatch)
+        model, _encoder = stub_below_the_loop(monkeypatch)
         monkeypatch.setattr(loop_module, "load_shard", load)
-        monkeypatch.setattr(TrainingLoop, "_train_on_shard", train_on_shard)
-        # The shard's records stand in for the steps they would prepare.
+        # The shard's records stand in for the one step they would prepare.
         monkeypatch.setattr(
             StepPreparer, "shard_steps",
-            lambda self, task, records, pin=False: iter([records]),
+            lambda self, task, records, pin=False: iter([
+                ShardOpened(trainable=1, held_back=0, rarity_coverage=None),
+                StepReady(
+                    prepared=(task.shard.name, records), buckets={}, families={},
+                ),
+            ]),
         )
         monkeypatch.setattr(
             TrainingLoop, "_validate", lambda self, records, *args, **kwargs: 1.0,
@@ -102,9 +113,11 @@ def epoch(tmp_path, make_record, monkeypatch):
             shards_per_epoch=SHARDS, batch_size=2, seed=SEED,
             model_output=tmp_path / "out", prefetch_workers=0,
         )
-        return make_training_loop(
+        loop = make_training_loop(
             config, training_shards=shards, validation_samples=samples,
-        ).execute()
+        )
+        loop.losses = StubLosses(train)
+        return loop.execute()
 
     drawn = epoch_shards(shards, epoch=1, per_epoch=SHARDS, seed=SEED)
     return SimpleNamespace(
@@ -119,8 +132,8 @@ def test_the_shards_are_trained_in_the_drawn_order_with_their_own_records(epoch)
     a different corpus reported under the same seed."""
     assert epoch.start() == 0
     assert [name for name, _ in epoch.trained] == epoch.drawn
-    assert [steps for _, steps in epoch.trained] == [
-        [[f"{name} records"]] for name in epoch.drawn
+    assert [records for _, records in epoch.trained] == [
+        [f"{name} records"] for name in epoch.drawn
     ]
 
 
@@ -157,15 +170,14 @@ def _shard(monkeypatch, directory, *, failing_at: int | None = None):
             raise RuntimeError(f"step {which} could not be prepared")
         return which, 0
 
-    def device_loss(self, prepared, *args, **kwargs):
+    def device_loss(prepared):
         _mark(marks, "train", prepared, "start")
         time.sleep(PAUSE)
-        loss = model.p.sum()
-        return StepLoss(total=loss, shipped=loss, parts=LossParts(), terms={})
+        return model.p.sum()
 
     monkeypatch.setattr(StepPreparer, "prepare_training_step", prepare)
-    monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
     loop = make_cpu_training_loop(monkeypatch, batch_size=8)
+    loop.losses = StubLosses(device_loss)
     preparer = make_preparer(directory, cards_folders=GEN1_SIDECAR_FOLDERS, batch_size=8)
     task = ShardTask(
         shard=EFFECTS_FIXTURES / "gen1-records.jsonl.gz", epoch=1, position=1,

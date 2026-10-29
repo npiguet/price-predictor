@@ -14,13 +14,13 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from effects.application import training_loop as loop_module
 from effects.application.run_context import build_run, training_settings
+from effects.application.step_loss import StepLoss
 from effects.application.step_preparation import NO_TEXT_BUCKET, training_heads
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
+from effects.application.text_staging import MlmMasker
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_log import format_shares
-from effects.application.training_loop import StepLoss
 from effects.domain.aux_heads import Head
 from effects.domain.effect_losses import LossParts
 from effects.domain.effect_model import EffectModel, EffectModelConfig
@@ -89,7 +89,7 @@ class _Batcher:
         return SimpleNamespace(rows=len(self.encoded.texts))
 
 
-def _terms(monkeypatch, preparer, loop, records, batcher, model, hidden, *, training):
+def _terms(monkeypatch, preparer, losses, records, batcher, model, hidden, *, training):
     """Both halves of the head terms: targets on the host, losses after.
 
     The MLM term is computed after the main backward in training, so the step
@@ -103,9 +103,9 @@ def _terms(monkeypatch, preparer, loop, records, batcher, model, hidden, *, trai
             if training else frozenset()
         ),
     )
-    terms = loop._head_terms(targets, batcher.encoded, model, hidden)
+    terms = losses.head_terms(targets, batcher.encoded, model, hidden)
     rows = len(batcher.encoded.texts)
-    monkeypatch.setattr(loop_module.MlmMasker, "forward", staticmethod(
+    monkeypatch.setattr(MlmMasker, "forward", staticmethod(
         lambda encoder, masked, device: (
             torch.randn(rows, 8), torch.zeros(rows, dtype=torch.long),
         ),
@@ -114,7 +114,7 @@ def _terms(monkeypatch, preparer, loop, records, batcher, model, hidden, *, trai
         total=torch.zeros(()), shipped=torch.zeros(()), parts=LossParts(), terms=terms,
         pending_mlm=targets.get(Head.MLM),
     )
-    loop._mlm_backward(loss, None, model)
+    losses.mlm_backward(loss, None, model)
     return loss.terms
 
 
@@ -180,7 +180,7 @@ class TestTheTargets:
 class TestTheHeadTerms:
     def test_every_head_contributes_on_a_mixed_batch(self, monkeypatch, records, tmp_path):
         """Spec Story 5 scenario 9: decision, cost half, trigger, effect half."""
-        loop = make_cpu_training_loop(monkeypatch)
+        losses = make_cpu_training_loop(monkeypatch).losses
         preparer = make_preparer(
             tmp_path, api_types=["DealDamage", "Draw", "Pump"], param_keys=list("ABCDE"),
         )
@@ -189,32 +189,32 @@ class TestTheHeadTerms:
         hidden = torch.randn(len(batch), 6, 8)
         batcher = _Batcher(["NumDmg$ 2 | SP$ DealDamage", "SP$ Draw | NumCards$ 1"], {})
         terms = _terms(
-            monkeypatch, preparer, loop, batch, batcher, model, hidden, training=True,
+            monkeypatch, preparer, losses, batch, batcher, model, hidden, training=True,
         )
         assert {"verdict", "value", "api", "mlm"} <= set(terms)
         assert all(torch.isfinite(value) for value in terms.values())
         assert terms["verdict"] > 0
 
     def test_zero_weights_compute_neither_auxiliary(self, monkeypatch, records, tmp_path):
-        loop = make_cpu_training_loop(monkeypatch, mlm_weight=0.0, api_weight=0.0)
+        losses = make_cpu_training_loop(monkeypatch, mlm_weight=0.0, api_weight=0.0).losses
         preparer = make_preparer(
             tmp_path, mlm_weight=0.0, api_weight=0.0, api_types=["Draw"],
         )
         batch = _kinds(records)
         batcher = _Batcher(["SP$ Draw | NumCards$ 1"], {})
         terms = _terms(
-            monkeypatch, preparer, loop, batch, batcher, _model(),
+            monkeypatch, preparer, losses, batch, batcher, _model(),
             torch.randn(len(batch), 6, 8), training=True,
         )
         assert "mlm" not in terms and "api" not in terms
         assert batcher.mlm_calls == 0
 
     def test_scoring_computes_only_the_shipped_heads(self, monkeypatch, records, tmp_path):
-        loop = make_cpu_training_loop(monkeypatch)
+        losses = make_cpu_training_loop(monkeypatch).losses
         preparer = make_preparer(tmp_path, api_types=["Draw"])
         batch = _kinds(records)
         terms = _terms(
-            monkeypatch, preparer, loop, batch, _Batcher(["SP$ Draw"], {}), _model(),
+            monkeypatch, preparer, losses, batch, _Batcher(["SP$ Draw"], {}), _model(),
             torch.randn(len(batch), 6, 8), training=False,
         )
         assert set(terms) <= {"verdict", "created_objects"}

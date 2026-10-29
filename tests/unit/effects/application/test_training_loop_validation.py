@@ -23,7 +23,12 @@ from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
 from effects.domain.split import HoldoutRule
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.builders import make_entity_targets, make_preparer, make_training_loop
+from tests.unit.effects.builders import (
+    StubLosses,
+    make_entity_targets,
+    make_preparer,
+    make_training_loop,
+)
 
 
 @pytest.fixture
@@ -230,12 +235,12 @@ def test_validation_scores_the_shipped_objective_not_the_backward_total():
     """
     from types import SimpleNamespace
 
-    from effects.application.training_loop import StepLoss
+    from effects.application.step_loss import StepLoss
 
     loop = make_training_loop(TrainEffectModelConfig(corpus="unused", batch_size=2))
-    loop._device_loss = lambda *a, **k: StepLoss(
+    loop.losses = StubLosses(lambda prepared: StepLoss(
         total=torch.tensor(5.0), shipped=torch.tensor(1.0), parts=LossParts(), terms={},
-    )
+    ))
     module = SimpleNamespace(eval=lambda: None, train=lambda: None)
     run = SimpleNamespace(
         encoder=module, model=module, step=0, scoring=None,

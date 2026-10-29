@@ -28,6 +28,7 @@ from effects.application import run_context
 from effects.application import training_loop as loop_module
 from effects.application.extract_keyword_definitions import load_keyword_definitions
 from effects.application.run_context import preparer_settings
+from effects.application.step_loss import StepLossComputer
 from effects.application.step_preparation import (
     ShardOpened,
     ShardTask,
@@ -38,7 +39,6 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     fields_for_epoch,
 )
-from effects.application.training_loop import TrainingLoop
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.baselines import baseline_masks
@@ -130,14 +130,40 @@ class _Interrupted(Exception):
     """Stands in for the machine turning off after an epoch."""
 
 
+class _RecordedLosses(StepLossComputer):
+    """The real device half, noting every loss it computes, training's and
+    validation's, and pressing Ctrl+C on the ``interrupt_at``-th."""
+
+    def __init__(self, config, device, sink: list[float], interrupt_at) -> None:
+        super().__init__(config, device)
+        self.sink = sink
+        self.interrupt_at = interrupt_at
+        self.calls = 0
+
+    def device_loss(self, *args, **kwargs):
+        self.calls += 1
+        if self.calls == self.interrupt_at:
+            raise KeyboardInterrupt
+        computed = super().device_loss(*args, **kwargs)
+        self.sink.append(float(computed.total.detach()))
+        return computed
+
+
+def record_losses(loop, sink: list[float], *, interrupt_at=None) -> None:
+    """Swap ``loop``'s device half for one that records into ``sink``."""
+    loop.losses = _RecordedLosses(loop.config, loop.device, sink, interrupt_at)
+
+
 def _run(
     monkeypatch, corpus, out: Path, caplog, *, workers: int, seed: int = SEED,
-    interrupt_after: int | None = None, resume: bool = False, **config,
+    interrupt_after: int | None = None, resume: bool = False,
+    interrupt_at: int | None = None, **config,
 ) -> dict:
     """Two epochs end to end; every loss, the final weights, the share lines.
 
     ``interrupt_after`` stops the run once that epoch's resume file is written,
     as a machine turning off would; ``resume`` continues from that file.
+    ``interrupt_at`` presses Ctrl+C on that device loss, counted from 1.
     """
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     if interrupt_after is not None:
@@ -152,7 +178,6 @@ def _run(
     built: dict[str, torch.nn.Module] = {}
     initial: dict[str, torch.Tensor] = {}
     losses: list[float] = []
-    real_loss = TrainingLoop._device_loss
 
     def encoder(config):
         built["encoder"] = AbilityEncoder(config)
@@ -170,14 +195,8 @@ def _run(
         })
         return built["model"]
 
-    def device_loss(self, *args, **kwargs):
-        computed = real_loss(self, *args, **kwargs)
-        losses.append(float(computed.total.detach()))
-        return computed
-
     monkeypatch.setattr(run_context, "AbilityEncoder", encoder)
     monkeypatch.setattr(run_context, "EffectModel", model)
-    monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
     caplog.clear()
     with caplog.at_level(logging.INFO, logger="effects.application.training_loop"):
         loop = make_training_loop(
@@ -194,6 +213,7 @@ def _run(
                 "card-disjoint": corpus.sample, "game-disjoint": corpus.sample,
             },
         )
+        record_losses(loop, losses, interrupt_at=interrupt_at)
         try:
             code = loop.execute()
         except _Interrupted:
@@ -539,16 +559,6 @@ def test_an_interrupt_mid_shard_leaves_no_process_behind(
     monkeypatch, corpus, tmp_path, caplog,
 ):
     """Ctrl+C lands in the training loop with workers blocked on full queues."""
-    real_loss = TrainingLoop._device_loss
-    calls = []
-
-    def interrupted(self, *args, **kwargs):
-        calls.append(1)
-        if len(calls) == 3:
-            raise KeyboardInterrupt
-        return real_loss(self, *args, **kwargs)
-
-    monkeypatch.setattr(TrainingLoop, "_device_loss", interrupted)
     with pytest.raises(KeyboardInterrupt):
-        _run(monkeypatch, corpus, tmp_path / "out", caplog, workers=2)
+        _run(monkeypatch, corpus, tmp_path / "out", caplog, workers=2, interrupt_at=3)
     assert not multiprocessing.active_children()
