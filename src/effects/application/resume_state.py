@@ -19,6 +19,7 @@ from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
     RESUME_NAME,
     ResumeMismatchError,
+    content_hash,
     load_resume_state,
     resume_mismatches,
     save_resume_state,
@@ -27,8 +28,8 @@ from effects.infrastructure.effect_model_store import (
 logger = logging.getLogger(__name__)
 
 #: Flags a resumed run may set differently from the run it continues. The
-#: corpus is compared by its digest instead, and the holdout unit is the
-#: corpus's own.
+#: corpus is compared by its digest instead, the vocabulary and keyword
+#: definitions by their bytes, and the holdout unit is the corpus's own.
 RESUME_MAY_CHANGE: frozenset[str] = frozenset({
     "epochs", "patience", "lr_scale", "save_every_epoch", "model_output",
     "prefetch_workers", "resume", "corpus", "cards_folders", "variant_scripts",
@@ -76,6 +77,8 @@ class ResumeState:
         return {
             "seed": self.seed,
             "corpus_digest": self.corpus_digest,
+            "vocab_hash": content_hash(self.config.vocab_path),
+            "keyword_definitions_hash": content_hash(self.config.keyword_definitions),
             **{name: getattr(self.config, name) for name in compared_flags()},
             **self.training_settings(),
         }
@@ -90,6 +93,7 @@ class ResumeState:
         save_resume_state(directory, {
             "epoch": epoch,
             "step": run.step,
+            "warmup": run.warmup,
             "finished": finished,
             "settings": self.settings(),
             "encoder": run.encoder.state_dict(),
@@ -136,6 +140,9 @@ class ResumeState:
         if state["rng"]["cuda"] is not None and torch.cuda.is_available():
             torch.cuda.set_rng_state_all(state["rng"]["cuda"])
         epoch, run.step = state["epoch"], state["step"]
+        # The run that started fixed its warmup from its own --epochs, which a
+        # resume may change.
+        run.warmup = state["warmup"]
         # Recomputed under this run's patience rather than read from the file,
         # so a run that stopped early continues when given more patience, or
         # none (FR-063f).

@@ -329,6 +329,23 @@ def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
     assert not multiprocessing.active_children()
 
 
+def test_a_run_resumed_for_more_epochs_warms_up_as_the_run_it_continues(
+    monkeypatch, corpus, tmp_path, caplog, in_process,
+):
+    """``--epochs`` may grow on resume, but the warmup was fixed by the run
+    that started: at 40 epochs it would still be warming up through epoch 2."""
+    out = tmp_path / "extended"
+    first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    second = _run(
+        monkeypatch, corpus, out, caplog, workers=0, resume=True, epochs=40,
+        interrupt_after=2,
+    )
+
+    assert first["losses"] + second["losses"] == in_process["losses"]
+    for name, value in in_process["parameters"].items():
+        assert torch.equal(value, second["parameters"][name]), name
+
+
 def test_a_resume_under_another_seed_is_refused(monkeypatch, corpus, tmp_path, caplog):
     from effects.infrastructure.effect_model_store import ResumeMismatchError
 

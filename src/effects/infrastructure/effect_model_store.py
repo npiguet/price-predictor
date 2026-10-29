@@ -364,9 +364,11 @@ def load_resume_state(directory: Path) -> dict[str, Any]:
 
 
 def resume_mismatches(saved: dict[str, Any], current: dict[str, Any]) -> list[str]:
-    """Every setting whose value differs between a resume file and this run."""
+    """Every setting whose value differs between a resume file and this run,
+    over both sides' names: a setting recorded only when set can be missing
+    from either."""
     return [
-        f"{name}: resume file {saved.get(name)!r}, this run {current[name]!r}"
-        for name in sorted(current)
-        if saved.get(name) != current[name]
+        f"{name}: resume file {saved.get(name)!r}, this run {current.get(name)!r}"
+        for name in sorted(saved.keys() | current.keys())
+        if saved.get(name) != current.get(name)
     ]

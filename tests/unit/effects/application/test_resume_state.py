@@ -50,6 +50,32 @@ def test_a_compared_flag_that_moved_is_a_mismatch_and_a_free_one_is_not():
     )
 
 
+def test_a_resume_dropping_the_copies_of_the_run_it_continues_is_a_mismatch():
+    """Recorded only when set, so the saved side alone can hold the key."""
+    config = TrainEffectModelConfig()
+    saved = _settings(config, lethality_copies=3)
+    assert resume_mismatches(saved, _settings(config))
+    assert resume_mismatches(_settings(config), saved)
+
+
+def test_a_vocabulary_rebuilt_at_the_same_path_is_a_mismatch(tmp_path):
+    """Rebuilt at the same size the embedding shapes match, so only the bytes
+    say every token id may have moved."""
+    vocab, keywords = tmp_path / "vocab.json", tmp_path / "keywords.json"
+    vocab.write_text('{"a": 0}')
+    keywords.write_text("{}")
+    config = TrainEffectModelConfig(vocab_path=vocab, keyword_definitions=keywords)
+    saved = _settings(config)
+
+    vocab.write_text('{"b": 0}')
+    assert any("vocab" in line for line in resume_mismatches(saved, _settings(config)))
+    vocab.write_text('{"a": 0}')
+    keywords.write_text('{"flying": "x"}')
+    assert any(
+        "keyword" in line for line in resume_mismatches(saved, _settings(config))
+    )
+
+
 def test_the_training_settings_are_compared_as_recorded():
     """``lethality_copies`` is recorded only when set, so a run without copies
     resumes against exactly the settings it always wrote."""
