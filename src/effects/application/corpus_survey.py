@@ -37,12 +37,7 @@ from effects.domain.corpus_plan import (
     TrainingSupply,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
-from effects.domain.record_quality import (
-    QualityDefect,
-    acting_text_defect,
-    quality_defect,
-    unjoinable_key_defect,
-)
+from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
     EffectRecord,
     LegalityDecision,
@@ -156,16 +151,11 @@ class WorkerContext:
 
         return read_shard(Path(self.read.records_dir) / relative)
 
-    def refusal(self, record: EffectRecord) -> str | None:
+    def refusal(self, record: EffectRecord) -> QualityDefect | None:
         """The one refusal rule both passes apply."""
-        defect = quality_defect(record, max_events=self.read.max_events)
-        if defect is not None:
-            return defect
-        resolve = self.sidecars.resolution_of
-        defect = unjoinable_key_defect(record, resolve)
-        if defect is not None:
-            return defect
-        return acting_text_defect(record, resolve)
+        return record_refusal(
+            record, self.sidecars.resolution_of, max_events=self.read.max_events,
+        )
 
     def cell_of(
         self, record: EffectRecord, mode_counts: Mapping[str, int] | None = None,

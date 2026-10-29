@@ -89,6 +89,19 @@ def acting_text_defect(
     return QualityDefect.NO_ACTING_TEXT
 
 
+def record_refusal(
+    record: EffectRecord, resolve: Callable[[ProvenanceKey], KeyResolution],
+    *, max_events: int = MAX_EVENTS_PER_RECORD,
+) -> QualityDefect | None:
+    """The one refusal rule: every pass that counts kept records applies it,
+    so the survey, the write pass and the held-out coverage round agree."""
+    return (
+        quality_defect(record, max_events=max_events)
+        or unjoinable_key_defect(record, resolve)
+        or acting_text_defect(record, resolve)
+    )
+
+
 def has_unattributed_events(record: EffectRecord) -> bool:
     """Whether any of this record's events names no producing clause.
 

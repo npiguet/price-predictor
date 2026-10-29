@@ -29,6 +29,7 @@ from effects.domain.coverage import (
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
     EffectRecord,
+    RecordKind,
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import EntityState, Refs
@@ -1060,28 +1061,44 @@ class TestHeldOutTextUnit:
         assert texts == {"SP$ Rare | Thing$ 1": frozenset({"alpha", "beta"})}
 
     def test_a_shard_counts_distinct_games_per_text(self):
+        """Counted as build-corpus counts a held-out text's games (FR-053):
+        from resolution records only, so a text whose triggers fire but never
+        resolve is not satisfied."""
         from effects.application.collect_coverage import count_text_shard
-        from effects.domain.text_holdout import normalize_script_text
-        from effects.infrastructure.record_io import read_shard
-        from effects.infrastructure.sidecar_io import SidecarCache
 
-        roots = {
-            "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
-            "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
-        }
-        shard = _FIXTURES / "gen1-records.jsonl.gz"
-        cache = SidecarCache({k: Path(v) for k, v in roots.items()})
-        expected: dict[str, set[str]] = {}
-        for record in read_shard(shard):
-            for key in record.ability or ():
-                line = cache.line_for(key)
-                if line is not None and line.script_text:
-                    expected.setdefault(
-                        normalize_script_text(line.script_text), set(),
-                    ).add(record.game_id)
-        assert expected
-        counted = count_text_shard(shard, roots=roots, texts=frozenset(expected))
-        assert counted == expected
+        resolutions, everything = _texts_by_game(_GEN1_SHARD)
+        assert resolutions and everything != resolutions
+        counted = count_text_shard(
+            _GEN1_SHARD, roots=_GEN1_ROOTS, texts=frozenset(everything),
+        )
+        assert counted == resolutions
+
+    def test_a_refused_resolution_does_not_count_toward_its_text(self, tmp_path):
+        """A record the quality rules refuse never reaches the manifest."""
+        from dataclasses import replace
+
+        from effects.application.collect_coverage import count_text_shard
+        from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
+        from effects.infrastructure.record_io import read_shard, write_shard
+
+        effects = [
+            record for record in read_shard(_GEN1_SHARD)
+            if isinstance(record.payload, ResolutionPayload)
+        ]
+        flood = (Event(type=EventType.DAMAGE_DEALT, subjects=("P0",)),) * (
+            MAX_EVENTS_PER_RECORD + 1
+        )
+        clean, flooded = tmp_path / "clean.jsonl.gz", tmp_path / "flooded.jsonl.gz"
+        write_shard(clean, effects)
+        write_shard(flooded, [
+            replace(record, payload=replace(record.payload, events=flood))
+            for record in effects
+        ])
+        _, everything = _texts_by_game(_GEN1_SHARD)
+        texts = frozenset(everything)
+
+        assert count_text_shard(clean, roots=_GEN1_ROOTS, texts=texts)
+        assert count_text_shard(flooded, roots=_GEN1_ROOTS, texts=texts) == {}
 
     def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
         """A sidecar cache per shard re-read every sidecar the shard named."""
@@ -1159,6 +1176,36 @@ class TestHeldOutTextUnit:
         decks = build_coverage_decks(weights, candidates, 3, rng=random.Random(0))
         basics = {"Plains", "Island", "Swamp", "Mountain", "Forest"}
         assert all(set(deck) <= {"alpha"} | basics for deck in decks)
+
+
+_GEN1_SHARD = _FIXTURES / "gen1-records.jsonl.gz"
+_GEN1_ROOTS = {
+    "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
+    "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
+}
+
+
+def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """``text -> games`` over the shard's resolution records, and over every
+    record: each record counted through its first key with a script text."""
+    from effects.domain.text_holdout import normalize_script_text
+    from effects.infrastructure.record_io import read_shard
+    from effects.infrastructure.sidecar_io import SidecarCache
+
+    cache = SidecarCache({tree: Path(root) for tree, root in _GEN1_ROOTS.items()})
+    resolutions: dict[str, set[str]] = {}
+    everything: dict[str, set[str]] = {}
+    for record in read_shard(shard):
+        for key in record.ability or ():
+            line = cache.line_for(key)
+            if line is None or not line.script_text:
+                continue
+            text = normalize_script_text(line.script_text)
+            everything.setdefault(text, set()).add(record.game_id)
+            if record.kind is RecordKind.RESOLUTION:
+                resolutions.setdefault(text, set()).add(record.game_id)
+            break
+    return resolutions, everything
 
 
 class TestOnlyCardsRefusals:

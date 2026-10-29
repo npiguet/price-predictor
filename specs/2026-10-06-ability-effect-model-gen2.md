@@ -325,7 +325,9 @@ Every gen-2 record carries `random_seat`, and every gen-2 legality record carrie
   cards alone, plus basics, and writes full-strength records. `PATH` is the list
   `holdout-cards` writes.
 - In this mode the coverage unit is the held-out ability text. A text is satisfied once it
-  acts in records from at least `--min-text-games` distinct games, default 5.
+  resolves in at least `--min-text-games` distinct games, default 5.
+- A game counts toward a text only through a resolution record the corpus build keeps, the
+  same count the manifest's under-five list reads.
 - The run ends when every held-out text with a castable carrier is satisfied or retired,
   and reports the texts left under the floor.
 - A text has a castable carrier when the base spec's castability consult judges at least

@@ -38,6 +38,8 @@ from effects.domain.coverage import (
     retire_stalled,
     text_deck_weights,
 )
+from effects.domain.record_quality import record_refusal
+from effects.domain.records import RecordKind, acting_keys
 
 if TYPE_CHECKING:
     from effects.domain.provenance import ProvenanceKey
@@ -616,18 +618,29 @@ def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
 def count_text_shard(
     shard: Path, *, roots: dict[str, str], texts: frozenset[str],
 ) -> dict[str, set[str]]:
-    """``held-out text -> the game ids it acted in``, over one shard. Top-level
-    so a process pool can pickle it; each process resolves keys through its own
-    :func:`_script_texts`, because a sidecar cache does not pickle."""
+    """``held-out text -> the game ids it resolved in``, over one shard.
+
+    Counted as build-corpus counts a held-out text's games (FR-053): from the
+    resolution records its refusal rule keeps, through the first acting key
+    whose text is held out. Top-level so a process pool can pickle it; each
+    process resolves keys through its own :func:`_script_texts`, because a
+    sidecar cache does not pickle.
+    """
     from effects.infrastructure.record_io import read_shard
 
     script_texts = _script_texts(tuple(sorted(roots.items())))
     games: dict[str, set[str]] = defaultdict(set)
     for record in read_shard(shard):
-        for key in record.ability or ():
-            text = script_texts.of(key)
-            if text in texts:
-                games[text].add(record.game_id)
+        if record.kind is not RecordKind.RESOLUTION:
+            continue
+        if record_refusal(record, script_texts.sidecars.resolution_of) is not None:
+            continue
+        text = next(
+            (text for key in acting_keys(record) if (text := script_texts.of(key)) in texts),
+            None,
+        )
+        if text is not None:
+            games[text].add(record.game_id)
     return dict(games)
 
 
@@ -637,14 +650,14 @@ class _ScriptTexts:
     def __init__(self, roots: tuple[tuple[str, str], ...]) -> None:
         from effects.infrastructure.sidecar_io import SidecarCache
 
-        self._sidecars = SidecarCache({tree: Path(root) for tree, root in roots})
+        self.sidecars = SidecarCache({tree: Path(root) for tree, root in roots})
         self._by_key: dict[ProvenanceKey, str | None] = {}
 
     def of(self, key: ProvenanceKey) -> str | None:
         from effects.domain.text_holdout import normalize_script_text
 
         if key not in self._by_key:
-            line = self._sidecars.line_or_none(key)
+            line = self.sidecars.line_or_none(key)
             self._by_key[key] = (
                 normalize_script_text(line.script_text)
                 if line is not None and line.script_text else None

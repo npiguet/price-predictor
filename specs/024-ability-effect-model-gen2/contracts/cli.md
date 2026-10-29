@@ -66,7 +66,7 @@ A random-seat match writes effect records and the progress line only.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--only-cards` | none | the `holdout-cards` list; decks from listed cards plus basics; unit = held-out text; full-strength caps |
-| `--min-text-games` | 5 | distinct games a held-out text must act in |
+| `--min-text-games` | 5 | distinct games a held-out text must resolve in (kept resolution records) |
 
 Refuses `--only-cards` beside `--exclude-cards`, `--training-corpus` or `--split-from`. Ends when
 every held-out text with a castable carrier (by feature 023's castability consult) is satisfied or

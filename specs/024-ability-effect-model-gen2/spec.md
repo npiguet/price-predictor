@@ -156,7 +156,7 @@ for a short session and read its report of texts under the floor.
 5. **Given** `collect-coverage --only-cards PATH`, **When** decks are built, **Then** they contain
    only cards from PATH plus basics, and the records are full strength.
 6. **Given** the coverage round in progress, **When** every held-out text with a castable carrier
-   has acted in at least `--min-text-games` distinct games or been retired, **Then** the run ends
+   has resolved in at least `--min-text-games` distinct games or been retired, **Then** the run ends
    and reports the texts left under the floor.
 7. **Given** `--only-cards` beside `--exclude-cards`, `--training-corpus` or `--split-from`,
    **When** `collect-coverage` starts, **Then** it refuses before any game.
@@ -747,8 +747,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   `holdout-cards` writes. In this mode it MUST build decks from the listed cards alone, plus basics,
   and write full-strength records.
 - **FR-036**: In `--only-cards` mode the coverage unit MUST be the held-out ability text. A text
-  MUST count as satisfied once it acts in records from at least `--min-text-games` distinct games
-  (default 5).
+  MUST count as satisfied once it resolves in records from at least `--min-text-games` distinct
+  games (default 5). Games are counted as FR-053 counts them: from the resolution records that
+  feature 023's FR-148 refusal rule keeps, through the first acting key whose text is held out.
 - **FR-037**: The run MUST end when every held-out text with a castable carrier is satisfied or
   retired, and MUST report the texts left under the floor. A held-out text has a castable carrier
   when feature 023's castability consult judges at least one card carrying it castable; a text with
