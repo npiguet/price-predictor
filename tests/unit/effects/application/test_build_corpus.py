@@ -58,8 +58,10 @@ from effects.domain.records import (
     ResolutionPayload,
     RewritePayload,
 )
+from effects.domain.split import HoldoutRule
 from effects.domain.state_snapshot import StateSnapshot
 from effects.domain.strata import Stratum
+from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
@@ -203,7 +205,8 @@ def _rewrite(
 #: text above is held out under the ``text`` unit, ``0.16`` places exactly one
 #: game (``g-clean-3``) in the game-disjoint stratum, and one copy per record.
 _LEGACY_RULES = dict(
-    holdout_unit="text", game_disjoint_share=0.16, game_disjoint_keyword_share=0.16,
+    holdout=HoldoutRule(unit=HoldoutUnit.TEXT),
+    game_disjoint_share=0.16, game_disjoint_keyword_share=0.16,
     reuse_cap=1,
 )
 
@@ -491,7 +494,9 @@ def test_build_refuses_a_holdout_that_selects_no_card(tmp_path, a_corpus):
     only on an empty folder would let this one through.
     """
     with pytest.raises(ValueError, match="no held-out card") as raised:
-        a_corpus.build(tmp_path / "curated", holdout_permille=0)
+        a_corpus.build(
+            tmp_path / "curated", holdout=HoldoutRule(permille=0, unit=HoldoutUnit.TEXT),
+        )
 
     assert "4 converted card" in str(raised.value)
 
@@ -1334,7 +1339,7 @@ def test_the_new_flags_reach_the_config():
     ])
     assert (args.game_disjoint_share, args.game_disjoint_keyword_share) == (0.02, 0.3)
     assert args.game_disjoint_keywords == ("trample", "infect")
-    assert (args.reuse_cap, args.holdout_unit) == (2, "text")
+    assert (args.reuse_cap, args.holdout_unit) == (2, HoldoutUnit.TEXT)
 
 
 def test_an_unscored_game_disjoint_keyword_is_refused(tmp_path, shared_corpus):

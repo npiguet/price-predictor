@@ -18,7 +18,6 @@ from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import OUTPUT_STRATA, Stratum
-from effects.domain.text_holdout import HoldoutUnit
 
 if TYPE_CHECKING:
     from effects.application.build_corpus import BuildCorpusConfig, Decisions
@@ -228,8 +227,8 @@ def build_manifest(
         surface=surface,
         vocab_path=config.vocab_path,
         variant_scripts=config.variant_scripts or "",
-        holdout_permille=config.holdout_permille,
-        holdout_max_carriers=config.holdout_max_carriers,
+        holdout_permille=config.holdout.permille,
+        holdout_max_carriers=config.holdout.max_carriers,
         text_cap=config.text_cap,
         card_disjoint_text_cap=config.card_disjoint_text_cap,
         training_records=config.training_records,
@@ -259,7 +258,7 @@ def build_manifest(
         validation_sample=config.validation_sample,
         max_events_per_record=config.max_events,
         unattributed_records=written.unattributed,
-        holdout_unit=HoldoutUnit(config.holdout_unit),
+        holdout_unit=config.holdout.unit,
         families=families,
         signatures=signatures,
         policy_counts=_nested(written.families.policy),

@@ -32,7 +32,7 @@ from effects.domain.script_variants import (
     script_card_name,
     variant_name,
 )
-from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOutCards
+from effects.domain.split import HeldOutCards, HoldoutRule
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
@@ -79,11 +79,9 @@ class CollectVariantsConfig:
     })
     caps: CollectionCaps = field(default_factory=CollectionCaps)
     #: The holdout rule a variant printing a held-out text is dropped under;
-    #: must agree with ``build-corpus``'s.
+    #: given the flags ``build-corpus`` is, so the two agree.
     cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
-    holdout_permille: int = HOLDOUT_PERMILLE
-    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
-    holdout_unit: str = "template"
+    holdout: HoldoutRule = HoldoutRule()
 
     def volume_source(self) -> Path:
         """The directory the volume cap counts records in."""
@@ -380,15 +378,12 @@ def _keep_unheld(
             ", ".join(str(folder) for folder in config.cards_folders),
         )
         return variants
-    held_out = trees.holdout(
-        permille=config.holdout_permille, max_carriers=config.holdout_max_carriers,
-        unit=config.holdout_unit,
-    )
+    held_out = trees.holdout(config.holdout)
     kept = drop_held_out_variants(variants, held_out)
     if len(kept) < len(variants):
         logger.info(
             "Dropped %d of %d variant(s) printing a held-out %s.",
-            len(variants) - len(kept), len(variants), config.holdout_unit,
+            len(variants) - len(kept), len(variants), config.holdout.unit,
         )
     if not kept:
         logger.error("Every variant printed a held-out text; there is nothing to deck.")

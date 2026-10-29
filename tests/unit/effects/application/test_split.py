@@ -23,9 +23,11 @@ from effects.domain.records import (
 )
 from effects.domain.split import (
     HeldOutCards,
+    HoldoutRule,
     record_names_held_out_card,
 )
 from effects.domain.state_snapshot import EntityState
+from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.card_sources import (
     load_card_files,
     load_first_printings,
@@ -132,7 +134,7 @@ def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
 
     for permille in range(0, 1001, 50):
         held = text_keyed_holdout(
-            card_files, texts_by_card, permille=permille, max_carriers=8,
+            card_files, texts_by_card, HoldoutRule(permille, 8, HoldoutUnit.TEXT),
         )
         assert ("Searing Spear" in held.names) == ("Lightning Strike" in held.names), (
             f"reprints disagreed at permille={permille}"
@@ -146,7 +148,7 @@ def test_the_holdout_carries_its_texts_for_sizing_the_stratum() -> None:
     held = text_keyed_holdout(
         {"Alpha": "cardsfolder/a/alpha.txt"},
         {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]},
-        permille=1000, max_carriers=8,
+        HoldoutRule(1000, 8, HoldoutUnit.TEXT),
     )
 
     assert held.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
@@ -226,7 +228,7 @@ class TestTokenScriptsCarryHeldOutTexts:
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"},
             {"Alpha": [self._TEXT]},
-            permille=1000, max_carriers=8,
+            HoldoutRule(1000, 8, HoldoutUnit.TEXT),
             token_texts={"tokenscripts/r_1_1_goblin_shock.txt": [self._TEXT]},
         )
         assert "tokenscripts/r_1_1_goblin_shock.txt" in held.script_files
@@ -238,7 +240,7 @@ class TestTokenScriptsCarryHeldOutTexts:
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"},
             {"Alpha": [self._TEXT]},
-            permille=1000, max_carriers=1,
+            HoldoutRule(1000, 1, HoldoutUnit.TEXT),
             token_texts={"tokenscripts/goblin.txt": [self._TEXT]},
         )
         assert not held.texts
@@ -248,7 +250,7 @@ class TestTokenScriptsCarryHeldOutTexts:
 
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"}, {"Alpha": ["SP$ Draw"]},
-            permille=1000, max_carriers=8,
+            HoldoutRule(1000, 8, HoldoutUnit.TEXT),
             token_texts={"tokenscripts/goblin.txt": [self._TEXT]},
         )
         assert self._TEXT in held.texts
@@ -266,7 +268,7 @@ class TestHeldOutTextMatching:
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"},
             {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]},
-            permille=1000, max_carriers=8, unit="template",
+            HoldoutRule(1000, 8, HoldoutUnit.TEMPLATE),
         )
         assert held.holds_text("SP$ DealDamage | NumDmg$ 7")
         assert not held.holds_text("SP$ Draw | NumCards$ 1")
@@ -277,7 +279,7 @@ class TestHeldOutTextMatching:
         held = text_keyed_holdout(
             {"Alpha": "cardsfolder/a/alpha.txt"},
             {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]},
-            permille=1000, max_carriers=8, unit="text",
+            HoldoutRule(1000, 8, HoldoutUnit.TEXT),
         )
         assert held.holds_text("SP$  DealDamage |  NumDmg$ 3")
         assert not held.holds_text("SP$ DealDamage | NumDmg$ 7")

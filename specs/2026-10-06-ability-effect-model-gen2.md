@@ -373,8 +373,10 @@ Every gen-2 record carries `random_seat`, and every gen-2 legality record carrie
   token tree for it.
 - Under `template` a script text is held out when its template is. `collect-variants` deletes,
   before decking, every variant whose lines print a held-out text or template under the holdout
-  `build-corpus` chooses. `build-corpus` does not write a training game's record acting through a
-  held-out text, and counts it under the `dropped-held-out-text` stratum.
+  `build-corpus` chooses. It takes `build-corpus`'s `--cards-folder`, `--holdout-permille`,
+  `--holdout-max-carriers` and `--holdout-unit`, with the same defaults, and is passed the same
+  values. `build-corpus` does not write a training game's record acting through a held-out text,
+  and counts it under the `dropped-held-out-text` stratum.
 - `holdout-cards`, `build-corpus` and `train-effect-model` share the rule through
   `--holdout-unit template|text`. `text` is the base spec's rule, kept for corpora
   collected under it. Manifests and checkpoints record the unit, and one that records none

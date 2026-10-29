@@ -45,7 +45,7 @@ from effects.domain.provenance import SourceTree, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
 from effects.domain.sampling import DEFAULT_KIND_MIX
-from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOutCards
+from effects.domain.split import HeldOutCards, HoldoutRule
 from effects.domain.strata import OUTPUT_STRATA
 
 if TYPE_CHECKING:
@@ -81,10 +81,7 @@ class BuildCorpusConfig:
     )
     vocab_path: str = default_paths.DEFAULT_VOCAB_PATH
     variant_scripts: str | None = None
-    holdout_permille: int = HOLDOUT_PERMILLE
-    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
-    #: ``template`` (gen-2) or ``text`` (feature 023's rule, FR-041).
-    holdout_unit: str = "template"
+    holdout: HoldoutRule = HoldoutRule()
     text_cap: int = field(default=200, metadata={"help": (
         "Max written training records per ability text per selection cell, "
         "repeats included; 0 means no cap (default: %(default)s)"
@@ -177,10 +174,6 @@ class BuildCorpusConfig:
         ):
             if not 0.0 <= share <= 1.0:
                 raise BuildCorpusError(f"{flag} is {share}; a share is between 0 and 1.")
-        if self.holdout_unit not in ("template", "text"):
-            raise BuildCorpusError(
-                f"--holdout-unit is {self.holdout_unit!r}; expected template or text."
-            )
         from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
 
         unknown = [
@@ -345,7 +338,7 @@ def build(config: BuildCorpusConfig) -> int:
     logger.info(
         "Holdout (%s unit): %d ability text(s) on %d card(s) and %d token "
         "script(s); encoding surface %r.",
-        config.holdout_unit, len(held_out.texts), len(held_out.names),
+        config.holdout.unit, len(held_out.texts), len(held_out.names),
         sum(
             1 for script in held_out.script_files
             if split_script_file(script)[0] == SourceTree.TOKENSCRIPTS
@@ -423,11 +416,7 @@ def _converted_trees(config: BuildCorpusConfig) -> ConvertedTrees:
 
 def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOutCards:
     """The trainer's own holdout rule over the converted trees; refuses an empty one."""
-    held_out = trees.holdout(
-        permille=config.holdout_permille,
-        max_carriers=config.holdout_max_carriers,
-        unit=config.holdout_unit,
-    )
+    held_out = trees.holdout(config.holdout)
     if not held_out.names:
         tried = ", ".join(
             f"{folder} ({'found' if Path(folder).is_dir() else 'missing'})"

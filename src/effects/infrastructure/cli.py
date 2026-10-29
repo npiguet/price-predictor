@@ -56,7 +56,8 @@ from effects.domain.default_paths import (
     DEFAULT_WIN_RATES,
 )
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
-from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE
+from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
+from effects.domain.text_holdout import HoldoutUnit
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     announce_probe_state,
@@ -229,8 +230,8 @@ def _add_holdout_sources(
 
 
 def _add_holdout_flags(parser: argparse.ArgumentParser) -> None:
-    """The holdout rule, on both commands that compute it: ``holdout-cards`` and
-    ``build-corpus`` must be passed the same values."""
+    """The holdout rule, on every command that computes it: ``holdout-cards``,
+    ``build-corpus`` and ``collect-variants`` must be passed the same values."""
     parser.add_argument(
         "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
         help=(
@@ -245,18 +246,25 @@ def _add_holdout_flags(parser: argparse.ArgumentParser) -> None:
             "(default: %(default)s)"
         ),
     )
-    _add_holdout_unit(parser, default="template")
+    _add_holdout_unit(parser, default=HoldoutRule().unit)
 
 
-def _add_holdout_unit(parser: argparse.ArgumentParser, *, default: str | None) -> None:
+def _add_holdout_unit(
+    parser: argparse.ArgumentParser, *, default: HoldoutUnit | None,
+) -> None:
     parser.add_argument(
-        "--holdout-unit", choices=("template", "text"), default=default,
+        "--holdout-unit", type=HoldoutUnit, choices=list(HoldoutUnit), default=default,
         help=(
             "'template' holds out every text sharing a masked template together; "
             "'text' is feature 023's per-text rule (default: "
             + ("%(default)s)" if default else "the corpus manifest's recorded unit)")
         ),
     )
+
+
+def holdout_rule(args: argparse.Namespace) -> HoldoutRule:
+    """The rule :func:`_add_holdout_flags` parsed."""
+    return HoldoutRule(args.holdout_permille, args.holdout_max_carriers, args.holdout_unit)
 
 
 def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = None) -> None:
@@ -423,6 +431,10 @@ def _collect_variants_parser(subparsers) -> None:
     )
     add_config_flags(parser, CollectVariantsConfig, only=("variant_volume", "seed"))
     _add_holdout_sources(parser, excluded="held-out cards, and their variants,")
+    # A variant printing a held-out text is dropped under this rule, so it has
+    # to be the one build-corpus is given.
+    _add_cards_folder(parser)
+    _add_holdout_flags(parser)
     add_config_flags(parser, CollectVariantsConfig, only=("decks_per_round", "workers"))
     add_cap_flags(parser)
 
@@ -451,7 +463,9 @@ def collection_caps(args: argparse.Namespace) -> CollectionCaps:
     )
 
 
-def collector_config(config_type: type[_Config], args: argparse.Namespace) -> _Config:
+def collector_config(
+    config_type: type[_Config], args: argparse.Namespace, **overrides: Any,
+) -> _Config:
     """A collector's config, with its corpus location and holdout resolved."""
     source = holdout_source(args)
     return config_from_args(
@@ -459,18 +473,19 @@ def collector_config(config_type: type[_Config], args: argparse.Namespace) -> _C
         effect_records=source.effect_records,
         exclude_cards=source.exclude_cards,
         caps=collection_caps(args),
+        **overrides,
     )
 
 
 def _run_collector(
     args: argparse.Namespace, command: str, config_type: type,
-    collect: Callable[[Any], int],
+    collect: Callable[[Any], int], **overrides: Any,
 ) -> int:
     """Refuse a bad flag combination as a message before any worker starts."""
     error = random_seat_error(args)
     if error is None:
         try:
-            config = collector_config(config_type, args)
+            config = collector_config(config_type, args, **overrides)
         except ValueError as exc:
             error = str(exc)
     if error is not None:
@@ -489,7 +504,10 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
 def run_collect_variants(args: argparse.Namespace) -> int:
     from effects.application.collect_variants import run as collect
 
-    return _run_collector(args, "collect-variants", CollectVariantsConfig, collect)
+    return _run_collector(
+        args, "collect-variants", CollectVariantsConfig, collect,
+        holdout=holdout_rule(args),
+    )
 
 
 # ── build-corpus ────────────────────────────────────────────────────────
@@ -589,6 +607,7 @@ def run_build_corpus(args: argparse.Namespace) -> int:
 
     return build_corpus_module.build(config_from_args(
         BuildCorpusConfig, args, max_events=args.max_events_per_record,
+        holdout=holdout_rule(args),
     ))
 
 
@@ -625,13 +644,13 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
     from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
     from effects.application.holdout_cards import run as holdout_cards
 
-    config = config_from_args(HoldoutCardsConfig, args)
+    config = config_from_args(HoldoutCardsConfig, args, holdout=holdout_rule(args))
     try:
         report = holdout_cards(config)
     except HoldoutCardsError as exc:
         print(exc)
         return 1
-    if report.unit == "template":
+    if report.unit is HoldoutUnit.TEMPLATE:
         print(f"held-out templates: {report.keys}")
     print(f"held-out texts: {report.texts}")
     print(

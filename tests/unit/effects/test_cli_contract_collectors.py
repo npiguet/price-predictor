@@ -227,6 +227,34 @@ class TestOneHoldoutSource:
         assert "one source of held-out cards" in capsys.readouterr().out
 
 
+class TestCollectVariantsHoldoutRule:
+    """A6: the rule a variant printing a held-out text is dropped under is the
+    one ``build-corpus`` is given, so the collector takes the same flags."""
+
+    def test_the_defaults_are_build_corpuss(self):
+        from effects.infrastructure.cli import holdout_rule
+
+        assert holdout_rule(parse("collect-variants")) == holdout_rule(parse("build-corpus"))
+        assert parse("collect-variants").cards_folders == parse("build-corpus").cards_folders
+
+    def test_the_flags_reach_the_config(self):
+        from unittest.mock import patch
+
+        from effects.domain.split import HoldoutRule
+        from effects.domain.text_holdout import HoldoutUnit
+        from effects.infrastructure.cli import run_collect_variants
+
+        with patch("effects.application.collect_variants.run", return_value=0) as collect:
+            assert run_collect_variants(parse(
+                "collect-variants", "--cards-folder", "trees/cards",
+                "--holdout-permille", "50", "--holdout-max-carriers", "3",
+                "--holdout-unit", "text",
+            )) == 0
+        config = collect.call_args.args[0]
+        assert config.holdout == HoldoutRule(50, 3, HoldoutUnit.TEXT)
+        assert config.cards_folders == (Path("trees/cards"),)
+
+
 class TestSubcommandTable:
     def test_collect_coverage_is_registered(self):
         parser = build_parser()

@@ -43,6 +43,8 @@ from effects.domain.script_variants import (
     shift,
     variant_name,
 )
+from effects.domain.split import HoldoutRule
+from effects.domain.text_holdout import HoldoutUnit
 from tests.unit.effects.builders import make_record
 
 _BOLT_SCRIPT = (
@@ -909,12 +911,12 @@ class TestNoVariantPrintsAHeldOutText:
         )
         return GeneratedVariant(name=name, source_card="x", path=path, perturbation="numeric")
 
-    def _holdout(self, unit: str):
+    def _holdout(self, unit: HoldoutUnit):
         from effects.domain.split import text_keyed_holdout
 
         return text_keyed_holdout(
             {"Held": "cardsfolder/h/held.txt"}, {"Held": [self._HELD]},
-            permille=1000, max_carriers=8, unit=unit,
+            HoldoutRule(1000, 8, unit),
         )
 
     def test_a_variant_printing_a_held_out_template_is_dropped_with_its_files(self, tmp_path):
@@ -927,7 +929,7 @@ class TestNoVariantPrintsAHeldOutText:
         )
         clean = self._variant(tmp_path, "shock_variant_2", "SP$ Draw | NumCards$ 2")
 
-        kept = drop_held_out_variants([held, clean], self._holdout("template"))
+        kept = drop_held_out_variants([held, clean], self._holdout(HoldoutUnit.TEMPLATE))
 
         assert kept == [clean]
         assert not held.path.exists()
@@ -941,4 +943,43 @@ class TestNoVariantPrintsAHeldOutText:
         )
         same = self._variant(tmp_path, "same_variant_2", self._HELD)
 
-        assert drop_held_out_variants([near, same], self._holdout("text")) == [near]
+        assert drop_held_out_variants([near, same], self._holdout(HoldoutUnit.TEXT)) == [near]
+
+    def test_the_rule_the_collector_is_given_decides_what_is_dropped(self, tmp_path):
+        """A6: under ``build-corpus --holdout-permille 1000`` this text is held
+        out, under the default it is not; a collector applying the default
+        would deck it into training games' boards."""
+        from effects.application.collect_variants import _keep_unheld
+        from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+        from effects.domain.split import HOLDOUT_PERMILLE
+        from effects.domain.text_holdout import masked_template, text_is_held_out
+        from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+
+        assert not text_is_held_out(masked_template(self._HELD), permille=HOLDOUT_PERMILLE)
+        card = tmp_path / "cardsfolder" / "h" / "held.txt"
+        card.parent.mkdir(parents=True)
+        card.write_text("name: Held\ntypes: instant\n", encoding="utf-8")
+        write_sidecar(
+            ProvenanceSidecar(
+                card="Held", script_file="cardsfolder/h/held.txt",
+                lines=(SidecarLine(
+                    line_index=0, line_kind="spell", script_text=self._HELD,
+                    provenance=(ProvenanceKey("cardsfolder/h/held.txt", 0, "spell", 0),),
+                ),),
+            ),
+            sidecar_path_for(card),
+        )
+        variants = tmp_path / "variant-scripts"
+        variants.mkdir()
+
+        def config(**rule) -> CollectVariantsConfig:
+            return CollectVariantsConfig(
+                cards_folders=(tmp_path / "cardsfolder",), holdout=HoldoutRule(**rule),
+            )
+
+        printed = self._variant(
+            variants, "held_variant_1", "SP$ DealDamage | ValidTgts$ Artifact | NumDmg$ 5",
+        )
+        clean = self._variant(variants, "draw_variant_2", "SP$ Draw | NumCards$ 2")
+        assert _keep_unheld(config(), [printed, clean]) == [printed, clean]
+        assert _keep_unheld(config(permille=1000), [printed, clean]) == [clean]

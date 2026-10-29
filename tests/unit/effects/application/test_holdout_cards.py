@@ -22,15 +22,16 @@ from effects.application.holdout_cards import (
     run,
 )
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-from effects.domain.split import text_keyed_holdout
+from effects.domain.split import HoldoutRule, text_keyed_holdout
+from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
 
 
 def _report(card_files, texts_by_card, *, unit="text", canonical_names=None, **rule):
     """The report over ``text_keyed_holdout``, as ``run`` builds it from the trees."""
     return holdout_report(
-        text_keyed_holdout(card_files, texts_by_card, unit=unit, **rule),
-        unit=unit, converted_cards=len(card_files), canonical_names=canonical_names,
+        text_keyed_holdout(card_files, texts_by_card, HoldoutRule(unit=unit, **rule)),
+        converted_cards=len(card_files), canonical_names=canonical_names,
     )
 
 
@@ -56,12 +57,12 @@ def _convert(root: Path, script_file: str, name: str, texts: list[str]) -> None:
     )
 
 
-def _run(root: Path, out: Path, **flags) -> HoldoutReport:
+def _run(root: Path, out: Path, **rule) -> HoldoutReport:
     return run(HoldoutCardsConfig(
         out=out,
         cards_folders=(root / "cardsfolder", root / "tokenscripts"),
         printings_path=root / "AllPrintings.json",
-        **{"holdout_unit": "text", "holdout_max_carriers": 8, **flags},
+        holdout=HoldoutRule(**{"unit": HoldoutUnit.TEXT, "max_carriers": 8, **rule}),
     ))
 
 
@@ -84,9 +85,9 @@ def test_the_list_is_the_cards_the_trainer_holds_out(tmp_path) -> None:
     out = tmp_path / "holdout-cards.txt"
 
     for permille in (0, 250, 500, 750, 1000):
-        listed = _run(tmp_path, out, holdout_permille=permille).names
+        listed = _run(tmp_path, out, permille=permille).names
         held = text_keyed_holdout(
-            card_files, texts_by_card, permille=permille, max_carriers=8,
+            card_files, texts_by_card, HoldoutRule(permille, 8, HoldoutUnit.TEXT),
         )
         assert set(listed) == held.names, f"disagreed at permille={permille}"
         assert out.read_text(encoding="utf-8").splitlines() == listed
@@ -97,13 +98,13 @@ def test_token_carriers_move_the_list_as_they_move_the_split(tmp_path) -> None:
     token carriers included, or the list depletes cards the split trains on."""
     _convert(tmp_path, "cardsfolder/s/searing_spear.txt", "Searing Spear", [_SPEAR])
     out = tmp_path / "holdout-cards.txt"
-    assert _run(tmp_path, out, holdout_permille=1000, holdout_max_carriers=1).names == [
+    assert _run(tmp_path, out, permille=1000, max_carriers=1).names == [
         "searing spear",
     ]
 
     _convert(tmp_path, "tokenscripts/goblin.txt", "Goblin", [_SPEAR])
 
-    assert _run(tmp_path, out, holdout_permille=1000, holdout_max_carriers=1).names == [], (
+    assert _run(tmp_path, out, permille=1000, max_carriers=1).names == [], (
         "a token printing the text is a second carrier, over the ceiling of one"
     )
 
@@ -307,9 +308,11 @@ def test_the_cli_defaults_to_the_template_unit():
     from effects.infrastructure.cli import build_parser
 
     args = build_parser().parse_args(["holdout-cards", "--out", "x.txt"])
-    assert args.holdout_unit == "template"
+    assert args.holdout_unit is HoldoutUnit.TEMPLATE
     args = build_parser().parse_args(["build-corpus"])
-    assert args.holdout_unit == "template"
+    assert args.holdout_unit is HoldoutUnit.TEMPLATE
+    args = build_parser().parse_args(["build-corpus", "--holdout-unit", "text"])
+    assert args.holdout_unit is HoldoutUnit.TEXT
     args = build_parser().parse_args(["train-effect-model", "--corpus", "c"])
     assert args.holdout_unit is None
 

@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE
+from effects.domain.split import HoldoutRule
+from effects.domain.text_holdout import HoldoutUnit
 
 if TYPE_CHECKING:
     from effects.domain.split import HeldOutCards
@@ -33,9 +34,7 @@ class HoldoutCardsConfig:
     cards_folders: tuple[Path, ...] = (Path("output/cardsfolder"), Path("output/tokenscripts"))
     #: Read only to write the list in Forge's printed spelling.
     printings_path: Path = Path("resources/AllPrintings.json")
-    holdout_permille: int = HOLDOUT_PERMILLE
-    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
-    holdout_unit: str = "template"
+    holdout: HoldoutRule = HoldoutRule()
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +42,7 @@ class HoldoutReport:
     """The depletion list and the counts the operator reads beside it (FR-043)."""
 
     names: list[str]
-    unit: str
+    unit: HoldoutUnit
     #: Held-out units: masked templates under ``template``, texts under ``text``.
     keys: int
     texts: int
@@ -76,12 +75,7 @@ def run(config: HoldoutCardsConfig) -> HoldoutReport:
             printings,
         )
     report = holdout_report(
-        trees.holdout(
-            permille=config.holdout_permille,
-            max_carriers=config.holdout_max_carriers,
-            unit=config.holdout_unit,
-        ),
-        unit=config.holdout_unit,
+        trees.holdout(config.holdout),
         converted_cards=len(trees.card_files),
         canonical_names=canonical,
     )
@@ -92,7 +86,6 @@ def run(config: HoldoutCardsConfig) -> HoldoutReport:
 def holdout_report(
     held: HeldOutCards,
     *,
-    unit: str,
     converted_cards: int,
     canonical_names: Mapping[str, object] | None = None,
 ) -> HoldoutReport:
@@ -111,8 +104,8 @@ def holdout_report(
     }
     return HoldoutReport(
         names=sorted(printed.get(name, name) for name in held.names),
-        unit=unit,
-        keys=len({holdout_key(text, unit) for text in held.texts}),
+        unit=held.unit,
+        keys=len({holdout_key(text, held.unit) for text in held.texts}),
         texts=len(held.texts),
         converted_cards=converted_cards,
     )

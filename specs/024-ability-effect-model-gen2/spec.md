@@ -786,7 +786,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   its template under `template`. `collect-variants` MUST use it, under the holdout `build-corpus`
   chooses, to delete before decking every variant whose lines print a held-out text or template
   (023 FR-057), and `build-corpus` to drop a training game's record acting through one (023
-  FR-137).
+  FR-137). `collect-variants` MUST take `build-corpus`'s `--cards-folder`, `--holdout-permille`,
+  `--holdout-max-carriers` and `--holdout-unit` flags with the same defaults, so it can be given
+  the rule `build-corpus` is.
 - **FR-042**: Manifests and checkpoints MUST record the holdout unit. A manifest or checkpoint that
   records none MUST be read as `text`.
 - **FR-043**: `holdout-cards` MUST report the held-out templates, texts and cards, and the share of

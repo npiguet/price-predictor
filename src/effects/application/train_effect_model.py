@@ -20,9 +20,9 @@ from effects.domain.effect_head_layout import active_fields
 from effects.domain.records import (
     EffectRecord,
 )
-from effects.domain.split import CorpusSplit
+from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
-from effects.domain.text_holdout import normalize_script_text
+from effects.domain.text_holdout import HoldoutUnit, normalize_script_text
 from effects.infrastructure.converted_trees import ConvertedTrees
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import (
@@ -128,7 +128,7 @@ class TrainEffectModelConfig:
     )
     variant_scripts: Path | None = None
     #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
-    holdout_unit: str | None = None
+    holdout_unit: HoldoutUnit | None = None
     vocab_path: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_VOCAB_PATH),
     )
@@ -239,9 +239,7 @@ class CorpusFacts:
     split: CorpusSplit = field(default_factory=CorpusSplit)
     #: The holdout rule the corpus was composed against; no trainer flag, as
     #: re-deriving it could only disagree.
-    holdout_permille: int = 0
-    holdout_max_carriers: int = 0
-    holdout_unit: str = "text"
+    holdout: HoldoutRule = HoldoutRule(0, 0, HoldoutUnit.TEXT)
     #: Records in the manifest's gate-1 slice (FR-088b).
     gate_one_records: int = 0
     #: The corpus-wide ``text -> games`` table (FR-146).
@@ -260,9 +258,7 @@ class CorpusFacts:
                 card_disjoint_games=frozenset(manifest.card_disjoint_games),
                 game_disjoint_games=frozenset(manifest.game_disjoint_games),
             ),
-            holdout_permille=manifest.holdout_permille,
-            holdout_max_carriers=manifest.holdout_max_carriers,
-            holdout_unit=manifest.holdout_unit,
+            holdout=manifest.holdout,
             gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
             rarity=manifest.rarity,
             legality_mode_counts=manifest.legality_mode_counts or None,
@@ -285,11 +281,11 @@ class CorpusFacts:
             vocab_hash=content_hash(Path(config.vocab_path)),
             keyword_definitions_hash=content_hash(Path(config.keyword_definitions)),
             withheld_keyword=config.withhold_keyword,
-            holdout_permille=self.holdout_permille,
-            holdout_max_carriers=self.holdout_max_carriers,
+            holdout_permille=self.holdout.permille,
+            holdout_max_carriers=self.holdout.max_carriers,
             corpus_path=config.corpus or "",
             corpus_digest=self.digest,
-            holdout_unit=self.holdout_unit,
+            holdout_unit=self.holdout.unit,
         )
 
 
@@ -439,11 +435,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
         "Recomputing the %s holdout over %d cards' sidecars under %s.",
         unit, len(trees.card_files), cards_folder,
     )
-    recomputed = trees.holdout(
-        permille=manifest.holdout_permille,
-        max_carriers=manifest.holdout_max_carriers,
-        unit=unit,
-    )
+    recomputed = trees.holdout(manifest.holdout)
     logger.info(
         "Holdout recomputed in %.0fs: %d held-out text(s).",
         time.monotonic() - started, len(recomputed.texts),

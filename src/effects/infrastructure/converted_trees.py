@@ -21,7 +21,7 @@ from effects.infrastructure.card_sources import (
 from effects.infrastructure.sidecar_io import SidecarCache, load_tree_texts, sidecar_roots
 
 if TYPE_CHECKING:
-    from effects.domain.split import HeldOutCards
+    from effects.domain.split import HeldOutCards, HoldoutRule
 
 
 @dataclass(frozen=True)
@@ -73,12 +73,10 @@ class ConvertedTrees:
         """``token script file -> its sidecar's script texts``; empty without tokens."""
         return load_tree_texts(self.roots.get(SourceTree.TOKENSCRIPTS))
 
-    def holdout(self, *, permille: int, max_carriers: int, unit: str) -> HeldOutCards:
-        """The trainer's holdout rule over the card tree, token scripts as carriers."""
+    def holdout(self, rule: HoldoutRule) -> HeldOutCards:
+        """``rule`` applied over the card tree, token scripts as carriers."""
         from effects.domain.split import text_keyed_holdout
 
         return text_keyed_holdout(
-            self.card_files, self.card_texts(),
-            permille=permille, max_carriers=max_carriers, unit=unit,
-            token_texts=self.token_texts(),
+            self.card_files, self.card_texts(), rule, token_texts=self.token_texts(),
         )

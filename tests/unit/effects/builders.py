@@ -254,12 +254,13 @@ def make_training_loop(
     """
     from effects.application.train_effect_model import CorpusFacts
     from effects.application.training_loop import TrainingLoop
+    from effects.domain.split import HoldoutRule
+    from effects.domain.text_holdout import HoldoutUnit
 
     return TrainingLoop(
         config,
         facts=CorpusFacts(**{
-            "holdout_permille": 20, "holdout_max_carriers": 8, "rarity": {},
-            **facts,
+            "holdout": HoldoutRule(unit=HoldoutUnit.TEXT), "rarity": {}, **facts,
         }),
         training_shards=list(training_shards),
         validation_samples=validation_samples or {},

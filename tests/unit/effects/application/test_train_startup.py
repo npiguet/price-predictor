@@ -17,6 +17,7 @@ from effects.application.train_effect_model import (
     run,
 )
 from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import MixedGenerationsError, write_shard
 
@@ -127,7 +128,7 @@ def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, s
     assert facts == CorpusFacts.of(manifest)
     assert facts.split.card_disjoint_games == frozenset({"cg"})
     assert facts.split.game_disjoint_games == frozenset({"gg"})
-    assert (facts.holdout_permille, facts.holdout_max_carriers) == (20, 8)
+    assert (facts.holdout.permille, facts.holdout.max_carriers) == (20, 8)
     assert facts.gate_one_records == 4096
     assert facts.digest == manifest.digest()
 
@@ -239,12 +240,12 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
 def test_the_trainer_takes_the_manifests_unit_when_the_flag_is_absent(config, started):
     """A gen-1 manifest records no unit and reads as ``text``."""
     assert run(config) == 0
-    assert started[-1].facts.holdout_unit == "text"
+    assert started[-1].facts.holdout.unit is HoldoutUnit.TEXT
     assert config.holdout_unit is None
 
 
 def test_a_unit_differing_from_the_manifests_is_refused(config):
-    config.holdout_unit = "template"
+    config.holdout_unit = HoldoutUnit.TEMPLATE
     with pytest.raises(HoldoutMismatchError, match="--holdout-unit template differs"):
         run(config)
 
@@ -280,7 +281,7 @@ def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
     )
 
     assert run(config) == 0
-    assert started[-1].facts.holdout_unit == "text"
+    assert started[-1].facts.holdout.unit is HoldoutUnit.TEXT
 
 
 def test_a_records_set_mixing_generations_is_refused(corpus, config, make_record):

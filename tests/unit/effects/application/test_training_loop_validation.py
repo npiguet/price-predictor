@@ -21,6 +21,7 @@ from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
+from effects.domain.split import HoldoutRule
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.builders import make_preparer, make_training_loop
 
@@ -61,7 +62,7 @@ def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
     anything but the defaults would be described by a checkpoint that never
     read it.
     """
-    provenance = CorpusFacts(holdout_permille=30, holdout_max_carriers=5).provenance(
+    provenance = CorpusFacts(holdout=HoldoutRule(30, 5)).provenance(
         TrainEffectModelConfig(corpus="unused"),
     )
 

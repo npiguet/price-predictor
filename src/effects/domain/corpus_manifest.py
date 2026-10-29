@@ -11,6 +11,7 @@ from dataclasses import MISSING, Field, asdict, dataclass, field, fields
 from typing import Any
 
 from effects.domain.canonical_digest import canonical_digest
+from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 
 
@@ -238,6 +239,12 @@ class CorpusManifest:
     class_targets: dict[str, int] = field(
         default_factory=dict, metadata=_gen1_implied(_int_map),
     )
+
+    @property
+    def holdout(self) -> HoldoutRule:
+        """The rule the held-out texts were chosen by; stored as three fields,
+        the form every manifest so far was written in."""
+        return HoldoutRule(self.holdout_permille, self.holdout_max_carriers, self.holdout_unit)
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)

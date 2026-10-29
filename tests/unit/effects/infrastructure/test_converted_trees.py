@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine, SourceTree
+from effects.domain.split import HoldoutRule
+from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.converted_trees import ConvertedTrees
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
 
@@ -66,11 +68,15 @@ def test_cards_texts_and_tokens_are_read_through_one_sidecar_cache(tmp_path) -> 
     assert trees.sidecars.get("tokenscripts/goblin.txt").card == "Goblin"
 
 
+#: Every text held out, unless a second carrier prints it.
+_ONE_CARRIER = HoldoutRule(permille=1000, max_carriers=1, unit=HoldoutUnit.TEXT)
+
+
 def test_a_token_printing_a_text_is_a_carrier_of_it(tmp_path) -> None:
     _convert(tmp_path, "cardsfolder/s/shock.txt", "Shock", "SP$ Bespoke")
     cards_only = ConvertedTrees.from_folders((tmp_path / "cardsfolder",))
-    assert cards_only.holdout(permille=1000, max_carriers=1, unit="text").names == {"shock"}
+    assert cards_only.holdout(_ONE_CARRIER).names == {"shock"}
 
     _convert(tmp_path, "tokenscripts/goblin.txt", "Goblin", "SP$ Bespoke")
     with_tokens = ConvertedTrees.from_folders((tmp_path / "cardsfolder", tmp_path / "tokenscripts"))
-    assert with_tokens.holdout(permille=1000, max_carriers=1, unit="text").names == set()
+    assert with_tokens.holdout(_ONE_CARRIER).names == set()
