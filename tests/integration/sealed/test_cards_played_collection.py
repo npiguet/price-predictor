@@ -19,11 +19,12 @@ Skipped automatically when the Forge classpath is unavailable.
 
 from __future__ import annotations
 
-import subprocess
 import time
 from pathlib import Path
 
 import pytest
+
+from price_predictor.infrastructure.forge_jvm import kill_process_tree
 
 _BASIC_LAND_NAMES = frozenset({
     "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
@@ -72,12 +73,7 @@ def test_cards_played_collection(tmp_path: Path) -> None:
                 if len(lines) >= target_match_lines:
                     break
             time.sleep(2)
-        process.terminate()
-        try:
-            process.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=10)
+        kill_process_tree(process)
 
     if not output_file.exists():
         pytest.skip("worker did not produce match-outcomes.txt within deadline")

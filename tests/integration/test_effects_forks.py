@@ -12,7 +12,6 @@ the game ends and the run spends its whole simulation budget producing nothing.
 
 from __future__ import annotations
 
-import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -22,7 +21,7 @@ import pytest
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.records import EffectRecord
 from effects.infrastructure.record_io import read_records
-from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
+from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 pytestmark = pytest.mark.integration
@@ -77,11 +76,7 @@ def _run(
                 break
         return list(read_records(records_dir))
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        kill_process_tree(process)
 
 
 def test_a_stage_one_run_takes_no_forks(tmp_path: Path) -> None:

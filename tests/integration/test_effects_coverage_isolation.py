@@ -12,7 +12,6 @@ by even a timestamp.
 
 from __future__ import annotations
 
-import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -21,7 +20,7 @@ import pytest
 
 from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
 from effects.infrastructure.record_io import read_records
-from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
+from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 pytestmark = pytest.mark.integration
@@ -56,11 +55,7 @@ def _run_records_only(records_dir: Path) -> int:
                 break
         return sum(1 for _ in read_records(records_dir))
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        kill_process_tree(process)
 
 
 def test_a_coverage_run_leaves_the_sealed_corpora_byte_identical(
@@ -230,12 +225,7 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
                 break
     finally:
         for process in processes:
-            process.terminate()
-        for process in processes:
-            try:
-                process.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                process.kill()
+            kill_process_tree(process)
 
     assert "Llanowar Elves" in names, (
         "the decked card never reached a record: the worker is not playing "

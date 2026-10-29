@@ -17,7 +17,6 @@ stay green.
 from __future__ import annotations
 
 import re
-import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -25,7 +24,7 @@ from pathlib import Path
 import pytest
 
 from effects.infrastructure.record_io import iter_shards, read_records
-from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
+from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 pytestmark = pytest.mark.integration
@@ -66,11 +65,7 @@ def _run_worker(records_dir: Path, output_file: Path | None) -> list:
                 )
         return list(read_records(records_dir))
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        kill_process_tree(process)
 
 
 def test_collection_writes_records_under_one_attribution_mode(
