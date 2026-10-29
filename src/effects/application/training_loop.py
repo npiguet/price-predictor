@@ -45,7 +45,7 @@ from pathlib import Path
 import torch
 
 from effects.application.ability_text import known_texts
-from effects.application.gate_one import measure
+from effects.application.gate_one import GateOneMetrics, MarginAccumulator
 from effects.application.resume_state import ResumeState
 from effects.application.step_preparation import (
     NO_TEXT_BUCKET,
@@ -245,6 +245,9 @@ class StepLoss:
     terms: dict[str, torch.Tensor]
     #: The MLM pass's masked tokens, left for after the main backward.
     pending_mlm: MaskedTokens | None = None
+    #: The per-entity head's output at each target entity, detached; what the
+    #: validation pass scores gate 1's progress margins on.
+    gathered: torch.Tensor | None = None
 
 
 def combine_terms(
@@ -396,6 +399,56 @@ def _read_back(scalars: Mapping[str, torch.Tensor]) -> dict[str, float]:
         value.detach().to(device, torch.float64) for value in values
     ])
     return dict(zip(scalars, stacked.tolist()))
+
+
+def _progress_metrics(margins: MarginAccumulator) -> GateOneMetrics:
+    """Gate 1's three numbers on the whole card-disjoint sample, every epoch.
+
+    The loss says the objective fell; these say whether the model knows *that*
+    something happens, *what*, and *how much*. A progress reading, not the gate
+    itself: the evaluator's gate 1 scores only the unique-text stratum (records
+    whose acting text is on no training card), while this sample also carries
+    card-disjoint records whose text the model has seen elsewhere. A run whose
+    loss falls while all three sit still is worth seeing early regardless.
+
+    Read off the card-disjoint validation pass's own outputs rather than a
+    second pass over the sample, so they carry that pass's precision — bf16
+    under autocast on CUDA — where the evaluator's gate 1 scores in float32: a
+    logit near zero can fall on the other side of the gate here than there.
+    """
+    return margins.metrics()
+
+
+@dataclass(frozen=True, slots=True)
+class _HostCopy:
+    """One validation batch's gathered outputs on their way to the host.
+
+    Queued without waiting and read a batch later, by which time the device has
+    usually finished it: waiting at once would stall every batch until the
+    device drained, and the host would prepare the next one with the device
+    idle. The prepared step rides along for its host-side targets.
+    """
+
+    gathered: torch.Tensor
+    done: torch.cuda.Event | None
+    prepared: PreparedStep
+
+    @classmethod
+    def queue(cls, gathered: torch.Tensor, prepared: PreparedStep) -> _HostCopy:
+        host = gathered.float().to("cpu", non_blocking=True)
+        done = None
+        if gathered.device.type == "cuda":
+            done = torch.cuda.Event()
+            done.record()
+        return cls(host, done, prepared)
+
+    def fold_into(self, margins: MarginAccumulator) -> None:
+        if self.done is not None:
+            self.done.synchronize()
+        prepared = self.prepared
+        margins.add(
+            self.gathered, prepared.gate, prepared.field_targets, prepared.mask,
+        )
 
 
 def _optimizer_step(optimizer, *, read: bool) -> dict[str, float]:
@@ -679,7 +732,7 @@ class TrainingLoop:
         total, shipped = combine_terms(loss, terms, self._head_weights())
         return StepLoss(
             total=total, shipped=shipped, parts=parts, terms=terms,
-            pending_mlm=prepared.heads.mlm,
+            pending_mlm=prepared.heads.mlm, gathered=gathered.detach(),
         )
 
     def _head_terms(
@@ -935,8 +988,7 @@ class TrainingLoop:
                 "the early stopper starts over", epoch, len(fields),
             )
         self._train_epoch(epoch, run, tally, pool)
-        result, card_parts = self._validate_epoch(epoch, run, tally, fields)
-        metrics = self._progress_metrics(run, fields)
+        result, card_parts, metrics = self._validate_epoch(epoch, run, tally, fields)
         self._log_epoch(result, metrics, card_parts, tally)
         self._log_unresolved()
         return self._close_epoch(epoch, run, stopper, result)
@@ -960,9 +1012,11 @@ class TrainingLoop:
 
     def _validate_epoch(
         self, epoch: int, run: RunContext, tally: EpochTally, fields,
-    ) -> tuple[EpochResult, dict[str, float]]:
-        """Both strata's loss, the card-disjoint one by field, and the floor."""
+    ) -> tuple[EpochResult, dict[str, float], GateOneMetrics]:
+        """Both strata's loss, the card-disjoint one by field, the floor, and
+        gate 1's progress margins."""
         card_parts: dict[str, float] = {}
+        margins = MarginAccumulator(fields)
         # Collected only on the epoch that has a floor to compute: the targets
         # are a copy of the whole sample, and holding them past the one pass
         # that reads them would cost that for nothing.
@@ -974,7 +1028,7 @@ class TrainingLoop:
             train_loss=tally.train_loss,
             card_disjoint_loss=self._validate(
                 self.card_disjoint, run, parts=card_parts, fields=fields,
-                collect=collected,
+                collect=collected, margins=margins,
             ),
             game_disjoint_loss=self._validate(self.game_disjoint, run, fields=fields),
         )
@@ -986,29 +1040,7 @@ class TrainingLoop:
                 "Constant-predictor floor (card-disjoint): %s",
                 format_floor(self.floor.floor),
             )
-        return result, card_parts
-
-    def _progress_metrics(self, run: RunContext, fields):
-        """Gate 1's three numbers on the whole card-disjoint sample, every epoch.
-
-        The loss says the objective fell; these say whether the model knows
-        *that* something happens, *what*, and *how much*. A progress reading,
-        not the gate itself: the evaluator's gate 1 scores only the unique-text
-        stratum (records whose acting text is on no training card), while this
-        sample also carries card-disjoint records whose text the model has
-        seen elsewhere. A run whose loss falls while all three sit still is
-        worth seeing early regardless.
-        """
-        metrics = measure(
-            self.card_disjoint, run.encoder, run.model,
-            self.preparer.batcher(training=False, materializer=self._scoring),
-            fields=fields,
-        )
-        # `measure` calls `eval()` and does not call `train()` back — its
-        # other caller is the evaluator, which never trains.
-        run.encoder.train()
-        run.model.train()
-        return metrics
+        return result, card_parts, _progress_metrics(margins)
 
     def _log_epoch(
         self, result: EpochResult, metrics, card_parts: dict[str, float],
@@ -1365,6 +1397,7 @@ class TrainingLoop:
         self, records, run: RunContext, *, fields,
         parts: dict[str, float] | None = None,
         collect: list[EntityTargetBatch] | None = None,
+        margins: MarginAccumulator | None = None,
     ) -> float:
         """Mean loss over the stratum, batched the way training batches.
 
@@ -1379,7 +1412,9 @@ class TrainingLoop:
         is not moving when the total is not moving. ``collect`` takes each
         batch's targets along the way, kept on the host, so the
         constant-predictor floor those terms are scaled by is scored on this
-        sample and this masking rather than on a second pass's.
+        sample and this masking rather than on a second pass's. ``margins``
+        takes each batch's gathered outputs and targets, for gate 1's progress
+        margins, for the same reason.
 
         Records are still grouped by game *within* a batch, for the same reason
         training groups them: one encode of an ability text then serves every
@@ -1394,6 +1429,7 @@ class TrainingLoop:
         total = torch.zeros((), device=self.device)
         batches = 0
         means = PartsMean()
+        pending: _HostCopy | None = None
         with torch.no_grad():
             for start in range(0, len(records), size):
                 chunk = records[start:start + size]
@@ -1417,6 +1453,13 @@ class TrainingLoop:
                 total += computed.shipped
                 batches += 1
                 means.add(computed.parts)
+                if margins is not None:
+                    copy = _HostCopy.queue(computed.gathered, prepared)
+                    if pending is not None:
+                        pending.fold_into(margins)
+                    pending = copy
+        if pending is not None:
+            pending.fold_into(margins)
         run.encoder.train()
         run.model.train()
         if parts is not None:

@@ -38,12 +38,6 @@ class _Stub(torch.nn.Module):
         self.p = torch.nn.Parameter(torch.ones(2))
 
 
-class _Metrics:
-    affected_gate_f1 = 0.5
-    zone_outcome_accuracy = 0.5
-    mean_poisson_deviance = 0.5
-
-
 @pytest.fixture
 def run(tmp_path, make_record, monkeypatch):  # noqa: F811
     """Run two epochs and return the ordered log of what the loop called."""
@@ -78,17 +72,9 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         loss = model.p.sum()
         return StepLoss(total=loss, shipped=loss, parts=LossParts(), terms={})
 
-    def validate(self, records, *args, parts=None, fields=None, **kwargs):
-        events.append(("validate", id(fields), model.training))
+    def validate(self, records, *args, parts=None, fields=None, margins=None, **kwargs):
+        events.append(("validate", id(fields), margins is not None))
         return 1.0
-
-    def measure(records, enc, mdl, batcher, *, fields):
-        events.append(("measure", id(fields), batcher.stager.keyword_expand_p))
-        # The real one scores in eval mode and never switches back, which is
-        # what the next epoch's first step has to survive.
-        enc.eval()
-        mdl.eval()
-        return _Metrics()
 
     monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
     # The step's host half reads real surfaces off real records; what it is
@@ -98,7 +84,6 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         lambda self, plan, *a, fields=None, **k: {"fields": fields},
     )
     monkeypatch.setattr(TrainingLoop, "_validate", validate)
-    monkeypatch.setattr(loop_module, "measure", measure)
 
     resets = []
     original = EarlyStopper.reset
@@ -131,10 +116,9 @@ def test_the_run_completes(run):
 def test_an_epoch_scores_the_field_set_it_trained_with(run):
     """Every pass of an epoch is handed the same object (FR-082).
 
-    Not merely an equal one: the training loss, the two validation strata and
-    the gate-1 probe all read ``fields`` by identity from the epoch, so a pass
-    that rebuilt its own would be scoring a different objective from the number
-    printed beside it.
+    Not merely an equal one: the training loss and the two validation strata
+    read ``fields`` by identity from the epoch, so a pass that rebuilt its own
+    would be scoring a different objective from the number printed beside it.
     """
     _, events, _, _ = run
     seen = [fields for _kind, fields, _payload in events]
@@ -145,7 +129,7 @@ def test_an_epoch_scores_the_field_set_it_trained_with(run):
     assert len(set(runs)) == 2
     for epoch_fields in runs:
         kinds = {kind for kind, fields, _ in events if fields == epoch_fields}
-        assert kinds == {"loss", "validate", "measure"}
+        assert kinds == {"loss", "validate"}
 
 
 def test_the_stopper_forgets_its_best_once_at_the_curriculum_boundary(run):
@@ -153,18 +137,17 @@ def test_the_stopper_forgets_its_best_once_at_the_curriculum_boundary(run):
     assert len(resets) == 1
 
 
-def test_the_gate_one_probe_runs_without_the_augmentations(run):
+def test_the_gate_one_margins_ride_the_card_disjoint_pass_alone(run):
+    """One validation pass per epoch feeds the progress margins, and no second
+    pass over the sample scores them."""
     _, events, _, _ = run
-    expansions = [payload for kind, _, payload in events if kind == "measure"]
-    assert expansions == [0.0, 0.0]
+    fed = [payload for kind, _, payload in events if kind == "validate"]
+    assert fed == [True, False, True, False]
 
 
 def test_the_second_epoch_starts_in_training_mode(run):
-    """``measure`` scores in eval mode and never switches back.
-
-    Epoch 2 would then train a model whose dropout and noise are off, and
-    nothing in the log would say so.
-    """
+    """Epoch 2 would otherwise train a model whose dropout and noise are off,
+    and nothing in the log would say so."""
     _, events, _, model = run
     assert all(payload for kind, _, payload in events if kind == "loss")
     # And the loop leaves the modules the way an epoch needs to find them.

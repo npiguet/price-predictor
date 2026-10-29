@@ -157,12 +157,6 @@ class _Stub(torch.nn.Module):
         self.p = torch.nn.Parameter(torch.ones(2))
 
 
-class _Metrics:
-    affected_gate_f1 = 0.5
-    zone_outcome_accuracy = 0.5
-    mean_poisson_deviance = 0.5
-
-
 def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F811
     """Run one real epoch/shard with everything below the loop stubbed.
 
@@ -210,7 +204,6 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
     monkeypatch.setattr(
         TrainingLoop, "_validate", lambda self, records, *a, **k: 1.0,
     )
-    monkeypatch.setattr(loop_module, "measure", lambda *a, **k: _Metrics())
 
     memory_fraction_calls: list[float] = []
     empty_cache_calls: list[None] = []

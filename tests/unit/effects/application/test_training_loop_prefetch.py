@@ -51,12 +51,6 @@ class _Stub(torch.nn.Module):
         self.p = torch.nn.Parameter(torch.ones(2))
 
 
-class _Metrics:
-    affected_gate_f1 = 0.5
-    zone_outcome_accuracy = 0.5
-    mean_poisson_deviance = 0.5
-
-
 class _SpyPool:
     """A one-thread pool that remembers how it was built and shut down."""
 
@@ -117,9 +111,6 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
             pools.append(_SpyPool(*args, **kwargs))
             return pools[-1]
 
-        def measure(records, encoder, model, batcher, *, fields):
-            return _Metrics()
-
         model, encoder = _Stub(), _Stub()
         monkeypatch.setattr(loop_module, "load_shard", load)
         # ``raising=False`` so a loop with no pool at all still runs and fails
@@ -127,7 +118,6 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         monkeypatch.setattr(
             loop_module, "ThreadPoolExecutor", pool, raising=False,
         )
-        monkeypatch.setattr(loop_module, "measure", measure)
         monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
         monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
         monkeypatch.setattr(TrainingLoop, "_train_on_shard", train_on_shard)
