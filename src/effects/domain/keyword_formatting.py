@@ -234,6 +234,27 @@ def _simple(template: str, details: str) -> str:
     return template
 
 
+def _fixed_when(
+    applies: Callable[[str], bool], text: str, otherwise: Callable[[str, str], str],
+) -> Callable[[str, str], str]:
+    """A formatter writing ``text`` whatever the template when ``applies`` to
+    the details, else what ``otherwise`` fills: a keyword class that hard-codes
+    one wording for one shape of its details."""
+
+    def fill(template: str, details: str) -> str:
+        return text if applies(details) else otherwise(template, details)
+
+    return fill
+
+
+def _bare(details: str) -> bool:
+    return not details
+
+
+def _parameterized(details: str) -> bool:
+    return bool(details)
+
+
 def _with_cost(template: str, details: str) -> str:
     cost = details.split(":")[0].split("|", 1)[0].strip()
     if "%" not in template:
@@ -270,13 +291,10 @@ def _kicker(template: str, details: str) -> str:
     return _with_cost(template, details)
 
 
-def _mayhem(template: str, details: str) -> str:
-    if not details:
-        return (
-            "You may play this card from your graveyard if you discarded it "
-            "this turn. Timing rules still apply."
-        )
-    return _with_cost(template, details)
+_mayhem = _fixed_when(_bare, (
+    "You may play this card from your graveyard if you discarded it this "
+    "turn. Timing rules still apply."
+), _with_cost)
 
 
 def _emerge(template: str, details: str) -> str:
@@ -364,23 +382,16 @@ def _with_amount(template: str, details: str) -> str:
     return java_format(template, [amount])
 
 
-def _modular(template: str, details: str) -> str:
-    if details == "Sunburst":
-        return (
-            "This enters with a +1/+1 counter on it for each color of mana spent "
-            "to cast it. When it dies, you may put its +1/+1 counters on target "
-            "artifact creature."
-        )
-    return _with_amount(template, details)
+_modular = _fixed_when("Sunburst".__eq__, (
+    "This enters with a +1/+1 counter on it for each color of mana spent to "
+    "cast it. When it dies, you may put its +1/+1 counters on target artifact "
+    "creature."
+), _with_amount)
 
-
-def _vanishing(template: str, details: str) -> str:
-    if not details:
-        return (
-            "At the beginning of your upkeep, remove a time counter from this "
-            "enchantment. When the last is removed, sacrifice it."
-        )
-    return _with_amount(template, details)
+_vanishing = _fixed_when(_bare, (
+    "At the beginning of your upkeep, remove a time counter from this "
+    "enchantment. When the last is removed, sacrifice it."
+), _with_amount)
 
 
 def _firebending(template: str, details: str) -> str:
@@ -410,14 +421,11 @@ def _with_cost_and_amount(template: str, details: str) -> str:
     return java_format(template, [cost_text(cost), amount])
 
 
-def _suspend(template: str, details: str) -> str:
-    if not details:
-        return (
-            "At the beginning of its owner's upkeep, remove a time counter from "
-            "that card. When the last is removed, the player plays it without "
-            "paying its mana cost. If it's a creature, it has haste."
-        )
-    return _with_cost_and_amount(template, details)
+_suspend = _fixed_when(_bare, (
+    "At the beginning of its owner's upkeep, remove a time counter from that "
+    "card. When the last is removed, the player plays it without paying its "
+    "mana cost. If it's a creature, it has haste."
+), _with_cost_and_amount)
 
 
 def _with_cost_and_type(template: str, details: str) -> str:
@@ -452,19 +460,15 @@ def _with_type(template: str, details: str) -> str:
     return java_format(template, [_type_desc(details)])
 
 
-def _hexproof(template: str, details: str) -> str:
-    if not details:
-        return "This can't be the target of spells or abilities your opponents control."
-    return _with_type(template, details)
+_hexproof = _fixed_when(
+    _bare, "This can't be the target of spells or abilities your opponents control.",
+    _with_type,
+)
 
-
-def _trample(template: str, details: str) -> str:
-    if details:
-        return (
-            "This creature can deal excess combat damage to the controller of "
-            "the planeswalker it's attacking."
-        )
-    return template
+_trample = _fixed_when(_parameterized, (
+    "This creature can deal excess combat damage to the controller of the "
+    "planeswalker it's attacking."
+), _simple)
 
 
 def _affinity(template: str, details: str) -> str:
@@ -482,10 +486,9 @@ def _affinity(template: str, details: str) -> str:
     return java_format(template, [reminder])
 
 
-def _partner(template: str, details: str) -> str:
-    if details:
-        return "You can have two commanders if both have this ability."
-    return template
+_partner = _fixed_when(
+    _parameterized, "You can have two commanders if both have this ability.", _simple,
+)
 
 
 #: ``formatter -> (template, details) -> filled text``. Keyed by the simple
