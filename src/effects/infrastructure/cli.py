@@ -31,7 +31,7 @@ from effects.application.collect_variants import CollectVariantsConfig
 from effects.application.collector_common import HOLDOUT_LIST_NAME, HoldoutSource
 from effects.application.corpus_validation.findings import Thresholds
 from effects.application.evaluation_context import CorpusMismatchError
-from effects.application.holdout_cards import HoldoutCardsConfig
+from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
 from effects.application.train_effect_model import (
     EmptyHoldoutError,
     HoldoutMismatchError,
@@ -640,18 +640,14 @@ def _holdout_cards_parser(subparsers) -> None:
     _add_holdout_flags(parser)
 
 
+@exits_with({HoldoutCardsError: 1})
 def run_holdout_cards(args: argparse.Namespace) -> int:
     """Write the list, and report the share of the corpus it removes: what a
     depleted pool loses, and the knob the two holdout flags turn."""
-    from effects.application.holdout_cards import HoldoutCardsError
     from effects.application.holdout_cards import run as holdout_cards
 
     config = config_from_args(HoldoutCardsConfig, args, holdout=holdout_rule(args))
-    try:
-        report = holdout_cards(config)
-    except HoldoutCardsError as exc:
-        print(exc)
-        return 1
+    report = holdout_cards(config)
     if report.unit is HoldoutUnit.TEMPLATE:
         print(f"held-out templates: {report.keys}")
     print(f"held-out texts: {report.texts}")
@@ -687,16 +683,25 @@ def _field_coverage_parser(subparsers) -> None:
     )
 
 
-def run_field_coverage(args: argparse.Namespace) -> int:
-    from effects.application.field_coverage import field_coverage, report_lines
-    from effects.infrastructure.record_io import iter_shards, read_shard
+def _require_shards(root: Path) -> list[Path] | None:
+    """The shards under ``root``; None, having said so, where there are none."""
+    from effects.infrastructure.record_io import iter_shards
 
-    root = args.effect_records
     shards = iter_shards(root)
     if not shards:
         print(f"no shards under {root}")
+        return None
+    return shards
+
+
+def run_field_coverage(args: argparse.Namespace) -> int:
+    from effects.application.field_coverage import field_coverage, report_lines
+    from effects.infrastructure.record_io import read_records
+
+    root = args.effect_records
+    if _require_shards(root) is None:
         return 1
-    coverage = field_coverage(record for shard in shards for record in read_shard(shard))
+    coverage = field_coverage(read_records(root))
     if not coverage:
         print(f"no records under {root}")
         return 1
@@ -735,12 +740,11 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
     number is what tells an operator whether a fix worked or merely moved."""
     from effects.application.corpus_validation.presence import FieldPresence
     from effects.application.validate_corpus import validate_corpus
-    from effects.infrastructure.record_io import iter_shards, read_window
+    from effects.infrastructure.record_io import read_window
 
     root = args.effect_records
-    shards = iter_shards(root)
-    if not shards:
-        print(f"no shards under {root}")
+    shards = _require_shards(root)
+    if shards is None:
         return 1
 
     presence = FieldPresence()
