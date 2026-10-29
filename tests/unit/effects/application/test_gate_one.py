@@ -140,7 +140,7 @@ class TestTrainingTexts:
 class TestMarginAccumulator:
     """The three margins pool every chunk's entities, then reduce once."""
 
-    def _chunk(self, affected_damage: float):
+    def _chunk(self, affected_damage: float, observed_damage: float = 2.0):
         import torch
 
         from effects.domain.effect_head_layout import (
@@ -162,7 +162,7 @@ class TestMarginAccumulator:
             "zone_outcome": torch.tensor(
                 [[float(ZONE_OUTCOMES.index("died")), 0.0]],
             ),
-            "damage_taken": torch.tensor([[2.0, 0.0]]),
+            "damage_taken": torch.tensor([[observed_damage, 0.0]]),
         })
         return gathered, torch.tensor([[1.0, 0.0]]), targets, torch.ones(1, 2)
 
@@ -178,6 +178,16 @@ class TestMarginAccumulator:
         assert metrics.affected_gate_f1 == pytest.approx(1.0)
         assert metrics.zone_outcome_accuracy == pytest.approx(1.0)
         assert metrics.mean_poisson_deviance == pytest.approx(0.0, abs=1e-6)
+
+    def test_a_count_netted_negative_scores_as_none_as_it_trains(self):
+        """A heal netted into ``damage_taken`` trains as zero damage, not as
+        the heal's size."""
+        from effects.application.gate_one import MarginAccumulator
+        from effects.domain.effect_head_layout import FIELDS_BY_NAME
+
+        margins = MarginAccumulator((FIELDS_BY_NAME["damage_taken"],))
+        margins.add(*self._chunk(1e-6, observed_damage=-2.0))
+        assert margins.metrics().mean_poisson_deviance == pytest.approx(0.0, abs=1e-4)
 
     def test_nothing_added_is_unmeasured_rather_than_perfect(self):
         import math

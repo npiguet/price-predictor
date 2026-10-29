@@ -77,6 +77,14 @@ def counted(target: torch.Tensor) -> torch.Tensor:
     return target.clamp(min=0.0, max=MAGNITUDE_CAP)
 
 
+def magnitude_target(spec: FieldSpec, target: torch.Tensor) -> torch.Tensor:
+    """The magnitude a count or signed-delta field's Poisson term trains on,
+    so anything scoring that term reads the target the same way."""
+    if spec.type is FieldType.COUNT:
+        return counted(target.float())
+    return capped(target.float()).abs()
+
+
 def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     """Poisson NLL on a log-rate prediction, summed. ``full=True`` changes no
     gradient but puts every term's minimum near zero, so the loss does not
@@ -115,7 +123,7 @@ def field_loss(
                 prediction, target.float(), reduction="sum",
             )
         case FieldType.COUNT:
-            return _poisson(prediction.squeeze(-1), counted(target.float()))
+            return _poisson(prediction.squeeze(-1), magnitude_target(spec, target))
         case FieldType.SIGNED_DELTA:
             return _signed_delta_loss(prediction, capped(target.float()))
         case FieldType.CATEGORICAL:

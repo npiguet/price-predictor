@@ -20,6 +20,7 @@ from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
 from effects.domain.ability_encoder import surface_of
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX
+from effects.domain.effect_losses import magnitude_target
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.evaluation_report import (
@@ -201,7 +202,7 @@ class MarginAccumulator:
             if not slice_.numel():
                 continue
             self._count_pred.append(expected_magnitude(spec, slice_).numpy())
-            self._count_true.append(np.abs(target[scored].numpy()))
+            self._count_true.append(magnitude_target(spec, target[scored]).numpy())
 
     def metrics(self) -> GateOneMetrics:
         """The three margins over everything added; NaN where nothing was."""
