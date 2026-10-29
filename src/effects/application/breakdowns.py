@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from effects.domain.evaluation_report import CheckName, CheckResult, CheckStatus
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, rarity_bucket
-from effects.domain.records import WHAT_IF_SUBKINDS, LegalityDecision
+from effects.domain.records import LEGALITY_SUBKINDS, LegalityDecision
 from effects.domain.strata import Stratum
 
 #: The loss key every scored record carries: the per-entity loss summed over
@@ -189,7 +189,7 @@ def policy_slice(results: Iterable[RecordResult]) -> dict[str, GroupResult]:
 def decision_slice(results: Iterable[RecordResult]) -> dict[str, GroupResult]:
     """Legality records, real declarations apart from what-if queries (FR-067)."""
     def kind(result: RecordResult) -> str | None:
-        if result.subkind not in WHAT_IF_SUBKINDS:
+        if result.subkind not in LEGALITY_SUBKINDS:
             return None
         return LegalityDecision.of(result)
 

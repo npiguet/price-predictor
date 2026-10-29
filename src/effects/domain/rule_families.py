@@ -35,8 +35,9 @@ from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import (
     Candidate,
     EffectRecord,
+    PlayabilityAttackersPayload,
+    PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
-    PlayabilitySubkind,
     RecordKind,
 )
 from effects.domain.script_text import root_param
@@ -111,8 +112,11 @@ def legality_modes(record: EffectRecord, sidecars: SidecarLookup) -> frozenset[s
     A ``Mode$`` list (Pacifism's ``CantAttack,CantBlock``) is split; a keyword
     family is taken whole, since its name is not a mode list.
     """
+    payload = record.payload
+    if not isinstance(payload, PlayabilityAttackersPayload | PlayabilityBlockersPayload):
+        raise TypeError(f"{type(payload).__name__} is not a legality payload")
     modes: set[str] = set()
-    for entry in record.payload.forbidden:
+    for entry in payload.forbidden:
         if not entry.responsible_static:
             continue
         line = sidecars.first_line(entry.responsible_static)
@@ -164,11 +168,11 @@ def rule_family(
         case RecordKind.COMBAT:
             return combat_family(record, resolver or KeywordResolver(sidecars))
         case RecordKind.PLAYABILITY:
-            if record.subkind is PlayabilitySubkind.DECISION:
-                payload: PlayabilityDecisionPayload = record.payload
-                if not payload.candidates:
+            match record.payload:
+                case PlayabilityDecisionPayload(candidates=(candidate, *_)):
+                    return candidate_family(candidate, sidecars)
+                case PlayabilityDecisionPayload():
                     return FamilySentinel.NONE
-                return candidate_family(payload.candidates[0], sidecars)
             return legality_family(
                 legality_modes(record, sidecars), legality_mode_counts,
             )

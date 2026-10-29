@@ -22,7 +22,6 @@ from effects.domain.sampling import (
     DEFAULT_KIND_MIX,
     RARITY_CAP,
     SAMPLING_CLASSES,
-    UNIFORM_CLASSES,
     SamplingClass,
     batches_without_replacement,
     effective_games,
@@ -120,8 +119,19 @@ class TestRarityWeighting:
 
 
 class TestUniformClasses:
-    def test_combat_and_playability_legality_sample_uniformly(self):
-        assert UNIFORM_CLASSES == {SamplingClass.COMBAT, SamplingClass.PLAYABILITY_LEGALITY}
+    def test_combat_and_playability_legality_have_no_acting_line(self):
+        records = [
+            make_record(kind, subkind=subkind)
+            for kind, subkind in (
+                (RecordKind.COMBAT, None),
+                (RecordKind.PLAYABILITY, PlayabilitySubkind.ATTACKERS),
+                (RecordKind.PLAYABILITY, PlayabilitySubkind.BLOCKERS),
+                (RecordKind.PLAYABILITY, PlayabilitySubkind.DECISION),
+                (RecordKind.RESOLUTION, None),
+            )
+        ]
+        uniform = {sampling_class(r) for r in records if not r.has_act_line}
+        assert uniform == {SamplingClass.COMBAT, SamplingClass.PLAYABILITY_LEGALITY}
 
     def test_a_record_with_no_acting_text_weighs_one(self):
         records = [
@@ -146,7 +156,7 @@ class TestUniformClasses:
         """One record, one example per candidate, each keyed on its own text."""
         record = make_record(RecordKind.PLAYABILITY)
         assert sampling_class(record) == SamplingClass.PLAYABILITY_DECISION
-        assert SamplingClass.PLAYABILITY_DECISION not in UNIFORM_CLASSES
+        assert record.has_act_line
 
 
 class TestSampleWeightsRarityTable:

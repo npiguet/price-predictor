@@ -34,11 +34,10 @@ from effects.domain.records import (
     ActivationPayload,
     ContinuousPayload,
     EffectRecord,
-    Moment,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
-    RecordKind,
+    ResolutionPayload,
     RewritePayload,
     TriggerPayload,
     events_of,
@@ -157,7 +156,7 @@ def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:
             )
         return entry
 
-    for event in _outcome_events(record):
+    for event in _target_events(record):
         for subject in event.subjects:
             entry = slot(subject)
             entry.affected = True
@@ -168,9 +167,10 @@ def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:
     return targets
 
 
-def _outcome_events(record: EffectRecord) -> tuple[Event, ...]:
-    """The events that are this record's outcome: none on a trigger record,
-    whose events caused it and whose effect is its resolution's record."""
+def _target_events(record: EffectRecord) -> tuple[Event, ...]:
+    """The events the head trains on as this record's outcome: those that
+    happened, except on a trigger record, whose event caused it and whose
+    effect is its resolution's record."""
     if isinstance(record.payload, TriggerPayload):
         return ()
     return events_of(record)
@@ -354,38 +354,35 @@ def verdict_targets(
     """
     target = [0.0] * VERDICT_WIDTH
     mask = [False] * VERDICT_WIDTH
-    payload = record.payload
     bits = len(VERDICT_BITS)
-    if isinstance(payload, PlayabilityDecisionPayload):
-        if not payload.candidates:
+    match record.payload:
+        case PlayabilityDecisionPayload(candidates=(candidate, *_)):
+            for index, value in enumerate(
+                (candidate.can_play, candidate.affordable, candidate.has_legal_target)
+            ):
+                target[index] = 1.0 if value else 0.0
+                mask[index] = True
+        case ActivationPayload(costs=costs):
+            paid = costs.mana_by_color
+            for offset, color in enumerate(COLORS):
+                target[bits + offset] = float(paid.get(color, 0))
+                mask[bits + offset] = True
+        case TriggerPayload(fired=fired):
+            target[-1] = 1.0 if fired else 0.0
+            mask[-1] = True
+        case _:
             return None
-        candidate = payload.candidates[0]
-        for index, value in enumerate(
-            (candidate.can_play, candidate.affordable, candidate.has_legal_target)
-        ):
-            target[index] = 1.0 if value else 0.0
-            mask[index] = True
-        return target, mask
-    if record.moment is Moment.ACTIVATION and isinstance(payload, ActivationPayload):
-        paid = payload.costs.mana_by_color
-        for offset, color in enumerate(COLORS):
-            target[bits + offset] = float(paid.get(color, 0))
-            mask[bits + offset] = True
-        return target, mask
-    if isinstance(payload, TriggerPayload):
-        target[-1] = 1.0 if payload.fired else 0.0
-        mask[-1] = True
-        return target, mask
-    return None
+    return target, mask
 
 
 def supervises_created_objects(record: EffectRecord) -> bool:
     """Effect halves and in-place rewrites carry created-objects targets; any
     other rewrite ran another ability, whose effect half supervises it."""
-    if record.kind is RecordKind.RESOLUTION:
-        return record.moment is Moment.RESOLUTION
-    if record.kind is RecordKind.REWRITE:
-        return isinstance(record.payload, RewritePayload) and record.payload.rewritten
+    match record.payload:
+        case ResolutionPayload():
+            return True
+        case RewritePayload(rewritten=rewritten):
+            return rewritten
     return False
 
 

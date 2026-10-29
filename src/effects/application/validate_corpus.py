@@ -34,10 +34,10 @@ from effects.domain.event_schema import (
 from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
+    LEGALITY_SUBKINDS,
     PAYLOAD_TYPES,
     REWRITE_RESULTS_RUNNING_AN_ABILITY,
     REWRITE_RESULTS_WITHOUT_ABILITY,
-    WHAT_IF_SUBKINDS,
     ActivationPayload,
     CollectionMode,
     CombatPayload,
@@ -254,7 +254,7 @@ class FieldPresence:
         counts.with_random_seat += "random_seat" in data
         legality = (
             data.get("kind") == RecordKind.PLAYABILITY.value
-            and data.get("subkind") in WHAT_IF_SUBKINDS
+            and data.get("subkind") in LEGALITY_SUBKINDS
         )
         if legality:
             counts.legality += 1

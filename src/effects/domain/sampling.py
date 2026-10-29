@@ -49,13 +49,6 @@ DEFAULT_KIND_MIX: dict[SamplingClass, float] = {
 }
 
 
-#: Classes whose records have no acting ability text, so rarity weighting has
-#: nothing to key on and they sample uniformly instead (FR-087).
-UNIFORM_CLASSES: frozenset[SamplingClass] = frozenset({
-    SamplingClass.COMBAT, SamplingClass.PLAYABILITY_LEGALITY,
-})
-
-
 #: Rarity weight ceiling, as a multiple of the weight of the text at
 #: :data:`RARITY_PERCENTILE` of effective games (FR-054).
 RARITY_CAP = 20.0

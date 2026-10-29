@@ -19,6 +19,7 @@ from functools import lru_cache
 from effects.domain.keyword_names import overlay_keyword
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
+    ActivationPayload,
     CombatPayload,
     ContinuousPayload,
     EffectRecord,
@@ -278,7 +279,7 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
     """Announced values and the resolution outcome flag; zeros for
     ``combat`` and the ``attackers``/``blockers`` subkinds, where no single
     line acts."""
-    if _act_is_empty(record):
+    if not record.has_act_line:
         return tuple([0.0] * _ACT_FEATURE_WIDTH)
     refs = record.state.refs
     out: list[float] = [1.0]  # slot is populated
@@ -289,9 +290,11 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
     _push_scalar(out, len(refs.choices))
     # The outcome flag comes from the paired cost record; a half with no
     # partner resolved by definition, which is why `resolved` is the default.
-    outcome = ResolutionOutcome.RESOLVED
-    if record.moment is Moment.ACTIVATION and hasattr(record.payload, "outcome"):
-        outcome = record.payload.outcome
+    payload = record.payload
+    outcome = (
+        payload.outcome if isinstance(payload, ActivationPayload)
+        else ResolutionOutcome.RESOLVED
+    )
     out += _one_hot(outcome.value, _RESOLUTION_OUTCOMES)
     return tuple(out)
 
@@ -300,14 +303,6 @@ _ACT_FEATURE_WIDTH = 1 + 2 + 1 + 2 + 2 + 2 + (len(ResolutionOutcome) + 1)
 _RESOLUTION_OUTCOMES: tuple[str, ...] = tuple(
     o.value for o in ResolutionOutcome
 )
-
-
-def _act_is_empty(record: EffectRecord) -> bool:
-    if record.kind is RecordKind.COMBAT:
-        return True
-    return record.subkind in (
-        PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS,
-    )
 
 
 def player_features(
@@ -604,7 +599,7 @@ def _act_vector(
     record: EffectRecord, e_for, zero: tuple[float, ...],
     candidate_index: int | None,
 ):
-    if _act_is_empty(record):
+    if not record.has_act_line:
         return zero
     payload = record.payload
     if isinstance(payload, PlayabilityDecisionPayload):
@@ -630,16 +625,14 @@ def _first_vector(keys, e_for, zero: tuple[float, ...]):
 def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]]:
     """Keywords a ``continuous`` record's own static contributed (FR-020),
     hidden so the input does not already contain the answer."""
-    payload = record.payload
-    if record.kind is not RecordKind.CONTINUOUS or not isinstance(
-        payload, ContinuousPayload,
-    ):
-        return {}
-    return {
-        contribution.entity: frozenset(contribution.keywords)
-        for contribution in payload.contributions
-        if contribution.keywords
-    }
+    match record.payload:
+        case ContinuousPayload(contributions=contributions):
+            return {
+                contribution.entity: frozenset(contribution.keywords)
+                for contribution in contributions
+                if contribution.keywords
+            }
+    return {}
 
 
 def feature_widths(records, *, layout: InputLayout = INPUT_LAYOUT) -> dict[SlotKind, int]:
