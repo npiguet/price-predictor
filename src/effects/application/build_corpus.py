@@ -516,7 +516,7 @@ def _write_validation_samples(
         card_disjoint=store.card_disjoint_dir, game_disjoint=store.game_disjoint_dir,
         gate_one=store.gate_one_dir, mix=config.mix(), size=config.validation_sample,
         seed=config.seed,
-        held_out_text_of=lambda record: context.held_out_text(acting_keys(record) or None),
+        held_out_text_of=lambda record: context.held_out_text(acting_keys(record)),
     )
     sampled = write_samples(store, samples)
     for stratum, count in sampled.items():

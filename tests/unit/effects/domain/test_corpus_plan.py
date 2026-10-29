@@ -82,11 +82,11 @@ class TestLegalityCells:
         supply = TrainingSupply(heap_cap=10)
         both = Cell(LEGALITY, "real", modes=frozenset({"CantAttack", "CantBlock"}))
         alone = Cell(LEGALITY, "real", modes=frozenset({"CantBlock"}))
-        supply.add(both, None, 0)
-        supply.add(alone, None, 0)
+        supply.add(both, (), 0)
+        supply.add(alone, (), 0)
         supply.add(both, key, 5)
         supply.add(alone, key, 6)
-        supply.add(Cell("combat", "", "none"), None, 0)
+        supply.add(Cell("combat", "", "none"), (), 0)
 
         folded = supply.resolved({"CantAttack": 35, "CantBlock": 7})
         block = Cell(LEGALITY, "real", "CantBlock")
@@ -180,7 +180,7 @@ def test_the_selection_plan_is_pinned_level_by_level_and_in_order():
     for cell, key, records in _SUPPLY:
         for _ in range(records):
             value = (value * 37 + 11) % 1000
-            supply.add(cell, None if key is None else _keys(key), value)
+            supply.add(cell, () if key is None else _keys(key), value)
     members, keys_of = members_of(supply, _TEXTS)
 
     plan = plan_selection(

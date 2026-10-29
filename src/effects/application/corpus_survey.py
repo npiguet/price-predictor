@@ -129,7 +129,7 @@ class WorkerContext:
     def hash_of(self, record: EffectRecord) -> int:
         return record_hash(record.record_id, seed=self.read.seed)
 
-    def held_out_text(self, keys: Keys | None) -> str | None:
+    def held_out_text(self, keys: Keys) -> str | None:
         """The held-out script text these acting keys resolve to, normalized,
         or None. Always the script surface, whatever ``--vocab-path`` says,
         since that is the surface the holdout is chosen on."""
@@ -289,7 +289,7 @@ class _PendingRecord:
     game: str
     klass: SamplingClass
     cell: Cell
-    keys: Keys | None
+    keys: Keys
     value: int
     #: Never trains, even in a training game.
     acts_through_held_out_text: bool
@@ -339,7 +339,7 @@ class _ShardSurveyor:
         out.games.games.add(game)
         cell = context.cell_of(record)
         out.mode_counts.update(cell.modes)
-        keys = acting_keys(record) or None
+        keys = acting_keys(record)
         if keys:
             out.rarity.note(keys, game)
         held_text = context.held_out_text(keys)

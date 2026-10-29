@@ -151,7 +151,7 @@ class TrainingSupply:
         # A partial rather than a lambda, so the supply pickles.
         self.heaps = defaultdict(partial(CapHeap, self.heap_cap))
 
-    def add(self, cell: Cell, keys: Keys | None, value: int) -> None:
+    def add(self, cell: Cell, keys: Keys, value: int) -> None:
         """One training-bound record, by its cell, acting keys and record hash."""
         if not keys:
             self.keyless[cell] += 1
