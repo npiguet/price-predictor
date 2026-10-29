@@ -119,7 +119,7 @@ class TestCoverageDeckBuilding:
     def test_a_deck_is_forty_cards_with_twenty_three_nonlands(self):
         import random
 
-        from effects.application.collect_coverage import build_coverage_decks
+        from effects.application.collector_common import build_coverage_decks
 
         names = [f"card {i}" for i in range(40)]
         decks = build_coverage_decks(
@@ -141,7 +141,7 @@ class TestCoverageDeckBuilding:
     def test_a_heavier_card_appears_more_often(self):
         import random
 
-        from effects.application.collect_coverage import build_coverage_decks
+        from effects.application.collector_common import build_coverage_decks
 
         names = [f"card {i}" for i in range(40)]
         weights = {n: 1.0 for n in names}
@@ -157,7 +157,7 @@ class TestCoverageDeckBuilding:
         """A weight can name a card the tree has no text for; basics need its cost."""
         import random
 
-        from effects.application.collect_coverage import build_coverage_decks
+        from effects.application.collector_common import build_coverage_decks
 
         names = [f"card {i}" for i in range(40)]
         decks = build_coverage_decks(
@@ -170,7 +170,7 @@ class TestCoverageDeckBuilding:
 
 class TestHeldOutExclusion:
     def test_no_split_holds_nothing_out(self):
-        from effects.application.collect_coverage import load_held_out
+        from effects.application.collector_common import load_held_out
 
         assert load_held_out(None) == frozenset()
 
@@ -275,7 +275,7 @@ class TestExclusionsWithoutACheckpoint:
     """
 
     def test_the_depletion_list_is_read_and_folded(self, tmp_path) -> None:
-        from effects.application.collect_coverage import HoldoutSource
+        from effects.application.collector_common import HoldoutSource
 
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\nLim-Dûl's Vault\n", encoding="utf-8")
@@ -288,13 +288,13 @@ class TestExclusionsWithoutACheckpoint:
         )
 
     def test_neither_source_means_no_exclusions(self) -> None:
-        from effects.application.collect_coverage import HoldoutSource
+        from effects.application.collector_common import HoldoutSource
 
         assert HoldoutSource().exclusions() == frozenset()
 
     def test_both_sources_at_once_is_refused(self, tmp_path) -> None:
         """Two spellings of the same holdout is the bug this feature just had."""
-        from effects.application.collect_coverage import HoldoutSource
+        from effects.application.collector_common import HoldoutSource
 
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\n", encoding="utf-8")
@@ -994,7 +994,7 @@ class TestHeldOutTextUnit:
         """Spec Story 2 scenario 5."""
         import random
 
-        from effects.application.collect_coverage import build_coverage_decks
+        from effects.application.collector_common import build_coverage_decks
         from effects.domain.coverage import (
             DeckCandidate,
             TextCoverage,

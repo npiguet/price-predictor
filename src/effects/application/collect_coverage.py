@@ -12,15 +12,20 @@ from __future__ import annotations
 import logging
 import random
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from functools import lru_cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+from effects.application.collector_common import (
+    CollectorConfig,
+    build_coverage_decks,
+    collector_supervisor,
+    play_decks,
+    read_name_list,
+)
 from effects.application.parallel_map import run_parallel
-from effects.domain import default_paths
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
     HELD_OUT_GAME_FLOOR,
@@ -51,41 +56,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_RECORDS_DIR = Path(default_paths.DEFAULT_RECORDS_DIR)
-#: Java worker processes, for both collectors.
-DEFAULT_WORKERS = 12
 DEFAULT_TARGET_RECORDS = 50
-DEFAULT_DECKS_PER_ROUND = 500
 DEFAULT_NO_PROGRESS_ROUNDS = 3
 
 #: Shards between progress lines while counting: the first pass reads the whole
 #: existing corpus, and silence that long looks like a hang.
 PROGRESS_EVERY_SHARDS = 10
 
-#: A 40-card limited deck: 23 nonlands plus basics.
-NONLANDS_PER_DECK = 23
-DECK_SIZE = 40
-
 #: Seeds the per-round deck sampler so which cards fill a round is reproducible.
 RANDOM_SEED = 42
-
-
-@dataclass
-class CollectorConfig:
-    """What both collectors take: the corpus they write to, the converted
-    trees, the holdout they keep out of their decks, and how they play."""
-
-    effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
-    cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
-    split_from: Path | None = None
-    exclude_cards: Path | None = None
-    decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
-        "help": "Decks played as matches per round (default: %(default)s)",
-    })
-    workers: int = field(default=DEFAULT_WORKERS, metadata={
-        "help": "Parallel Java worker processes (default: %(default)s)",
-    })
-    caps: CollectionCaps = field(default_factory=CollectionCaps)
 
 
 @dataclass
@@ -117,12 +96,6 @@ class CollectCoverageConfig(CollectorConfig):
         from effects.infrastructure.converted_trees import ConvertedTrees
 
         return ConvertedTrees.from_folders(self.cards_folders)
-
-    def holdout_source(self) -> HoldoutSource:
-        return HoldoutSource(
-            effect_records=self.effect_records, exclude_cards=self.exclude_cards,
-            split_from=self.split_from,
-        )
 
     def no_converted_cards(self) -> str:
         """The error for a run whose card tree holds no converted card."""
@@ -210,39 +183,6 @@ class CoverageCounter(_ShardCounter):
         return self._count_fresh(records_dir, count_shard, add, workers=workers)
 
 
-def build_coverage_decks(
-    weights: dict[str, float],
-    candidates: Mapping[str, DeckCandidate],
-    count: int,
-    *,
-    rng: random.Random,
-) -> list[list[str]]:
-    """``count`` 40-card decks drawn from ``weights`` (FR-046).
-
-    23 nonlands sampled with replacement in proportion to weight, since the
-    point is to get a card into games rather than a deck anyone would play,
-    then basics from ``compute_basic_lands``. A weighted card that is no
-    candidate has no cost to read and is skipped.
-    """
-    from sealed.domain.manabase import compute_basic_lands
-
-    pool = [(name, w) for name, w in weights.items() if name in candidates and w > 0]
-    if not pool:
-        return []
-    names = [name for name, _ in pool]
-    ws = [w for _, w in pool]
-
-    decks: list[list[str]] = []
-    for _ in range(count):
-        nonlands = rng.choices(names, weights=ws, k=NONLANDS_PER_DECK)
-        basics = compute_basic_lands([candidates[n] for n in nonlands])
-        deck = list(nonlands)
-        for land, n in basics.items():
-            deck.extend([land] * n)
-        decks.append(deck)
-    return decks
-
-
 @dataclass
 class CoverageResidues:
     """What the run could not reach, split by why (FR-051): which cards need
@@ -275,137 +215,6 @@ def residues(
     return CoverageResidues(tuple(uncastable), tuple(short))
 
 
-TWO_HOLDOUT_SOURCES = (
-    "pass one source of held-out cards, not both: --exclude-cards "
-    "names the list this corpus is being depleted against, "
-    "--split-from inherits a checkpoint's recorded split, and a "
-    "disagreement between them is silent"
-)
-
-
-#: The name a depletion list takes inside the corpus it depleted.
-HOLDOUT_LIST_NAME = "holdout-cards.txt"
-
-
-@dataclass(frozen=True, slots=True)
-class HoldoutSource:
-    """Where a collector writes, and the one source of the cards it keeps out:
-    ``--exclude-cards`` (needs no trained model) or ``--split-from`` (an
-    existing checkpoint's split). Both at once is refused rather than merged,
-    since a merge would hide a disagreement."""
-
-    effect_records: Path = DEFAULT_RECORDS_DIR
-    exclude_cards: Path | None = None
-    split_from: Path | None = None
-
-    def __post_init__(self) -> None:
-        if self.split_from is not None and self.exclude_cards is not None:
-            raise ValueError(TWO_HOLDOUT_SOURCES)
-
-    @classmethod
-    def from_flags(
-        cls, *,
-        effect_records: Path | None,
-        exclude_cards: Path | None,
-        split_from: Path | None,
-        training_corpus: Path | None = None,
-        only_cards: Path | None = None,
-    ) -> HoldoutSource:
-        """The source a collector's flags name, refused before any worker starts.
-
-        ``--training-corpus DIR`` stands for ``--effect-records DIR`` with
-        ``DIR/holdout-cards.txt`` as the depletion list, so a corpus and the
-        list that depleted it cannot be named apart.
-
-        Raises ``ValueError`` when ``--only-cards`` comes with a holdout to keep
-        out, when ``--training-corpus`` comes with a flag it implies (an
-        explicit default ``--effect-records`` included) or its directory holds
-        no depletion list, or when two sources name the held-out cards.
-        """
-        if only_cards is not None:
-            _refuse_holdout_beside_only_cards(
-                exclude_cards=exclude_cards, training_corpus=training_corpus,
-                split_from=split_from,
-            )
-        if training_corpus is None:
-            return cls(
-                effect_records=effect_records or DEFAULT_RECORDS_DIR,
-                exclude_cards=exclude_cards, split_from=split_from,
-            )
-        if effect_records is not None or exclude_cards:
-            raise ValueError(
-                "pass one source of the corpus location, not both: "
-                "--training-corpus DIR means --effect-records DIR with its own "
-                f"{HOLDOUT_LIST_NAME}"
-            )
-        return cls(
-            effect_records=training_corpus,
-            exclude_cards=_depletion_list(training_corpus), split_from=split_from,
-        )
-
-    def exclusions(self) -> frozenset[str]:
-        """Cards to keep out of every deck, folded, from whichever source names them."""
-        if self.exclude_cards is not None:
-            return read_name_list(self.exclude_cards)
-        return load_held_out(self.split_from)
-
-
-def _refuse_holdout_beside_only_cards(
-    *, exclude_cards: Path | None, training_corpus: Path | None, split_from: Path | None,
-) -> None:
-    clashing = [
-        flag for flag, value in (
-            ("--exclude-cards", exclude_cards),
-            ("--training-corpus", training_corpus),
-            ("--split-from", split_from),
-        ) if value
-    ]
-    if clashing:
-        # FR-038: opposite instructions, so one of them is a mistake.
-        raise ValueError(
-            f"--only-cards decks the held-out cards; {', '.join(clashing)} "
-            "keeps a holdout out of every deck. Pass one or the other."
-        )
-
-
-def _depletion_list(training_corpus: Path) -> Path:
-    """The list ``training_corpus`` was depleted against, which it must hold."""
-    listed = training_corpus / HOLDOUT_LIST_NAME
-    if not listed.is_file():
-        raise ValueError(
-            f"{training_corpus} holds no {HOLDOUT_LIST_NAME}. A training "
-            "corpus is depleted against a list, and without it this run "
-            "would deck the held-out cards and contaminate the split. Write "
-            "one with 'python -m effects holdout-cards', or pass "
-            "--effect-records and --exclude-cards separately if they "
-            "genuinely live apart."
-        )
-    return listed
-
-
-def read_name_list(path: Path) -> frozenset[str]:
-    """The card names a one-per-line list holds, folded to match converted
-    names; blank lines skipped."""
-    from effects.domain.card_names import fold_card_name
-
-    return frozenset(
-        fold_card_name(line.strip())
-        for line in Path(path).read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    )
-
-
-def load_held_out(split_from: Path | None) -> frozenset[str]:
-    """Cards to keep out of every deck (FR-045): the held-out cards of the
-    checkpoint whose card-disjoint split this run must not contaminate."""
-    if split_from is None:
-        return frozenset()
-    from effects.infrastructure.effect_model_store import load_effect_checkpoint
-
-    provenance = load_effect_checkpoint(Path(split_from)).provenance
-    return frozenset(provenance.held_out_cards)
-
-
 def build_coverage_units(
     names: Iterable[str], held_out: frozenset[str],
 ) -> dict[str, CardCoverage]:
@@ -420,44 +229,6 @@ def build_coverage_units(
 def non_deck_names(texts: Mapping[str, str]) -> set[str]:
     """The cards whose converted text names a type no deck holds."""
     return {name for name, text in texts.items() if not is_deckable(text)}
-
-
-@contextmanager
-def collector_supervisor(
-    *,
-    workers: int,
-    effect_records: Path,
-    caps: CollectionCaps,
-    variant_scripts: Path | None = None,
-) -> Iterator[CollectorSupervisor]:
-    """A records-only supervisor that is stopped however its rounds end:
-    without ``stop()`` the worker logs holding the latched failure reports
-    stay unflushed until the interpreter exits."""
-    from effects.infrastructure.collector_connector import CollectorSupervisor
-
-    supervisor = CollectorSupervisor(
-        worker_count=workers, effect_records=effect_records, caps=caps,
-        variant_scripts=variant_scripts,
-    )
-    try:
-        yield supervisor
-    finally:
-        supervisor.stop()
-
-
-def play_decks(
-    supervisor: CollectorSupervisor,
-    decks: list[list[str]],
-    decks_file: Path,
-    *,
-    label: str,
-    matches: int,
-) -> None:
-    """Play one round of ``decks``, which a records-only round reads from a file."""
-    from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
-
-    write_deck_file(decks, decks_file, label=label, set_code=COVERAGE_SET_CODE)
-    supervisor.play_round(decks_file, matches=matches)
 
 
 class CoverageRounds(Protocol):
@@ -575,21 +346,34 @@ def _play_to_completion(
     return 130 if interrupted else 0
 
 
-@dataclass
-class CardRounds:
-    """The card run's rounds: every deckable card a unit, and every one awaited."""
+@dataclass(kw_only=True)
+class _RoundsBase:
+    """What both kinds of round hold: the units, the consult's verdicts, the
+    counter that reads each round's shards into the units, and the cards a
+    deck can be drawn from."""
 
-    coverage: dict[str, CardCoverage]
+    coverage: dict[str, CoverageUnit]
     verdicts: Mapping[str, ConsultVerdict]
-    counter: CoverageCounter
+    counter: CoverageCounter | TextCoverageCounter
     records_dir: Path
     target: int
     candidates: dict[str, DeckCandidate]
-    no_decks: str = "No card with a weight has converted text; nothing to deck."
 
     @property
-    def units(self) -> dict[str, CardCoverage]:
+    def units(self) -> dict[str, CoverageUnit]:
         return self.coverage
+
+    def count_new_shards(self) -> int:
+        return self.counter.update(self.coverage, self.records_dir)
+
+
+@dataclass(kw_only=True)
+class CardRounds(_RoundsBase):
+    """The card run's rounds: every deckable card a unit, and every one awaited."""
+
+    coverage: dict[str, CardCoverage]
+    counter: CoverageCounter
+    no_decks: str = "No card with a weight has converted text; nothing to deck."
 
     @property
     def awaited(self) -> dict[str, CardCoverage]:
@@ -600,9 +384,6 @@ class CardRounds:
 
     def units_decked(self, cards: set[str]) -> set[str]:
         return cards
-
-    def count_new_shards(self) -> int:
-        return self.counter.update(self.coverage, self.records_dir)
 
     def report(self) -> str:
         return residues(self.coverage, self.target).render(self.target)
@@ -780,28 +561,20 @@ def held_out_round_caps(caps: CollectionCaps) -> CollectionCaps:
     return replace(caps, playability_rate=1.0)
 
 
-@dataclass
-class TextRounds:
+@dataclass(kw_only=True)
+class TextRounds(_RoundsBase):
     """The held-out round's rounds: each held-out text a unit, awaited only
     when some castable card carries it."""
 
     coverage: dict[str, TextCoverage]
     #: ``held-out text -> the deckable listed cards carrying it``.
     carriers: Mapping[str, frozenset[str]]
-    verdicts: Mapping[str, ConsultVerdict]
     counter: TextCoverageCounter
-    records_dir: Path
-    target: int
-    candidates: dict[str, DeckCandidate]
     no_decks: str = "No unfinished held-out text has a card with converted text."
     awaited: dict[str, TextCoverage] = field(init=False)
 
     def __post_init__(self) -> None:
         self.awaited = awaited_texts(self.coverage)
-
-    @property
-    def units(self) -> dict[str, TextCoverage]:
-        return self.coverage
 
     def weights(self) -> dict[str, float]:
         return rank_by_consult(
@@ -814,11 +587,40 @@ class TextRounds:
             text for text, carrying in self.carriers.items() if carrying & cards
         }
 
-    def count_new_shards(self) -> int:
-        return self.counter.update(self.coverage, self.records_dir)
-
     def report(self) -> str:
         return text_residues(self.coverage, self.target).render(self.target)
+
+
+def _held_out_carriers(
+    listed: Iterable[str], texts_by_card: Mapping[str, list[str]],
+    non_deck: set[str],
+) -> dict[str, frozenset[str]]:
+    """``held-out text -> its deckable listed carriers``, for each text some
+    deckable card carries.
+
+    Held-out texts are decided over every listed card, non-deck ones
+    included, or those would read as unlisted carriers and take their texts
+    out of the round; only then do non-deck cards leave as carriers.
+    """
+    carriers = held_out_texts_of(frozenset(listed), texts_by_card)
+    return {
+        text: cards - non_deck
+        for text, cards in carriers.items() if cards - non_deck
+    }
+
+
+def _text_coverage(
+    carriers: Mapping[str, frozenset[str]], verdicts: Mapping[str, ConsultVerdict],
+) -> dict[str, TextCoverage]:
+    """One unit per held-out text, castable while any carrier is not judged
+    uncastable."""
+    return {
+        text: TextCoverage(text=text, castable=any(
+            verdicts.get(card, ConsultVerdict.UNKNOWN) != ConsultVerdict.UNCASTABLE
+            for card in cards
+        ))
+        for text, cards in carriers.items()
+    }
 
 
 def run_text_coverage(config: CollectCoverageConfig) -> int:
@@ -832,25 +634,14 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         logger.error("%s", config.no_converted_cards())
         return 1
     listed = read_name_list(config.only_cards)
-    card_files = trees.card_files
-    texts_by_card = trees.card_texts()
     listed_files = {
-        name: script for name, script in card_files.items()
+        name: script for name, script in trees.card_files.items()
         if fold_card_name(name) in listed
     }
     texts = {name: converted[name].text for name in listed_files}
-    # Held-out texts are decided over every listed card, non-deck ones
-    # included, or those would read as unlisted carriers and take their texts
-    # out of the round; only then do non-deck cards leave as carriers.
     non_deck = non_deck_names(texts)
     present = frozenset(name for name in listed_files if name not in non_deck)
-    carriers = {
-        text: cards - non_deck
-        for text, cards in held_out_texts_of(
-            frozenset(listed_files), texts_by_card,
-        ).items()
-        if cards - non_deck
-    }
+    carriers = _held_out_carriers(listed_files, trees.card_texts(), non_deck)
     if non_deck:
         logger.info(
             "Held-out round: %d listed card(s) of a non-deck type left out",
@@ -864,13 +655,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
         return 1
 
     verdicts = consult_castability(sorted(present))
-    coverage = {
-        text: TextCoverage(text=text, castable=any(
-            verdicts.get(card, ConsultVerdict.UNKNOWN) != ConsultVerdict.UNCASTABLE
-            for card in cards
-        ))
-        for text, cards in carriers.items()
-    }
+    coverage = _text_coverage(carriers, verdicts)
     floor = config.min_text_games
     records_dir = Path(config.effect_records)
     counter = TextCoverageCounter(trees.root_paths)

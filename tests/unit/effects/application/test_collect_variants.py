@@ -486,7 +486,7 @@ class TestVariantManaCostIsParseable:
             perturbation="numeric",
         )
 
-        from effects.application.collect_coverage import build_coverage_decks
+        from effects.application.collector_common import build_coverage_decks
 
         decks = build_coverage_decks(
             {variant.name: 1.0}, {variant.name: _deck_candidate(variant)}, 1,

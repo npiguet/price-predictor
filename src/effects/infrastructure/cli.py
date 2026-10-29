@@ -26,12 +26,9 @@ from effects.application.build_corpus import (
     BuildCorpusError,
 )
 from effects.application.build_vocab import DEFAULT_TARGET_SIZE, EmptyCardsFolderError
-from effects.application.collect_coverage import (
-    HOLDOUT_LIST_NAME,
-    CollectCoverageConfig,
-    HoldoutSource,
-)
+from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
+from effects.application.collector_common import HOLDOUT_LIST_NAME, HoldoutSource
 from effects.application.evaluation_context import CorpusMismatchError
 from effects.application.holdout_cards import HoldoutCardsConfig
 from effects.application.train_effect_model import (

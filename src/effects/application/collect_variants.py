@@ -13,9 +13,8 @@ import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from effects.application.collect_coverage import (
+from effects.application.collector_common import (
     CollectorConfig,
-    HoldoutSource,
     build_coverage_decks,
     collector_supervisor,
     play_decks,
@@ -266,10 +265,7 @@ def _size_budget(config: CollectVariantsConfig) -> int:
 
 
 def _generate(config: CollectVariantsConfig, budget: int) -> list[GeneratedVariant]:
-    held_out = HoldoutSource(
-        effect_records=config.effect_records, exclude_cards=config.exclude_cards,
-        split_from=config.split_from,
-    ).exclusions()
+    held_out = config.holdout_source().exclusions()
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
         held_out=held_out, limit=budget, seed=config.seed,
