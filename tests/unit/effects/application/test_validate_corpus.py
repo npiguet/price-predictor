@@ -52,12 +52,13 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.infrastructure.record_io import read_window
-from effects.infrastructure.sidecar_io import SidecarCache, write_sidecar
+from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.builders import (
     RawShardWriter,
     make_entity,
     make_record,
     make_snapshot,
+    write_sidecar,
 )
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)

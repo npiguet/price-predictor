@@ -476,4 +476,6 @@ def write_sidecar(sidecar, path: Path) -> None:
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(sidecar_to_dict(sidecar)), encoding="utf-8")
+    path.write_text(
+        json.dumps(sidecar_to_dict(sidecar), separators=(",", ":")), encoding="utf-8",
+    )

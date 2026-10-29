@@ -928,8 +928,7 @@ class TestHeldOutTextUnit:
         from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
         from effects.domain.text_holdout import HoldoutUnit
         from effects.infrastructure.record_io import write_shard
-        from effects.infrastructure.sidecar_io import write_sidecar
-        from tests.unit.effects.builders import make_record
+        from tests.unit.effects.builders import make_record, write_sidecar
 
         damage, draw = "SP$ DealDamage | NumDmg$ 2", "SP$ Draw | NumCards$ 1"
         keys = []

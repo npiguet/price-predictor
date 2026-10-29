@@ -24,7 +24,8 @@ from effects.application.holdout_cards import (
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.split import HoldoutRule, text_keyed_holdout
 from effects.domain.text_holdout import HoldoutUnit
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import write_sidecar
 
 
 def _report(card_files, texts_by_card, *, unit="text", canonical_names=None, **rule):

@@ -24,8 +24,9 @@ from effects.application.build_vocab import (
 )
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from effects.infrastructure.sidecar_io import sidecar_path_for
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
+from tests.unit.effects.builders import write_sidecar
 
 _CARD = """name: serra angel
 mana cost: {3}{W}{W}

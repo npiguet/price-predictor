@@ -798,7 +798,8 @@ class TestNoVariantPrintsAHeldOutText:
 
     def _variant(self, tmp_path, name: str, text: str) -> GeneratedVariant:
         from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-        from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+        from effects.infrastructure.sidecar_io import sidecar_path_for
+        from tests.unit.effects.builders import write_sidecar
 
         path = tmp_path / f"{name}.txt"
         path.write_text(f"Name:{name}\n", encoding="utf-8")
@@ -856,7 +857,8 @@ class TestNoVariantPrintsAHeldOutText:
         from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
         from effects.domain.split import HOLDOUT_PERMILLE
         from effects.domain.text_holdout import masked_template, text_is_held_out
-        from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+        from effects.infrastructure.sidecar_io import sidecar_path_for
+        from tests.unit.effects.builders import write_sidecar
 
         assert not text_is_held_out(masked_template(self._HELD), permille=HOLDOUT_PERMILLE)
         card = tmp_path / "cardsfolder" / "h" / "held.txt"

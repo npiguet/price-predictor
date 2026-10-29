@@ -19,11 +19,11 @@ from effects.infrastructure.sidecar_io import (
     SidecarCache,
     UnconfiguredTree,
     UnconvertedScript,
-    write_sidecar,
 )
 from tests.unit.effects.builders import (
     make_record,
     record_on_board,
+    write_sidecar,
 )
 
 

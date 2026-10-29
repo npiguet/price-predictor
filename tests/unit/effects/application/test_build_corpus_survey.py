@@ -41,8 +41,8 @@ from effects.domain.records import (
 )
 from effects.domain.split import HeldOutCards
 from effects.infrastructure.record_io import write_shard
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
 
 _PAYLOAD_BY_KIND: dict[RecordKind, tuple[Moment | None, object]] = {
     RecordKind.RESOLUTION: (Moment.RESOLUTION, ResolutionPayload()),

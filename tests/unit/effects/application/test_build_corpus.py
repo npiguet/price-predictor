@@ -64,8 +64,8 @@ from effects.domain.strata import Stratum
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
 
 _HELD_OUT_CARD = "Held Out Bears"
 #: Found by brute force over ``text_is_held_out(..., permille=20)`` (the

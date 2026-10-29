@@ -30,8 +30,8 @@ from effects.infrastructure.sidecar_io import (
     sidecar_from_dict,
     sidecar_path_for,
     sidecar_to_dict,
-    write_sidecar,
 )
+from tests.unit.effects.builders import write_sidecar
 
 _SCRIPT = "cardsfolder/a/ajanis_pridemate.txt"
 _TRIGGER = ProvenanceKey(_SCRIPT, 0, "trigger", 0)
@@ -253,7 +253,7 @@ class TestSidecarCache:
 
     def test_the_cache_joins_a_record_key_to_its_row(self, tmp_path):
         cache = self._write_trees(tmp_path)
-        assert cache.row_for(_TRIGGER) == 1
+        assert cache.get(_TRIGGER.script_file).row_for(_TRIGGER) == 1
         assert cache.line_for(_TRIGGER).script_api_type == "PutCounter"
 
 
@@ -292,7 +292,7 @@ class TestTheVariantTreeHasNoProse:
     def test_the_line_still_resolves(self, tmp_path):
         """Only the prose surface is absent; the join itself is ordinary."""
         cache, key = self._cache(tmp_path)
-        assert cache.row_for(key) == 0
+        assert cache.get(key.script_file).row_for(key) == 0
         assert cache.line_for(key).script_text == "SP$ DealDamage | NumDmg$ 7"
 
 

@@ -37,7 +37,8 @@ _CARD_TEXTS = {
 def _card_tree(root):
     """A converted tree whose holdout recomputes to ``_HELD_OUT_TEXTS``."""
     from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-    from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+    from effects.infrastructure.sidecar_io import sidecar_path_for
+    from tests.unit.effects.builders import write_sidecar
 
     for name, texts in _CARD_TEXTS.items():
         stem = name.lower().replace(" ", "_")

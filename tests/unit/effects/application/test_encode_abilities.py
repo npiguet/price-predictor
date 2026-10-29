@@ -30,7 +30,8 @@ from effects.infrastructure.effect_model_store import (
     SplitProvenance,
     content_hash,
 )
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import write_sidecar
 
 E_DIM = 8
 

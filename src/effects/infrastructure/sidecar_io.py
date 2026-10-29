@@ -30,8 +30,6 @@ logger = logging.getLogger(__name__)
 
 SIDECAR_SUFFIX = ".provenance.json"
 
-_JSON_SEPARATORS = (",", ":")
-
 
 def tree_of_folder(folder: Path) -> str:
     """The source tree a converted folder holds, read from its name.
@@ -214,19 +212,6 @@ def read_sidecar(path: Path) -> ProvenanceSidecar:
     raise AssertionError("unreachable: the last attempt either returns or raises")
 
 
-def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
-    """Write one sidecar beside its converted text.
-
-    The inverse of :func:`read_sidecar`, for producing one without Forge.
-    """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(sidecar_to_dict(sidecar), separators=_JSON_SEPARATORS),
-        encoding="utf-8",
-    )
-
-
 def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
     """``script file -> its sidecar's script texts`` over one converted tree.
 
@@ -402,10 +387,6 @@ class SidecarCache:
             )
             self._prose[key.script_file] = rendered
         return prose_for(line, rendered)
-
-    def row_for(self, key: ProvenanceKey) -> int | None:
-        """The ability-cache row a record's key names, or None where it was dropped."""
-        return self.get(key.script_file).row_for(key)
 
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
         """The join's answer for a key, with the two no-sidecar cases folded in.

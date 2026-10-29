@@ -35,8 +35,8 @@ from effects.domain.evaluation_report import CheckStatus
 from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
-from tests.unit.effects.builders import read_cache
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import read_cache, write_sidecar
 
 
 def _write_source(
