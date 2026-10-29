@@ -143,12 +143,11 @@ class TextStager:
         )
 
     def prepare_texts(
-        self, ordered: list[str], lines_of: Mapping[str, SidecarLine] | None = None,
-        *, rng: random.Random, keys_of: Callable[[str], list] = lambda text: [],
+        self, ordered: list[str], lines_of: Mapping[str, SidecarLine], *,
+        rng: random.Random, keys_of: Callable[[str], list],
     ) -> list[EncodedLine]:
         """Each text through :meth:`prepare`, with the role spans of its
         sidecar line in ``lines_of``."""
-        lines_of = lines_of or {}
         return [
             self.prepare(
                 text, encoding_role_spans(lines_of.get(text), text, self.surface),
@@ -158,8 +157,8 @@ class TextStager:
         ]
 
     def prepare(
-        self, text: str, role_spans: tuple = (), *, rng: random.Random,
-        keys_of: Callable[[str], list] = lambda text: [],
+        self, text: str, role_spans: tuple, *, rng: random.Random,
+        keys_of: Callable[[str], list],
     ) -> EncodedLine:
         """One text tokenized with ``role_spans`` and its keywords expanded; a
         truncation is reported under ``keys_of(text)``."""
