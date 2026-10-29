@@ -1,16 +1,11 @@
 """The effect head's losses (FR-080, FR-081, FR-082, FR-085).
 
-Each field's loss follows what the field is, as :mod:`effect_head_layout`
-declares it.
+One reduction for every head: a row's loss is summed over its targets, then
+averaged over every row of the batch, scored or not (:func:`per_row`). A row is
+a record, or an encoded text for the value, script-API and MLM heads.
 
-**One reduction for every head**: a row's loss is summed over that row's
-targets, then averaged over the rows of the batch (:func:`per_row`). A row is
-the head's unit — a record for the per-entity, created-objects and verdict
-heads, an encoded text for the value, script-API and MLM heads — and every row
-of the batch counts in the average, including one with nothing to score, so a
-batch with few supervising rows does not weigh them up and a large board
-weighs no more than a small one. A loss weight therefore scales the same kind
-of number on every head.
+Every mask is tested and indexed on the host, where it was built, and rows are
+gathered by index: a device mask would stall the step until the GPU drains.
 """
 
 from __future__ import annotations
@@ -44,15 +39,8 @@ from effects.domain.value_targets import VALUE_TARGETS, ValueKind
 
 @dataclass(frozen=True, slots=True)
 class LossParts:
-    """The per-entity loss by term, still on the device: names beside one tensor.
-
-    ``values`` is float64, each term per record like the total. One stacked
-    tensor rather than a float per term because reading a device value back
-    is a synchronization: with forty-odd active fields a dict of floats was
-    forty-odd stalls per batch, where one read serves them all. Float64 so the
-    values read back are the ones ``float()`` read term by term before, and a
-    caller summing them over batches sums exactly what it summed then.
-    """
+    """The per-entity loss by term, still on the device: names beside one
+    float64 tensor, read back in one synchronization."""
 
     names: tuple[str, ...] = ()
     values: torch.Tensor | None = None
@@ -61,14 +49,12 @@ class LossParts:
         return bool(self.names)
 
     def as_dict(self) -> dict[str, float]:
-        """The terms as floats by name: one read for all of them."""
         if self.values is None:
             return {}
         return dict(zip(self.names, self.values.tolist()))
 
 
 def per_row(total: torch.Tensor, rows: int) -> torch.Tensor:
-    """A head's summed loss as its mean per row: the one reduction every head uses."""
     return total / max(int(rows), 1)
 
 
@@ -86,26 +72,15 @@ def capped(target: torch.Tensor) -> torch.Tensor:
 
 
 def counted(target: torch.Tensor) -> torch.Tensor:
-    """A count target as the Poisson loss scores it: from zero to the cap.
-
-    A count below zero has no likelihood, and a negative target makes the
-    Poisson NLL unbounded below. ``damage_taken`` nets healing against damage,
-    so a heal on an undamaged creature reaches here as one; the creature
-    ended with no damage marked, which is what zero says.
-    """
+    """A count target clamped to ``[0, cap]``: a negative target (a heal
+    netted into ``damage_taken``) makes the Poisson NLL unbounded below."""
     return target.clamp(min=0.0, max=MAGNITUDE_CAP)
 
 
 def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    """Poisson NLL on a log-rate prediction, summed.
-
-    ``full=True`` adds the Stirling approximation of ``log(k!)``, which is
-    constant in the prediction and so changes no gradient — but it moves the
-    minimum of every term to about zero. Without it a term's floor is
-    ``k - k·ln k``, and a batch holding one 88-card draw reads as -306 at a
-    perfect prediction: the loss would track batch composition rather than
-    the model.
-    """
+    """Poisson NLL on a log-rate prediction, summed. ``full=True`` changes no
+    gradient but puts every term's minimum near zero, so the loss does not
+    track batch composition."""
     return functional.poisson_nll_loss(
         prediction, target, log_input=True, full=True, reduction="sum",
     )
@@ -114,11 +89,8 @@ def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 def _signed_delta_loss(
     prediction: torch.Tensor, target: torch.Tensor,
 ) -> torch.Tensor:
-    """Direction (categorical) plus magnitude (count), summed.
-
-    Splitting them is what makes "gains 2 life" and "loses 2 life" different
-    predictions rather than a regression that can hedge between them.
-    """
+    """Direction (categorical) plus magnitude (count), summed, so a gain and
+    a loss are different predictions rather than a hedge."""
     direction_logits = prediction[..., SIGNED_DIRECTIONS]
     log_magnitude = prediction[..., SIGNED_MAGNITUDE]
     direction = torch.sign(target).long() + 1  # -1,0,1 -> 0,1,2
@@ -163,40 +135,23 @@ def per_entity_loss(
     fields: tuple[FieldSpec, ...],
     report_parts: bool = False,
 ) -> tuple[torch.Tensor, LossParts]:
-    """The per-entity head's loss, normalized per record over entity count.
+    """The per-entity head's loss, per record, and its terms when
+    ``report_parts`` (scaled alike, so they sum to the loss).
 
     Args:
         outputs: ``(batch, entities, PER_ENTITY_WIDTH)``.
         gate_target: ``(batch, entities)``, 1 where the entity was affected.
-        field_targets: per-field ``(batch, entities, …)`` targets and where
-            each is present.
         entity_mask: ``(batch, entities)``, 1 for a real entity.
-        fields: the fields active at this step, from :func:`active_fields`.
-        report_parts: return each term as well, stacked on the device
-            (:class:`LossParts`). Off by default: the training loop walks this
-            once per batch and keeps the terms only on the step whose line
-            prints them. Each reported term is divided by the same record
-            count the total is, so the breakdown a log line prints sums to the
-            loss printed beside it.
+        fields: the fields active at this step.
 
-    The gate trains on every entity — players included, since the head is mapped
-    over ``[PLAYER]`` outputs too. A conditional field trains only where the
-    gate's *target* fires and the field is present — where the record said
-    something about it — and not where the gate's prediction fires: supervising
-    on the prediction would let a head that gates everything off escape the
-    field loss entirely.
-
-    Normalizing per record rather than per entity keeps a twelve-permanent board
-    from outweighing a two-permanent one; each record is one observation of an
-    ability, whatever the board size.
+    The gate trains on every real entity, players included. A field trains
+    where the gate's *target* fires and the field is present, never where the
+    prediction fires: a head that gates everything off would escape the field
+    loss.
     """
     names: list[str] = []
     terms: list[torch.Tensor] = []
     device = outputs.device
-    # The rows are picked on the host, where the masks were built, and gathered
-    # by index: a device mask tested or indexed by stalls the step until the GPU
-    # drains, which is what kept the CPU from preparing the next batch while
-    # the GPU worked. A mask already on the device is read back once here.
     real_mask = entity_mask.detach().bool().cpu()
     gate_host = gate_target.detach().cpu()
     real = real_mask.flatten().nonzero().squeeze(1)
@@ -235,9 +190,6 @@ def per_entity_loss(
         total = total + loss
 
     records = int(outputs.shape[0])
-    # The parts were summed over the batch like the total; dividing them by the
-    # same record count is what makes the printed breakdown add up to the
-    # printed loss rather than to `records` times it.
     parts = LossParts()
     if report_parts:
         parts = LossParts(
@@ -251,20 +203,11 @@ def created_objects_loss(
     prediction: torch.Tensor, target: torch.Tensor,
     mask: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Binary presence/flags plus count regression over the K slots.
-
-    Slots are in canonical order (FR-078), so slot *i* means the same group on
-    both sides and the head is not asked to solve an assignment problem. Count,
-    power and toughness are counts (FR-080); presence, the scripted flag and the
-    type and keyword flags are bits.
-
-    ``mask`` selects the records that supervise the head — effect halves and
-    rewrites with an outgoing event. Averaged over every record of the batch
-    (:func:`per_row`).
-    """
+    """Bits plus counts over the K slots, which are in canonical order
+    (FR-078) so no assignment problem arises. ``mask`` selects the records
+    that supervise the head."""
     records = int(prediction.shape[0])
     if mask is not None:
-        # Decided on the host, where the mask was built: no device read.
         rows = mask.detach().bool().cpu().nonzero().squeeze(1)
         if rows.numel() == 0:
             return prediction.new_zeros(())
@@ -297,15 +240,11 @@ def verdict_loss(
 ) -> torch.Tensor:
     """Verdict bits and the trigger bit binary; cost paid Poisson per colour.
 
-    ``mask`` is per record ``(batch,)`` — every output of a selected record is
-    scored — or per output ``(batch, VERDICT_WIDTH)``, which is what training
-    passes: a ``decision`` record supervises the three verdict bits, a cost half
-    the cost paid and a ``trigger`` record the fired bit, and none of them says
-    anything about the others' columns. Averaged over every record of the
-    batch (:func:`per_row`).
+    ``mask`` is per record ``(batch,)`` or per output ``(batch,
+    VERDICT_WIDTH)``, as training passes it: each record kind supervises only
+    its own columns.
     """
     records = int(prediction.shape[0])
-    # Tested on the host, where the mask was built: no device read.
     mask = mask.detach().bool().cpu()
     if mask.dim() == 1:
         mask = mask.unsqueeze(-1).expand(-1, prediction.shape[-1])
@@ -330,18 +269,9 @@ def verdict_loss(
 def value_loss(
     prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
 ) -> torch.Tensor:
-    """The value head's loss over the batch's encoded texts (FR-058, FR-058b).
-
-    One row per unique text. A count is Poisson, a signed amount the
-    direction-and-magnitude split, a cost flag binary — the same losses the
-    per-entity fields of those types use. Every amount also scores its
-    at-least bits by binary cross-entropy, averaged over the bits. A masked
-    target contributes nothing, and the sum is averaged over the texts
-    (:func:`per_row`).
-    """
+    """The value head's loss, one row per unique text (FR-058, FR-058b): the
+    per-entity fields' losses by kind, plus each amount's at-least bits."""
     rows = int(prediction.shape[0])
-    # The mask is decided on the host, where the targets were built: testing a
-    # device mask and indexing by it would stall the step once per target.
     mask = mask.detach().bool().cpu()
     total = prediction.new_zeros(())
     for index, (name, kind) in enumerate(VALUE_TARGETS):
@@ -362,10 +292,8 @@ def value_loss(
                     output.squeeze(-1), wanted, reduction="sum",
                 )
         if name in AT_LEAST_SLICES:
-            # Averaged over the steps, so an amount's forty bits weigh what
-            # one binary target does: summed, they would outweigh the rest of
-            # the head's loss many times over and set the encoder's gradient
-            # alone.
+            # Averaged over the steps, so forty bits weigh what one binary
+            # target does rather than dominating the encoder's gradient.
             start, end = AT_LEAST_SLICES[name]
             total = total + functional.binary_cross_entropy_with_logits(
                 prediction.index_select(0, selected)[:, start:end],
@@ -377,13 +305,7 @@ def value_loss(
 def mlm_loss(
     logits: torch.Tensor, targets: torch.Tensor, *, rows: int,
 ) -> torch.Tensor:
-    """Cross-entropy at the masked positions given, per text of the pass.
-
-    Summed over every masked token and averaged over the ``rows`` texts the
-    pass masked them in (:func:`per_row`). Training-only: it teaches the
-    encoder the language of card text, which the effect objective alone would
-    only reach through whichever words happened to change an outcome.
-    """
+    """Cross-entropy at the masked positions, per text of the pass."""
     return per_row(functional.cross_entropy(logits, targets, reduction="sum"), rows)
 
 
@@ -393,20 +315,13 @@ def api_loss(
     key_logits: torch.Tensor | None,
     key_targets: torch.Tensor | None,
 ) -> torch.Tensor:
-    """Script-API classification from ``e``: the API type and its parameter keys.
-
-    It teaches ``e`` the script structure the prose surface does not spell
-    out; on the script surface it reinforces what the encoder reads directly.
-    One row per text: its type's cross-entropy plus every key's binary
-    cross-entropy, averaged over the texts (:func:`per_row`).
-    """
+    """Script-API classification from ``e``, one row per text: the API type's
+    cross-entropy plus every parameter key's binary cross-entropy."""
     given = type_logits if type_logits is not None else key_logits
     rows = int(given.shape[0]) if given is not None else 0
     total = None
     if type_logits is not None and type_targets is not None:
-        # A line with no API type (a replacement, say) carries -1 and is
-        # skipped rather than scored against an invented class. The test runs
-        # on the host, where the targets were built, so it costs no sync.
+        # A line with no API type carries -1 and is skipped.
         known = (type_targets.detach().cpu() >= 0).nonzero().squeeze(1)
         if known.numel():
             known = known.to(type_logits.device, non_blocking=True)

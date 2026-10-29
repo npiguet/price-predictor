@@ -1,18 +1,5 @@
-"""Decoding the per-entity head's raw outputs into the quantities rules name.
-
-No field of the head is a bare value. A count predicts a log rate; a signed
-delta predicts three direction logits (negative, zero, positive) and then the
-same log-rate magnitude; a categorical predicts logits over its classes. Every
-reader that wants "how much damage" or "how likely to die" has to undo that
-layout, and doing it in one place is what keeps gate 1's deviance, gate 2's
-direction test and the knowledge probes reading the same column.
-
-And no field head stands alone. Each is supervised only on entities the gate's
-target marks affected and whose record supervises the field
-(``effect_head_layout``: a written value, or the field's silent value), so it
-answers "*if* this entity is affected, how much" and says nothing about whether
-it is. :class:`HeadReading` is the one place that combines the two.
-"""
+"""Decoding the per-entity head's raw outputs into the quantities rules name,
+in one place so the gates and the probes read the same columns."""
 
 from __future__ import annotations
 
@@ -31,8 +18,7 @@ from effects.domain.effect_head_layout import (
     FieldType,
 )
 
-#: Field types that predict a magnitude under the count loss — "how much
-#: damage", "how many cards", "how far the life total moved".
+#: Field types that predict a magnitude under the count loss.
 MAGNITUDE_TYPES: frozenset[FieldType] = frozenset(
     {FieldType.COUNT, FieldType.SIGNED_DELTA},
 )
@@ -44,11 +30,7 @@ def field_outputs(outputs: torch.Tensor, spec: FieldSpec) -> torch.Tensor:
 
 
 def magnitude_log_rate(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
-    """The predicted magnitude's log rate, from ``spec``'s columns.
-
-    A count predicts only that column; a signed delta predicts its directions
-    first.
-    """
+    """The predicted magnitude's log rate, from ``spec``'s columns."""
     if spec.type not in MAGNITUDE_TYPES:
         raise ValueError(f"{spec.name} is a {spec.type} field and has no magnitude")
     return slice_[..., SIGNED_MAGNITUDE if spec.type is FieldType.SIGNED_DELTA else 0]
@@ -74,20 +56,11 @@ def direction_balance(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
 class HeadReading:
     """One entity's per-entity output, over any leading dims, read as the rules ask.
 
-    Unconditional by default: an expected value is ``P(affected) × E[field |
-    affected]`` and a class probability ``P(affected) × P(class | affected)``,
-    because a change to the board can move either factor. Removing first strike
-    leaves the creature it fights unaffected in that step: the gate falls while
-    the damage head, which never trained on an unaffected entity, still reads
-    how much a hit would deal. ``conditional=True`` reads the field head alone,
-    for a question already restricted to affected entities.
-
-    For a field with a silent value — zone, damage, counters, P/T, the player
-    fields — every affected entity of a supervising record is scored, so the
-    gated product is the unconditional expectation. A field only a written
-    value supervises — the tap state, both durations, the legality bits —
-    reads conditional on the record having written it as well, and its gated
-    product inherits that condition.
+    Unconditional by default, ``P(affected) ×`` the field's reading, because
+    each field head trained only on affected entities and a board change can
+    move either factor. ``conditional=True`` reads the field head alone. A
+    field with no silent value also reads conditional on the record having
+    written it.
     """
 
     outputs: torch.Tensor

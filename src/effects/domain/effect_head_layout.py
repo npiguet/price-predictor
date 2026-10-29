@@ -1,22 +1,11 @@
 """The effect head's output layout: every field, slot and bit, and where it sits.
 
-Field losses follow what the field *is* (FR-080). A count is Poisson, because
-damage and cards drawn are counts and squared error on a count punishes the
-wrong tail. A signed delta decomposes into a direction and a magnitude, because
-"gains life" and "loses life" are a different question from "how much". A closed
-vocabulary is categorical. A gate is binary.
-
-A field is scored on an affected entity only where the record says something
-about it (FR-077, FR-081). Two things make a field *present*: a value the
-record wrote — an event, or a payload's legality mark — or the field's
-**silent** value, which is what "affected, and nothing said" means for a field
-whose absence is itself an observation. A creature a burn spell damaged and did
-not kill stayed where it was and gained no counters; that is known. Whether it
-was tapped is not, and a tapped creature is not the opposite of one no event
-mentioned. So a field takes its silent value only where the record's sampling
-class supervises it and the entity is the kind the field describes — a player
-is never scored on a zone, a permanent never on life — and the tap state, the
-durations and the legality bits have no silent value at all.
+A field is scored on an affected entity only where present (FR-077, FR-081):
+the record wrote a value, or the field has a **silent** value — what "affected,
+and nothing said" means where absence is itself an observation (no damage, no
+counters). The silent value applies only where the record's sampling class
+supervises the field and the entity is the field's scope; the tap state, the
+durations and the legality bits have none.
 """
 
 from __future__ import annotations
@@ -39,9 +28,7 @@ ZONE_OUTCOMES: tuple[str, ...] = (
     "stayed", "died", "exiled", "to_hand", "library_top", "library_bottom",
     "transformed", "face_changed", "phased_out", "blinked", "countered",
 )
-#: How long a delta lasts. Closed, and read alongside every delta that has one.
 DURATIONS: tuple[str, ...] = ("instant", "end_of_turn", "permanent")
-#: Library manipulations a player can undergo, as a multi-hot.
 LIBRARY_EVENTS: tuple[str, ...] = ("scry", "surveil", "tutor", "reveal", "reorder")
 
 
@@ -75,12 +62,8 @@ class FieldType(StrEnum):
 
 
 class FieldGroup(StrEnum):
-    """When a field starts training.
-
-    The sparse group is the set FR-082 names: fields that fire on a small
-    fraction of records, and which a head learns to suppress entirely if they
-    compete with the dense ones from step zero.
-    """
+    """When a field starts training: the sparse group (FR-082) waits for the
+    curriculum epoch."""
 
     DENSE = "dense"
     SPARSE = "sparse"
@@ -115,12 +98,10 @@ class FieldSpec:
 
     @property
     def arity(self) -> int:
-        """Categorical classes / multi-binary members; 1 for the scalar types."""
         return len(self.classes) or 1
 
     @property
     def width(self) -> int:
-        """How many head outputs this field occupies."""
         match self.type:
             case FieldType.BINARY | FieldType.COUNT:
                 return 1
@@ -153,7 +134,6 @@ class FieldSpec:
 
 
 def _counter_fields() -> tuple[FieldSpec, ...]:
-    """One signed delta per tracked counter type, plus a catch-all."""
     return tuple(
         FieldSpec(
             name=f"counters_delta_{name.lower()}",
@@ -184,8 +164,6 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     # ── permanents and stack entities ──
     FieldSpec("zone_outcome", FieldType.CATEGORICAL, FieldScope.PERMANENT,
               classes=ZONE_OUTCOMES, silent=float(ZONE_OUTCOMES.index("stayed"))),
-    # Tapped or untapped only where an event says so: a creature no event
-    # mentions is neither.
     FieldSpec("tap_state", FieldType.BINARY, FieldScope.PERMANENT),
     FieldSpec("damage_taken", FieldType.COUNT, FieldScope.PERMANENT, silent=0.0),
     FieldSpec("power_delta", FieldType.SIGNED_DELTA, FieldScope.PERMANENT,
@@ -228,9 +206,7 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec("cards_milled", FieldType.COUNT, FieldScope.PLAYER, silent=0.0),
     FieldSpec("library_events", FieldType.MULTI_BINARY, FieldScope.PLAYER,
               classes=LIBRARY_EVENTS, silent=0.0),
-    # Poison is not in FR-077's player group, but the snapshot tracks it and
-    # gate 2's infect row has nowhere else to land: infect's whole player-side
-    # effect is poison, so without this field that row could never fire.
+    # Not in FR-077's player group, but gate 2's infect row needs it.
     FieldSpec("poison_delta", FieldType.SIGNED_DELTA, FieldScope.PLAYER, silent=0.0),
     *_mana_fields(),
     # ── legality bits: only a payload's own marks set them ──
@@ -260,11 +236,7 @@ CREATED_OBJECT_SLOTS = 4
 
 
 class CreatedSlot:
-    """Offsets within one created-objects slot.
-
-    Two binary flags, then three magnitudes, then one flag per card type and
-    per overlay keyword for a characteristics-only group.
-    """
+    """Offsets within one created-objects slot."""
 
     PRESENT = 0
     SCRIPTED = 1
@@ -282,8 +254,7 @@ CREATED_OBJECTS_WIDTH = CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
 VERDICT_BITS: tuple[str, ...] = ("can_play", "affordable", "has_legal_target")
 VERDICT_WIDTH = len(VERDICT_BITS) + len(COLORS) + 1
 
-#: Value head (FR-058): one output per count or binary target, and a signed
-#: target the direction-and-magnitude columns every signed field uses.
+#: Value head (FR-058) widths per target kind.
 _VALUE_WIDTHS: dict[ValueKind, int] = {
     ValueKind.COUNT: 1, ValueKind.BINARY: 1, ValueKind.SIGNED: SIGNED_WIDTH,
 }
@@ -294,15 +265,9 @@ for _name, _kind in VALUE_TARGETS:
     VALUE_SLICES[_name] = (_value_offset, _value_offset + _VALUE_WIDTHS[_kind])
     _value_offset += _VALUE_WIDTHS[_kind]
 
-#: Steps of the at-least targets (FR-058b): beside each stated amount, the head
-#: predicts whether its magnitude is at least k for k = 1 … 40, one yes/no each —
-#: the magnitude cap, and the board's thermometer length, so both sides of a
-#: comparison count on one scale.
-#: A single layer reading every such bit from ``e`` pushes ``e`` to carry the
-#: amount as a thermometer — the form the trunk's attention compares against a
-#: toughness or a life total in one dot product (the board side carries the
-#: same code, ``effect_head_input.thermometer``). Cumulative-link ordinal
-#: regression, kept beside the count loss rather than replacing it.
+#: Steps of the at-least targets (FR-058b): whether each stated amount is at
+#: least k for k = 1 … 40, the board's thermometer length, which pushes ``e``
+#: to carry amounts in the code the board side carries.
 AT_LEAST_STEPS = 40
 #: ``amount target -> (start, end)`` of its at-least block, after every
 #: :data:`VALUE_SLICES` block so the earlier layout of the head is a prefix.
@@ -315,11 +280,7 @@ VALUE_WIDTH = _value_offset
 
 
 def per_entity_fields_of_type(*types: FieldType) -> tuple[FieldSpec, ...]:
-    """Every per-entity field of one of ``types``.
-
-    Gate 1's deviance is read over the count-valued ones, and a caller that
-    enumerated them by name would drift the moment a field was added.
-    """
+    """Every per-entity field of one of ``types``."""
     wanted = set(types)
     return tuple(spec for spec in PER_ENTITY_FIELDS if spec.type in wanted)
 
@@ -327,16 +288,9 @@ def per_entity_fields_of_type(*types: FieldType) -> tuple[FieldSpec, ...]:
 def active_fields(
     present_classes: frozenset[str], *, sparse: bool,
 ) -> tuple[FieldSpec, ...]:
-    """Fields that contribute loss right now.
-
-    Two filters, for two different reasons. A field none of the corpus's record
-    kinds supervises is dropped because nothing could teach it — that is what
-    makes a stage-one corpus with three of the eight classes trainable on the
-    same heads as a full one (FR-085). A sparse field is dropped until
-    ``sparse`` turns the group on, because it fires rarely, and a head that
-    meets it alongside the dense fields from step zero learns to output zero
-    for it and never recovers (FR-082).
-    """
+    """Fields that contribute loss right now: supervised by a class present
+    (FR-085), and sparse ones only once ``sparse`` is on, since a head that
+    meets them from step zero learns to output zero for good (FR-082)."""
     return tuple(
         spec for spec in PER_ENTITY_FIELDS
         if spec.supervised_by & present_classes

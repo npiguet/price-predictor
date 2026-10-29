@@ -1,20 +1,9 @@
 """The effect head: a game state plus an ability, to what that ability does.
 
-A transformer trunk over the token surface
-:mod:`effects.domain.effect_head_input` builds, with three output heads:
-
-- a **per-entity head** mapped over every ``[CARD]`` *and* ``[PLAYER]`` output —
-  one shared head, so "what happens to this thing" is learned once rather than
-  once per board position;
-- a **created-objects head** at ``[GLOBAL]``, because a token a spell makes
-  belongs to no entity that was on the board;
-- a **verdict head** at ``[ACT]``, carrying the rules-level judgments about the
-  acting line itself.
-
-The per-entity head is a **gate then conditional fields**: predict whether this
-entity is affected at all, and only where it is, predict how. Most entities on
-most boards are unaffected by most abilities, so a head that predicted every
-field for every entity would spend nearly all its loss learning to output zero.
+A transformer trunk over the token surface, with three shipped heads: one
+per-entity head shared over every ``[CARD]`` and ``[PLAYER]`` output (a gate,
+then fields where the gate fires), a created-objects head at ``[GLOBAL]``, and
+a verdict head at ``[ACT]``.
 """
 
 from __future__ import annotations
@@ -42,8 +31,7 @@ DROPOUT = 0.1
 MAX_POSITION = 512
 
 
-#: Rows of the option-kind embedding: a root or ordinary ability row, and a row
-#: from a charm mode's ``option`` line (FR-063a).
+#: An ordinary ability row, and a charm mode's ``option`` row (FR-063a).
 OPTION_KINDS = 2
 
 
@@ -59,8 +47,7 @@ class EffectModelConfig:
     vocab_size: int = 0
     n_api_types: int = 0
     n_param_keys: int = 0
-    #: The ability encoder's width, which sizes the MLM head (FR-060b): it
-    #: reads the encoder's token outputs, not the trunk's.
+    #: Sizes the MLM head, which reads the encoder's token outputs (FR-060b).
     encoder_d_model: int = ENCODER_D_MODEL
     d_model: int = TRUNK_D_MODEL
     n_layers: int = TRUNK_N_LAYERS
@@ -78,7 +65,6 @@ class EffectModelConfig:
 
 
 def _mlp(width_in: int, hidden: int, width_out: int) -> nn.Sequential:
-    """The two-layer head every output uses."""
     return nn.Sequential(
         nn.Linear(width_in, hidden), nn.GELU(), nn.Linear(hidden, width_out),
     )
@@ -92,17 +78,14 @@ class EffectModel(nn.Module):
         self.config = config
         d = config.d_model
 
-        # One projection per slot kind: the kinds carry different features and
-        # a shared projection would have to pad them to a common width.
         self.global_proj = nn.Linear(config.global_features, d)
         self.act_proj = nn.Linear(config.act_features, d)
         self.player_proj = nn.Linear(config.player_features, d)
         self.card_proj = nn.Linear(config.card_features, d)
         self.e_proj = nn.Linear(config.e_dim, d)
         self.slot_kind_embedding = nn.Embedding(len(SlotKind), d)
-        # Zero rows, so a checkpoint saved before option rows existed — which
-        # loads with ``strict=False`` and keeps this initial value — reads
-        # every row exactly as it trained (FR-063a).
+        # Zero rows: a checkpoint saved before option rows existed loads
+        # without this key and must read every row as it trained (FR-063a).
         self.option_kind_embedding = nn.Embedding(OPTION_KINDS, d)
         nn.init.zeros_(self.option_kind_embedding.weight)
         self.position_embedding = nn.Embedding(config.max_position, d)
@@ -114,8 +97,7 @@ class EffectModel(nn.Module):
                 dropout=config.dropout, batch_first=True, norm_first=True,
             ),
             num_layers=config.n_layers,
-            # norm_first makes torch's nested-tensor fast path inapplicable; say
-            # so rather than letting it warn once per construction.
+            # norm_first rules the nested-tensor path out; this silences the warning.
             enable_nested_tensor=False,
         )
         self.norm = nn.LayerNorm(d)
@@ -154,10 +136,8 @@ class EffectModel(nn.Module):
         """Run the trunk. Returns ``(batch, slots, d_model)``.
 
         ``slot_features`` maps each kind to a ``(batch, slots, width)`` tensor
-        already zero-padded at the slots of other kinds, so one add assembles
-        the surface without a per-slot Python loop. ``option_kinds`` marks the
-        ability rows that come from a charm mode's ``option`` line; absent,
-        every row reads as an ordinary one.
+        zero at the slots of other kinds. Without ``option_kinds`` every row
+        reads as an ordinary one.
         """
         hidden = (
             self.global_proj(slot_features[SlotKind.GLOBAL])
@@ -175,17 +155,12 @@ class EffectModel(nn.Module):
         return self.norm(hidden)
 
     def per_entity(self, hidden: torch.Tensor) -> torch.Tensor:
-        """Map the shared per-entity head over every slot.
-
-        Callers select the ``[CARD]`` and ``[PLAYER]`` positions; mapping over
-        all of them and selecting afterwards keeps the head one batched matmul.
-        """
+        """Map the shared per-entity head over every slot; callers select the
+        ``[CARD]`` and ``[PLAYER]`` positions."""
         return self.per_entity_head(hidden)
 
     def created_objects(self, hidden: torch.Tensor) -> torch.Tensor:
-        """Read the created-objects head at ``[GLOBAL]`` (slot 0)."""
         return self.created_objects_head(hidden[:, 0, :])
 
     def verdict(self, hidden: torch.Tensor) -> torch.Tensor:
-        """Read the verdict head at ``[ACT]``."""
         return self.verdict_head(hidden[:, ACT_SLOT, :])

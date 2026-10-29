@@ -1,18 +1,5 @@
-"""Load a saved checkpoint back into something that can be run over records.
-
-Training builds the encoder, the model and the batcher from a config; the
-evaluator has to build the same three from a checkpoint, and they must match or
-the numbers it reports describe a different model than the one that trained.
-That is why the batcher comes from :mod:`effects.application.surface_batching`
-rather than being assembled again here: the variant masks, the encoding surface
-and the identity table are exactly what distinguish a baseline from the shipping
-model, and gate 1 is decided by comparing the two.
-
-The identity baseline is the case that would break quietly. Its ``e`` comes from
-a free embedding table rather than the encoder, and that table is part of what it
-learned, so a run that rebuilt it empty would score the baseline on random
-vectors and hand gate 1 a margin it did not earn.
-"""
+"""Load a saved checkpoint back into something that can be run over records,
+through the same ``surface_batching`` the trainer uses."""
 
 from __future__ import annotations
 
@@ -56,28 +43,22 @@ from effects.infrastructure.torch_device import default_device
 
 logger = logging.getLogger(__name__)
 
-#: Seeds every evaluation batcher's generator, so whatever draws from it draws
-#: the same from one evaluation of a checkpoint to the next.
+#: Seeds every evaluation batcher's generator, so evaluations repeat.
 EVALUATION_SEED = 42
 
 
 def build_sidecars(config) -> SidecarCache:
-    """The sidecar roots ``--cards-folder`` names (FR-063b).
-
-    A folder keyed by the tree its name ends in, so a kept-aside copy such as
-    ``output/gen1-cardsfolder`` serves the keys that name ``cardsfolder/``.
-    """
+    """The sidecar roots ``--cards-folder`` names (FR-063b), each keyed by the
+    tree its name ends in, so ``output/gen1-cardsfolder`` serves
+    ``cardsfolder/`` keys."""
     return SidecarCache(sidecar_roots(
         config.cards_folders, getattr(config, "variant_scripts", None),
     ))
 
 
 def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
-    """The tokenizer ``checkpoint`` trained with, over its verified files.
-
-    Under the rules the checkpoint recorded rather than a training run's, so a
-    gen-1 checkpoint reads its script vocabulary with the prose grammar.
-    """
+    """The tokenizer ``checkpoint`` trained with, under the rules it recorded
+    (a gen-1 checkpoint reads its script vocabulary with the prose grammar)."""
     return load_tokenizer(
         vocab_path, keyword_path,
         training_settings=checkpoint.training_settings or {},
@@ -87,19 +68,14 @@ def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTo
 #: Records per forward pass when gate 1 and the breakdowns score a checkpoint.
 BATCH_RECORDS = 32
 
-#: Observations per forward pass in gate 2: half the record batch, because
-#: every observation is built twice — as collected and perturbed — in one batch.
+#: Observations per forward pass in gate 2: each is built twice, as collected
+#: and perturbed, in one batch.
 BATCH_OBSERVATIONS = BATCH_RECORDS // 2
 
 
 @dataclass(frozen=True, slots=True)
 class Runnable:
-    """One checkpoint, ready to run over one set of records.
-
-    ``fields`` is the active-field tuple for the classes those records carry,
-    the sparse group included — the evaluator scores a finished model, not one
-    partway through its schedule.
-    """
+    """One checkpoint, ready to run over one set of records."""
 
     encoder: AbilityEncoder
     model: EffectModel
@@ -107,13 +83,9 @@ class Runnable:
     fields: tuple[FieldSpec, ...]
 
     def inference_chunks[T](self, items: Iterable[T], size: int) -> Iterator[list[T]]:
-        """``items`` in chunks of ``size``, each yielded under inference mode.
-
-        Sets evaluation mode first although a loaded checkpoint is already in
-        it: a caller that builds its own ``Runnable``, such as a probe, may
-        hand over modules that were training, and dropout would then make the
-        numbers depend on a coin flip.
-        """
+        """``items`` in chunks of ``size``, each yielded under inference mode
+        and evaluation mode, since a probe's own ``Runnable`` may hand over
+        modules still training."""
         self.encoder.eval()
         self.model.eval()
         with torch.inference_mode():
@@ -121,26 +93,16 @@ class Runnable:
                 yield list(chunk)
 
     def keyword_resolver(self) -> KeywordResolver:
-        """A resolver over the batcher's own sidecar cache, never a second one.
-
-        The resolver decides which entity carries a keyword and the surface
-        builder decides which slot to drop for it, and the two reading
-        different joins is exactly how a perturbation strips nothing. One per
-        pass: it memoizes each provenance key's keyword.
-        """
+        """A resolver over the batcher's own sidecar cache, never a second
+        one: reading different joins, a perturbation would strip nothing."""
         return KeywordResolver(self.batcher.sidecars)
 
 
 @dataclass(frozen=True, slots=True)
 class LoadedModel:
-    """A checkpoint's weights on the device, before any record is seen.
-
-    Split from :class:`Runnable` because the expensive part — the weights, the
-    identity table, the tokenizer — does not depend on the records, while the
-    batcher's slot widths and the active fields do. One load serves every
-    record set an evaluation scores; each set gets a batcher of its own, with
-    its own generator, so scoring one set never moves another's draws.
-    """
+    """A checkpoint's weights on the device, before any record is seen; each
+    record set gets a :class:`Runnable` with a batcher and generator of its
+    own."""
 
     checkpoint: object
     encoder: AbilityEncoder
@@ -152,7 +114,6 @@ class LoadedModel:
     sidecars: SidecarCache
 
     def runnable(self, records) -> Runnable:
-        """The model with a batcher measured from ``records``."""
         return Runnable(
             self.encoder, self.model, self._batcher(records),
             evaluation_fields(records),
@@ -160,9 +121,6 @@ class LoadedModel:
 
     def _batcher(self, records) -> SurfaceBatcher:
         checkpoint = self.checkpoint
-        # The inputs the checkpoint learned on: a gen-1 checkpoint, or a gen-2
-        # arm trained before the layout was recorded, reads the earlier layout
-        # bit for bit (FR-063c).
         layout = InputLayout.of(checkpoint.training_settings)
         masks = baseline_masks(checkpoint.variant)
         return SurfaceBatcher(
@@ -170,8 +128,6 @@ class LoadedModel:
                 tokenizer=self.tokenizer,
                 surface=self.surface,
                 withhold_keyword=checkpoint.provenance.withheld_keyword,
-                # Both are training-time augmentations. Sampling them at
-                # evaluation would make the gate's numbers depend on a coin flip.
                 keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
                 truncations=TruncationLog(log_truncation(logger, "evaluation")),
             ),
@@ -190,11 +146,8 @@ def load_model(
     config, checkpoint, *, vocab_path: Path, keyword_path: Path,
     sidecars: SidecarCache | None = None,
 ) -> LoadedModel:
-    """``checkpoint``'s weights on the device, with its tokenizer.
-
-    ``sidecars`` lets several loads share one cache; left out, the roots
-    ``config`` names are read into a new one.
-    """
+    """``checkpoint``'s weights on the device, with its tokenizer;
+    ``sidecars`` lets several loads share one cache."""
     device = default_device()
     encoder, model = _load_weights(checkpoint, device)
     return LoadedModel(
@@ -218,11 +171,9 @@ def load_runnable(
     ).runnable(records)
 
 
-#: Model state a shipped checkpoint may lack. The training-only heads are
-#: filtered out at save time (FR-076), and the option-kind embedding, which
-#: starts at zero, postdates checkpoints that read every row as it trained
-#: without it (FR-063a). Anything else missing would run at its random
-#: initial weights while every number it produced still looked like a result.
+#: Model state a shipped checkpoint may lack: the training-only heads (FR-076)
+#: and the zero-initialized option-kind embedding (FR-063a). Anything else
+#: missing is refused, or it would run at random initial weights.
 OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
     *(f"{module}." for module in TRAINING_ONLY_MODULES),
     "option_kind_embedding.",
@@ -230,9 +181,8 @@ OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
 
 
 def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
-    """The checkpoint's encoder and model on ``device``, in evaluation mode."""
-    # Built at the size the checkpoint recorded (FR-061): a non-default arm
-    # loads without its flags restated.
+    """The checkpoint's encoder and model on ``device``, in evaluation mode,
+    at the size the checkpoint recorded (FR-061)."""
     encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
     if checkpoint.encoder_state:
         encoder.load_state_dict(checkpoint.encoder_state)
@@ -265,11 +215,8 @@ def _identity_table(checkpoint, device) -> IdentityTable | None:
 
 
 def evaluation_fields(records) -> tuple[FieldSpec, ...]:
-    """The fields active for ``records``' classes once training has finished.
-
-    The sparse group included: the gates score the model as it finished
-    training, not as it started.
-    """
+    """The fields active for ``records``' classes, the sparse group included:
+    the gates score a finished model."""
     return active_fields(
         frozenset(sampling_class(r) for r in records), sparse=True,
     )

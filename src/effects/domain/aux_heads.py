@@ -1,15 +1,9 @@
 """The heads beside the per-entity one, one row each.
 
-A head is **shipped** or **training-only** (FR-060a, FR-063). A shipped head
-joins the per-entity loss at unit weight, is what validation scores, and is
-saved with the model. A training-only head shapes the encoder: it is added for
-the backward pass alone, at its own weight, and filtered out of the saved
-artifact (FR-076), so a loader must accept a checkpoint without it.
-
-Every place that treats the heads differently — which a step prepares targets
-for, how the terms combine, how each loss reads its input, which modules a
-checkpoint drops — reads :data:`AUX_HEADS`, so a new head is a row here and a
-module on :class:`~effects.domain.effect_model.EffectModel`.
+A shipped head joins the per-entity loss at unit weight and is saved; a
+training-only head is added for backward alone, at its own weight, and is
+filtered out of the saved artifact (FR-060a, FR-063, FR-076). A new head is a
+row of :data:`AUX_HEADS` and a module on ``EffectModel``.
 """
 
 from __future__ import annotations
@@ -45,8 +39,7 @@ class HeadInput(StrEnum):
     TRUNK = "trunk"
     #: The batch's encoded ``e`` matrix, one row per unique text.
     ENCODED = "encoded"
-    #: A masked second encoder pass over the batch's texts, run after the main
-    #: backward has freed the first pass's activations.
+    #: A masked second encoder pass over the batch's texts.
     MASKED_TOKENS = "masked_tokens"
 
 
@@ -80,18 +73,14 @@ class HeadSpec:
     #: The ``EffectModel`` modules that make up the head.
     modules: tuple[str, ...]
     #: The ``TrainEffectModelConfig`` field holding a training-only head's
-    #: weight; None for a shipped head, which joins at unit weight.
+    #: weight; None for a shipped head.
     weight_field: str | None = None
-    #: ``(model, input, *targets) -> loss``, the targets as the step's host half
-    #: built them with :attr:`on_device` moved to the device. None for the MLM
-    #: head, whose second encoder pass the training loop runs itself.
+    #: ``(model, input, *targets) -> loss``; None for the MLM head, whose
+    #: second encoder pass the training loop runs itself.
     loss: Callable[..., torch.Tensor] | None = None
-    #: Which of the head's target tensors the loss reads on the device. The rest
-    #: are masks and class indices it selects its rows by on the host, where
-    #: they were built, so no step waits for the device to say which rows.
+    #: Which target tensors the loss reads on the device; the rest are masks
+    #: and indices it selects rows by on the host.
     on_device: tuple[int, ...] = (0,)
-    #: Whether the head predicts the script-API vocabularies, and so exists only
-    #: in a run that has them.
     needs_api_vocabulary: bool = False
 
     @property
@@ -99,20 +88,17 @@ class HeadSpec:
         return self.weight_field is None
 
     def weight(self, config) -> float:
-        """The head's weight in the backward pass."""
         return 1.0 if self.weight_field is None else getattr(config, self.weight_field)
 
     def to_device(self, targets: tuple, device) -> tuple:
-        """``targets`` with the ones the loss reads on the device moved there."""
         return tuple(
             target.to(device, non_blocking=True) if index in self.on_device else target
             for index, target in enumerate(targets)
         )
 
 
-#: Every auxiliary head, shipped ones first. The order is the order the terms
-#: are computed and summed in, and float addition is not associative: reordered,
-#: a run would no longer repeat bit for bit.
+#: Every auxiliary head, shipped ones first, in the order the terms are summed:
+#: reordered, a run would no longer repeat bit for bit.
 AUX_HEADS: tuple[HeadSpec, ...] = (
     HeadSpec(Head.VERDICT, HeadInput.TRUNK, ("verdict_head",), loss=_verdict),
     HeadSpec(

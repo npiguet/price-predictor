@@ -2,26 +2,10 @@
 
     [GLOBAL] [ACT] [PLAYER] [PLAYER] [CARD] e e … [CARD] e …
 
-One token per slot, with **position ids resetting at each ``[CARD]``**. The
-reset is what makes an entity's ability tokens a block rather than a sequence:
-the head reads "this card, then its abilities" the same way whether the card is
-first on the board or twelfth, so a board of nine permanents is not nine
-different geometries.
-
-Every record kind enters this one surface as a variant of it rather than getting
-a surface of its own — a combat record leaves ``[ACT]`` empty, a ``continuous``
-record has the acting static's own contributions masked out of the entity
-inputs, a ``rewrite`` carries its pending event as an overlay. That is what lets
-one trunk learn from eight kinds of record at once.
-
-Two rules shape the numeric encoding:
-
-- **Nothing is binned.** A scalar enters as its raw value *and* a ``log1p``
-  copy, so the head can read both "how much" and "how much, roughly" without
-  the modeller having chosen the bucket edges.
-- **No perspective is stored.** Controller tags are derived here, relative to
-  the record's ``actor_player``, which is why one snapshot can serve records
-  with different actors.
+Position ids reset at each ``[CARD]``, so an entity and its abilities read the
+same wherever the entity sits on the board. Every record kind is a variant of
+this one surface. Controller tags are derived here, relative to the record's
+``actor_player``, so one snapshot serves records with different actors.
 """
 
 from __future__ import annotations
@@ -55,11 +39,9 @@ class SlotKind(IntEnum):
     ABILITY = 4
 
 
-# ── checked-in vocabularies ─────────────────────────────────────────────
-#
-# Each ends in an "other" bucket, so a value the corpus grows later is
-# unfamiliar rather than unrepresentable. Adding a member shifts nothing above
-# it, which keeps an older checkpoint's feature layout readable.
+# Each vocabulary's one-hot ends in an "other" slot. Never edit these tuples:
+# a checkpoint trained on them reads them bit for bit; a new spelling goes in a
+# new InputLayout instead.
 
 PHASES: tuple[str, ...] = (
     "untap", "upkeep", "draw", "main1", "begin_combat", "declare_attackers",
@@ -79,9 +61,8 @@ COUNTER_TYPES: tuple[str, ...] = (
     "P1P1", "M1M1", "LOYALTY", "CHARGE", "TIME", "STUN", "SHIELD", "OIL",
     "POISON", "EXPERIENCE", "KI", "LEVEL", "LORE", "DEFENSE",
 )
-#: Keywords the overlay tracks individually. The eight damage-step keywords lead
-#: the list because gate 2's perturbation removes one of them from exactly this
-#: channel when it is not printed on the entity, so each has to be addressable.
+#: Keywords the overlay tracks individually; the eight damage-step keywords
+#: must be among them, because gate 2 strips a granted one from this channel.
 OVERLAY_KEYWORDS: tuple[str, ...] = (
     "first_strike", "double_strike", "deathtouch", "lifelink", "trample",
     "indestructible", "wither", "infect",
@@ -93,18 +74,11 @@ THIS_TURN_COUNTERS: tuple[str, ...] = (
     "creatures_died", "spells_cast", "lands_played",
 )
 
-# ── input layouts (FR-063c) ──────────────────────────────────────────────
-#
-# The vocabularies above were written before the collector's spelling was
-# checked, and three of them miss it: Forge names five combat phases
-# ``combat_*``, writes counters as ``+1/+1``, and spells protection as
-# ``protection_from_red``. Each of those landed in its vocabulary's "other"
-# slot. The fix is a layout of its own rather than an edit of the tuples,
-# because a checkpoint trained on the earlier inputs has to keep reading them
-# bit for bit.
+# Input layouts (FR-063c). Forge's own spellings of phases, counters and
+# protection miss the vocabularies above and land in "other"; the gen-2 layout
+# aliases them.
 
-#: Where a checkpoint records the layout it trained on, in its
-#: ``training_settings`` — beside ``tokenizer_rules``, the precedent.
+#: Where a checkpoint's ``training_settings`` record the layout it trained on.
 INPUT_LAYOUT_KEY = "input_layout"
 
 PHASE_ALIASES: dict[str, str] = {
@@ -123,17 +97,13 @@ OVERLAY_KEYWORDS_GEN2: tuple[str, ...] = (*OVERLAY_KEYWORDS, "landwalk")
 class InputLayout:
     """One input layout, as the features it switches (FR-063c)."""
 
-    #: What a checkpoint trained on it records under :data:`INPUT_LAYOUT_KEY`;
-    #: None for the earlier layout, which no checkpoint records.
+    #: Recorded under :data:`INPUT_LAYOUT_KEY`; None for the earlier layout,
+    #: which no checkpoint records.
     name: str | None
-    #: Forge's own spellings read as the vocabularies' members: its
-    #: ``combat_*`` phases, ``+1/+1``/``-1/-1`` counters and
-    #: ``protection_from_<x>`` keywords.
     forge_spellings: bool
-    #: The keywords the overlay tracks individually.
     overlay_keywords: tuple[str, ...]
-    #: Whether each card slot ends with thermometer codes of its power,
-    #: toughness and toughness left, and each player slot with one of life.
+    #: Whether card slots end with thermometers of power, toughness and
+    #: toughness left, and player slots with one of life.
     thermometers: bool
 
     @classmethod
@@ -151,33 +121,23 @@ INPUT_LAYOUT = InputLayout(
     name="gen-2", forge_spellings=True, overlay_keywords=OVERLAY_KEYWORDS_GEN2,
     thermometers=True,
 )
-#: The layout before :data:`INPUT_LAYOUT`, which a checkpoint recording none
-#: reads bit for bit.
 EARLIER_LAYOUT = InputLayout(
     name=None, forge_spellings=False, overlay_keywords=OVERLAY_KEYWORDS,
     thermometers=False,
 )
 
-#: The largest magnitude a count or a signed delta is scored at. Above about
-#: forty an amount is the game state compounding — a counter doubling run to two
-#: million in one long game — not what the ability's text says, and one such
-#: target under the Poisson loss pulls a step a million times harder than an
-#: ordinary one. Every consumer of the magnitudes caps them here: the field
-#: losses, the constant-predictor floor and the evaluation's deviance. Defined
-#: here, torch-free, so the thermometer below and the gate metrics share it.
+#: The largest magnitude a count or a signed delta is scored at, by the field
+#: losses, the floor and the evaluation's deviance alike. Above it an amount is
+#: the game state compounding, and one such target would dominate the Poisson
+#: loss.
 MAGNITUDE_CAP = 40.0
 
-#: Positions of a thermometer code. Position k is set when the value is at
-#: least k, so the dot product of an amount's code with a one-hot of t is 1
-#: exactly when the amount is at least t — the comparison "this damage kills
-#: this creature" is one attention score. As many as the magnitude cap: life
-#: often climbs past its starting twenty, and a larger value sets every
-#: position.
 THERMOMETER_STEPS = int(MAGNITUDE_CAP)
 
 
 def thermometer(value: float) -> list[float]:
-    """``value`` as :data:`THERMOMETER_STEPS` positions, position k set when ``value >= k``."""
+    """``value`` as :data:`THERMOMETER_STEPS` positions, position k set when
+    ``value >= k``, so "amount >= t" is one dot product with a one-hot of t."""
     return [1.0 if value >= k else 0.0 for k in range(1, THERMOMETER_STEPS + 1)]
 
 
@@ -192,16 +152,7 @@ def _phase_in(phase: str | None, layout: InputLayout) -> str | None:
 
 @lru_cache(maxsize=None)
 def _positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
-    """``normalized member -> its slot``, built once per vocabulary.
-
-    The vocabularies are checked-in constants, so normalizing them is done once
-    here and every feature is a dict lookup per value present, rather than a
-    scan of the vocabulary per feature — twenty-seven of them for the overlay
-    keywords alone, on every slot of every step.
-
-    First occurrence wins; no vocabulary has two members that normalize to the
-    same string.
-    """
+    """``normalized member -> its slot``, built once per vocabulary."""
     positions: dict[str, int] = {}
     for index, member in enumerate(vocabulary):
         positions.setdefault(member.lower(), index)
@@ -224,36 +175,22 @@ def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
 
 
 def _push_scalar(out: list[float], value: float) -> None:
-    """A scalar as raw plus ``log1p``, onto the caller's list. Nothing is binned (FR-074).
-
-    ``log1p`` of a negative value is undefined, so the copy is signed:
-    ``sign(v) * log1p(|v|)``, which keeps the transform monotone across zero.
-    Appended rather than returned, because a two-element list per scalar —
-    twenty-eight per entity, millions per run — made the allocation, not the
-    arithmetic, the cost of a scalar.
-    """
+    """A scalar as raw plus signed ``log1p``, onto the caller's list; nothing
+    is binned (FR-074). Appended rather than returned: a list per scalar made
+    the allocation the cost."""
     raw = float(value)
     out.append(raw)
     out.append(math.copysign(math.log1p(abs(raw)), raw))
 
 
-#: Thirteen zeros: the power/toughness block of an entity that has none. Its
-#: own constant because most boards carry non-creatures.
 _NO_PT: tuple[float, ...] = (0.0,) * 13
-#: The counter block of an entity carrying none — one scalar per checked-in
-#: counter type plus the catch-all, and a scalar of zero is two zeros.
+#: One scalar (two zeros) per counter type plus the catch-all.
 _NO_COUNTERS: tuple[float, ...] = (0.0,) * (2 * (len(COUNTER_TYPES) + 1))
-#: The stack-extras block of an entity that is not on the stack.
 _NO_STACK_EXTRAS: tuple[float, ...] = (0.0,) * 6
 
 
 def _multi_hot(present, vocabulary: tuple[str, ...]) -> list[float]:
-    """Multi-hot over ``vocabulary`` plus a count of everything else.
-
-    One dict lookup per value the entity actually carries, rather than one
-    membership test per vocabulary entry: an entity has a handful of types
-    and keywords, and the vocabularies are ten to twenty-seven long.
-    """
+    """Multi-hot over ``vocabulary`` plus a count of everything else."""
     positions = _positions(vocabulary)
     out = [0.0] * (len(vocabulary) + 1)
     seen: set[str] = set()
@@ -272,9 +209,6 @@ def _multi_hot(present, vocabulary: tuple[str, ...]) -> list[float]:
     return out
 
 
-# ── slots ───────────────────────────────────────────────────────────────
-
-
 @dataclass(frozen=True, slots=True)
 class Slot:
     """One token of the input surface."""
@@ -282,18 +216,14 @@ class Slot:
     kind: SlotKind
     position: int
     features: tuple[float, ...] = ()
-    #: The ability vector an ``ACT`` or ``ABILITY`` slot carries — either the
-    #: values themselves (inference, reading the cache) or an ``int`` row of a
-    #: matrix supplied at collate time (training, where ``e`` is the live
-    #: encoder output and must stay a tensor the gradient can flow back
-    #: through). A row index is not a vector of one element: the two are told
-    #: apart by type, never by length.
+    #: An ``ACT`` or ``ABILITY`` slot's ability vector: the values (from the
+    #: cache) or, in training, an ``int`` row of the batch's live encoder
+    #: output. Told apart by type, never by length.
     e: tuple[float, ...] | int | None = None
     entity_id: str | None = None
     player_id: str | None = None
-    #: ``ABILITY`` slots read from a charm mode's ``option`` line (FR-063a).
-    #: They follow their root's slot inside the card's block, and the flag plus
-    #: that adjacency is the whole link between a mode and its charm.
+    #: A charm mode's ``option`` line (FR-063a); the flag plus following its
+    #: root's slot is the whole link between a mode and its charm.
     option: bool = False
 
 
@@ -306,11 +236,6 @@ class EffectHeadInput:
     entity_slots: tuple[int, ...] = field(default_factory=tuple)
 
 
-# ── feature builders ────────────────────────────────────────────────────
-
-
-#: The three enum vocabularies the global slot one-hots over. Built here
-#: rather than per call: they are as fixed as the checked-in tuples above.
 _RECORD_KINDS: tuple[str, ...] = tuple(k.value for k in RecordKind)
 _MOMENTS: tuple[str, ...] = tuple(m.value for m in Moment)
 _PLAYABILITY_SUBKINDS: tuple[str, ...] = tuple(
@@ -342,22 +267,17 @@ def global_features(
     return tuple(out)
 
 
-#: Width of the record-kind flags that end every ``[GLOBAL]`` slot: the kind,
-#: moment and subkind one-hots, each with its trailing "other/absent" slot.
-#: The ``no-state`` baseline keeps exactly these (FR-094).
+#: Width of the kind, moment and subkind one-hots that end every ``[GLOBAL]``
+#: slot; the ``no-state`` baseline keeps exactly these (FR-094).
 KIND_FLAG_WIDTH = len(_RECORD_KINDS) + len(_MOMENTS) + len(_PLAYABILITY_SUBKINDS) + 3
 
-#: The ``[ACT]`` slot's index in every surface: ``[GLOBAL]`` is first, then it.
 ACT_SLOT = 1
 
 
 def act_features(record: EffectRecord) -> tuple[float, ...]:
-    """Announced values and the resolution outcome flag.
-
-    Empty for ``combat`` and for the ``attackers``/``blockers`` subkinds: no
-    single line acts, so there is nothing for the slot to describe and filling
-    it with the board's averages would invent an actor.
-    """
+    """Announced values and the resolution outcome flag; zeros for
+    ``combat`` and the ``attackers``/``blockers`` subkinds, where no single
+    line acts."""
     if _act_is_empty(record):
         return tuple([0.0] * _ACT_FEATURE_WIDTH)
     refs = record.state.refs
@@ -394,12 +314,7 @@ def player_features(
     player: PlayerState, record: EffectRecord, *,
     layout: InputLayout = INPUT_LAYOUT,
 ) -> tuple[float, ...]:
-    """One player's resources, plus their relation to the acting player.
-
-    Under the gen-2 layout a thermometer code of life follows, so a burn
-    spell's damage reads against a life total the way it reads against a
-    toughness.
-    """
+    """One player's resources, plus their relation to the acting player."""
     out: list[float] = []
     for value in (player.life, player.hand, player.library, player.graveyard,
                   player.poison, player.energy):
@@ -425,18 +340,8 @@ def card_features(
     masked_keywords: frozenset[str] = frozenset(),
     layout: InputLayout = INPUT_LAYOUT,
 ) -> tuple[float, ...]:
-    """One entity's structured characteristics plus its overlay.
-
-    ``masked_keywords`` removes keywords from the temporarily-granted channel.
-    Gate 2's perturbation uses it to strip one keyword from a combat
-    participant that was granted it rather than printing it, and a
-    ``continuous`` record uses it to hide the acting static's own contribution.
-
-    Under the gen-2 layout, thermometer codes of total power, total toughness
-    and toughness left after marked damage close the vector. The last is
-    computed here rather than left to the trunk: subtracting is one more thing
-    a transformer would have to learn before it could compare.
-    """
+    """One entity's structured characteristics plus its overlay;
+    ``masked_keywords`` removes keywords from the temporarily-granted channel."""
     out: list[float] = []
     _push_characteristics(out, entity)
     _push_overlay(out, entity, record, masked_keywords=masked_keywords, layout=layout)
@@ -498,7 +403,6 @@ def _push_overlay(
 
 def _push_counters(out: list[float], counters, layout: InputLayout) -> None:
     if not counters:
-        # The common case by far, and every one of those scalars is zero.
         out += _NO_COUNTERS
         return
     if layout.forge_spellings:
@@ -526,7 +430,8 @@ def _push_stack_extras(out: list[float], entity: EntityState) -> None:
 
 def _push_comparable_amounts(out: list[float], entity: EntityState) -> None:
     """The gen-2 layout's thermometers: total power, total toughness, and the
-    toughness left after marked damage."""
+    toughness left after marked damage, subtracted here so the trunk need not
+    learn to."""
     if entity.pt is None:
         out += _NO_THERMOMETER * 3
         return
@@ -564,9 +469,6 @@ def _pending_event_features(
     ]
 
 
-# ── assembly ────────────────────────────────────────────────────────────
-
-
 def build_effect_head_input(
     record: EffectRecord,
     *,
@@ -585,48 +487,27 @@ def build_effect_head_input(
     """Lay one record out as the token surface.
 
     Args:
-        e_for: ``ProvenanceKey -> tuple[float, ...] | int | None``, the ability
-            lookup. A tuple is the vector itself, read from the cache; an ``int``
-            is a row of a matrix supplied at collate time, which is how the
-            training loop keeps ``e`` a live encoder output the gradient can
-            flow back through. A key that resolves to neither contributes a zero
-            vector rather than dropping the token, so the entity keeps its shape.
-        e_dim: bottleneck width, for the zero vectors above.
-        has_line: ``ProvenanceKey -> bool``, whether the key maps to a rendered
-            line at all. An entity key with no line contributes no token:
-            Forge attaches an implicit cast-this-permanent object to every
-            permanent, the converter renders no line for it, and a token for
-            it is board content no rules text produced. Distinct from ``e_for``
-            returning None, which keeps a zero token so a variant that masks
-            ``e`` keeps the geometry. None keeps every key.
-        candidate_index: a ``playability``/``decision`` record trains as one
-            example per candidate; this selects which candidate's ``e`` sits in
-            ``[ACT]``.
-        context_dropout: probability of dropping each *context* ability token
-            during training. The acting entity's tokens are never dropped —
-            dropping the ability under study would make the record unanswerable.
+        e_for: ``ProvenanceKey -> tuple[float, ...] | int | None`` (see
+            :attr:`Slot.e`). None gives a zero vector rather than dropping the
+            token, so a variant that masks ``e`` keeps the geometry.
+        has_line: ``ProvenanceKey -> bool``; a key with no rendered line (the
+            implicit permanent spell) gets no token. None keeps every key.
+        candidate_index: which candidate's ``e`` a ``decision`` record's
+            ``[ACT]`` reads.
+        context_dropout: per-token drop probability for every entity's
+            abilities but the acting one's.
         masked_keywords: per-entity keywords to hide from the temporary-grant
-            channel.
-        stripped_keywords: per-entity keywords to remove from the entity's model
-            input **entirely** — gate 2's perturbation. It hides the keyword
-            from the overlay the way ``masked_keywords`` does *and* drops the
-            ability slot whose line is that keyword, because a keyword the card
-            prints reaches the model as an ability token and clearing only the
-            overlay would leave it in. The two parameters stay separate because
-            a ``continuous`` record masks what its own static contributed, which
-            is a grant, and must not also silence a printed line that happens to
-            name the same keyword.
+            channel, e.g. a ``continuous`` record's own contribution.
+        stripped_keywords: gate 2's perturbation: per-entity keywords removed
+            from the overlay *and* as ability slots, since a printed keyword
+            reaches the model as a token. Kept apart from ``masked_keywords``,
+            which must not silence a printed line of the same keyword. The
+            ability channel needs ``keyword_of``.
         keyword_of: ``ProvenanceKey -> str | None``, which keyword a line *is*.
-            Required for ``stripped_keywords`` to reach the ability channel;
-            without it only the overlay is stripped.
-        layout: the input layout (FR-063c) — :data:`INPUT_LAYOUT`, or the
-            one a loaded checkpoint recorded (:meth:`InputLayout.of`).
-        options_for: ``ProvenanceKey -> tuple[ProvenanceKey, ...]``, the keys of
-            the charm-mode ``option`` lines that follow the key's line in its
-            sidecar (FR-063a). A snapshot names an entity's abilities by root
-            key only, so each such line gets its own ``ABILITY`` slot right
-            after its root's, flagged ``option`` and continuing the block's
-            positions. None adds none, which is every gen-1 sidecar anyway.
+        options_for: ``ProvenanceKey -> tuple[ProvenanceKey, ...]``, the
+            charm-mode keys whose slots follow the key's (FR-063a).
+        layout: :data:`INPUT_LAYOUT`, or the one a checkpoint recorded
+            (:meth:`InputLayout.of`).
     """
     rng = rng or random.Random()
     masked = masked_keywords or {}
@@ -679,12 +560,8 @@ def _entity_block(
     entity: EntityState, record: EffectRecord, *, e_for, zero, masked, layout,
     options_for, keeps,
 ) -> list[Slot]:
-    """One entity's ``CARD`` slot, then an ``ABILITY`` slot per ability it keeps,
-    each charm root followed by its mode lines.
-
-    Position ids restart at the block: an entity plus its abilities is read the
-    same way wherever the entity sits on the board.
-    """
+    """One entity's ``CARD`` slot, then an ``ABILITY`` slot per ability it
+    keeps, each charm root followed by its mode lines; positions restart."""
     block = [Slot(
         kind=SlotKind.CARD, position=0,
         features=card_features(entity, record, masked_keywords=masked, layout=layout),
@@ -707,28 +584,19 @@ def _entity_block(
 
 
 def _keeps_ability(key, *, has_line, gone, keyword_of, dropout: float, rng) -> bool:
-    """Whether one of an entity's abilities gets a slot.
-
-    ``dropout`` is zero for the acting entity: dropping the ability under study
-    would make the record unanswerable.
-    """
+    """Whether one of an entity's abilities gets a slot."""
     if has_line is not None and not has_line(key):
         return False
     if gone and keyword_of is not None and keyword_of(key) in gone:
-        # Dropped rather than zeroed: a zero token would still tell the head
-        # this creature has an ability here, and gate 2 is asking what the
-        # board looks like without the keyword at all.
+        # Dropped rather than zeroed: a zero token still says an ability is
+        # here.
         return False
     return not (dropout > 0.0 and rng.random() < dropout)
 
 
 def _ability_keys(entity: EntityState) -> tuple[ProvenanceKey, ...]:
-    """An entity's ability tokens: printed and attachment-granted only (FR-073).
-
-    Temporary grants ride the overlay instead. The two channels differ in what
-    they are: a printed or equipped ability is part of what the card *is*, while
-    a grant until end of turn is part of what happened to it.
-    """
+    """An entity's ability tokens: printed and attachment-granted only;
+    temporary grants ride the overlay (FR-073)."""
     return (*entity.printed, *entity.granted_attached)
 
 
@@ -750,11 +618,8 @@ def _act_vector(
 
 
 def _first_vector(keys, e_for, zero: tuple[float, ...]):
-    """The first key that resolves; zeros if none do.
-
-    A rendered line merged from several traits carries several keys and they all
-    name the same cache row, so the first hit is the line's vector.
-    """
+    """The first key that resolves; zeros if none do. A merged line's keys
+    all name the same row."""
     for key in keys:
         vector = e_for(key)
         if vector is not None:
@@ -763,12 +628,8 @@ def _first_vector(keys, e_for, zero: tuple[float, ...]):
 
 
 def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]]:
-    """Keywords a ``continuous`` record's own static contributed (FR-020).
-
-    Removed from the entity inputs so the model is not asked to predict a state
-    that already contains its answer. Structured features stay: the static
-    changed keywords, not the card's printed type line.
-    """
+    """Keywords a ``continuous`` record's own static contributed (FR-020),
+    hidden so the input does not already contain the answer."""
     payload = record.payload
     if record.kind is not RecordKind.CONTINUOUS or not isinstance(
         payload, ContinuousPayload,
@@ -782,12 +643,8 @@ def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]
 
 
 def feature_widths(records, *, layout: InputLayout = INPUT_LAYOUT) -> dict[SlotKind, int]:
-    """Each slot kind's width, measured from real records.
-
-    Measured rather than declared: the vocabularies the features are built from
-    live in this module, and a constant elsewhere would be a second place to
-    keep them in step. A player's and a card's width need a record that has one.
-    """
+    """Each slot kind's width, measured from real records; 0 for a kind no
+    record has."""
     probe = records[0]
     widths = {
         SlotKind.GLOBAL: len(global_features(probe, layout=layout)),

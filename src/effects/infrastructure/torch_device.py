@@ -6,5 +6,4 @@ import torch
 
 
 def default_device() -> torch.device:
-    """The GPU when torch can see one, else the CPU."""
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
