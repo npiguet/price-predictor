@@ -162,17 +162,16 @@ class MarginAccumulator:
     def add(self, gathered: torch.Tensor, targets: EntityTargetBatch) -> None:
         """Fold one chunk in: the gate over every real entity, zone and
         magnitude only where they train (target affected, field present)."""
-        gate, field_targets = targets.gate, targets.fields
-        real = targets.mask.bool()
+        field_targets = targets.fields
+        real = targets.real
         self._gate_pred.append(
             (gathered[..., GATE_INDEX][real] > 0).numpy().astype(np.int8)
         )
-        self._gate_true.append(gate[real].numpy().astype(np.int8))
+        self._gate_true.append(targets.gate[real].numpy().astype(np.int8))
 
-        affected = real & gate.bool()
         zone = HeadField.ZONE_OUTCOME
         if zone in field_targets:
-            scored = affected & field_targets.present[zone]
+            scored = targets.scored(zone)
             logits = field_outputs(gathered, FIELDS_BY_NAME[zone])[scored]
             if logits.numel():
                 self._zone_pred.append(logits.argmax(-1).numpy())
@@ -181,7 +180,7 @@ class MarginAccumulator:
             target = field_targets.values.get(spec.name)
             if target is None:
                 continue
-            scored = affected & field_targets.present[spec.name]
+            scored = targets.scored(spec.name)
             slice_ = field_outputs(gathered, spec)[scored]
             if not slice_.numel():
                 continue

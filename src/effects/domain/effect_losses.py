@@ -155,47 +155,21 @@ def per_entity_loss(
             column for column with ``targets``.
         fields: the fields active at this step.
 
-    The gate trains on every real entity, players included. A field trains
-    where the gate's *target* fires and the field is present, never where the
-    prediction fires: a head that gates everything off would escape the field
-    loss.
+    The gate trains on every :attr:`~EntityTargetBatch.real` entity, a field
+    wherever :meth:`~EntityTargetBatch.scored` puts it.
     """
     names: list[str] = []
     terms: list[torch.Tensor] = []
-    device = outputs.device
-    field_targets = targets.fields
-    real_mask = targets.mask.detach().bool().cpu()
-    gate_host = targets.gate.detach().cpu()
-    real = real_mask.flatten().nonzero().squeeze(1)
-    hit_mask = real_mask & gate_host.bool()
     flat_outputs = outputs.reshape(-1, outputs.shape[-1])
-    gate = functional.binary_cross_entropy_with_logits(
-        flat_outputs.index_select(0, real.to(device, non_blocking=True))[:, GATE_INDEX],
-        gate_host.flatten().index_select(0, real).float().to(device, non_blocking=True),
-        reduction="sum",
-    )
+    total = _gate_term(flat_outputs, targets)
     if report_parts:
         names.append("gate")
-        terms.append(gate.detach())
-    total = gate
+        terms.append(total.detach())
 
     for spec in fields:
-        target = field_targets.values.get(spec.name)
-        if target is None:
+        loss = _field_term(spec, flat_outputs, targets)
+        if loss is None:
             continue
-        present = field_targets.present[spec.name].detach().bool().cpu()
-        rows = (hit_mask & present).flatten().nonzero().squeeze(1)
-        if rows.numel() == 0:
-            continue
-        rows_device = rows.to(device, non_blocking=True)
-        start, end = FIELD_SLICES[spec.name]
-        flat_target = target.reshape(-1, *target.shape[2:])
-        loss = field_loss(
-            spec, flat_outputs.index_select(0, rows_device)[:, start:end],
-            flat_target.index_select(
-                0, rows if flat_target.device.type == "cpu" else rows_device,
-            ).to(device, non_blocking=True),
-        )
         if report_parts:
             names.append(spec.name)
             terms.append(loss.detach())
@@ -209,6 +183,41 @@ def per_entity_loss(
             torch.stack([term.double() for term in terms]) / max(records, 1),
         )
     return per_row(total, records), parts
+
+
+def _gate_term(flat_outputs: torch.Tensor, targets: EntityTargetBatch) -> torch.Tensor:
+    """The affected gate's BCE over every real entity, summed."""
+    device = flat_outputs.device
+    real = targets.real.flatten().nonzero().squeeze(1)
+    affected = targets.gate.detach().cpu().flatten().index_select(0, real).float()
+    return functional.binary_cross_entropy_with_logits(
+        flat_outputs.index_select(0, real.to(device, non_blocking=True))[:, GATE_INDEX],
+        affected.to(device, non_blocking=True),
+        reduction="sum",
+    )
+
+
+def _field_term(
+    spec: FieldSpec, flat_outputs: torch.Tensor, targets: EntityTargetBatch,
+) -> torch.Tensor | None:
+    """One field's loss over the entities it is scored at, summed; None where
+    the batch carries no target for it or scores it nowhere."""
+    target = targets.fields.values.get(spec.name)
+    if target is None:
+        return None
+    rows = targets.scored(spec.name).flatten().nonzero().squeeze(1)
+    if rows.numel() == 0:
+        return None
+    device = flat_outputs.device
+    rows_device = rows.to(device, non_blocking=True)
+    start, end = FIELD_SLICES[spec.name]
+    flat_target = target.reshape(-1, *target.shape[2:])
+    return field_loss(
+        spec, flat_outputs.index_select(0, rows_device)[:, start:end],
+        flat_target.index_select(
+            0, rows if flat_target.device.type == "cpu" else rows_device,
+        ).to(device, non_blocking=True),
+    )
 
 
 def created_objects_loss(

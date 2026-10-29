@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from functools import cached_property
 
 import torch
 
@@ -51,20 +52,40 @@ class EntityFieldTargets:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class EntityTargetBatch:
     """One batch's per-entity targets, aligned column for column.
 
     ``gate`` is 1 where an entity was affected, ``mask`` 1 for a real entity,
     and ``index`` the trunk-output column each entity is gathered from; all
     three are ``(batch, entities)``. Kept whole, so the loss, the margins and
-    the constant-predictor floor all read exactly the entities the head did.
+    the constant-predictor floor all read exactly the entities the head did,
+    selected by :attr:`real`, :attr:`affected` and :meth:`scored`. No slots:
+    the two masks are cached, since the loss reads ``affected`` once per field.
     """
 
     gate: torch.Tensor
     fields: EntityFieldTargets
     mask: torch.Tensor
     index: torch.Tensor
+
+    @cached_property
+    def real(self) -> torch.Tensor:
+        """``(batch, entities)`` bool on the host: a real entity, not padding.
+        The gate trains on every one, players included."""
+        return self.mask.detach().bool().cpu()
+
+    @cached_property
+    def affected(self) -> torch.Tensor:
+        """The real entities the record's *target* says were affected; never
+        the prediction's, or a head that gates everything off would escape
+        the field terms."""
+        return self.real & self.gate.detach().bool().cpu()
+
+    def scored(self, name: str) -> torch.Tensor:
+        """Where field ``name`` trains: an affected entity the field is
+        present at (FR-081)."""
+        return self.affected & self.fields.present[name].detach().bool().cpu()
 
     def fields_on(self, device, *, non_blocking: bool = False) -> EntityTargetBatch:
         """The batch with its field values on ``device``. The gate, mask and
