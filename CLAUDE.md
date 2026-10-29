@@ -50,7 +50,7 @@ These workers import `forge-game` / `forge-core` from the sibling `../forge` che
 
 `draft` **imports from** `sealed` and `price_predictor` (scorer, picker, greedy builder, `deck_assembly`, `score_decks`, `ConvertedCardLocator`, card-embedding layout, `torch_checkpoint`, `torch_training`, `forge_jvm` worker helpers) — never the reverse. `draft` adds only the genuinely-new logic (booster→state geometry, typed-token state, the two-headed model, the Java draft worker).
 
-`effects` **imports from** `sealed` and `price_predictor` too, over a surface FR-002 declares explicitly and an import-direction test asserts: the tokenizer and `tokenizer_store`, `build_vocabulary`, `forge_jvm`, `torch_checkpoint`, `torch_training.clip_per_group`, `append_only`, `ridge_probes`, `compute_basic_lands`, `ConvertedCardLocator`, `format_generated_deck`, `effect_collection_flags`, `ManaCost` (the value head's cost targets) — and **nothing from `sealed.application`**, which stays disjoint.
+`effects` **imports from** `sealed` and `price_predictor` too, over a surface FR-002 declares explicitly and an import-direction test asserts: the tokenizer and `tokenizer_store`, `build_vocabulary`, `forge_jvm`, `torch_checkpoint`, `torch_training.clip_per_group`, `append_only`, `ridge_probes`, `field_default`, `compute_basic_lands`, `ConvertedCardLocator`, `format_generated_deck`, `effect_collection_flags`, `ManaCost` (the value head's cost targets) — and **nothing from `sealed.application`**, which stays disjoint.
 
 ## Corpus file formats
 
