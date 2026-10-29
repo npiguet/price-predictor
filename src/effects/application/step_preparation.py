@@ -53,7 +53,7 @@ from effects.domain.split import (
 )
 from effects.domain.surface_collation import entity_target_tensors
 from effects.domain.value_targets import value_targets
-from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 
 #: Rarity-bucket label for a record with no acting text (combat, legality).
@@ -232,9 +232,9 @@ class StepPreparer:
         self.tokenizer = load_tokenizer(
             self.config.vocab_path, self.config.keyword_definitions,
         )
-        self.sidecars = SidecarCache(sidecar_roots(
+        self.sidecars = SidecarCache.from_folders(
             self.config.cards_folders, self.config.variant_scripts,
-        ))
+        )
         #: One memoised join for the run, not per step.
         self.resolver = KeyResolver(self.sidecars, self.surface)
         self._keywords = KeywordResolver(self.sidecars)
@@ -313,7 +313,9 @@ class StepPreparer:
         """The surfaces, the per-entity targets and ``heads``' targets."""
         batch = batcher.prepare(records)
         return DeviceStep(
-            batch=replace(batch, texts={}, prepared=[], surfaces=[]),
+            batch=replace(
+                batch, texts={}, staged=replace(batch.staged, prepared=[]), surfaces=[],
+            ),
             fields=fields,
             targets=entity_target_tensors(batch.surfaces, targets, fields),
             heads=self._head_targets(records, batcher, batch, heads=heads),
@@ -373,16 +375,16 @@ class StepPreparer:
                 torch.tensor(created),
             )
         # No text, no matrix for these heads to read.
-        if not heads or not batch.rows:
+        if not heads or not batch.staged.rows:
             return targets
-        texts = sorted(batch.rows, key=batch.rows.__getitem__)
+        texts = batch.staged.ordered
         if Head.VALUE in heads:
             targets[Head.VALUE] = value_batch(texts, batch.texts)
         if Head.API in heads:
             targets[Head.API] = self._api_batch(texts, batch.texts)
         if Head.MLM in heads:
             targets[Head.MLM] = batcher.draw_mlm_mask(
-                batch.prepared, self.config.mlm_mask_prob,
+                batch.staged.prepared, self.config.mlm_mask_prob,
             )
         return targets
 

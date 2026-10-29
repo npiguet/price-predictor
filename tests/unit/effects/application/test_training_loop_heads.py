@@ -18,7 +18,7 @@ from effects.application.run_context import build_run, training_settings
 from effects.application.step_loss import StepLoss
 from effects.application.step_preparation import NO_TEXT_BUCKET, training_heads
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
-from effects.application.text_staging import MlmMasker
+from effects.application.text_staging import MlmMasker, StagedTexts
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_log import format_shares
 from effects.domain.aux_head_targets import (
@@ -79,9 +79,11 @@ class _Batcher:
         texts = self.encoded.texts
         return PreparedBatch(
             texts=dict(self.encoded.lines),
-            rows={text: row for row, text in enumerate(texts)},
-            prepared=[object()] * len(texts), encoder_inputs=None,
-            stand_in=None, surfaces=[], inputs={},
+            staged=StagedTexts(
+                rows={text: row for row, text in enumerate(texts)},
+                prepared=[object()] * len(texts), encoder_inputs=None, stand_in=None,
+            ),
+            surfaces=[], inputs=None,
         )
 
     def draw_mlm_mask(self, prepared, mask_prob):

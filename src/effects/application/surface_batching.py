@@ -22,7 +22,6 @@ from effects.application.text_staging import (
     StagedTexts,
     TextStager,
     encode_by_length,
-    pinned,
 )
 from effects.domain.ability_encoder import AbilityEncoder, EncodedLine
 from effects.domain.ability_tokenizer import Surface
@@ -168,21 +167,14 @@ class PreparedBatch:
 
     #: Each unique ability text to its sidecar line.
     texts: dict[str, object]
-    #: Each text's row of the batch's ``e`` matrix.
-    rows: dict[str, int]
-    #: Empty for the two baselines that never reach the encoder.
-    prepared: list[EncodedLine]
-    #: None when the encoder is not called.
-    encoder_inputs: dict[str, torch.Tensor] | None
-    #: The ``taxonomy`` baseline's vectors, which stand in for the encoder.
-    stand_in: torch.Tensor | None
+    #: The same texts staged for whatever produces their ``e``.
+    staged: StagedTexts
     surfaces: list
     #: The variant's masks already applied.
     inputs: TrunkInputs
 
     def pin(self) -> None:
-        self.encoder_inputs = pinned(self.encoder_inputs)
-        self.stand_in = pinned(self.stand_in)
+        self.staged.pin()
         self.inputs = self.inputs.pin()
 
 
@@ -250,26 +242,23 @@ class Materializer:
     identity_table: IdentityTable | None = None
     noise: NoiseState | None = None
 
-    def encode(
-        self, ordered: list[str], inputs: dict[str, torch.Tensor] | None,
-        stand_in: torch.Tensor | None, encoder: AbilityEncoder,
-    ) -> torch.Tensor | None:
-        """The batch's ``e`` matrix, one row per text of ``ordered``, or None;
-        ``identity`` and ``taxonomy`` never reach the encoder."""
-        if self.masks.identity_embedding and ordered:
+    def encode(self, staged: StagedTexts, encoder: AbilityEncoder) -> torch.Tensor | None:
+        """The batch's ``e`` matrix, one row per staged text in row order, or
+        None; ``identity`` and ``taxonomy`` never reach the encoder."""
+        if self.masks.identity_embedding and staged.rows:
             if self.identity_table is None:
                 raise ValueError(
                     "the identity baseline needs its embedding table; construct "
                     "the materializer with identity_table="
                 )
             return self.identity_table(
-                self.identity_table.rows(ordered).to(self.device, non_blocking=True),
+                self.identity_table.rows(staged.ordered).to(self.device, non_blocking=True),
             )
-        if stand_in is not None:
-            return stand_in.to(self.device, non_blocking=True)
-        if inputs is None:
+        if staged.stand_in is not None:
+            return staged.stand_in.to(self.device, non_blocking=True)
+        if staged.encoder_inputs is None:
             return None
-        vectors, _hidden = encode_by_length(encoder, inputs, self.device)
+        vectors, _hidden = encode_by_length(encoder, staged.encoder_inputs, self.device)
         return vectors
 
     def materialize(
@@ -278,9 +267,7 @@ class Materializer:
     ) -> Materialized:
         """``prepared`` on the device, its texts encoded and scattered;
         ``step`` is the training step, which places the noise on its ramp."""
-        rows = prepared.rows
-        ordered = sorted(rows, key=rows.__getitem__)
-        matrix = self.encode(ordered, prepared.encoder_inputs, prepared.stand_in, encoder)
+        matrix = self.encode(prepared.staged, encoder)
         if self.noise is not None:
             # Every e of the batch, whichever variant produced it (FR-056).
             matrix = self.noise.apply(matrix, step=step)
@@ -288,7 +275,7 @@ class Materializer:
         inputs = prepared.inputs.to(self.device, non_blocking=True).with_e(matrix)
         return Materialized(
             inputs, prepared.surfaces,
-            EncodedBatch(texts=ordered, lines=prepared.texts, matrix=matrix),
+            EncodedBatch(texts=prepared.staged.ordered, lines=prepared.texts, matrix=matrix),
         )
 
 
@@ -423,9 +410,7 @@ class SurfaceBatcher:
     ) -> tuple[dict[str, int], torch.Tensor | None]:
         """Encode each unique ability text once: ``(row_of_text, matrix)``."""
         staged = self.stage(texts)
-        return staged.rows, self.materializer.encode(
-            staged.ordered, staged.encoder_inputs, staged.stand_in, encoder,
-        )
+        return staged.rows, self.materializer.encode(staged, encoder)
 
     def draw_mlm_mask(
         self, prepared: list[EncodedLine], mask_prob: float,
@@ -492,11 +477,7 @@ class SurfaceBatcher:
         inputs = self._masked(collate_surfaces(
             surfaces, e_dim=self.e_dim, widths=self.widths,
         ))
-        return PreparedBatch(
-            texts=texts, rows=staged.rows, prepared=staged.prepared,
-            encoder_inputs=staged.encoder_inputs, stand_in=staged.stand_in,
-            surfaces=surfaces, inputs=inputs,
-        )
+        return PreparedBatch(texts=texts, staged=staged, surfaces=surfaces, inputs=inputs)
 
     def _masked(self, inputs: TrunkInputs) -> TrunkInputs:
         """The collated inputs with the variant's masks applied (FR-094),

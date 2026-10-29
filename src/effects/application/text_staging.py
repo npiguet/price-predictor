@@ -103,14 +103,22 @@ class StagedTexts:
     baseline's vectors) is set; neither, for the ``identity`` baseline.
     """
 
+    #: Each text's row of the batch's ``e`` matrix.
     rows: dict[str, int]
+    #: Empty for the two baselines that never reach the encoder.
     prepared: list[EncodedLine]
+    #: None when the encoder is not called.
     encoder_inputs: dict[str, torch.Tensor] | None
     stand_in: torch.Tensor | None
 
     @property
     def ordered(self) -> list[str]:
+        """The texts in matrix-row order."""
         return sorted(self.rows, key=self.rows.__getitem__)
+
+    def pin(self) -> None:
+        self.encoder_inputs = pinned(self.encoder_inputs)
+        self.stand_in = pinned(self.stand_in)
 
 
 @dataclass(frozen=True)
