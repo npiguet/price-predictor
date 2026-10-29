@@ -16,28 +16,19 @@ validation records, is covered in ``test_shard_streaming.py``.
 from __future__ import annotations
 
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.records import (
-    EffectRecord,
-)
 from effects.domain.split import (
     HeldOutCards,
     HoldoutRule,
     record_names_held_out_card,
 )
-from effects.domain.state_snapshot import EntityState
 from effects.domain.text_holdout import HoldoutUnit
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
-
-
-def _entity(name: str, **overrides) -> EntityState:
-    return make_entity(f"E-{name}", name, **overrides)
-
-
-def _record(game_id: str, entities=(), ability=None, **overrides) -> EffectRecord:
-    return make_record(
-        game_id=game_id, ability=ability,
-        state=make_snapshot(entities=tuple(entities)), **overrides,
-    )
+from tests.unit.effects.builders import (
+    make_entity,
+    make_record,
+    make_snapshot,
+    named_entity,
+    record_on_board,
+)
 
 
 class TestRecordNamesHeldOutCard:
@@ -48,26 +39,26 @@ class TestRecordNamesHeldOutCard:
         )
 
     def test_a_record_whose_context_holds_the_card_names_it(self):
-        record = _record("g1", entities=(_entity("Serra Angel"),))
+        record = record_on_board("g1", entities=(named_entity("Serra Angel"),))
         assert record_names_held_out_card(record, self._held())
 
     def test_a_record_whose_acting_ability_is_the_cards_names_it(self):
-        record = _record("g1", ability=(
+        record = record_on_board("g1", ability=(
             ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "spell", 0),
         ))
         assert record_names_held_out_card(record, self._held())
 
     def test_a_record_carrying_the_cards_line_on_another_entity_names_it(self):
         """An anthem's granted line names the anthem, wherever it landed."""
-        recipient = _entity("Grizzly Bears", granted_attached=(
+        recipient = named_entity("Grizzly Bears", granted_attached=(
             ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "static", 0),
         ))
         assert record_names_held_out_card(
-            _record("g1", entities=(recipient,)), self._held()
+            record_on_board("g1", entities=(recipient,)), self._held()
         )
 
     def test_an_unrelated_record_does_not(self):
-        record = _record("g1", entities=(_entity("Grizzly Bears"),))
+        record = record_on_board("g1", entities=(named_entity("Grizzly Bears"),))
         assert not record_names_held_out_card(record, self._held())
 
 
@@ -150,7 +141,7 @@ class TestTheConvertedToRuntimeNameBoundary:
         held = HeldOutCards(
             names=frozenset({"soul echo"}), script_files=frozenset(),
         )
-        record = _record("g1", entities=(_entity("Soul Echo"),))
+        record = record_on_board("g1", entities=(named_entity("Soul Echo"),))
 
         assert record_names_held_out_card(record, held) is True
 
@@ -158,7 +149,7 @@ class TestTheConvertedToRuntimeNameBoundary:
         held = HeldOutCards(
             names=frozenset({"soul echo"}), script_files=frozenset(),
         )
-        record = _record("g1", entities=(_entity("Grizzly Bears"),))
+        record = record_on_board("g1", entities=(named_entity("Grizzly Bears"),))
 
         assert record_names_held_out_card(record, held) is False
 
@@ -167,7 +158,7 @@ class TestTheConvertedToRuntimeNameBoundary:
         held = HeldOutCards(
             names=frozenset({"lim-dûl's vault"}), script_files=frozenset(),
         )
-        record = _record("g1", entities=(_entity("Lim-Dûl's Vault"),))
+        record = record_on_board("g1", entities=(named_entity("Lim-Dûl's Vault"),))
 
         assert record_names_held_out_card(record, held) is True
 
@@ -247,7 +238,6 @@ class TestHeldOutTextMatching:
 
 def test_a_held_out_token_on_the_board_names_its_game_held_out():
     from effects.domain.provenance import ProvenanceKey
-    from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
     token = ProvenanceKey("tokenscripts/goblin.txt", 0, "spell", 1)
     record = make_record(state=make_snapshot(entities=(

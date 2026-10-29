@@ -13,28 +13,18 @@ import pytest
 
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (
-    EffectRecord,
     RecordKind,
 )
-from effects.domain.state_snapshot import EntityState
 from effects.infrastructure.sidecar_io import (
     SidecarCache,
     UnconfiguredTree,
     UnconvertedScript,
     write_sidecar,
 )
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
-
-
-def _entity(name: str, **overrides) -> EntityState:
-    return make_entity(f"E-{name}", name, **overrides)
-
-
-def _record(game_id: str, entities=(), ability=None, **overrides) -> EffectRecord:
-    return make_record(
-        game_id=game_id, ability=ability,
-        state=make_snapshot(entities=tuple(entities)), **overrides,
-    )
+from tests.unit.effects.builders import (
+    make_record,
+    record_on_board,
+)
 
 
 class FakeSidecarCache:
@@ -92,7 +82,7 @@ def test_text_for_key_and_the_acting_text_agree_on_one_key():
     from effects.application.ability_text import KeyResolver, text_for_key
 
     key = ProvenanceKey("cardsfolder/f/flying_test.txt", 0, "keyword", 0)
-    record = _record("g1", ability=(key,))
+    record = record_on_board("g1", ability=(key,))
     sidecars = FakeSidecarCache(
         lines={
             key: SidecarLine(
@@ -180,7 +170,7 @@ def test_a_decisions_acting_text_is_its_candidates():
     )
 
     key = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
-    record = _record(
+    record = record_on_board(
         "g1", kind=RecordKind.PLAYABILITY, moment=None,
         subkind=PlayabilitySubkind.DECISION,
         payload=PlayabilityDecisionPayload(candidates=(Candidate(

@@ -116,6 +116,19 @@ def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> Effect
     return EffectRecord(**defaults)
 
 
+def named_entity(name: str, **overrides) -> EntityState:
+    """:func:`make_entity` with its id derived from ``name``."""
+    return make_entity(f"E-{name}", name, **overrides)
+
+
+def record_on_board(game_id: str, entities=(), ability=None, **overrides) -> EffectRecord:
+    """A record of game ``game_id`` whose board holds ``entities``."""
+    return make_record(
+        game_id=game_id, ability=ability,
+        state=make_snapshot(entities=tuple(entities)), **overrides,
+    )
+
+
 #: Records per gzip member, as the Java collector blocks them.
 RAW_BLOCK_RECORDS = 256
 
