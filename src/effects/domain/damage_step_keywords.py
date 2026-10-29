@@ -54,7 +54,6 @@ class CombatParticipant:
 
     carrier: EntityState
     opponents: tuple[EntityState, ...]
-    controller: str
     defending_player: str | None
     combat_substep: str | None = None
 
@@ -86,7 +85,6 @@ def combat_participant(
     return CombatParticipant(
         carrier=carrier,
         opponents=opponents,
-        controller=carrier.controller,
         defending_player=(
             _defending_player(state, carrier)
             if combat.attacking is not None else None
@@ -499,7 +497,7 @@ def subject_id(
         case Subject.OPPONENT:
             return participant.opponents[0].id if participant.opponents else None
         case Subject.CONTROLLER:
-            return participant.controller
+            return participant.carrier.controller
         case Subject.DEFENDING_PLAYER:
             return participant.defending_player
     raise ValueError(f"unhandled subject {effect.subject}")

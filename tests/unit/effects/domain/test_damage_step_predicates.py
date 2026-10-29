@@ -180,7 +180,7 @@ class TestCombatParticipant:
     def test_an_attackers_controller_and_defending_player_are_the_two_sides(self):
         state, carrier = _attacker_and_blockers()
         participant = combat_participant(state, carrier)
-        assert participant.controller == "P0"
+        assert participant.carrier.controller == "P0"
         assert participant.defending_player == "P1"
 
     def test_an_unblocked_attacker_has_no_opponent_but_still_has_a_defender(self):
@@ -194,7 +194,7 @@ class TestCombatParticipant:
         blocker = state.entity("B0")
         participant = combat_participant(state, blocker)
         assert [o.id for o in participant.opponents] == ["A"]
-        assert participant.controller == "P1"
+        assert participant.carrier.controller == "P1"
 
     def test_a_blocker_has_no_defending_player(self):
         """Its damage lands on the attacker, never on a player."""
@@ -711,7 +711,7 @@ class TestTheTableIsTheSingleSource:
         participant = combat_participant(state, carrier)
         assert isinstance(participant, CombatParticipant)
         with pytest.raises(dataclasses.FrozenInstanceError):
-            participant.controller = "P1"
+            participant.defending_player = "P0"
 
 
 def test_the_keyword_predicate_module_does_not_import_torch():
