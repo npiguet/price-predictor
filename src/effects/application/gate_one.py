@@ -1,22 +1,7 @@
-"""Gate 1: the identity baseline, measured by running both checkpoints over the split.
+"""Gate 1: the shipping model against the ``identity`` baseline (FR-118).
 
-Gate 1 asks whether the encoder is reading text at all, and it answers by
-comparing the shipping model against an ``identity`` baseline that can memorize
-which ability a line is but cannot read a word of it. This module produces each
-side's numbers, compares them and renders the verdict (FR-118).
-
-Two choices here are the whole point of the gate.
-
-The stratum is the **unique-text** slice of the card-disjoint split: resolution
-records whose acting line's text appears on no training card. The identity
-baseline holds a free vector per text, so on a text it saw in training it can
-simply recall what happened, and a comparison over the whole split would mostly
-measure memorization on both sides. On a text absent from training the baseline
-has nothing to recall, and only reading the words helps.
-
-The three margins are measured together on one pass rather than three, because
-they must describe the same records: the gate F1 says whether the model knows
-*that* something happens, the zone accuracy *what*, and the deviance *how much*.
+Scored on the card-disjoint split's unique-text stratum, the only slice where
+a baseline holding a free vector per text cannot simply recall the answer.
 """
 
 from __future__ import annotations
@@ -101,12 +86,8 @@ def _text_of_keys(keys, texts: TextsOf) -> str | None:
 
 
 def training_texts(acting, texts: TextsOf) -> set[str]:
-    """Every acting-line text the training records contain.
-
-    ``acting`` is the training records' distinct ``acting_keys`` tuples rather
-    than the records: the distinct acting lines are what gate 1 needs and what
-    fits in memory.
-    """
+    """Every acting-line text among ``acting``, the training records' distinct
+    ``acting_keys`` tuples (the records themselves would not fit in memory)."""
     found = {_text_of_keys(keys, texts) for keys in acting}
     found.discard(None)
     return found
@@ -115,10 +96,7 @@ def training_texts(acting, texts: TextsOf) -> set[str]:
 def unique_text_records(records, texts: TextsOf, *, seen) -> list:
     """The unique-text stratum: resolution records whose text is not in ``seen``.
 
-    Resolution records only, because the gate's three margins are about what an
-    ability does when it resolves. A combat record has no acting line at all,
-    so it could not be stratified by text even in principle. ``records`` is
-    read once, so it may be a stream.
+    ``records`` is read once, so it may be a stream.
     """
     stratum = []
     for record in records:
@@ -133,12 +111,9 @@ def unique_text_records(records, texts: TextsOf, *, seen) -> list:
 def unique_text_stratum(corpus_path, card_disjoint_games, texts: TextsOf) -> list:
     """Gate 1's population, read from the curated corpus the checkpoint trained on.
 
-    "Seen" is every text a record of the corpus's ``training/`` acts with —
-    what the identity baseline could have memorized — and the candidates are
-    the card-disjoint stratum's resolutions, streamed so only the stratum is
-    held. Neither comes from the raw shards: a raw game outside the recorded
-    validation sets is not necessarily a training game (curation drops
-    held-out games, and collection continues after a build).
+    Not from the raw shards: a raw game outside the recorded validation sets
+    is not necessarily a training game (curation drops held-out games, and
+    collection continues after a build).
     """
     from effects.infrastructure.corpus_store import CorpusStore
 
@@ -152,26 +127,15 @@ def unique_text_stratum(corpus_path, card_disjoint_games, texts: TextsOf) -> lis
     )
 
 
-# ── scoring: one forward pass, two readers ──────────────────────────────
-
-
 def forward_chunks(records, runnable: Runnable) -> Iterator[tuple[list, tuple]]:
-    """``(chunk, (gathered, gate, field_targets, mask))`` per chunk of ``records``.
-
-    The one forward pass both readers share: the margins pool it, the
-    per-record scorer (:mod:`effects.application.record_scoring`) splits it by
-    row.
-    """
+    """``(chunk, (gathered, gate, field_targets, mask))`` per chunk of ``records``,
+    shared by the margins and :mod:`effects.application.record_scoring`."""
     for chunk in runnable.inference_chunks(records, BATCH_RECORDS):
         yield chunk, _forward(chunk, runnable)
 
 
 def measure(records, runnable: Runnable) -> GateOneMetrics:
-    """Run the model over ``records`` and score the three margins.
-
-    The runnable's ``fields`` is the active-field tuple the run trains with, so
-    the gate reads the same heads the loss shaped.
-    """
+    """Run the model over ``records`` and score the three margins."""
     margins = MarginAccumulator(runnable.fields)
     for _chunk, forward in forward_chunks(records, runnable):
         margins.add(*forward)
@@ -179,11 +143,8 @@ def measure(records, runnable: Runnable) -> GateOneMetrics:
 
 
 def _forward(chunk, runnable: Runnable):
-    """``(gathered, gate, field_targets, mask)`` for one chunk, on the host.
-
-    ``gathered`` is the per-entity head's output at each target entity's slot,
-    aligned column for column with the targets ``entity_target_tensors`` built.
-    """
+    """``(gathered, gate, field_targets, mask)`` for one chunk, on the host,
+    ``gathered`` aligned column for column with the targets."""
     model = runnable.model
     batch, surfaces, _encoded = runnable.batcher.build(chunk, runnable.encoder)
     outputs = model.per_entity(model(**batch))
@@ -217,12 +178,8 @@ class MarginAccumulator:
         self, gathered: torch.Tensor, gate: torch.Tensor,
         field_targets: EntityFieldTargets, mask: torch.Tensor,
     ) -> None:
-        """Fold one chunk's gathered outputs and targets in.
-
-        The gate is read over every real entity; zone and magnitude only over
-        the entities the gate's *target* marks affected and whose record
-        supervises the field, the ones those fields are trained on.
-        """
+        """Fold one chunk in: the gate over every real entity, zone and
+        magnitude only where they train (target affected, field present)."""
         real = mask.bool()
         self._gate_pred.append(
             (gathered[..., GATE_INDEX][real] > 0).numpy().astype(np.int8)
@@ -264,16 +221,8 @@ def _cat(chunks: list[np.ndarray]) -> np.ndarray:
     return np.concatenate(chunks) if chunks else np.empty(0)
 
 
-# ── the gate ────────────────────────────────────────────────────────────
-
-
 def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
-    """Score both models on the split's unique-text stratum and compare.
-
-    Loading a second model and running the corpus twice is the expensive part
-    of an evaluation, so it happens only when the baseline is actually
-    supplied. The baseline is loaded for this gate alone and released after it.
-    """
+    """Score both models on the split's unique-text stratum and compare."""
     from effects.application.ability_text import KeyResolver
     from effects.domain.ability_encoder import surface_of
 
@@ -309,11 +258,8 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
 
 
 def _relative_reduction(baseline: float, value: float) -> float:
-    """How far ``value`` falls below ``baseline``, as a share of it.
-
-    An unmeasured baseline leaves the reduction unmeasured; a zero one leaves
-    nothing to reduce.
-    """
+    """How far ``value`` falls below ``baseline``, as a share of it; NaN for
+    an unmeasured baseline, 0 for a zero one."""
     if math.isnan(baseline):
         return baseline
     return (baseline - value) / baseline if baseline > 0 else 0.0
@@ -322,11 +268,10 @@ def _relative_reduction(baseline: float, value: float) -> float:
 def evaluate_gate_one(
     model: GateOneMetrics, identity: GateOneMetrics,
 ) -> CheckResult:
-    """All three margins must hold (FR-118). Blocks shipping.
+    """All three margins must hold (FR-118).
 
-    Three margins rather than one because they fail differently: the gate F1
-    says whether the model knows *that* something happens, the zone accuracy
-    whether it knows *what*, and the deviance whether it knows *how much*. A
+    They fail differently: the gate F1 says whether the model knows *that*
+    something happens, the zone accuracy *what*, the deviance *how much*. A
     model can beat the baseline on one and tie on the others by learning the
     corpus's priors.
     """

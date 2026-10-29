@@ -1,11 +1,8 @@
 """The gates' arithmetic: thresholds and metrics over arrays already collected.
 
-Pure numpy, so the evaluator, gate 1's measurement and the geometry checks share
-one definition of each number without importing one another. Gate 2's own
-thresholds live beside its table, in :mod:`effects.domain.damage_step_keywords`.
-
-Every metric reports NaN where it has nothing to measure, rather than a number
-that reads as a result; the gates fail a NaN margin as unmeasured.
+Gate 2's thresholds live in :mod:`effects.domain.damage_step_keywords`. Every
+metric reports NaN where it has nothing to measure; the gates fail a NaN
+margin as unmeasured.
 """
 
 from __future__ import annotations
@@ -16,7 +13,7 @@ import numpy as np
 
 from effects.domain.effect_head_input import MAGNITUDE_CAP
 
-# ── gate thresholds (FR-118, FR-123). Contract, not tuning. ──────────────
+# Gate thresholds (FR-118, FR-123): contract, not tuning.
 GATE1_MIN_GATE_F1_GAIN = 0.05
 GATE1_MIN_ZONE_ACCURACY_GAIN = 0.05
 GATE1_MIN_DEVIANCE_REDUCTION = 0.05
@@ -40,12 +37,8 @@ def f1_score(predicted: np.ndarray, observed: np.ndarray) -> float:
 
 
 def balanced_accuracy(predicted: np.ndarray, observed: np.ndarray) -> float:
-    """Accuracy averaged over the observed classes, each weighing the same (FR-109).
-
-    Balanced because one class dominates a categorical field — ``stayed`` the
-    zone outcome — and a plain accuracy reads as high for a model that answers
-    that class every time.
-    """
+    """Accuracy averaged over the observed classes, each weighing the same
+    (FR-109), so always answering the dominant ``stayed`` scores as chance."""
     predicted = np.asarray(predicted)
     observed = np.asarray(observed)
     if not observed.size:
@@ -57,15 +50,9 @@ def balanced_accuracy(predicted: np.ndarray, observed: np.ndarray) -> float:
 
 
 def poisson_deviance(predicted: np.ndarray, observed: np.ndarray) -> float:
-    """Mean Poisson deviance, the count analogue of squared error.
-
-    Gate 1 reads it over the magnitude side of the count-valued fields, which is
-    where "how much damage" and "how many cards" live — the numbers a model that
-    is not reading the text can only predict at the corpus average.
-    """
+    """Mean Poisson deviance, the count analogue of squared error."""
     predicted = np.asarray(predicted, dtype=np.float64)
-    # Capped as the training loss caps it, so one runaway amount cannot
-    # dominate the mean the model was never asked to fit.
+    # Capped as the training loss caps it.
     observed = np.minimum(np.asarray(observed, dtype=np.float64), MAGNITUDE_CAP)
     if predicted.size == 0:
         return float("nan")
@@ -78,20 +65,13 @@ def poisson_deviance(predicted: np.ndarray, observed: np.ndarray) -> float:
 def mean_pairwise_cosine(
     vectors: np.ndarray, *, pairs: int = GATE3_COSINE_PAIRS, seed: int = 42,
 ) -> float:
-    """Mean cosine similarity over ``pairs`` random distinct pairs.
-
-    Sampled rather than exhaustive because the corpus has ~38k unique texts and
-    the full pairwise matrix is 700 million entries for a number a sample
-    estimates to three decimals.
-    """
+    """Mean cosine similarity over ``pairs`` random distinct pairs."""
     count = vectors.shape[0]
     if count < 2:
         return float("nan")
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)
     unit = vectors / np.clip(norms, 1e-12, None)
-    # The pairs are drawn one at a time from the same generator as ever, so a
-    # seed picks the same pairs it always has; only the dot products are taken
-    # in one pass rather than one call per pair.
+    # Drawn one at a time so a seed keeps picking the same pairs.
     rng = random.Random(seed)
     first = np.empty(pairs, dtype=np.intp)
     second = np.empty(pairs, dtype=np.intp)
@@ -108,10 +88,8 @@ def top_component_share(vectors: np.ndarray) -> float:
     if vectors.shape[0] < 2:
         return float("nan")
     centred = (vectors - vectors.mean(axis=0, keepdims=True)).astype(np.float64)
-    # The eigenvalues of the small (dim × dim) scatter matrix are the squared
-    # singular values of the tall centred matrix, at a fraction of an SVD's
-    # cost over ~38k texts. Clamped at zero: rounding can leave a null
-    # direction a hair negative.
+    # The small scatter matrix's eigenvalues are the squared singular values,
+    # far cheaper than an SVD; clamped since rounding can go a hair negative.
     variance = np.clip(np.linalg.eigvalsh(centred.T @ centred), 0.0, None)
     total = float(variance.sum())
     # No variance at all is every vector on one point: the whole collapse.

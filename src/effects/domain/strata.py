@@ -1,8 +1,4 @@
-"""Where a curated dataset puts a record (FR-089, FR-142).
-
-A string enum, so a stratum keys the manifest's JSON and names its directory
-exactly as the bare string always did.
-"""
+"""Where a curated dataset puts a record (FR-089, FR-142)."""
 
 from __future__ import annotations
 
@@ -13,19 +9,15 @@ class Stratum(StrEnum):
     TRAINING = "training"
     CARD_DISJOINT = "card-disjoint"
     GAME_DISJOINT = "game-disjoint"
-    #: A *slice* of card-disjoint rather than a fourth destination: its
-    #: records are written twice on purpose, so the evaluator reads gate 1's
-    #: unique-text stratum without re-filtering the whole card-disjoint output,
-    #: and its count overlaps card-disjoint's rather than partitioning with it.
+    #: A slice of card-disjoint, its records written twice: the resolutions
+    #: acting through a held-out text, which ``validation_samples`` draws the
+    #: card-disjoint sample's resolution classes from first and the trainer
+    #: reports the size of. Its count overlaps card-disjoint's.
     GATE_ONE = "gate-one"
-    #: Held-out games the card-disjoint cap declined. Accounting only: nothing
-    #: is written for it, so it is counted but never carries a unique-text
-    #: figure.
+    #: Held-out games the card-disjoint cap declined; counted, never written.
     DROPPED_HELD_OUT = "dropped-held-out"
-    #: Records of training games acting through a held-out ability text: a
-    #: token or a variant script carrying it, or its template under
-    #: ``--holdout-unit template``. Accounting only, like the stratum above;
-    #: the rest of the game still trains.
+    #: Records of training games acting through a held-out ability text;
+    #: counted, never written, while the rest of the game still trains.
     DROPPED_HELD_OUT_TEXT = "dropped-held-out-text"
 
 

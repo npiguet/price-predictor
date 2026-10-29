@@ -1,20 +1,7 @@
 """The caps a collecting run applies, and how they reach the worker.
 
-Every one is a **per-worker-process** quantity that the Python supervisor cannot
-observe: how many records one mana ability has already contributed, how often a
-decision point has been sampled, how many forks a game has spent. The supervisor
-sets them and the JVM enforces them, which is why they travel as system
-properties rather than as arguments.
-
-Kept here rather than in the CLI so the three commands that collect — the sealed
-match supervisor, the coverage collector and the variant collector — cannot
-drift into passing different names for the same knob.
-
-Snapshot depth is not among them. Every record collects all four inclusion
-tiers — referenced objects, the core board, the unreferenced stack, and
-unreferenced hands and graveyards — because a depth that varied by collector or
-by run made ``state.tiers`` a proxy for how a record was collected, which is
-collection metadata the schema bars from being a model input.
+Kept here rather than in the CLI so the three collecting commands cannot drift
+into passing different names for the same knob.
 """
 
 from __future__ import annotations
@@ -23,64 +10,45 @@ from dataclasses import dataclass, fields
 
 from effects.domain.damage_step_keywords import DAMAGE_STEP_KEYWORDS
 
-#: Records per unique mana ability, per game. Lands are the reason: a Mountain
-#: taps a dozen times a game for the same R, and the repeats are the same
-#: observation over a board that barely moved.
 DEFAULT_MANA_CAP = 1
 DEFAULT_PLAYABILITY_RATE = 0.1
 DEFAULT_INTERVENTIONS_PER_GAME = 2
 DEFAULT_PROBES_PER_GAME = 2
-#: Every damage-step keyword gate 2 checks, in its table's order and spelling,
-#: which is the spelling the JVM compares a normalized Forge keyword against.
+#: In gate 2's table spelling, which is what the JVM compares a normalized
+#: Forge keyword against.
 DEFAULT_PROBE_KEYWORDS = ",".join(row.keyword for row in DAMAGE_STEP_KEYWORDS)
-#: Share of matches with one random seat (FR-021). Off unless a run asks.
 DEFAULT_RANDOM_SEAT_SHARE = 0.0
-#: The random seat's ``P``. No default a run could rely on: a share above zero
-#: without it is refused before any game (FR-026), so the 0 here only ever
-#: travels beside a share of 0.
+#: Only ever travels beside a share of 0: a share above zero without an
+#: explicit ``P`` is refused (FR-026).
 DEFAULT_RANDOM_SEAT_PROBABILITY = 0.0
 
 
 @dataclass(frozen=True, slots=True)
 class CollectionCaps:
-    """What one worker may collect, per game."""
+    """What one worker may collect, per game; enforced in the JVM, which is
+    why the caps travel as system properties."""
 
-    #: Records per unique (mana ability, mana produced) per game. A dual land
-    #: producing G and producing U are two observations of one line, so the
-    #: produced mana is part of the key rather than of the count.
+    #: Records per unique (mana ability, mana produced) per game.
     mana_cap: int = DEFAULT_MANA_CAP
-    #: Share of `decision`-subkind logging points kept. The AI evaluates every
-    #: candidate at every priority; the legality subkinds are not sampled,
-    #: because identical answers are coalesced instead.
+    #: Share of `decision`-subkind logging points kept; the legality subkinds
+    #: are coalesced instead.
     playability_rate: float = DEFAULT_PLAYABILITY_RATE
-    #: Stage three. Forks that force an ability no game plays.
     interventions_per_game: int = DEFAULT_INTERVENTIONS_PER_GAME
-    #: Stage three. Forks that re-run a combat with a keyword stripped.
     probes_per_game: int = DEFAULT_PROBES_PER_GAME
-    #: Comma-separated keywords to probe; all eight damage-step keywords unless
-    #: a run narrows the list. Empty takes no fork at all, whatever the build
-    #: state — the runtime switch is deliberately separate from the build
-    #: decision gate 2 drives.
+    #: Comma-separated keywords to probe; empty takes no probe fork at all.
     probe_keywords: str = DEFAULT_PROBE_KEYWORDS
-    #: Share of matches in which one seat, chosen at random per match, is the
-    #: random seat (FR-021). Per worker for the same reason as every cap: the
-    #: match draw happens in the JVM.
+    #: Share of matches with one random seat (FR-021).
     random_seat_share: float = DEFAULT_RANDOM_SEAT_SHARE
-    #: ``P``: the chance the random seat draws uniformly from the legal
-    #: options at a decision point instead of taking the Forge AI's choice.
+    #: ``P``: the chance the random seat draws uniformly from the legal options.
     random_seat_probability: float = DEFAULT_RANDOM_SEAT_PROBABILITY
 
     @classmethod
     def from_args(cls, args) -> CollectionCaps:
-        """Read the flags `_add_cap_flags` installed, whichever command they sit on.
-
-        Falls back per field rather than requiring all of them: the trainer and
-        the evaluator carry no cap flags and still build configs from their own
-        namespaces. ``field.default`` rather than a class attribute, because
-        ``slots=True`` leaves none.
-        """
-        # None is an unset flag, not a value: --random-seat-probability
-        # defaults to None so a share above 0 without it can be refused.
+        """Read the flags `_add_cap_flags` installed, falling back per field
+        for a namespace without them. ``field.default``, because ``slots=True``
+        leaves no class attribute."""
+        # None is an unset flag: --random-seat-probability defaults to None so
+        # a share above 0 without it can be refused.
         return cls(**{
             spec.name: (
                 spec.default if getattr(args, spec.name, None) is None
@@ -90,11 +58,7 @@ class CollectionCaps:
         })
 
     def as_system_properties(self) -> dict[str, str]:
-        """The `-D` properties the worker reads them back from.
-
-        Named `effect.*` like the other collection properties, so a worker
-        started without instrumentation ignores the lot.
-        """
+        """The `-D effect.*` properties the worker reads them back from."""
         return {
             f"effect.{field.name.replace('_', '.')}": str(getattr(self, field.name))
             for field in fields(self)

@@ -1,16 +1,4 @@
-"""``encode-abilities``: compute the ability cache once, offline.
-
-Every downstream consumer reads the cache rather than the encoder. That is the
-point of the bottleneck: an ability's vector is computed once for the whole
-corpus and looked up thereafter, so a deck builder or a scorer pays a dictionary
-hit instead of a transformer forward pass.
-
-``--variant`` resolves the checkpoint *and* the output suffix together, so a
-baseline is never encoded with another variant's weights and never lands on top
-of the shipping cache. The ``taxonomy`` variant has no encoder at all and emits
-its lookup into the same row layout, so every ``e``-geometry check reads one
-file shape whichever variant it is looking at.
-"""
+"""``encode-abilities``: compute the ability cache once, offline."""
 
 from __future__ import annotations
 
@@ -51,12 +39,8 @@ class EncodeAbilitiesConfig:
     clean: bool = False
 
     def resolved_checkpoint(self) -> Path:
-        """The checkpoint this variant reads; an explicit value overrides.
-
-        Resolving it from the variant is what stops a baseline being encoded
-        with the shipping model's weights — a mistake that produces a cache
-        which loads, has the right shape, and answers a different question.
-        """
+        """The checkpoint this variant reads, so a baseline is never encoded
+        with another variant's weights; an explicit value overrides."""
         if self.checkpoint is not None:
             return Path(self.checkpoint)
         return model_output_for(self.variant) / "latest.pt"
@@ -75,13 +59,8 @@ def iter_sidecars(cards_folder: Path) -> list[Path]:
 
 
 def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
-    """The ``taxonomy`` baseline's stand-in for an encoded ``e``.
-
-    A deterministic hash embedding of the sidecar's API type and parameter-key
-    set: everything the script says about what the line *does*, and nothing
-    about how it says it. If the full model cannot beat this, the encoder is
-    reading no more than a taxonomy would give for free.
-    """
+    """The ``taxonomy`` baseline's stand-in for an encoded ``e``: a
+    deterministic hash embedding of the line's API type and parameter keys."""
     vector = np.zeros(e_dim, dtype=np.float32)
     features = [f"api:{line.script_api_type or ''}"]
     features += [f"param:{key}" for key in line.script_param_keys]
@@ -103,17 +82,11 @@ def taxonomy_matrix(sidecar: ProvenanceSidecar, e_dim: int) -> np.ndarray:
 
 
 def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
-    """Encode every source under the configured trees.
-
-    Idempotent: re-running rewrites the same rows from the same checkpoint. The
-    hash check runs before anything is written, so a vocabulary that moved since
-    training stops the run rather than filling the cache with vectors that mean
-    nothing.
-    """
+    """Encode every source under the configured trees; idempotent."""
     store = AbilityCacheStore(config.output_root, variant=config.variant)
     cleaned = store.clean() if config.clean else 0
 
-    # Loaded once and hash-checked before anything is written.
+    # Hash-checked before anything is written.
     loaded = load_for_inference(
         config.resolved_checkpoint(),
         vocab_path=config.vocab_path, keyword_path=config.keyword_definitions,
@@ -169,14 +142,9 @@ def read_sources(
 def encode_tree(
     runner, sources: list[tuple[Path, ProvenanceSidecar]],
 ) -> list[np.ndarray]:
-    """Each source's ``(n_lines, e_dim)`` matrix, from one encode of the tree.
-
-    A line is keyed by exactly what the encoder reads, its text and role spans,
-    so every card printing *Flying* shares one encoding, and the forward passes
-    run over the whole tree's distinct inputs in length-sorted groups rather
-    than a card at a time. A truncated text is reported under the first line
-    that printed it.
-    """
+    """Each source's ``(n_lines, e_dim)`` matrix, from one encode of the
+    tree's distinct inputs. A truncated text is reported under the first line
+    that printed it."""
     index: dict[tuple[str, tuple], int] = {}
     keys: dict[str, tuple] = {}
     rows_of: list[list[int]] = []
@@ -197,12 +165,8 @@ def encode_tree(
 
 
 def prose_of(sidecar: ProvenanceSidecar, sidecar_path: Path) -> list[str]:
-    """The converted prose lines beside a sidecar, as the trainer's join reads them.
-
-    A variant has none: the ``.txt`` beside its sidecar is the Forge source
-    script, and read as prose it would encode a script line as card text where
-    the trainer (``SidecarCache.prose_for``) encodes the variant's script.
-    """
+    """The converted prose lines beside a sidecar, as the trainer's join reads
+    them; none for a variant, whose ``.txt`` is the Forge source script."""
     from effects.domain.provenance import SourceTree
     from effects.infrastructure.sidecar_io import converted_text_path, prose_lines
 
@@ -212,11 +176,7 @@ def prose_of(sidecar: ProvenanceSidecar, sidecar_path: Path) -> list[str]:
 
 
 def build_runner(loaded: InferenceCheckpoint):
-    """The checkpoint's encoder, built once for the whole run.
-
-    Moving the weights to the device is the expensive part, and doing it per
-    card would dominate the encode.
-    """
+    """The checkpoint's encoder, built once for the whole run."""
     from effects.domain.ability_encoder import TruncationLog, log_truncation
     from effects.infrastructure.ability_encoder_runner import (
         AbilityEncoderRunner,

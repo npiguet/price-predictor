@@ -1,12 +1,7 @@
 """The converted source trees one run reads its ability texts from.
 
-``--cards-folder`` names the converted card and token trees, and
-``--variant-scripts`` the perturbed one. Every command that joins a key to its
-text, or computes the holdout, needs the same few things out of them: which
-folder holds which tree, the converted cards, a sidecar cache over every root
-and the texts the holdout is chosen from. They are read here once, so the
-holdout ``build-corpus`` splits by and the one ``holdout-cards`` depletes pools
-by come from one reading of the trees rather than one each.
+``build-corpus``'s split and ``holdout-cards``' depletion list both come from
+:meth:`ConvertedTrees.holdout`, one reading of the trees.
 """
 
 from __future__ import annotations
@@ -31,13 +26,9 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ConvertedTrees:
-    """``tree -> folder`` over the converted trees, and what is read from them.
+    """``tree -> folder`` over the converted trees (the variant tree included
+    when named), and what is read from them, lazily and once."""
 
-    The reads are lazy and kept, because the card tree is some 33,000 files
-    and a command that needs both the cards and the holdout reads it once.
-    """
-
-    #: ``tree -> folder``, the variant tree included when one was named.
     roots: Mapping[str, Path]
 
     @classmethod
@@ -83,11 +74,7 @@ class ConvertedTrees:
         return load_tree_texts(self.roots.get(SourceTree.TOKENSCRIPTS))
 
     def holdout(self, *, permille: int, max_carriers: int, unit: str) -> HeldOutCards:
-        """The trainer's holdout rule over the card tree, token scripts as carriers.
-
-        Token scripts count because a token printing a held-out text puts its
-        script in the holdout, so the games it appears in are held out too.
-        """
+        """The trainer's holdout rule over the card tree, token scripts as carriers."""
         from effects.domain.split import text_keyed_holdout
 
         return text_keyed_holdout(

@@ -1,12 +1,8 @@
 """Build a fixed training corpus and two fixed validation strata (FR-135).
 
-Two passes. The survey (:mod:`effects.application.corpus_survey`) reads every
-shard and reports what the whole corpus holds and what its training-bound
-records can supply; this module folds provenance keys to ability texts,
-decides the split and the plan (:mod:`effects.domain.corpus_plan`), and the
-write pass (:mod:`effects.application.corpus_write`) re-reads each shard and
-keeps what the decisions admit. :mod:`effects.application.corpus_report`
-assembles the manifest and the operator's report.
+Between the survey (:mod:`effects.application.corpus_survey`) and the write
+pass (:mod:`effects.application.corpus_write`), this module folds provenance
+keys to ability texts and decides the split and the plan.
 """
 
 from __future__ import annotations
@@ -94,8 +90,7 @@ class BuildCorpusConfig:
     #: ``game_disjoint_keywords`` (FR-045).
     game_disjoint_keyword_share: float = 0.15
     game_disjoint_keywords: tuple[str, ...] = DEFAULT_GAME_DISJOINT_KEYWORDS
-    #: The keyword-definitions table the tokenizer expands with; FR-015's check
-    #: reads it. None, or a path that does not exist, skips the check: nothing
+    #: Read by FR-015's check; None or a missing file skips it, since nothing
     #: can expand without a table.
     keyword_definitions: Path | None = Path("output/effects/keyword-definitions.json")
     card_disjoint_text_cap: int = 50
@@ -107,32 +102,21 @@ class BuildCorpusConfig:
     verify: bool = False
 
     def __post_init__(self) -> None:
-        """Refuse a negative count, and say what zero means for each.
+        """Refuse a negative count; zero is a real setting for each.
 
-        Zero is a real setting for all seven and means something different in
-        each, which is why it is spelled out rather than rejected along with
-        the negatives:
-
-        - ``--text-cap 0`` — no per-text cap; a text's quota in a cell is bounded
-          by ``--reuse-cap`` repeats alone.
-        - ``--card-disjoint-text-cap 0`` — no cap on the card-disjoint
-          stratum; every held-out game carrying a held-out text is admitted.
+        - ``--text-cap 0`` — no per-text cap; ``--reuse-cap`` alone bounds a
+          text's quota in a cell.
+        - ``--card-disjoint-text-cap 0`` — every held-out game carrying a
+          held-out text is admitted.
         - ``--game-disjoint-share 0`` — no game-disjoint stratum, unless the
           keyword share places some games.
         - ``--training-records 0`` — no ceiling beyond ``--text-cap``.
         - ``--shard-records 0`` — no repacking; one output shard per source
-          shard, which is what the write pass did before repacking existed
-          (``repack_shards`` reads a non-positive size this way).
-        - ``--max-events-per-record 0`` — no event-flood rule; every record's
-          event count is accepted (``quality_defect`` reads a non-positive
-          maximum this way, the same reading ``--text-cap`` gives zero). The
-          other two quality rules have no number and stay on.
-        - ``--validation-sample 0`` — no fixed validation sample; nothing is
-          written under ``validation/samples/``.
-
-        A negative is none of those and has no reading at all: it would make
-        ``min(cap, total)`` negative and ``random.sample`` raise several
-        thousand records into the build.
+          shard.
+        - ``--max-events-per-record 0`` — no event-flood rule; the other two
+          quality rules stay on.
+        - ``--validation-sample 0`` — nothing written under
+          ``validation/samples/``.
         """
         for flag, value in (
             ("--text-cap", self.text_cap),
@@ -180,11 +164,8 @@ class BuildCorpusConfig:
 
     @property
     def heap_cap(self) -> int:
-        """How many smallest hashes the survey keeps per cell and key.
-
-        ``--text-cap 0`` is no cap, so a text's quota is bounded by its repeats
-        alone and every hash may be needed.
-        """
+        """How many smallest hashes the survey keeps per cell and key; every
+        one under ``--text-cap 0``."""
         return self.text_cap if self.text_cap > 0 else sys.maxsize
 
     @property
@@ -195,16 +176,12 @@ class BuildCorpusConfig:
         )
 
 
-# ── the decisions ───────────────────────────────────────────────────────
-
-
 @dataclass(frozen=True, slots=True)
 class Decisions:
     """Everything the write pass needs and the manifest records about the plan.
 
-    The fold from acting keys to ability texts happened here, once, so the
-    plans are keyed by cell and key tuple and a worker applies them without
-    folding anything.
+    Plans are keyed by cell and key tuple, so a worker applies them without
+    folding keys to texts.
     """
 
     selection: SelectionPlan
@@ -232,14 +209,8 @@ def _text_of_keys(keys: Keys, sidecars: SidecarCache, surface: str) -> str | Non
 def _keyword_misfires(
     key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
 ) -> list[str]:
-    """Texts a display-name keyword match would expand on a non-keyword line.
-
-    FR-015: the tokenizer recognises a keyword line by the text before its
-    first colon matching a definition, and the match has to land on a line
-    whose ``script_api_type`` is ``Keyword``. One that lands anywhere else
-    would replace a script with a reminder template the line does not carry,
-    and train the encoder on it; the build refuses instead.
-    """
+    """Texts a display-name keyword match would expand on a non-keyword line
+    (FR-015), replacing a script with a reminder template it does not carry."""
     if definitions is None or not Path(definitions).exists():
         return []
     from effects.application.extract_keyword_definitions import load_keyword_definitions
@@ -286,12 +257,8 @@ def decide(
     for keys in survey.rarity.key_records:
         text = _text_of_keys(keys, sidecars, surface)
         if text is None:
-            # No sidecar line carries these keys: a runtime-only trait (level
-            # up, bestow, a trigger another card's static granted) or, outside
-            # the resolution class -- whose records acting through no text the
-            # quality rules already refused -- a script the converted corpus
-            # never held. Not a text, so it cannot be capped against one: its
-            # records are sampled with the cell's keyless records.
+            # A runtime-only trait or an unconverted script: no text to cap
+            # against, so its records are sampled with the cell's keyless ones.
             continue
         key_text[keys] = text
         text_games.setdefault(text, set()).update(survey.rarity.key_games.get(keys, ()))
@@ -327,9 +294,6 @@ def decide(
         key_text=key_text,
         mode_counts=dict(sorted(survey.mode_counts.items())),
     )
-
-
-# ── the build ───────────────────────────────────────────────────────────
 
 
 def build(config: BuildCorpusConfig) -> int:
@@ -417,11 +381,7 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
 
 
 def _converted_trees(config: BuildCorpusConfig) -> ConvertedTrees:
-    """The converted trees, the variant tree among them when one is named.
-
-    Without the variant tree every variant key resolves to no text, and a
-    resolution acting through one is refused as textless.
-    """
+    """The converted trees, the variant tree among them when one is named."""
     from effects.infrastructure.converted_trees import ConvertedTrees
 
     return ConvertedTrees.from_folders(config.cards_folders, config.variant_scripts)
@@ -539,12 +499,8 @@ def _repack_outputs(
 ) -> None:
     """Deal each stratum's parts into uniform, mixed shards, then drop the parts.
 
-    The write pass writes one part per source shard, so an output's shard
-    sizes mirror the raw corpus's -- hundreds of tiny files beside a handful
-    of huge ones -- and each part is one collection run's lifetime. The
-    trainer reads a shard at a time and takes that shard's share of an
-    epoch's steps, so uneven shards make the step budget uneven, and a shard
-    of one run's games makes its batches correlated by run.
+    A part is one source shard, so unrepacked the trainer's per-shard step
+    budget would be uneven and a shard's batches correlated by run.
     """
     import shutil
 

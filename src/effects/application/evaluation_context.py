@@ -1,9 +1,7 @@
 """What every stage of one ``evaluate-effect-model`` run reads, gathered once.
 
-The command's configuration, the main checkpoint with its verified inference
-files and curated corpus, and the variant checkpoints compared against it. Kept
-apart from the orchestration so the gate modules can name the context they are
-handed without importing the command that hands it to them.
+Kept apart from the orchestration so the gate modules can name the context
+without importing the command.
 """
 
 from __future__ import annotations
@@ -25,17 +23,12 @@ if TYPE_CHECKING:
     from effects.infrastructure.sidecar_io import SidecarCache
 
 
-# ── what every stage reads ──────────────────────────────────────────────
-
-
 @dataclass
 class EvaluationContext:
-    """What every stage of one evaluation reads, gathered once in :func:`run`.
+    """What every stage of one evaluation reads, gathered once.
 
-    The main checkpoint's weights are loaded on first use and kept: gate 1,
-    the breakdowns and gate 2 all run it, and each used to load it afresh with
-    a sidecar cache of its own. Each record set still gets a batcher of its own
-    (``LoadedModel.runnable``), since the slot widths and the active fields are
+    The main checkpoint is loaded on first use and kept; each record set still
+    gets a batcher of its own, since the slot widths and active fields are
     measured from the records it scores.
     """
 
@@ -44,7 +37,6 @@ class EvaluationContext:
     vocab_path: Path
     keyword_path: Path
     corpus_path: Path
-    #: The curated dataset's manifest, read once.
     manifest: CorpusManifest
     _main_model: LoadedModel | None = field(default=None, repr=False)
     _sidecars: SidecarCache | None = field(default=None, repr=False)
@@ -78,9 +70,6 @@ class EvaluationContext:
         )
 
 
-#: The per-card win-rate table the decodability battery reads by default;
-#: defined beside the other default paths so ``--help`` can print it without
-#: importing this module, which loads torch.
 DEFAULT_WIN_RATES = Path(default_paths.DEFAULT_WIN_RATES)
 
 
@@ -109,8 +98,8 @@ class EvaluateEffectModelConfig:
 def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:
     """``NAME=PATH`` for ``--variant-checkpoint``, ``NAME`` a baseline.
 
-    An unknown name is refused rather than carried: a misspelt ``identity``
-    would otherwise read as gate 1's "no identity checkpoint" skip.
+    An unknown name is refused: a misspelt ``identity`` would otherwise read
+    as gate 1's "no identity checkpoint" skip.
     """
     name, separator, path = value.partition("=")
     if not separator or not name.strip() or not path.strip():
@@ -126,20 +115,13 @@ def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:
     return Baseline(name.strip()), Path(path.strip())
 
 
-# ── corpus provenance (FR-147) ──────────────────────────────────────────
-
-
 class CorpusMismatchError(RuntimeError):
     """The checkpoint records no curated corpus, or it was rebuilt since."""
 
 
 def check_corpus(provenance: SplitProvenance, *, actual_digest: str) -> None:
-    """Refuse a dataset that is not the one the checkpoint read (FR-147).
-
-    A rebuild is a different split, so scoring the gates against it would score
-    them partly on games the model trained on — the failure the recorded
-    ``game_id`` sets exist to prevent, arriving through the corpus instead.
-    """
+    """Refuse a dataset that is not the one the checkpoint read (FR-147): a
+    rebuild is a different split."""
     if provenance.corpus_digest != actual_digest:
         raise CorpusMismatchError(
             f"{provenance.corpus_path} has been rebuilt since this checkpoint "
@@ -152,13 +134,9 @@ def check_corpus(provenance: SplitProvenance, *, actual_digest: str) -> None:
 def resolve_corpus_path(
     provenance: SplitProvenance, *, corpus: Path | None, checkpoint: Path,
 ) -> Path:
-    """Where to read the curated corpus ``check_corpus`` verifies.
-
-    Defaults to what the checkpoint recorded; an explicit ``--corpus``
-    overrides it. A checkpoint that records no corpus is refused: every gate
-    and breakdown reads the curated strata, and nothing else says which games
-    the checkpoint trained on.
-    """
+    """``--corpus``, else the corpus the checkpoint recorded; a checkpoint
+    recording none is refused, since nothing else says which games it
+    trained on."""
     if not provenance.corpus_digest:
         raise CorpusMismatchError(
             f"{checkpoint} records no curated corpus, so nothing says which "
@@ -169,18 +147,11 @@ def resolve_corpus_path(
     return Path(provenance.corpus_path)
 
 
-# ── loading ─────────────────────────────────────────────────────────────
-
-
 def with_corpus_defaults(
     config: EvaluateEffectModelConfig, manifest: CorpusManifest,
 ) -> EvaluateEffectModelConfig:
-    """``config`` with what it left unset taken from the corpus's manifest.
-
-    The variant-script tree: the curated corpus holds records of variant cards,
-    whose ability keys name that tree, so a run without it reads every variant
-    ability as no text at all — the same records the trainer read as text.
-    """
+    """``config`` with an unset variant-script tree taken from the manifest;
+    without it every variant ability reads as no text."""
     if config.variant_scripts is not None or not manifest.variant_scripts:
         return config
     return replace(config, variant_scripts=Path(manifest.variant_scripts))
@@ -202,8 +173,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     )
     manifest = CorpusStore(corpus_path).load()
     check_corpus(main.provenance, actual_digest=manifest.digest())
-    # Before any record is read (FR-033): the two generations read
-    # actor_player on playability records differently.
+    # Before any record is read (FR-033).
     refuse_mixed_generations(iter_shards(Path(corpus_path)))
     return EvaluationContext(
         with_corpus_defaults(config, manifest), main, vocab_path, keyword_path,

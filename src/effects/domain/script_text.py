@@ -1,13 +1,8 @@
 """The grammar of a sidecar line's ``script_text``: segments and parameters.
 
-A line's script text is the trait's whole chain (FR-002): the root segment,
-then every chained ability, joined by :data:`SEG` and each later segment
-opened by its renamed label (``SV1: DB$ Draw``). A segment is ``Key$ value``
-parameters separated by ``|``; a printed keyword converts to its bare display
-name, which has neither.
-
-Prior art: Forge's own ``FileSection.parseToMap`` splits the same way on the
-source script; this module reads the converted chain, which Forge never sees.
+A segment is ``Key$ value`` parameters separated by ``|``, split as Forge's
+``FileSection.parseToMap`` splits a source script; a printed keyword is its
+bare display name.
 """
 
 from __future__ import annotations
@@ -40,10 +35,8 @@ def root(text: str) -> str:
 def params(segment: str) -> dict[str, str]:
     """``key -> raw value`` of one segment's ``Key$ value`` parameters.
 
-    Split at the first ``$`` only, so a value carrying its own ``$``-prefix
-    (``Count$Valid Creature``) stays whole and reads as a non-literal. The
-    first occurrence of a key wins, and a part with no ``$`` is not a
-    parameter.
+    Split at the first ``$`` only, so ``Count$Valid Creature`` stays whole.
+    The first occurrence of a key wins.
     """
     found: dict[str, str] = {}
     for part in segment.split("|"):
@@ -62,11 +55,8 @@ def root_param(text: str | None, name: str) -> str | None:
 
 
 def api_of(found: dict[str, str]) -> str | None:
-    """The segment's effect API, whichever of ``SP$``/``AB$``/``DB$`` names it.
-
-    None where none does, or where the one present is empty: an empty API
-    names no effect.
-    """
+    """The segment's effect API, whichever of ``SP$``/``AB$``/``DB$`` names
+    it; None where none does or it is empty."""
     for key in _API_KEYS:
         if found.get(key):
             return found[key]
@@ -74,9 +64,6 @@ def api_of(found: dict[str, str]) -> str | None:
 
 
 def is_bare_keyword(text: str | None) -> bool:
-    """Whether ``text`` is a printed keyword's display name rather than a script.
-
-    A printed keyword converts to a line whose script text is the keyword
-    itself (White Knight's is exactly ``First Strike``), with no parameter.
-    """
+    """Whether ``text`` is a printed keyword's display name (White Knight's
+    ``First Strike``) rather than a script."""
     return bool(text) and "$" not in text and "|" not in text

@@ -1,10 +1,7 @@
 """What one ``evaluate-effect-model`` run reports: named checks and their verdicts.
 
-Every gate and every reported check produces a :class:`CheckResult`, and the
-report renders them one line each, in the order they ran. Kept in the domain
-and free of torch, because the gates, the geometry checks and the breakdowns
-all build these values, and the report scripts (``scripts/effect_gen2_report``)
-parse what :meth:`EvaluationReport.render` prints.
+The report scripts (``scripts/effect_gen2_report``) parse what
+:meth:`EvaluationReport.render` prints.
 """
 
 from __future__ import annotations
@@ -41,14 +38,8 @@ _MARKERS = {
 
 
 class CheckName(StrEnum):
-    """The report's fixed check names.
-
-    The values are what the rendered report prints and what the report scripts
-    (``scripts/effect_gen2_report``) parse, so a member is renamed freely and a
-    value never is. Breakdown lines compose their names from the stratum and
-    group, and a baseline comparison from the baseline
-    (:meth:`baseline_comparison`).
-    """
+    """The report's fixed check names. The report scripts parse the values, so
+    a member is renamed freely and a value never is."""
 
     GATE_1 = "gate-1"
     GATE_2 = "gate-2"
@@ -87,10 +78,8 @@ class CheckResult:
 class KeywordVerdict:
     """One damage-step keyword's routing verdict from gate 2. Blocks nothing.
 
-    ``qualifying_records`` counts distinct records and is what the threshold
-    reads; ``observations`` counts the (record, carrier) perturbations the
-    agreement averages, more than the records wherever one combat holds two
-    carriers of the keyword.
+    ``qualifying_records`` (distinct records) is what the threshold reads;
+    ``observations`` the (record, carrier) perturbations the agreement averages.
     """
 
     keyword: str
@@ -108,9 +97,7 @@ class KeywordVerdict:
 class Bound(StrEnum):
     """Which side of its limit a margin's value must stay on."""
 
-    #: The value must be at least the limit.
     FLOOR = "floor"
-    #: The value must be at most the limit.
     CEILING = "ceiling"
 
 
@@ -118,10 +105,8 @@ class Bound(StrEnum):
 class Margin:
     """One measured quantity a gate holds against a fixed limit.
 
-    ``key`` names the value in the report's figures line and ``label`` in its
-    prose. ``value_format`` and ``limit_format`` are format specs for the
-    rendered comparison, and ``verb`` the word, if any, that reads before the
-    value there (``explains 41.0% > 30%``).
+    ``key`` names the value in the figures line, ``label`` in the prose;
+    ``verb`` reads before the value there (``explains 41.0% > 30%``).
     """
 
     key: str
@@ -135,12 +120,8 @@ class Margin:
 
     @property
     def breached(self) -> bool:
-        """Whether the value is on the wrong side of the limit.
-
-        A margin that cannot be measured fails rather than passes: NaN compares
-        False against every limit, so without this an empty stratum or an
-        all-zero embedding would read as a gate that held.
-        """
+        """Whether the value is on the wrong side of the limit; an unmeasured
+        (NaN) margin fails rather than comparing False and passing."""
         if math.isnan(self.value):
             return True
         if self.bound is Bound.FLOOR:
@@ -163,11 +144,8 @@ class Margin:
 def gate_verdict(
     name: str, margins: Sequence[Margin], *, fail_prefix: str, pass_detail: str,
 ) -> CheckResult:
-    """A gate that holds only when every one of its margins does.
-
-    Every margin's value is reported whatever the verdict, and every breached
-    one is named, in the order given.
-    """
+    """A gate that holds only when every one of its margins does; every value
+    is reported and every breach named, in the order given."""
     values = {margin.key: margin.value for margin in margins}
     failures = [margin.failure for margin in margins if margin.breached]
     if failures:
@@ -197,21 +175,15 @@ class EvaluationReport:
 
     @property
     def ships(self) -> bool:
-        """Whether gates 1 and 3 both hold.
-
-        Only gates 1 and 3 can answer no. Gate 2 is routing information and the
-        remaining checks are diagnostics. The verdict is reported; it never
-        stops the command.
-        """
+        """Whether gates 1 and 3, the only checks that can fail, both hold.
+        Reported; it never stops the command."""
         return not self.blocking_failures
 
     def render(self) -> str:
         lines = []
         for check in self.checks:
             lines.append(f"[{check.status.marker}] {check.name}: {check.detail}")
-            # Every figure a check measured, whatever its verdict: the design
-            # record's Outcome section needs a passing margin as much as a
-            # failing one.
+            # Every figure, whatever the verdict: a passing margin is a result too.
             if check.values:
                 lines.append("       " + "  ".join(
                     f"{name}={value:+.4f}"

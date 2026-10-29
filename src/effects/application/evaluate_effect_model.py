@@ -1,26 +1,7 @@
 """``evaluate-effect-model``: the three gates and the reported checks.
 
-Two of the three gates block shipping, and they block for different reasons.
-**Gate 1** asks whether the encoder is reading text at all, by requiring the
-model to beat an ``identity`` baseline that can memorize every text it has seen
-and knows nothing about one it has not. **Gate 3** asks whether the embeddings
-have collapsed — a space where every ability sits on top of every other passes
-every average-case metric and is useless.
-
-**Gate 2 blocks nothing**, and that is deliberate: its per-keyword verdict is the
-input to a build decision, not a ship decision. A keyword whose removal does not
-move the prediction the way the rules say gets routed to a stage-three probe,
-and a run where all eight pass means that machinery never has to be written.
-
-Splits are never a flag. The held-out card list and the ``game_id`` sets come
-from ``--checkpoint``, because the corpus is append-only: recomputing the split
-against a grown corpus would score the gates partly on games the model trained
-on. A ``--variant-checkpoint`` recording a different split fails fast, since a
-baseline that saw different games is not a baseline.
-
-This module is the orchestration: each gate lives in its own module
-(``gate_one``, ``gate_two``, ``geometry_checks``), the breakdowns' report lines
-in ``breakdowns``, and the report's values in ``domain.evaluation_report``.
+The orchestration only: each gate lives in its own module (``gate_one``,
+``gate_two``, ``geometry_checks``), the breakdowns in ``breakdowns``.
 """
 
 from __future__ import annotations
@@ -45,12 +26,9 @@ from effects.domain.strata import VALIDATION_STRATA
 
 logger = logging.getLogger(__name__)
 
-# ── checks FR-116 names that were never built ───────────────────────────
-
-#: What each unbuilt check would measure. Reported on its own line, so a report
-#: lists every FR-116 check whether or not it ran, and never as a skip: the
-#: corpus holds the fork, probe and mana records these read, so a line blaming
-#: the records would send an operator after data that is already there.
+#: What each unbuilt FR-116 check would measure. Never reported as a skip: the
+#: corpus holds the records these read, so a skip would send an operator after
+#: data that is already there.
 NOT_IMPLEMENTED_CHECKS: dict[CheckName, str] = {
     CheckName.MATCHED_REAL_VS_FORK: (
         "it would compare each fork's observed outcome with the real record "
@@ -74,15 +52,9 @@ def not_implemented(name: CheckName) -> CheckResult:
     )
 
 
-# ── breakdowns (FR-064 – FR-068) ────────────────────────────────────────
-
 def breakdown_records(context: EvaluationContext) -> dict[str, list]:
-    """Both validation strata, as the curated dataset's fixed samples.
-
-    They are what best-checkpoint selection scored, and the card-disjoint
-    sample is filled round-robin over held-out texts (FR-051), so every text
-    shows up in the per-text mean.
-    """
+    """Both validation strata, as the curated dataset's fixed samples: what
+    best-checkpoint selection scored."""
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.record_io import read_shard
 
@@ -123,16 +95,8 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
     )
 
 
-# ── the command ─────────────────────────────────────────────────────────
-
-
 def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
-    """Load the checkpoints, run every check, and report.
-
-    Splits come from ``--checkpoint`` and are never recomputed; a
-    ``--variant-checkpoint`` recording a different split fails fast here, before
-    any number is produced that would look comparable and not be.
-    """
+    """Load the checkpoints, run every check, and report."""
     from effects.application.gate_two import (
         evaluate_gate_two,
         gate_two_records,
@@ -163,14 +127,8 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 
 
 def _load_cache(context: EvaluationContext, variant: str = "full"):
-    """One variant's cache, keyed on the surface the checkpoint encoded from.
-
-    One vector per unique ability text on that surface — the population gate 3
-    is defined over (FR-123) and the one every other geometry check reads —
-    over the card and token trees: the variant-script tree's perturbed scripts
-    are synthetic collection input, and the shipping cache serves the real card
-    and token lines.
-    """
+    """One variant's cache: a vector per unique text on the checkpoint's
+    surface, over the card and token trees (FR-123)."""
     from effects.application.geometry_checks import load_cache
     from effects.domain.ability_encoder import surface_of
 

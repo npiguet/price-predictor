@@ -1,8 +1,7 @@
 """What ``build-corpus`` records about a build, checks after it, and tells the operator.
 
-The manifest is assembled here from the survey, the decisions and the write
-pass's tallies, and the operator's report is read back off it, so the log and
-the file cannot disagree.
+The operator's report is read back off the manifest, so the log and the file
+cannot disagree.
 """
 
 from __future__ import annotations
@@ -28,21 +27,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 #: How much of one sampling class the quality rules may refuse before the
-#: build stops instead of writing the dataset. A class refused past this is
-#: not a dirty corpus: it is a rule that does not fit the kind, or a corpus
-#: collected against an unpatched Forge, and either way the dataset silently
-#: loses a whole class the trainer then reports as one the corpus happens not
-#: to hold. The withdrawn unattributed rule refused 98.9% of combat records
-#: exactly this way and nothing said so.
+#: build stops, rather than silently losing a whole class.
 MAX_REFUSED_SHARE = 0.5
 
-#: How many of the records read may act through a key their sidecar cannot
-#: place before the build stops. A Flashback-cast charm leaves one such record
-#: in a few million; a reconversion between collection and training leaves one
-#: on every record of every card whose lines it moved, and a dataset built
-#: through it would join the survivors to the wrong text. The build stops only
-#: past both the share and the count, so a pilot of a few hundred records does
-#: not stop on its one Flashback cast.
+#: Unjoinable-key records the build tolerates; it stops only past both, so a
+#: small pilot does not stop on its one Flashback-cast charm.
 MAX_UNJOINABLE_SHARE = 0.001
 MAX_UNJOINABLE_RECORDS = 20
 
@@ -55,31 +44,15 @@ HELD_OUT_GAME_FLOOR = 5
 #: not a full-strength source.
 _LEAK_SHARE = 0.05
 
-#: A class delivered more than this far under its target is reported as short.
-#: Keyless cells are sampled by hash rate, exact in expectation only, so a
-#: class can land a hair either side of its target with nothing wrong.
+#: A class delivered more than this far under its target is reported as short;
+#: keyless cells are sampled by hash rate, exact in expectation only.
 _DELIVERY_TOLERANCE = 0.01
 
 
 def check_refusals(written: WriteResult) -> None:
-    """Stop when the quality rules refused most of any one sampling class.
-
-    A few percent refused per class is what the rules are for. A majority is
-    one of three things, and the message names all three because the counts
-    alone do not separate them: a corpus collected against an unpatched
-    (degraded) Forge, which resolves no attribution and stamps every event
-    ``unresolved``; a rule that does not fit the kind it is being applied to;
-    or a corpus rebuilt against sidecars written before the converter claimed
-    the traits whose text its lines carry, which leaves the records acting
-    through keys the sidecar still drops. The third shows itself as
-    ``no-acting-text`` dominating the refusals, and a reconversion is the fix.
-
-    ``unjoinable-key`` refusals are judged on their own, over every record
-    read, and stop the build past both ``MAX_UNJOINABLE_SHARE`` and
-    ``MAX_UNJOINABLE_RECORDS``: they are the join failing rather than a
-    record being poor, and far fewer of them than a class majority already
-    says the sidecars describe other cards.
-    """
+    """Stop when the quality rules refused most of any one sampling class, or
+    past both unjoinable-key limits over every record read: those are the join
+    failing, not a record being poor."""
     refusals = written.refusals
     unjoinable = refusals.by_reason.get(QualityDefect.UNJOINABLE_KEY, 0)
     total_read = sum(written.training.read.values()) + sum(refusals.by_class.values())
@@ -123,13 +96,8 @@ def check_refusals(written: WriteResult) -> None:
 
 
 def check_samples(counts: Mapping[str, int], *, size: int) -> None:
-    """Stop when a stratum's validation sample came out empty.
-
-    ``--validation-sample`` is what the trainer validates on and what selects
-    the best checkpoint, so an empty one makes every epoch validate ``nan`` on
-    that stratum -- reported, if at all, as a stratum the corpus happens not
-    to hold. ``size <= 0`` asked for no sample at all, so nothing is wrong.
-    """
+    """Stop when a stratum's validation sample came out empty, unless
+    ``size <= 0`` asked for none."""
     if size <= 0:
         return
     for stratum in sorted(counts):
@@ -157,11 +125,6 @@ def report_write_pass(survey: Survey, written: WriteResult) -> None:
         100.0 * written.unattributed / kept_records if kept_records else 0.0,
     )
     if survey.refusals.by_reason != written.refusals.by_reason:
-        # Both passes run the same rule over the same shards, so they must
-        # agree. A disagreement means the two passes read different records
-        # -- a corpus appended to between them, or a rule that is not pure
-        # over the record -- and every count the manifest carries is then
-        # about a corpus that no longer exists.
         logger.warning(
             "The survey and the write pass disagree about which records are "
             "refused: survey %s, write pass %s. Both read the same shards "
@@ -190,13 +153,7 @@ def _nested(counts: Counter[tuple[str, str]]) -> dict[str, dict[str, int]]:
 def family_tables(
     decisions: Decisions, written: WriteResult,
 ) -> tuple[dict[str, dict[str, dict[str, int]]], dict[str, dict[str, dict[str, int]]]]:
-    """The manifest's per-family and per-signature tables (FR-053).
-
-    ``share`` is the family's equal split of its class budget, ``planned``
-    what the plan asked of it, ``written`` and ``repeats`` what the write pass
-    actually wrote, and ``shortfall`` the gap between share and written that
-    the coverage and variant collectors exist to close.
-    """
+    """The manifest's per-family and per-signature tables (FR-053)."""
     families: dict[str, dict[str, dict[str, int]]] = {}
     for klass, per_family in decisions.selection.families.items():
         for label, row in per_family.items():
@@ -282,8 +239,7 @@ def build_manifest(
         rarity=decisions.rarity,
         sources=survey.shards,
         per_class=per_class,
-        # Every stratum is counted; unique texts only for the outputs, since
-        # the two dropped strata write nothing (FR-143, FR-145).
+        # The two dropped strata write nothing, so have no unique texts.
         per_stratum={name: strata.records.get(name, 0) for name in Stratum},
         unique_texts={
             name: _unique_texts(strata.keys.get(name, ()), decisions.key_text)
@@ -292,9 +248,7 @@ def build_manifest(
         shortfall=decisions.selection.shortfall,
         class_targets=dict(decisions.selection.targets),
         quality_dropped=dict(written.refusals.by_reason),
-        # The hundred worst scripts, not all of them: every permanent carries
-        # the implicit spell the textless refusal is mostly about, and the
-        # manifest is read by people.
+        # The hundred worst: every permanent carries the implicit spell.
         no_acting_text_scripts=dict(written.refusals.textless_scripts.most_common(100)),
         games_by_source=survey.games_by_source,
         held_out_games_by_source=survey.held_out_games_by_source,

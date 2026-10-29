@@ -1,10 +1,7 @@
 """The text an ability is encoded from, resolved once per key.
 
-One definition of the key-to-text join, because every consumer has to agree on
-it exactly: ``build-corpus`` keys its rarity table and its per-text caps on it,
-the trainer weights records by it, and the batcher encodes it. Two spellings
-that disagree miss every lookup, and the model then trains on a zero vector
-while every number it reports still moves.
+The one definition of the key-to-text join: ``build-corpus``, the trainer's
+weighting and the batcher must agree on it exactly, or every lookup misses.
 """
 
 from __future__ import annotations
@@ -27,12 +24,9 @@ def resolve_key(key, sidecars, surface: str) -> tuple[str | None, object]:
     """``(text, line)`` for one provenance key on ``surface``; ``(None, None)``
     where the key names no line.
 
-    Falls back to the key itself where the sidecar carries neither surface, so
-    a line that cannot be read is still a distinct unit for rarity weighting
-    rather than collapsing into every other unreadable line.
-
-    A key the sidecar does not describe raises ``KeyError``: that is the
-    contract's fail-loudly case, and reading it as no text is what hid it.
+    A line with neither surface falls back to the key itself, so it stays a
+    distinct unit for rarity weighting. A key the sidecar does not describe
+    raises ``KeyError`` (the contract's fail-loudly case).
     """
     try:
         line = sidecars.line_for(key)
@@ -53,12 +47,8 @@ def text_for_key(key, sidecars, surface: str) -> str | None:
 
 
 def known_texts(roots: Mapping[str, Path], surface: str) -> list[str]:
-    """Every distinct text a line under ``roots`` encodes as on ``surface``, sorted.
-
-    Each line resolved through :func:`resolve_key` by its own first key, so a
-    text is spelled exactly as every training batch will look it up. ``roots``
-    maps a tree name to its folder, as ``sidecar_roots`` builds it.
-    """
+    """Every distinct text a line under ``roots`` (tree name -> folder) encodes
+    as on ``surface``, sorted, spelled as a training batch looks it up."""
     sidecars = SidecarCache(roots)
     texts: set[str] = set()
     for tree, root in roots.items():
@@ -76,14 +66,8 @@ def known_texts(roots: Mapping[str, Path], surface: str) -> list[str]:
 class KeyResolver:
     """:func:`resolve_key` and a charm's option keys, memoised for a run.
 
-    ``SidecarCache`` already reads each card once, but a key is still resolved
-    several times per step — once for the batch's texts and again for every
-    record its entity appears in — and every step meets the same few thousand
-    cards. The answer depends only on the key, the sidecars and the surface,
-    all fixed for the resolver's life, so it is computed once per run.
-
-    A ``KeyError`` is deliberately not cached: a failure remembered as "no
-    text" is exactly the fail-loudly case going quiet.
+    A ``KeyError`` is deliberately not cached: remembered as "no text", the
+    fail-loudly case would go quiet.
     """
 
     def __init__(self, sidecars, surface: str) -> None:
@@ -106,11 +90,8 @@ class KeyResolver:
         return self.resolve(key)[0]
 
     def acting_text(self, record: EffectRecord) -> str | None:
-        """The acting line's text, or None where no line acts.
-
-        ``combat`` and the ``attackers``/``blockers`` subkinds have none, which
-        is what makes them sample uniformly rather than by rarity.
-        """
+        """The acting line's text, or None where no line acts (``combat``,
+        ``attackers``, ``blockers``), which samples uniformly."""
         for key in acting_keys(record):
             text = self.text_of(key)
             if text is not None:
@@ -122,11 +103,8 @@ class KeyResolver:
         return list(self._keys_by_text.get(text, ()))
 
     def options_for(self, key) -> tuple:
-        """The keys of the charm-mode lines that follow ``key``'s line (FR-063a).
-
-        Empty for every line that is not a charm's root, and for a sidecar
-        source that cannot say (a stub, an unconverted script).
-        """
+        """The keys of the charm-mode lines that follow ``key``'s line (FR-063a);
+        empty for a non-root line or a sidecar source that cannot say."""
         cached = self._options.get(key)
         if cached is not None:
             return cached

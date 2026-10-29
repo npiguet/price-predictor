@@ -39,6 +39,10 @@ _COST_PART_RE = re.compile(r"\w+<[^>]*>|\S+")
 _MANA_SHARD_RE = re.compile(r"^(\d+|[XYZ]|[WUBRGCS](/[WUBRGCP2])*|2/[WUBRG])$")
 
 _COLORS = {"white", "blue", "black", "red", "green", "colorless"}
+#: The type words a keyword's details are lower-cased as, after Forge's
+#: ``CardType.isACardType``. Deliberately not the effect head's ``CARD_TYPES``:
+#: that is an input vocabulary frozen in its column order, with ``emblem`` and
+#: without ``tribal``, and a change to either list must not move the other.
 _CARD_TYPES = {
     "artifact", "battle", "creature", "enchantment", "instant", "kindred",
     "land", "planeswalker", "sorcery", "tribal",

@@ -1,8 +1,4 @@
-"""Reading the converted card trees and the MTGJSON printings dump.
-
-File I/O shared by ``build-corpus``, ``collect-coverage``, ``collect-variants``,
-``train-effect-model`` and the CLI.
-"""
+"""Reading the converted card trees and the MTGJSON printings dump."""
 
 from __future__ import annotations
 
@@ -20,12 +16,8 @@ logger = logging.getLogger(__name__)
 def load_card_texts(
     card_files: Mapping[str, str], sidecars: SidecarCache,
 ) -> dict[str, list[str]]:
-    """``card name -> the script texts of its sidecar's lines``.
-
-    The I/O half of the holdout, kept apart from the selection so the rule can
-    be exercised without a converted tree on disk. A card converted without a
-    sidecar carries no text to hold out; it is skipped and counted.
-    """
+    """``card name -> the script texts of its sidecar's lines``; a card with
+    no sidecar is skipped and counted."""
     out: dict[str, list[str]] = {}
     skipped = 0
     for name, script_file in card_files.items():
@@ -53,10 +45,8 @@ class ConvertedCard:
 def load_converted_cards(cards_folder: Path) -> dict[str, ConvertedCard]:
     """``card name -> its converted file`` for one converted tree.
 
-    Names come from each file's ``name:`` line, which is authoritative — the
-    filename is a sanitized derivative and several cards share a stem. The
-    text rides along because the name is read out of it anyway, and a caller
-    that wants both would otherwise read some 33,000 files twice.
+    Names come from each file's ``name:`` line: several cards share a
+    filename stem.
     """
     from price_predictor.domain.tokenizer import extract_card_name
 
@@ -84,11 +74,8 @@ def load_card_files(cards_folder: Path) -> dict[str, str]:
 
 
 def load_first_printings(printings_path: Path) -> dict[str, str]:
-    """``card name -> earliest release date`` from an MTGJSON dump.
-
-    Faces are indexed under their own names as well as the combined one, so a
-    record naming either resolves.
-    """
+    """``card name -> earliest release date`` from an MTGJSON dump, faces
+    indexed under their own names as well as the combined one."""
     import json
 
     data = json.loads(Path(printings_path).read_text(encoding="utf-8"))

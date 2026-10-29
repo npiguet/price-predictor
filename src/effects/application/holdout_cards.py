@@ -1,15 +1,8 @@
 """``holdout-cards``: the depletion list ``generate-pools --exclude-cards`` reads.
 
-The one coupling between the two halves of a depleted collection run, and it is
-a plain file of card names rather than an import: `sealed` must not depend on
-`effects` (FR-132).
-
-The list and the trainer's split have to name the same cards. They are two
-programs run hours apart, and a disagreement is silent — pools depleted of one
-set while the split holds out another means held-out cards reach training games
-and the card-disjoint stratum holds games that are not disjoint. So this command
-and ``build-corpus`` both go through ``ConvertedTrees.holdout`` rather than
-reimplementing the rule.
+A plain file rather than an import, because `sealed` must not depend on
+`effects` (FR-132). It goes through ``ConvertedTrees.holdout`` like
+``build-corpus``, so the list and the split cannot silently disagree.
 """
 
 from __future__ import annotations
@@ -65,9 +58,7 @@ class HoldoutReport:
 def run(config: HoldoutCardsConfig) -> HoldoutReport:
     """Choose the holdout over the converted trees and write its cards to ``out``.
 
-    Raises:
-        HoldoutCardsError: If no card tree among ``cards_folders`` holds a
-            converted card.
+    Raises ``HoldoutCardsError`` when no tree holds a converted card.
     """
     from effects.infrastructure.card_sources import load_first_printings
     from effects.infrastructure.converted_trees import ConvertedTrees
@@ -107,17 +98,10 @@ def holdout_report(
 ) -> HoldoutReport:
     """The depletion list with its held-out template, text and card counts.
 
-    Args:
-        canonical_names: any mapping keyed by printed card name — the
-            first-printing table serves — used to resolve the converted tree's
-            lowercase spelling back to the one Forge prints. A name it does not
-            know keeps the converted spelling; every comparison folds case, so
-            an unresolved name still depletes.
-
-    The list is in printed case because this file crosses into another package
-    and into Forge: an operator reads it, and ``getName()`` is what it is
-    matched against. Sorted because the file is compared between runs, and one
-    that reordered would read as a changed holdout when nothing had changed.
+    ``canonical_names`` (keyed by printed name) restores Forge's printed case
+    for an operator to read; an unknown name keeps the lowercase, which still
+    depletes since every comparison folds case. Sorted so an unchanged holdout
+    writes an unchanged file.
     """
     from effects.domain.card_names import fold_card_name
     from effects.domain.text_holdout import holdout_key

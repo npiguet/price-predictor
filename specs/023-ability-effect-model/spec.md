@@ -234,9 +234,9 @@ loss.
   - from `sealed.domain`: `manabase.compute_basic_lands`;
   - from `sealed.infrastructure`: `ConvertedCardLocator`,
     `MatchWorkerConnector` (the effects collectors spawn the same Java worker main, so
-    rebuilding its system-property mapping here would be a second place for it to drift);
-  - from `sealed.application`: nothing. `train-scorer` Phase A is re-run as a subprocess, not
-    imported, so the two application layers stay disjoint.
+    rebuilding its system-property mapping here would be a second place for it to drift), and
+    `pool_file_reader.format_generated_deck` (the generated-decks line the collectors write);
+  - from `sealed.application`: nothing, so the two application layers stay disjoint.
 - **FR-003**: Java collectors, the `MatchWorkerMain` instrumentation behind `--effect-records`, and
   `KeywordDefinitionMain` MUST live in `forge-connector`.
 - **FR-004**: The engine hooks MUST live as commits on a branch of the sibling `../forge` checkout,
