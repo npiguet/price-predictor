@@ -13,6 +13,7 @@ from collections import Counter
 
 import pytest
 
+from effects.domain.rarity import TextGames
 from effects.domain.records import (
     Moment,
     PlayabilitySubkind,
@@ -24,7 +25,6 @@ from effects.domain.sampling import (
     SAMPLING_CLASSES,
     SamplingClass,
     batches_without_replacement,
-    effective_games,
     parse_kind_mix,
     rarity_weights,
     sample_weights,
@@ -105,18 +105,6 @@ class TestRarityWeighting:
     def test_an_empty_corpus_weighs_nothing(self):
         assert rarity_weights({}) == {}
 
-    def test_effective_games_counts_distinct_games_not_records(self):
-        """One long game producing many records is still one game."""
-        records = [
-            make_record(RecordKind.COMBAT, game_id="g1", record_id=f"g1.{i}")
-            for i in range(50)
-        ] + [make_record(RecordKind.COMBAT, game_id="g2")]
-        assert effective_games(records, lambda r: "bolt") == {"bolt": 2}
-
-    def test_a_record_with_no_text_is_not_counted(self):
-        records = [make_record(RecordKind.COMBAT)]
-        assert effective_games(records, lambda r: None) == {}
-
 
 class TestUniformClasses:
     def test_combat_and_playability_legality_have_no_acting_line(self):
@@ -171,8 +159,11 @@ class TestSampleWeightsRarityTable:
         texts = {"r1": "t", "r2": "u"}
         # The resident shard shows one game of each; corpus-wide ``t`` was in
         # a hundred, so within the class it now weighs less than ``u``.
+        def text_of(record):
+            return texts[record.record_id]
+
         corpus_wide = sample_weights(
-            records, lambda r: texts[r.record_id], rarity={"t": 100, "u": 1},
+            records, text_of, games=TextGames.of(records, text_of, {"t": 100, "u": 1}),
         )
         shard_only = sample_weights(records, lambda r: texts[r.record_id])
         assert corpus_wide[0] < corpus_wide[1]
@@ -181,7 +172,8 @@ class TestSampleWeightsRarityTable:
     def test_a_text_the_table_does_not_name_falls_back_to_the_shard(self):
         """A shard collected after the dataset was built still weights sanely."""
         records = [make_record(RecordKind.COMBAT, game_id="g1", record_id="r1")]
-        assert sample_weights(records, lambda r: "new", rarity={"t": 100}) == (
+        table = TextGames.of(records, lambda r: "new", {"t": 100})
+        assert sample_weights(records, lambda r: "new", games=table) == (
             sample_weights(records, lambda r: "new")
         )
 
@@ -228,7 +220,8 @@ class TestWeightsKeyByAbilityText:
         preparer.resolver = KeyResolver(sidecars, preparer.surface)
 
         shard = [*common_records, *rare_records]
-        weights = preparer._weighted(shard, preparer._texts(shard))
+        texts = preparer._texts(shard)
+        weights = preparer._weighted(shard, texts, preparer._games(shard, texts))
 
         assert weights[-1] > weights[0]
 
@@ -357,9 +350,13 @@ class TestRarityWeightsWithinAClass:
         ]
         texts = {f"r{i}": ("rare" if i == 0 else "common") for i in range(6)}
         records = [*resolutions, *combats]
+        def text_of(record):
+            return texts.get(record.record_id)
+
         weights = sample_weights(
-            records, lambda r: texts.get(r.record_id),
-            rarity={"rare": 1, "common": 100}, class_of=sampling_class,
+            records, text_of,
+            games=TextGames.of(records, text_of, {"rare": 1, "common": 100}),
+            class_of=sampling_class,
         )
         resolution_weights = weights[:6]
         assert sum(resolution_weights) / 6 == pytest.approx(1.0)

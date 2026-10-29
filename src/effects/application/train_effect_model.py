@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import random
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -315,14 +315,6 @@ def require_matching_surface(
             "curated dataset exists to stop. Pass the vocabulary the manifest "
             "records, or rebuild the dataset against this one."
         )
-
-
-def rarity_coverage(
-    texts: Iterable[str | None], rarity: Mapping[str, int],
-) -> tuple[int, int]:
-    """``(named, distinct)``: how many distinct ability texts the table names."""
-    distinct = {text for text in texts if text is not None}
-    return sum(1 for text in distinct if text in rarity), len(distinct)
 
 
 # Hardcoded, not flags (FR-095).

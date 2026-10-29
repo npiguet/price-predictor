@@ -402,31 +402,6 @@ class TestCorpusSurface:
         )
 
 
-class TestRarityCoverage:
-    """How much of a shard the rarity table actually names.
-
-    Reported once per run because a table that matches nothing is invisible
-    otherwise: every weight silently falls back to the resident shard's count,
-    and the run looks exactly like a healthy one.
-    """
-
-    def test_it_counts_distinct_texts_rather_than_records(self) -> None:
-        from effects.application.train_effect_model import rarity_coverage
-
-        texts = ["a", "a", "a", "b", None, None]
-        assert rarity_coverage(texts, {"a": 3}) == (1, 2)
-
-    def test_a_table_naming_nothing_reads_as_zero_of_the_texts_present(self) -> None:
-        from effects.application.train_effect_model import rarity_coverage
-
-        assert rarity_coverage(["a", "b"], {"other": 1}) == (0, 2)
-
-    def test_a_shard_with_no_acting_text_at_all_looks_up_nothing(self) -> None:
-        from effects.application.train_effect_model import rarity_coverage
-
-        assert rarity_coverage([None, None], {"a": 1}) == (0, 0)
-
-
 class TestEmptyHoldoutIsAnExitCodeNotATraceback:
     """An empty card-disjoint stratum is a corpus problem, not a crash.
 

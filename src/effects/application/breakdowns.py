@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from effects.domain.evaluation_report import CheckName, CheckResult, CheckStatus
 from effects.domain.keyword_names import normalize_keyword
-from effects.domain.rarity import RARITY_BUCKETS, rarity_bucket
+from effects.domain.rarity import RARITY_BUCKETS, TextGames
 from effects.domain.records import LEGALITY_SUBKINDS, LegalityDecision
 from effects.domain.strata import Stratum
 
@@ -137,17 +137,8 @@ def by_rarity_bucket(
     to the games the scored records themselves span.
     """
     rows = [r for r in results if r.text is not None]
-    seen: dict[str, set[str]] = defaultdict(set)
-    for result in rows:
-        seen[result.text].add(result.game_id)
-
-    def bucket(result: RecordResult) -> str:
-        games = games_by_text.get(result.text)
-        if games is None:
-            games = len(seen[result.text])
-        return rarity_bucket(games)
-
-    grouped = _group(rows, bucket)
+    games = TextGames.of(rows, lambda result: result.text, games_by_text)
+    grouped = _group(rows, lambda result: games.bucket(result.text))
     return {name: grouped[name] for name in RARITY_BUCKETS if name in grouped}
 
 

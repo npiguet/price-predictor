@@ -228,7 +228,8 @@ class TestEpochShares:
 
     def test_every_record_gets_a_bucket_and_a_family(self, records, tmp_path):
         preparer = _fixture_preparer(tmp_path)
-        labels = preparer._shard_labels(records, preparer._texts(records))
+        texts = preparer._texts(records)
+        labels = preparer._shard_labels(records, texts, preparer._games(records, texts))
         assert set(labels) == {r.record_id for r in records}
         buckets = {bucket for bucket, _ in labels.values()}
         assert buckets <= {*RARITY_BUCKETS, NO_TEXT_BUCKET}
@@ -243,7 +244,8 @@ class TestEpochShares:
             and preparer.resolver.acting_text(r) is not None
         )
         preparer.rarity = {preparer.resolver.acting_text(record): 50}
-        labels = preparer._shard_labels([record], preparer._texts([record]))
+        texts = preparer._texts([record])
+        labels = preparer._shard_labels([record], texts, preparer._games([record], texts))
         assert labels[record.record_id][0] == "20+"
 
     def test_shares_are_reported_in_bucket_order(self):

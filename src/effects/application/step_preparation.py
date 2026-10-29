@@ -22,10 +22,7 @@ from effects.application.surface_batching import (
     SurfaceBatcher,
 )
 from effects.application.text_staging import MaskedTokens, TextStager, pinned
-from effects.application.train_effect_model import (
-    TrainEffectModelConfig,
-    rarity_coverage,
-)
+from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.domain.ability_encoder import TruncationLog, surface_of
 from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
 from effects.domain.aux_heads import TRAINING_HEADS, Head
@@ -42,12 +39,11 @@ from effects.domain.effect_targets import (
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.provenance import SidecarLine
-from effects.domain.rarity import rarity_bucket
+from effects.domain.rarity import TextGames
 from effects.domain.records import EffectRecord
 from effects.domain.rule_families import rule_family
 from effects.domain.sampling import (
     batches_without_replacement,
-    effective_games,
     sample_weights,
     sampling_class,
 )
@@ -423,30 +419,29 @@ class StepPreparer:
             record.record_id: self.resolver.acting_text(record) for record in records
         }
 
+    def _games(self, records: list, texts: Mapping[str, str | None]) -> TextGames:
+        """Each text's games for a shard's records: the manifest's corpus-wide
+        table (FR-086), else the shard's own count."""
+        return TextGames.of(records, lambda record: texts[record.record_id], self.rarity)
+
     def _weighted(
-        self, records: list, texts: Mapping[str, str | None],
+        self, records: list, texts: Mapping[str, str | None], games: TextGames,
     ) -> list[float]:
-        """Rarity weights for a shard's records, from the manifest's table (FR-086)."""
+        """Rarity weights for a shard's records."""
         return sample_weights(
             records, lambda record: texts[record.record_id],
-            rarity=self.rarity, class_of=sampling_class,
+            games=games, class_of=sampling_class,
         )
 
     def _shard_labels(
-        self, records: list, texts: Mapping[str, str | None],
+        self, records: list, texts: Mapping[str, str | None], games: TextGames,
     ) -> dict[str, tuple[str, str]]:
         """``record_id -> (rarity bucket, rule family)`` for one shard's
-        records; the bucket falls back to the shard's own game count as the
-        weights do."""
-        own_games = effective_games(records, lambda r: texts[r.record_id])
+        records, bucketed by the games the weights read."""
         labels: dict[str, tuple[str, str]] = {}
         for record in records:
             text = texts[record.record_id]
-            if text is None:
-                bucket = NO_TEXT_BUCKET
-            else:
-                games = (self.rarity or {}).get(text, own_games.get(text, 1))
-                bucket = rarity_bucket(games)
+            bucket = NO_TEXT_BUCKET if text is None else games.bucket(text)
             labels[record.record_id] = (
                 bucket, rule_family(
                     record, self.sidecars, resolver=self._keywords,
@@ -463,17 +458,15 @@ class StepPreparer:
         excluded = self.split.validation_games
         training = [r for r in records if r.game_id not in excluded]
         texts = self._texts(training)
+        games = self._games(training, texts)
         yield ShardOpened(
             trainable=len(training), held_back=len(records) - len(training),
-            rarity_coverage=(
-                rarity_coverage(texts.values(), self.rarity)
-                if self.rarity is not None else None
-            ),
+            rarity_coverage=games.coverage(),
         )
         if not training:
             return
-        weights = self._weighted(training, texts)
-        labels = self._shard_labels(training, texts)
+        weights = self._weighted(training, texts, games)
+        labels = self._shard_labels(training, texts, games)
         del texts
         batches = batches_without_replacement(
             training, weights, batch_size=self.config.batch_size,
