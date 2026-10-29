@@ -1546,8 +1546,8 @@ class TestPredict:
         seen = {}
 
         class Model:
-            def __call__(self, **inputs):
-                seen.update(inputs)
+            def __call__(self, inputs):
+                seen["inputs"] = inputs
                 return "hidden"
 
             def per_entity(self, hidden):
@@ -1563,7 +1563,7 @@ class TestPredict:
 
         rows = common.predict(probe_model, ["r0", "r1"], lambda o, v, s, r: (o, v, s, r))
 
-        assert seen == {"x": 1}
+        assert seen == {"inputs": {"x": 1}}
         assert rows == [
             ("per-entity of hidden", "verdict of hidden", "s0", 0),
             ("per-entity of hidden", "verdict of hidden", "s1", 1),

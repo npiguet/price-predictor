@@ -20,7 +20,6 @@ from effects.application.evaluation_context import EvaluationContext
 from effects.domain.ability_encoder import surface_of
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, HeadField
 from effects.domain.effect_losses import magnitude_target
-from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.evaluation_report import (
     Bound,
@@ -45,7 +44,7 @@ from effects.domain.head_decoding import (
 )
 from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import RecordKind, acting_keys
-from effects.domain.surface_collation import entity_target_tensors, gather_entities
+from effects.domain.surface_collation import per_entity_targets
 from effects.infrastructure.corpus_store import (
     CorpusStore,
     card_disjoint_resolutions,
@@ -130,15 +129,8 @@ def measure(records, runnable: Runnable) -> GateOneMetrics:
 def _forward(chunk, runnable: Runnable) -> tuple[torch.Tensor, EntityTargetBatch]:
     """``(gathered, targets)`` for one chunk, on the host, ``gathered``
     aligned column for column with the targets."""
-    model = runnable.model
-    batch, surfaces, _encoded = runnable.batcher.build(chunk, runnable.encoder)
-    outputs = model.per_entity(model(**batch))
-    targets = [derive_targets(record) for record in chunk]
-    batch_targets = entity_target_tensors(surfaces, targets, runnable.fields)
-    gathered = gather_entities(
-        outputs, batch_targets.index.to(outputs.device),
-    ).float().cpu()
-    return gathered, batch_targets
+    gathered, surfaces = runnable.per_entity_outputs(chunk)
+    return gathered, per_entity_targets(chunk, surfaces, runnable.fields)
 
 
 class MarginAccumulator:

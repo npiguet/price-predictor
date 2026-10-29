@@ -38,6 +38,7 @@ from effects.domain.effect_head_input import InputLayout, feature_widths
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
+from effects.domain.surface_collation import entity_index
 from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 from effects.infrastructure.torch_device import default_device
@@ -92,6 +93,17 @@ class Runnable:
         with torch.inference_mode():
             for chunk in batched(items, size):
                 yield list(chunk)
+
+    def per_entity_outputs(self, records, strips=None) -> tuple[torch.Tensor, list]:
+        """``(outputs, surfaces)``: the per-entity head at each record's
+        ``[CARD]`` and ``[PLAYER]`` slots, ``(records, entities, width)`` on
+        the host in each surface's ``entity_slots`` order, and the surfaces
+        built. ``strips`` is gate 2's per-record perturbation
+        (:meth:`SurfaceBatcher.build`)."""
+        batch, surfaces, _encoded = self.batcher.build(records, self.encoder, strips)
+        hidden = self.model(batch)
+        index = entity_index(surfaces).to(hidden.device)
+        return self.model.per_entity_at(hidden, index).float().cpu(), surfaces
 
     def keyword_resolver(self) -> KeywordResolver:
         """A resolver over the batcher's own sidecar cache, never a second

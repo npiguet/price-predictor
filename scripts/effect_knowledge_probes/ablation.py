@@ -23,7 +23,7 @@ Nothing here does work at import time.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -109,9 +109,7 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
     """
     import torch
 
-    from effects.domain.effect_losses import per_entity_loss
-    from effects.domain.effect_targets import derive_targets
-    from effects.domain.surface_collation import entity_target_tensors
+    from effects.domain.surface_collation import per_entity_targets
 
     model, encoder, batcher = probe_model.model, probe_model.encoder, probe_model.batcher
     fields = probe_model.fields
@@ -119,44 +117,35 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
     totals: dict[tuple, float] = defaultdict(float)
     count = 0
 
-    def losses(batch, surfaces, targets, e_vectors) -> dict[str, float]:
-        hidden = model(**{**batch, "e_vectors": e_vectors})
-        outputs = model.per_entity(hidden)
-        batch_targets = entity_target_tensors(surfaces, targets, fields)
-        index = batch_targets.index.to(outputs.device)
-        gathered = outputs.gather(1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
-        _total, parts = per_entity_loss(
-            gathered.float(), batch_targets.fields_on(gathered.device),
-            fields=fields, report_parts=True,
-        )
-        return parts.as_dict()
+    def losses(batch, targets, e_vectors) -> dict[str, float]:
+        return entity_loss_parts(model, replace(batch, e_vectors=e_vectors), targets, fields)
 
     with torch.no_grad():
         for start in range(0, len(records), batch_size):
             chunk = records[start : start + batch_size]
             batch, surfaces, encoded = batcher.build(chunk, encoder)
-            targets = [derive_targets(record) for record in chunk]
-            base = losses(batch, surfaces, targets, batch["e_vectors"])
+            targets = per_entity_targets(chunk, surfaces, fields)
+            base = losses(batch, targets, batch.e_vectors)
             for name, value in base.items():
                 totals[(name, "base", "")] += value * len(chunk)
             if encoded.matrix is not None:
-                rows = torch.full(batch["e_vectors"].shape[:2], -1, dtype=torch.long)
+                rows = torch.full(batch.e_vectors.shape[:2], -1, dtype=torch.long)
                 for b, surface in enumerate(surfaces):
                     for s, slot in enumerate(surface.slots):
                         if isinstance(slot.e, int):
                             rows[b, s] = slot.e
-                rows = rows.to(batch["e_vectors"].device)
+                rows = rows.to(batch.e_vectors.device)
                 has_row = rows >= 0
                 for replacement in REPLACEMENTS:
                     substitute = torch.tensor(replacement_vectors(
                         stats, encoded.texts, encoded.lines, encoded.matrix,
                         replacement, rng,
-                    ), device=batch["e_vectors"].device, dtype=batch["e_vectors"].dtype)
+                    ), device=batch.e_vectors.device, dtype=batch.e_vectors.dtype)
                     for scope in SCOPES:
-                        chosen = scope_mask(batch["slot_kinds"], scope) & has_row
-                        e_vectors = batch["e_vectors"].clone()
+                        chosen = scope_mask(batch.slot_kinds, scope) & has_row
+                        e_vectors = batch.e_vectors.clone()
                         e_vectors[chosen] = substitute[rows[chosen]]
-                        for name, value in losses(batch, surfaces, targets, e_vectors).items():
+                        for name, value in losses(batch, targets, e_vectors).items():
                             totals[(name, replacement, scope)] += value * len(chunk)
             count += len(chunk)
     out: dict[str, dict] = {}
@@ -174,6 +163,18 @@ def run_ablation(probe_model, records: list, stats: CacheStatistics, *,
     return out
 
 
+def entity_loss_parts(model, batch, targets, fields) -> dict[str, float]:
+    """The per-entity loss's terms when ``model`` reads one built ``batch``."""
+    from effects.domain.effect_losses import per_entity_loss
+
+    hidden = model(batch)
+    gathered = model.per_entity_at(hidden, targets.index.to(hidden.device)).float()
+    _total, parts = per_entity_loss(
+        gathered, targets.fields_on(gathered.device), fields=fields, report_parts=True,
+    )
+    return parts.as_dict()
+
+
 def field_losses(model, probe_model, records: list, *, batch_size: int = 32) -> dict:
     """Each per-entity field's mean loss when ``model`` reads ``records``.
 
@@ -182,9 +183,7 @@ def field_losses(model, probe_model, records: list, *, batch_size: int = 32) -> 
     """
     import torch
 
-    from effects.domain.effect_losses import per_entity_loss
-    from effects.domain.effect_targets import derive_targets
-    from effects.domain.surface_collation import entity_target_tensors
+    from effects.domain.surface_collation import per_entity_targets
 
     totals: dict[str, float] = defaultdict(float)
     count = 0
@@ -192,17 +191,9 @@ def field_losses(model, probe_model, records: list, *, batch_size: int = 32) -> 
         for start in range(0, len(records), batch_size):
             chunk = records[start : start + batch_size]
             batch, surfaces, _encoded = probe_model.batcher.build(chunk, probe_model.encoder)
-            outputs = model.per_entity(model(**batch))
-            targets = [derive_targets(record) for record in chunk]
-            batch_targets = entity_target_tensors(surfaces, targets, probe_model.fields)
-            index = batch_targets.index.to(outputs.device)
-            gathered = outputs.gather(
-                1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1])).float()
-            _total, parts = per_entity_loss(
-                gathered, batch_targets.fields_on(gathered.device),
-                fields=probe_model.fields, report_parts=True,
-            )
-            for name, value in parts.as_dict().items():
+            targets = per_entity_targets(chunk, surfaces, probe_model.fields)
+            parts = entity_loss_parts(model, batch, targets, probe_model.fields)
+            for name, value in parts.items():
                 totals[name] += value * len(chunk)
             count += len(chunk)
     return {name: value / max(count, 1) for name, value in totals.items()}

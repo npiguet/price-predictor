@@ -229,9 +229,7 @@ def _score_chunk(
         {participant.carrier.id: frozenset({row.keyword})}
         for _record, row, participant in chunk
     ]
-    model = runnable.model
-    batch, surfaces, _encoded = runnable.batcher.build(built, runnable.encoder, strips)
-    outputs = model.per_entity(model(**batch)).cpu()
+    outputs, surfaces = runnable.per_entity_outputs(built, strips)
 
     for offset, (record, row, participant) in enumerate(chunk):
         twin = len(chunk) + offset
@@ -248,7 +246,8 @@ def _subject_vectors(
     surface, outputs: torch.Tensor, row: DamageStepKeyword,
     participant: CombatParticipant,
 ) -> dict[str, torch.Tensor]:
-    """The head's output row for each subject this row reads.
+    """The head's output row for each subject this row reads; ``outputs`` is
+    the surface's, one row per entity slot.
 
     Per surface, because dropping the keyword's ability token shifts every
     slot after it.
@@ -259,11 +258,10 @@ def _subject_vectors(
         ) if subject is not None
     }
     found: dict[str, torch.Tensor] = {}
-    for index in surface.entity_slots:
-        slot = surface.slots[index]
-        key = slot.entity_id or slot.player_id
+    for column, index in enumerate(surface.entity_slots):
+        key = surface.slots[index].subject_id
         if key in wanted:
-            found[key] = outputs[index]
+            found[key] = outputs[column]
     return found
 
 

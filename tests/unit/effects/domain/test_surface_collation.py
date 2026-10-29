@@ -107,16 +107,15 @@ class TestCollateSurfaces:
     def _assert_same(self, surfaces, *, e_dim, widths):
         got = collate_surfaces(surfaces, e_dim=e_dim, widths=widths)
         want = self._collate_reference(surfaces, e_dim=e_dim, widths=widths)
-        assert got.keys() == want.keys()
-        assert got["slot_features"].keys() == want["slot_features"].keys()
+        assert got.slot_features.keys() == want["slot_features"].keys()
         for kind, tensor in want["slot_features"].items():
-            mine = got["slot_features"][kind]
+            mine = got.slot_features[kind]
             assert mine.dtype == tensor.dtype
             assert torch.equal(mine, tensor)
         for name in ("slot_kinds", "positions", "e_vectors", "e_rows",
                      "attention_mask", "option_kinds"):
-            assert got[name].dtype == want[name].dtype, name
-            assert torch.equal(got[name], want[name]), name
+            assert getattr(got, name).dtype == want[name].dtype, name
+            assert torch.equal(getattr(got, name), want[name]), name
 
     def test_a_batch_of_real_surfaces_collates_identically(self):
         from tests.unit.effects.domain.test_effect_head_input import (

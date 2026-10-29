@@ -106,14 +106,14 @@ def _columns(surface, kind):
 def test_the_state_only_variant_keeps_the_zero_token_for_a_real_line():
     surface, inputs = _prepared("state-only")
     (ability,) = _columns(surface, SlotKind.ABILITY)
-    assert inputs["e_rows"][0, ability] == -1
-    assert torch.all(inputs["e_vectors"][0, ability] == 0.0)
+    assert inputs.e_rows[0, ability] == -1
+    assert torch.all(inputs.e_vectors[0, ability] == 0.0)
 
 
 def test_the_state_only_variant_zeroes_the_acting_lines_e():
     surface, inputs = _prepared("state-only")
     (act,) = _columns(surface, SlotKind.ACT)
-    assert inputs["e_rows"][0, act] == -1
+    assert inputs.e_rows[0, act] == -1
 
 
 def test_the_no_state_variant_keeps_the_acting_lines_e():
@@ -121,20 +121,20 @@ def test_the_no_state_variant_keeps_the_acting_lines_e():
     surface, inputs = _prepared("no-state")
     (act,) = _columns(surface, SlotKind.ACT)
     (ability,) = _columns(surface, SlotKind.ABILITY)
-    assert inputs["e_rows"][0, act] >= 0
-    assert inputs["e_rows"][0, ability] == -1
+    assert inputs.e_rows[0, act] >= 0
+    assert inputs.e_rows[0, ability] == -1
 
 
 def test_the_no_state_variant_keeps_only_the_record_kind_flags_of_global():
     from effects.domain.effect_head_input import KIND_FLAG_WIDTH
 
-    full = _prepared("full")[1]["slot_features"][SlotKind.GLOBAL][0, 0]
+    full = _prepared("full")[1].slot_features[SlotKind.GLOBAL][0, 0]
     _surface, inputs = _prepared("no-state")
-    blank = inputs["slot_features"][SlotKind.GLOBAL][0, 0]
+    blank = inputs.slot_features[SlotKind.GLOBAL][0, 0]
     assert torch.all(blank[:-KIND_FLAG_WIDTH] == 0.0)
     assert torch.equal(blank[-KIND_FLAG_WIDTH:], full[-KIND_FLAG_WIDTH:])
     assert full[:-KIND_FLAG_WIDTH].abs().sum() > 0
-    assert torch.all(inputs["slot_features"][SlotKind.CARD] == 0.0)
+    assert torch.all(inputs.slot_features[SlotKind.CARD] == 0.0)
 
 
 class _Counting(_Sidecars):

@@ -273,7 +273,7 @@ def predict(probe_model, records: list, read) -> list:
 
     with torch.no_grad():
         built = probe_model.batcher.build(records, probe_model.encoder)
-        hidden = probe_model.model(**built.inputs)
+        hidden = probe_model.model(built.inputs)
         outputs = probe_model.model.per_entity(hidden)
         verdict = probe_model.model.verdict(hidden)
     return [

@@ -620,12 +620,12 @@ def extract_features(probe_model, records: list, items_by_record: dict, *,
                 chunk = records[start : start + batch_size]
                 captured.clear()
                 batch, surfaces, encoded = batcher.build(chunk, encoder)
-                hidden = model(**batch)
+                hidden = model(batch)
                 outputs = model.per_entity(hidden)
                 verdict = model.verdict(hidden)
                 host = BatchOutputs(
                     slot_features=torch.cat(
-                        [batch["slot_features"][k] for k in sorted(batch["slot_features"])],
+                        [batch.slot_features[k] for k in sorted(batch.slot_features)],
                         dim=-1,
                     ).float().cpu().numpy(),
                     hidden=hidden.float().cpu().numpy(),

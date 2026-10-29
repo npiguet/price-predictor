@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 import torch
 
@@ -9,6 +11,7 @@ from effects.domain.aux_heads import AUX_HEADS, SHIPPED_HEADS, TRAINING_ONLY_MOD
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, PER_ENTITY_WIDTH, VERDICT_WIDTH
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.surface_collation import TrunkInputs
 
 _CONFIG = EffectModelConfig(
     global_features=8, act_features=6, player_features=10, card_features=12,
@@ -38,30 +41,30 @@ def _surface(batch: int = 2, slots: int = 6):
             (SlotKind.CARD, _CONFIG.card_features),
         )
     }
-    return {
-        "slot_features": features,
-        "slot_kinds": kinds,
-        "positions": torch.tensor([[0, 1, 2, 3, 0, 1]] * batch),
-        "e_vectors": torch.zeros(batch, slots, _CONFIG.e_dim),
-        "attention_mask": torch.ones(batch, slots, dtype=torch.long),
-    }
+    return TrunkInputs(
+        slot_features=features,
+        slot_kinds=kinds,
+        positions=torch.tensor([[0, 1, 2, 3, 0, 1]] * batch),
+        e_vectors=torch.zeros(batch, slots, _CONFIG.e_dim),
+        attention_mask=torch.ones(batch, slots, dtype=torch.long),
+    )
 
 
 class TestTrunkAndHeads:
     def test_the_trunk_returns_one_vector_per_slot(self, model):
-        hidden = model(**_surface())
+        hidden = model(_surface())
         assert hidden.shape == (2, 6, _CONFIG.d_model)
 
     def test_the_per_entity_head_scores_every_slot(self, model):
-        hidden = model(**_surface())
+        hidden = model(_surface())
         assert model.per_entity(hidden).shape == (2, 6, PER_ENTITY_WIDTH)
 
     def test_the_created_objects_head_reads_the_global_slot(self, model):
-        hidden = model(**_surface())
+        hidden = model(_surface())
         assert model.created_objects(hidden).shape == (2, CREATED_OBJECTS_WIDTH)
 
     def test_the_verdict_head_reads_the_act_slot(self, model):
-        hidden = model(**_surface())
+        hidden = model(_surface())
         assert model.verdict(hidden).shape == (2, VERDICT_WIDTH)
 
 
@@ -118,9 +121,9 @@ class TestGen2Heads:
     def test_an_untrained_option_flag_changes_no_output(self, model):
         model.eval()
         batch = _surface()
-        flagged = dict(batch, option_kinds=torch.ones_like(batch["slot_kinds"]))
+        flagged = replace(batch, option_kinds=torch.ones_like(batch.slot_kinds))
         with torch.no_grad():
-            assert torch.equal(model(**batch), model(**flagged))
+            assert torch.equal(model(batch), model(flagged))
 
 
 _GEN1_CHECKPOINT = (
@@ -141,8 +144,8 @@ def test_a_gen1_checkpoint_reads_option_rows_as_it_trained():
     model.eval()
     torch.manual_seed(5)
     slots = 7
-    kwargs = {
-        "slot_features": {
+    inputs = TrunkInputs(
+        slot_features={
             kind: torch.randn(2, slots, width) for kind, width in (
                 (SlotKind.GLOBAL, config.global_features),
                 (SlotKind.ACT, config.act_features),
@@ -150,13 +153,13 @@ def test_a_gen1_checkpoint_reads_option_rows_as_it_trained():
                 (SlotKind.CARD, config.card_features),
             )
         },
-        "slot_kinds": torch.full((2, slots), int(SlotKind.ABILITY)),
-        "positions": torch.arange(slots).expand(2, -1),
-        "e_vectors": torch.randn(2, slots, config.e_dim),
-        "attention_mask": torch.ones(2, slots, dtype=torch.long),
-    }
+        slot_kinds=torch.full((2, slots), int(SlotKind.ABILITY)),
+        positions=torch.arange(slots).expand(2, -1),
+        e_vectors=torch.randn(2, slots, config.e_dim),
+        attention_mask=torch.ones(2, slots, dtype=torch.long),
+    )
     with torch.no_grad():
-        plain = model(**kwargs, option_kinds=torch.zeros(2, slots, dtype=torch.long))
-        flagged = model(**kwargs, option_kinds=torch.ones(2, slots, dtype=torch.long))
-        absent = model(**kwargs)
+        plain = model(replace(inputs, option_kinds=torch.zeros(2, slots, dtype=torch.long)))
+        flagged = model(replace(inputs, option_kinds=torch.ones(2, slots, dtype=torch.long)))
+        absent = model(inputs)
     assert torch.equal(plain, flagged) and torch.equal(plain, absent)

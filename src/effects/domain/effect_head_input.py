@@ -246,6 +246,12 @@ class Slot:
     #: root's slot is the whole link between a mode and its charm.
     option: bool = False
 
+    @property
+    def subject_id(self) -> str | None:
+        """The entity or player a ``CARD`` or ``PLAYER`` slot stands for: the
+        id its per-entity targets and outputs are keyed by."""
+        return self.entity_id or self.player_id
+
 
 @dataclass(frozen=True, slots=True)
 class EffectHeadInput:

@@ -39,7 +39,7 @@ from effects.domain.effect_head_input import (
 )
 from effects.domain.provenance import SidecarLookup
 from effects.domain.records import PlayabilityDecisionPayload, acting_keys
-from effects.domain.surface_collation import collate_surfaces, scatter_e_rows
+from effects.domain.surface_collation import TrunkInputs, collate_surfaces
 
 #: Running-covariance decay for the noise on ``e`` (FR-056).
 NOISE_DECAY = 0.99
@@ -178,19 +178,19 @@ class PreparedBatch:
     stand_in: torch.Tensor | None
     surfaces: list
     #: The variant's masks already applied.
-    inputs: dict
+    inputs: TrunkInputs
 
     def pin(self) -> None:
         self.encoder_inputs = pinned(self.encoder_inputs)
         self.stand_in = pinned(self.stand_in)
-        self.inputs = pinned(self.inputs)
+        self.inputs = self.inputs.pin()
 
 
 class Materialized(NamedTuple):
-    """One batch on the device: the trunk's keyword arguments, the surfaces
-    they came from, and the batch's encoded texts."""
+    """One batch on the device: the trunk's inputs, the surfaces they came
+    from, and the batch's encoded texts."""
 
-    inputs: dict
+    inputs: TrunkInputs
     surfaces: list
     encoded: EncodedBatch
 
@@ -284,29 +284,16 @@ class Materializer:
         if self.noise is not None:
             # Every e of the batch, whichever variant produced it (FR-056).
             matrix = self.noise.apply(matrix, step=step)
-        inputs = prepared.inputs
-        batch = {
-            "slot_features": {
-                k: v.to(self.device, non_blocking=True)
-                for k, v in inputs["slot_features"].items()
-            },
-            **{
-                k: v.to(self.device, non_blocking=True)
-                for k, v in inputs.items() if k != "slot_features"
-            },
-        }
-        e_rows = batch.pop("e_rows")
-        if matrix is not None:
-            # The one place the encoder's output enters the head.
-            batch["e_vectors"] = scatter_e_rows(batch["e_vectors"], e_rows, matrix)
+        # The one place the encoder's output enters the head.
+        inputs = prepared.inputs.to(self.device, non_blocking=True).with_e(matrix)
         return Materialized(
-            batch, prepared.surfaces,
+            inputs, prepared.surfaces,
             EncodedBatch(texts=ordered, lines=prepared.texts, matrix=matrix),
         )
 
 
 class SurfaceBatcher:
-    """Turns a list of records into the trunk's keyword arguments.
+    """Turns a list of records into the trunk's inputs.
 
     Owns the host half; a batcher built only to prepare steps, as a worker's
     is, has no ``materializer``.
@@ -511,23 +498,23 @@ class SurfaceBatcher:
             surfaces=surfaces, inputs=inputs,
         )
 
-    def _masked(self, inputs: dict) -> dict:
+    def _masked(self, inputs: TrunkInputs) -> TrunkInputs:
         """The collated inputs with the variant's masks applied (FR-094),
         zeroed rather than dropped so the per-entity targets keep their shape."""
         masks = self.masks
-        features = inputs["slot_features"]
+        features = inputs.slot_features
         if masks.zero_state:
             for kind in (SlotKind.PLAYER, SlotKind.CARD):
                 features[kind] = torch.zeros_like(features[kind])
             features[SlotKind.GLOBAL][..., :-KIND_FLAG_WIDTH] = 0.0
         if masks.zero_act_e or masks.zero_context_e:
             zeroed = torch.full(
-                (inputs["e_rows"].shape[1],), masks.zero_context_e, dtype=torch.bool,
+                (inputs.e_rows.shape[1],), masks.zero_context_e, dtype=torch.bool,
             )
             if zeroed.numel() > ACT_SLOT:
                 zeroed[ACT_SLOT] = masks.zero_act_e
-            inputs["e_rows"][:, zeroed] = -1
-            inputs["e_vectors"][:, zeroed] = 0.0
+            inputs.e_rows[:, zeroed] = -1
+            inputs.e_vectors[:, zeroed] = 0.0
         return inputs
 
 

@@ -490,8 +490,7 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
 
     from effects.domain.effect_losses import per_entity_loss
     from effects.domain.effect_model import EffectModel
-    from effects.domain.effect_targets import derive_targets
-    from effects.domain.surface_collation import entity_target_tensors
+    from effects.domain.surface_collation import per_entity_targets
     from effects.infrastructure.record_io import iter_shards, read_shard
 
     layers = args.method_c_layers
@@ -513,12 +512,10 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
         chunk = [next(records) for _ in range(16)]
         with torch.no_grad():
             batch, surfaces, _encoded = batcher.build(chunk, encoder)
-        outputs = shallow.per_entity(shallow(**batch))
-        targets = entity_target_tensors(
-            surfaces, [derive_targets(r) for r in chunk], fields)
-        device = outputs.device
-        gathered = outputs.gather(
-            1, targets.index.to(device).unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
+        targets = per_entity_targets(chunk, surfaces, fields)
+        hidden = shallow(batch)
+        device = hidden.device
+        gathered = shallow.per_entity_at(hidden, targets.index.to(device))
         loss, _ = per_entity_loss(gathered, targets.fields_on(device), fields=fields)
         optimizer.zero_grad()
         loss.backward()
