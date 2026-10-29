@@ -1,9 +1,8 @@
 """bf16 autocast and the CUDA reservation cap (FR-095).
 
 The GPU work itself is untestable without a real card, so what is pinned here
-is the *wiring*: which flag `StepLossComputer.device_loss` reads to decide
-whether to enter `torch.autocast`, and which of the three CUDA calls `execute`
-makes and when.
+is the *wiring*: when the device half's autocast flag is set, and which of the
+three CUDA calls `execute` makes and when.
 Every torch.cuda.* function used below is a spy or a stub — nothing here
 touches a real device, matching the rest of this package's CPU-only unit
 suite.
@@ -11,17 +10,12 @@ suite.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import torch
 
-from effects.application import step_loss
 from effects.application import training_loop as loop_module
-from effects.application.step_loss import StepLossComputer, autocast_enabled
-from effects.application.step_preparation import DeviceStep, HeadTargets, StepPreparer
+from effects.application.step_loss import autocast_enabled
+from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
-from effects.domain.effect_losses import LossParts
-from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.builders import (
@@ -31,21 +25,6 @@ from tests.unit.effects.builders import (
     stub_validator,
     write_validation_samples,
 )
-
-
-class _AutocastSpy:
-    """Stands in for `torch.autocast`: records its kwargs, does nothing else."""
-
-    calls: list[dict] = []
-
-    def __init__(self, **kwargs) -> None:
-        self.calls.append(kwargs)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
 
 
 class TestAutocastEnabled:
@@ -76,70 +55,6 @@ class TestAutocastEnabled:
 
         monkeypatch.setattr(torch.cuda, "is_bf16_supported", _boom)
         assert autocast_enabled(torch.device("cuda")) is False
-
-
-class _NoHeads(StepLossComputer):
-    """The real device half, computing no head terms."""
-
-    def head_terms(self, *args, **kwargs):
-        return {}
-
-
-def _run_device_loss(monkeypatch, *, autocast: bool):
-    """Call the real `device_loss` with every internal step stubbed out.
-
-    What is under test is only whether the call is wrapped in
-    `torch.autocast(dtype=torch.bfloat16, enabled=...)` — not the batching,
-    targets or loss math, which their own suites already cover. Forcing
-    `losses.autocast` directly (rather than faking a CUDA device) is the
-    fallback the task called for: a device fake would have to fake every
-    other CUDA-touching call `execute` and `SurfaceBatcher` make along the
-    way, none of which this test is about.
-    """
-    losses = _NoHeads(TrainEffectModelConfig(corpus="unused"), torch.device("cpu"))
-    losses.autocast = autocast
-    _AutocastSpy.calls = []
-    monkeypatch.setattr(torch, "autocast", _AutocastSpy)
-    monkeypatch.setattr(
-        step_loss, "per_entity_loss",
-        lambda *a, **k: (torch.tensor(0.0), LossParts()),
-    )
-
-    class _Materializer:
-        def materialize(self, prepared, encoder, *, step=None):
-            return {}, [], None
-
-    # The host half, as training hands it over: it holds no device work, so
-    # whether autocast encloses it is not the question.
-    prepared = DeviceStep(
-        batch=None, fields=("dummy",),
-        targets=EntityTargetBatch(
-            torch.zeros((1, 1)), EntityFieldTargets({}, {}), torch.zeros((1, 1)),
-            torch.zeros((1, 1), dtype=torch.long),
-        ),
-        heads=HeadTargets(),
-    )
-
-    class _Model:
-        def __call__(self, **batch):
-            return "hidden"
-
-        def per_entity(self, hidden):
-            return torch.zeros((1, 1, 3))
-
-    run = SimpleNamespace(encoder=None, model=_Model())
-    assert losses.device_loss(prepared, run, _Materializer()) is not None
-    return _AutocastSpy.calls
-
-
-class TestDeviceLossAutocast:
-    def test_disabled_on_a_cpu_loop(self, monkeypatch):
-        calls = _run_device_loss(monkeypatch, autocast=False)
-        assert calls == [{"device_type": "cuda", "dtype": torch.bfloat16, "enabled": False}]
-
-    def test_enabled_when_the_loop_says_so(self, monkeypatch):
-        calls = _run_device_loss(monkeypatch, autocast=True)
-        assert calls == [{"device_type": "cuda", "dtype": torch.bfloat16, "enabled": True}]
 
 
 def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):

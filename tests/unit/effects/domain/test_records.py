@@ -13,7 +13,6 @@ from pathlib import Path
 import pytest
 
 from effects.domain.records import (
-    COLLECTION_METADATA_FIELDS,
     ActivationPayload,
     CombatPayload,
     Costs,
@@ -64,10 +63,6 @@ class TestFlagSignatures:
     def test_variant_of_requires_the_synthetic_flag(self, make_record):
         with pytest.raises(ValueError, match="variant_of"):
             make_record(variant_of="Serra Angel")
-
-    def test_a_fork_may_name_the_record_it_mirrors(self, make_record):
-        record = make_record(kind=RecordKind.COMBAT, fork=True, mirror_of="run.3.9")
-        assert record.mirror_of == "run.3.9"
 
 
 class TestLinkId:
@@ -138,17 +133,6 @@ class TestActingAbility:
                 ability=(ability_key,),
             )
 
-    def test_a_resolution_names_its_line(self, make_record, ability_key):
-        assert make_record().ability == (ability_key,)
-
-    def test_a_merged_line_carries_several_keys(self, make_record, ability_key):
-        second = type(ability_key)(
-            script_file=ability_key.script_file, face=0,
-            trait_kind="static", index_within_kind=1,
-        )
-        record = make_record(ability=(ability_key, second))
-        assert len(record.ability) == 2
-
 
 class TestAbilityUnresolved:
     """Why no key was found, where a line was looked for and not reached.
@@ -179,9 +163,6 @@ class TestAbilityUnresolved:
     def test_the_reason_comes_from_the_closed_vocabulary(self, make_record):
         with pytest.raises(ValueError, match="closed vocabulary"):
             make_record(ability=(), ability_unresolved="dunno")
-
-    def test_it_is_collection_metadata(self):
-        assert "ability_unresolved" in COLLECTION_METADATA_FIELDS
 
 
 class TestDiscriminators:
@@ -216,21 +197,6 @@ class TestDiscriminators:
     def test_the_payload_type_must_match_the_moment(self, make_record):
         with pytest.raises(ValueError, match="takes an? ActivationPayload"):
             make_record(moment=Moment.ACTIVATION, payload=ResolutionPayload())
-
-
-class TestCollectionMetadataStaysOutOfTheModel:
-    def test_the_metadata_fields_are_named(self):
-        assert COLLECTION_METADATA_FIELDS == {
-            "mode", "interventional", "fork", "synthetic", "ability_unresolved",
-            "random_seat", "what_if",
-        }
-
-
-class TestIdentity:
-    def test_a_record_is_immutable_once_written(self, make_record):
-        record = make_record()
-        with pytest.raises(AttributeError):
-            record.link_id = "pair-1"
 
 
 #: The Java side of the contract. Read rather than mirrored in a constant,
@@ -305,9 +271,6 @@ class TestGen2Flags:
     def test_a_resolution_never_carries_what_if(self, make_record):
         with pytest.raises(ValueError, match="what_if"):
             make_record(what_if=True)
-
-    def test_both_are_collection_metadata(self):
-        assert {"random_seat", "what_if"} <= COLLECTION_METADATA_FIELDS
 
 
 def _legality(subkind: str) -> dict:

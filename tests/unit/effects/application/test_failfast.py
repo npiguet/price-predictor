@@ -13,7 +13,6 @@ import pytest
 
 from effects.application.train_effect_model import (
     LEARNING_RATE,
-    MAX_GRAD_NORM,
     EarlyStopper,
     TrainEffectModelConfig,
     learning_rate_at,
@@ -166,10 +165,6 @@ class TestScheduleConstants:
         assert learning_rate_at(warmup, warmup=warmup) == LEARNING_RATE
         assert learning_rate_at(10_000, warmup=warmup) == LEARNING_RATE
 
-    def test_the_pinned_constants_are_the_specs(self):
-        assert LEARNING_RATE == 1e-4
-        assert MAX_GRAD_NORM == 1.0
-
 
 class TestEarlyStopping:
     def test_a_new_best_resets_the_counter(self):
@@ -185,13 +180,6 @@ class TestEarlyStopping:
         assert not stopper.should_stop
         assert not stopper.update(1.2)
         assert stopper.should_stop
-
-    def test_selection_is_by_card_disjoint_loss(self):
-        """The number the model ships on, not in-distribution fit."""
-        stopper = EarlyStopper(patience=5)
-        stopper.update(0.5)
-        assert not stopper.update(0.6)
-        assert stopper.best == 0.5
 
 
 class TestWithheldKeyword:

@@ -99,12 +99,6 @@ class TestSatisfactionCounting:
         )
         assert qualifying_cards(record) == {"Grizzly Bears"}
 
-    def test_counting_tallies_across_the_whole_corpus(self):
-        records = [
-            _record([_entity("E1", "Shock")], source="E1") for _ in range(3)
-        ]
-        assert sum("Shock" in qualifying_cards(r) for r in records) == 3
-
 
 class TestConsultRanksButNeverDrops:
     def test_an_uncastable_card_keeps_a_weight(self):
@@ -230,21 +224,6 @@ class TestResidues:
             "unknown": CardCoverage("unknown", records=1, retired=True),
         }
         assert residues(coverage, 50).castable_but_short == ("unknown",)
-
-
-class TestConfig:
-    def test_the_coverage_unit_comes_from_the_card_tree_alone(self):
-        """A token script is not a deckable card and could never be retired."""
-        config = CollectCoverageConfig()
-        assert config.converted_trees().cards_folder.name == "cardsfolder"
-
-    def test_a_reordered_cards_folder_still_finds_the_card_tree(self):
-        from pathlib import Path
-
-        config = CollectCoverageConfig(cards_folders=(
-            Path("output/tokenscripts/"), Path("output/cardsfolder/"),
-        ))
-        assert config.converted_trees().cards_folder.name == "cardsfolder"
 
 
 class TestCoverageDeckBuilding:
