@@ -430,6 +430,15 @@ class _Share:
     def rate(self) -> float:
         return _rate(self.hit, self.seen)
 
+    @classmethod
+    def total(cls, shares: Iterable[_Share]) -> _Share:
+        """Every case of ``shares`` as one."""
+        out = cls()
+        for share in shares:
+            out.hit += share.hit
+            out.seen += share.seen
+        return out
+
 
 def _histogram(counts: Iterable[tuple[str, int]]) -> str:
     """``name count, name count``, in the order given, or ``none`` when empty."""
@@ -465,6 +474,26 @@ def _floor_finding(
     )
 
 
+def _ceiling_finding(
+    name: str,
+    ceiling: float,
+    rate: float,
+    measured: Callable[[str], str],
+    detail: Iterable[str],
+) -> Finding:
+    """A rate judged against a ceiling, :func:`_floor_finding`'s mirror.
+
+    ``measured`` is handed the ceiling's label to place in its own sentence.
+    An empty window's rate is 0.0, so it holds whatever the ceiling.
+    """
+    return Finding(
+        name=name,
+        ok=rate <= ceiling,
+        measured=measured(f"limit {ceiling:.1%}"),
+        detail=tuple(detail),
+    )
+
+
 class _Check(Protocol):
     """One invariant: running counts filled by the pass, then its findings
     (several where they read the same counts)."""
@@ -479,27 +508,27 @@ class _RecordIds:
     :class:`_MirrorTurns` reads."""
 
     def __init__(self) -> None:
-        self.total = 0
         self.turns: dict[str, int] = {}
-        self.duplicates = 0
+        #: Records whose id an earlier record already carried.
+        self.repeats = _Share()
         self.examples: list[str] = []
 
     def add(self, record: EffectRecord) -> None:
-        self.total += 1
-        if record.record_id in self.turns:
-            self.duplicates += 1
+        repeat = record.record_id in self.turns
+        self.repeats.note(repeat)
+        if repeat:
             _keep_example(self.examples, record.record_id)
         else:
             self.turns[record.record_id] = record.state.global_.turn
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        rate = _rate(self.duplicates, self.total)
+        repeats = self.repeats
         yield Finding(
             name="record_id is unique across the run's shards",
-            ok=self.duplicates == 0,
+            ok=repeats.hit == 0,
             measured=(
-                f"{self.duplicates} repeats of {len(self.turns)} "
-                f"distinct ids over {self.total} records ({rate:.1%})"
+                f"{repeats.hit} repeats of {len(self.turns)} "
+                f"distinct ids over {repeats.seen} records ({repeats.rate:.1%})"
             ),
             detail=tuple(f"repeated: {rid}" for rid in self.examples),
         )
@@ -579,22 +608,23 @@ class _Links:
             )
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        paired = sum(1 for halves in self.links.values() if _joined(halves))
-        total = len(self.links)
-        unpaired = total - paired
-        rate = _rate(unpaired, total)
+        unpaired = _Share()
+        for halves in self.links.values():
+            unpaired.note(not _joined(halves))
+        paired = unpaired.seen - unpaired.hit
         sizes = Counter(len(halves) for halves in self.links.values())
-        yield Finding(
+        yield _ceiling_finding(
             name=(
                 "every link_id joins one activation to its resolution(s): one, "
                 "or one per chosen mode of a charm"
             ),
-            ok=rate <= limits.max_unpaired_link_rate,
-            measured=(
-                f"{paired}/{total} link ids paired, {unpaired} unpaired "
-                f"({rate:.1%}, limit {limits.max_unpaired_link_rate:.1%})"
+            ceiling=limits.max_unpaired_link_rate,
+            rate=unpaired.rate,
+            measured=lambda limit: (
+                f"{paired}/{unpaired.seen} link ids paired, {unpaired.hit} "
+                f"unpaired ({unpaired.rate:.1%}, {limit})"
             ),
-            detail=tuple(
+            detail=(
                 f"{count} link ids carry {size} half(s)"
                 for size, count in sorted(sizes.items())
             ),
@@ -1001,40 +1031,33 @@ class _Duplicates:
     """Records byte-identical to an earlier one in the same game, per kind."""
 
     def __init__(self) -> None:
-        self.by_kind: Counter[str] = Counter()
-        self.duplicates_by_kind: Counter[str] = Counter()
+        #: Per kind label: how many records repeat an earlier one of their game.
+        self.by_kind: dict[str, _Share] = defaultdict(_Share)
         #: game_id -> the digest of every record it has shown.
         self.digests: dict[str, set[bytes]] = defaultdict(set)
 
     def add(self, record: EffectRecord) -> None:
-        label = _kind_label(record)
-        self.by_kind[label] += 1
         digest = _digest(record)
         game = self.digests[record.game_id]
-        if digest in game:
-            self.duplicates_by_kind[label] += 1
-        else:
-            game.add(digest)
+        self.by_kind[_kind_label(record)].note(digest in game)
+        game.add(digest)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        worst = 0.0
-        detail = []
-        for label, count in sorted(self.by_kind.items()):
-            duplicates = self.duplicates_by_kind[label]
-            rate = _rate(duplicates, count)
-            worst = max(worst, rate)
-            detail.append(f"{label}: {duplicates}/{count} ({rate:.1%})")
-        total = sum(self.by_kind.values())
-        total_dupes = sum(self.duplicates_by_kind.values())
-        overall = _rate(total_dupes, total)
-        yield Finding(
+        kinds = sorted(self.by_kind.items())
+        worst = max((share.rate for _, share in kinds), default=0.0)
+        overall = _Share.total(self.by_kind.values())
+        yield _ceiling_finding(
             name="exact duplicates within a game stay rare, per kind",
-            ok=worst <= limits.max_duplicate_rate,
-            measured=(
-                f"{total_dupes}/{total} overall ({overall:.1%}); worst "
-                f"kind {worst:.1%}, limit {limits.max_duplicate_rate:.1%}"
+            ceiling=limits.max_duplicate_rate,
+            rate=worst,
+            measured=lambda limit: (
+                f"{overall.hit}/{overall.seen} overall ({overall.rate:.1%}); "
+                f"worst kind {worst:.1%}, {limit}"
             ),
-            detail=tuple(detail),
+            detail=(
+                f"{label}: {share.hit}/{share.seen} ({share.rate:.1%})"
+                for label, share in kinds
+            ),
         )
 
 
@@ -1044,9 +1067,9 @@ class _DuplicateEvents:
     abilities deal their damage twice."""
 
     def __init__(self) -> None:
-        self.events = 0
-        self.duplicates = 0
-        self.by_type: Counter[str] = Counter()
+        #: Events repeating an earlier event of their own record.
+        self.repeats = _Share()
+        self.by_type: Counter[EventType] = Counter()
 
     def add(self, record: EffectRecord) -> None:
         seen: set[bytes] = set()
@@ -1054,24 +1077,23 @@ class _DuplicateEvents:
         # repeat on every healthy record.
         for event in record.payload.listed_events():
             digest = canonical_digest(event.as_dict())
-            self.events += 1
-            if digest in seen:
-                self.duplicates += 1
-                self.by_type[event.type.value] += 1
-            else:
-                seen.add(digest)
+            repeat = digest in seen
+            self.repeats.note(repeat)
+            if repeat:
+                self.by_type[event.type] += 1
+            seen.add(digest)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        rate = _rate(self.duplicates, self.events)
-        yield Finding(
+        repeats = self.repeats
+        yield _ceiling_finding(
             name="no record repeats an event inside itself",
-            ok=rate <= limits.max_duplicate_event_rate,
-            measured=(
-                f"{self.duplicates}/{self.events} events repeat "
-                f"another in the same record ({rate:.2%}, limit "
-                f"{limits.max_duplicate_event_rate:.2%})"
+            ceiling=limits.max_duplicate_event_rate,
+            rate=repeats.rate,
+            measured=lambda limit: (
+                f"{repeats.hit}/{repeats.seen} events repeat another in the "
+                f"same record ({repeats.rate:.1%}, {limit})"
             ),
-            detail=tuple(
+            detail=(
                 f"{event_type}: {count}"
                 for event_type, count in self.by_type.most_common(_EXAMPLES)
             ),
@@ -1083,7 +1105,6 @@ class _Triggers:
     mode drawing no negatives hides behind every other mode's balance."""
 
     def __init__(self) -> None:
-        self.fired: Counter[bool] = Counter()
         #: Per evaluated mode: how often it fired, of how often it was asked.
         self.modes: dict[str, _Share] = defaultdict(_Share)
 
@@ -1091,29 +1112,26 @@ class _Triggers:
         payload = record.payload
         if not isinstance(payload, TriggerPayload):
             return
-        self.fired[payload.fired] += 1
         # Forge's own mode name where written: the event-type vocabulary is
         # far coarser than Forge's trigger modes.
         mode = payload.event.params.get("mode") or payload.event.type.value
         self.modes[str(mode)].note(payload.fired)
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        fired = self.fired[True]
-        total = fired + self.fired[False]
-        share = _rate(fired, total)
+        fired = _Share.total(self.modes.values())
         skewed = sorted(
             ((counts.rate, mode, counts) for mode, counts in self.modes.items()),
             reverse=True,
         )
-        yield Finding(
+        yield _ceiling_finding(
             name="trigger records draw negatives against positives",
-            ok=not total or share <= limits.max_trigger_fired_share,
-            measured=(
-                f"{fired}:{total - fired} fired:not-fired over {total} trigger "
-                f"records ({share:.1%} fired, ceiling "
-                f"{limits.max_trigger_fired_share:.1%})"
+            ceiling=limits.max_trigger_fired_share,
+            rate=fired.rate,
+            measured=lambda limit: (
+                f"{fired.hit}:{fired.seen - fired.hit} fired:not-fired over "
+                f"{fired.seen} trigger records ({fired.rate:.1%} fired, {limit})"
             ),
-            detail=tuple(
+            detail=(
                 f"{mode}: {counts.hit}:{counts.seen - counts.hit} "
                 f"({rate:.1%} fired)"
                 for rate, mode, counts in skewed[:_EXAMPLES]
@@ -1293,29 +1311,28 @@ class _ZoneChanges:
     """
 
     def __init__(self) -> None:
-        self.zone_changes = 0
-        self.with_from = 0
+        #: zone_change events carrying a ``from_zone``.
+        self.with_from = _Share()
         self.to_zone: Counter[str] = Counter()
 
     def add(self, record: EffectRecord) -> None:
         for event in record.payload.all_events():
             if event.type is EventType.ZONE_CHANGE:
-                self.zone_changes += 1
-                self.with_from += bool(event.params.get("from_zone"))
+                self.with_from.note(bool(event.params.get("from_zone")))
                 self.to_zone[str(event.params.get("to_zone"))] += 1
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        rate = _rate(self.with_from, self.zone_changes)
+        with_from = self.with_from
         to_stack = self.to_zone.get("stack", 0)
-        stack_rate = _rate(to_stack, self.zone_changes)
+        stack_rate = _rate(to_stack, with_from.seen)
         yield _floor_finding(
             name="zone_change events say where the card came from",
             floor=limits.min_zone_change_from_zone_rate,
-            seen=self.zone_changes,
-            rate=rate,
+            seen=with_from.seen,
+            rate=with_from.rate,
             measured=lambda limit: (
-                f"{self.with_from}/{self.zone_changes} carry "
-                f"from_zone ({rate:.1%}, {limit}); {to_stack} say "
+                f"{with_from.hit}/{with_from.seen} carry "
+                f"from_zone ({with_from.rate:.1%}, {limit}); {to_stack} say "
                 f"to_zone=stack ({stack_rate:.1%})"
             ),
             detail=(
@@ -1402,17 +1419,16 @@ class _CauseBearing:
                 self.by_type[event.type.value].note(bool(event.params.get("cause")))
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        with_cause = sum(counts.hit for counts in self.by_type.values())
-        seen = sum(counts.seen for counts in self.by_type.values())
-        rate = _rate(with_cause, seen)
+        caused = _Share.total(self.by_type.values())
         yield _floor_finding(
             name="events that declare a cause name one",
             floor=limits.min_cause_rate,
-            seen=seen,
-            rate=rate,
+            seen=caused.seen,
+            rate=caused.rate,
             measured=lambda limit: (
-                f"{with_cause}/{seen} events of the {len(CAUSE_BEARING_TYPES)} "
-                f"cause-bearing types carry a cause ({rate:.1%}, {limit})"
+                f"{caused.hit}/{caused.seen} events of the "
+                f"{len(CAUSE_BEARING_TYPES)} cause-bearing types carry a cause "
+                f"({caused.rate:.1%}, {limit})"
             ),
             detail=(
                 f"{event_type}: {counts.hit}/{counts.seen}"
@@ -1440,29 +1456,30 @@ class _MirrorTurns:
             )
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
-        disagreed: list[str] = []
-        uncomparable = 0
+        disagreed = _Share()
+        examples: list[str] = []
         for record_id, mirror_of, turn in self.mirrors:
             mirror_turn = self.record_ids.turns.get(mirror_of)
             if mirror_turn is None:
-                uncomparable += 1
-            elif mirror_turn != turn:
-                disagreed.append(
+                continue
+            disagreed.note(mirror_turn != turn)
+            if mirror_turn != turn:
+                _keep_example(
+                    examples,
                     f"{record_id} at turn {turn} mirrors {mirror_of} at turn "
-                    f"{mirror_turn}"
+                    f"{mirror_turn}",
                 )
-        comparable = len(self.mirrors) - uncomparable
-        rate = _rate(len(disagreed), comparable)
-        yield Finding(
+        uncomparable = len(self.mirrors) - disagreed.seen
+        yield _ceiling_finding(
             name="a fork's turn agrees with the record it mirrors",
-            ok=rate <= limits.max_mirror_turn_disagreement_rate,
-            measured=(
-                f"{len(disagreed)}/{comparable} forks disagree with their "
-                f"mirror about the turn ({rate:.1%}, limit "
-                f"{limits.max_mirror_turn_disagreement_rate:.1%}); "
+            ceiling=limits.max_mirror_turn_disagreement_rate,
+            rate=disagreed.rate,
+            measured=lambda limit: (
+                f"{disagreed.hit}/{disagreed.seen} forks disagree with their "
+                f"mirror about the turn ({disagreed.rate:.1%}, {limit}); "
                 f"{uncomparable} mirrors fell outside the window"
             ),
-            detail=tuple(disagreed[:_EXAMPLES]),
+            detail=examples,
         )
 
 
