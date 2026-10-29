@@ -876,6 +876,11 @@ def read_shard(path: Path) -> Iterator[EffectRecord]:
         yield record_from_dict(data)
 
 
+def load_shard(path: Path) -> list[EffectRecord]:
+    """One shard's records, the largest unit the trainer ever holds."""
+    return list(read_shard(Path(path)))
+
+
 def iter_shards(directory: Path) -> list[Path]:
     """Every shard at or under ``directory``, in path order, either spelling.
 

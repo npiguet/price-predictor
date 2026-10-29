@@ -42,7 +42,6 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     epoch_shards,
     learning_rate_at,
-    load_shard,
     steps_per_shard,
 )
 from effects.application.validation_pass import ValidationSamples, Validator
@@ -52,6 +51,7 @@ from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
     EffectModelStore,
 )
+from effects.infrastructure.record_io import load_shard
 from effects.infrastructure.step_workers import StepWorkerPool
 from effects.infrastructure.torch_device import default_device
 from price_predictor.infrastructure.torch_training import clip_per_group
