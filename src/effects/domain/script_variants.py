@@ -1,23 +1,9 @@
 """Perturbing a Forge card script into a card that never existed.
 
-The corpus only ever contains texts real cards print, and real cards cluster: a
-model can learn "deal 3 damage" as a memorized phrase because almost every
-damage spell in the set deals 2, 3 or 4. A variant that deals 7 breaks that
-correlation without inventing a mechanic — the script is a real Forge script,
-Forge resolves it by its ordinary rules, and only the parameter differs.
-
-Two perturbations, both deliberately small:
-
-- **a numeric parameter shifted by up to ±3, or doubled**, floored at zero in
-  either case. Not scaled arbitrarily, because a 40-damage spell would be a
-  different card rather than the same card with a different number;
-- **a selector swapped from a checked-in whitelist**, so the swap always
-  produces a selector Forge recognizes. A generated selector would mostly
-  produce cards that fail to load.
-
-A variant exists on the **script surface only** and is never converted to prose:
-there is no oracle text for a card nobody printed, and inventing one would put
-text in the corpus that no card has.
+Real cards cluster (most damage spells deal 2, 3 or 4), so a variant that
+deals 7 breaks a memorized phrase without inventing a mechanic. Perturbations
+are kept small: a numeric shift of up to ±3 or a doubling, floored at zero, or
+a selector swapped from a whitelist.
 """
 
 from __future__ import annotations
@@ -94,22 +80,13 @@ def selector_params(script_text: str) -> dict[str, str]:
 
 
 def shift(value: int, rng: random.Random) -> int:
-    """Move a number by up to ±3, floored at zero.
-
-    Floored because a negative count is not a smaller effect, it is a script
-    Forge will reject — and a rejected script is a variant that never reaches a
-    game.
-    """
+    """Move a number by up to ±3, floored at zero (Forge rejects a negative)."""
     delta = rng.randint(-MAX_NUMERIC_SHIFT, MAX_NUMERIC_SHIFT)
     return max(0, value + delta)
 
 
 def double(value: int) -> int:
-    """Double a number, floored at zero.
-
-    Doubling rather than scaling arbitrarily: it moves the value off the
-    corpus's cluster while keeping the card recognisably the same card.
-    """
+    """Double a number, floored at zero."""
     return max(0, value * 2)
 
 
@@ -119,8 +96,7 @@ def perturb(
     """Apply one perturbation to ``script_text``.
 
     Returns the perturbed script and what changed, or None when the line has
-    nothing this module knows how to perturb — most script lines do not, and
-    skipping them is correct.
+    nothing this module knows how to perturb.
     """
     numbers = numeric_params(script_text)
     selectors = selector_params(script_text)
@@ -168,13 +144,9 @@ def _apply(script_text: str, perturbation: Perturbation) -> str:
 def variant_name(card_name: str, index: int) -> str:
     """The name a variant script is filed under.
 
-    Derived from the source card so ``variant_of`` and the file name agree, and
-    suffixed so several variants of one card do not collide.
-
-    Suffixed with words rather than parentheses because Forge reads a
-    parenthesised suffix on a deck-list line as a set code, and because neither
-    filename sanitizer strips brackets — the file would be named
-    ``lightning_bolt_(variant_0).txt``.
+    Suffixed with words rather than parentheses: Forge reads a parenthesised
+    suffix on a deck-list line as a set code, and no filename sanitizer strips
+    brackets.
     """
     return f"{card_name} Variant {index}"
 
@@ -197,15 +169,9 @@ def renamed_script(lines: list[str], name: str) -> list[str]:
 def is_multi_face(source_lines: list[str]) -> bool:
     """Whether a Forge script declares more than one card face.
 
-    A variant takes its own name, and renaming is a rewrite of the script's
-    first ``Name:`` line -- which on a two-faced card renames the front and
-    leaves the back answering to the original. Forge then builds card rules
-    whose faces disagree, and the failure is not a skipped card: ``StaticData``
-    throws while constructing the whole database, so every Forge startup that
-    sees the script dies, including runs with nothing to do with variants.
-
-    Perturbing one parameter of one face is not what these scripts are for
-    anyway, so they are left alone rather than renamed more cleverly.
+    Such a card is never varied: renaming rewrites only the first ``Name:``
+    line, and faces that disagree make ``StaticData`` throw while building the
+    whole card database, killing every Forge startup that sees the script.
     """
     return any(
         line.strip().startswith("ALTERNATE") for line in source_lines

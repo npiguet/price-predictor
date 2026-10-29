@@ -1,17 +1,9 @@
 """Counterfactual copies of damage and -X/-X resolutions, labelled by the rules (FR-063e).
 
-Forge's AI aims its removal at creatures it can kill, so almost every resolution
-that damages or shrinks a creature kills it, and the corpus rarely shows the
-amount falling short. A model fits that with "a small creature dies" and never
-learns to compare the amount with the creature's toughness. A copy made here
-changes one hit creature's toughness and the amount, and is labelled by the
-state-based rule: a creature with toughness 0 or less dies, and so does one
-with damage at least its toughness (rule 704.5f-g). The rules as written are
-the target, not Forge's AI. The amount is a literal in the script, edited in
-the copy's text, or the X the caster paid, edited in the copy's references.
-
-Only records whose real outcome already obeys the rule are copied, and only
-where nothing else changes what the rule decides:
+A copy changes one hit creature's toughness and the amount, and is labelled
+by rule 704.5f-g rather than by Forge's AI. Only records whose real outcome
+already obeys the rule are copied, and only where nothing else changes what
+the rule decides:
 
 - the acting chain holds exactly one ``DealDamage``/``DamageAll`` segment with
   a fixed or paid amount, or one ``Pump``/``PumpAll`` lowering toughness by
@@ -21,8 +13,6 @@ where nothing else changes what the rule decides:
   amount and its zone, and every player it hit loses exactly the amount;
 - the source carries no deathtouch, wither, infect or lifelink, and no hit
   creature carries indestructible, a shield counter or an attachment.
-
-Nothing here does work at import time.
 """
 
 from __future__ import annotations
@@ -65,10 +55,7 @@ _STAYED = ZONE_OUTCOMES.index("stayed")
 
 
 class EffectKind(StrEnum):
-    """What the one amount does to a creature it hits.
-
-    A ``StrEnum``, so a member still compares equal to the string it replaced.
-    """
+    """What the one amount does to a creature it hits."""
 
     DAMAGE = "damage"  # marks damage on it
     SHRINK = "shrink"  # lowers its toughness, -X/-X style
@@ -411,11 +398,8 @@ class _TextEdit:
 
 def _edited_text(record: EffectRecord, qualified: Qualified, line: SidecarLine,
                  text: str | None, drawn: int) -> _TextEdit:
-    """A literal amount set to ``drawn`` in the script and in the encoded text alike.
-
-    Both or neither: a copy whose encoded text kept the old amount while its
-    labels used the new one would teach the opposite of what it exists for.
-    """
+    """A literal amount set to ``drawn`` in the script and the encoded text,
+    both or neither, so the text never disagrees with the labels."""
     unedited = _TextEdit(qualified.amount)
     if not text:
         return unedited
@@ -472,12 +456,9 @@ def counterfactual(record: EffectRecord, qualified: Qualified,
     """One copy of ``record``: a new amount, a new toughness on one hit creature,
     and every creature and player the amount hit relabelled by the rule.
 
-    ``line`` is the acting sidecar line and ``text`` what the run encodes it
-    from: its script, or on the prose surface its converted prose. A literal
-    amount is edited in the script and in that text alike, which then needs a
-    key of its own; a paid X is edited in the references; and where the script
-    or the encoded text names neither, the amount stays as it was and only the
-    toughness moves.
+    ``text`` is what the run encodes ``line`` from. A literal amount is edited
+    in the text under a key of its own, a paid X in the references; where the
+    text names neither, only the toughness moves.
     """
     low, high = DRAW_RANGE
     drawn = rng.randint(low, high)

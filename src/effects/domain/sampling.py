@@ -1,19 +1,8 @@
 """The eight sampling classes, and how a shard's records are drawn from them.
 
-A record's class is the granularity the corpus mixture and the field losses
-both speak in (FR-085): a field whose classes are all absent from the corpus
-contributes no loss. Within a class, records are drawn by a weighted shuffle
-without replacement, weighted by how rarely their acting text was seen.
-
-**Rarity weighting counts games, not records.** One long game can produce
-hundreds of records of one ability; weighting by records would make that ability
-look well-observed when it has been seen in one board state. The weights feed a
-weighted shuffle *without replacement* over the resident shard (FR-086): the
-per-batch class draw is gone, because a sixteen-record shard resampled with
-replacement was replayed 640 times.
-
-Torch-free, so the curation workers and the record readers can classify a
-record without loading the model.
+Within a class, records are drawn by a weighted shuffle without replacement
+over the resident shard (FR-086), weighted by how rarely their acting text was
+seen. Torch-free, so curation workers can classify a record without the model.
 """
 
 from __future__ import annotations
@@ -28,11 +17,9 @@ from effects.domain.records import EffectRecord, Moment, PlayabilitySubkind, Rec
 
 
 class SamplingClass(StrEnum):
-    """The eight sampling classes, which are also the granularity FR-085 speaks in.
+    """The granularity of the corpus mixture and the field losses (FR-085).
 
-    A field whose classes are all absent from the corpus contributes no loss. A
-    string enum, so a class keys the manifest's JSON and ``--class-mix``
-    exactly as the bare string always did. Declared in report order.
+    Declared in report order.
     """
 
     RESOLUTION_EFFECT = "resolution-effect"
@@ -48,9 +35,8 @@ class SamplingClass(StrEnum):
 SAMPLING_CLASSES: tuple[SamplingClass, ...] = tuple(SamplingClass)
 
 
-#: The eight-class mixture (root spec § Training), now a ``build-corpus``
-#: input: it sets the proportions the training stratum is written in, and the
-#: trainer samples whatever the corpus holds rather than re-mixing per batch.
+#: The default ``build-corpus --class-mix``: the proportions the training
+#: stratum is written in.
 DEFAULT_KIND_MIX: dict[SamplingClass, float] = {
     SamplingClass.RESOLUTION_EFFECT: 0.30,
     SamplingClass.COMBAT: 0.20,
@@ -73,10 +59,8 @@ UNIFORM_CLASSES: frozenset[SamplingClass] = frozenset({
 #: Rarity weight ceiling, as a multiple of the weight of the text at
 #: :data:`RARITY_PERCENTILE` of effective games (FR-054).
 RARITY_CAP = 20.0
-#: The percentile of effective games the ceiling is set against. The 99th
-#: rather than the maximum: one ubiquitous text (``Flying``) would otherwise
-#: set the ceiling for the whole class, and a corpus that gains one more game
-#: of it would move every rare text's weight.
+#: The percentile of effective games the ceiling is set against; not the
+#: maximum, which one ubiquitous text (``Flying``) would set alone.
 RARITY_PERCENTILE = 99.0
 
 
@@ -130,9 +114,8 @@ def effective_games(
 ) -> dict[str, int]:
     """Distinct games contributing a record of each unique ability text.
 
-    Games rather than records: one long game can produce hundreds of records of
-    one ability, and weighting by records would call that ability well-observed
-    when it has been seen in a single board state.
+    Games rather than records: one long game can produce hundreds of records
+    of one ability, all on one board.
     """
     games: defaultdict[str, set[str]] = defaultdict(set)
     for record in records:
@@ -155,13 +138,7 @@ def rarity_weights(
 ) -> dict[str, float]:
     """``effective_games ** -0.5``, capped at ``cap`` times the p99 text's weight.
 
-    The exponent flattens the corpus's long tail without erasing it: an ability
-    seen in one game gets more weight than one seen in a hundred, but not a
-    hundred times more. The cap stops a single-game ability from dominating a
-    batch, and is expressed against the text at the ``percentile``-th
-    percentile of effective games (FR-054) — a common text, so the cap scales
-    with the corpus, but not the single most common one, whose count would set
-    every other text's ceiling on its own.
+    The cap stops a single-game ability from dominating a batch (FR-054).
     """
     if not games_per_text:
         return {}
@@ -183,22 +160,14 @@ def sample_weights(
 ) -> list[float]:
     """Per-record sampling weight within its class (FR-054).
 
-    A record with no acting ability text weighs 1 before normalization:
-    ``combat`` and ``playability``/``attackers``/``blockers`` sample uniformly,
-    because there is no ability text for rarity to key on (FR-087).
-
-    The ceiling is set and the weights normalized **within each sampling
-    class**: each class's weights are capped against its own p99 text and
-    scaled to a mean of one, so rarity reorders records inside a class without
-    moving mass between classes — the class mixture is the corpus's, fixed by
-    ``build-corpus --class-mix``.
+    A record with no acting text weighs 1 before normalization (FR-087).
+    Capped and normalized to mean one within each class, so rarity reorders
+    records inside a class without moving mass between classes.
 
     Args:
-        rarity: a corpus-wide ``text -> games`` table from a curated dataset's
-            manifest, read in preference to the resident shard's own count. A
-            text the table does not name falls back to the shard's count for
-            it rather than to zero, so a shard collected after the dataset was
-            built still weights sanely instead of dominating every batch.
+        rarity: a corpus-wide ``text -> games`` table, preferred to the shard's
+            own count; a text it does not name falls back to the shard's count
+            rather than zero, which would dominate every batch.
         class_of: ``record -> class``; absent, the records are one class.
     """
     texts = [text_of(record) for record in records]
@@ -231,9 +200,8 @@ def sample_weights(
 class BatchPlan:
     """Which records a batch draws, grouped by the game they came from.
 
-    Grouping matters for cost, not correctness: records from one game share a
-    board, so their context entities share ability texts, and one encode of a
-    text then serves many records instead of one.
+    For cost only: records from one game share context texts, so one encode
+    serves many records.
     """
 
     by_game: dict[str, list[EffectRecord]] = field(default_factory=dict)
@@ -247,9 +215,7 @@ def weighted_order(weights: Sequence[float], rng: random.Random) -> list[int]:
     """Indices in a weighted shuffle: each drawn once, heavier ones earlier.
 
     Efraimidis–Spirakis: key ``u ** (1 / w)`` per item, sorted descending, is a
-    sample without replacement in proportion to ``w``. One shuffle per pass is
-    what lets a shard be seen whole rather than resampled from with
-    replacement, which is how a sixteen-record shard was replayed 640 times.
+    sample without replacement in proportion to ``w``.
     """
     keys = [
         rng.random() ** (1.0 / max(float(weight), 1e-9)) for weight in weights

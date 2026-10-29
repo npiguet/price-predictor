@@ -1,41 +1,9 @@
 """JSONL shard IO for the effect-record corpus.
 
-One ``{run_id}.{worker}-{lifetime}.jsonl.gz`` shard per worker JVM, all read as a
-directory. The Java collector writes raw shards; Python only reads them, and
-writes the curated shards ``build-corpus`` produces (:func:`write_shard`).
-One shard per worker rather than one shared file because records are
-far larger than a match-outcome row, so cross-process appends would interleave
-mid-record; and line-oriented rather than columnar because the writers are Forge
-JVMs that are expected to crash mid-write, which is exactly what a line format
-survives.
-
-A shard per JVM *lifetime*, not per worker slot: the supervisor recycles workers
-on a timer, and the ids inside a shard are counters that restart with the JVM.
-
-Serialization lives here; the in-memory shapes are the pure dataclasses in
-``effects/domain/``. Every conversion is written out rather than reflected from
-the dataclass, because the wire format is a frozen contract and a field renamed
-in Python must not silently rename itself in a corpus that cannot be rebuilt.
-
-**Widening a field's value set is not redefining the field**, and most of what a
-collector fix changes is the former. ``outcome`` gained no new member when the
-writer stopped hardcoding ``resolved``: the enum always held all five and the
-corpus only ever showed one. ``zone_change`` gained no new param when
-``from_zone`` started being written; the key was already in ``EVENT_PARAMS`` and
-always empty. ``attributed_to`` gained two sentinel *values* (``root``,
-``unresolved``) and stayed a nullable string, so a reader that predates them
-parses them as the strings they are. ``zone_change`` then gained a genuinely
-new key, ``library_position``: adding a param to a type's row widens what the
-type may carry and redefines nothing it already carried — and it has to happen
-*here first*, because a reader that does not know a key drops it, so a param a
-writer emits before the schema accepts it is invisible rather than wrong. The
-``rewrite`` payload's ``outgoing`` then gained ``null``, alongside two new keys:
-a value a field may now take is a widening, and the records already written keep
-meaning what they meant, which is what makes it legal.
-Compatibility rule 1 forbids only the other direction — nothing here may change
-what an existing field *means*, because the
-corpus is append-only and a reinterpreted field silently reinterprets hours of
-records that cannot be recollected.
+The Java collector writes raw shards; Python reads them and writes the
+curated shards ``build-corpus`` produces. Every conversion is written out
+rather than reflected from the dataclass, so a field renamed in Python never
+silently renames itself in a corpus that cannot be rebuilt.
 """
 
 from __future__ import annotations
@@ -122,10 +90,8 @@ def _keys_to_json(keys: tuple[ProvenanceKey, ...]) -> list[dict]:
     return [key.as_dict() for key in keys]
 
 
-#: Every key parsed so far, by its raw JSON fields. A record carries about 56
-#: keys and a shard repeats the same few hundred thousands of times, so building
-#: each one afresh was the costliest part of parsing a record. The table is
-#: bounded by the number of traits in the card pool, not by the corpus size.
+#: Every key parsed so far, by its raw JSON fields: a shard repeats the same
+#: few hundred keys thousands of times. Bounded by the card pool's traits.
 _INTERNED_KEYS: dict[tuple, ProvenanceKey] = {}
 
 
@@ -158,10 +124,8 @@ def _events_from_json(data: Any) -> tuple[Event, ...]:
 def _event_from_json(item: Any) -> Event:
     """One event, with its counter type in this package's spelling.
 
-    Normalized on read for the same reason keywords are: Forge writes what a
-    card prints and the head reads a canonical name, and a corpus already
-    collected cannot be rewritten. Doing it here rather than at the head's
-    lookup means every consumer gets the same answer.
+    Normalized on read, like keywords, because collected shards carry Forge's
+    printed spelling and cannot be rewritten.
     """
     event = Event.from_dict(item)
     counter = event.params.get("counter_type")
@@ -266,9 +230,6 @@ def _entity_from_json(data: dict) -> EntityState:
         face_down=data.get("face_down", False),
         granted_attached=_keys_from_json(data.get("granted_attached")),
         granted_temporary=GrantedTemporary(
-            # Normalized on read rather than on write: the corpus is
-            # append-only, so shards collected before this was noticed carry
-            # Forge's spelling and have to keep resolving.
             keywords=tuple(
                 normalize_keyword(k) for k in granted.get("keywords", ())
             ),
@@ -320,8 +281,6 @@ def _snapshot_to_json(state: StateSnapshot) -> dict:
         "pending_event": (
             state.pending_event.as_dict() if state.pending_event else None
         ),
-        # Explicit, because "absent tier means uncollected" is unanswerable
-        # without it: an empty entity list and an uncollected tier look alike.
         "tiers": sorted(int(t) for t in state.tiers),
     }
 
@@ -362,12 +321,6 @@ def _snapshot_from_json(data: dict) -> StateSnapshot:
 
 
 # ── payloads ────────────────────────────────────────────────────────────
-#
-# One encoder and one decoder per payload type, side by side, so a field added
-# to one direction is in plain sight of the other. The decoder is chosen by
-# ``PAYLOAD_TYPES``, the table the record's own invariant checks against, so a
-# ``(kind, moment/subkind)`` pair that table does not know is refused here
-# rather than read as whichever payload happened to be the fallback.
 
 
 def _activation_to_json(payload: ActivationPayload) -> dict:
@@ -410,10 +363,6 @@ def _resolution_from_json(data: dict) -> ResolutionPayload:
 def _rewrite_to_json(payload: RewritePayload) -> dict:
     return {
         "incoming": payload.incoming.as_dict(),
-        # Written as null rather than as a copy of `incoming` when the
-        # replacement edited nothing. The two spellings are not
-        # interchangeable: a copy claims the event survived unchanged,
-        # null says the question does not apply.
         "outgoing": payload.outgoing.as_dict() if payload.outgoing else None,
         "result": payload.result.value if payload.result else None,
         "replaced_by": _keys_to_json(payload.replaced_by),
@@ -421,16 +370,6 @@ def _rewrite_to_json(payload: RewritePayload) -> dict:
 
 
 def _rewrite_from_json(data: dict) -> RewritePayload:
-    # Two shapes coexist in an append-only corpus. A shard collected before
-    # the outcome was passed to the hook carries `{incoming, outgoing}` with
-    # `outgoing` always an event — usually one byte-identical to
-    # `incoming`, because Forge substitutes by running another ability
-    # rather than by editing the event — and no `result`. Such a record
-    # reads as `result=None`, which is a third state and not `not_replaced`:
-    # it says the writer reported nothing, where `not_replaced` says the
-    # writer watched a replacement decline. A consumer that needs the
-    # distinction filters on `result is None`; one that does not can treat
-    # those records as the unreadable ones they always were.
     outgoing = data.get("outgoing")
     result = data.get("result")
     return RewritePayload(
@@ -461,8 +400,6 @@ def _continuous_from_json(data: dict) -> ContinuousPayload:
             Contribution(
                 entity=c["entity"],
                 pt_boost=tuple(c.get("pt_boost", (0, 0))),
-                # Same spelling rule as the overlay channel: Forge writes
-                # "first strike", everything downstream reads first_strike.
                 keywords=tuple(
                     normalize_keyword(k) for k in c.get("keywords", ())
                 ),
@@ -607,8 +544,7 @@ class _PayloadCodec:
     decode: Callable[[dict], Any]
 
 
-#: Every payload type's wire form, by type: the values of ``PAYLOAD_TYPES``,
-#: each once.
+#: Every payload type's wire form: the values of ``PAYLOAD_TYPES``, each once.
 _PAYLOAD_CODECS: dict[type, _PayloadCodec] = {
     ActivationPayload: _PayloadCodec(_activation_to_json, _activation_from_json),
     ResolutionPayload: _PayloadCodec(_resolution_to_json, _resolution_from_json),
@@ -634,10 +570,7 @@ def _payload_from_json(
 ):
     payload_type = PAYLOAD_TYPES.get((kind, discriminator))
     if payload_type is None:
-        # A ValueError, which is what the record's own discriminator check
-        # raises for the same line: a resolution without a moment, a
-        # playability record without a subkind, or a discriminator on a kind
-        # that takes none.
+        # A ValueError, as the record's own discriminator check raises.
         raise ValueError(
             f"no payload is defined for kind={kind.value} with "
             f"moment/subkind={discriminator.value if discriminator else None}"
@@ -666,9 +599,8 @@ def record_to_dict(record: EffectRecord) -> dict:
         "fork": record.fork,
         "synthetic": record.synthetic,
     }
-    # Written only where the source carried it: its presence is what makes a
-    # shard gen-2 (``shard_generation``), so a curated shard rewritten from
-    # gen-1 records has to stay gen-1 for the mixed-generation guard to fire.
+    # Written only where the source carried it: its presence makes a shard
+    # gen-2 (``shard_generation``), so a rewritten gen-1 record stays gen-1.
     if record.random_seat is not None:
         out["random_seat"] = record.random_seat
     if record.what_if is not None:
@@ -682,7 +614,6 @@ def record_to_dict(record: EffectRecord) -> dict:
         "state": _snapshot_to_json(record.state),
         "payload": _payload_to_json(record.payload),
     }
-    # Fields a newer writer added, carried through untouched.
     for key, value in record.extra_fields.items():
         out.setdefault(key, value)
     return out
@@ -712,8 +643,6 @@ def record_from_dict(data: dict) -> EffectRecord:
         interventional=data.get("interventional", False),
         fork=data.get("fork", False),
         synthetic=data.get("synthetic", False),
-        # Absent on a gen-1 shard (FR-033): None, which reads as on-policy and
-        # writes back absent, so the record keeps its generation.
         random_seat=data.get("random_seat"),
         what_if=data.get("what_if"),
         ability=_keys_from_json(ability) if ability is not None else None,
@@ -737,10 +666,8 @@ def _write_line(handle: IO[str], record: EffectRecord) -> None:
 def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
     """Write a whole shard at once, gzipped; return the record count.
 
-    One gzip member rather than one per 256 records: that blocking exists so a
-    worker killed mid-run truncates only its last block, and a curated shard is
-    written in a single pass by a process that either finishes or leaves
-    nothing behind. ``read_shard`` reads both shapes.
+    One gzip member: per-block members guard a worker killed mid-run, and a
+    curated shard is written by a process that finishes or leaves nothing.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -752,10 +679,8 @@ def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
     return written
 
 
-#: How many group files the first deal holds open. Every output shard's lines
-#: pass through the group its index falls in modulo this, so the parts are read
-#: once however many shards a stratum has, without a file open per shard --
-#: a large stratum has thousands, past what one process may hold open.
+#: How many group files the first deal holds open: a large stratum has more
+#: shards than one process may hold files open.
 _GROUPS = 256
 
 
@@ -765,28 +690,15 @@ def repack_shards(
 ) -> list[Path]:
     """Deal ``parts``' games into shards of about ``shard_records`` records each.
 
-    Whole games are dealt by a seeded hash of ``game_id`` modulo the shard
-    count, so a game never spans two shards -- the split is by game, and the
-    trainer filters a shard by game -- and each shard holds games from across
-    the whole stratum rather
-    than a run of consecutive parts. A part is one source shard, one JVM
-    lifetime of one collection run, so cutting the parts in order filled
-    each shard with a handful of lifetimes of one run; the trainer draws
-    whole shards and shuffles only inside the one it holds, so every batch
-    drawn from such a shard is correlated by run. Each shard's records are
-    then shuffled under ``seed``, which also spreads a record's copies, dealt
-    with their game to one shard, through it.
+    Whole games are dealt by a seeded hash of ``game_id``, so a game never
+    spans two shards and each shard mixes games from across the stratum
+    rather than one run's consecutive lifetimes (the trainer shuffles only
+    inside the shard it holds). Each shard is then shuffled under ``seed``.
 
-    Streamed, since a training stratum does not fit in memory: one pass deals
-    the lines into at most :data:`_GROUPS` compressed group files beside
-    ``out_dir``, each holding the shards whose index falls in it, then each
-    group is read, split into its shards, and every shard shuffled and
-    written -- so every line is read twice whatever the shard count. Empty
-    shards write nothing. ``records`` is the parts' record count when the
-    caller already knows it; otherwise the parts are counted first.
-
-    ``shard_records <= 0`` writes one shard per part, unshuffled, which is
-    what the write pass did before repacking existed. Parts are not deleted.
+    Streamed through at most :data:`_GROUPS` compressed group files beside
+    ``out_dir``, since a stratum does not fit in memory. ``records`` is the
+    parts' record count when the caller knows it. ``shard_records <= 0``
+    writes one shard per part, unshuffled. Parts are not deleted.
     """
     parts = [Path(p) for p in parts]
     if not parts:
@@ -804,8 +716,7 @@ def repack_shards(
     scratch.mkdir(parents=True)
     try:
         filled = _deal_into_buckets(parts, scratch, seed=seed, count=count)
-        # Numbered in index order, which is not the order the groups write
-        # them in, so the names are fixed before any shard is written.
+        # Named before writing: groups write shards out of index order.
         names = {
             index: out_dir / f"{prefix}-{number:05d}.jsonl.gz"
             for number, index in enumerate(sorted(filled), start=1)
@@ -841,8 +752,7 @@ def _deal_into_buckets(
 ) -> set[int]:
     """Deal every line into the group of its shard's index; return the indices.
 
-    A group keeps its lines in the parts' order, so each shard's lines reach
-    its shuffle in that order whichever group carried them.
+    A group keeps the parts' order, so each shuffle sees a fixed input order.
     """
     groups = min(count, _GROUPS)
     filled: set[int] = set()
@@ -893,30 +803,21 @@ def _game_of_line(line: str) -> str:
 def parse_record_line(text: str) -> dict:
     """One shard line as the dict ``record_from_dict`` reads.
 
-    ``orjson`` rather than ``json``: a record carries its whole state snapshot,
-    and the trainer parses a fresh shard every few dozen steps on a thread that
-    shares the interpreter lock with the training step, so the parse is what
-    the step waits on. The two parsers give equal dicts — floats round-trip
-    exactly in both — and ``orjson``'s decode error subclasses
-    ``json.JSONDecodeError``, so a caller's handler for a torn line still works.
+    ``orjson`` for speed; it gives the same dicts as ``json``, and its decode
+    error subclasses ``json.JSONDecodeError``.
     """
     return orjson.loads(text)
 
 
-#: Both shard spellings. `.jsonl.gz` is what the writer produces; plain
-#: `.jsonl` is read so a corpus collected before compression keeps working,
-#: because the corpus is append-only and cannot be regenerated.
+#: Both shard spellings: plain `.jsonl` predates compression.
 SHARD_GLOBS: tuple[str, ...] = ("*.jsonl.gz", "*.jsonl")
 
 
 def iter_shard_lines(path: Path) -> Iterator[str]:
     """Every complete line of a shard, compressed or not.
 
-    A compressed shard is a concatenation of gzip members, one per block of
-    records. Every member stands alone, so a worker killed mid-write truncates
-    the last one and leaves the rest readable — and a truncated member raises
-    on read, which is where the stream stops. That is the same rule a plain
-    shard's trailing partial line follows, applied a block at a time.
+    A truncated final gzip member, or a trailing partial line, ends the
+    stream.
     """
     path = Path(path)
     if path.suffix != ".gz":
@@ -926,24 +827,18 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
     try:
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             for line in handle:
-                # The reader runs on across member boundaries, so a line
-                # without its newline can only be the stream's last: a member
-                # cut short. Dropped, because half a record parses as nothing.
+                # A line without its newline can only be a member cut short.
                 if line.endswith("\n"):
                     yield line
     except (EOFError, gzip.BadGzipFile, zlib.error):
-        # The final member was truncated by a killed worker. Everything before
-        # it has already been yielded.
         return
 
 
 def iter_record_dicts(path: Path) -> Iterator[dict]:
     """Every complete record of one shard, as the dict its line parses to.
 
-    The read every record reader shares, for a caller that has to see the raw
-    JSON before a record is built from it: a generation check needs only
-    whether a field is present. Blank lines are skipped, and a
-    trailing partial line never arrives, as :func:`iter_shard_lines` promises.
+    For a caller that needs the raw JSON, such as a generation check. Blank
+    lines are skipped.
     """
     for line in iter_shard_lines(Path(path)):
         stripped = line.strip()
@@ -960,16 +855,9 @@ def read_shard(path: Path) -> Iterator[EffectRecord]:
 def iter_shards(directory: Path) -> list[Path]:
     """Every shard at or under ``directory``, in path order, either spelling.
 
-    Recursive, because separating a depleted collection run from a
-    full-strength one into two subdirectories is the obvious way to keep them
-    apart, and a flat glob reads neither while reporting nothing. Every
-    consumer arrives here: the trainer would see an empty corpus, and
-    ``collect-coverage`` would recount every card at zero records and chase a
-    target the corpus had already met.
-
-    Path order rather than name order, so two shards of the same name in
-    different subdirectories keep a stable relative position, and every
-    reader that walks a corpus walks it in the same order on every run.
+    Recursive, so collection runs kept in subdirectories read as one corpus.
+    Path order rather than name order, so every reader walks a corpus in the
+    same order on every run.
     """
     directory = Path(directory)
     if not directory.is_dir():
@@ -986,10 +874,9 @@ def iter_shards(directory: Path) -> list[Path]:
 
 
 def read_records(directory: Path) -> Iterator[EffectRecord]:
-    """Stream every record under ``directory``, shard by shard in name order.
+    """Stream every record under ``directory``, shard by shard in path order.
 
-    A missing directory yields nothing rather than raising: a collection run
-    that has not started yet is an empty corpus, not an error.
+    A missing directory yields nothing: an empty corpus, not an error.
     """
     for shard in iter_shards(directory):
         yield from read_shard(shard)
@@ -1013,12 +900,9 @@ def read_records_matching(
 ) -> Iterator[EffectRecord]:
     """The records under ``directory`` of the named games and kinds.
 
-    The same records a filter over :func:`read_records` keeps, without parsing
-    the rest. A record costs a full JSON parse of its state snapshot, and a
-    scan for a thousand games' combat records otherwise parses every one of the
-    corpus's millions to throw nearly all of them away. A line whose head does
-    not have the expected shape is parsed and filtered the slow way, so a
-    writer that reorders the envelope costs speed, never records.
+    The same records a filter over :func:`read_records` keeps, without
+    parsing the rest. A line whose head has another shape is parsed and
+    filtered the slow way, so a reordered envelope costs speed, never records.
     """
     shards = iter_shards(directory)
     for done, shard in enumerate(shards):
@@ -1046,16 +930,9 @@ def read_records_matching(
 def count_records(directory: Path, *, ceiling: int = 0) -> int:
     """Complete records under ``directory``, for progress and resume.
 
-    Counts complete lines rather than parsed records: the count is a number,
-    and building a record dataclass per line to arrive at it would parse the
-    whole corpus's JSON — the variant collector asks for this before every run
-    just to size its budget.
-
-    A compressed shard still has to be decompressed to be counted, so the saving
-    there is only the JSON parse. Over a full corpus that is minutes of gzip
-    before a single game is played, which is why ``ceiling`` exists: a caller
-    that only needs to know whether some threshold is passed stops there and
-    gets the threshold back. Zero means count everything.
+    Counts complete lines without parsing them. A non-zero ``ceiling`` stops
+    the count there and returns it, since decompressing a full corpus takes
+    minutes.
     """
     total = 0
     for shard in iter_shards(directory):
@@ -1088,9 +965,8 @@ class MixedGenerationsError(ValueError):
 def shard_generation(path: Path) -> str | None:
     """``gen-1`` or ``gen-2`` by the shard's first complete record; None if empty.
 
-    The first record is enough: ``validate-corpus`` fails a shard whose
-    records disagree about carrying the field, so one record speaks for its
-    shard. Only the first line is decoded.
+    One record speaks for its shard: ``validate-corpus`` fails a shard whose
+    records disagree.
     """
     for data in iter_record_dicts(path):
         return GEN_2 if "random_seat" in data else GEN_1
@@ -1100,11 +976,9 @@ def shard_generation(path: Path) -> str | None:
 def refuse_mixed_generations(paths: Iterable[Path]) -> str | None:
     """The one generation ``paths`` hold, or raise when they hold both.
 
-    Every reader of a records set calls this before reading a record
-    (FR-033): the redefined ``actor_player`` has no version field of its own,
-    so a set mixing the two generations would read half its legality records
-    under the wrong meaning with nothing to say so. Returns None for a set of
-    empty shards.
+    Every reader of a records set calls this first (FR-033): the redefined
+    ``actor_player`` has no version field of its own. None for a set of empty
+    shards.
     """
     seen: dict[str, Path] = {}
     for path in paths:

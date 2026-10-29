@@ -1,26 +1,11 @@
 """The effect-record schema: one observed game event or decision point.
 
-This schema is **fixed before stage-one collection begins**. Later stages widen
-the corpus — new ``kind`` values become reachable, new snapshot tiers appear —
-but never redefine a field, which is what lets a stage-one corpus stay trainable
-alongside stage-four records. The four compatibility rules are stated in
-``specs/023-ability-effect-model/contracts/record-schema.md`` and enforced by
-``tests/unit/effects/domain/test_schema_compatibility.py``; there is no version
-field, so the tests are the enforcement.
-
-Rule 1 is what the ``rewrite`` payload's widening rests on, and it is worth
-spelling out because it looks like a redefinition and is not. ``incoming`` keeps
-its meaning exactly. ``outgoing`` gains ``None`` as a value it may take — the
-same widening ``attributed_to`` made when it gained its sentinels, and a reader
-that predates it still parses every record that carries an event. ``result`` and
-``replaced_by`` are added fields, absent on shards already collected, and a
-missing ``result`` reads as "the writer had no opinion" rather than as any of
-the five outcomes. Nothing a collected record already says is reinterpreted,
-which is the only thing rule 1 forbids.
-
-Pure dataclasses with no torch and no IO — serialization lives in
-``infrastructure/record_io.py``, the same split
-``draft/domain/draft_geometry.py`` makes against ``draft_record_io``.
+The schema is frozen: later collection widens the corpus but never redefines a
+field. The compatibility rules are in
+``specs/023-ability-effect-model/contracts/record-schema.md`` and, with no
+version field, ``tests/unit/effects/domain/test_schema_compatibility.py`` is
+their enforcement. Pure dataclasses; serialization lives in
+``infrastructure/record_io.py``.
 """
 
 from __future__ import annotations
@@ -57,13 +42,7 @@ class PlayabilitySubkind(StrEnum):
 
 
 class CollectionMode(StrEnum):
-    """Whether the worker found the engine patch hooks at startup.
-
-    Detected per run rather than compiled in, because the patch lives in a
-    sibling checkout that is rebuilt independently and re-patched by hand after
-    every Forge upgrade. A build-time switch would silently mislabel a corpus
-    collected after a lapsed patch.
-    """
+    """Whether the worker found the engine patch hooks at startup."""
 
     PATCHED = "patched"
     DEGRADED = "degraded"
@@ -80,19 +59,11 @@ class ResolutionOutcome(StrEnum):
 class RewriteResult(StrEnum):
     """What a replacement effect's handler reported, as Forge names it.
 
-    A closed vocabulary mirroring ``forge.game.replacement.ReplacementResult``
-    member for member, lower_snake_case for the wire.
-    ``tests/unit/effects/domain/test_records_us2.py`` pins it against that
-    enum's source in both directions, because a closed vocabulary with nothing
-    holding the two ends together is how a collector learns a value its reader
-    then raises on — and the corpus is append-only, so those records are lost.
-
-    This is the field that makes the ``rewrite`` channel readable at all. Only
-    ``Replaced`` and ``Updated`` can edit the event's parameter map, and only
-    then when the substituted ability happens to write one; every other outcome
-    is a bare ``return`` in ``executeReplacementUnobserved``. Without ``result``,
-    "enters tapped", "exile it instead" and "prevent that damage" all record as
-    an event that came out exactly as it went in.
+    Mirrors ``forge.game.replacement.ReplacementResult`` member for member,
+    lower_snake_case for the wire; ``test_records_us2.py`` pins the two
+    together, since a value the reader raises on loses append-only records.
+    Most replacements never edit the event's parameter map, so without this
+    "enters tapped" and "prevent that damage" would read as no change at all.
     """
 
     REPLACED = "replaced"
@@ -102,24 +73,18 @@ class RewriteResult(StrEnum):
     SKIPPED = "skipped"
 
 
-#: Results the handler reaches by returning *above* the
-#: ``playSpellAbilityNoStack`` call, so no ability ran and nothing was written
-#: to the parameter map. A record of one of these carrying an ``outgoing`` or a
-#: ``replaced_by`` is a collector defect, not a rare game state.
-#:
-#: ``NotReplaced`` is deliberately absent though it too returns early: its
-#: prevention branch writes ``PreventedAmount`` into the map on the way out, so
-#: a ``not_replaced`` record legitimately carries an ``outgoing``.
+#: Results the handler returns before running any ability, so one carrying an
+#: ``outgoing`` or a ``replaced_by`` is a collector defect. ``NotReplaced`` also
+#: returns early but its prevention branch writes ``PreventedAmount`` into the
+#: map, so it may legitimately carry an ``outgoing``.
 REWRITE_RESULTS_WITHOUT_ABILITY: frozenset[RewriteResult] = frozenset({
     RewriteResult.PREVENTED,
     RewriteResult.SKIPPED,
 })
 
-#: Results reachable only after the handler ran the ``ReplaceWith$`` ability —
-#: which is where ``replaced_by`` comes from. Not an invariant: a replacement
-#: scripted with ``ReplacementResult$`` returns one of these with no ability at
-#: all, so the share of these records naming a key is a number to watch rather
-#: than a rule to enforce.
+#: Results usually reached by running the ``ReplaceWith$`` ability, the source
+#: of ``replaced_by``. Watched, not enforced: a ``ReplacementResult$`` script
+#: returns one of these with no ability at all.
 REWRITE_RESULTS_RUNNING_AN_ABILITY: frozenset[RewriteResult] = frozenset({
     RewriteResult.REPLACED,
     RewriteResult.UPDATED,
@@ -133,19 +98,16 @@ PARTNERLESS_OUTCOMES: frozenset[ResolutionOutcome] = frozenset({
     ResolutionOutcome.COUNTERED,
 })
 
-#: Envelope fields that describe how a record was collected. They must never
-#: reach the model as inputs (FR-018): a model that can see ``fork`` learns to
-#: predict differently on forks, which is exactly the confound the forks exist
-#: to avoid. ``ability_unresolved`` belongs here for the same reason: it says
-#: why the collector could not name a line, which is a fact about the resolver
-#: and not about the game.
+#: Envelope fields that describe how a record was collected, never model inputs
+#: (FR-018): a model that can see ``fork`` learns to predict differently on
+#: forks, the confound forks exist to avoid.
 COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
     "mode", "interventional", "fork", "synthetic", "ability_unresolved",
     "random_seat", "what_if",
 })
 
-#: The legality subkinds that carry ``what_if`` (FR-031). A ``decision`` record
-#: is always a real evaluation of a real candidate, so the question never arises.
+#: The legality subkinds that carry ``what_if`` (FR-031); a ``decision`` is
+#: always a real evaluation.
 WHAT_IF_SUBKINDS: frozenset[PlayabilitySubkind] = frozenset({
     PlayabilitySubkind.ATTACKERS, PlayabilitySubkind.BLOCKERS,
 })
@@ -155,8 +117,7 @@ class LegalityDecision(StrEnum):
     """Whether a legality record is the declaration actually made (FR-033).
 
     ``unknown`` is a gen-1 record, collected before ``what_if`` existed; it is
-    never a real decision. One spelling for curation, the manifest and the
-    evaluation slices alike.
+    never a real decision.
     """
 
     REAL = "real"
@@ -174,8 +135,7 @@ class LegalityDecision(StrEnum):
 class SeatPolicy(StrEnum):
     """Whether the acting seat was Forge's AI or the random seat (FR-030).
 
-    A gen-1 record carries no ``random_seat`` and reads as on-policy. The
-    values key the manifest's ``policy_counts``.
+    A gen-1 record carries no ``random_seat`` and reads as on-policy.
     """
 
     ON_POLICY = "on_policy"
@@ -189,11 +149,9 @@ class SeatPolicy(StrEnum):
 class UnresolvedReason(StrEnum):
     """Why a record that does name an acting line carries no key for it.
 
-    A closed vocabulary, because the point of the field is to separate "no
-    printed line exists" from "the resolver failed": an engine-built card (the
-    Monarch, a dungeon, an emblem) has no script file in any tree and never
-    will, while ``unindexable`` is the signature of a resolver bug and must not
-    appear in a healthy run at all.
+    Separates "no printed line exists" (an engine-built card such as the
+    Monarch) from "the resolver failed": ``unindexable`` is a resolver bug and
+    never appears in a healthy run.
     """
 
     ENGINE_EFFECT = "engine_effect"
@@ -205,22 +163,14 @@ class UnresolvedReason(StrEnum):
 
 
 #: Kinds where no single line acts, so the envelope carries no ``ability``.
-#: A combat record's participants each act; a playability record is a verdict
-#: about candidates, not the resolution of one of them.
 KINDS_WITHOUT_ACTING_ABILITY: frozenset[RecordKind] = frozenset({
     RecordKind.COMBAT, RecordKind.PLAYABILITY,
 })
 
 
-# ── per-kind payloads ───────────────────────────────────────────────────
-
-
 class _PayloadQueries:
-    """What every payload answers about its events and keys, whatever its kind.
-
-    Each default is the answer of a payload that carries none of it, so a
-    payload class overrides only the questions its fields answer.
-    """
+    """What every payload answers about its events and keys; each default is
+    the answer of a payload carrying none of it."""
 
     __slots__ = ()
 
@@ -296,34 +246,19 @@ class ResolutionPayload(_PayloadQueries):
 class RewritePayload(_PayloadQueries):
     """``rewrite``: what a replacement effect received, and what it did.
 
-    The parameter maps are deep-copied at the hook. The handler's own copy is
-    shallow and replacements mutate nested structures in place, so a shallow
-    copy would record the outgoing event in both slots.
-
-    ``incoming`` and ``outgoing`` alone modelled a mechanism Forge does not
-    have. Forge substitutes by *running a different ability*, not by editing the
-    event, so the before and after maps came back byte-identical on 87% of the
-    hook's calls and the channel collected 34 usable records in 1.88M. ``result``
-    and ``replaced_by`` carry what those records were actually saying, and
-    ``outgoing`` is ``None`` when the map was not edited rather than a copy of
-    ``incoming`` — a record whose two halves are identical says nothing, and
-    saying nothing is not the same as saying "unchanged".
-
-    ``result`` is ``None`` only on shards collected before it existed. That is
-    not ``not_replaced``: it means the collector had no opinion, where
-    ``not_replaced`` means the collector watched a replacement decline to apply.
-    Conflating them would reinterpret every pre-contract record as a negative.
+    The parameter maps are deep-copied at the hook: replacements mutate nested
+    structures in place, so a shallow copy would record the outgoing event in
+    both slots. Forge mostly substitutes by running a different ability rather
+    than editing the event, which ``result`` and ``replaced_by`` record.
     """
 
     incoming: Event
     #: The rewritten event, or ``None`` when the parameter map was not edited.
     outgoing: Event | None = None
-    #: Which of Forge's five replacement outcomes the handler reported;
-    #: ``None`` on a record written before the hook passed one.
+    #: ``None`` only on a record written before the hook passed one — "no
+    #: opinion", which must not be read as ``not_replaced``.
     result: RewriteResult | None = None
-    #: The ability that ran *instead*, keyed the same way the record's own
-    #: ``ability`` field is. Empty where none ran, and on the outcomes that
-    #: return before reaching one.
+    #: The ability that ran instead, keyed like the record's ``ability``.
     replaced_by: tuple[ProvenanceKey, ...] = field(default_factory=tuple)
 
     @property
@@ -332,11 +267,8 @@ class RewritePayload(_PayloadQueries):
         return self.outgoing is not None
 
     def outcome_events(self) -> tuple[Event, ...]:
-        # A rewrite with no outgoing event was carried out by running another
-        # ability rather than by editing this one, which is how Forge implements
-        # most replacements — so the record carries no outcome event of its own.
-        # The incoming event is what was proposed, not what happened, and
-        # returning it here would train the head on the replaced event.
+        # The incoming event is what was proposed, not what happened; returning
+        # it would train the head on the replaced event.
         return (self.outgoing,) if self.outgoing is not None else ()
 
     def all_events(self) -> tuple[Event, ...]:
@@ -364,8 +296,8 @@ class Contribution:
     ``all-creature-types``  and its ``-all-*`` siblings: a whole class at once
     ==================  ====================================================
 
-    Types are spelled the way the snapshot spells an entity's own, and carry
-    subtypes and supertypes as well as the core types the model has fields for.
+    Types are spelled as the snapshot spells an entity's own, subtypes and
+    supertypes included.
     """
 
     entity: str
@@ -378,12 +310,7 @@ class Contribution:
 
 @dataclass(frozen=True, slots=True)
 class ContinuousPayload(_PayloadQueries):
-    """``continuous``: one record per stable board.
-
-    Coalescing per ``(game, static, board_hash)`` is itself the cap — a static
-    that applies every recompute would otherwise write a record per priority
-    pass, and none of them would say anything the first did not.
-    """
+    """``continuous``: one record per ``(game, static, board_hash)``."""
 
     contributions: tuple[Contribution, ...] = ()
     board_hash: str = ""
@@ -391,21 +318,14 @@ class ContinuousPayload(_PayloadQueries):
 
 @dataclass(frozen=True, slots=True)
 class CombatPayload(_PayloadQueries):
-    """``combat``: one record per damage step.
-
-    A first-strike combat therefore yields two records, which is the only way a
-    keyword that acts by splitting the step can be visible in the corpus at all.
-    """
+    """``combat``: one record per damage step, so a first-strike combat yields two."""
 
     attackers: tuple[str, ...] = ()
     blocks: dict[str, tuple[str, ...]] = field(default_factory=dict)
     assignment_choices: dict[str, dict[str, int]] = field(default_factory=dict)
     events: tuple[Event, ...] = ()
-    #: Damage-step probes only: which keyword was stripped, and from which
-    #: creature. Both are needed to reproduce the perturbation model-side —
-    #: a board with two tramplers gives the keyword alone two readings, and the
-    #: comparison the probe exists for would be against the wrong one. Absent on
-    #: an observed combat record, which perturbs nothing.
+    #: Damage-step probes only: the stripped keyword and its carrier, both
+    #: needed to reproduce the perturbation on a board with two tramplers.
     probed_keyword: str | None = None
     probed_entity: str | None = None
 
@@ -442,10 +362,8 @@ class TriggerPayload(_PayloadQueries):
 class Candidate:
     """One ability the engine evaluated for legality.
 
-    ``verdict`` is rules-level only. The AI's policy judgments ("another time",
-    "life in danger") are never recorded — they are the AI's opinion, not the
-    game's rules, and training on them would teach the model Forge's play style
-    instead of Magic.
+    The verdict is rules-level only: the AI's policy judgments ("life in
+    danger") are never recorded, or the model would learn Forge's play style.
     """
 
     ability: tuple[ProvenanceKey, ...]
@@ -539,18 +457,9 @@ PAYLOAD_TYPES: dict[tuple[RecordKind, Moment | PlayabilitySubkind | None], type]
 }
 
 
-# ── the envelope ────────────────────────────────────────────────────────
-
-
 @dataclass(frozen=True, slots=True)
 class EffectRecord:
     """One JSONL line: an observed game event or decision point.
-
-    Immutable once written. ``record_id`` and ``game_id`` both carry the worker
-    slot and the JVM lifetime it counted in, because workers count
-    independently and each JVM counts from zero; ``game_id`` is the join key
-    for a checkpoint's recorded split, so a repeated one merges unrelated
-    games.
 
     Three flag signatures distinguish how a record was produced, and the probe's
     ``interventional = False`` is what separates it from an intervention by
@@ -582,31 +491,22 @@ class EffectRecord:
     interventional: bool = False
     fork: bool = False
     synthetic: bool = False
-    #: ``actor_player`` is the random seat (FR-030). None on a record read
-    #: from a gen-1 shard, which never wrote it: falsy, so the record reads as
-    #: on-policy, and kept apart from False so a rewritten record stays the
-    #: generation it was collected in (FR-033). Collection metadata.
+    #: ``actor_player`` is the random seat (FR-030). None on a gen-1 record:
+    #: falsy, so on-policy, but kept apart from False so a rewritten record
+    #: stays the generation it was collected in (FR-033).
     random_seat: bool | None = False
-    #: On ``attackers`` and ``blockers`` records only: False for the declaration
-    #: a player actually made, True for a query the AI asked about a
-    #: hypothetical (FR-027, FR-031). None is unknown — a gen-1 record — and
-    #: never counts as a real decision. Collection metadata.
+    #: ``attackers``/``blockers`` only: False for the declaration actually made,
+    #: True for an AI query about a hypothetical (FR-031); None on gen-1.
     what_if: bool | None = None
-    #: The acting line, as several keys where the rendered line merged several
-    #: traits. On a modal resolution this is the chosen ``option`` line's key,
-    #: not the parent ``spell`` line's (FR-017).
+    #: The acting line, several keys where the line merged several traits; on a
+    #: modal resolution, the chosen ``option`` line's key (FR-017).
     ability: tuple[ProvenanceKey, ...] | None = None
-    #: Why ``ability`` came back empty on a kind that does name a line, from
-    #: :class:`UnresolvedReason`. Set only where there was a line to look for
-    #: and none was found, so an empty ``ability`` alone no longer conflates
-    #: "the Monarch has no printed line anywhere" with "the resolver regressed"
-    #: — the ambiguity that hid a broken resolver for a whole collection run.
-    #: Collection metadata; never a model input.
+    #: An :class:`UnresolvedReason`, set only where a line was looked for and
+    #: none found.
     ability_unresolved: str | None = None
     #: Envelope keys a newer writer added that this code does not model, kept
-    #: verbatim so reading and rewriting a shard is lossless. This is the
-    #: mechanism behind compatibility rule 1: an added field must survive a
-    #: round trip through code that predates it. Never a model input.
+    #: verbatim so a read-and-rewrite round trip is lossless (compatibility
+    #: rule 1).
     extra_fields: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -614,8 +514,6 @@ class EffectRecord:
         self._check_ability()
         self._check_flags()
         self._check_link_id()
-
-    # ── invariants ──────────────────────────────────────────────────────
 
     def _check_discriminators(self) -> None:
         if (self.moment is not None) != (self.kind is RecordKind.RESOLUTION):
@@ -645,9 +543,6 @@ class EffectRecord:
             )
         if self.ability_unresolved is None:
             return
-        # A reason without a failed lookup is a contradiction, and a reason on
-        # a kind that names no line is a category error — both would make the
-        # field unreadable as the diagnostic it exists to be.
         if self.kind in KINDS_WITHOUT_ACTING_ABILITY:
             raise ValueError(
                 f"{self.kind.value} records look for no acting line, so they "
@@ -700,8 +595,6 @@ class EffectRecord:
                 "so it has no linked effect half"
             )
 
-    # ── derived views ───────────────────────────────────────────────────
-
     @property
     def discriminator(self) -> Moment | PlayabilitySubkind | None:
         """The ``moment`` or ``subkind`` that, with ``kind``, picks the payload type."""
@@ -720,8 +613,8 @@ class EffectRecord:
 def events_of(record: EffectRecord) -> tuple[Event, ...]:
     """The events that happened in a record, whatever its kind.
 
-    Here rather than beside target derivation because the coverage counter's
-    pool workers read it per record, and target derivation imports torch.
+    Here rather than beside target derivation, which imports torch, because
+    the coverage counter's pool workers read it.
     """
     return record.payload.outcome_events()
 
@@ -729,16 +622,10 @@ def events_of(record: EffectRecord) -> tuple[Event, ...]:
 def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
     """Every printed-line key a record names, except its emblems', in record order.
 
-    The acting ``ability``; each entity's ``printed``, ``granted_attached`` and
-    ``granted_temporary`` keys; and every key its payload carries — a
-    decision's candidates and their ``responsible_static``, a legality
-    record's ``forbidden`` statics, a rewrite's ``replaced_by``. One walk, so a
-    payload field that gains keys is added to its payload once rather than in
-    each consumer that has to see every key.
-
-    Emblems are left out: an emblem's traits are built by the engine and key to
-    a script path that exists in no converted tree, so a consumer joining keys
-    to sidecars would report every planeswalker ultimate as a mismatch.
+    The acting ``ability``, each entity's printed and granted keys, and every
+    key its payload carries. Emblems are left out: their engine-built traits
+    key to a script path in no converted tree, so a sidecar join would report
+    every planeswalker ultimate as a mismatch.
     """
     if record.ability:
         yield from record.ability
@@ -752,8 +639,7 @@ def key_sites(record: EffectRecord) -> Iterator[ProvenanceKey]:
 def acting_keys(record: EffectRecord) -> tuple[ProvenanceKey, ...]:
     """The keys ``[ACT]`` reads: the acting line, or a decision's candidate.
 
-    Rarity, the per-text caps and gate 1's stratum all key on this, because a
-    text keyed one way there and read another way at ``[ACT]`` weighs the
-    whole decision class as textless.
+    Rarity, the per-text caps and gate 1's stratum all key on this, so they
+    agree with what ``[ACT]`` reads.
     """
     return record.payload.acting_keys(record.ability or ())

@@ -1,26 +1,7 @@
 """Reading and writing ``<name>.provenance.json`` beside a converted card.
 
-The sidecar is written by the Java parser — `price_predictor convert` for the
-two converted trees, and `VariantSidecarMain` (spawned by `effects
-collect-variants`) for the perturbed one, where it is the only output. It is
-read here into the pure dataclasses of :mod:`effects.domain.provenance`.
-
-The join rule it implements is the one thing this module exists for:
-
-- a key that appears in ``lines`` resolves to that line;
-- a key in ``dropped_keys`` resolves to **no** line and is kept — the converter
-  deduplicated that trait away, but it is still live at runtime and still
-  produces a key, so the record supervises through its state and payload with
-  nothing to join to;
-- a key outside every range the sidecar declared — another face, another trait
-  kind, or an index past the last one declared for its pair — is a trait Forge
-  attached to a live card, resolves to **no** line and is kept;
-- a key *inside* a declared range and in neither list **fails loudly**, because
-  the only way that happens is a reconversion between collection and training,
-  and a corpus scored against the wrong sidecar is worse than one that stops.
-
-Per-line provenance entries omit ``script_file`` — it is the same for every key
-in one file and lives in the header.
+Written by the Java parser (``convert``, or ``VariantSidecarMain`` for the
+variant tree); the join rule itself lives in :mod:`effects.domain.provenance`.
 """
 
 from __future__ import annotations
@@ -52,10 +33,8 @@ _JSON_SEPARATORS = (",", ":")
 def tree_of_folder(folder: Path) -> str:
     """The source tree a converted folder holds, read from its name.
 
-    A folder named for its tree is the tree (``output/cardsfolder``), and so is
-    one whose name ends in ``-<tree>``: stage 0 reads gen-1's sidecars from a
-    kept-aside copy, ``output/gen1-cardsfolder``, while stage 1 reconverts the
-    original (FR-063b), and the copy's keys still name ``cardsfolder/…``.
+    A name ending in ``-<tree>`` counts too: a kept-aside copy such as
+    ``output/gen1-cardsfolder`` still keys as ``cardsfolder/…`` (FR-063b).
     """
     name = Path(folder).name
     for tree in SourceTree:
@@ -77,10 +56,8 @@ def sidecar_roots(
 def script_vocabularies(folders) -> tuple[list[str], list[str]]:
     """Every ``script_api_type`` and script parameter key the sidecars carry.
 
-    The script-API head's two vocabularies (FR-060b): its classes have to be
-    fixed when the model is built, before any record is read, so they come from
-    the converted trees themselves. Parameter keys are read from every segment
-    of a line's chained ``script_text``, which is what the head predicts.
+    The script-API head's two vocabularies (FR-060b), fixed before any record
+    is read. Parameter keys come from every segment of ``script_text``.
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -92,8 +69,7 @@ def script_vocabularies(folders) -> tuple[list[str], list[str]]:
     ]
     api_types: set[str] = set()
     param_keys: set[str] = set()
-    # Read on a thread pool: the cost is tens of thousands of file opens, which
-    # release the interpreter lock, and not the parse.
+    # Threads: the cost is file opens, which release the interpreter lock.
     with ThreadPoolExecutor(max_workers=_SCAN_THREADS) as pool:
         for raw in pool.map(lambda p: p.read_bytes(), paths, chunksize=64):
             for line in json.loads(raw).get("lines", ()):
@@ -185,16 +161,12 @@ def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
     )
 
 
-#: Errnos a sidecar open can fail with while the file is perfectly good.
-#: ``EINVAL`` is what Windows reports when another process holds the file open
-#: in a mode this one cannot share, which an indexer or a virus scanner does to
-#: files written minutes earlier; ``EACCES`` is the same story with a different
-#: lock. Both come back clean on a retry.
+#: Errnos Windows reports while an indexer or virus scanner briefly holds a
+#: good file open; both come back clean on a retry.
 _TRANSIENT_ERRNOS = frozenset({errno.EINVAL, errno.EACCES})
 
-#: Attempts, and the wait before the second one. The wait doubles, so five
-#: attempts span under a second in total -- long enough to outlast a scanner's
-#: hold, short enough that a genuinely unreadable file still fails promptly.
+#: Attempts, and the wait before the second; doubling, five span under a
+#: second.
 _SIDECAR_READ_ATTEMPTS = 5
 _SIDECAR_RETRY_DELAY = 0.05
 
@@ -202,23 +174,9 @@ _SIDECAR_RETRY_DELAY = 0.05
 def read_sidecar(path: Path) -> ProvenanceSidecar:
     """Load one sidecar. Raises ``FileNotFoundError`` if it is missing.
 
-    A missing sidecar is not tolerated the way a partial shard line is: a record
-    that names a card with no sidecar cannot be joined at all, and silently
-    skipping it would drop training signal without saying so.
-
-    A *transient* open failure is tolerated, and retried. One survey worker died
-    fifteen minutes into a corpus build on ``OSError: [Errno 22] Invalid
-    argument`` opening a sidecar that was intact and parsed fine seconds later,
-    and re-reading the whole tree from twelve processes produced no error at
-    all: something outside this program had the file open for a moment. A build
-    runs for about two hours and reads tens of thousands of these, so losing it
-    to one such moment costs far more than four retries do.
-
-    ``FileNotFoundError`` is excluded: absence is an answer, not a hiccup. A
-    sidecar that is not there means the converted corpus never held that card,
-    which ``SidecarCache`` reports as :class:`UnconvertedScript` and the
-    trainer tallies per script file. Waiting out the backoff before saying so
-    would slow an ordinary run for nothing.
+    A transient open failure (:data:`_TRANSIENT_ERRNOS`) is retried with
+    backoff, so one scanner hold cannot kill a two-hour corpus build. Absence
+    is not retried: it is an answer, not a hiccup.
     """
     path = Path(path)
     for attempt in range(1, _SIDECAR_READ_ATTEMPTS + 1):
@@ -247,8 +205,7 @@ def read_sidecar(path: Path) -> ProvenanceSidecar:
 def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
     """Write one sidecar beside its converted text.
 
-    The inverse of :func:`read_sidecar`, used by the tests and by any tool that
-    needs to produce a sidecar without a Forge runtime.
+    The inverse of :func:`read_sidecar`, for producing one without Forge.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -261,10 +218,8 @@ def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
 def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
     """``script file -> its sidecar's script texts`` over one converted tree.
 
-    The holdout's token carriers (``text_keyed_holdout(token_texts=...)``):
-    every converted token script, keyed by the script file its sidecar names,
-    which is what a record's provenance key and ``HeldOutCards.script_files``
-    both spell. An absent or missing root is an empty tree.
+    Keyed by the script file as provenance keys spell it. An absent or
+    missing root is an empty tree.
     """
     if root is None or not Path(root).is_dir():
         return {}
@@ -287,9 +242,7 @@ def converted_text_path(sidecar_path: Path) -> Path:
 def prose_lines(converted_txt: Path) -> list[str]:
     """The converted file's rendered lines, indexable by ``line_index``.
 
-    The prose surface encodes these; the sidecar carries only the script. A
-    reader that used ``script_text`` for both would silently encode the wrong
-    surface, and the result would look like a working run.
+    The prose surface encodes these; the sidecar carries only the script.
     """
     path = Path(converted_txt)
     if not path.exists():
@@ -300,15 +253,10 @@ def prose_lines(converted_txt: Path) -> list[str]:
 def prose_for(line, lines: list[str]) -> str | None:
     """One line's converted prose, without its ``kind[n]: `` prefix.
 
-    The prefix is structure rather than card text, and the role spans the
-    tokenizer applies are offsets into the prose without it.
-
-    The split is the sidecar's ``prose_offset``, which the converter records
-    because it cannot be recovered from the text: a continuation line of a
-    multi-line description has no prefix, and cutting it at its first ``": "``
-    would take ``{T}: `` off it as though it were one. A sidecar written
-    before the field existed falls back to that cut, which is right for every
-    line those sidecars hold.
+    Role spans are offsets into the prose without the prefix. The split is
+    the sidecar's ``prose_offset``, since a continuation line has no prefix
+    but may hold a ``{T}: ``; an older sidecar without it is cut at the first
+    ``": "``, right for every line such sidecars hold.
     """
     if not lines or not (0 <= line.line_index < len(lines)):
         return None
@@ -322,49 +270,32 @@ def prose_for(line, lines: list[str]) -> str | None:
 class UnconvertedScript(KeyError):
     """A provenance key names a script the converted corpus does not hold.
 
-    Raised rather than ``FileNotFoundError`` because callers already treat an
-    unresolvable key as an ability that contributes no text, and catching a
-    distinct exception type is what made them miss this case. A ``KeyError``
-    subclass so those handlers keep working unchanged.
+    A ``KeyError`` so callers' handlers for an unresolvable key catch it.
     """
 
 
 class UnconfiguredTree(KeyError):
     """A key names a source tree this run configured no converted root for.
 
-    Distinct from :class:`UnconvertedScript` (the tree exists, the card was
-    never converted) and from the mismatch ``KeyError`` (the sidecar exists and
-    disagrees with the record). A variant key on a run without
-    ``--variant-scripts`` is the expected case, and it reads as no text.
+    The expected case is a variant key on a run without ``--variant-scripts``.
     """
 
 
 class SidecarCache:
     """Sidecars held by script file, read once per card.
 
-    Training joins millions of records against a few tens of thousands of cards,
-    so the read has to happen once per card rather than once per record. The
-    cache is per run and holds only what the corpus actually names.
+    Per run, holding only what the corpus names.
     """
 
     def __init__(self, roots: dict[str, Path]) -> None:
-        """``roots`` maps a source tree name to the directory it was written to.
-
-        e.g. ``{"cardsfolder": Path("output/cardsfolder"), "tokenscripts":
-        Path("output/tokenscripts")}``. A key's ``script_file`` names its tree,
-        which is what lets one filename resolve differently in two trees.
-        """
-        # Plain strings, so the unconfigured-tree message lists tree names
-        # rather than a SourceTree's repr.
+        """``roots`` maps a source tree name to the directory it was written to."""
         self._roots = {str(name): Path(root) for name, root in roots.items()}
         self._cache: dict[str, ProvenanceSidecar] = {}
         #: Script files found to have no sidecar, so a miss stats the disk once.
         self._missing: set[str] = set()
         self._prose: dict[str, list[str]] = {}
-        #: ``script_file -> times asked`` for keys naming an unconverted script.
-        #: Counted rather than only swallowed: today this is 0.07% of records,
-        #: all of them tokens, but a conversion that broke would raise that
-        #: share without otherwise changing the shape of a run.
+        #: ``script_file -> times asked`` for keys naming an unconverted script,
+        #: counted so a broken conversion shows.
         self.unresolved: dict[str, int] = {}
         #: ``script_file -> times asked`` for keys :meth:`line_or_none` read as
         #: no line although the sidecar exists and does not describe them.
@@ -396,10 +327,8 @@ class SidecarCache:
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
         """The rendered line a record's key names, or None where there is none.
 
-        None covers two cases that read the same way downstream: the converter
-        deduplicated the line away, and the key names a script the converted
-        corpus never held. An unconfigured *tree* still raises, because that is
-        a misconfigured run rather than a gap in the corpus.
+        None also for a script never converted; an unconfigured tree still
+        raises, being a misconfigured run.
         """
         try:
             return self.get(key.script_file).line_for(key)
@@ -409,13 +338,9 @@ class SidecarCache:
     def line_or_none(self, key: ProvenanceKey) -> SidecarLine | None:
         """The line a key names, or None wherever the join gives none.
 
-        The one policy for a reader that reads keys off a board rather than
-        training on them — the evaluator's keyword resolver and breakdowns, the
-        knowledge probes — where a gap costs one ability its text and nothing
-        else: a dropped key, a script never converted, a tree this run has no
-        root for, and a key the sidecar does not describe all read as no line.
-        The last is the join's fail-loudly case (:meth:`line_for` raises on it),
-        so it is tallied in :attr:`undescribed` rather than lost.
+        For readers that read keys off a board rather than train on them. A
+        key the sidecar does not describe, which :meth:`line_for` raises on, is
+        tallied in :attr:`undescribed`.
         """
         try:
             return self.line_for(key)
@@ -438,14 +363,8 @@ class SidecarCache:
     def prose_for(self, key: ProvenanceKey) -> str | None:
         """The converted prose of the line a key names.
 
-        Read from the ``.txt`` beside the sidecar and held per card, because the
-        prose surface encodes it and the sidecar carries only the script.
-
-        A variant has none: nobody printed the card, so there is no oracle text
-        to convert, and the ``.txt`` beside its sidecar is the Forge source
-        script rather than converted prose. Returning None is what makes the
-        prose surface fall back to the script for a variant instead of encoding
-        a source-script line as if it were card text.
+        None for a variant: the ``.txt`` beside its sidecar is the Forge
+        source script, so the prose surface falls back to the script.
         """
         if key.tree == SourceTree.VARIANT_SCRIPTS:
             return None
@@ -467,9 +386,8 @@ class SidecarCache:
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
         """The join's answer for a key, with the two no-sidecar cases folded in.
 
-        An unconverted script and an unconfigured tree are both "no text"; the
-        mismatch inside an existing sidecar still raises, because that is the
-        one condition the whole join is designed to fail loudly on.
+        An unconverted script and an unconfigured tree are both
+        ``UNCONVERTED``; a mismatch inside an existing sidecar still raises.
         """
         try:
             return self.get(key.script_file).resolution_of(key)
