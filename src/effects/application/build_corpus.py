@@ -251,9 +251,9 @@ def _keyword_misfires(
     (FR-015), replacing a script with a reminder template it does not carry."""
     if definitions is None or not Path(definitions).exists():
         return []
-    from effects.application.extract_keyword_definitions import load_keyword_definitions
     from effects.domain.ability_tokenizer import display_name_of
     from effects.domain.rule_families import KEYWORD_API_TYPE
+    from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 
     names = {name.lower() for name in load_keyword_definitions(Path(definitions))}
     found: list[str] = []

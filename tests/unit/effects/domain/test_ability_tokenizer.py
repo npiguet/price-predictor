@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.extract_keyword_definitions import KeywordDefinition
 from effects.domain.ability_tokenizer import (
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
     Token,
     withheld_keyword_tokens,
 )
+from effects.domain.keyword_definitions import KeywordDefinition
 from effects.domain.provenance import RoleSpan
 
 # "flying" and "vigilance" are deliberately absent: the fixture adds them as
@@ -693,7 +693,7 @@ class TestKeywordLines:
         """Scenario 7: normalized at load, not in the file."""
         import json
 
-        from effects.application.extract_keyword_definitions import (
+        from effects.infrastructure.tokenizer_loading import (
             load_keyword_definitions,
         )
 
@@ -709,7 +709,7 @@ class TestKeywordLines:
     def test_an_old_definitions_file_has_no_formatter(self, tmp_path):
         import json
 
-        from effects.application.extract_keyword_definitions import (
+        from effects.infrastructure.tokenizer_loading import (
             load_keyword_definitions,
         )
 
@@ -755,7 +755,7 @@ def test_no_definition_expands_to_a_percent_or_unk(surface, source):
         seed_tokens,
         staging_tokenizer,
     )
-    from effects.application.extract_keyword_definitions import (
+    from effects.infrastructure.tokenizer_loading import (
         load_keyword_definitions,
     )
     from price_predictor.application.build_vocabulary import MULTI_WORD_KEYWORDS

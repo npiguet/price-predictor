@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import random
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import NamedTuple
 
+from effects.domain.keyword_definitions import KeywordDefinition
 from effects.domain.keyword_formatting import (
     format_reminder,
     java_format,
@@ -160,7 +162,7 @@ class AbilityTokenizer:
     def __init__(
         self,
         vocab: dict[str, int],
-        keyword_definitions: dict | None = None,
+        keyword_definitions: Mapping[str, KeywordDefinition] | None = None,
         *,
         surface: Surface = Surface.PROSE,
     ) -> None:
@@ -502,9 +504,7 @@ class AbilityTokenizer:
         formatted by the definition's ``formatter``, specifiers removed."""
         definition = self._definitions[name]
         template = self._definition_text(definition) or ""
-        return format_reminder(
-            getattr(definition, "formatter", None), template, details,
-        )
+        return format_reminder(definition.formatter, template, details)
 
     def _expansion(self, token: Token) -> list[Token]:
         definition = self._definition_by_token[token.text]
@@ -522,10 +522,10 @@ class AbilityTokenizer:
         ]
 
     @staticmethod
-    def _definition_text(definition) -> str | None:
+    def _definition_text(definition: KeywordDefinition) -> str | None:
         """The reminder template, on both surfaces; the captured script holds
         only root lines, never their effect (FR-020)."""
-        return getattr(definition, "reminder_template", None)
+        return definition.reminder_template
 
     @staticmethod
     def _instantiate(template: str | None) -> str:

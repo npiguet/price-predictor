@@ -6,11 +6,11 @@ from __future__ import annotations
 import pytest
 import torch
 
-from effects.application.extract_keyword_definitions import load_keyword_definitions
 from effects.domain.ability_tokenizer import SPECIAL_TOKENS, AbilityTokenizer
 from effects.domain.baselines import baseline_masks
 from effects.infrastructure.record_io import read_shard, write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
+from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 from tests.unit.effects.builders import (
     EFFECTS_FIXTURES,

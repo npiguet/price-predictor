@@ -426,8 +426,8 @@ def test_a_stand_in_key_reads_its_text_with_the_real_line():
 def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
     """``--withhold-keyword``: the line still says what the keyword does, so the
     zero-shot check has a definition the model trained on reading."""
-    from effects.application.extract_keyword_definitions import KeywordDefinition
     from effects.domain.ability_tokenizer import AbilityTokenizer
+    from effects.domain.keyword_definitions import KeywordDefinition
 
     words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
              "cant", "be", "blocked", "except", "by", "creatures", "with", "or"]
@@ -451,8 +451,8 @@ def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
 
 def test_a_withheld_keywords_token_never_appears_even_inside_an_expansion():
     """Flying's own reminder text says "flying", and so does Reach's."""
-    from effects.application.extract_keyword_definitions import KeywordDefinition
     from effects.domain.ability_tokenizer import AbilityTokenizer
+    from effects.domain.keyword_definitions import KeywordDefinition
 
     words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
              "cant", "be", "blocked", "except", "by", "creatures", "with", "or",
