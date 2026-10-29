@@ -15,6 +15,7 @@ their signal is in playability records.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -92,6 +93,14 @@ def combat_participant(
     )
 
 
+#: Forge renders a card defender (a planeswalker or a battle) as ``Name (id)``,
+#: and a player defender by the player's name, which carries no such suffix.
+_CARD_DEFENDER = re.compile(r" \(\d+\)$")
+
+#: Forge's rendering of an attack whose defender is gone.
+_NO_DEFENDER = "<Nothing>"
+
+
 def _defending_player(
     state: StateSnapshot, carrier: EntityState,
 ) -> str | None:
@@ -103,10 +112,7 @@ def _defending_player(
     has no defending player, since no player's life or poison can move.
     """
     attacking = carrier.combat.attacking if carrier.combat else None
-    for player in state.players:
-        if player.id == attacking:
-            return player.id
-    if any(entity.name == attacking for entity in state.entities):
+    if attacking in (None, _NO_DEFENDER) or _CARD_DEFENDER.search(attacking):
         return None
     others = [p.id for p in state.players if p.id != carrier.controller]
     return others[0] if len(others) == 1 else None

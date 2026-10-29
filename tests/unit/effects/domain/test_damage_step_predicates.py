@@ -44,6 +44,14 @@ from tests.unit.effects.builders import fresh_interpreter_env
 
 _WHITE_KNIGHT = ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "static", 0)
 
+#: How Forge renders a planeswalker defender into ``CombatStatus.attacking``:
+#: its name and its card id, which the snapshot's ``name`` does not carry.
+_PLANESWALKER_DEFENDER = "Chandra, Torch of Defiance (9)"
+
+#: How Forge renders a player defender: the player's name, not its ``P`` id.
+_PLAYER_DEFENDER = "p2"
+
+
 
 def _creature(
     entity_id: str,
@@ -99,7 +107,7 @@ def _attacker_and_blockers(
     carrier = _creature(
         "A", *attacker, damage=attacker_damage, keywords=attacker_keywords,
         combat=CombatStatus(
-            attacking="P1", blocked_by=blocker_ids,
+            attacking=_PLAYER_DEFENDER, blocked_by=blocker_ids,
             became_blocked=bool(blocker_ids),
         ),
     )
@@ -114,11 +122,10 @@ def _attacker_and_blockers(
 
 
 def _planeswalker() -> EntityState:
-    """A defender that is not a player. Forge writes its name into
-    ``CombatStatus.attacking`` exactly as it writes a player's."""
+    """A defender that is not a player."""
     return EntityState(
-        id="E9", name="Chandra", zone="battlefield", controller="P1",
-        types=("planeswalker",),
+        id="E9", name="Chandra, Torch of Defiance", zone="battlefield",
+        controller="P1", types=("planeswalker",),
     )
 
 
@@ -128,7 +135,7 @@ def _unblocked_attacker(
 ):
     carrier = _creature(
         "A", power, toughness, keywords=keywords,
-        combat=CombatStatus(attacking="P1"),
+        combat=CombatStatus(attacking=_PLAYER_DEFENDER),
     )
     return _board(carrier, substep=substep), carrier
 
@@ -220,17 +227,36 @@ class TestCombatParticipant:
 
     def test_an_attack_on_a_planeswalker_has_no_defending_player(self):
         """Its damage lands on the planeswalker, not on that player's life."""
-        carrier = _creature("A", 4, 4, combat=CombatStatus(attacking="Chandra"))
+        carrier = _creature(
+            "A", 4, 4, combat=CombatStatus(attacking=_PLANESWALKER_DEFENDER),
+        )
         participant = combat_participant(
             _board(carrier, _planeswalker()), carrier,
         )
         assert participant.defending_player is None
 
+    def test_an_attack_on_a_battle_off_the_snapshot_has_no_defending_player(self):
+        """The card spelling alone says the defender is not a player."""
+        carrier = _creature(
+            "A", 4, 4, combat=CombatStatus(attacking="Invasion of Belenon (51)"),
+        )
+        participant = combat_participant(_board(carrier), carrier)
+        assert participant.defending_player is None
+
+    def test_an_attack_on_nothing_has_no_defending_player(self):
+        carrier = _creature(
+            "A", 4, 4, combat=CombatStatus(attacking="<Nothing>"),
+        )
+        participant = combat_participant(_board(carrier), carrier)
+        assert participant.defending_player is None
+
     def test_trample_over_a_planeswalkers_blockers_is_not_an_observation(self):
         carrier = _creature(
             "A", 4, 4,
-            combat=CombatStatus(attacking="Chandra", blocked_by=("B0",),
-                                became_blocked=True),
+            combat=CombatStatus(
+                attacking=_PLANESWALKER_DEFENDER, blocked_by=("B0",),
+                became_blocked=True,
+            ),
         )
         blocker = _creature(
             "B0", 1, 1, controller="P1", combat=CombatStatus(blocking=("A",)),
@@ -251,7 +277,7 @@ class TestDealsDamageAtAll:
     def test_a_powerless_carrier_qualifies_for_nothing(self, keyword, substep):
         carrier = _creature(
             "A", 0, 3, keywords=(keyword,),
-            combat=CombatStatus(attacking="P1", blocked_by=("B0",),
+            combat=CombatStatus(attacking=_PLAYER_DEFENDER, blocked_by=("B0",),
                                 became_blocked=True),
         )
         blocker = _creature(
@@ -369,7 +395,7 @@ class TestStrikingFirst:
     def test_an_unblocked_attack_on_a_planeswalker_shows_nothing(self, keyword):
         carrier = _creature(
             "A", 4, 4, keywords=(keyword,),
-            combat=CombatStatus(attacking="Chandra"),
+            combat=CombatStatus(attacking=_PLANESWALKER_DEFENDER),
         )
         state = _board(carrier, _planeswalker(), substep="first_strike")
         assert not _qualifies(keyword, state, carrier)
@@ -439,7 +465,7 @@ class TestTheOtherStrikeFirstKeyword:
         """Printed first strike is most first strike; the overlay sees none."""
         carrier = _creature(
             "A", 2, 2, keywords=("double_strike",), printed=(_WHITE_KNIGHT,),
-            combat=CombatStatus(attacking="P1"),
+            combat=CombatStatus(attacking=_PLAYER_DEFENDER),
         )
         state = _board(carrier, substep="first_strike")
         assert _qualifies("double_strike", state, carrier)
@@ -464,7 +490,7 @@ class TestLifelink:
     def test_a_zero_power_lifelinker_gains_nothing(self):
         carrier = _creature(
             "A", 0, 4, keywords=("lifelink",),
-            combat=CombatStatus(attacking="P1"),
+            combat=CombatStatus(attacking=_PLAYER_DEFENDER),
         )
         assert not _qualifies("lifelink", _board(carrier), carrier)
 
