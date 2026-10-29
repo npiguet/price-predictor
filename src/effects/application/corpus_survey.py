@@ -17,15 +17,12 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import (
-    SIGNATURE_CLASSES,
     game_hash,
-    outcome_signature,
     record_hash,
-    signature_label,
 )
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import (
@@ -41,7 +38,6 @@ from effects.domain.provenance import first_text
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
     EffectRecord,
-    LegalityDecision,
     RecordKind,
     acting_keys,
 )
@@ -51,51 +47,10 @@ from effects.domain.tally_merge import NOT_MERGED, merge_into
 
 if TYPE_CHECKING:
     from effects.domain.damage_step_keywords import KeywordResolver
-    from effects.domain.provenance import ProvenanceKey, SidecarLookup
+    from effects.domain.provenance import ProvenanceKey
     from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
-
-
-def selection_half(record: EffectRecord, klass: SamplingClass) -> LegalityDecision | Literal[""]:
-    """``real`` / ``what-if`` on a legality record (FR-049 step 3), empty on
-    every other; a gen-1 record, whose decision is unknown, is a what-if."""
-    if klass != SamplingClass.PLAYABILITY_LEGALITY:
-        return ""
-    if LegalityDecision.of(record) is LegalityDecision.REAL:
-        return LegalityDecision.REAL
-    return LegalityDecision.WHAT_IF
-
-
-def cell_of(
-    record: EffectRecord, sidecars: SidecarLookup, resolver: KeywordResolver,
-    legality_mode_counts: Mapping[str, int] | None = None,
-) -> Cell:
-    """The cell a record is selected in. Both passes call this one function.
-
-    ``random_seat`` is not a component (FR-050). A legality record's family is
-    its rarest mode, which only the whole corpus can say, so without
-    ``legality_mode_counts`` (the survey) its cell carries the modes for
-    :meth:`Cell.resolved` to fold later.
-    """
-    from effects.domain.rule_families import FamilySentinel, legality_modes, rule_family
-
-    klass = sampling_class(record)
-    half = selection_half(record, klass)
-    if klass == SamplingClass.PLAYABILITY_LEGALITY:
-        modes = legality_modes(record, sidecars)
-        family = "" if modes else FamilySentinel.NONE
-        cell = Cell(klass=klass, half=half, family=family, modes=modes)
-        return cell if legality_mode_counts is None else cell.resolved(legality_mode_counts)
-    return Cell(
-        klass=klass,
-        half=half,
-        family=rule_family(record, sidecars, resolver=resolver),
-        signature=(
-            signature_label(outcome_signature(record))
-            if klass in SIGNATURE_CLASSES else ""
-        ),
-    )
 
 
 # ── what both passes read with ──────────────────────────────────────────
@@ -157,7 +112,7 @@ class WorkerContext:
     def cell_of(
         self, record: EffectRecord, mode_counts: Mapping[str, int] | None = None,
     ) -> Cell:
-        return cell_of(record, self.sidecars, self.resolver, mode_counts)
+        return Cell.of(record, self.sidecars, self.resolver, mode_counts)
 
     def hash_of(self, record: EffectRecord) -> int:
         return record_hash(record.record_id, seed=self.read.seed)

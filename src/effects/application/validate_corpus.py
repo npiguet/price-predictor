@@ -20,7 +20,6 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, fields, replace
-from pathlib import Path
 from typing import Protocol
 
 from effects.domain.canonical_digest import canonical_digest
@@ -209,7 +208,7 @@ def validate_corpus(
 
     ``sidecars`` of ``None`` reports the key-join checks as unchecked rather
     than as holding. ``presence`` is the per-shard envelope tally
-    :func:`read_window` fills from the raw lines (FR-033), since a parsed
+    ``record_io.read_window`` fills from the raw lines (FR-033), since a parsed
     record cannot say whether a field was on the wire.
     """
     checks = _checks(sidecars)
@@ -311,31 +310,6 @@ def _joined(halves: list[tuple[str, tuple[ProvenanceKey, ...]]]) -> bool:
             return False
         roots |= {key.root for key in keys}
     return len(roots) == 1
-
-
-def read_window(
-    directory: Path, limit: int = 0, presence: FieldPresence | None = None,
-) -> Iterator[EffectRecord]:
-    """The first ``limit`` records under ``directory``; 0 reads all of them.
-    ``presence``, when given, is filled from each raw line before it is parsed.
-    """
-    from effects.infrastructure.record_io import (
-        iter_record_dicts,
-        iter_shards,
-        record_from_dict,
-    )
-
-    root = Path(directory)
-    seen = 0
-    for shard in iter_shards(root):
-        name = shard.relative_to(root).as_posix() if shard.is_relative_to(root) else str(shard)
-        for data in iter_record_dicts(shard):
-            if presence is not None:
-                presence.observe(name, data)
-            yield record_from_dict(data)
-            seen += 1
-            if limit and seen >= limit:
-                return
 
 
 def _kind_label(record: EffectRecord) -> str:

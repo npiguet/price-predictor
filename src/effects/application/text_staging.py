@@ -178,7 +178,7 @@ def _taxonomy_vectors(
 ) -> torch.Tensor:
     """The taxonomy baseline's stand-in for ``e``: the hash embedding its cache
     writes, so the trained baseline and its cache agree."""
-    from effects.application.encode_abilities import taxonomy_vector
+    from effects.domain.baselines import taxonomy_vector
 
     rows = np.stack([taxonomy_vector(lines[text], e_dim) for text in ordered])
     return torch.from_numpy(rows)

@@ -209,6 +209,32 @@ class TestLoadingTheCache:
             [1.0, 0.0],
         )
 
+    def test_every_variant_joins_the_sidecars_read_once(self, cache):
+        """The evaluator reads the trees once for its three variants."""
+        from effects.application.geometry_checks import cached_vectors
+        from effects.infrastructure.ability_cache_store import SidecarIndex
+        from effects.infrastructure.sidecar_io import sidecar_paths
+
+        cards, abilities = cache
+        _write_source(
+            cards, abilities, "Serra Angel", "s/serra_angel",
+            ["Flying", "Vigilance"], [[9.0, 9.0], [9.0, 9.0]],
+            variant="no-state", prose=["flying", "vigilance"],
+        )
+        expected = {
+            variant: load_cache(abilities, cards, surface="script", variant=variant)
+            for variant in ("full", "no-state")
+        }
+        index = SidecarIndex(cards, surface="script")
+        for path in sidecar_paths(cards):
+            path.unlink()
+        for variant, loaded in expected.items():
+            joined = cached_vectors(index, abilities, variant=variant)
+            assert joined.texts == loaded.texts
+            np.testing.assert_array_equal(joined.matrix, loaded.matrix)
+            assert joined.by_prose == loaded.by_prose
+            assert set(joined.by_card) == set(loaded.by_card)
+
 
 class TestTheShippingCache:
     """Gate 3's population: one vector per unique text the shipping cache serves."""

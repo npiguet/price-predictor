@@ -733,12 +733,8 @@ def _validate_corpus_parser(subparsers) -> None:
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
-    from effects.application.validate_corpus import (
-        FieldPresence,
-        read_window,
-        validate_corpus,
-    )
-    from effects.infrastructure.record_io import iter_shards
+    from effects.application.validate_corpus import FieldPresence, validate_corpus
+    from effects.infrastructure.record_io import iter_shards, read_window
 
     root = args.effect_records
     shards = iter_shards(root)
@@ -748,7 +744,7 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
 
     presence = FieldPresence()
     findings = validate_corpus(
-        read_window(root, args.limit, presence), config_from_args(Thresholds, args),
+        read_window(root, args.limit, presence.observe), config_from_args(Thresholds, args),
         _sidecars_for_validation(args), presence,
     )
     window = f" (first {args.limit} records)" if args.limit else ""

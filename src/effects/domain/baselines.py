@@ -6,8 +6,13 @@ can file a baseline under its name without loading the model.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from enum import StrEnum
+
+import numpy as np
+
+from effects.domain.provenance import ProvenanceSidecar, SidecarLine
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,3 +72,26 @@ def baseline_masks(name: str) -> BaselineMasks:
         raise ValueError(
             f"unknown --variant {name!r}; known: {list(BASELINES)}"
         ) from None
+
+
+def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
+    """The ``taxonomy`` baseline's stand-in for an encoded ``e``: a
+    deterministic hash embedding of the line's API type and parameter keys."""
+    vector = np.zeros(e_dim, dtype=np.float32)
+    features = [f"api:{line.script_api_type or ''}"]
+    features += [f"param:{key}" for key in line.script_param_keys]
+    for feature in features:
+        digest = hashlib.sha256(feature.encode("utf-8")).digest()
+        index = int.from_bytes(digest[:4], "big") % e_dim
+        sign = 1.0 if digest[4] % 2 else -1.0
+        vector[index] += sign
+    norm = float(np.linalg.norm(vector))
+    return vector / norm if norm > 0 else vector
+
+
+def taxonomy_matrix(sidecar: ProvenanceSidecar, e_dim: int) -> np.ndarray:
+    """The ``taxonomy`` variant's ``(n_lines, e_dim)`` matrix, row-aligned to
+    its sidecar, with no encoder at all."""
+    if not sidecar.lines:
+        return np.zeros((0, e_dim), dtype=np.float32)
+    return np.stack([taxonomy_vector(line, e_dim) for line in sidecar.lines])

@@ -15,23 +15,29 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import partial
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from effects.domain.budget_allocation import allocate
 from effects.domain.corpus_curation import (
+    SIGNATURE_CLASSES,
     CapHeap,
     CopyPlan,
     class_targets,
     copy_plan,
     game_disjoint_draw,
     in_game_disjoint_stratum,
+    outcome_signature,
     rate_plan,
+    signature_label,
     text_capacity,
 )
-from effects.domain.provenance import ProvenanceKey
-from effects.domain.records import LegalityDecision
-from effects.domain.sampling import SamplingClass
+from effects.domain.provenance import ProvenanceKey, SidecarLookup
+from effects.domain.records import EffectRecord, LegalityDecision
+from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.strata import Stratum
+
+if TYPE_CHECKING:
+    from effects.domain.damage_step_keywords import KeywordResolver
 
 #: A record's acting keys: the whole tuple, hashable and picklable as it is.
 Keys = tuple[ProvenanceKey, ...]
@@ -74,10 +80,53 @@ class Cell:
             self, family=legality_family(self.modes, mode_counts), modes=frozenset(),
         )
 
+    @classmethod
+    def of(
+        cls, record: EffectRecord, sidecars: SidecarLookup, resolver: KeywordResolver,
+        legality_mode_counts: Mapping[str, int] | None = None,
+    ) -> Cell:
+        """The cell a record is selected in. Both passes call this one function.
+
+        ``random_seat`` is not a component (FR-050). A legality record's family is
+        its rarest mode, which only the whole corpus can say, so without
+        ``legality_mode_counts`` (the survey) its cell carries the modes for
+        :meth:`resolved` to fold later.
+        """
+        from effects.domain.rule_families import FamilySentinel, legality_modes, rule_family
+
+        klass = sampling_class(record)
+        half = _selection_half(record, klass)
+        if klass == SamplingClass.PLAYABILITY_LEGALITY:
+            modes = legality_modes(record, sidecars)
+            family = "" if modes else FamilySentinel.NONE
+            cell = cls(klass=klass, half=half, family=family, modes=modes)
+            return cell if legality_mode_counts is None else cell.resolved(legality_mode_counts)
+        return cls(
+            klass=klass,
+            half=half,
+            family=rule_family(record, sidecars, resolver=resolver),
+            signature=(
+                signature_label(outcome_signature(record))
+                if klass in SIGNATURE_CLASSES else ""
+            ),
+        )
+
     @property
     def label(self) -> str:
         """The family's name in the manifest: prefixed by its half on a legality cell."""
         return f"{self.half}:{self.family}" if self.half else self.family
+
+
+def _selection_half(
+    record: EffectRecord, klass: SamplingClass,
+) -> LegalityDecision | Literal[""]:
+    """``real`` / ``what-if`` on a legality record (FR-049 step 3), empty on
+    every other; a gen-1 record, whose decision is unknown, is a what-if."""
+    if klass != SamplingClass.PLAYABILITY_LEGALITY:
+        return ""
+    if LegalityDecision.of(record) is LegalityDecision.REAL:
+        return LegalityDecision.REAL
+    return LegalityDecision.WHAT_IF
 
 
 # ── what the training-bound records can supply ──────────────────────────

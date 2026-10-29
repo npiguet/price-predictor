@@ -56,6 +56,7 @@ from effects.infrastructure.record_io import (
     parse_record_line,
     read_records,
     read_shard,
+    read_window,
     record_from_dict,
     record_to_dict,
 )
@@ -1019,3 +1020,26 @@ class TestThePayloadCodecs:
 
         with pytest.raises(ValueError, match="no payload is defined"):
             _payload_from_json({"anchor_attacker": "E1"}, kind, discriminator)
+
+
+class TestTheWindow:
+    """``validate-corpus`` reads the first records of a collection pass."""
+
+    def _write(self, tmp_path: Path, count: int) -> None:
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
+            for index in range(count):
+                writer.write(_record(record_id=f"run.0-L1.{index}"))
+
+    def test_limit_stops_reading(self, tmp_path):
+        self._write(tmp_path, 5)
+        assert len(list(read_window(tmp_path, limit=2))) == 2
+        assert len(list(read_window(tmp_path))) == 5
+
+    def test_each_raw_record_is_observed_under_its_shard_s_relative_name(self, tmp_path):
+        self._write(tmp_path, 2)
+        seen = []
+        records = list(read_window(tmp_path, observe=lambda name, data: seen.append(
+            (name, data["record_id"]),
+        )))
+        shard = iter_shards(tmp_path)[0].relative_to(tmp_path).as_posix()
+        assert seen == [(shard, record.record_id) for record in records]

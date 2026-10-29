@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,8 +10,8 @@ import numpy as np
 
 from effects.domain import default_paths
 from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
-from effects.domain.baselines import Baseline
-from effects.domain.provenance import ProvenanceSidecar, SidecarLine
+from effects.domain.baselines import Baseline, taxonomy_matrix
+from effects.domain.provenance import ProvenanceSidecar
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.effect_model_store import (
     InferenceCheckpoint,
@@ -50,29 +49,6 @@ class EncodeSummary:
     rows: int = 0
     skipped: int = 0
     cleaned: int = 0
-
-
-def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
-    """The ``taxonomy`` baseline's stand-in for an encoded ``e``: a
-    deterministic hash embedding of the line's API type and parameter keys."""
-    vector = np.zeros(e_dim, dtype=np.float32)
-    features = [f"api:{line.script_api_type or ''}"]
-    features += [f"param:{key}" for key in line.script_param_keys]
-    for feature in features:
-        digest = hashlib.sha256(feature.encode("utf-8")).digest()
-        index = int.from_bytes(digest[:4], "big") % e_dim
-        sign = 1.0 if digest[4] % 2 else -1.0
-        vector[index] += sign
-    norm = float(np.linalg.norm(vector))
-    return vector / norm if norm > 0 else vector
-
-
-def taxonomy_matrix(sidecar: ProvenanceSidecar, e_dim: int) -> np.ndarray:
-    """The ``taxonomy`` variant's ``(n_lines, e_dim)`` matrix, row-aligned to
-    its sidecar, with no encoder at all."""
-    if not sidecar.lines:
-        return np.zeros((0, e_dim), dtype=np.float32)
-    return np.stack([taxonomy_vector(line, e_dim) for line in sidecar.lines])
 
 
 def run(config: EncodeAbilitiesConfig) -> EncodeSummary:

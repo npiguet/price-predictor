@@ -108,7 +108,8 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     variants = load_baselines(config, context.main)
 
     report = EvaluationReport()
-    cached = _load_cache(context)
+    sidecars = _sidecar_index(context)
+    cached = _load_cache(context, sidecars)
     report.add(run_gate_three(cached, config.abilities_root))
     report.add(_gate_one(context, variants))
 
@@ -121,23 +122,27 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 
     logger.info("breakdowns: scoring both validation strata")
     report.extend(run_breakdowns(context))
-    report.extend(_geometry_checks(context, cached))
+    report.extend(_geometry_checks(context, cached, sidecars))
     report.extend(_unmeasured_checks(context.main))
     return report
 
 
-def _load_cache(context: EvaluationContext, variant: str = "full"):
-    """One variant's cache: a vector per unique text on the checkpoint's
-    surface, over the card and token trees (FR-123)."""
-    from effects.application.geometry_checks import load_cache
+def _sidecar_index(context: EvaluationContext):
+    """The card and token trees' sidecars (FR-123), keyed on the checkpoint's
+    surface once for every variant's cache."""
     from effects.domain.ability_encoder import surface_of
+    from effects.infrastructure.ability_cache_store import SidecarIndex
 
-    config = context.config
-    logger.info("loading the %s ability cache under %s", variant, config.abilities_root)
-    return load_cache(
-        config.abilities_root, config.cards_folders,
-        surface=surface_of(context.vocab_path), variant=variant,
-    )
+    return SidecarIndex(context.config.cards_folders, surface=surface_of(context.vocab_path))
+
+
+def _load_cache(context: EvaluationContext, sidecars, variant: str = "full"):
+    """One variant's cache: a vector per unique text on the checkpoint's surface."""
+    from effects.application.geometry_checks import cached_vectors
+
+    root = context.config.abilities_root
+    logger.info("loading the %s ability cache under %s", variant, root)
+    return cached_vectors(sidecars, root, variant=variant)
 
 
 def _gate_one(context: EvaluationContext, variants: dict) -> CheckResult:
@@ -153,7 +158,7 @@ def _gate_one(context: EvaluationContext, variants: dict) -> CheckResult:
     return run_gate_one(context, variants[Baseline.IDENTITY])
 
 
-def _geometry_checks(context: EvaluationContext, cached) -> list[CheckResult]:
+def _geometry_checks(context: EvaluationContext, cached, sidecars) -> list[CheckResult]:
     """The e-geometry checks, all reported, none gating."""
     from effects.application.geometry_checks import (
         NEIGHBOUR_QUERIES,
@@ -176,7 +181,7 @@ def _geometry_checks(context: EvaluationContext, cached) -> list[CheckResult]:
     ]
     for variant in (Baseline.NO_STATE, Baseline.TAXONOMY):
         checks.append(check_baseline_geometry(
-            cached, _load_cache(context, variant), variant,
+            cached, _load_cache(context, sidecars, variant), variant,
         ))
     return checks
 

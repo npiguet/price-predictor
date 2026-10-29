@@ -846,6 +846,29 @@ def iter_record_dicts(path: Path) -> Iterator[dict]:
             yield parse_record_line(stripped)
 
 
+def read_window(
+    directory: Path, limit: int = 0,
+    observe: Callable[[str, dict], None] | None = None,
+) -> Iterator[EffectRecord]:
+    """The first ``limit`` records under ``directory``; 0 reads all of them.
+
+    ``observe``, when given, sees each record's raw dict, with its shard's
+    path relative to ``directory``, before it is parsed: a parsed record
+    cannot say whether a field was on the wire.
+    """
+    root = Path(directory)
+    seen = 0
+    for shard in iter_shards(root):
+        name = shard.relative_to(root).as_posix()
+        for data in iter_record_dicts(shard):
+            if observe is not None:
+                observe(name, data)
+            yield record_from_dict(data)
+            seen += 1
+            if limit and seen >= limit:
+                return
+
+
 def read_shard(path: Path) -> Iterator[EffectRecord]:
     """Yield every complete record in one shard; skip a trailing partial line."""
     for data in iter_record_dicts(path):
