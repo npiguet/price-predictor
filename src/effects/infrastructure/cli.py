@@ -35,6 +35,7 @@ from effects.application.collect_variants import CollectVariantsConfig
 from effects.application.evaluation_context import CorpusMismatchError
 from effects.application.train_effect_model import (
     EmptyHoldoutError,
+    HoldoutMismatchError,
     SurfaceMismatchError,
     TrainEffectModelConfig,
 )
@@ -784,7 +785,15 @@ def _train_effect_model_parser(subparsers) -> None:
     add_config_flags(parser, TrainEffectModelConfig)
 
 
-@exits_with({SurfaceMismatchError: 2, EmptyHoldoutError: 2})
+@exits_with({
+    HoldoutMismatchError: 1,
+    "effects.infrastructure.record_io.MixedGenerationsError": 1,
+    SurfaceMismatchError: 2,
+    EmptyHoldoutError: 2,
+    f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 2,
+    # A missing manifest or resume file.
+    FileNotFoundError: 2,
+})
 def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import run as train
 

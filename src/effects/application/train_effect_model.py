@@ -26,7 +26,6 @@ from effects.domain.text_holdout import normalize_script_text
 from effects.infrastructure.converted_trees import ConvertedTrees
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import (
-    MixedGenerationsError,
     iter_shards,
     read_shard,
     refuse_mixed_generations,
@@ -477,7 +476,7 @@ def run(config: TrainEffectModelConfig) -> int:
             "shards was withdrawn with FR-125."
         )
         return 1
-    store =CorpusStore(Path(config.corpus))
+    store = CorpusStore(Path(config.corpus))
     manifest = store.load()
     require_matching_surface(
         manifest_surface=manifest.surface, vocab_path=Path(config.vocab_path),
@@ -497,13 +496,9 @@ def run(config: TrainEffectModelConfig) -> int:
             "build-corpus that writes validation/samples/.", config.corpus, ", ".join(missing),
         )
         return 1
-    try:
-        # Before any record is read (FR-033).
-        refuse_mixed_generations(iter_shards(Path(config.corpus)))
-        check_manifest_holdout(manifest, config)
-    except (HoldoutMismatchError, MixedGenerationsError) as exc:
-        logger.error("%s", exc)
-        return 1
+    # Before any record is read (FR-033).
+    refuse_mixed_generations(iter_shards(Path(config.corpus)))
+    check_manifest_holdout(manifest, config)
     facts = CorpusFacts.of(manifest)
     logger.info(
         "Curated corpus at %s: %d training shards, %d gate-one record(s), "
