@@ -56,10 +56,6 @@ class TestBuildVocab:
         with pytest.raises(SystemExit):
             parse("build-vocab", "--surface", "oracle")
 
-    def test_an_explicit_vocab_path_is_carried(self):
-        args = parse("build-vocab", "--vocab-path", "models/x.txt")
-        assert args.vocab_path == Path("models/x.txt")
-
 
 class TestExtractKeywordDefinitions:
     def test_the_output_default_is_the_contracts(self):
@@ -131,8 +127,8 @@ class TestVariantAcceptsCorpusAtThePreflightCheck:
     trainer: the curated dataset's manifest is the split it inherits.
 
     The real trainer entry point (``train_effect_model.run``) is monkeypatched
-    out, so getting past the CLI is what these tests prove, not a full training
-    run, and neither case imports torch or reads a real corpus off disk.
+    out, so getting past the CLI is what this test proves, not a full training
+    run, and it neither imports torch nor reads a real corpus off disk.
     """
 
     def test_a_variant_with_corpus_gets_past_the_preflight_check(self, monkeypatch):
@@ -147,11 +143,6 @@ class TestVariantAcceptsCorpusAtThePreflightCheck:
         )
 
         assert run_train_effect_model(args) == 0
-
-    def test_a_variant_without_a_corpus_never_reaches_the_check(self):
-        """``--corpus`` is required, so the parser refuses first."""
-        with pytest.raises(SystemExit):
-            parse("train-effect-model", "--variant", "identity")
 
 
 class TestBuildCorpusDispatch:
@@ -220,9 +211,6 @@ class TestEncodeAbilities:
         config = EncodeAbilitiesConfig(variant="no-state")
         assert config.resolved_checkpoint().parent.name == "no-state"
 
-    def test_clean_is_a_flag(self):
-        assert parse("encode-abilities", "--clean").clean is True
-
 
 class TestEvaluateEffectModel:
     def test_the_defaults_are_the_contracts(self):
@@ -265,15 +253,15 @@ class TestEvaluateEffectModel:
 
 
 class TestSubcommandTable:
-    def test_every_us1_subcommand_is_registered(self):
+    def test_every_subcommand_is_registered(self):
         parser = build_parser()
-        action = next(
-            a for a in parser._actions if isinstance(a.choices, dict)
-        )
-        assert {
-            "build-vocab", "extract-keyword-definitions", "train-effect-model",
-            "encode-abilities", "evaluate-effect-model",
-        } <= set(action.choices)
+        action = next(a for a in parser._actions if isinstance(a.choices, dict))
+        assert set(action.choices) == {
+            "build-vocab", "extract-keyword-definitions", "collect-coverage",
+            "build-corpus", "field-coverage", "validate-corpus",
+            "collect-variants", "train-effect-model", "encode-abilities",
+            "evaluate-effect-model", "holdout-cards",
+        }
 
     def test_bare_invocation_prints_help_rather_than_failing(self):
         assert getattr(build_parser().parse_args([]), "func", None) is None

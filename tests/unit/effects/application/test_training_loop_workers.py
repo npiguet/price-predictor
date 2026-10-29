@@ -51,21 +51,21 @@ from effects.infrastructure.record_io import read_shard, write_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.step_workers import pack, unpack
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
-from tests.unit.effects.builders import make_batcher, make_training_loop
-
-_FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
-_CARDS = (
-    _FIXTURES / "gen1-sidecars" / "cardsfolder",
-    _FIXTURES / "gen1-sidecars" / "tokenscripts",
+from tests.unit.effects.builders import (
+    EFFECTS_FIXTURES,
+    GEN1_SIDECAR_FOLDERS,
+    make_batcher,
+    make_training_loop,
 )
-_DEFINITIONS = _FIXTURES / "keyword-definitions.json"
+
+_DEFINITIONS = EFFECTS_FIXTURES / "keyword-definitions.json"
 SEED = 11
 SHARDS = 3
 
 
 @pytest.fixture(scope="module")
 def records():
-    return list(read_shard(_FIXTURES / "gen1-records.jsonl.gz"))
+    return list(read_shard(EFFECTS_FIXTURES / "gen1-records.jsonl.gz"))
 
 
 @pytest.fixture(scope="module")
@@ -87,7 +87,8 @@ def corpus(tmp_path_factory, records):
     sample = root / "validation.jsonl.gz"
     write_shard(sample, records[:24])
 
-    sidecars = SidecarCache({"cardsfolder": _CARDS[0], "tokenscripts": _CARDS[1]})
+    cards, tokens = GEN1_SIDECAR_FOLDERS
+    sidecars = SidecarCache({"cardsfolder": cards, "tokenscripts": tokens})
     definitions = load_keyword_definitions(_DEFINITIONS)
     base = {token: index for index, token in enumerate(SPECIAL_TOKENS)}
     bare = AbilityTokenizer(base, definitions, surface="script")
@@ -111,7 +112,7 @@ def corpus(tmp_path_factory, records):
 
 def _config(corpus, out: Path, **overrides) -> TrainEffectModelConfig:
     settings = dict(
-        corpus=str(corpus.root), cards_folders=_CARDS,
+        corpus=str(corpus.root), cards_folders=GEN1_SIDECAR_FOLDERS,
         keyword_definitions=_DEFINITIONS, vocab_path=corpus.vocab,
         model_output=out, seed=SEED, batch_size=8, steps_per_epoch=7,
         shards_per_epoch=SHARDS, epochs=2, curriculum_epoch=2, patience=5,

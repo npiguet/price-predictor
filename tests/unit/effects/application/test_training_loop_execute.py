@@ -10,10 +10,7 @@ epoch starts. Those are the joins the per-piece suites cannot see.
 from __future__ import annotations
 
 import pytest
-import torch
 
-from effects.application import step_preparation
-from effects.application import training_loop as loop_module
 from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import (
     EarlyStopper,
@@ -23,50 +20,25 @@ from effects.application.training_loop import StepLoss, TrainingLoop
 from effects.domain.effect_losses import LossParts
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.builders import make_training_loop
-from tests.unit.effects.domain.conftest import (  # noqa: F401
-    ability_key,
-    make_record,
-    snapshot,
+from tests.unit.effects.builders import (
+    make_training_loop,
+    stub_below_the_loop,
+    write_validation_samples,
 )
 
 
-class _Stub(torch.nn.Module):
-    """A module with one parameter, so backward and the optimizer have work."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.p = torch.nn.Parameter(torch.ones(2))
-
-
 @pytest.fixture
-def run(tmp_path, make_record, monkeypatch):  # noqa: F811
+def run(tmp_path, make_record, monkeypatch):
     """Run two epochs and return the ordered log of what the loop called."""
     combat = [make_record(record_id=f"r{i}", game_id=f"g{i % 2}",
                           kind=RecordKind.COMBAT, payload=CombatPayload())
               for i in range(8)]
     shard = tmp_path / "train.jsonl.gz"
     write_shard(shard, combat)
-    samples = {}
-    for stratum in ("card-disjoint", "game-disjoint"):
-        samples[stratum] = tmp_path / f"{stratum}.jsonl.gz"
-        write_shard(samples[stratum], combat[:2])
+    samples = write_validation_samples(tmp_path, combat[:2])
 
-    model, encoder = _Stub(), _Stub()
+    model, _encoder = stub_below_the_loop(monkeypatch)
     events: list[tuple] = []
-
-    monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
-    monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
-    monkeypatch.setattr(
-        step_preparation, "load_tokenizer",
-        lambda *a, **k: type("T", (), {"vocab_size": 8})(),
-    )
-    # The script-API vocabulary is read off every real sidecar; none here.
-    monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
-    monkeypatch.setattr(
-        loop_module, "feature_widths",
-        lambda records: dict.fromkeys(loop_module.SlotKind, 4),
-    )
 
     def device_loss(self, prepared, *args, **kwargs):
         events.append(("loss", id(prepared["fields"]), model.training))

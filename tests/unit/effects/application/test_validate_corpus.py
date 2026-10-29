@@ -58,7 +58,12 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.infrastructure.sidecar_io import SidecarCache, write_sidecar
-from tests.unit.effects.builders import RawShardWriter, make_entity, make_snapshot
+from tests.unit.effects.builders import (
+    RawShardWriter,
+    make_entity,
+    make_record,
+    make_snapshot,
+)
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _BEARS = "cardsfolder/g/grizzly_bears.txt"
@@ -83,12 +88,8 @@ def _snapshot(turn: int = 3, names: tuple[str, ...] = (), tiers=None) -> StateSn
 def _resolution(record_id: str, game_id: str = "run.0-L1.0", **overrides):
     fields: dict = {
         "record_id": record_id,
-        "run_id": "run",
         "timestamp": "2026-09-09T10:00:00.000000Z",
         "game_id": game_id,
-        "kind": RecordKind.RESOLUTION,
-        "moment": Moment.RESOLUTION,
-        "actor_player": "P0",
         "state": _snapshot(),
         "ability": (_KEY,),
         # The mode a run collected under is a property of the checkout, not of
@@ -107,7 +108,7 @@ def _resolution(record_id: str, game_id: str = "run.0-L1.0", **overrides):
         ),
     }
     fields.update(overrides)
-    return EffectRecord(**fields)
+    return make_record(**fields)
 
 
 def _mode(option: int) -> ProvenanceKey:

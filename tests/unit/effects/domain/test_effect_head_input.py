@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import math
 import random
+from pathlib import Path
 
+import numpy as np
 import pytest
 
 from effects.domain.effect_head_input import (
@@ -25,7 +27,6 @@ from effects.domain.effect_head_input import (
     PHASES,
     SUPERTYPES,
     THERMOMETER_STEPS,
-    THIS_TURN_COUNTERS,
     ZONES,
     SlotKind,
     _multi_hot,
@@ -76,6 +77,10 @@ from tests.unit.effects.builders import (
 
 E_DIM = 4
 _ZERO = (0.0,) * E_DIM
+
+_EARLIER_LAYOUT_FEATURES = (
+    Path(__file__).parents[3] / "fixtures" / "effects" / "earlier-layout-features.npz"
+)
 
 _BOLT = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _ANTHEM = ProvenanceKey("cardsfolder/a/anthem.txt", 0, "static", 0)
@@ -510,141 +515,20 @@ class TestFeatureEquivalence:
 
     The feature vector is a layout, not a computation: a value that moves one
     position changes what every checkpoint's weights mean while every number
-    the run reports still looks fine. So the slower implementation is pasted
-    here and the two are compared element by element over a generated board
-    that reaches every branch — a known value and an unknown one in each
-    vocabulary, present and absent power/toughness, counters on and off the
-    checked-in list, and both combat payloads.
+    the run reports still looks fine. So the slower implementation's output is
+    kept in ``earlier-layout-features.npz`` and compared element by element
+    over a generated board that reaches every branch — a known value and an
+    unknown one in each vocabulary, present and absent power/toughness,
+    counters on and off the checked-in list, and both combat payloads.
 
     The reference is the earlier input layout (FR-063c), which every checkpoint
     recording no ``input_layout`` must keep reading bit for bit.
     """
 
     @staticmethod
-    def _ref_one_hot(value, vocabulary):
-        out = [0.0] * (len(vocabulary) + 1)
-        if value is None:
-            return out
-        normalized = value.strip().lower().replace(" ", "_")
-        for index, member in enumerate(vocabulary):
-            if member.lower() == normalized:
-                out[index] = 1.0
-                return out
-        out[-1] = 1.0
-        return out
-
-    @staticmethod
-    def _ref_scalar(value):
-        magnitude = math.log1p(abs(float(value)))
-        return [float(value), math.copysign(magnitude, value)]
-
-    @staticmethod
-    def _ref_multi_hot(present, vocabulary):
-        normalized = {p.strip().lower().replace(" ", "_") for p in present}
-        out = [
-            1.0 if member.lower() in normalized else 0.0
-            for member in vocabulary
-        ]
-        known = {member.lower() for member in vocabulary}
-        out.append(float(len(normalized - known)))
-        return out
-
-    @classmethod
-    def _ref_card_features(cls, entity, record, *, masked_keywords=frozenset()):
-        from effects.domain.effect_head_input import (
-            _damage_assignment_features,
-            _pending_event_features,
-        )
-
-        one_hot, scalar, multi_hot = (
-            cls._ref_one_hot, cls._ref_scalar, cls._ref_multi_hot,
-        )
-        state = record.state
-        out: list[float] = []
-        out += multi_hot(set(entity.types), CARD_TYPES)
-        out += multi_hot(set(entity.supertypes), SUPERTYPES)
-        out += multi_hot(set(entity.colors), COLORS)
-        out += scalar(entity.mana_value)
-        if entity.pt is not None:
-            for pair in (entity.pt.base, entity.pt.boosts, entity.pt.counters):
-                out += scalar(pair[0])
-                out += scalar(pair[1])
-            out.append(1.0)
-        else:
-            out += [0.0] * 12
-            out.append(0.0)
-        out += one_hot(entity.zone, ZONES)
-        out.append(1.0 if entity.tapped else 0.0)
-        out.append(1.0 if entity.sick else 0.0)
-        out.append(1.0 if entity.face_down else 0.0)
-        out += scalar(entity.damage)
-        for counter in COUNTER_TYPES:
-            out += scalar(entity.counters.get(counter, 0))
-        out += scalar(sum(
-            value for name, value in entity.counters.items()
-            if name not in COUNTER_TYPES
-        ))
-        combat = entity.combat
-        out.append(1.0 if combat and combat.attacking else 0.0)
-        out.append(1.0 if combat and combat.blocking else 0.0)
-        out.append(1.0 if combat and combat.became_blocked else 0.0)
-        out += scalar(len(combat.blocked_by) if combat else 0)
-        out.append(1.0 if entity.attached_to else 0.0)
-        granted = set(entity.granted_temporary.keywords) - set(masked_keywords)
-        out += multi_hot(granted, OVERLAY_KEYWORDS)
-        out += scalar(len(entity.granted_temporary.abilities))
-        out.append(1.0 if state.controller_tag(
-            entity.controller, record.actor_player) == "mine" else 0.0)
-        out.append(1.0 if entity.id in state.refs.targets else 0.0)
-        out.append(1.0 if entity.id == state.refs.source else 0.0)
-        extras = entity.stack_extras
-        out += scalar(len(extras.targets) if extras else 0)
-        out += scalar(sum(extras.per_target_amounts.values()) if extras else 0)
-        out += scalar(sum(extras.up_to_counts.values()) if extras else 0)
-        out += _damage_assignment_features(entity, record)
-        out += _pending_event_features(entity, record)
-        return tuple(out)
-
-    @classmethod
-    def _ref_player_features(cls, player, record):
-        scalar = cls._ref_scalar
-        out: list[float] = []
-        for value in (player.life, player.hand, player.library,
-                      player.graveyard, player.poison, player.energy):
-            out += scalar(value)
-        for key in THIS_TURN_COUNTERS:
-            out += scalar(player.this_turn.get(key, 0))
-        for color in COLORS:
-            out += scalar(player.floating_mana.get(color, 0))
-        for color in COLORS:
-            out += scalar(player.untapped_production.get(color, 0))
-        out.append(1.0 if player.id == record.actor_player else 0.0)
-        out.append(0.0 if player.id == record.actor_player else 1.0)
-        out.append(1.0 if player.id in record.state.refs.targets else 0.0)
-        return tuple(out)
-
-    @classmethod
-    def _ref_global_features(cls, record):
-        one_hot, scalar = cls._ref_one_hot, cls._ref_scalar
-        g = record.state.global_
-        out: list[float] = []
-        out += scalar(g.turn)
-        out += scalar(g.stack_size)
-        out += one_hot(g.phase, PHASES)
-        out += one_hot(g.combat_substep, COMBAT_SUBSTEPS)
-        out.append(1.0 if g.active == record.actor_player else 0.0)
-        out.append(1.0 if g.priority == record.actor_player else 0.0)
-        out += scalar(len(g.emblems))
-        out += one_hot(record.kind.value, tuple(k.value for k in RecordKind))
-        out += one_hot(
-            record.moment.value if record.moment else None,
-            tuple(m.value for m in Moment),
-        )
-        out += one_hot(
-            record.subkind.value if record.subkind else None,
-            tuple(s.value for s in PlayabilitySubkind),
-        )
-        return tuple(out)
+    def _golden(name: str) -> np.ndarray:
+        with np.load(_EARLIER_LAYOUT_FEATURES) as golden:
+            return golden[name]
 
     @staticmethod
     def _boards(seed: int):
@@ -714,46 +598,47 @@ class TestFeatureEquivalence:
         return records
 
     def test_every_entity_builds_the_same_card_features(self):
-        seen = 0
-        for record in self._boards(3):
-            for entity in record.state.entities:
-                masked = frozenset(entity.granted_temporary.keywords[:1])
-                assert card_features(
-                    entity, record, masked_keywords=masked,
-                    layout=EARLIER_LAYOUT,
-                ) == self._ref_card_features(
-                    entity, record, masked_keywords=masked,
-                )
-                seen += 1
-        assert seen > 150
+        built = [
+            card_features(
+                entity, record,
+                masked_keywords=frozenset(entity.granted_temporary.keywords[:1]),
+                layout=EARLIER_LAYOUT,
+            )
+            for record in self._boards(3)
+            for entity in record.state.entities
+        ]
+        assert len(built) > 150
+        assert np.array_equal(np.array(built), self._golden("card"))
 
     def test_the_global_and_player_features_are_unchanged(self):
-        for record in self._boards(5):
-            assert global_features(
-                record, layout=EARLIER_LAYOUT,
-            ) == self._ref_global_features(record)
-            for player in record.state.players:
-                assert player_features(
-                    player, record, layout=EARLIER_LAYOUT,
-                ) == self._ref_player_features(player, record)
+        records = self._boards(5)
+        global_rows = [global_features(r, layout=EARLIER_LAYOUT) for r in records]
+        player_rows = [
+            player_features(player, record, layout=EARLIER_LAYOUT)
+            for record in records for player in record.state.players
+        ]
+        assert np.array_equal(np.array(global_rows), self._golden("global_"))
+        assert np.array_equal(np.array(player_rows), self._golden("player"))
 
     def test_the_helpers_themselves_agree_on_every_vocabulary(self):
+        one_hot: list[float] = []
+        multi_hot: list[float] = []
         for vocabulary in (PHASES, COMBAT_SUBSTEPS, ZONES, CARD_TYPES,
                            SUPERTYPES, COUNTER_TYPES, OVERLAY_KEYWORDS, COLORS):
             values = (None, *vocabulary, " First Strike ", "nope", "")
             for value in values:
-                assert _one_hot(value, vocabulary) == self._ref_one_hot(
-                    value, vocabulary
-                )
+                one_hot += _one_hot(value, vocabulary)
             for size in range(4):
                 present = set(random.Random(size).sample(values[1:], size))
-                assert _multi_hot(present, vocabulary) == self._ref_multi_hot(
-                    present, vocabulary
-                )
+                multi_hot += _multi_hot(present, vocabulary)
+        scalars = []
         for value in (0, -0.0, 3, -3, 2.5, -2.5, 1e6, -1e6):
             pushed: list[float] = []
             _push_scalar(pushed, value)
-            assert pushed == self._ref_scalar(value)
+            scalars.append(pushed)
+        assert np.array_equal(np.array(one_hot), self._golden("one_hot"))
+        assert np.array_equal(np.array(multi_hot), self._golden("multi_hot"))
+        assert np.array_equal(np.array(scalars), self._golden("scalar"))
 
 
 class TestOptionRows:

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
+from effects.domain import default_paths
 from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
 from effects.domain.baselines import Baseline
 from effects.domain.provenance import ProvenanceSidecar, SidecarLine
@@ -22,8 +23,8 @@ from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, read_sidecar
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
-    Path("output/cardsfolder/"), Path("output/tokenscripts/"),
+DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
+    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
 )
 
 

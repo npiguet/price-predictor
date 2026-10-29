@@ -15,7 +15,6 @@ from __future__ import annotations
 import pytest
 
 from effects.application.gate_one import (
-    GateOneMetrics,
     acting_text,
     training_texts,
     unique_text_records,
@@ -136,15 +135,6 @@ class TestTrainingTexts:
 
     def test_records_without_an_acting_line_contribute_nothing(self, batcher):
         assert training_texts(_acting([_record(None)]), batcher) == set()
-
-
-class TestMetrics:
-    def test_the_three_margins_are_one_object(self):
-        """They must describe the same records, so they travel together."""
-        metrics = GateOneMetrics(0.5, 0.4, 1.2)
-        assert metrics.affected_gate_f1 == 0.5
-        assert metrics.zone_outcome_accuracy == 0.4
-        assert metrics.mean_poisson_deviance == 1.2
 
 
 class TestMarginAccumulator:

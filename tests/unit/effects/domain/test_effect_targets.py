@@ -9,14 +9,11 @@ counter went to zero.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
-import effects
 from effects.domain.effect_head_input import CARD_TYPES, OVERLAY_KEYWORDS
 from effects.domain.effect_head_layout import LIBRARY_EVENTS, ZONE_OUTCOMES
 from effects.domain.effect_targets import derive_targets, events_of
@@ -38,7 +35,7 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.state_snapshot import COLORS, GlobalState, StateSnapshot
-from tests.unit.effects.builders import make_record
+from tests.unit.effects.builders import fresh_interpreter_env, make_record
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -579,13 +576,11 @@ def test_deriving_targets_loads_no_torch():
     none of them needs torch to do it.
 
     In a fresh interpreter, because any test before this one may have
-    imported torch into this one; pointed at the tree under test, which an
-    installed copy of the package would otherwise shadow.
+    imported torch into this one.
     """
-    source = Path(effects.__file__).parents[1]
     subprocess.run(
         [sys.executable, "-c",
          "import sys, effects.application.corpus_survey, effects.domain.effect_targets; "
          "assert 'torch' not in sys.modules, 'torch was imported'"],
-        check=True, env={**os.environ, "PYTHONPATH": str(source)},
+        check=True, env=fresh_interpreter_env(),
     )

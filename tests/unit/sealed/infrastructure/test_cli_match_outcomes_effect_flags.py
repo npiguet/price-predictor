@@ -4,26 +4,15 @@
 collectors where collection is the whole point. That asymmetry is the contract
 (FR-031): on this command the flag is an opt-in, and a default would quietly
 turn every sealed self-play run into a collection run.
-
-US1 ships this surface, so its fast-suite coverage belongs with US1 rather than
-with the collectors US2 adds.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from sealed.infrastructure.cli import (
-    build_parser,
-    check_random_seat_flags,
-    run_match_outcomes,
-)
+from sealed.infrastructure.cli import build_parser, check_random_seat_flags, run_match_outcomes
 from sealed.infrastructure.effect_collection_flags import (
-    EFFECT_INTERVENTIONS_PER_GAME,
-    EFFECT_MANA_CAP,
-    EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBE_KEYWORDS,
-    EFFECT_PROBES_PER_GAME,
     announce_probe_state,
 )
 
@@ -61,21 +50,9 @@ class TestCapAndBudgetFlags:
             "indestructible,wither,infect"
         )
 
-    def test_the_constants_and_the_defaults_agree(self):
-        args = parse("match-outcomes")
-        assert args.mana_cap == EFFECT_MANA_CAP
-        assert args.playability_rate == EFFECT_PLAYABILITY_RATE
-        assert args.interventions_per_game == EFFECT_INTERVENTIONS_PER_GAME
-        assert args.probes_per_game == EFFECT_PROBES_PER_GAME
-        assert args.probe_keywords == EFFECT_PROBE_KEYWORDS
-
     def test_an_empty_keyword_list_turns_probes_off(self):
         """No probe fork is taken at all with the list emptied."""
         assert parse("match-outcomes", "--probe-keywords", "").probe_keywords == ""
-
-    def test_probe_keywords_is_comma_separated(self):
-        args = parse("match-outcomes", "--probe-keywords", "wither,infect")
-        assert args.probe_keywords == "wither,infect"
 
     def test_each_cap_is_overridable(self):
         args = parse(

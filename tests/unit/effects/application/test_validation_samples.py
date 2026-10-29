@@ -13,7 +13,6 @@ from effects.domain.sampling import (
     sampling_class,
 )
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.domain.conftest import ability_key, make_record, snapshot  # noqa: F401
 
 
 def test_class_quota_rounds_each_share_and_keeps_every_class():
@@ -22,7 +21,7 @@ def test_class_quota_rounds_each_share_and_keeps_every_class():
 
 
 @pytest.fixture
-def strata(tmp_path, make_record):  # noqa: F811 -- shadows the imported fixture by design
+def strata(tmp_path, make_record):
     def res(i, game, moment=Moment.RESOLUTION):
         return make_record(record_id=f"r{i}", game_id=game, moment=moment)
     def combat(i, game):
@@ -96,7 +95,7 @@ def test_zero_validation_sample_reads_nothing_and_draws_nothing(strata, monkeypa
 
 
 def test_two_records_with_one_id_do_not_compare_the_records_themselves(
-    tmp_path, make_record,  # noqa: F811
+    tmp_path, make_record,
 ):
     """The sample heap once broke its tie on the record when hash and id both matched.
 
@@ -133,7 +132,7 @@ def test_round_robin_stops_when_every_text_is_exhausted():
     assert sorted(round_robin({"a": [1], "b": [2, 3]}, quota=50)) == [1, 2, 3]
 
 
-def test_card_disjoint_resolution_slots_spread_over_held_out_texts(tmp_path, make_record):  # noqa: F811
+def test_card_disjoint_resolution_slots_spread_over_held_out_texts(tmp_path, make_record):
     """Spec Story 4 scenario 9: a text with many records cannot crowd one with few."""
     from effects.domain.provenance import ProvenanceKey
 

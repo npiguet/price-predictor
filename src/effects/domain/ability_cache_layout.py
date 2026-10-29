@@ -23,11 +23,12 @@ from pathlib import Path
 
 import numpy as np
 
+from effects.domain import default_paths
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.provenance import ProvenanceSidecar
 
 #: Root of the cache tree. One subtree per source tree, mirroring its layout.
-DEFAULT_CACHE_ROOT = Path("output/effects/abilities")
+DEFAULT_CACHE_ROOT = Path(default_paths.DEFAULT_ABILITIES_ROOT)
 #: The key the `.npz` stores its matrix under.
 ARRAY_KEY = "e"
 CACHE_SUFFIX = ".npz"

@@ -328,16 +328,24 @@ class TestInferencePathResolution:
         )
         assert resolved == (vocab, keywords)
 
+    def test_the_resolved_paths_pass_the_hash_check(self, files):
+        provenance = _provenance(files)
+        vocab_path, keyword_path = resolve_inference_paths(
+            provenance, vocab_path=None, keyword_path=None,
+        )
+        provenance.verify_hashes(vocab_path=vocab_path, keyword_path=keyword_path)
+
     def test_an_explicit_path_overrides(self, tmp_path, files):
+        _vocab, keywords = files
         chosen = tmp_path / "other-vocab.txt"
-        vocab_path, _ = resolve_inference_paths(
+        vocab_path, keyword_path = resolve_inference_paths(
             _provenance(files), vocab_path=chosen, keyword_path=None,
         )
         assert vocab_path == chosen
+        assert keyword_path == keywords
 
     def test_an_override_is_still_hash_checked(self, tmp_path, files):
         """Overriding to a different file must fail, not silently re-encode."""
-        _vocab, keywords = files
         other = tmp_path / "other-vocab.txt"
         other.write_text("[PAD]\n[UNK]\nextra\n", encoding="utf-8")
         provenance = _provenance(files)
@@ -348,7 +356,6 @@ class TestInferencePathResolution:
             provenance.verify_hashes(
                 vocab_path=vocab_path, keyword_path=keyword_path,
             )
-
 
 
 class TestLoadForInference:

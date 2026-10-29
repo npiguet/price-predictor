@@ -17,6 +17,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from effects.domain import default_paths
 from effects.domain.ability_tokenizer import (
     SURFACE_PROSE,
     SURFACE_SCRIPT,
@@ -35,13 +36,12 @@ from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
-    Path("output/cardsfolder/"),
-    Path("output/tokenscripts/"),
+DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
+    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
 )
-DEFAULT_KEYWORD_DEFINITIONS = Path("output/effects/keyword-definitions.json")
-DEFAULT_VOCAB_PATH = Path("models/effects/vocab.txt")
-DEFAULT_SCRIPT_VOCAB_PATH = Path("models/effects/vocab-script.txt")
+DEFAULT_KEYWORD_DEFINITIONS = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
+DEFAULT_VOCAB_PATH = Path(default_paths.DEFAULT_VOCAB_PATH)
+DEFAULT_SCRIPT_VOCAB_PATH = Path(default_paths.DEFAULT_SCRIPT_VOCAB_PATH)
 DEFAULT_TARGET_SIZE = 5000
 
 #: Seeded into every effects vocabulary at the lowest ids, whatever their

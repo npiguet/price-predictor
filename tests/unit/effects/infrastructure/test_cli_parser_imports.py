@@ -12,6 +12,8 @@ from __future__ import annotations
 import subprocess
 import sys
 
+from tests.unit.effects.builders import fresh_interpreter_env
+
 
 def test_building_the_parser_never_loads_torch() -> None:
     probe = (
@@ -22,5 +24,6 @@ def test_building_the_parser_never_loads_torch() -> None:
     )
     result = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True,
+        env=fresh_interpreter_env(),
     )
     assert result.stdout.strip() == "False", "building the effects parser loads torch"

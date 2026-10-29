@@ -7,6 +7,8 @@ specific passes it as an override, or keeps a small local wrapper that does.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
     ActivationPayload,
@@ -26,6 +28,13 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+
+EFFECTS_FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
+#: The converted card and token trees the gen-1 fixture records were collected against.
+GEN1_SIDECAR_FOLDERS = (
+    EFFECTS_FIXTURES / "gen1-sidecars" / "cardsfolder",
+    EFFECTS_FIXTURES / "gen1-sidecars" / "tokenscripts",
+)
 
 _EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
 
@@ -126,8 +135,6 @@ class RawShardWriter:
         self, directory, run_id: str, worker: int, lifetime: str, *,
         compressed: bool = True,
     ) -> None:
-        from pathlib import Path
-
         suffix = ".jsonl.gz" if compressed else ".jsonl"
         self.path = Path(directory) / f"{run_id}.{worker}-{lifetime}{suffix}"
         self.compressed = compressed
@@ -160,6 +167,18 @@ class RawShardWriter:
 
     def close(self) -> None:
         self._flush()
+
+
+def fresh_interpreter_env(**overrides: str) -> dict[str, str]:
+    """The environment for a ``sys.executable`` child that imports the tree
+    under test, which an installed copy of the package would otherwise shadow."""
+    import os
+    from pathlib import Path
+
+    import effects
+
+    source = Path(effects.__file__).parents[1]
+    return {**os.environ, "PYTHONPATH": str(source), **overrides}
 
 
 def slots_of_kind(surface, kind) -> tuple:
@@ -245,3 +264,66 @@ def make_training_loop(
         training_shards=list(training_shards),
         validation_samples=validation_samples or {},
     )
+
+
+def make_cpu_training_loop(monkeypatch, **config):
+    """A ``TrainingLoop`` over no corpus, on a real ``cpu`` device.
+
+    Forced whatever ``torch.cuda.is_available()`` says: on this box it can
+    read ``True`` even under ``CUDA_VISIBLE_DEVICES=""`` (its raw device count
+    ignores the mask — the same disagreement ``autocast_enabled`` guards
+    against), which would move a test's tensors onto a real GPU by accident.
+    """
+    import torch
+
+    from effects.application.train_effect_model import TrainEffectModelConfig
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    return make_training_loop(TrainEffectModelConfig(corpus="unused", **config))
+
+
+def one_parameter_module():
+    """A module with one parameter, so backward and the optimizer have work."""
+    import torch
+
+    module = torch.nn.Module()
+    module.p = torch.nn.Parameter(torch.ones(2))
+    return module
+
+
+def stub_below_the_loop(monkeypatch):
+    """Replace what a ``TrainingLoop`` builds beneath itself — the encoder, the
+    head, the tokenizer, the script-API vocabulary and the feature widths — so
+    ``execute`` runs over records no sidecar describes.
+
+    Returns the ``(model, encoder)`` stand-ins, from :func:`one_parameter_module`.
+    """
+    from effects.application import step_preparation
+    from effects.application import training_loop as loop_module
+    from effects.application.training_loop import TrainingLoop
+
+    model, encoder = one_parameter_module(), one_parameter_module()
+    monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
+    monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
+    monkeypatch.setattr(
+        step_preparation, "load_tokenizer",
+        lambda *a, **k: type("T", (), {"vocab_size": 8})(),
+    )
+    # The script-API vocabulary is read off every real sidecar; none here.
+    monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
+    monkeypatch.setattr(
+        loop_module, "feature_widths",
+        lambda records: dict.fromkeys(loop_module.SlotKind, 4),
+    )
+    return model, encoder
+
+
+def write_validation_samples(directory, records) -> dict:
+    """Both validation strata's samples under ``directory``, each ``records``."""
+    from effects.infrastructure.record_io import write_shard
+
+    samples = {}
+    for stratum in ("card-disjoint", "game-disjoint"):
+        samples[stratum] = directory / f"{stratum}.jsonl.gz"
+        write_shard(samples[stratum], records)
+    return samples

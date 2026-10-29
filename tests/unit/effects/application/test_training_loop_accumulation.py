@@ -13,7 +13,6 @@ from types import SimpleNamespace
 import torch
 
 from effects.application import training_loop as loop_module
-from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import (
     EpochTally,
     ShardStats,
@@ -21,16 +20,11 @@ from effects.application.training_loop import (
     TrainingLoop,
 )
 from effects.domain.effect_losses import LossParts
-from tests.unit.effects.builders import make_training_loop
-
-
-def _loop(monkeypatch, **config) -> TrainingLoop:
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    return make_training_loop(TrainEffectModelConfig(corpus="unused", **config))
+from tests.unit.effects.builders import make_cpu_training_loop
 
 
 def test_every_epoch_steps_the_optimizer_on_its_own_accumulation_boundary(monkeypatch):
-    loop = _loop(monkeypatch, grad_accum=2, steps_per_epoch=3)
+    loop = make_cpu_training_loop(monkeypatch, grad_accum=2, steps_per_epoch=3)
     weight = torch.nn.Parameter(torch.ones(()))
 
     def loss(*_args, **_kwargs):

@@ -18,11 +18,6 @@ from effects.application.train_effect_model import (
 from effects.domain.corpus_manifest import CorpusManifest
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.domain.conftest import (  # noqa: F401
-    ability_key,
-    make_record,
-    snapshot,
-)
 
 #: Three texts ``text_is_held_out`` selects at the default permille, found by
 #: search: the trainer recomputes the holdout from its sidecars at startup and
@@ -73,7 +68,7 @@ def _manifest(**overrides) -> CorpusManifest:
 
 
 @pytest.fixture
-def corpus(tmp_path, make_record):  # noqa: F811
+def corpus(tmp_path, make_record):
     """A curated dataset with just enough on disk for ``run`` to reach the loop."""
     store = CorpusStore(tmp_path / "corpus")
     store.training_dir.mkdir(parents=True)
@@ -232,7 +227,7 @@ def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config, caplog):
 
 
 def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
-    tmp_path, make_record, started,  # noqa: F811
+    tmp_path, make_record, started,
 ):
     """The trimmed real gen-1 manifest records no unit; the trainer reads text."""
     import json
@@ -259,7 +254,7 @@ def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
     assert started[-1].facts.holdout_unit == "text"
 
 
-def test_a_records_set_mixing_generations_is_refused(corpus, config, caplog, make_record):  # noqa: F811
+def test_a_records_set_mixing_generations_is_refused(corpus, config, caplog, make_record):
     """FR-033: refused before any record is read."""
     from effects.infrastructure.record_io import record_to_dict
 

@@ -23,15 +23,10 @@ from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.builders import make_preparer, make_training_loop
-from tests.unit.effects.domain.conftest import (  # noqa: F401
-    ability_key,
-    make_record,
-    snapshot,
-)
 
 
 @pytest.fixture
-def samples(tmp_path, make_record):  # noqa: F811
+def samples(tmp_path, make_record):
     card = [make_record(record_id=f"c{i}", game_id="cg") for i in range(5)]
     game = [make_record(record_id=f"g{i}", game_id="gg", kind=RecordKind.COMBAT,
                         payload=CombatPayload()) for i in range(3)]
@@ -101,7 +96,7 @@ def test_validation_batches_drop_the_augmentations_but_keep_the_withholding(tmp_
     assert scoring.rng is not stream
 
 
-def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):  # noqa: F811
+def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):
     """The epoch's field set comes from the validation samples (FR-085).
 
     A class the corpus trains on but that neither sample holds drops every

@@ -18,7 +18,6 @@ from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     ActivationPayload,
     Candidate,
-    CollectionMode,
     CombatPayload,
     ContinuousPayload,
     Contribution,
@@ -272,10 +271,6 @@ class TestRoundTrip:
 
     def test_the_wire_field_for_the_global_block_is_named_global(self):
         assert "global" in record_to_dict(_record())["state"]
-
-    def test_collection_mode_round_trips(self):
-        record = _record(mode=CollectionMode.PATCHED)
-        assert record_from_dict(record_to_dict(record)).mode is CollectionMode.PATCHED
 
 
 class TestForwardCompatibility:

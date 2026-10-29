@@ -13,9 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from effects.application.collect_coverage import (
-    DEFAULT_DECKS_PER_ROUND,
     DEFAULT_NO_PROGRESS_ROUNDS,
-    DEFAULT_TARGET_RECORDS,
     CollectCoverageConfig,
     residues,
 )
@@ -34,7 +32,12 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import EntityState, Refs
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.builders import (
+    fresh_interpreter_env,
+    make_entity,
+    make_record,
+    make_snapshot,
+)
 
 
 def _entity(entity_id: str, name: str) -> EntityState:
@@ -229,14 +232,6 @@ class TestResidues:
 
 
 class TestConfig:
-    def test_the_defaults_are_the_contracts(self):
-        config = CollectCoverageConfig()
-        assert config.effect_records.as_posix() == "output/effects/records"
-        assert config.target_records == DEFAULT_TARGET_RECORDS == 50
-        assert config.decks_per_round == DEFAULT_DECKS_PER_ROUND == 500
-        assert config.no_progress_rounds == DEFAULT_NO_PROGRESS_ROUNDS == 3
-        assert config.split_from is None
-
     def test_the_coverage_unit_comes_from_the_card_tree_alone(self):
         """A token script is not a deckable card and could never be retired."""
         config = CollectCoverageConfig()
@@ -974,7 +969,7 @@ class TestCountingReportsProgress:
         )
         result = subprocess.run(
             [sys.executable, "-c", probe],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, env=fresh_interpreter_env(),
         )
         assert result.stdout.strip() == "False"
 

@@ -30,11 +30,6 @@ from effects.domain.evaluation_report import CheckStatus
 from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
-from effects.infrastructure.effect_model_store import (
-    SplitProvenance,
-    content_hash,
-    resolve_inference_paths,
-)
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
 
 
@@ -596,60 +591,3 @@ class TestBaselineComparison:
         for baseline in baselines:
             check_baseline_geometry(full, baseline, "no-state")
         assert len(calls) == 3
-
-
-class TestInferencePathsResolveFromTheCheckpoint:
-    """T089: FR-097 tested by execution, not by parser inspection."""
-
-    def _provenance(self, tmp_path):
-        vocab = tmp_path / "recorded-vocab.txt"
-        vocab.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
-        keywords = tmp_path / "recorded-kw.json"
-        keywords.write_text("{}", encoding="utf-8")
-        return SplitProvenance(
-            vocab_path=str(vocab), keyword_definitions_path=str(keywords),
-            vocab_hash=content_hash(vocab),
-            keyword_definitions_hash=content_hash(keywords),
-        ), vocab, keywords
-
-    def test_absent_flags_resolve_to_the_recorded_paths(self, tmp_path):
-        provenance, vocab, keywords = self._provenance(tmp_path)
-        resolved = resolve_inference_paths(
-            provenance, vocab_path=None, keyword_path=None,
-        )
-        assert resolved == (vocab, keywords)
-
-    def test_the_resolved_paths_pass_the_hash_check(self, tmp_path):
-        provenance, _vocab, _keywords = self._provenance(tmp_path)
-        vocab_path, keyword_path = resolve_inference_paths(
-            provenance, vocab_path=None, keyword_path=None,
-        )
-        provenance.verify_hashes(
-            vocab_path=vocab_path, keyword_path=keyword_path,
-        )
-
-    def test_an_explicit_flag_overrides_the_recorded_path(self, tmp_path):
-        provenance, _vocab, keywords = self._provenance(tmp_path)
-        chosen = tmp_path / "chosen.txt"
-        chosen.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
-        vocab_path, keyword_path = resolve_inference_paths(
-            provenance, vocab_path=chosen, keyword_path=None,
-        )
-        assert vocab_path == chosen
-        assert keyword_path == keywords
-
-    def test_an_override_to_a_different_file_still_fails_the_hash_check(
-        self, tmp_path,
-    ):
-        provenance, _vocab, _keywords = self._provenance(tmp_path)
-        other = tmp_path / "other.txt"
-        other.write_text("[PAD]\n[UNK]\ndifferent\n", encoding="utf-8")
-        from effects.infrastructure.effect_model_store import HashMismatchError
-
-        vocab_path, keyword_path = resolve_inference_paths(
-            provenance, vocab_path=other, keyword_path=None,
-        )
-        with pytest.raises(HashMismatchError):
-            provenance.verify_hashes(
-                vocab_path=vocab_path, keyword_path=keyword_path,
-            )

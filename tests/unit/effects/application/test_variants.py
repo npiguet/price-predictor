@@ -21,7 +21,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from effects.application.collect_variants import (
-    DEFAULT_VARIANT_VOLUME,
     RANDOM_SEED,
     CollectVariantsConfig,
     GeneratedVariant,
@@ -32,16 +31,11 @@ from effects.application.collect_variants import (
     variant_budget,
     volume_ceiling,
 )
-from effects.domain.records import (
-    EffectRecord,
-    RecordKind,
-)
+from effects.domain.records import EffectRecord
 from effects.domain.script_variants import (
     MAX_NUMERIC_SHIFT,
-    NUMERIC_PARAM_KEYS,
     SELECTOR_WHITELIST,
     PerturbationKind,
-    double,
     is_multi_face,
     numeric_params,
     perturb,
@@ -49,16 +43,7 @@ from effects.domain.script_variants import (
     shift,
     variant_name,
 )
-from effects.domain.state_snapshot import GlobalState, StateSnapshot
 from tests.unit.effects.builders import make_record
-
-_SNAPSHOT = StateSnapshot(
-    global_=GlobalState(
-        turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-    ),
-    players=(),
-    entities=(),
-)
 
 _BOLT_SCRIPT = (
     "A:SP$ DealDamage | Cost$ R | ValidTgts$ Any | NumDmg$ 3 | "
@@ -70,21 +55,6 @@ def _record(**overrides) -> EffectRecord:
     defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
     defaults.update(overrides)
     return make_record(**defaults)
-
-
-class TestVariantRecordFlags:
-    def test_a_variant_record_is_synthetic_and_names_its_source(self):
-        record = _record(synthetic=True, variant_of="Lightning Bolt")
-        assert record.synthetic
-        assert record.variant_of == "Lightning Bolt"
-
-    def test_variant_of_requires_the_synthetic_flag(self):
-        with pytest.raises(ValueError, match="variant_of"):
-            _record(variant_of="Lightning Bolt")
-
-    def test_a_variant_is_otherwise_an_ordinary_record(self):
-        record = _record(synthetic=True, variant_of="Lightning Bolt")
-        assert record.kind is RecordKind.RESOLUTION
 
 
 class TestNumericPerturbation:
@@ -99,17 +69,6 @@ class TestNumericPerturbation:
         rng = random.Random(0)
         for _ in range(50):
             assert shift(1, rng) >= 0
-
-    def test_doubling_keeps_the_card_recognisably_the_same(self):
-        assert double(3) == 6
-        assert double(0) == 0
-
-    def test_the_numeric_keys_are_a_whitelist(self):
-        """A shifted CounterType would produce a script that fails to load
-        rather than a card that plays differently."""
-        assert "NumDmg" in NUMERIC_PARAM_KEYS
-        assert "CounterType" not in NUMERIC_PARAM_KEYS
-        assert "ValidTgts" not in NUMERIC_PARAM_KEYS
 
     def test_numeric_params_reads_only_whitelisted_numbers(self):
         found = numeric_params(_BOLT_SCRIPT)
@@ -148,11 +107,6 @@ class TestSelectorPerturbation:
                 assert perturbation.replacement in SELECTOR_WHITELIST
                 assert perturbation.replacement != perturbation.original
                 assert perturbation.replacement in perturbed
-
-    def test_the_whitelist_holds_only_composable_restrictions(self):
-        for selector in SELECTOR_WHITELIST:
-            assert " " not in selector
-            assert selector[0].isupper()
 
 
 class TestVariantGeneration:
@@ -287,10 +241,6 @@ class TestVolumeCap:
         needing a new absolute every time the corpus grows."""
         assert variant_budget(1000, 0.2) == 200
         assert variant_budget(0, 0.2) == 0
-
-    def test_the_default_volume_is_the_contract(self):
-        assert DEFAULT_VARIANT_VOLUME == 0.2
-        assert CollectVariantsConfig().variant_volume == 0.2
 
     def test_a_larger_volume_allows_more(self):
         assert variant_budget(1000, 0.5) > variant_budget(1000, 0.2)

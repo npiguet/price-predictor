@@ -9,7 +9,6 @@ computed at all.
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -18,9 +17,8 @@ import torch
 from effects.application import training_loop as loop_module
 from effects.application.step_preparation import NO_TEXT_BUCKET, training_heads
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
-from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_log import format_shares
-from effects.application.training_loop import StepLoss, TrainingLoop
+from effects.application.training_loop import StepLoss
 from effects.domain.aux_heads import Head
 from effects.domain.effect_losses import LossParts
 from effects.domain.effect_model import EffectModel, EffectModelConfig
@@ -40,19 +38,17 @@ from effects.domain.records import (
     events_of,
 )
 from effects.infrastructure.record_io import read_shard
-from tests.unit.effects.builders import make_preparer, make_training_loop
-
-_FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
+from tests.unit.effects.builders import (
+    EFFECTS_FIXTURES,
+    GEN1_SIDECAR_FOLDERS,
+    make_cpu_training_loop,
+    make_preparer,
+)
 
 
 @pytest.fixture(scope="module")
 def records():
-    return list(read_shard(_FIXTURES / "gen1-records.jsonl.gz"))
-
-
-def _loop(monkeypatch, **config) -> TrainingLoop:
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    return make_training_loop(TrainEffectModelConfig(corpus="unused", **config))
+    return list(read_shard(EFFECTS_FIXTURES / "gen1-records.jsonl.gz"))
 
 
 def _model(**overrides) -> EffectModel:
@@ -182,7 +178,7 @@ class TestTheTargets:
 class TestTheHeadTerms:
     def test_every_head_contributes_on_a_mixed_batch(self, monkeypatch, records, tmp_path):
         """Spec Story 5 scenario 9: decision, cost half, trigger, effect half."""
-        loop = _loop(monkeypatch)
+        loop = make_cpu_training_loop(monkeypatch)
         preparer = make_preparer(
             tmp_path, api_types=["DealDamage", "Draw", "Pump"], param_keys=list("ABCDE"),
         )
@@ -198,7 +194,7 @@ class TestTheHeadTerms:
         assert terms["verdict"] > 0
 
     def test_zero_weights_compute_neither_auxiliary(self, monkeypatch, records, tmp_path):
-        loop = _loop(monkeypatch, mlm_weight=0.0, api_weight=0.0)
+        loop = make_cpu_training_loop(monkeypatch, mlm_weight=0.0, api_weight=0.0)
         preparer = make_preparer(
             tmp_path, mlm_weight=0.0, api_weight=0.0, api_types=["Draw"],
         )
@@ -212,7 +208,7 @@ class TestTheHeadTerms:
         assert batcher.mlm_calls == 0
 
     def test_scoring_computes_only_the_shipped_heads(self, monkeypatch, records, tmp_path):
-        loop = _loop(monkeypatch)
+        loop = make_cpu_training_loop(monkeypatch)
         preparer = make_preparer(tmp_path, api_types=["Draw"])
         batch = _kinds(records)
         terms = _terms(
@@ -224,12 +220,7 @@ class TestTheHeadTerms:
 
 def _fixture_preparer(directory):
     """A preparer over the gen-1 fixture's sidecars, on their script surface."""
-    return make_preparer(
-        directory, cards_folders=(
-            _FIXTURES / "gen1-sidecars" / "cardsfolder",
-            _FIXTURES / "gen1-sidecars" / "tokenscripts",
-        ),
-    )
+    return make_preparer(directory, cards_folders=GEN1_SIDECAR_FOLDERS)
 
 
 class TestEpochShares:
@@ -270,7 +261,7 @@ class TestTheBatchersTheLoopBuilds:
         from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
         from effects.domain.effect_head_input import SlotKind
 
-        loop = _loop(monkeypatch, e_noise=0.2, encoder_layers=1, encoder_d_model=8)
+        loop = make_cpu_training_loop(monkeypatch, e_noise=0.2, encoder_layers=1, encoder_d_model=8)
         run = loop._build_run(SimpleNamespace(
             tokenizer=SimpleNamespace(vocab_size=8), widths=dict.fromkeys(SlotKind, 4),
             api_types=[], param_keys=[],
@@ -284,11 +275,11 @@ class TestTheBatchersTheLoopBuilds:
         ) == 0.0
 
     def test_the_noise_ramps_over_one_epoch_of_steps(self, monkeypatch):
-        loop = _loop(monkeypatch, steps_per_epoch=40)
+        loop = make_cpu_training_loop(monkeypatch, steps_per_epoch=40)
         assert loop.noise.ramp_steps == 40
 
     def test_the_checkpoint_records_the_sweep_flags(self, monkeypatch):
-        loop = _loop(monkeypatch, e_noise=0.05, value_weight=0.1)
+        loop = make_cpu_training_loop(monkeypatch, e_noise=0.05, value_weight=0.1)
         settings = loop._training_settings(["Draw"], ["NumCards"])
         assert settings["e_noise"] == 0.05 and settings["value_weight"] == 0.1
         assert settings["api_types"] == ["Draw"]
@@ -301,5 +292,5 @@ class TestTheBatchersTheLoopBuilds:
 
     def test_the_checkpoint_records_the_seed_the_run_drew(self, monkeypatch):
         """A run with no --seed is reproducible only through the one it drew."""
-        loop = _loop(monkeypatch)
+        loop = make_cpu_training_loop(monkeypatch)
         assert loop._training_settings((), ())["seed"] == loop.seed

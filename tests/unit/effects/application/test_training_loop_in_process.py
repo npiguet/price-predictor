@@ -18,7 +18,6 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from effects.application import step_preparation
 from effects.application import training_loop as loop_module
 from effects.application.step_preparation import ShardTask, StepPreparer
 from effects.application.train_effect_model import (
@@ -28,32 +27,22 @@ from effects.application.train_effect_model import (
 from effects.application.training_loop import EpochTally, StepLoss, TrainingLoop
 from effects.domain.effect_losses import LossParts
 from effects.domain.records import CombatPayload, RecordKind
-from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.builders import make_preparer, make_training_loop
-from tests.unit.effects.domain.conftest import (  # noqa: F401
-    ability_key,
-    make_record,
-    snapshot,
+from tests.unit.effects.builders import (
+    EFFECTS_FIXTURES,
+    GEN1_SIDECAR_FOLDERS,
+    make_cpu_training_loop,
+    make_preparer,
+    make_training_loop,
+    one_parameter_module,
+    stub_below_the_loop,
+    write_validation_samples,
 )
 
-_FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"
-_CARDS = (
-    _FIXTURES / "gen1-sidecars" / "cardsfolder",
-    _FIXTURES / "gen1-sidecars" / "tokenscripts",
-)
 #: Shards in the epoch, and the seed whose draw orders them.
 SHARDS = 4
 SEED = 7
 #: What each stubbed half costs, so the clock can tell one from the next.
 PAUSE = 0.01
-
-
-class _Stub(torch.nn.Module):
-    """A module with one parameter, so backward and the optimizer have work."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.p = torch.nn.Parameter(torch.ones(2))
 
 
 def _mark(marks: list, what: str, which, phase: str) -> None:
@@ -69,15 +58,12 @@ def _at(marks, what: str, which, phase: str) -> float:
 
 
 @pytest.fixture
-def epoch(tmp_path, make_record, monkeypatch):  # noqa: F811
+def epoch(tmp_path, make_record, monkeypatch):
     """Run one four-shard epoch end to end; what was read and trained, and when."""
     combat = [make_record(record_id=f"r{i}", game_id=f"g{i % 2}",
                           kind=RecordKind.COMBAT, payload=CombatPayload())
               for i in range(4)]
-    samples = {}
-    for stratum in ("card-disjoint", "game-disjoint"):
-        samples[stratum] = tmp_path / f"{stratum}.jsonl.gz"
-        write_shard(samples[stratum], combat[:2])
+    samples = write_validation_samples(tmp_path, combat[:2])
     shards = [tmp_path / f"train{index}.jsonl.gz" for index in range(SHARDS)]
 
     real_load = loop_module.load_shard
@@ -100,9 +86,8 @@ def epoch(tmp_path, make_record, monkeypatch):  # noqa: F811
             time.sleep(PAUSE)
             _mark(marks, "train", task.shard.name, "finish")
 
+        stub_below_the_loop(monkeypatch)
         monkeypatch.setattr(loop_module, "load_shard", load)
-        monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: _Stub())
-        monkeypatch.setattr(loop_module, "EffectModel", lambda config: _Stub())
         monkeypatch.setattr(TrainingLoop, "_train_on_shard", train_on_shard)
         # The shard's records stand in for the steps they would prepare.
         monkeypatch.setattr(
@@ -111,16 +96,6 @@ def epoch(tmp_path, make_record, monkeypatch):  # noqa: F811
         )
         monkeypatch.setattr(
             TrainingLoop, "_validate", lambda self, records, *args, **kwargs: 1.0,
-        )
-        monkeypatch.setattr(
-            step_preparation, "load_tokenizer",
-            lambda *a, **k: type("T", (), {"vocab_size": 8})(),
-        )
-        # The script-API vocabulary is read off every real sidecar; none here.
-        monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
-        monkeypatch.setattr(
-            loop_module, "feature_widths",
-            lambda records: dict.fromkeys(loop_module.SlotKind, 4),
         )
         config = TrainEffectModelConfig(
             corpus=str(tmp_path), epochs=1, steps_per_epoch=SHARDS,
@@ -173,7 +148,7 @@ def test_a_failing_read_surfaces_at_its_own_shard(epoch):
 def _shard(monkeypatch, directory, *, failing_at: int | None = None):
     """Train one fixture shard with stubbed halves; what each did, and when."""
     marks: list = []
-    model = _Stub()
+    model = one_parameter_module()
 
     def prepare(self, plan, *args, **kwargs):
         which = len([m for m in marks if m[0] == "prepare"])
@@ -188,17 +163,16 @@ def _shard(monkeypatch, directory, *, failing_at: int | None = None):
         loss = model.p.sum()
         return StepLoss(total=loss, shipped=loss, parts=LossParts(), terms={})
 
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     monkeypatch.setattr(StepPreparer, "prepare_training_step", prepare)
     monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
-    loop = make_training_loop(TrainEffectModelConfig(corpus="unused", batch_size=8))
-    preparer = make_preparer(directory, cards_folders=_CARDS, batch_size=8)
+    loop = make_cpu_training_loop(monkeypatch, batch_size=8)
+    preparer = make_preparer(directory, cards_folders=GEN1_SIDECAR_FOLDERS, batch_size=8)
     task = ShardTask(
-        shard=_FIXTURES / "gen1-records.jsonl.gz", epoch=1, position=1,
+        shard=EFFECTS_FIXTURES / "gen1-records.jsonl.gz", epoch=1, position=1,
         budget=4, fields=(),
     )
     run = SimpleNamespace(
-        step=0, warmup=1, encoder=_Stub(), model=model, training=None,
+        step=0, warmup=1, encoder=one_parameter_module(), model=model, training=None,
         optimizer=torch.optim.SGD(model.parameters(), lr=0.1),
     )
     loop._train_on_shard(

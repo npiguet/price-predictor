@@ -7,9 +7,11 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from effects.domain import default_paths
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_OUTPUT = Path("output/effects/keyword-definitions.json")
+DEFAULT_OUTPUT = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
 
 
 @dataclass
