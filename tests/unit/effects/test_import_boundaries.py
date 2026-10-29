@@ -40,6 +40,9 @@ _ALLOWED: dict[str, set[str] | None] = {
     # the existing mana-cost parser rather than a second one (research.md §
     # Adjacent prior art, FR-058a).
     "price_predictor.domain.value_objects": {"ManaCost"},
+    # One reading of a dataclass field's default, shared with the price and
+    # sealed CLIs rather than spelled again per package.
+    "price_predictor.domain.dataclass_defaults": {"field_default"},
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
     # The cap flags every collecting supervisor carries, one definition for

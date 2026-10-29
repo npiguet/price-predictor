@@ -16,7 +16,7 @@ import logging
 import sys
 import typing
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import MISSING, fields
+from dataclasses import fields
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -58,6 +58,7 @@ from effects.domain.default_paths import (
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
+from price_predictor.domain.dataclass_defaults import field_default
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     announce_probe_state,
@@ -104,7 +105,7 @@ def add_config_flags(
     for name in only if only is not None else [n for n in specs if n not in claimed]:
         spec = specs[name]
         kind = _flag_type(config, name, hints[name])
-        default = spec.default if spec.default is not MISSING else spec.default_factory()
+        default = field_default(spec)
         if isinstance(default, Path):
             # Spelled as typed in --help; argparse parses a string default too.
             default = default.as_posix()

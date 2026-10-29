@@ -14,6 +14,7 @@ from effects.domain.ability_tokenizer import Surface
 from effects.domain.canonical_digest import canonical_digest
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
+from price_predictor.domain.dataclass_defaults import field_default
 
 
 class ManifestDrift(NamedTuple):
@@ -122,11 +123,10 @@ def _default_of(spec: Field) -> Any:
     """The value a manifest lacking ``spec`` reads as; KeyError if it has none."""
     if _ABSENT in spec.metadata:
         return spec.metadata[_ABSENT]
-    if spec.default is not MISSING:
-        return spec.default
-    if spec.default_factory is not MISSING:
-        return spec.default_factory()
-    raise KeyError(spec.name)
+    try:
+        return field_default(spec)
+    except ValueError:
+        raise KeyError(spec.name) from None
 
 
 @dataclass(frozen=True, slots=True)

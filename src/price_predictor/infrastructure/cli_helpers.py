@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import typing
+
+from price_predictor.domain.dataclass_defaults import field_default
 
 
 def add_dataclass_arg(
@@ -23,7 +24,7 @@ def add_dataclass_arg(
     become ``store_true`` flags and the dataclass default must be ``False``.
     """
     field = dataclass_cls.__dataclass_fields__[field_name]  # type: ignore[attr-defined]
-    default = _field_default(field)
+    default = field_default(field)
     cli_flag = (
         cli_name if cli_name is not None
         else f"--{field_name.replace('_', '-')}"
@@ -47,16 +48,6 @@ def add_dataclass_arg(
         type=arg_type,
         default=default,
         help=f"{help_text} (default: {default})",
-    )
-
-
-def _field_default(field: dataclasses.Field) -> typing.Any:
-    if field.default is not dataclasses.MISSING:
-        return field.default
-    if field.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-        return field.default_factory()  # type: ignore[misc]
-    raise ValueError(
-        f"dataclass field {field.name!r} has no default; CLI helper needs one"
     )
 
 

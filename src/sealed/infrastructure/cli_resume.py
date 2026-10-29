@@ -9,11 +9,12 @@ module holds that resolution so the two commands cannot drift.
 
 from __future__ import annotations
 
-import dataclasses
 from argparse import Namespace
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
+
+from price_predictor.domain.dataclass_defaults import field_default
 
 
 def dataclass_default(
@@ -28,14 +29,10 @@ def dataclass_default(
     ``None``. ``required_defaults`` mirrors the help-text defaults a CLI
     advertises for fields that are required on the dataclass itself.
     """
-    field = config_cls.__dataclass_fields__[field_name]
-    if field.default is not dataclasses.MISSING:
-        return field.default
-    if field.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-        return field.default_factory()  # type: ignore[misc]
-    if required_defaults is not None and field_name in required_defaults:
-        return required_defaults[field_name]
-    return None
+    return field_default(
+        config_cls.__dataclass_fields__[field_name],
+        otherwise=(required_defaults or {}).get(field_name),
+    )
 
 
 def resolve_resumable_args(
