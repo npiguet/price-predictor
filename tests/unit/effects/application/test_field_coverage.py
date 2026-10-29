@@ -14,8 +14,8 @@ import dataclasses
 from effects.application.field_coverage import (
     KNOWN_CONSTANT_FIELDS,
     FieldCoverage,
-    constant_fields,
     field_coverage,
+    report_lines,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
@@ -207,9 +207,9 @@ class TestTheRewriteChannelIsNotExcused:
     def test_a_hook_that_passes_no_result_reads_as_a_constant_field(self):
         """The shape of the pre-contract corpus, and what it should report."""
         records = [self._rewrite("r1"), self._rewrite("r2")]
-        constant = constant_fields(field_coverage(records))
-        assert "record.payload<RewritePayload>.result" in constant
-        assert "record.payload<RewritePayload>.replaced_by" in constant
+        coverage = field_coverage(records)
+        assert coverage["record.payload<RewritePayload>.result"].constant
+        assert coverage["record.payload<RewritePayload>.replaced_by"].constant
 
     def test_a_wired_hook_clears_them(self):
         records = [
@@ -221,9 +221,9 @@ class TestTheRewriteChannelIsNotExcused:
                 ),
             )),
         ]
-        constant = constant_fields(field_coverage(records))
-        assert "record.payload<RewritePayload>.result" not in constant
-        assert "record.payload<RewritePayload>.replaced_by" not in constant
+        coverage = field_coverage(records)
+        assert not coverage["record.payload<RewritePayload>.result"].constant
+        assert not coverage["record.payload<RewritePayload>.replaced_by"].constant
 
     def test_a_null_outgoing_counts_as_unpopulated_rather_than_as_data(self):
         """``outgoing`` gained a default, so "not rewritten" no longer reads as
@@ -252,14 +252,14 @@ class TestTheRatchet:
                      if p.startswith(("record.state", "record.payload<Continuous"))}
         assert reachable <= walked, sorted(reachable - walked)
 
-    def test_constant_fields_reports_only_the_unvarying(self):
+    def test_only_the_unvarying_fields_read_as_constant(self):
         records = [
             _record(ContinuousPayload(board_hash="a")),
             _record(ContinuousPayload(board_hash="b"), record_id="r2"),
         ]
-        constant = constant_fields(field_coverage(records))
-        assert "record.payload<ContinuousPayload>.board_hash" not in constant
-        assert "record.game_id" in constant
+        coverage = field_coverage(records)
+        assert not coverage["record.payload<ContinuousPayload>.board_hash"].constant
+        assert coverage["record.game_id"].constant
 
     def test_coverage_of_no_records_is_empty_rather_than_an_error(self):
         assert field_coverage([]) == {}
@@ -267,3 +267,35 @@ class TestTheRatchet:
     def test_a_coverage_row_reports_what_it_saw(self):
         row = FieldCoverage(path="p", populated=1, seen=4, varied=True)
         assert not row.constant
+
+
+class TestReportLines:
+    """The rows ``field-coverage`` prints, tagged by what the list says."""
+
+    def _coverage(self, *rows: FieldCoverage) -> dict[str, FieldCoverage]:
+        return {row.path: row for row in rows}
+
+    def test_constant_fields_are_tagged_known_or_new(self):
+        known = next(iter(sorted(KNOWN_CONSTANT_FIELDS)))
+        lines = report_lines(self._coverage(
+            FieldCoverage(path=known, populated=0, seen=3, varied=False),
+            FieldCoverage(path="record.x", populated=0, seen=3, varied=False),
+            FieldCoverage(path="record.y", populated=2, seen=3, varied=True),
+        ))
+        assert lines == [f"  [known ] {known}   (seen 3)", "  [NEW   ] record.x   (seen 3)"]
+
+    def test_all_fields_adds_the_varying_ones(self):
+        lines = report_lines(self._coverage(
+            FieldCoverage(path="record.y", populated=2, seen=3, varied=True),
+        ), all_fields=True)
+        assert lines == ["  [varies] record.y   (2/3)"]
+
+    def test_a_listed_field_that_varied_is_named_for_removal(self):
+        known = next(iter(sorted(KNOWN_CONSTANT_FIELDS)))
+        lines = report_lines(self._coverage(
+            FieldCoverage(path=known, populated=1, seen=3, varied=True),
+        ))
+        assert lines[-2:] == [
+            "listed as constant but carrying data — remove from the list:",
+            f"  {known}",
+        ]

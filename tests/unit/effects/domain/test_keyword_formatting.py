@@ -99,3 +99,83 @@ class TestFormatters:
         for template, details in ((_WARD, "1"), (_ENCHANT, "Land"), (_BUSHIDO, "2")):
             for name in FORMATTERS:
                 assert "%" not in format_reminder(name, template, details)
+
+
+_CRAFT = (
+    "%s, Exile this artifact, %s: Return this card transformed under its owner's "
+    "control. Craft only as a sorcery."
+)
+_EQUIP = "%s: Attach to target %s you control. Equip only as a sorcery."
+_MAY_FLASH_COST = (
+    "You may cast CARDNAME as though it had flash if you pay %s more to cast it."
+)
+_REPLICATE = (
+    "As an additional cost to cast this spell, you may pay %s any number of "
+    "times. If you do, copy it that many times. You may choose new targets for "
+    "the copies."
+)
+
+#: Keyword lines from the converted corpus whose cost parts were once filled in
+#: as raw script syntax.
+_COST_PART_LINES = [
+    ("Craft", _CRAFT, "1 U ExileCtrlOrGrave<1/Artifact.Other>"),
+    ("Craft", _CRAFT, "2 B B XMin1 ExileCtrlOrGrave<X/Creature.Other>"),
+    ("Craft", _CRAFT, "4 ExileCtrlOrGrave<6/Artifact.Other>"),
+    ("Craft", _CRAFT, "3 U ExileCtrlOrGrave<1/Island.Other>"),
+    ("Craft", _CRAFT, "5 XMin1 ExileCtrlOrGrave<X/Permanent.Other/permanent>"),
+    (
+        "Craft", _CRAFT,
+        "8 U XMin4 ExileCtrlOrGrave<X/Permanent.Other+nonLand+hasAbility "
+        "Activated/nonlands with activated abilities>",
+    ),
+    ("Equip", _EQUIP, "PayEnergy<2>"),
+    ("KeywordWithCost", _REPLICATE, "PayEnergy<3>"),
+    ("KeywordWithCost", _MAY_FLASH_COST, "Behold<1/Dragon>"),
+    ("Ward", _WARD, "AddCounterYou<5/POISON>"),
+    ("Ward", _WARD, "Blight<2>"),
+    ("Ward", _WARD, "CollectEvidence<4>"),
+    ("Ward", _WARD, "Waterbend<4>"),
+    ("Equip", _EQUIP, "Sac<1/Permanent.Other+nonLand/another nonland permanent>"),
+]
+
+
+class TestCostPartsReadAsForgeWordsThem:
+    @pytest.mark.parametrize(("formatter", "template", "details"), _COST_PART_LINES)
+    def test_no_raw_script_syntax_survives(self, formatter, template, details):
+        filled = format_reminder(formatter, template, details)
+        for raw in ("<", ">", "$", "ExileCtrlOrGrave", "PayEnergy", "an another"):
+            assert raw not in filled
+
+    def test_craft_words_its_exile_cost_as_exileMultiZoneCostString(self):
+        filled = format_reminder(
+            "Craft", _CRAFT, "1 U ExileCtrlOrGrave<1/Artifact.Other>",
+        )
+        assert filled.startswith(
+            "{1}{U}, Exile this artifact, Exile another artifact you control or "
+            "an artifact card from your graveyard: Return"
+        )
+
+    def test_craft_with_a_minimum_x_counts_one_or_more(self):
+        filled = format_reminder(
+            "Craft", _CRAFT, "2 B B XMin1 ExileCtrlOrGrave<X/Creature.Other>",
+        )
+        assert (
+            "Exile one or more creatures you control and/or creature cards from "
+            "your graveyard:" in filled
+        )
+
+    def test_energy_reads_as_energy_symbols(self):
+        assert format_reminder("Equip", _EQUIP, "PayEnergy<2>").startswith(
+            "Pay {E}{E}: Attach to target creature you control."
+        )
+
+    def test_a_described_another_takes_no_article(self):
+        filled = format_reminder(
+            "Equip", _EQUIP, "Sac<1/Permanent.Other+nonLand/another nonland permanent>",
+        )
+        assert filled.startswith("Sacrifice another nonland permanent:")
+
+    def test_behold_counts_its_type_in_words(self):
+        assert "if you pay Behold a Dragon more" in format_reminder(
+            "KeywordWithCost", _MAY_FLASH_COST, "Behold<1/Dragon>",
+        )

@@ -14,11 +14,11 @@ import torch
 
 from effects.application.encode_abilities import (
     EncodeAbilitiesConfig,
-    encode_sidecar,
+    encode_tree,
     iter_sidecars,
     run,
+    taxonomy_matrix,
     taxonomy_vector,
-    tree_of,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY, cache_path_for
 from effects.domain.ability_encoder import AbilityEncoderConfig
@@ -40,18 +40,6 @@ _MODEL_CONFIG = EffectModelConfig(
     global_features=8, act_features=6, player_features=10, card_features=12,
     e_dim=E_DIM, d_model=16, n_layers=1, n_heads=2, ff_dim=32,
 )
-
-
-class _Cache:
-    """What ``encode-abilities`` wrote for one variant, read back as a consumer reads it."""
-
-    def __init__(self, root, variant: str) -> None:
-        self.root, self.variant = root, variant
-
-    def read(self, script_file: str) -> np.ndarray:
-        path = cache_path_for(script_file, root=self.root, variant=self.variant)
-        with np.load(path) as data:
-            return data[ARRAY_KEY]
 
 
 def _sidecar(script_file: str, n_lines: int = 2) -> ProvenanceSidecar:
@@ -127,14 +115,14 @@ class TestRowAlignment:
     def test_a_source_gets_one_row_per_sidecar_line(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = _Cache(config.output_root, "taxonomy")
+        store = AbilityCacheStore(config.output_root, variant="taxonomy")
         assert store.read("cardsfolder/s/serra_angel.txt").shape == (3, E_DIM)
         assert store.read("tokenscripts/soldier.txt").shape == (1, E_DIM)
 
     def test_rows_are_float32(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = _Cache(config.output_root, "taxonomy")
+        store = AbilityCacheStore(config.output_root, variant="taxonomy")
         assert store.read("cardsfolder/s/serra_angel.txt").dtype == np.float32
 
 
@@ -160,9 +148,6 @@ class TestTreeSubtrees:
         )
         assert card.parent.name == "s"
         assert token.parent.name == "tokenscripts"
-
-    def test_tree_of_reads_the_folder_name(self, tmp_path):
-        assert tree_of(tmp_path / "tokenscripts") == "tokenscripts"
 
     def test_a_missing_source_tree_is_refused_rather_than_skipped(self, corpus, tmp_path):
         """A relative default resolved from the wrong directory would otherwise
@@ -223,14 +208,31 @@ class TestVariantIsolation:
         assert (root / "cardsfolder" / "s" / "serra_angel.taxonomy.npz").exists()
 
 
+class TestReadingTheCache:
+    def test_a_variant_iterates_only_its_own_files(self, corpus, tmp_path):
+        root = tmp_path / "abilities"
+        run(_config(corpus, tmp_path, variant="taxonomy", output_root=root))
+        shipping = root / "cardsfolder" / "s" / "serra_angel.npz"
+        np.savez_compressed(shipping, **{ARRAY_KEY: np.zeros((5, E_DIM))})
+
+        shapes = {
+            path.name: matrix.shape
+            for path, matrix in AbilityCacheStore(root).iter_matrices()
+        }
+        assert shapes == {"serra_angel.npz": (5, E_DIM)}
+
+    def test_a_source_with_no_cache_reads_none(self, tmp_path):
+        assert AbilityCacheStore(tmp_path).read("cardsfolder/a/absent.txt") is None
+
+
 class TestIdempotence:
     def test_a_second_run_produces_the_same_rows(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = _Cache(config.output_root, "taxonomy")
+        store = AbilityCacheStore(config.output_root, variant="taxonomy")
         first = store.read("cardsfolder/s/serra_angel.txt").copy()
         run(config)
-        second = _Cache(config.output_root, "taxonomy").read("cardsfolder/s/serra_angel.txt")
+        second = store.read("cardsfolder/s/serra_angel.txt")
         np.testing.assert_array_equal(first, second)
 
     def test_the_summary_counts_what_it_wrote(self, corpus, tmp_path):
@@ -243,7 +245,7 @@ class TestTaxonomyBaseline:
     def test_it_emits_into_the_same_row_layout_without_an_encoder(self):
         """Every e-geometry check reads one file shape (FR-102)."""
         sidecar = _sidecar("cardsfolder/s/serra_angel.txt", 3)
-        matrix = encode_sidecar(sidecar, variant="taxonomy", e_dim=E_DIM)
+        matrix = taxonomy_matrix(sidecar, E_DIM)
         assert matrix.shape == (3, E_DIM)
 
     def test_the_vector_is_a_function_of_the_api_type_and_params(self):
@@ -270,16 +272,58 @@ class TestTaxonomyBaseline:
         bare = SidecarLine(line_index=0, line_kind="text", provenance=())
         assert taxonomy_vector(bare, E_DIM).shape == (E_DIM,)
 
-    def test_another_variant_without_an_encoder_is_rejected(self):
-        sidecar = _sidecar("cardsfolder/s/serra_angel.txt", 1)
-        with pytest.raises(ValueError, match="needs an encoder"):
-            encode_sidecar(sidecar, variant="full", e_dim=E_DIM)
-
     def test_a_source_with_no_lines_yields_an_empty_matrix(self):
         empty = ProvenanceSidecar(card="x", script_file="cardsfolder/x.txt", lines=())
-        assert encode_sidecar(
-            empty, variant="taxonomy", e_dim=E_DIM,
-        ).shape == (0, E_DIM)
+        assert taxonomy_matrix(empty, E_DIM).shape == (0, E_DIM)
+
+
+class TestOneEncodeForTheTree:
+    """The encoder sees each distinct input once for the whole tree, not per card."""
+
+    class _Runner:
+        def __init__(self) -> None:
+            self.calls: list[list] = []
+
+        def unit_of(self, line, prose):
+            return line.script_text, ()
+
+        def encode(self, units, keys_of):
+            self.calls.append(list(units))
+            return np.arange(len(units) * E_DIM, dtype=np.float32).reshape(-1, E_DIM)
+
+    @staticmethod
+    def _card(name: str, texts: list[str]) -> ProvenanceSidecar:
+        script_file = f"variant-scripts/{name}.txt"
+        return ProvenanceSidecar(
+            card=name, script_file=script_file,
+            lines=tuple(
+                SidecarLine(
+                    line_index=i, line_kind="static",
+                    provenance=(ProvenanceKey(script_file, 0, "static", i),),
+                    script_text=text,
+                )
+                for i, text in enumerate(texts)
+            ),
+        )
+
+    def test_a_line_shared_across_cards_is_encoded_once(self, tmp_path):
+        runner = self._Runner()
+        sources = [
+            (tmp_path / "a.provenance.json", self._card("a", ["Flying", "Draw"])),
+            (tmp_path / "b.provenance.json", self._card("b", ["Flying"])),
+        ]
+        encode_tree(runner, sources)
+        assert runner.calls == [[("Flying", ()), ("Draw", ())]]
+
+    def test_rows_scatter_back_in_sidecar_line_order(self, tmp_path):
+        runner = self._Runner()
+        sources = [
+            (tmp_path / "a.provenance.json", self._card("a", ["Flying", "Draw"])),
+            (tmp_path / "b.provenance.json", self._card("b", ["Draw", "Flying"])),
+        ]
+        first, second = encode_tree(runner, sources)
+        np.testing.assert_array_equal(first, second[::-1])
+        assert not np.array_equal(first[0], first[1])
 
 
 class TestTheRealEncoder:
@@ -346,14 +390,14 @@ class TestTheRealEncoder:
         summary = run(trained)
         assert summary.sources == 1
         assert summary.rows == 3
-        store = _Cache(trained.output_root, "full")
+        store = AbilityCacheStore(trained.output_root, variant="full")
         assert store.read("cardsfolder/s/serra_angel.txt").shape == (3, E_DIM)
 
     def test_the_rows_are_not_all_the_same(self, trained):
         """A cache of one repeated vector would pass every shape check and
         carry no information."""
         run(trained)
-        rows = _Cache(trained.output_root, "full").read(
+        rows = AbilityCacheStore(trained.output_root, variant="full").read(
             "cardsfolder/s/serra_angel.txt"
         )
         assert not np.allclose(rows[0], rows[1]) or not np.allclose(
@@ -365,9 +409,10 @@ class TestTheRealEncoder:
         built without eval() would differ run to run and every consumer reads
         the cache rather than the model."""
         run(trained)
-        first = _Cache(trained.output_root, "full").read("cardsfolder/s/serra_angel.txt").copy()
+        store = AbilityCacheStore(trained.output_root)
+        first = store.read("cardsfolder/s/serra_angel.txt").copy()
         run(trained)
-        second = _Cache(trained.output_root, "full").read("cardsfolder/s/serra_angel.txt")
+        second = store.read("cardsfolder/s/serra_angel.txt")
         np.testing.assert_array_equal(first, second)
 
     def test_a_line_past_the_window_is_reported_by_its_key(self, trained, caplog):
@@ -437,11 +482,11 @@ class TestTheWithheldKeyword:
                 device=torch.device("cpu"), withheld_keyword=withheld,
             )
 
-        withheld = runner("Flying").encode_texts(["flying"])
-        expansion = runner(None).encode_texts(
-            ["cant be blocked except by creatures with or reach"],
+        withheld = runner("Flying").encode([("flying", ())])
+        expansion = runner(None).encode(
+            [("cant be blocked except by creatures with or reach", ())],
         )
-        token = runner(None).encode_texts(["flying"])
+        token = runner(None).encode([("flying", ())])
         assert np.allclose(withheld, expansion, atol=1e-6)
         assert not np.allclose(withheld, token, atol=1e-6)
 
@@ -484,7 +529,7 @@ class TestTruncation:
                 surface="script", e_dim=4, widths={},
                 device=torch.device("cpu"), truncations=log,
             )
-            batcher.prepare_texts([long_text, "x x"])
+            batcher.stage({long_text: None, "x x": None})
         assert reported == [long_text]
 
     def test_a_text_is_reported_once_per_run(self):

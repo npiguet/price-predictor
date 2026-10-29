@@ -1,15 +1,4 @@
-"""Supervises the records-only worker over coverage and variant decks.
-
-The third supervisor over ``ForgeWorkerPool`` (after ``sealed
-match-outcomes`` and ``draft play-draft-games``), so the pool's restart,
-recycling and status-line behaviour come for free and the operator sees the
-same output shape from every long-running Forge command in this repo.
-
-What is different here is the worker's mode: no ``output.file`` is passed, so
-neither sealed writer is constructed and these matches can only write effect
-records. That guard lives in the Java worker rather than here, because that is
-where the writers are built — a Python-side check would not bind.
-"""
+"""Supervises the records-only worker over coverage and variant decks."""
 
 from __future__ import annotations
 
@@ -24,9 +13,7 @@ from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 logger = logging.getLogger(__name__)
 
-#: Coverage matches are one game each: the question is whether a card reached a
-#: game at all, and a best-of-three would spend three times the simulation on
-#: the same answer.
+#: One game each: the question is whether a card reached a game at all.
 COVERAGE_BEST_OF = 1
 
 
@@ -51,12 +38,8 @@ class CollectorSupervisor:
         self._pool: ForgeWorkerPool | None = None
         self._interrupted = False
         self._decks_file: Path | None = None
-        # Every worker here runs with effect-record collection on by
-        # construction (records-only mode, see start_worker), so any of the
-        # five latched effect-record failure reporters (ApiEvents.
-        # reportEmitterFailure and its siblings) can fire on it. Without a
-        # real destination they print into DEVNULL and a broken emitter is
-        # indistinguishable from a mechanic that simply never occurred (F4).
+        # A real log destination, or the JVM's latched emitter-failure reports
+        # vanish into DEVNULL and look like a mechanic that never occurred.
         self._worker_logs = WorkerLogFiles(self._effect_records, self._run_id)
 
     @property
@@ -67,26 +50,15 @@ class CollectorSupervisor:
     def interrupted(self) -> bool:
         """True when some round ended on Ctrl-C rather than at its budget.
 
-        ``ForgeWorkerPool.run`` installs its own SIGINT handler, sets its own
-        event and returns normally, so an interrupted round is
-        indistinguishable from one that hit its match budget -- and a caller
-        that cannot tell them apart builds a fresh pool for the next round,
-        which turns Ctrl-C into "skip this round, start another". The pool
-        already records the difference; this is what carries it out.
-
-        Latched rather than read from the live pool, because ``stop()`` drops
-        the pool and ``collect_variants.run`` asks after its ``finally`` has
-        already run.
+        ``ForgeWorkerPool.run`` returns normally on SIGINT, so without this a
+        caller would start the next round. Latched, because ``stop()`` drops
+        the pool before ``collect_variants`` asks.
         """
         return self._interrupted
 
     def start_worker(self, worker_id: int) -> subprocess.Popen:
-        """Spawn one records-only worker.
-
-        ``output_file=None`` is what puts the worker in records-only mode: it
-        constructs neither the match-outcome writer nor the cards-played one, so
-        there is no path by which a coverage run reaches the sealed corpus.
-        """
+        """Spawn one records-only worker: with no output file the JVM builds
+        neither sealed writer, so a coverage run cannot reach the sealed corpus."""
         process = self._connector.start(
             None,
             run_id=self._run_id,
@@ -106,29 +78,15 @@ class CollectorSupervisor:
 
     @property
     def progress_path(self) -> Path:
-        """The file a round's completed matches are counted from.
-
-        Under ``output/effects/``, never the sealed corpus: FR-052 and FR-059
-        forbid a coverage or variant run reaching ``match-outcomes.txt``, and
-        this is a per-run scratch file that nothing downstream reads.
-        """
+        """The per-run scratch file a round's completed matches are counted
+        from, never the sealed corpus (FR-052, FR-059)."""
         return self._effect_records / f"{self._run_id}.progress.txt"
 
     def play_round(self, decks_file: Path, *, matches: int) -> None:
         """Play ``matches`` matches from ``decks_file``, then stop.
 
-        The budget is what makes a round a round: without it the pool runs until
-        it is signalled, the caller never recounts coverage, nothing retires,
-        and the run cannot finish.
-
-        ``decks_file`` is validated up front rather than merely logged: every
-        worker this round spawns runs ``decks_only=True``, which forces both
-        sides of every match to sample from this file (see ``start_worker``),
-        so a missing or empty file is not a degraded round but one no worker
-        can play at all. Raising here, before any worker is spawned, turns
-        that into one clear Python-level error instead of an unexplained
-        subprocess exit -- ``GeneratedDecksIndex.load`` on an empty file is
-        untested territory this deliberately never reaches.
+        A missing or empty ``decks_file`` raises before any worker spawns:
+        every worker is decks-only, so no worker could play at all.
         """
         self._decks_file = Path(decks_file)
         if not self._decks_file.exists():
@@ -157,10 +115,7 @@ class CollectorSupervisor:
     def stop(self) -> None:
         self._worker_logs.close_all()
         if self._pool is not None:
-            # ``request_shutdown``, not ``shutdown``: this call sits in the
-            # ``finally`` of both collectors' ``run``, so a wrong method name
-            # here does not merely fail to stop the pool -- it swallows the
-            # residue report and the return code behind an AttributeError and
-            # ends an overnight run in a traceback having reported nothing.
+            # Runs in both collectors' ``finally``: a raise here would hide
+            # the run's report and return code.
             self._pool.request_shutdown()
             self._pool = None

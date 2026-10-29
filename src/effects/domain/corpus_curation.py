@@ -1,17 +1,10 @@
 """Which records a curated training corpus keeps, and how many times.
 
-Every decision is shaped so a worker can apply it to one shard without talking
-to any other worker. The survey keeps each text's smallest record hashes per
-selection cell; the main process turns each text's quota into a
-:class:`CopyPlan` — a base copy count and a hash threshold — and a write worker
-then decides a record's copies by comparing one number. The class mixture sets
-each class's budget, the game-disjoint stratum is a per-game hash test, and
-both are pure functions of the corpus, the flags and the seed (FR-052).
-
-A text over its cap contributes a *random* subset rather than its first N: a
-text's earliest records are its earliest games, and keeping those would
-describe one opening board over and over — the bias the mana reservoir sampler
-exists to avoid, on the other side of the pipeline.
+Every decision is shaped so a write worker applies it to one shard alone, by
+comparing a record's hash with a :class:`CopyPlan` threshold; all of it is a
+pure function of the corpus, the flags and the seed (FR-052). A text over its
+cap contributes a random subset rather than its first N, which would be its
+earliest games' opening boards over and over.
 """
 
 from __future__ import annotations
@@ -22,24 +15,18 @@ import zlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from effects.domain.sampling import (
-    CLASS_COMBAT,
-    CLASS_CONTINUOUS,
-    CLASS_RESOLUTION_EFFECT,
-    CLASS_REWRITE,
-)
+from effects.domain.effect_head_layout import ZONE_OUTCOMES
+from effects.domain.effect_targets import derive_targets
+from effects.domain.sampling import SamplingClass
 
-#: uint64, which is the width the threshold comparison is over.
 _HASH_BYTES = 8
 
 
 def record_hash(record_id: str, *, seed: int) -> int:
     """A stable uniform draw in [0, 2^64) for one record.
 
-    ``blake2b`` keyed by the seed rather than the built-in ``hash()``, which is
-    salted per process: a threshold computed in the survey pass would admit a
-    different set of records in the write pass, and nothing would say so
-    (FR-088a).
+    Not the built-in ``hash()``, which is salted per process, so the survey and
+    write passes would silently admit different records (FR-088a).
     """
     digest = hashlib.blake2b(
         record_id.encode("utf-8"),
@@ -50,46 +37,72 @@ def record_hash(record_id: str, *, seed: int) -> int:
 
 
 class CapHeap:
-    """The ``cap`` smallest record hashes seen for one ability text.
+    """The ``cap`` smallest record hashes seen, as a max-heap of negated hashes.
 
-    A max-heap of negated values, so the largest retained hash sits at the root
-    and is the first one a smaller arrival displaces. Held bounded rather than
-    collecting every hash: the corpus has tens of millions of records, and no
-    quota a text is given exceeds the cap.
+    Bounded because no quota a text is given exceeds the cap; entries are bare
+    ints because the survey holds one heap per text slot.
     """
 
     __slots__ = ("cap", "_heap")
 
     def __init__(self, cap: int) -> None:
         self.cap = cap
-        self._heap: list[int] = []
+        self._heap: list = []
 
     def offer(self, value: int) -> None:
+        self._push(-value)
+
+    def _push(self, entry) -> None:
         if self.cap <= 0:
             return
         if len(self._heap) < self.cap:
-            heapq.heappush(self._heap, -value)
-        elif -value > self._heap[0]:
-            heapq.heappushpop(self._heap, -value)
+            heapq.heappush(self._heap, entry)
+        elif entry > self._heap[0]:
+            heapq.heappushpop(self._heap, entry)
+
+    @staticmethod
+    def _negated(entry) -> int:
+        return entry
 
     def merge(self, other: CapHeap) -> None:
         """Absorb another heap's values, keeping the cap smallest of the union.
 
-        Valid only when both heaps share the same cap, because the k smallest of
-        a union are drawn from each side's own k smallest. This precondition is
-        enforced to prevent silent data loss: if the other heap discarded values
-        due to a smaller cap, they are irrecoverably lost here.
+        Refused across caps: a smaller cap has already lost values for good.
         """
         if self.cap != other.cap:
             raise ValueError(
                 f"cannot merge heaps with mismatched caps: "
                 f"self.cap={self.cap}, other.cap={other.cap}"
             )
-        for negated in other._heap:
-            self.offer(-negated)
+        for entry in other._heap:
+            self._push(entry)
 
     def values(self) -> tuple[int, ...]:
-        return tuple(-negated for negated in self._heap)
+        return tuple(-self._negated(entry) for entry in self._heap)
+
+    def __len__(self) -> int:
+        return len(self._heap)
+
+
+class KeyedCapHeap[T](CapHeap):
+    """A :class:`CapHeap` that carries an item with each hash.
+
+    Among equal hashes the larger ``tiebreak`` is kept; it must never tie, or
+    two equal hashes would compare the items.
+    """
+
+    __slots__ = ()
+
+    def offer(self, value: int, item: T, tiebreak: tuple) -> None:  # type: ignore[override]
+        self._push((-value, tiebreak, item))
+
+    @staticmethod
+    def _negated(entry) -> int:
+        return entry[0]
+
+    def items(self) -> list[T]:
+        """The retained items, smallest hash first."""
+        return [item for _, _, item in sorted(self._heap, reverse=True)]
 
 
 def class_targets(
@@ -100,15 +113,10 @@ def class_targets(
 ) -> tuple[dict[str, int], dict[str, int]]:
     """Per-class write targets, and the shortfall against a requested ceiling.
 
-    The scarcest class sets the size of the whole dataset: the largest total
-    the mixture can be written at is ``min(available[c] / share[c])``, and
-    every class then takes its share of that. Filling the abundant classes to
-    their own capacity instead would write the mixture the disk happens to
-    hold, which is the shape the dataset exists to correct.
-
-    ``ceiling`` (``--training-records``) lowers that total. A ceiling above
-    what the mixture supports cannot be met, and the difference is returned per
-    class rather than silently under-filled (FR-139).
+    The scarcest class sets the total, ``min(available[c] / share[c])``;
+    filling abundant classes to capacity would write the mixture the disk
+    happens to hold. ``ceiling`` (``--training-records``) lowers that total,
+    and what a ceiling above it cannot meet is returned per class (FR-139).
     """
     shares = {
         name: float(share)
@@ -135,31 +143,21 @@ def class_targets(
     return targets, shortfall
 
 
-# ── gen-2 selection (FR-049) ────────────────────────────────────────────
-
 #: The sampling classes whose families split further by outcome signature
-#: (FR-049 step 2). The others have no per-entity outcome to sort by: a cost
-#: half's outcome is its payment, a trigger's is whether it fired.
-SIGNATURE_CLASSES: frozenset[str] = frozenset({
-    CLASS_RESOLUTION_EFFECT, CLASS_REWRITE, CLASS_COMBAT, CLASS_CONTINUOUS,
+#: (FR-049 step 2); the others have no per-entity outcome to sort by.
+SIGNATURE_CLASSES: frozenset[SamplingClass] = frozenset({
+    SamplingClass.RESOLUTION_EFFECT, SamplingClass.REWRITE, SamplingClass.COMBAT,
+    SamplingClass.CONTINUOUS,
 })
 
 
 def outcome_signature(record) -> frozenset[tuple[str, bool]]:
-    """The distinct ``(zone outcome, changed)`` pairs over a record's entities.
+    """The distinct ``(zone outcome, changed)`` pairs over a record's entities,
+    from the targets the head trains on.
 
-    From the targets the head trains on (``derive_targets``): the entity's
-    ``zone_outcome`` or ``"stayed"`` when it has none, paired with whether any
-    event touched it. A set, not a multiset, so a wipe that kills three
-    creatures and one that kills seven share a signature rather than splitting
-    one rule into thin cells by board size (FR-049 step 2).
-
-    The import is local because ``effect_targets`` reads the head's field
-    layout, which pulls in torch; this module is otherwise torch-free.
+    A set, not a multiset, so a wipe of three and a wipe of seven share a
+    signature rather than splitting one rule by board size (FR-049 step 2).
     """
-    from effects.domain.effect_head_layout import ZONE_OUTCOMES
-    from effects.domain.effect_targets import derive_targets
-
     pairs = set()
     for entry in derive_targets(record).values():
         zone = entry.fields.get("zone_outcome")
@@ -177,25 +175,17 @@ def signature_label(signature: frozenset[tuple[str, bool]]) -> str:
 
 
 def text_capacity(distinct: int, *, text_cap: int, reuse_cap: int) -> int:
-    """How many written records one text can supply to one cell (FR-049).
-
-    ``min(reuse_cap × n, text_cap)``, repeats included, so no text is replayed
-    past the cap however short its family is. ``text_cap <= 0`` is no cap, as
-    it always was; a record with no text has no text cap either, and its cell
-    passes ``text_cap=0``.
-    """
+    """How many written records one text can supply to one cell (FR-049):
+    ``min(reuse_cap × n, text_cap)``, repeats included; ``text_cap <= 0`` is
+    no cap."""
     repeated = max(0, reuse_cap) * distinct
     return repeated if text_cap <= 0 else min(repeated, text_cap)
 
 
 @dataclass(frozen=True, slots=True)
 class CopyPlan:
-    """How many copies each record of one text in one cell is written.
-
-    Every record gets ``base`` copies and one more when its hash is at most
-    ``threshold``. Two numbers rather than a table, so a write worker applies
-    it to a record it has never seen listed, by comparing one hash.
-    """
+    """``base`` copies, and one more when a record's hash is at most
+    ``threshold``: two numbers, so a write worker needs no record list."""
 
     base: int = 0
     threshold: int | None = None
@@ -208,13 +198,10 @@ class CopyPlan:
 def copy_plan(smallest: Sequence[int], distinct: int, quota: int) -> CopyPlan:
     """The plan that writes ``quota`` records of a text with ``distinct`` records.
 
-    ``smallest`` holds the text's smallest record hashes in the cell, at least
-    ``min(distinct, quota)`` of them — the survey keeps the ``--text-cap``
-    smallest, and a quota never exceeds the cap. A quota at or below
-    ``distinct`` takes that many records once each, by smallest hash: a random
-    subset under ``--seed`` (FR-049 step 4). A larger quota spreads evenly, each
-    record ``quota // distinct`` times and the remainder once more on the
-    smallest hashes, so repeats differ by at most one.
+    ``smallest`` holds at least ``min(distinct, quota)`` of the text's smallest
+    hashes in the cell. A quota up to ``distinct`` takes the smallest hashes
+    once each, a random subset under ``--seed`` (FR-049 step 4); a larger one
+    spreads evenly, so repeats differ by at most one.
     """
     ordered = sorted(smallest)
     if quota <= 0 or distinct <= 0:
@@ -226,14 +213,8 @@ def copy_plan(smallest: Sequence[int], distinct: int, quota: int) -> CopyPlan:
 
 
 def rate_plan(distinct: int, quota: int) -> CopyPlan:
-    """A copy plan for records that carry no ability text, by hash rate.
-
-    Combat and legality records name no acting line, so there is no text cap
-    and no per-text heap: the cell is sampled at the rate its quota asks,
-    ``quota / distinct`` copies a record on average, as a hash threshold. Exact
-    in expectation rather than in count, which is what the class admission
-    rate always was.
-    """
+    """A copy plan for records with no ability text (combat, legality): the
+    quota's rate as a hash threshold, exact in expectation rather than count."""
     if quota <= 0 or distinct <= 0:
         return CopyPlan()
     base, extra = divmod(quota, distinct)
@@ -249,21 +230,15 @@ def game_disjoint_draw(game_id: str) -> float:
 
 def in_game_disjoint_stratum(
     game_id: str,
-    names_held_out: bool,
     has_keyword_combat: bool,
     share: float,
     keyword_share: float,
 ) -> bool:
-    """Whether a game enters the game-disjoint validation stratum (FR-044–046).
+    """Whether a game not held out enters the game-disjoint stratum (FR-044–046).
 
     A pure function of the game, so a rebuild over a grown corpus places every
-    game it placed before (SC-007): the stratum grows with the corpus rather
-    than being redrawn from it. A game naming a held-out card is card-disjoint
-    and never placed here. A game holding a qualifying combat for a listed
-    keyword is placed at the higher threshold, because those combats are what
-    gate 2 scores and a 1% sample of them is too few to score.
+    game it placed before (SC-007). A game holding a qualifying keyword combat
+    takes the higher threshold, since those are what gate 2 scores.
     """
-    if names_held_out:
-        return False
     threshold = keyword_share if has_keyword_combat else share
     return game_disjoint_draw(game_id) < threshold

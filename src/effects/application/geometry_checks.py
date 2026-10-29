@@ -1,15 +1,8 @@
 """The checks that read the ability cache rather than the model.
 
-Gate 3, the ward canary, nearest-neighbour inspection, UMAP, the decodability
-battery and the scorer smoke test all ask about the *geometry* of ``e`` rather
-than about a prediction. They are grouped here because they share one input —
-the cache — and because a check on the geometry catches a failure the loss
-cannot: a collapsed space, where every ability sits on top of every other,
-passes every average-case metric and is useless.
-
-None of them blocks except gate 3. The rest are reported, and they are reported
-because a number that gates nothing still tells an operator which way to go
-next.
+They ask about the geometry of ``e`` rather than a prediction, which catches
+what the loss cannot: a collapsed space passes every average-case metric.
+Only gate 3 is a verdict; the rest are reported.
 """
 
 from __future__ import annotations
@@ -17,17 +10,20 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 
 import numpy as np
 
-from effects.domain.ability_cache_layout import ARRAY_KEY, CACHE_SUFFIX
+from effects.domain.ability_cache_layout import pooled_card_vector
+from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
+    Bound,
     CheckName,
     CheckResult,
     CheckStatus,
-    breaches,
-    margin,
+    Margin,
+    gate_verdict,
 )
 from effects.domain.gate_metrics import (
     GATE3_MAX_MEAN_COSINE,
@@ -37,6 +33,7 @@ from effects.domain.gate_metrics import (
     top_component_share,
 )
 from effects.domain.line_query import LineQuery, normalize_prose
+from effects.domain.provenance import SourceTree
 
 logger = logging.getLogger(__name__)
 
@@ -51,11 +48,7 @@ class Resolution:
 
 @dataclass(frozen=True, slots=True)
 class CacheGeometry:
-    """The two collapse measures of one set of vectors (FR-123).
-
-    Measured once per cache: gate 3 reads the shipping cache's, and every
-    baseline comparison reads it again beside the baseline's own.
-    """
+    """The two collapse measures of one set of vectors (FR-123)."""
 
     mean_pairwise_cosine: float
     top_component_share: float
@@ -72,52 +65,46 @@ class CacheGeometry:
 class CachedVectors:
     """One variant's cache, loaded once and indexed by ability text.
 
-    Indexed by *text* rather than by provenance key because every geometry
-    check asks about unique texts: a line reprinted on forty cards is one point
-    in the space, and counting it forty times would make the space look more
-    populated than it is. The text is the one on the checkpoint's encoding
-    surface — what the model read — so two lines sharing prose but compiling to
-    different scripts are two points on a script checkpoint, and one reprint
-    encoded in two batches, whose vectors differ in float noise, is one.
-
-    ``display`` and ``by_prose`` exist for the checks a person reads. A script
-    key is unreadable in a report, and a query written as script would break on
-    the first reconversion, so queries name lines in prose and results print in
-    prose; ``by_prose`` maps each normalized prose line to the keys it encodes
-    to, with the cards printing each.
+    By the text on the checkpoint's encoding surface, so a reprint is one
+    point (not one per card or per float-noisy batch) and two scripts sharing
+    prose are two. ``by_prose`` maps each normalized prose line to the keys it
+    encodes to, with the cards printing each, for queries a person reads.
+    The cached properties are kept, so nothing may add to ``by_text`` once
+    any has been read.
     """
 
     by_text: dict[str, np.ndarray] = field(default_factory=dict)
     by_card: dict[str, np.ndarray] = field(default_factory=dict)
     display: dict[str, str] = field(default_factory=dict)
     by_prose: dict[str, dict[str, set[str]]] = field(default_factory=dict)
-    _geometry: CacheGeometry | None = field(default=None, repr=False)
 
+    @cached_property
     def matrix(self) -> np.ndarray:
+        """One row per text, in ``texts`` order."""
         if not self.by_text:
             return np.zeros((0, 0), dtype=np.float32)
         return np.stack(list(self.by_text.values()))
 
-    def geometry(self) -> CacheGeometry:
-        """The cache's collapse measures, computed on first use and kept."""
-        if self._geometry is None:
-            self._geometry = CacheGeometry.of(self.matrix())
-        return self._geometry
+    @cached_property
+    def unit(self) -> np.ndarray:
+        norms = np.linalg.norm(self.matrix, axis=1, keepdims=True)
+        return self.matrix / np.clip(norms, 1e-12, None)
 
+    @cached_property
     def texts(self) -> list[str]:
         return list(self.by_text)
+
+    @cached_property
+    def geometry(self) -> CacheGeometry:
+        return CacheGeometry.of(self.matrix)
 
     def label(self, key: str) -> str:
         """``key`` as a person reads it: its prose, where it has any."""
         return self.display.get(key, key)
 
     def resolve(self, query: LineQuery) -> Resolution:
-        """The cache key ``query`` names, or the reason it names none.
-
-        Several keys under one prose is ambiguity rather than a choice to make
-        here: picking the first would compare against whichever card happened
-        to load first, so the query has to pin its card instead.
-        """
+        """The cache key ``query`` names, or the reason it names none. Several
+        keys under one prose is ambiguity: the query has to pin its card."""
         keys = self.by_prose.get(normalize_prose(query.prose), {})
         if query.card is not None:
             card = normalize_prose(query.card)
@@ -145,22 +132,17 @@ def load_cache(
     sidecar_roots: Path | Iterable[Path],
     *,
     surface: str,
-    variant: str = "full",
+    variant: str = Baseline.FULL,
 ) -> CachedVectors:
     """Load a variant's cache, keyed by the ability text each row encodes.
 
-    ``sidecar_roots`` supplies the texts: the cache is row-aligned with each
-    source's sidecar, so the pairing is positional and needs no index. The key
-    is the text on ``surface``, which the caller takes from the checkpoint the
-    cache was encoded with, and which has no default: a check keyed on the
-    other surface compares the vectors against texts they do not encode, and
-    on a script checkpoint silently merges every pair of scripts sharing a
-    prose line.
-
-    Only a ``cardsfolder`` source contributes a pooled per-card vector: a token
-    is not a card the sealed pipeline scores.
+    ``surface`` comes from the checkpoint and has no default: keyed on the
+    other surface, a script checkpoint's cache silently merges every pair of
+    scripts sharing a prose line. Only a ``cardsfolder`` source contributes a
+    pooled per-card vector.
     """
     from effects.domain.ability_encoder import encoding_text
+    from effects.infrastructure.ability_cache_store import AbilityCacheStore
     from effects.infrastructure.sidecar_io import (
         SIDECAR_SUFFIX,
         converted_text_path,
@@ -173,25 +155,23 @@ def load_cache(
         (Path(sidecar_roots),) if isinstance(sidecar_roots, (str, Path))
         else tuple(Path(r) for r in sidecar_roots)
     )
-    suffix = CACHE_SUFFIX if variant == "full" else f".{variant}{CACHE_SUFFIX}"
     cached = CachedVectors()
-    root = Path(abilities_root)
-    if not root.is_dir():
+    store = AbilityCacheStore(abilities_root, variant=variant)
+    if not store.root.is_dir():
         return cached
 
     for sidecar_root in roots:
         for sidecar_path in sorted(sidecar_root.rglob(f"*{SIDECAR_SUFFIX}")):
             sidecar = read_sidecar(sidecar_path)
             relative = Path(sidecar.script_file)
-            cache_path = root / relative.parent / f"{relative.stem}{suffix}"
-            if not cache_path.exists():
+            matrix = store.read(sidecar.script_file)
+            if matrix is None:
                 continue
-            with np.load(cache_path) as data:
-                matrix = data[ARRAY_KEY]
             if matrix.shape[0] != len(sidecar.lines):
                 logger.warning(
                     "skipping %s: %d cache rows for %d sidecar lines",
-                    cache_path, matrix.shape[0], len(sidecar.lines),
+                    store.path_for(sidecar.script_file), matrix.shape[0],
+                    len(sidecar.lines),
                 )
                 continue
             rendered = prose_lines(converted_text_path(sidecar_path))
@@ -207,52 +187,34 @@ def load_cache(
                     cached.by_prose.setdefault(
                         normalize_prose(prose), {},
                     ).setdefault(text, set()).add(card)
-            if matrix.size and relative.parts[:1] == ("cardsfolder",):
-                cached.by_card[sidecar.card] = pooled(matrix)
+            if matrix.size and relative.parts[:1] == (SourceTree.CARDSFOLDER,):
+                cached.by_card[sidecar.card] = pooled_card_vector(matrix)
     return cached
-
-
-def pooled(matrix: np.ndarray) -> np.ndarray:
-    """Mean and max over a card's ability rows, concatenated (FR-114)."""
-    from effects.domain.ability_cache_layout import pooled_card_vector
-
-    return pooled_card_vector(matrix)
 
 
 # ── gate 3: collapse canaries ───────────────────────────────────────────
 
 
-def evaluate_gate_three(vectors: np.ndarray, *, seed: int = 42) -> CheckResult:
-    """Two collapse canaries, both of which block shipping (FR-123)."""
-    return gate_three_verdict(CacheGeometry.of(vectors, seed=seed))
-
-
 def gate_three_verdict(geometry: CacheGeometry) -> CheckResult:
-    """Gate 3 on measured geometry.
-
-    One vector per unique ability text. A collapsed space passes every
-    average-case metric — every prediction is the corpus mean and every mean is
-    close — so this is checked on the geometry rather than on the loss.
-    """
-    cosine = geometry.mean_pairwise_cosine
-    top = geometry.top_component_share
-    values = {"mean_pairwise_cosine": cosine, "top_component_share": top}
-    failures = breaches(
-        margin(
-            "mean pairwise cosine", cosine, cosine > GATE3_MAX_MEAN_COSINE,
-            f"{cosine:.3f} > {GATE3_MAX_MEAN_COSINE}",
+    """Gate 3 on measured geometry, one vector per unique ability text."""
+    return gate_verdict(
+        CheckName.GATE_3,
+        (
+            Margin(
+                "mean_pairwise_cosine", "mean pairwise cosine",
+                geometry.mean_pairwise_cosine, GATE3_MAX_MEAN_COSINE,
+                Bound.CEILING, value_format=".3f",
+            ),
+            Margin(
+                "top_component_share", "top principal component",
+                geometry.top_component_share, GATE3_MAX_TOP_COMPONENT,
+                Bound.CEILING, value_format=".1%", limit_format=".0%",
+                verb="explains",
+            ),
         ),
-        margin(
-            "top principal component", top, top > GATE3_MAX_TOP_COMPONENT,
-            f"explains {top:.1%} > {GATE3_MAX_TOP_COMPONENT:.0%}",
-        ),
+        fail_prefix="the embedding space has collapsed",
+        pass_detail="no collapse",
     )
-    if failures:
-        return CheckResult(
-            CheckName.GATE_3, CheckStatus.FAIL,
-            "the embedding space has collapsed: " + "; ".join(failures), values,
-        )
-    return CheckResult(CheckName.GATE_3, CheckStatus.PASS, "no collapse", values)
 
 
 def run_gate_three(cached: CachedVectors, abilities_root: Path) -> CheckResult:
@@ -264,16 +226,13 @@ def run_gate_three(cached: CachedVectors, abilities_root: Path) -> CheckResult:
             f"no ability cache under {abilities_root}; run "
             "encode-abilities first",
         )
-    return gate_three_verdict(cached.geometry())
+    return gate_three_verdict(cached.geometry)
 
 
 # ── nearest neighbours ──────────────────────────────────────────────────
 
-#: Lines whose neighbours a reader can judge at a glance. Reported rather than
-#: scored: the point is for a person to see whether the neighbours of a removal
-#: spell are removal spells, which no metric asks. Each prose line is printed
-#: with several scripts across the corpus, so each pins the card whose script
-#: the query stands for (see :mod:`effects.domain.line_query`).
+#: Lines whose neighbours a reader can judge at a glance, each pinned to a card
+#: because its prose compiles to several scripts.
 NEIGHBOUR_QUERIES: tuple[LineQuery, ...] = (
     LineQuery("destroy target creature.", card="murder"),
     LineQuery("draw a card.", card="think twice"),
@@ -287,21 +246,14 @@ NEIGHBOUR_QUERIES: tuple[LineQuery, ...] = (
 def nearest_neighbours(
     cached: CachedVectors, query: str, *, k: int = 5,
 ) -> list[tuple[str, float]]:
-    """The ``k`` texts nearest ``query`` by cosine similarity.
-
-    Reported rather than scored: the point is for a person to read the list and
-    see whether the neighbours of "destroy target creature" are removal spells.
-    A metric cannot ask that question.
-    """
+    """The ``k`` texts nearest ``query`` by cosine similarity, for a person to
+    judge, since no metric asks whether a removal spell's neighbours are."""
     target = cached.by_text.get(query)
     if target is None or len(cached) < 2:
         return []
-    texts = cached.texts()
-    matrix = cached.matrix()
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    unit = matrix / np.clip(norms, 1e-12, None)
+    texts = cached.texts
     target_unit = target / max(float(np.linalg.norm(target)), 1e-12)
-    scores = unit @ target_unit
+    scores = cached.unit @ target_unit
     order = np.argsort(-scores)
     out: list[tuple[str, float]] = []
     for index in order:
@@ -314,11 +266,8 @@ def nearest_neighbours(
 
 
 def umap_projection(matrix: np.ndarray, *, seed: int = 42) -> np.ndarray | None:
-    """A 2-D UMAP projection, or None when the library or the data is absent.
-
-    Returns None rather than raising: the projection is a picture for a person
-    to look at, and a run that cannot draw it has not failed.
-    """
+    """A 2-D UMAP projection, or None when the library or the data is absent:
+    a run that cannot draw the picture has not failed."""
     if matrix.shape[0] < 10:
         return None
     try:
@@ -334,11 +283,8 @@ def umap_projection(matrix: np.ndarray, *, seed: int = 42) -> np.ndarray | None:
 def check_nearest_neighbours(
     cached: CachedVectors, queries: tuple[LineQuery, ...],
 ) -> CheckResult:
-    """Each query's three nearest lines, printed in prose for a person to judge.
-
-    A query that resolves to no line is listed as unresolved rather than left
-    out, so a list shorter than the query table says why.
-    """
+    """Each query's three nearest lines, in prose; an unresolved query is
+    listed as such rather than left out."""
     if len(cached) < 2:
         return CheckResult(
             CheckName.NEAREST_NEIGHBOUR, CheckStatus.SKIPPED,
@@ -365,7 +311,7 @@ def check_nearest_neighbours(
 
 
 def check_umap(cached: CachedVectors) -> CheckResult:
-    projection = umap_projection(cached.matrix())
+    projection = umap_projection(cached.matrix)
     if projection is None:
         return CheckResult(
             CheckName.UMAP, CheckStatus.SKIPPED,
@@ -389,13 +335,9 @@ def evaluate_ward_canary(
 ) -> CheckResult:
     """Is ward nearer its meaning than it is to keyword-shaped text in general?
 
-    Passes when ward is closer to **each** functional twin than to the median of
-    its distances to all bare single-keyword vectors. A median rather than a
-    fixed threshold, so the criterion stays meaningful whatever scale the
-    embedding settles at.
-
-    ``unresolved`` names the checked-in lines the cache had no vector for. They
-    are carried into the detail, and the counts compared into the values, so a
+    Holds when ward is closer to each functional twin than the median of its
+    distances to the bare keywords, a median so the criterion survives any
+    embedding scale. ``unresolved`` lines are named in the detail, so a
     verdict over fewer twins than the table lists says so.
     """
     tail = f"; unresolved: {'; '.join(unresolved)}" if unresolved else ""
@@ -431,13 +373,8 @@ def evaluate_ward_canary(
 
 
 def check_ward(cached: CachedVectors) -> CheckResult:
-    """Is ward's ``e`` nearer its longhand twins than a bare keyword generally?
-
-    Every line resolves through its prose to the key the checkpoint encoded. A
-    twin or keyword that resolves to nothing is named in the result rather
-    than dropped: a canary quietly comparing against fewer twins than it lists
-    is weaker than it claims to be.
-    """
+    """:func:`evaluate_ward_canary` over the cache, each line resolved through
+    its prose to the key the checkpoint encoded."""
     from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
 
     ward = cached.resolve(WARD)
@@ -473,11 +410,8 @@ def check_decodability(
     *,
     held_out_cards: tuple[str, ...] = (),
 ) -> CheckResult:
-    """How much of each winnability label is linearly readable from pooled ``e``.
-
-    Validated on the checkpoint's held-out cards, so a text the model trained
-    on cannot carry its own label into the score.
-    """
+    """How much of each winnability label is linearly readable from pooled
+    ``e``, validated on the checkpoint's held-out cards."""
     if not cached.by_card:
         return CheckResult(
             CheckName.DECODABILITY, CheckStatus.SKIPPED,
@@ -495,10 +429,8 @@ def check_decodability(
     )
 
     shared = sorted(cached.by_card)
-    # A sidecar names its card in lowercase and the win-rate table in Forge's
-    # canonical case, so an exact join labels no card and every probe reads
-    # nan. Joined case-insensitively, in the cache's order, so label row i
-    # still describes embedding row i.
+    # Sidecars name cards in lowercase, the win-rate table in Forge's case:
+    # joined case-insensitively, in the cache's order.
     canonical = {name.casefold(): name for name in load_labels(Path(win_rates_path))}
     labelled = [canonical.get(name.casefold(), name) for name in shared]
     with_rate = sum(name.casefold() in canonical for name in shared)
@@ -515,18 +447,13 @@ def check_decodability(
     )
     effects_matrix = np.stack([cached.by_card[name] for name in shared])
     effects_probes = fit_probes(table, effects_matrix, mode="honest")
-    return CheckResult(
-        CheckName.DECODABILITY, CheckStatus.REPORTED, _probe_summary("effects", effects_probes),
+    rendered = ", ".join(
+        f"{name} {probe.metrics.get('val_r2', float('nan')):.3f}"
+        for name, probe in effects_probes.probes.items()
     )
-
-
-def _probe_summary(label: str, probes) -> str:
-    scores = {
-        name: probe.metrics.get("val_r2", float("nan"))
-        for name, probe in probes.probes.items()
-    }
-    rendered = ", ".join(f"{name} {value:.3f}" for name, value in scores.items())
-    return f"{label}: {rendered}"
+    return CheckResult(
+        CheckName.DECODABILITY, CheckStatus.REPORTED, f"effects: {rendered}",
+    )
 
 
 # ── the average-effect control and the taxonomy comparison ──────────────
@@ -535,19 +462,13 @@ def _probe_summary(label: str, probes) -> str:
 def check_baseline_geometry(
     full: CachedVectors, baseline_vectors: CachedVectors, name: str,
 ) -> CheckResult:
-    """Compare a baseline's cache geometry against the shipping one.
-
-    ``no-state`` is the average-effect control and ``taxonomy`` the
-    script-structure floor; both are read here rather than through a prediction,
-    because what they test is whether the encoder's space carries more than
-    theirs does.
-    """
+    """Compare a baseline's cache geometry against the shipping one."""
     if len(baseline_vectors) < 2 or len(full) < 2:
         return CheckResult(
             CheckName.baseline_comparison(name), CheckStatus.SKIPPED,
             f"no {name} cache; run encode-abilities --variant {name}",
         )
-    shipping, baseline = full.geometry(), baseline_vectors.geometry()
+    shipping, baseline = full.geometry, baseline_vectors.geometry
     return CheckResult(
         CheckName.baseline_comparison(name), CheckStatus.REPORTED,
         f"mean pairwise cosine {shipping.mean_pairwise_cosine:.3f} vs "
@@ -559,56 +480,3 @@ def check_baseline_geometry(
             f"{name}_cosine": baseline.mean_pairwise_cosine,
         },
     )
-
-
-# ── the scorer smoke test (FR-115) ──────────────────────────────────────
-
-
-def write_scorer_smoke_cache(
-    pooled_by_path: dict[str, np.ndarray],
-    scratch_cards: Path,
-    *,
-    e_width: int,
-) -> tuple[int, int]:
-    """Splice pooled ``e`` into every sealed vector of a scratch tree, in place.
-
-    ``scratch_cards`` is a scratch copy of the converted tree that
-    ``encode-cards`` has already written sealed vectors into; it is **never**
-    ``output/cardsfolder/``, which the sealed pipeline reads, so a run of this
-    check cannot change what the real scorer trains on. ``pooled_by_path``
-    keys each card's pooled ``e`` by its path under the tree
-    (``a/ajanis_pridemate``), the path its sealed vector sits at.
-
-    Concatenated rather than replacing, so the test asks "does this add
-    anything" rather than "is this better than nothing". Spliced in *before*
-    the trailing block of deterministic features, because the sealed layout
-    reads that block from the end (``card_embedding_layout``) and an
-    appended ``e`` would put mana-cost and land flags where the scorer reads
-    something else.
-
-    Every card gets the same width: one with no ability line, and so no
-    pooled ``e``, gets ``e_width`` zeros, because the scorer stacks the vectors
-    of a deck and a tree of mixed widths would not load. Returns
-    ``(written, without_e)``.
-    """
-    from sealed.domain.card_embedding_layout import FEATURE_COUNT
-    from sealed.infrastructure.embedding_store import EmbeddingStore
-
-    store = EmbeddingStore()
-    root = Path(scratch_cards)
-    written = without_e = 0
-    zeros = np.zeros(e_width, dtype=np.float32)
-    for path in sorted(root.rglob("*.npz")):
-        relative = (path.parent.relative_to(root) / path.stem).as_posix()
-        with np.load(path) as data:
-            sealed = data["embedding"]
-        pooled = pooled_by_path.get(relative)
-        if pooled is None:
-            pooled = zeros
-            without_e += 1
-        combined = np.concatenate([
-            sealed[:-FEATURE_COUNT], pooled.astype(np.float32), sealed[-FEATURE_COUNT:],
-        ]).astype(np.float32)
-        store.save(path, combined)
-        written += 1
-    return written, without_e

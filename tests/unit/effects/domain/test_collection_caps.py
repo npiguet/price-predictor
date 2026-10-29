@@ -1,11 +1,11 @@
 """The caps, and the two places that must agree about them.
 
 Every cap is a per-worker-process quantity the Python supervisor cannot
-observe, so it travels to the JVM as a system property. That makes the property
-names a contract between three parties that cannot all import each other:
-``sealed`` owns ``match-outcomes``, ``effects`` owns the coverage and variant
-collectors, and neither may import the other's CLI. This file is where the two
-sides are pinned together, because it is in the effects suite and may see both.
+observe, so it travels to the JVM as a system property. ``sealed`` writes the
+flags every collecting supervisor shares and their defaults, ``effects`` owns
+the caps record the collectors hand the worker, and ``sealed`` may not import
+``effects``; this file is in the effects suite, may see both, and pins them
+together and against the property literals the Java side reads.
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ from effects.domain.collection_caps import (
     CollectionCaps,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
-from effects.infrastructure.cli import announce_probe_state as effects_announce
-from sealed.infrastructure.cli import (
+from sealed.infrastructure.cli import _effect_collection_caps
+from sealed.infrastructure.effect_collection_flags import (
     EFFECT_INTERVENTIONS_PER_GAME,
     EFFECT_MANA_CAP,
     EFFECT_PLAYABILITY_RATE,
@@ -36,36 +36,8 @@ from sealed.infrastructure.cli import (
     EFFECT_PROBES_PER_GAME,
     EFFECT_RANDOM_SEAT_PROBABILITY,
     EFFECT_RANDOM_SEAT_SHARE,
-    _effect_collection_caps,
+    announce_probe_state,
 )
-from sealed.infrastructure.cli import announce_probe_state as sealed_announce
-
-
-class TestBothSidesAnnounceProbesTheSameWay:
-    """The probe startup line is restated on both sides, so it is pinned here.
-
-    ``--probes-per-game`` reads like the switch and is the budget;
-    ``--probe-keywords`` is the switch, and an emptied one names nothing. Two
-    commands that said different things about that would be worse than one that
-    said nothing, because an operator would learn to trust the wrong one.
-    """
-
-    def test_both_call_the_empty_case_disabled_and_name_the_flag(self):
-        for line in (sealed_announce("", 2), effects_announce("", 2)):
-            assert "DISABLED" in line
-            assert "--probe-keywords" in line
-
-    def test_both_produce_the_same_line_for_the_same_inputs(self):
-        for keywords, budget in (("", 2), ("trample", 2), ("wither,infect", 5)):
-            assert sealed_announce(keywords, budget) == effects_announce(
-                keywords, budget
-            )
-
-    def test_the_two_defaults_both_turn_probes_on(self):
-        assert EFFECT_PROBE_KEYWORDS == DEFAULT_PROBE_KEYWORDS
-        line = effects_announce(DEFAULT_PROBE_KEYWORDS, DEFAULT_PROBES_PER_GAME)
-        assert "DISABLED" not in line
-        assert "first_strike" in line and "infect" in line
 
 
 class TestTheProbeKeywordDefault:
@@ -90,6 +62,11 @@ class TestTheProbeKeywordDefault:
     def test_an_empty_list_still_turns_probes_off(self):
         caps = CollectionCaps(probe_keywords="")
         assert caps.as_system_properties()["effect.probe.keywords"] == ""
+
+    def test_the_default_announces_probes_on(self):
+        line = announce_probe_state(DEFAULT_PROBE_KEYWORDS, DEFAULT_PROBES_PER_GAME)
+        assert "DISABLED" not in line
+        assert "first_strike" in line and "infect" in line
 
 
 class TestTheTwoSidesAgree:
@@ -134,24 +111,6 @@ class TestPropertyNames:
         somewhere less obvious."""
         for value in CollectionCaps().as_system_properties().values():
             assert isinstance(value, str)
-
-
-class TestFromArgs:
-    def test_it_reads_the_flags_the_parsers_install(self):
-        args = argparse.Namespace(
-            mana_cap=3, playability_rate=0.5, interventions_per_game=1,
-            probes_per_game=0, probe_keywords="first_strike,trample",
-        )
-        caps = CollectionCaps.from_args(args)
-        assert caps.mana_cap == 3
-        assert caps.playability_rate == 0.5
-        assert caps.probe_keywords == "first_strike,trample"
-
-    def test_a_missing_flag_falls_back_to_the_default(self):
-        """The evaluator and the trainer carry no cap flags, and both build a
-        config from their own namespace."""
-        caps = CollectionCaps.from_args(argparse.Namespace())
-        assert caps == CollectionCaps()
 
 
 class TestTheManaCap:

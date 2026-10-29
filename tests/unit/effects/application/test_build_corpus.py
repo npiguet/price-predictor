@@ -20,20 +20,20 @@ covering four games, no game spanning both —
   seeded game-disjoint draw removes*, so at least one training-eligible copy
   is always cap-dropped.
 - ``g-clean-3`` is a small filler so each raw shard holds more than one game.
-- ``g-clean-1`` also carries one record keyed the way the *old* collector keyed
-  a token rebuilt in a forked game — ``cardsfolder/f/food_token.txt``, a path
-  no tree holds — against the converted ``tokenscripts/`` tree and the raw
-  Forge token scripts under ``forge_tokenscripts`` that FR-151's remap
-  resolves it with.
+- ``g-clean-1`` also carries one record acting through a token's ability,
+  keyed under the converted ``tokenscripts/`` tree beside the card tree.
 
 The held-out text itself is not asserted by inspection — it is *constructed*
 by searching for a string that ``text_is_held_out`` actually selects at the
 default ``--holdout-permille 20``, per the task brief.
+
+A test that adds to the corpus takes its own ``a_corpus``; one that only
+builds it reads ``shared_corpus``, and one that only reads the default build
+reads ``default_build``, built once for the module.
 """
 
 from __future__ import annotations
 
-import logging
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -55,7 +55,6 @@ from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarL
 from effects.domain.records import (
     CombatPayload,
     EffectRecord,
-    Moment,
     RecordKind,
     ResolutionPayload,
     RewritePayload,
@@ -64,7 +63,7 @@ from effects.domain.state_snapshot import StateSnapshot
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
-from tests.unit.effects.builders import make_entity, make_snapshot
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 _HELD_OUT_CARD = "Held Out Bears"
 #: Found by brute force over ``text_is_held_out(..., permille=20)`` (the
@@ -102,21 +101,8 @@ _FOOD_CARD = "Food Token"
 _FOOD_TEXT = "sacrifice this artifact: you gain 3 life"
 _FOOD_FILE = "tokenscripts/c_a_food_sac.txt"
 #: ``index_within_kind=1``: a token's printed spell keys start at 1, index 0
-#: being the permanent's own cast spell. Both the old key and the remapped one
-#: carry it, since the remap rewrites the file and nothing else (FR-151).
+#: being the permanent's own cast spell.
 _FOOD_KEY = ProvenanceKey(_FOOD_FILE, 0, "spell", 1)
-#: What the old collector wrote instead: a ``cardsfolder`` path derived from
-#: the printed name of a token rebuilt in a forked game. No tree holds it, so
-#: it resolves to no ability text at all and the records naming it are lost to
-#: the rarity table and the caps alike.
-_OLD_FOOD_KEY = ProvenanceKey("cardsfolder/f/food_token.txt", 0, "spell", 1)
-#: Forge's own token script — the file the remap reads to learn that one
-#: script, and only one, is printed "Food Token".
-_FORGE_FOOD_SCRIPT = (
-    "Name:Food Token\nManaCost:no cost\nTypes:Artifact Food\n"
-    "A:AB$ GainLife | Cost$ 2 T Sac<1/CARDNAME/this token> | LifeAmount$ 3\n"
-    "Oracle:\n"
-)
 
 
 def _write_card(
@@ -160,24 +146,15 @@ def _write_card(
     )
 
 
-def _write_forge_tokenscripts(root: Path) -> Path:
-    """Forge's raw token script tree, which ``--forge-tokenscripts`` names.
-
-    Raw Forge script text rather than converted prose: the remap parses
-    ``Name:``, ``Colors:``, ``Types:`` and ``PT:`` straight out of it.
-    """
-    directory = root / "forge-tokenscripts"
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / "c_a_food_sac.txt").write_text(_FORGE_FOOD_SCRIPT, encoding="utf-8")
-    return directory
-
-
 def _snapshot(entity_names: tuple[str, ...] = ()) -> StateSnapshot:
     return make_snapshot(
         entities=tuple(
             make_entity(f"E{index}", name) for index, name in enumerate(entity_names)
         ),
     )
+
+
+_TIMESTAMP = "2026-09-14T00:00:00.000000Z"
 
 
 def _resolution(
@@ -187,11 +164,9 @@ def _resolution(
     ability: tuple[ProvenanceKey, ...],
     entity_names: tuple[str, ...] = (),
 ) -> EffectRecord:
-    return EffectRecord(
-        record_id=record_id, run_id="run", timestamp="2026-09-14T00:00:00.000000Z",
-        game_id=game_id, kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION,
-        actor_player="P0", ability=ability, state=_snapshot(entity_names),
-        payload=ResolutionPayload(),
+    return make_record(
+        record_id=record_id, game_id=game_id, timestamp=_TIMESTAMP,
+        ability=ability, state=_snapshot(entity_names),
     )
 
 
@@ -204,10 +179,9 @@ def _combat(
     probed_keyword: str | None = None,
     probed_entity: str | None = None,
 ) -> EffectRecord:
-    return EffectRecord(
-        record_id=record_id, run_id="run", timestamp="2026-09-14T00:00:00.000000Z",
-        game_id=game_id, kind=RecordKind.COMBAT, actor_player="P0",
-        fork=fork, mirror_of=mirror_of, state=_snapshot(),
+    return make_record(
+        RecordKind.COMBAT, record_id=record_id, game_id=game_id, timestamp=_TIMESTAMP,
+        fork=fork, mirror_of=mirror_of,
         payload=CombatPayload(
             attackers=("E0",), probed_keyword=probed_keyword,
             probed_entity=probed_entity,
@@ -218,10 +192,9 @@ def _combat(
 def _rewrite(
     record_id: str, game_id: str, *, ability: tuple[ProvenanceKey, ...],
 ) -> EffectRecord:
-    return EffectRecord(
-        record_id=record_id, run_id="run", timestamp="2026-09-14T00:00:00.000000Z",
-        game_id=game_id, kind=RecordKind.REWRITE, actor_player="P0",
-        ability=ability, state=_snapshot(),
+    return make_record(
+        RecordKind.REWRITE, record_id=record_id, game_id=game_id, timestamp=_TIMESTAMP,
+        ability=ability,
         payload=RewritePayload(incoming=Event(type=EventType.ZONE_CHANGE)),
     )
 
@@ -240,11 +213,7 @@ class CorpusFixture:
     """A small real raw corpus: the raw shard root and the converted trees."""
 
     records: Path
-    cards: tuple[str, ...]
-    #: The *raw* Forge token scripts (``--forge-tokenscripts``), which are the
-    #: source the remap reads colours, types and P/T from — not the converted
-    #: ``tokenscripts/`` tree, which is one of ``cards``.
-    forge_tokenscripts: Path
+    cards: tuple[Path, ...]
 
     @staticmethod
     def resolution(
@@ -264,6 +233,21 @@ class CorpusFixture:
         if events:
             record = replace(record, payload=ResolutionPayload(events=events))
         return record
+
+    def config(
+        self, output: Path, *, rules: dict = _LEGACY_RULES, **overrides,
+    ) -> BuildCorpusConfig:
+        """A one-worker build of this corpus under ``rules``; ``overrides``
+        replace any field, a rule included."""
+        return BuildCorpusConfig(**{
+            "records_dir": self.records, "cards_folders": self.cards,
+            "output": output, "workers": 1, **rules, **overrides,
+        })
+
+    def build(self, output: Path, **overrides) -> CorpusStore:
+        """Build :meth:`config` and return the dataset it wrote."""
+        assert build(self.config(output, **overrides)) == 0
+        return CorpusStore(output)
 
     def with_extra_records(self, records: list[EffectRecord]) -> CorpusFixture:
         """Append ``records`` as one more raw shard under the same root.
@@ -288,9 +272,7 @@ class CorpusFixture:
         return len({record.game_id for record in read_records(self.records)})
 
 
-@pytest.fixture
-def a_corpus(tmp_path: Path) -> CorpusFixture:
-    root = tmp_path / "source"
+def _write_corpus(root: Path) -> CorpusFixture:
     _write_card(root, _HELD_OUT_FILE, _HELD_OUT_CARD, _HELD_OUT_TEXT)
     _write_card(root, _BOLT_FILE, _BOLT_CARD, _BOLT_TEXT)
     _write_card(root, _SHOCK_FILE, _SHOCK_CARD, _SHOCK_TEXT)
@@ -299,7 +281,6 @@ def a_corpus(tmp_path: Path) -> CorpusFixture:
         root, _BEAR_FILE, _BEAR_CARD, _BEAR_TEXT,
         index_within_kind=_BEAR_KEY.index_within_kind, dropped=(_BEAR_CAST_KEY,),
     )
-    forge_tokenscripts = _write_forge_tokenscripts(root)
 
     shard_a = [
         # Both held-out (names Held Out Bears) *and* carries a resolvable
@@ -323,10 +304,10 @@ def a_corpus(tmp_path: Path) -> CorpusFixture:
             _resolution(f"g-clean-1.{n}", "g-clean-1", ability=(_SHOCK_KEY,))
             for n in range(3)
         ),
-        # One training record keyed the way the old collector keyed a forked
-        # game's token (FR-151). Its own ability text, so it neither joins nor
-        # disturbs the capped six copies of the shock text above.
-        _resolution("g-clean-1.food", "g-clean-1", ability=(_OLD_FOOD_KEY,)),
+        # One training record acting through a token's ability. Its own
+        # ability text, so it neither joins nor disturbs the capped six
+        # copies of the shock text above.
+        _resolution("g-clean-1.food", "g-clean-1", ability=(_FOOD_KEY,)),
     ]
     shard_b = [
         *(
@@ -350,34 +331,45 @@ def a_corpus(tmp_path: Path) -> CorpusFixture:
 
     return CorpusFixture(
         records=records_dir,
-        cards=(str(root / "cardsfolder"), str(root / "tokenscripts")),
-        forge_tokenscripts=forge_tokenscripts,
+        cards=(root / "cardsfolder", root / "tokenscripts"),
     )
 
 
-def test_build_writes_the_three_strata_and_a_manifest(tmp_path, a_corpus):
-    out = tmp_path / "curated"
-    assert build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    )) == 0
+@pytest.fixture
+def a_corpus(tmp_path: Path) -> CorpusFixture:
+    return _write_corpus(tmp_path / "source")
 
-    store = CorpusStore(out)
+
+@pytest.fixture(scope="module")
+def shared_corpus(tmp_path_factory) -> CorpusFixture:
+    """``a_corpus`` written once, for the tests that never add to it."""
+    return _write_corpus(tmp_path_factory.mktemp("shared") / "source")
+
+
+@pytest.fixture(scope="module")
+def default_build(tmp_path_factory, shared_corpus) -> CorpusStore:
+    """``shared_corpus`` built once under the defaults, for the tests that only
+    read what the build wrote."""
+    return shared_corpus.build(tmp_path_factory.mktemp("default-build") / "curated")
+
+
+def test_build_writes_the_three_strata_and_a_manifest(default_build):
+    store = default_build
     assert store.manifest_path.exists()
     assert list(store.training_dir.glob("*.jsonl.gz"))
     assert store.load().digest()
 
 
-def test_no_training_record_belongs_to_a_withheld_game(tmp_path, a_corpus):
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
+def test_a_build_writes_the_legacy_token_key_fields_empty(default_build):
+    """Older manifests carry them and a digest hashes them, so they stay, unset."""
+    manifest = default_build.load()
+    assert manifest.token_keys_remapped == 0
+    assert manifest.token_keys_ambiguous == {}
+    assert manifest.forge_tokenscripts == ""
 
-    store = CorpusStore(out)
+
+def test_no_training_record_belongs_to_a_withheld_game(default_build):
+    store = default_build
     manifest = store.load()
     withheld = set(manifest.card_disjoint_games) | set(manifest.game_disjoint_games)
     assert withheld
@@ -385,29 +377,22 @@ def test_no_training_record_belongs_to_a_withheld_game(tmp_path, a_corpus):
     assert not trained & withheld
 
 
-def test_no_training_record_names_a_held_out_card(tmp_path, a_corpus):
+def test_no_training_record_names_a_held_out_card(default_build):
     """FR-088: the exclusion is by game, and every held-out game is dropped."""
     from effects.domain.split import (
         HeldOutCards,
         record_names_held_out_card,
     )
 
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
-
-    manifest = CorpusStore(out).load()
+    manifest = default_build.load()
     held_out = HeldOutCards(
         names=frozenset(manifest.held_out_cards), script_files=frozenset(),
     )
-    for record in read_records(CorpusStore(out).training_dir):
+    for record in read_records(default_build.training_dir):
         assert not record_names_held_out_card(record, held_out)
 
 
-def test_the_manifest_records_the_held_out_texts(tmp_path, a_corpus):
+def test_the_manifest_records_the_held_out_texts(default_build):
     """Fix round 1, Finding 1: ``build()`` must populate ``held_out_texts``.
 
     A ``--corpus`` training run's stratum-sizing guard (``check_holdout``)
@@ -416,27 +401,12 @@ def test_the_manifest_records_the_held_out_texts(tmp_path, a_corpus):
     make every ``--corpus`` run see an empty text set and report the
     card-disjoint stratum as empty regardless of the dataset's actual health.
     """
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
-
-    manifest = CorpusStore(out).load()
-    assert manifest.held_out_texts == (_HELD_OUT_TEXT,)
+    assert default_build.load().held_out_texts == (_HELD_OUT_TEXT,)
 
 
-def test_a_validation_stratum_keeps_whole_games(tmp_path, a_corpus):
+def test_a_validation_stratum_keeps_whole_games(default_build):
     """A probe and the combat record it mirrors land together (FR-136)."""
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
-
-    store = CorpusStore(out)
+    store = default_build
     mirrored = 0
     for directory in (store.card_disjoint_dir, store.game_disjoint_dir):
         records = list(read_records(directory))
@@ -448,50 +418,28 @@ def test_a_validation_stratum_keeps_whole_games(tmp_path, a_corpus):
     assert mirrored, "the fixture must contain a mirrored probe or this proves nothing"
 
 
-def test_the_cap_trims_a_text_that_exceeds_it(tmp_path, a_corpus):
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, text_cap=2, **_LEGACY_RULES,
-    ))
-
-    manifest = CorpusStore(out).load()
+def test_the_cap_trims_a_text_that_exceeds_it(tmp_path, shared_corpus):
+    manifest = shared_corpus.build(tmp_path / "curated", text_cap=2).load()
     assert sum(c.dropped_by_cap for c in manifest.per_class.values()) > 0
 
 
-def test_two_builds_of_one_corpus_agree(tmp_path, a_corpus):
-    first, second = tmp_path / "a", tmp_path / "b"
-    for out in (first, second):
-        build(BuildCorpusConfig(
-            records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-            forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-            workers=1, **_LEGACY_RULES,
-        ))
+def test_two_builds_of_one_corpus_agree(tmp_path, shared_corpus, default_build):
+    second = shared_corpus.build(tmp_path / "again")
 
-    assert CorpusStore(first).load().digest() == CorpusStore(second).load().digest()
+    assert default_build.load().digest() == second.load().digest()
     assert (
-        [r.record_id for r in read_records(CorpusStore(first).training_dir)]
-        == [r.record_id for r in read_records(CorpusStore(second).training_dir)]
+        [r.record_id for r in read_records(default_build.training_dir)]
+        == [r.record_id for r in read_records(second.training_dir)]
     )
 
 
 def test_verify_reports_drift_and_writes_nothing(tmp_path, a_corpus):
     out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
+    a_corpus.build(out)
     before = (out / "manifest.json").read_text(encoding="utf-8")
 
     (a_corpus.records / "extra.0-zz.jsonl.gz").write_bytes(b"")
-    code = build(BuildCorpusConfig(
-        **_LEGACY_RULES,
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, verify=True,
-    ))
+    code = build(a_corpus.config(out, verify=True))
 
     assert code == 1
     assert (out / "manifest.json").read_text(encoding="utf-8") == before
@@ -499,17 +447,8 @@ def test_verify_reports_drift_and_writes_nothing(tmp_path, a_corpus):
 
 def test_verify_is_quiet_when_nothing_moved(tmp_path, a_corpus):
     out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
-    assert build(BuildCorpusConfig(
-        **_LEGACY_RULES,
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, verify=True,
-    )) == 0
+    a_corpus.build(out)
+    a_corpus.build(out, verify=True)
 
 
 # ── a dataset that cannot score gate 1 is refused, not written ────────
@@ -535,12 +474,10 @@ def test_build_refuses_a_cards_folder_that_resolved_to_nothing(
     monkeypatch.setattr(module, "run_survey", no_survey)
 
     with pytest.raises(ValueError, match="no held-out card") as raised:
-        build(BuildCorpusConfig(
-        **_LEGACY_RULES,
-            records_dir=a_corpus.records,
-            cards_folders=(str(tmp_path / "not-here"), str(tmp_path / "nor-here")),
-            output=tmp_path / "curated", workers=1,
-        ))
+        a_corpus.build(
+            tmp_path / "curated",
+            cards_folders=(tmp_path / "not-here", tmp_path / "nor-here"),
+        )
 
     message = str(raised.value)
     assert "not-here" in message and "nor-here" in message
@@ -554,12 +491,7 @@ def test_build_refuses_a_holdout_that_selects_no_card(tmp_path, a_corpus):
     only on an empty folder would let this one through.
     """
     with pytest.raises(ValueError, match="no held-out card") as raised:
-        build(BuildCorpusConfig(
-        **_LEGACY_RULES,
-            records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-            forge_tokenscripts=a_corpus.forge_tokenscripts,
-            output=tmp_path / "curated", workers=1, holdout_permille=0,
-        ))
+        a_corpus.build(tmp_path / "curated", holdout_permille=0)
 
     assert "4 converted card" in str(raised.value)
 
@@ -585,11 +517,7 @@ def test_build_refuses_a_corpus_no_game_of_which_names_a_held_out_card(
     out = tmp_path / "curated"
 
     with pytest.raises(ValueError, match="card-disjoint"):
-        build(BuildCorpusConfig(
-            records_dir=depleted, cards_folders=a_corpus.cards,
-            forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-            workers=1, **_LEGACY_RULES,
-        ))
+        a_corpus.build(out, records_dir=depleted)
 
     assert not (out / "manifest.json").exists()
 
@@ -598,12 +526,7 @@ def test_build_refuses_an_empty_corpus(tmp_path, a_corpus):
     empty = tmp_path / "empty"
     empty.mkdir()
     with pytest.raises(ValueError, match="no shards"):
-        build(BuildCorpusConfig(
-        **_LEGACY_RULES,
-            records_dir=empty, cards_folders=a_corpus.cards,
-            forge_tokenscripts=a_corpus.forge_tokenscripts,
-            output=tmp_path / "out", workers=1,
-        ))
+        a_corpus.build(tmp_path / "out", records_dir=empty)
 
 
 # ── fix round 1: _output_name must be injective (review Finding 1) ─────
@@ -624,7 +547,7 @@ def test_output_name_flattens_a_subdirectory_path():
 # ── fix round 1: per-stratum counts and unique texts (review Finding 2) ─
 
 
-def test_the_manifest_records_per_stratum_counts_and_unique_texts(tmp_path, a_corpus):
+def test_the_manifest_records_per_stratum_counts_and_unique_texts(default_build):
     """FR-143/FR-145: per-class counts alone leave both validation strata
     with no unique-text figure anywhere in the manifest. A test that only
     checked the two fields exist would not catch them being populated empty,
@@ -632,14 +555,7 @@ def test_the_manifest_records_per_stratum_counts_and_unique_texts(tmp_path, a_co
     populate: the tainted game (card-disjoint) and whichever clean game the
     seeded game-disjoint draw takes both carry a resolvable ability.
     """
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
-
-    manifest = CorpusStore(out).load()
+    manifest = default_build.load()
     assert manifest.per_stratum["training"] > 0
     assert manifest.unique_texts["training"] > 0
     assert "card-disjoint" in manifest.per_stratum
@@ -658,10 +574,19 @@ def test_the_manifest_records_per_stratum_counts_and_unique_texts(tmp_path, a_co
 _MIX_SHARDS = 4
 _MIX_PER_SHARD = 800
 _MIX_TEXT_CAP = 400
+#: ``validation_sample=0``: this corpus's card-disjoint stratum holds one
+#: ``resolution-effect`` record and the mixture under test names neither
+#: resolution class, so its sample is empty by construction and the
+#: empty-sample guard would refuse the build. That guard is exercised against
+#: this same fixture below; here the subject is the mixture.
+_MIXTURE = dict(
+    text_cap=_MIX_TEXT_CAP, class_mix={"rewrite": 0.5, "combat": 0.5},
+    game_disjoint_share=0.0, game_disjoint_keyword_share=0.0, validation_sample=0,
+)
 
 
-@pytest.fixture
-def a_mixture_corpus(tmp_path: Path) -> CorpusFixture:
+@pytest.fixture(scope="module")
+def a_mixture_corpus(tmp_path_factory) -> CorpusFixture:
     """Four shards, one text repeated far past the cap, and an uncapped class.
 
     ``rewrite`` carries one ability text and is what the cap bites; ``combat``
@@ -674,7 +599,7 @@ def a_mixture_corpus(tmp_path: Path) -> CorpusFixture:
     a class outside this corpus's ``--class-mix``, so nothing it holds reaches
     the training mixture under test.
     """
-    root = tmp_path / "mixture-source"
+    root = tmp_path_factory.mktemp("mixture-source")
     _write_card(root, _HELD_OUT_FILE, _HELD_OUT_CARD, _HELD_OUT_TEXT)
     _write_card(root, _BOLT_FILE, _BOLT_CARD, _BOLT_TEXT)
 
@@ -695,24 +620,13 @@ def a_mixture_corpus(tmp_path: Path) -> CorpusFixture:
         write_shard(records_dir / f"run.0-{shard}.jsonl.gz", rows)
 
     return CorpusFixture(
-        records=records_dir, cards=(str(root / "cardsfolder"),),
-        forge_tokenscripts=_write_forge_tokenscripts(root),
+        records=records_dir, cards=(root / "cardsfolder",),
     )
 
 
-def _mixture_config(output: Path, fixture: CorpusFixture):
-    # ``validation_sample=0``: this corpus's card-disjoint stratum holds one
-    # ``resolution-effect`` record and the mixture under test names neither
-    # resolution class, so its sample is empty by construction and the
-    # empty-sample guard would refuse the build. That guard is exercised
-    # against this same fixture below; here the subject is the mixture.
-    return BuildCorpusConfig(
-        records_dir=fixture.records, cards_folders=fixture.cards,
-        forge_tokenscripts=fixture.forge_tokenscripts, output=output, workers=1,
-        text_cap=_MIX_TEXT_CAP, class_mix={"rewrite": 0.5, "combat": 0.5},
-        game_disjoint_share=0.0, game_disjoint_keyword_share=0.0, holdout_unit="text",
-        reuse_cap=1, validation_sample=0,
-    )
+@pytest.fixture(scope="module")
+def mixture_build(tmp_path_factory, a_mixture_corpus) -> CorpusStore:
+    return a_mixture_corpus.build(tmp_path_factory.mktemp("mixture") / "curated", **_MIXTURE)
 
 
 def _delivered_shares(training_dir: Path) -> dict[str, float]:
@@ -725,9 +639,7 @@ def _delivered_shares(training_dir: Path) -> dict[str, float]:
     return {name: count / total for name, count in counts.items()}
 
 
-def test_the_delivered_class_mixture_is_the_one_the_manifest_records(
-    tmp_path, a_mixture_corpus,
-):
+def test_the_delivered_class_mixture_is_the_one_the_manifest_records(mixture_build):
     """FR-139: a class is written at its share or its shortfall is recorded.
 
     ``class_capped_records`` was summed from each shard's own ``CapHeap``
@@ -737,11 +649,8 @@ def test_the_delivered_class_mixture_is_the_one_the_manifest_records(
     to get its admission rate, so every capped class under-delivered against
     the mixture the manifest went on to record.
     """
-    out = tmp_path / "curated"
-    assert build(_mixture_config(out, a_mixture_corpus)) == 0
-
-    delivered = _delivered_shares(CorpusStore(out).training_dir)
-    requested = CorpusStore(out).load().class_mix
+    delivered = _delivered_shares(mixture_build.training_dir)
+    requested = mixture_build.load().class_mix
     for name, share in requested.items():
         assert abs(delivered.get(name, 0.0) - share) < 0.05, (
             f"{name}: delivered {delivered.get(name, 0.0):.3f} against a "
@@ -749,16 +658,11 @@ def test_the_delivered_class_mixture_is_the_one_the_manifest_records(
         )
 
 
-def test_the_manifest_records_what_was_delivered_beside_what_was_asked_for(
-    tmp_path, a_mixture_corpus,
-):
+def test_the_manifest_records_what_was_delivered_beside_what_was_asked_for(mixture_build):
     """The requested mixture is a claim; the delivered one is a fact, and the
     dataset's whole value is that its manifest is true."""
-    out = tmp_path / "curated"
-    build(_mixture_config(out, a_mixture_corpus))
-
-    manifest = CorpusStore(out).load()
-    delivered = _delivered_shares(CorpusStore(out).training_dir)
+    manifest = mixture_build.load()
+    delivered = _delivered_shares(mixture_build.training_dir)
     assert set(manifest.delivered_mix) == set(delivered)
     for name, share in delivered.items():
         assert manifest.delivered_mix[name] == pytest.approx(share, abs=1e-6)
@@ -777,14 +681,8 @@ def test_a_rebuild_removes_a_shard_the_new_build_does_not_write(tmp_path, a_corp
     build.
     """
     out = tmp_path / "curated"
-    config = BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    )
-    build(config)
+    store = a_corpus.build(out)
 
-    store = CorpusStore(out)
     orphans = [
         store.training_dir / "orphan.jsonl.gz",
         store.card_disjoint_dir / "orphan.jsonl.gz",
@@ -793,7 +691,7 @@ def test_a_rebuild_removes_a_shard_the_new_build_does_not_write(tmp_path, a_corp
     for orphan in orphans:
         write_shard(orphan, [_resolution("orphan.1", "g-orphan", ability=(_BOLT_KEY,))])
 
-    build(config)
+    a_corpus.build(out)
 
     assert not any(orphan.exists() for orphan in orphans)
     assert store.manifest_path.exists()
@@ -802,25 +700,15 @@ def test_a_rebuild_removes_a_shard_the_new_build_does_not_write(tmp_path, a_corp
 
 def test_verify_leaves_the_written_dataset_alone(tmp_path, a_corpus):
     out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
-    store = CorpusStore(out)
+    store = a_corpus.build(out)
     before = sorted(p.name for p in store.training_dir.glob("*"))
 
-    build(BuildCorpusConfig(
-        **_LEGACY_RULES,
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, verify=True,
-    ))
+    a_corpus.build(out, verify=True)
 
     assert sorted(p.name for p in store.training_dir.glob("*")) == before
 
 
-def test_no_empty_output_shard_is_written(tmp_path, a_corpus):
+def test_no_empty_output_shard_is_written(default_build):
     """One output shard per source shard per stratum, written unconditionally,
     turned 701 source shards into 2,103 files, most of them empty.
 
@@ -830,14 +718,7 @@ def test_no_empty_output_shard_is_written(tmp_path, a_corpus):
     forfeits its share of the step budget, because `_train_on_shard` returns
     early on a shard with nothing in it.
     """
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
-
-    store = CorpusStore(out)
+    store = default_build
     written = [
         shard
         for directory in (
@@ -845,16 +726,12 @@ def test_no_empty_output_shard_is_written(tmp_path, a_corpus):
         )
         for shard in directory.glob("*.jsonl.gz")
     ]
-    from effects.infrastructure.record_io import read_shard
-
     assert written, "the fixture must write something or this proves nothing"
     empty = [shard for shard in written if not any(True for _ in read_shard(shard))]
     assert not empty, f"empty shards written: {[str(s) for s in empty]}"
 
 
-def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(
-    tmp_path, a_corpus,
-):
+def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(default_build):
     """The manifest's ``surface`` reaches the trainer (FR-141).
 
     A real ``build-corpus`` output, read back by ``train_effect_model.run``
@@ -869,17 +746,12 @@ def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(
     )
     from effects.application.train_effect_model import run as train
 
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    ))
-    assert CorpusStore(out).load().surface == "prose"
+    assert default_build.load().surface == "prose"
 
     with pytest.raises(SurfaceMismatchError, match="prose"):
         train(TrainEffectModelConfig(
-            corpus=str(out), vocab_path=Path("models/effects/vocab-script.txt"),
+            corpus=str(default_build.directory),
+            vocab_path=Path("models/effects/vocab-script.txt"),
         ))
 
 
@@ -892,47 +764,32 @@ def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(
     ("reuse_cap", "--reuse-cap"),
     ("training_records", "--training-records"),
 ])
-def test_a_negative_count_is_refused(tmp_path, a_corpus, field, flag):
+def test_a_negative_count_is_refused(tmp_path, shared_corpus, field, flag):
     with pytest.raises(ValueError, match=flag):
-        BuildCorpusConfig(
-            records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-            forge_tokenscripts=a_corpus.forge_tokenscripts,
-            output=tmp_path / "curated", workers=1,
-            **{**_LEGACY_RULES, field: -1},
-        )
+        shared_corpus.config(tmp_path / "curated", **{field: -1})
 
 
 def test_a_text_cap_of_zero_means_no_cap_rather_than_keep_nothing(
-    tmp_path, a_corpus,
+    tmp_path, shared_corpus,
 ):
     """Zero admits everything, the way ``CapHeap`` reads it. Documented here
     because the other reading — keep nothing — is the one the word "cap"
     suggests, and it would silently empty the training corpus."""
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, text_cap=0, game_disjoint_share=0.16, game_disjoint_keyword_share=0.16,
-        holdout_unit="text", reuse_cap=1,
+    manifest = shared_corpus.build(
+        tmp_path / "curated", text_cap=0,
         # One class, so the class mixture asks for every record the class
         # holds: whatever is dropped then is the text cap's doing.
         class_mix={"resolution-effect": 1.0},
-    ))
+    ).load()
 
-    manifest = CorpusStore(out).load()
     assert sum(c.dropped_by_cap for c in manifest.per_class.values()) == 0
     assert manifest.per_stratum["training"] > 0
 
 
-def test_a_card_disjoint_text_cap_of_zero_means_no_cap_either(tmp_path, a_corpus):
-    out = tmp_path / "curated"
-    build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, card_disjoint_text_cap=0, **_LEGACY_RULES,
-    ))
+def test_a_card_disjoint_text_cap_of_zero_means_no_cap_either(tmp_path, shared_corpus):
+    store = shared_corpus.build(tmp_path / "curated", card_disjoint_text_cap=0)
 
-    assert CorpusStore(out).load().card_disjoint_games == ("g-tainted",)
+    assert store.load().card_disjoint_games == ("g-tainted",)
 
 
 # ── stage-four variants (FR-141: they are ability texts like any other) ──
@@ -968,11 +825,11 @@ def _write_variant(root: Path, script_file: str, text: str) -> None:
     )
 
 
-@pytest.fixture
-def a_corpus_with_variants(tmp_path: Path, a_corpus: CorpusFixture):
+@pytest.fixture(scope="module")
+def a_corpus_with_variants(tmp_path_factory):
     """The ordinary fixture plus a variant tree and a shard that uses it."""
-    fixture = a_corpus
-    root = tmp_path / "source"
+    root = tmp_path_factory.mktemp("variants") / "source"
+    fixture = _write_corpus(root)
     _write_variant(root, _VARIANT_FILE, _VARIANT_TEXT)
     write_shard(
         fixture.records / "variants" / "run.0-v.jsonl.gz",
@@ -984,26 +841,22 @@ def a_corpus_with_variants(tmp_path: Path, a_corpus: CorpusFixture):
     return fixture, str(root / "variant-scripts")
 
 
-def test_a_variant_text_is_capped_and_weighted_like_any_other(
-    tmp_path: Path, a_corpus_with_variants,
-):
+@pytest.fixture(scope="module")
+def variant_build(tmp_path_factory, a_corpus_with_variants) -> CorpusStore:
+    """``a_corpus_with_variants`` built with its variant tree."""
+    fixture, variant_root = a_corpus_with_variants
+    output = tmp_path_factory.mktemp("variant-build") / "curated"
+    return fixture.build(output, variant_scripts=variant_root)
+
+
+def test_a_variant_text_is_capped_and_weighted_like_any_other(variant_build):
     """FR-138/FR-141 do not exempt the variant tree.
 
     Without `--variant-scripts` a variant line resolves to no text at all, so
     it lands in neither the rarity table nor the per-text cap while every real
     ability is in both — uncapped records competing against capped ones.
     """
-    fixture, variant_root = a_corpus_with_variants
-    out = tmp_path / "curated"
-
-    build(BuildCorpusConfig(
-        records_dir=fixture.records, cards_folders=fixture.cards,
-        forge_tokenscripts=fixture.forge_tokenscripts,
-        variant_scripts=variant_root, output=out, workers=1,
-        **_LEGACY_RULES,
-    ))
-
-    assert _VARIANT_TEXT in CorpusStore(out).load().rarity
+    assert _VARIANT_TEXT in variant_build.load().rarity
 
 
 def test_without_the_variant_tree_a_variant_text_resolves_to_nothing(
@@ -1011,32 +864,16 @@ def test_without_the_variant_tree_a_variant_text_resolves_to_nothing(
 ):
     """The state this flag exists to end; pinned so the fix cannot regress."""
     fixture, _ = a_corpus_with_variants
-    out = tmp_path / "curated"
 
-    build(BuildCorpusConfig(
-        records_dir=fixture.records, cards_folders=fixture.cards,
-        forge_tokenscripts=fixture.forge_tokenscripts,
-        output=out, workers=1, **_LEGACY_RULES,
-    ))
+    store = fixture.build(tmp_path / "curated")
 
-    assert _VARIANT_TEXT not in CorpusStore(out).load().rarity
+    assert _VARIANT_TEXT not in store.load().rarity
 
 
-def test_the_manifest_records_the_variant_tree_it_read(
-    tmp_path: Path, a_corpus_with_variants,
-):
+def test_the_manifest_records_the_variant_tree_it_read(a_corpus_with_variants, variant_build):
     """Which trees resolved decides which texts the rarity table names."""
-    fixture, variant_root = a_corpus_with_variants
-    out = tmp_path / "curated"
-
-    build(BuildCorpusConfig(
-        records_dir=fixture.records, cards_folders=fixture.cards,
-        forge_tokenscripts=fixture.forge_tokenscripts,
-        variant_scripts=variant_root, output=out, workers=1,
-        **_LEGACY_RULES,
-    ))
-
-    assert CorpusStore(out).load().variant_scripts == variant_root
+    _, variant_root = a_corpus_with_variants
+    assert variant_build.load().variant_scripts == variant_root
 
 
 def test_the_store_names_the_new_outputs(tmp_path):
@@ -1075,7 +912,7 @@ def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
     rather than the unattributed record it used to be: an unattributed event
     is a watch statistic now, not a refusal (FR-148).
     """
-    from effects.domain.record_quality import EVENT_FLOOD, NO_ABILITY, NO_ACTING_TEXT
+    from effects.domain.record_quality import QualityDefect
     corpus = a_corpus.with_extra_records([
         a_corpus.resolution("junk-train", game="g-clean-1", ability=()),
         a_corpus.resolution(
@@ -1089,11 +926,7 @@ def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
             ),
         ),
     ])
-    assert build(BuildCorpusConfig(**_LEGACY_RULES,
-                                   records_dir=corpus.records, output=tmp_path / "out",
-                                   cards_folders=corpus.cards,
-                                   forge_tokenscripts=corpus.forge_tokenscripts, workers=1)) == 0
-    store = CorpusStore(tmp_path / "out")
+    store = corpus.build(tmp_path / "out")
     ids = {r.record_id for d in (store.training_dir, store.card_disjoint_dir,
                                   store.game_disjoint_dir, store.gate_one_dir)
            for r in read_records(d)}
@@ -1101,11 +934,12 @@ def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
     # ``no-acting-text`` is the fixture's own ``g-clean-3.cast``, refused by
     # the third rule in every build this file runs.
     assert store.load().quality_dropped == {
-        NO_ABILITY: 1, EVENT_FLOOD: 1, NO_ACTING_TEXT: 1,
+        QualityDefect.NO_ABILITY: 1, QualityDefect.EVENT_FLOOD: 1,
+        QualityDefect.NO_ACTING_TEXT: 1,
     }
 
 
-def test_a_resolution_record_acting_only_through_a_dropped_key_is_refused(tmp_path, a_corpus):
+def test_a_resolution_record_acting_only_through_a_dropped_key_is_refused(default_build):
     """FR-148's third rule, end to end through both passes.
 
     ``g-clean-3.cast`` acts through the implicit permanent spell alone — a
@@ -1114,18 +948,12 @@ def test_a_resolution_record_acting_only_through_a_dropped_key_is_refused(tmp_pa
     declared, which is a real ability whose text the join cannot reach yet,
     and is kept.
     """
-    out = tmp_path / "curated"
-    assert build(BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    )) == 0
-    manifest = CorpusStore(out).load()
+    manifest = default_build.load()
     assert manifest.quality_dropped.get("no-acting-text") == 1
     assert manifest.no_acting_text_scripts == {_BEAR_FILE: 1}
-    written = {r.record_id for r in read_records(CorpusStore(out).training_dir)}
-    written |= {r.record_id for r in read_records(CorpusStore(out).card_disjoint_dir)}
-    written |= {r.record_id for r in read_records(CorpusStore(out).game_disjoint_dir)}
+    written = {r.record_id for r in read_records(default_build.training_dir)}
+    written |= {r.record_id for r in read_records(default_build.card_disjoint_dir)}
+    written |= {r.record_id for r in read_records(default_build.game_disjoint_dir)}
     assert "g-clean-3.cast" not in written
     assert "g-clean-3.level" in written
 
@@ -1137,20 +965,14 @@ def test_a_record_acting_through_an_unjoinable_key_is_refused_not_fatal(tmp_path
     no converted line carries, inside a range the sidecar declares. The join
     raises on that key; the build refuses the one record and writes the rest.
     """
-    from effects.domain.record_quality import UNJOINABLE_KEY
+    from effects.domain.record_quality import QualityDefect
 
     mode_key = ProvenanceKey(_BEAR_FILE, 0, "spell", 1, option=0)
     corpus = a_corpus.with_extra_records([
         a_corpus.resolution("flashback-mode", game="g-clean-1", ability=(mode_key,)),
     ])
-    out = tmp_path / "curated"
-    assert build(BuildCorpusConfig(
-        records_dir=corpus.records, cards_folders=corpus.cards,
-        forge_tokenscripts=corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES,
-    )) == 0
-    store = CorpusStore(out)
-    assert store.load().quality_dropped.get(UNJOINABLE_KEY) == 1
+    store = corpus.build(tmp_path / "curated")
+    assert store.load().quality_dropped.get(QualityDefect.UNJOINABLE_KEY) == 1
     written = {
         r.record_id
         for d in (store.training_dir, store.card_disjoint_dir, store.game_disjoint_dir)
@@ -1208,12 +1030,8 @@ def test_a_few_unjoinable_keys_in_a_small_corpus_raise_nothing():
     ))
 
 
-def test_the_gate_one_slice_holds_held_out_resolutions_of_card_disjoint_games(tmp_path, a_corpus):
-    assert build(BuildCorpusConfig(**_LEGACY_RULES,
-                                   records_dir=a_corpus.records, output=tmp_path / "out",
-                                   cards_folders=a_corpus.cards,
-                                   forge_tokenscripts=a_corpus.forge_tokenscripts, workers=1)) == 0
-    store = CorpusStore(tmp_path / "out")
+def test_the_gate_one_slice_holds_held_out_resolutions_of_card_disjoint_games(default_build):
+    store = default_build
     manifest = store.load()
     slice_ = list(read_records(store.gate_one_dir))
     assert slice_, "g-tainted resolves the held-out text, so the slice is not empty"
@@ -1225,41 +1043,28 @@ def test_the_gate_one_slice_holds_held_out_resolutions_of_card_disjoint_games(tm
     assert manifest.per_stratum["gate-one"] == len(slice_)
 
 
-def test_games_are_reported_per_source_directory(tmp_path, a_corpus):
+def test_games_are_reported_per_source_directory(shared_corpus, default_build):
     """Shards live under depleted/ and full-strength/ in the fixture."""
-    assert build(BuildCorpusConfig(**_LEGACY_RULES,
-                                   records_dir=a_corpus.records, output=tmp_path / "out",
-                                   cards_folders=a_corpus.cards,
-                                   forge_tokenscripts=a_corpus.forge_tokenscripts, workers=1)) == 0
-    manifest = CorpusStore(tmp_path / "out").load()
-    assert set(manifest.games_by_source) == set(a_corpus.source_dirs)
-    assert sum(manifest.games_by_source.values()) == a_corpus.game_count
+    manifest = default_build.load()
+    assert set(manifest.games_by_source) == set(shared_corpus.source_dirs)
+    assert sum(manifest.games_by_source.values()) == shared_corpus.game_count
     assert all(manifest.held_out_games_by_source.get(s, 0) <= n
                for s, n in manifest.games_by_source.items())
 
 
-def test_output_shards_are_repacked_and_the_parts_removed(tmp_path, a_corpus):
+def test_output_shards_are_repacked_and_the_parts_removed(tmp_path, shared_corpus):
     # ``game_disjoint_target=1`` as everywhere else in this file: the default
     # 1000 takes all three clean games into the game-disjoint stratum, leaving
     # the training output — the one this test reads back — empty.
-    assert build(BuildCorpusConfig(records_dir=a_corpus.records, output=tmp_path / "out",
-                                   cards_folders=a_corpus.cards,
-                                   forge_tokenscripts=a_corpus.forge_tokenscripts, workers=1,
-                                   **_LEGACY_RULES, shard_records=2)) == 0
-    store = CorpusStore(tmp_path / "out")
+    store = shared_corpus.build(tmp_path / "out", shard_records=2)
     assert not store.parts_dir.exists()
     names = sorted(p.name for p in store.training_dir.glob("*.jsonl.gz"))
     assert names and names[0] == "shard-00001.jsonl.gz"
     assert store.load().shard_records == 2
 
 
-def test_the_build_writes_a_validation_sample_per_stratum(tmp_path, a_corpus):
-    assert build(BuildCorpusConfig(**_LEGACY_RULES,
-                                   records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts,
-                                   output=tmp_path / "out", workers=1,
-                                   validation_sample=4)) == 0
-    store = CorpusStore(tmp_path / "out")
+def test_the_build_writes_a_validation_sample_per_stratum(tmp_path, shared_corpus):
+    store = shared_corpus.build(tmp_path / "out", validation_sample=4)
     for stratum in ("card-disjoint", "game-disjoint"):
         assert store.sample_path(stratum).exists()
         assert 0 < sum(1 for _ in read_shard(store.sample_path(stratum))) <= 4 * 8
@@ -1315,13 +1120,8 @@ def test_a_combat_record_with_an_unresolved_event_reaches_training(tmp_path, a_c
             payload=CombatPayload(attackers=("E0",), events=(_unresolved_event(),)),
         ),
     ])
-    assert build(BuildCorpusConfig(
-        records_dir=corpus.records, cards_folders=corpus.cards,
-        forge_tokenscripts=corpus.forge_tokenscripts,
-        output=tmp_path / "out", workers=1, **_LEGACY_RULES,
-    )) == 0
+    store = corpus.build(tmp_path / "out")
 
-    store = CorpusStore(tmp_path / "out")
     trained = {r.record_id for r in read_records(store.training_dir)}
     assert "g-clean-1.combat" in trained
 
@@ -1351,11 +1151,7 @@ def test_a_class_refused_past_the_share_stops_the_build(tmp_path, a_corpus):
     ])
 
     with pytest.raises(BuildCorpusError, match="combat") as raised:
-        build(BuildCorpusConfig(
-            records_dir=corpus.records, cards_folders=corpus.cards,
-            forge_tokenscripts=corpus.forge_tokenscripts,
-            output=tmp_path / "out", workers=1, **_LEGACY_RULES,
-        ))
+        corpus.build(tmp_path / "out")
 
     message = str(raised.value)
     assert "unresolved" in message and "degraded" in message
@@ -1385,10 +1181,7 @@ def test_a_stratum_whose_sample_comes_out_empty_stops_the_build(
     validates ``nan`` on the stratum that selects the best checkpoint.
     """
     with pytest.raises(BuildCorpusError, match="card-disjoint"):
-        build(replace(
-            _mixture_config(tmp_path / "curated", a_mixture_corpus),
-            validation_sample=8,
-        ))
+        a_mixture_corpus.build(tmp_path / "curated", **{**_MIXTURE, "validation_sample": 8})
 
 
 def test_a_kept_record_with_an_unresolved_event_is_counted_not_refused(
@@ -1411,198 +1204,13 @@ def test_a_kept_record_with_an_unresolved_event_is_counted_not_refused(
             events=(_unresolved_event(),),
         ),
     ])
-    assert build(BuildCorpusConfig(
-        records_dir=corpus.records, cards_folders=corpus.cards,
-        forge_tokenscripts=corpus.forge_tokenscripts,
-        output=tmp_path / "out", workers=1, **_LEGACY_RULES,
-    )) == 0
+    store = corpus.build(tmp_path / "out")
 
-    store = CorpusStore(tmp_path / "out")
     manifest = store.load()
     assert manifest.unattributed_records >= 1
     assert "unattributed-events" not in manifest.quality_dropped
     kept = {r.record_id for r in read_records(store.card_disjoint_dir)}
     assert "unattributed-1" in kept
-
-
-# ── FR-151: the old collector's token keys, remapped in both passes ────
-
-
-def _remap_config(out: Path, a_corpus: CorpusFixture, **overrides) -> BuildCorpusConfig:
-    """The fixture built with the remap on and every training candidate kept.
-
-    ``class_mix`` names the one sampling class the fixture's training games
-    hold, so nothing is subsampled away: under the default eight-class
-    mixture the scarcest class sets the total and a *particular* record is
-    not a reliable thing to look for in the training output.
-    """
-    return BuildCorpusConfig(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
-        workers=1, **_LEGACY_RULES, class_mix={"resolution-effect": 1.0},
-        **overrides,
-    )
-
-
-def _training_script_files(out: Path) -> set[str]:
-    return {
-        key.script_file
-        for record in read_records(CorpusStore(out).training_dir)
-        for key in (record.ability or ())
-    }
-
-
-def test_the_build_remaps_old_token_keys_and_records_the_counts(tmp_path, a_corpus):
-    """FR-151: a key the converted tree does not hold, rewritten to the token script.
-
-    The remap runs on the raw JSON in both passes, so the written record
-    carries the corrected key and the survey that sized its cap and its
-    rarity entry counted it under the same one.
-    """
-    out = tmp_path / "out"
-    assert build(_remap_config(out, a_corpus)) == 0
-
-    keys = _training_script_files(out)
-    assert _FOOD_FILE in keys
-    assert _OLD_FOOD_KEY.script_file not in keys
-    manifest = CorpusStore(out).load()
-    assert manifest.token_keys_remapped >= 1
-    assert manifest.forge_tokenscripts == str(a_corpus.forge_tokenscripts)
-
-
-def test_a_remapped_key_resolves_to_the_token_scripts_ability_text(tmp_path, a_corpus):
-    """What the remap is *for*: the record joins the converted token's sidecar.
-
-    Keyed as collected, the food record resolves to no ability text at all —
-    no rarity entry, no per-text cap, and nothing for the trainer to encode.
-    """
-    out = tmp_path / "out"
-    build(_remap_config(out, a_corpus))
-
-    assert _FOOD_TEXT in CorpusStore(out).load().rarity
-
-
-def test_the_remap_can_be_turned_off(tmp_path, a_corpus):
-    """``--no-remap-token-keys``: no key is rewritten, whatever that costs.
-
-    Left as collected, the food key names a script no converted tree holds, so
-    it resolves to no ability text at all and FR-148's third rule refuses the
-    record outright rather than training on an empty acting slot — which is
-    the shape of the loss the remap exists to undo.
-    """
-    out = tmp_path / "out"
-    assert build(_remap_config(out, a_corpus, remap_token_keys=False)) == 0
-
-    assert _FOOD_FILE not in _training_script_files(out)
-    manifest = CorpusStore(out).load()
-    assert manifest.token_keys_remapped == 0
-    assert manifest.forge_tokenscripts == ""
-    assert manifest.no_acting_text_scripts[_OLD_FOOD_KEY.script_file] == 1
-
-
-def test_a_missing_forge_tokenscripts_dir_is_refused(tmp_path, a_corpus):
-    """The remap cannot tell same-name token scripts apart without them.
-
-    Refused rather than skipped: a build that quietly left every old key in
-    place would write a dataset indistinguishable from a remapped one except
-    in its manifest counts.
-    """
-    with pytest.raises(BuildCorpusError, match="forge-tokenscripts") as raised:
-        build(BuildCorpusConfig(
-        **_LEGACY_RULES,
-            records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-            forge_tokenscripts=tmp_path / "nowhere", output=tmp_path / "out", workers=1,
-        ))
-
-    assert "--no-remap-token-keys" in str(raised.value)
-    assert not (tmp_path / "out" / "manifest.json").exists()
-
-
-def test_two_builds_agree_about_the_remap(tmp_path, a_corpus):
-    """The remap is deterministic, so it cannot move a dataset's digest."""
-    first, second = tmp_path / "a", tmp_path / "b"
-    for out in (first, second):
-        build(_remap_config(out, a_corpus))
-
-    assert CorpusStore(first).load().digest() == CorpusStore(second).load().digest()
-    assert CorpusStore(first).load().token_keys_remapped >= 1
-
-
-def test_a_refused_records_remaps_are_not_counted(tmp_path, a_corpus):
-    """``token_keys_remapped`` counts written records only (review round 2).
-
-    Both passes rewrite every old key they read, junk included; the manifest
-    is the dataset's own inventory, so a record no output holds contributes
-    nothing to it.
-    """
-    from effects.domain.record_quality import EVENT_FLOOD, NO_ACTING_TEXT
-
-    corpus = a_corpus.with_extra_records([
-        a_corpus.resolution(
-            "junk-food", game="g-clean-1", ability=(_OLD_FOOD_KEY,),
-            events=tuple(
-                Event(type=EventType.DAMAGE_DEALT, subjects=("P0",), attributed_to="root")
-                for _ in range(65)
-            ),
-        ),
-    ])
-    out = tmp_path / "out"
-    assert build(_remap_config(out, corpus)) == 0
-
-    manifest = CorpusStore(out).load()
-    # ``no-acting-text`` is the fixture's own ``g-clean-3.cast``.
-    assert manifest.quality_dropped == {EVENT_FLOOD: 1, NO_ACTING_TEXT: 1}
-    # Two records carried the old food key; only g-clean-1.food was written.
-    assert manifest.token_keys_remapped == 1
-
-
-def test_verify_warns_when_the_dataset_was_built_against_another_token_tree(
-    tmp_path, a_corpus, caplog,
-):
-    """Which token scripts were on disk decides which keys resolved (FR-151).
-
-    Drift stays shard-based — this is a warning beside it, not a failure:
-    every shard still matches, and the dataset is still the one the manifest
-    describes.
-    """
-    out = tmp_path / "out"
-    assert build(_remap_config(out, a_corpus)) == 0
-
-    with caplog.at_level(logging.WARNING):
-        assert build(BuildCorpusConfig(
-        **_LEGACY_RULES,
-            records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-            forge_tokenscripts=tmp_path / "another-forge", output=out,
-            workers=1, verify=True,
-        )) == 0
-
-    assert "different datasets" in caplog.text
-    assert str(a_corpus.forge_tokenscripts) in caplog.text
-
-
-def test_verify_is_quiet_when_the_token_tree_is_the_one_it_was_built_against(
-    tmp_path, a_corpus, caplog,
-):
-    out = tmp_path / "out"
-    assert build(_remap_config(out, a_corpus)) == 0
-
-    with caplog.at_level(logging.WARNING):
-        assert build(_remap_config(out, a_corpus, verify=True)) == 0
-
-    assert "different datasets" not in caplog.text
-
-
-def test_the_cli_exposes_the_remap_flags():
-    from effects.infrastructure.cli import build_parser
-
-    args = build_parser().parse_args([
-        "build-corpus", "--forge-tokenscripts", "x", "--no-remap-token-keys",
-    ])
-    assert args.forge_tokenscripts == Path("x")
-    assert args.remap_token_keys is False
-    defaults = build_parser().parse_args(["build-corpus"])
-    assert defaults.remap_token_keys is True
-    assert defaults.forge_tokenscripts == Path("../forge/forge-gui/res/tokenscripts")
 
 
 def test_a_class_lost_to_no_acting_text_is_told_to_reconvert():
@@ -1638,19 +1246,16 @@ def test_a_class_that_keeps_most_of_its_records_raises_nothing():
 # ── gen-2 selection, placement and refusals (T036, T069, T080, T083) ─────
 
 
-def _gen2_config(a_corpus, out: Path, **overrides) -> BuildCorpusConfig:
-    fields = dict(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out, workers=1,
-        holdout_unit="text", game_disjoint_share=0.16, game_disjoint_keyword_share=0.16,
-        keyword_definitions=None,
-    )
-    fields.update(overrides)
-    return BuildCorpusConfig(**fields)
+#: Gen-2's copies up to the default ``--reuse-cap``, on the legacy holdout and
+#: game split, with no keyword table.
+_GEN2_RULES = {
+    **{rule: value for rule, value in _LEGACY_RULES.items() if rule != "reuse_cap"},
+    "keyword_definitions": None,
+}
 
 
-def _training_ids(out: Path) -> list[str]:
-    return sorted(r.record_id for r in read_records(CorpusStore(out).training_dir))
+def _training_ids(store: CorpusStore) -> list[str]:
+    return sorted(r.record_id for r in read_records(store.training_dir))
 
 
 def test_a_display_name_match_on_a_non_keyword_line_fails_the_build(tmp_path, a_corpus):
@@ -1663,7 +1268,7 @@ def test_a_display_name_match_on_a_non_keyword_line_fails_the_build(tmp_path, a_
     }), encoding="utf-8")
 
     with pytest.raises(BuildCorpusError, match="FR-015"):
-        build(_gen2_config(a_corpus, tmp_path / "out", keyword_definitions=definitions))
+        a_corpus.build(tmp_path / "out", rules=_GEN2_RULES, keyword_definitions=definitions)
 
 
 def test_a_records_set_mixing_generations_is_refused(tmp_path, a_corpus):
@@ -1680,7 +1285,7 @@ def test_a_records_set_mixing_generations_is_refused(tmp_path, a_corpus):
         handle.write(json.dumps(gen1) + "\n")
 
     with pytest.raises(BuildCorpusError, match="mixes gen-1 shards"):
-        build(_gen2_config(a_corpus, tmp_path / "out"))
+        a_corpus.build(tmp_path / "out", rules=_GEN2_RULES)
 
 
 def test_the_retired_game_count_flag_is_rejected_by_argparse(capsys):
@@ -1705,55 +1310,62 @@ def test_the_new_flags_reach_the_config():
     assert (args.reuse_cap, args.holdout_unit) == (2, "text")
 
 
-def test_an_unscored_game_disjoint_keyword_is_refused(tmp_path, a_corpus):
+def test_an_unscored_game_disjoint_keyword_is_refused(tmp_path, shared_corpus):
     with pytest.raises(BuildCorpusError, match="flying"):
-        _gen2_config(a_corpus, tmp_path, game_disjoint_keywords=("flying",))
+        shared_corpus.config(tmp_path, rules=_GEN2_RULES, game_disjoint_keywords=("flying",))
 
 
-def test_two_builds_with_one_seed_write_the_same_training_records(tmp_path, a_corpus):
+@pytest.fixture(scope="module")
+def gen2_build(tmp_path_factory, shared_corpus) -> CorpusStore:
+    """``shared_corpus`` built once under :data:`_GEN2_RULES`."""
+    output = tmp_path_factory.mktemp("gen2-build") / "curated"
+    return shared_corpus.build(output, rules=_GEN2_RULES)
+
+
+def test_two_builds_with_one_seed_write_the_same_training_records(
+    tmp_path, shared_corpus, gen2_build,
+):
     """FR-052."""
-    assert build(_gen2_config(a_corpus, tmp_path / "one")) == 0
-    assert build(_gen2_config(a_corpus, tmp_path / "two")) == 0
+    again = shared_corpus.build(tmp_path / "two", rules=_GEN2_RULES)
 
-    assert _training_ids(tmp_path / "one") == _training_ids(tmp_path / "two")
+    assert _training_ids(gen2_build) == _training_ids(again)
 
 
-def test_random_seat_changes_no_selection(tmp_path, a_corpus):
+def test_random_seat_changes_no_selection(tmp_path, shared_corpus, gen2_build):
     """FR-050: the off-policy flag is reported, never selected on."""
-    assert build(_gen2_config(a_corpus, tmp_path / "plain")) == 0
-
     flipped_root = tmp_path / "flipped"
-    for shard in iter_shards(a_corpus.records):
+    for shard in iter_shards(shared_corpus.records):
         records = [replace(r, random_seat=True) for r in read_shard(shard)]
-        write_shard(flipped_root / shard.relative_to(a_corpus.records), records)
-    assert build(_gen2_config(
-        a_corpus, tmp_path / "flipped-out", records_dir=flipped_root,
-    )) == 0
+        write_shard(flipped_root / shard.relative_to(shared_corpus.records), records)
+    flipped = shared_corpus.build(
+        tmp_path / "flipped-out", rules=_GEN2_RULES, records_dir=flipped_root,
+    )
 
-    assert _training_ids(tmp_path / "plain") == _training_ids(tmp_path / "flipped-out")
-    counts = CorpusStore(tmp_path / "flipped-out").load().policy_counts
+    assert _training_ids(gen2_build) == _training_ids(flipped)
+    counts = flipped.load().policy_counts
     assert counts and all(c.get("on_policy", 0) == 0 for c in counts.values())
 
 
 def test_a_rebuild_over_a_grown_corpus_keeps_every_game_disjoint_game(tmp_path, a_corpus):
     """SC-007."""
-    assert build(_gen2_config(a_corpus, tmp_path / "first")) == 0
-    first = set(CorpusStore(tmp_path / "first").load().game_disjoint_games)
+    first = set(
+        a_corpus.build(tmp_path / "first", rules=_GEN2_RULES).load().game_disjoint_games
+    )
     assert first
 
     a_corpus.with_extra_records([
         CorpusFixture.resolution(f"g-more-{i}.1", game=f"g-more-{i}") for i in range(40)
     ])
-    assert build(_gen2_config(a_corpus, tmp_path / "grown")) == 0
-    grown = set(CorpusStore(tmp_path / "grown").load().game_disjoint_games)
+    grown = set(
+        a_corpus.build(tmp_path / "grown", rules=_GEN2_RULES).load().game_disjoint_games
+    )
 
     assert first <= grown
 
 
-def test_the_manifest_records_families_policy_and_the_flags(tmp_path, a_corpus):
+def test_the_manifest_records_families_policy_and_the_flags(tmp_path, shared_corpus):
     """FR-053."""
-    assert build(_gen2_config(a_corpus, tmp_path / "out", reuse_cap=3)) == 0
-    manifest = CorpusStore(tmp_path / "out").load()
+    manifest = shared_corpus.build(tmp_path / "out", rules=_GEN2_RULES, reuse_cap=3).load()
 
     assert manifest.holdout_unit == "text"
     assert manifest.reuse_cap == 3
@@ -1775,26 +1387,22 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
     from effects.domain.records import PlayabilityBlockersPayload, PlayabilitySubkind
 
     legality = [
-        EffectRecord(
-            record_id=f"g-clean-1.leg{i}", run_id="run",
-            timestamp="2026-09-14T00:00:00.000000Z", game_id="g-clean-1",
-            kind=RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS,
-            actor_player="P0", state=_snapshot(), what_if=i >= 2,
-            payload=PlayabilityBlockersPayload(anchor_attacker=f"E{i}"),
+        make_record(
+            RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.BLOCKERS,
+            record_id=f"g-clean-1.leg{i}", game_id="g-clean-1", timestamp=_TIMESTAMP,
+            what_if=i >= 2, payload=PlayabilityBlockersPayload(anchor_attacker=f"E{i}"),
         )
         for i in range(22)
     ]
     a_corpus.with_extra_records(legality)
-    out = tmp_path / "out"
-    assert build(_gen2_config(
-        a_corpus, out, class_mix={"playability-legality": 1.0}, reuse_cap=4,
-        validation_sample=0,
-    )) == 0
+    manifest = a_corpus.build(
+        tmp_path / "out", rules=_GEN2_RULES,
+        class_mix={"playability-legality": 1.0}, reuse_cap=4, validation_sample=0,
+    ).load()
 
     # 22 distinct records set the class budget. Half of it, 11, is the real
     # half's share; its two records can supply at most 8 with four copies
     # each, and the what-if half is planned the 14 left over.
-    manifest = CorpusStore(out).load()
     families = manifest.families["playability-legality"]
     assert families["real:none"]["written"] == 8
     assert families["real:none"]["repeats"] == 6
@@ -1806,17 +1414,6 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
 
 
 # ── what the plan counts, and what it may train on (G4, G13, G14) ──────
-
-
-def _legacy_build(a_corpus: CorpusFixture, out: Path, **overrides) -> BuildCorpusConfig:
-    fields = dict(
-        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
-        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out, workers=1,
-        **_LEGACY_RULES,
-    )
-    fields.update(overrides)
-    assert build(BuildCorpusConfig(**fields)) == 0
-    return BuildCorpusConfig(**fields)
 
 
 def test_a_held_back_game_takes_no_training_slot(tmp_path, a_corpus):
@@ -1837,20 +1434,15 @@ def test_a_held_back_game_takes_no_training_slot(tmp_path, a_corpus):
             for n in range(60)
         ),
     ])
-    out = tmp_path / "curated"
-    _legacy_build(a_corpus, out, text_cap=2)
+    store = a_corpus.build(tmp_path / "curated", text_cap=2)
 
-    shock = [
-        r for r in read_records(CorpusStore(out).training_dir) if r.ability == (_SHOCK_KEY,)
-    ]
+    shock = [r for r in read_records(store.training_dir) if r.ability == (_SHOCK_KEY,)]
     assert len(shock) == 2
 
 
-def test_every_class_delivers_its_target(tmp_path, a_corpus):
+def test_every_class_delivers_its_target(tmp_path, shared_corpus):
     """The manifest shows targeted beside delivered, so a shortfall is visible."""
-    out = tmp_path / "curated"
-    _legacy_build(a_corpus, out, text_cap=2)
-    manifest = CorpusStore(out).load()
+    manifest = shared_corpus.build(tmp_path / "curated", text_cap=2).load()
 
     assert manifest.class_targets
     for klass, target in manifest.class_targets.items():
@@ -1870,13 +1462,12 @@ def test_a_held_out_game_resolving_no_held_out_text_is_dropped(tmp_path, a_corpu
             entity_names=(_HELD_OUT_CARD,),
         ),
     ])
-    out = tmp_path / "curated"
-    _legacy_build(a_corpus, out)
-    manifest = CorpusStore(out).load()
+    store = a_corpus.build(tmp_path / "curated")
+    manifest = store.load()
 
     assert "g-held-3" not in manifest.card_disjoint_games
     assert "g-tainted" in manifest.card_disjoint_games
-    trained = {r.game_id for r in read_records(CorpusStore(out).training_dir)}
+    trained = {r.game_id for r in read_records(store.training_dir)}
     assert "g-held-3" not in trained
 
 
@@ -1896,12 +1487,11 @@ def test_a_token_printing_a_held_out_text_holds_its_game_out(tmp_path, a_corpus)
             )),
         ),
     ])
-    out = tmp_path / "curated"
-    _legacy_build(a_corpus, out)
+    store = a_corpus.build(tmp_path / "curated")
 
-    trained = {r.game_id for r in read_records(CorpusStore(out).training_dir)}
+    trained = {r.game_id for r in read_records(store.training_dir)}
     assert "g-token" not in trained
-    assert "g-token" not in CorpusStore(out).load().game_disjoint_games
+    assert "g-token" not in store.load().game_disjoint_games
 
 
 def test_a_variant_printing_a_held_out_text_trains_on_nothing(tmp_path, a_corpus):
@@ -1930,15 +1520,14 @@ def test_a_variant_printing_a_held_out_text_trains_on_nothing(tmp_path, a_corpus
         _resolution("g-var.0", "g-var", ability=(variant_key,)),
         _resolution("g-var.1", "g-var", ability=(_SHOCK_KEY,)),
     ])
-    out = tmp_path / "curated"
     # Every resolution record the class can supply is wanted, so only the
     # held-out text can keep the variant's record out.
-    _legacy_build(
-        a_corpus, out, variant_scripts=str(root / "variant-scripts"), text_cap=0,
+    store = a_corpus.build(
+        tmp_path / "curated", variant_scripts=str(root / "variant-scripts"), text_cap=0,
         class_mix={"resolution-effect": 1.0},
     )
 
-    training = list(read_records(CorpusStore(out).training_dir))
+    training = list(read_records(store.training_dir))
     assert not [r for r in training if r.ability == (variant_key,)]
     assert any(r.game_id == "g-var" for r in training)
-    assert CorpusStore(out).load().per_stratum["dropped-held-out-text"] == 1
+    assert store.load().per_stratum["dropped-held-out-text"] == 1

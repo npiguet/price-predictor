@@ -1,163 +1,98 @@
 """Which records a curated corpus refuses on sight (FR-148): four rules.
 
-Three of them are shapes the first corpus held that no model should learn
-from. A
-resolution record with no acting ability is an outcome with no cause. A
-resolution record whose every acting key maps to no rendered line is the same
-thing one step further in: it *has* a key, so the first rule passes it, and
-the key names a trait the converter rendered nothing for. And a record
-carrying more events than any single ability resolves is a whole game that
-landed on one record: one such record in the first corpus held 278 events, 88
-card draws and the game's ``player_won``.
+A resolution with no acting ability, or whose acting keys all map to no
+rendered line, is an outcome with no cause; a record with more events than
+any single ability resolves is a whole game landed on one record; and a key
+inside a sidecar's declared range but in neither of its lists is a
+reconversion (or, a handful of times, a charm cast through Flashback, its mode
+keyed as the keyword trait plus an ``option`` no line carries).
 
-The fourth is a record acting through a key its sidecar cannot place: inside
-a range the sidecar declares, yet in neither its lines nor its dropped keys.
-The join raises on such a key, because a reconversion between collection and
-training produces exactly that. One collector case produces it too: a charm
-cast through Flashback resolves as a copy Forge builds from the keyword, so
-its mode is keyed as the keyword trait plus an ``option`` no converted line
-carries. A handful of such records is refused like any other defect; a
-reconversion shows itself as many, and ``build-corpus`` stops on those.
-
-**An unattributed event is watched, not refused.** ``attributed_to`` names
-the sub-ability clause that produced an event, and the collector writes
-``unresolved`` when it walked the acting chain and no clause claimed it. That
-is a failure to attribute, not a failure to belong: the bracket collector
-records the events that happened inside the ability's *own* resolution, so
-the outcome is that ability's whether or not a clause can be named for it. On
-the real corpus 12.3% of resolution records with an acting ability have every
-event stamped ``unresolved`` and not one of them exceeds ten events, and
-another 1% carry a single unattributed side effect — a state-based-action
-``zone_change`` death, a ``choice_made``, a ``tapped``. Refusing them threw
-away an eighth of the legitimate resolution outcomes, the "died" zone outcome
-among them. Combat is the same case at full strength: a damage step resolves
-nothing, so there is no chain at all and every combat-damage event is
-``unresolved`` by design with its cause in ``cause`` — 98.9% of the class.
-The whole-game dumps the rule was reaching for are caught by the no-ability
-and event-flood rules instead. ``has_unattributed_events`` keeps the number
-available, and ``build-corpus`` reports it as ``unattributed_records``: a
-rising share is a statement about the collector, not about the corpus.
-
-``quality_defect`` is pure over the record, so build-corpus applies it in a
-worker holding nothing else. ``acting_text_defect`` needs the sidecars' answer
-and takes it as a plain callable, which keeps the rule here beside the other
-two while the files it reads stay in infrastructure. Either way a test states
-one rule in one line.
+An unattributed event is watched, not refused: the bracket collector records
+only events inside the ability's own resolution, so the outcome is that
+ability's even when no clause claims it, and every combat-damage event is
+``unresolved`` by design.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from enum import StrEnum
 
 from effects.domain.event_schema import ATTRIBUTION_UNRESOLVED
 from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.records import EffectRecord, RecordKind, acting_keys, events_of
 
-NO_ABILITY = "no-ability"
-EVENT_FLOOD = "event-flood"
-NO_ACTING_TEXT = "no-acting-text"
-UNJOINABLE_KEY = "unjoinable-key"
-QUALITY_REASONS: tuple[str, ...] = (
-    NO_ABILITY, EVENT_FLOOD, NO_ACTING_TEXT, UNJOINABLE_KEY,
-)
 
-#: The ``attributed_to`` sentinel the collector writes when the producing
-#: clause was sought and nothing on the chain claimed the event. Aliased from
-#: the schema rather than re-declared, so the watch statistic and the writer
-#: cannot drift apart on the spelling of the one string it turns on.
-UNRESOLVED = ATTRIBUTION_UNRESOLVED
+class QualityDefect(StrEnum):
+    """Why a record is refused, as the manifest's ``quality_dropped`` spells it."""
 
-#: More events than this on one record is a game, not an ability. The
-#: heaviest legitimate resolutions in the first corpus (board wipes over
-#: two full boards) sat under forty.
+    NO_ABILITY = "no-ability"
+    EVENT_FLOOD = "event-flood"
+    NO_ACTING_TEXT = "no-acting-text"
+    UNJOINABLE_KEY = "unjoinable-key"
+
+
+#: More events than this on one record is a game, not an ability; board wipes
+#: over two full boards sit under forty.
 MAX_EVENTS_PER_RECORD = 64
 
 
 def quality_defect(
     record: EffectRecord, *, max_events: int = MAX_EVENTS_PER_RECORD,
-) -> str | None:
+) -> QualityDefect | None:
     """The first reason this record is refused, or None when it is clean.
 
-    Ordered so the most specific reason wins: a record with no ability is
-    reported as that, whatever its events look like.
-
-    A non-positive ``max_events`` means **no event-flood rule at all**, the
-    way ``CapHeap`` reads a non-positive cap and ``--text-cap 0`` reads zero.
-    Taken as a literal ceiling instead, zero refuses every record carrying a
-    single event -- which is nearly all of them -- so ``build-corpus``, which
-    lists ``--max-events-per-record 0`` among the settings zero is real for,
-    would write an almost empty corpus and still exit 0. The no-ability rule
-    is unconditional: it has no number to turn off.
+    A non-positive ``max_events`` turns the event-flood rule off, as
+    ``CapHeap`` reads a non-positive cap; as a literal ceiling, zero would
+    refuse nearly every record.
     """
     if record.kind is RecordKind.RESOLUTION and not record.ability:
-        return NO_ABILITY
+        return QualityDefect.NO_ABILITY
     events = events_of(record)
     if max_events > 0 and len(events) > max_events:
-        return EVENT_FLOOD
+        return QualityDefect.EVENT_FLOOD
     return None
 
 
 def unjoinable_key_defect(
     record: EffectRecord, resolve: Callable[[ProvenanceKey], KeyResolution],
-) -> str | None:
+) -> QualityDefect | None:
     """``UNJOINABLE_KEY`` when an acting key is one its sidecar cannot place.
 
-    Every kind with acting keys, not only resolutions: the surface builder and
-    the trainer join a trigger's or a rewrite's acting keys as well, and a
-    decision's candidate, which is what its ``[ACT]`` reads, and raise on the
-    same key further down the line.
-
-    Args:
-        resolve: ``ProvenanceKey -> KeyResolution``, the sidecar cache's answer.
-            It raises ``KeyError`` on a key inside a declared range and in
-            neither of the sidecar's lists.
+    Every kind with acting keys, not only resolutions: the surface builder
+    and trainer join them all and would raise on the same key later.
+    ``resolve`` raises ``KeyError`` on such a key.
     """
     for key in acting_keys(record):
         try:
             resolve(key)
         except KeyError:
-            return UNJOINABLE_KEY
+            return QualityDefect.UNJOINABLE_KEY
     return None
 
 
 def acting_text_defect(
     record: EffectRecord, resolve: Callable[[ProvenanceKey], KeyResolution],
-) -> str | None:
+) -> QualityDefect | None:
     """``NO_ACTING_TEXT`` when every acting key maps to no rendered line.
 
-    A resolution record whose acting key is Forge's implicit permanent spell
-    passes ``quality_defect`` — it has a key — and reaches the head with an
-    empty acting slot. Three quarters of the resolution class was that record
-    before this rule, weighted like the rarest text in the corpus.
-
-    A ``RUNTIME_ONLY`` key keeps the record: level up, bestow and scavenge, a
-    trigger another card's static granted, and a disguise creature's face-down
-    face are all real abilities whose text the join does not reach yet, and
-    refusing them would be a loss rather than a cleanup. A key inside a range
-    the sidecar declared and in neither of its lists raises out of ``resolve``;
-    ``unjoinable_key_defect`` refuses such a record first.
-
-    Separate from ``quality_defect`` rather than another branch of it, because
-    this one needs the join and that one needs nothing: a caller with no
-    sidecars — ``validate-corpus``, a test — still gets the other two rules.
-
-    Args:
-        resolve: ``ProvenanceKey -> KeyResolution``, the sidecar cache's answer.
+    A ``RUNTIME_ONLY`` key keeps the record: it is a real ability whose text
+    the join does not reach. Apart from ``quality_defect`` because it needs
+    the sidecars, which ``validate-corpus`` does not have; run
+    ``unjoinable_key_defect`` first, since ``resolve`` raises on such a key.
     """
     if record.kind is not RecordKind.RESOLUTION or not record.ability:
         return None
     outcomes = {resolve(key) for key in record.ability}
     if KeyResolution.LINE in outcomes or KeyResolution.RUNTIME_ONLY in outcomes:
         return None
-    return NO_ACTING_TEXT
+    return QualityDefect.NO_ACTING_TEXT
 
 
 def has_unattributed_events(record: EffectRecord) -> bool:
     """Whether any of this record's events names no producing clause.
 
-    The watch statistic the withdrawn refusal became (see the module
-    docstring). Every kind, including ``combat``, because the number is a
-    reading of the collector's attribution and a count taken over only the
-    kinds some rule happened to reach would move whenever the rules did.
+    A watched number over every kind, combat included, so it reads the
+    collector's attribution rather than which kinds a rule reaches.
     """
-    return any(event.attributed_to == UNRESOLVED for event in events_of(record))
+    return any(event.attributed_to == ATTRIBUTION_UNRESOLVED for event in events_of(record))

@@ -6,9 +6,9 @@ import com.pricepredictor.connector.WireNamed;
  * The role a prose span plays in its line, as a sidecar's {@code role_spans}
  * spell it.
  *
- * <p>The encoder adds one role embedding per token, and its {@code ROLES} in
- * {@code provenance.py} and {@code ROLE_ORDER} in {@code ability_encoder.py}
- * are the other half of this vocabulary.
+ * <p>The encoder adds one role embedding per token, and its
+ * {@code ROLE_ORDER} in {@code ability_encoder.py} is the other half of this
+ * vocabulary.
  */
 public enum SpanRole implements WireNamed {
     COST("cost"),

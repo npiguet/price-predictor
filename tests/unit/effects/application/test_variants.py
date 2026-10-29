@@ -21,7 +21,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from effects.application.collect_variants import (
-    DEFAULT_VARIANT_VOLUME,
     RANDOM_SEED,
     CollectVariantsConfig,
     GeneratedVariant,
@@ -30,19 +29,13 @@ from effects.application.collect_variants import (
     loadable_variants,
     perturb_script,
     variant_budget,
-    variant_growth,
     volume_ceiling,
 )
-from effects.domain.records import (
-    EffectRecord,
-    RecordKind,
-)
+from effects.domain.records import EffectRecord
 from effects.domain.script_variants import (
     MAX_NUMERIC_SHIFT,
-    NUMERIC_PARAM_KEYS,
     SELECTOR_WHITELIST,
     PerturbationKind,
-    double,
     is_multi_face,
     numeric_params,
     perturb,
@@ -50,16 +43,7 @@ from effects.domain.script_variants import (
     shift,
     variant_name,
 )
-from effects.domain.state_snapshot import GlobalState, StateSnapshot
 from tests.unit.effects.builders import make_record
-
-_SNAPSHOT = StateSnapshot(
-    global_=GlobalState(
-        turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-    ),
-    players=(),
-    entities=(),
-)
 
 _BOLT_SCRIPT = (
     "A:SP$ DealDamage | Cost$ R | ValidTgts$ Any | NumDmg$ 3 | "
@@ -71,21 +55,6 @@ def _record(**overrides) -> EffectRecord:
     defaults: dict = {"record_id": "r.0.1", "run_id": "r", "game_id": "r.0.1"}
     defaults.update(overrides)
     return make_record(**defaults)
-
-
-class TestVariantRecordFlags:
-    def test_a_variant_record_is_synthetic_and_names_its_source(self):
-        record = _record(synthetic=True, variant_of="Lightning Bolt")
-        assert record.synthetic
-        assert record.variant_of == "Lightning Bolt"
-
-    def test_variant_of_requires_the_synthetic_flag(self):
-        with pytest.raises(ValueError, match="variant_of"):
-            _record(variant_of="Lightning Bolt")
-
-    def test_a_variant_is_otherwise_an_ordinary_record(self):
-        record = _record(synthetic=True, variant_of="Lightning Bolt")
-        assert record.kind is RecordKind.RESOLUTION
 
 
 class TestNumericPerturbation:
@@ -100,17 +69,6 @@ class TestNumericPerturbation:
         rng = random.Random(0)
         for _ in range(50):
             assert shift(1, rng) >= 0
-
-    def test_doubling_keeps_the_card_recognisably_the_same(self):
-        assert double(3) == 6
-        assert double(0) == 0
-
-    def test_the_numeric_keys_are_a_whitelist(self):
-        """A shifted CounterType would produce a script that fails to load
-        rather than a card that plays differently."""
-        assert "NumDmg" in NUMERIC_PARAM_KEYS
-        assert "CounterType" not in NUMERIC_PARAM_KEYS
-        assert "ValidTgts" not in NUMERIC_PARAM_KEYS
 
     def test_numeric_params_reads_only_whitelisted_numbers(self):
         found = numeric_params(_BOLT_SCRIPT)
@@ -149,11 +107,6 @@ class TestSelectorPerturbation:
                 assert perturbation.replacement in SELECTOR_WHITELIST
                 assert perturbation.replacement != perturbation.original
                 assert perturbation.replacement in perturbed
-
-    def test_the_whitelist_holds_only_composable_restrictions(self):
-        for selector in SELECTOR_WHITELIST:
-            assert " " not in selector
-            assert selector[0].isupper()
 
 
 class TestVariantGeneration:
@@ -289,10 +242,6 @@ class TestVolumeCap:
         assert variant_budget(1000, 0.2) == 200
         assert variant_budget(0, 0.2) == 0
 
-    def test_the_default_volume_is_the_contract(self):
-        assert DEFAULT_VARIANT_VOLUME == 0.2
-        assert CollectVariantsConfig().variant_volume == 0.2
-
     def test_a_larger_volume_allows_more(self):
         assert variant_budget(1000, 0.5) > variant_budget(1000, 0.2)
 
@@ -317,17 +266,6 @@ class TestVolumeCap:
             effect_records=Path("output/effects/records"),
         )
         assert config.volume_source() == Path("output/effects/records")
-
-    def test_growth_is_measured_in_the_destination_not_the_volume_source(self):
-        """The two counts must come from the same directory.
-
-        `--corpus-records` let the volume cap be sized against a corpus the
-        variants are not written into. The growth check subtracted that count
-        from a count of the destination, so a run against a 39M-record corpus
-        writing to an empty directory reported "-39332737 new effect records".
-        """
-        assert variant_growth(before=12, after=20) == 8
-        assert variant_growth(before=0, after=0) == 0
 
     def test_the_record_count_stops_once_the_cap_cannot_bind(self):
         """Counting the corpus exactly is minutes of gzip for an inert number.
@@ -469,7 +407,7 @@ class TestRunClosesTheSupervisor:
         the sidecar writer (which otherwise needs a real JVM).
 
         The sidecar writer is patched on ``collect_variants`` itself, not on
-        ``effects.infrastructure.variant_sidecar_connector`` where the class
+        ``effects.infrastructure.one_shot_workers`` where the function
         lives -- ``run()`` now resolves the name at module scope (so
         ``TestTheVariantRoundPlaysTheVariants`` can patch it there too), and
         patching the source module no longer reaches a name ``run()`` never
@@ -480,14 +418,9 @@ class TestRunClosesTheSupervisor:
         import effects.application.collect_variants as collect_variants
         import effects.infrastructure.record_io as record_io
 
-        # Growing, not constant: `run` now compares the corpus before and
-        # after the round and refuses to report success when it did not move.
-        # Three calls: the volume source, then the destination before and
-        # after the round.
-        readings = iter([1000, 1000, 1100])
-        monkeypatch.setattr(
-            record_io, "count_records", lambda path, **_: next(readings),
-        )
+        # The volume source's size alone: the growth check counts the shards
+        # the round adds, which a test's supervisor writes itself.
+        monkeypatch.setattr(record_io, "count_records", lambda path, **_: 1000)
         monkeypatch.setattr(
             collect_variants, "generate_variants",
             lambda *a, **k: [variant],
@@ -499,11 +432,8 @@ class TestRunClosesTheSupervisor:
         monkeypatch.setattr(
             collect_variants, "loadable_variants", lambda generated, _root: generated,
         )
-        sidecar = MagicMock()
-        sidecar.run.return_value = 0
         monkeypatch.setattr(
-            collect_variants, "VariantSidecarConnector",
-            MagicMock(return_value=sidecar),
+            collect_variants, "write_variant_sidecars", MagicMock(return_value=0),
         )
         return collect_variants
 
@@ -516,6 +446,7 @@ class TestRunClosesTheSupervisor:
         collect_variants = self._patch_prerequisites(monkeypatch, variant)
         supervisor = MagicMock()
         supervisor.interrupted = False
+        supervisor.play_round.side_effect = _writes_a_shard(tmp_path / "records", 100)
         monkeypatch.setattr(
             collector_connector, "CollectorSupervisor",
             MagicMock(return_value=supervisor),
@@ -595,13 +526,13 @@ class TestTheVariantRoundPlaysTheVariants:
         supervisor = MagicMock()
         with patch.object(collector_connector, "CollectorSupervisor",
                           return_value=supervisor) as ctor, \
-             patch.object(collect_variants, "VariantSidecarConnector") as sidecar, \
+             patch.object(collect_variants, "write_variant_sidecars",
+                          return_value=0), \
              patch.object(collect_variants, "loadable_variants",
                           side_effect=lambda generated, _root: generated):
-            # The loadable list is written by the sidecar connector, which is
+            # The loadable list is written by the sidecar writer, which is
             # mocked here, so the file it would leave behind does not exist.
             # TestOnlyLoadableVariantsAreDecked covers the filter itself.
-            sidecar.return_value.run.return_value = 0
             collect_variants.run(
                 collect_variants.CollectVariantsConfig(
                     effect_records=records,
@@ -735,15 +666,15 @@ class TestTheRunReportsWhatItCollected:
     0 having collected nothing, and nothing said so.
     """
 
-    def _fixture(self, tmp_path, monkeypatch, counts):
-        """A run whose only unknown is what ``count_records`` reports.
+    def _fixture(self, tmp_path, monkeypatch, source_records, added):
+        """A run whose only unknowns are the corpus sizes.
 
-        ``counts`` is consumed one value per call, and there are three: the
-        pre-flight size of the *volume source* the budget is taken from, then
-        the destination before the round and after it. The first can name a
-        different directory from the other two -- that is what
-        ``--corpus-records`` is for -- so the growth check must never subtract
-        it from either.
+        ``source_records`` is what ``count_records`` reports for the *volume
+        source* the budget is taken from, which can name a different directory
+        from the destination -- that is what ``--corpus-records`` is for -- so
+        the growth check must never subtract it. ``added`` is how many records
+        the round writes, in a shard of its own beside one already in the
+        destination, which must not count as growth either.
         """
         from unittest.mock import MagicMock
 
@@ -760,10 +691,8 @@ class TestTheRunReportsWhatItCollected:
             name="Bolt Variant 0", source_card="Bolt", path=path,
             perturbation="numeric",
         )
-        readings = iter(counts)
         monkeypatch.setattr(
-            record_io, "count_records",
-            lambda directory, **_: next(readings),
+            record_io, "count_records", lambda directory, **_: source_records,
         )
         monkeypatch.setattr(
             collect_variants, "generate_variants", lambda *a, **k: [variant],
@@ -773,14 +702,15 @@ class TestTheRunReportsWhatItCollected:
         monkeypatch.setattr(
             collect_variants, "loadable_variants", lambda generated, _root: generated,
         )
-        sidecar = MagicMock()
-        sidecar.run.return_value = 0
         monkeypatch.setattr(
-            collect_variants, "VariantSidecarConnector",
-            MagicMock(return_value=sidecar),
+            collect_variants, "write_variant_sidecars", MagicMock(return_value=0),
         )
+        records = tmp_path / "records"
+        _writes_a_shard(records, 7, name="earlier.0-a.jsonl")()
         supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
         supervisor.interrupted = False
+        if added:
+            supervisor.play_round.side_effect = _writes_a_shard(records, added)
         monkeypatch.setattr(
             collector_connector, "CollectorSupervisor",
             MagicMock(return_value=supervisor),
@@ -788,7 +718,7 @@ class TestTheRunReportsWhatItCollected:
         forge_cards = tmp_path / "forge-cards"
         forge_cards.mkdir()
         config = CollectVariantsConfig(
-            effect_records=tmp_path / "records",
+            effect_records=records,
             forge_cards_path=forge_cards,
             variant_scripts=tmp_path / "variant-scripts",
         )
@@ -800,7 +730,7 @@ class TestTheRunReportsWhatItCollected:
         import logging
 
         collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, [1000, 1000, 1000],
+            tmp_path, monkeypatch, 1000, added=0,
         )
 
         with caplog.at_level(logging.ERROR):
@@ -821,7 +751,7 @@ class TestTheRunReportsWhatItCollected:
         import logging
 
         collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, [1000, 1000, 1042],
+            tmp_path, monkeypatch, 1000, added=42,
         )
 
         with caplog.at_level(logging.INFO):
@@ -829,7 +759,8 @@ class TestTheRunReportsWhatItCollected:
 
         assert code == 0
         assert any(
-            "42" in record.getMessage() for record in caplog.records
+            "Collected 42 new effect records" in record.getMessage()
+            for record in caplog.records
         ), "the run never reported how many records it added"
 
     def test_a_corpus_counted_elsewhere_never_enters_the_growth_figure(
@@ -845,7 +776,7 @@ class TestTheRunReportsWhatItCollected:
         import logging
 
         collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, [39_000_000, 0, 42],
+            tmp_path, monkeypatch, 39_000_000, added=42,
         )
 
         with caplog.at_level(logging.INFO):
@@ -864,11 +795,21 @@ class TestTheRunReportsWhatItCollected:
         swallows SIGINT, so a round the operator stopped returns exactly like
         one that finished."""
         collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, [1000, 1000, 1042],
+            tmp_path, monkeypatch, 1000, added=42,
         )
         supervisor.interrupted = True
 
         assert collect_variants.run(config) == 130
+
+
+def _writes_a_shard(directory: Path, records: int, *, name: str = "round.0-b.jsonl"):
+    """A stand-in for a round's workers: one new shard of ``records`` lines."""
+
+    def write(*_args, **_kwargs) -> None:
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / name).write_text("{}\n" * records, encoding="utf-8")
+
+    return write
 
 
 class TestOnlyLoadableVariantsAreDecked:

@@ -1,28 +1,11 @@
 """Tokenizing one ability line, with the offsets and hooks the encoder needs.
 
-Wraps the shared :class:`~price_predictor.domain.tokenizer.MtgTokenizer`'s
-vocabulary and token grammar, and adds the things it does not have:
-
-- **character offsets**, so the sidecar's role spans can be applied per token.
-  The shared tokenizer normalizes before splitting and returns bare strings, so
-  its output cannot be aligned back to the text the spans index.
-- **``[MASK]``, ``[CLS]`` and ``[SEG]``**, which it seeds none of. ``[CLS]`` is
-  the token the bottleneck ``e`` is pooled from, ``[MASK]`` is the MLM
-  auxiliary's, and ``[SEG]`` separates the segments of a chained script text.
-- **the script surface's rules** (FR-007–009b), applied exactly when the
-  vocabulary is a script vocabulary: camel-case compounds split into their
-  words, chain labels and counter types kept whole, token script names split
-  at their underscores. The prose surface is the shared grammar unchanged.
-- **keyword expansion**, which replaces a keyword with its reminder text so the
-  model learns "flying" and the sentence it stands for as the same thing. A
-  keyword *line* is recognised by its display name and expands whole, with its
-  own instance values filled in the way Forge fills them (FR-013, FR-017); a
-  keyword word inside any other line expands through the token path (FR-014).
-
-Tokenization is whole-token only with no subword fallback (FR-066). An unknown
-word is ``[UNK]``: unknown *keywords* are covered by forced expansion, and
-unknown subtypes and token names by the next vocabulary rebuild. A subword
-fallback would hide both behind plausible-looking fragments.
+Wraps the shared ``MtgTokenizer``'s vocabulary and grammar, adding what it
+lacks: character offsets (it normalizes before splitting, so its output cannot
+be aligned to the role spans), the ``[MASK]``/``[CLS]``/``[SEG]`` specials, the
+script surface's rules (FR-007–009b) and keyword expansion (FR-013, FR-014,
+FR-017). No subword fallback (FR-066): an unknown word is ``[UNK]``, and a
+fallback would hide it behind plausible-looking fragments.
 """
 
 from __future__ import annotations
@@ -37,94 +20,71 @@ from effects.domain.keyword_formatting import (
     strip_specifiers,
 )
 from effects.domain.provenance import RoleSpan
+from effects.domain.script_text import CHAIN_KEYS, SEG
 from price_predictor.domain.tokenizer import MtgTokenizer
 
-#: The two encoding surfaces, defined here rather than beside the encoder,
-#: which loads torch, so every corpus tool can name them without a model.
+#: Defined here rather than beside the encoder, which loads torch.
 SURFACE_PROSE = "prose"
 SURFACE_SCRIPT = "script"
 
-#: The bracketed specials the vocabulary seeds. Each is one token wherever it
-#: appears, never ``[``, a word and ``]``.
-SPECIAL_TOKENS: tuple[str, ...] = ("[PAD]", "[UNK]", "[MASK]", "[CLS]", "[SEG]")
-
-#: Separator between the segments of a chained script text (FR-002).
-SEG = "[SEG]"
+#: Each is one token wherever it appears, never ``[``, a word and ``]``.
+SPECIAL_TOKENS: tuple[str, ...] = ("[PAD]", "[UNK]", "[MASK]", "[CLS]", SEG)
 
 _SPECIAL_ALTERNATION = "|".join(re.escape(token) for token in SPECIAL_TOKENS)
 
-#: Token grammar, matching ``MtgTokenizer``'s final split: words (which may
-#: already carry an underscore), mana symbols, digit runs, and single
-#: punctuation characters, plus the bracketed specials as single tokens.
-#: Applied to the *original* text so offsets survive.
+#: ``MtgTokenizer``'s final split, applied to the original text so offsets
+#: survive.
 _TOKEN_RE = re.compile(
     rf"{_SPECIAL_ALTERNATION}|[A-Za-z_]+|\{{[^}}]+\}}|\d+|[^\s\w]"
 )
 
-#: Inside a ``TokenScript$`` value the underscore separates words and is
-#: dropped (FR-009a): ``w_1_1_soldier`` reads ``w 1 1 soldier``.
+#: Inside a ``TokenScript$`` value the underscore separates words (FR-009a).
 _TOKEN_SCRIPT_GRAMMAR = re.compile(r"[A-Za-z]+|\{[^}]+\}|\d+|[^\sA-Za-z0-9_]")
 
-#: Parameters whose value items stay one token on the script surface (FR-009):
-#: the chain references and the counter type. ``Choices$`` is handled apart.
+#: Parameters whose value items stay one token on the script surface (FR-009).
 _WHOLE_VALUE_RE = re.compile(
     r"(?<![A-Za-z])"
-    r"(?:Execute|SubAbility|RepeatSubAbility|ReplaceWith|CounterType)"
+    rf"(?:{'|'.join((*sorted(CHAIN_KEYS), 'CounterType'))})"
     r"\$[ \t]*([^\s|]+)"
 )
-#: ``Choices$`` names chain labels only on a chooser API; on every other API
-#: (``PutCounter``, ``ChangeZone``, …) it is a selector like
-#: ``Creature.YouCtrl`` and splits like any other value.
+#: ``Choices$`` names chain labels only on a chooser API; elsewhere it is a
+#: selector and splits like any other value.
 _CHOICES_RE = re.compile(r"(?<![A-Za-z])Choices\$[ \t]*([^\s|]+)")
 _CHOOSER_API_RE = re.compile(
     r"(?<![A-Za-z])(?:SP|DB|AB)\$[ \t]*"
     r"(?:Charm|GenericChoice|AssignGroup|VillainousChoice|Vote)(?![A-Za-z])"
 )
-#: The label that opens a segment: at the start of the text (an option line's
-#: mode) or right after a ``[SEG]``, in its FR-002a form.
-_SEGMENT_OPENER_RE = re.compile(r"(?:^|\[SEG\])[ \t]*(SV\d+)(?=:)")
+#: The label opening a segment: at the start (an option line) or after ``[SEG]``.
+_SEGMENT_OPENER_RE = re.compile(rf"(?:^|{re.escape(SEG)})[ \t]*(SV\d+)(?=:)")
 _TOKEN_SCRIPT_VALUE_RE = re.compile(r"(?<![A-Za-z])TokenScript\$[ \t]*([^\s|]+)")
 
-#: When two role spans cover a token, the more specific one wins. A target
-#: phrase sits inside the clause it restricts, so tagging it as that clause
-#: would lose the distinction the role embedding exists to make.
+#: When two role spans cover a token, the more specific one wins: a target
+#: phrase sits inside the clause it restricts.
 _ROLE_PRIORITY: tuple[str, ...] = (
     "target-spec", "cost", "trigger-condition", "effect",
 )
 
 #: Keywords whose body is printed on the host card rather than in a reminder
-#: template, by display name (lowercased). Expanding one would substitute a
-#: generic sentence for the card's own text, which is the opposite of what
-#: expansion is for. Compared by display name (FR-016): a token-form
-#: comparison never matched the two-word names.
+#: template, by lowercased display name (FR-016). Expanding one would replace
+#: the card's own text with a generic sentence.
 HOST_BODIED_KEYWORDS: frozenset[str] = frozenset({
     "chapter", "class", "level up", "saga", "read ahead",
 })
 
-#: Known-keyword expansion probability everywhere outside training: validation,
-#: evaluation and the ability cache (FR-012). Zero, so a known keyword reads as
-#: the token it trained as and a cache is reproducible; an unknown keyword
-#: still expands at any probability. Training keeps ``--keyword-expand-p``.
+#: Known-keyword expansion probability outside training (FR-012): zero, so a
+#: known keyword reads as the token it trained as and a cache is reproducible.
 INFERENCE_KEYWORD_EXPAND_P = 0.0
 
-#: The tokenization rules a checkpoint trained under, recorded in its
-#: ``training_settings`` under :data:`TOKENIZER_RULES_KEY`. Every training run
-#: of this feature records :data:`TOKENIZER_RULES`; a checkpoint recording none
-#: (gen-1, feature 023) tokenized every surface with the prose grammar, and the
-#: script-surface rules would hand it camel-case parts its vocabulary never
-#: held — about one script token in thirty reads as ``[UNK]`` that way, and
-#: nearly three texts in four change their token sequence.
+#: The tokenization rules a checkpoint trained under, in its
+#: ``training_settings``. A gen-1 checkpoint records none and tokenized every
+#: surface with the prose grammar.
 TOKENIZER_RULES_KEY = "tokenizer_rules"
 TOKENIZER_RULES = "gen-2"
 
 
 def tokenizer_surface(vocab_surface: str, training_settings) -> str:
-    """The surface whose rules a loaded checkpoint's tokenizer applies.
-
-    The vocabulary's surface (FR-010) for a checkpoint trained under the gen-2
-    rules; the prose grammar for one that records no rules, because that is
-    what it read in training whichever surface its vocabulary was.
-    """
+    """The surface whose rules a loaded checkpoint's tokenizer applies: the
+    vocabulary's under the gen-2 rules, else the prose grammar it trained on."""
     rules = (training_settings or {}).get(TOKENIZER_RULES_KEY)
     return vocab_surface if rules == TOKENIZER_RULES else SURFACE_PROSE
 
@@ -135,13 +95,7 @@ def keyword_token(display_name: str) -> str:
 
 
 def withheld_keyword_tokens(withheld: str | None) -> frozenset[str]:
-    """The token form of the keyword ``--withhold-keyword`` names, if any.
-
-    Withholding is what gives the zero-shot check something to measure: the
-    model never sees the keyword's *token*, only the sentence it stands for —
-    the batcher force-expands it to its definition — so the check asks whether
-    a keyword it has only ever read as prose lands near the right neighbours.
-    """
+    """The token form of the keyword ``--withhold-keyword`` names, if any."""
     return frozenset({keyword_token(withheld)}) if withheld else frozenset()
 
 
@@ -151,23 +105,16 @@ _HOST_BODIED_TOKENS: frozenset[str] = frozenset(
 
 
 def display_name_of(line_text: str) -> str:
-    """A keyword line's display name: its text before the first colon (FR-013).
-
-    ``Ward:2`` is ``Ward``, ``TypeCycling:Basic:1 B`` is ``TypeCycling`` and a
-    bare ``Flying`` is itself. Whether it names a keyword is the definitions
-    table's question, not this function's.
-    """
+    """A keyword line's display name: its text before the first colon (FR-013)."""
     return line_text.split(":", 1)[0].strip()
 
 
 @dataclass(frozen=True, slots=True)
 class KeywordLine:
-    """What makes a line a keyword line: the keyword it names and its values.
+    """The keyword a line names and its values.
 
-    ``name`` is the definition's own display name, ``details`` everything after
-    the first colon (the instance values, as Forge hands them to the keyword
-    class), and ``name_end`` the offset where the display name ends, so the
-    tokens that spell the name can be told from the ones that spell the values.
+    ``details`` is everything after the first colon, as Forge hands it to the
+    keyword class; ``name_end`` tells the name's tokens from the values'.
     """
 
     name: str
@@ -179,9 +126,7 @@ class KeywordLine:
 class Token:
     """One token, with everything the encoder reads off it.
 
-    ``start``/``end`` index the source text, and are ``None`` for a token that
-    came from an expansion rather than from the line — an expanded keyword's
-    replacement text has no position in the original.
+    ``start``/``end`` index the source text, ``None`` for an expansion's token.
     """
 
     text: str
@@ -189,9 +134,7 @@ class Token:
     start: int | None = None
     end: int | None = None
     role: str | None = None
-    #: The keyword this token was expanded from, where it was.
     expanded_from: str | None = None
-    #: The numeric value of a digit token, for the monotone number embedding.
     number: float | None = None
     #: Set on the first token of a keyword line only: the line expands whole.
     keyword_line: KeywordLine | None = None
@@ -202,12 +145,8 @@ class AbilityTokenizer:
 
     MASK = "[MASK]"
     CLS = "[CLS]"
-    SEG = SEG
 
-    #: Bound on :attr:`_tokenize_cache`. A training run tokenizes on the order
-    #: of 30,000 unique texts, so this is a guard against something unbounded
-    #: (a corpus-construction pass over a whole raw corpus, say) rather than a
-    #: policy tuned to a normal run's working set.
+    #: A guard against an unbounded caller, far above a training run's texts.
     _TOKENIZE_CACHE_CAP = 500_000
 
     def __init__(
@@ -217,25 +156,15 @@ class AbilityTokenizer:
         *,
         surface: str = SURFACE_PROSE,
     ) -> None:
-        """
-        Args:
-            vocab: ``{token: id}``, as written by ``effects build-vocab``.
-            keyword_definitions: ``keyword -> KeywordDefinition``, from
-                ``extract-keyword-definitions``. Absent, no keyword is
-                expandable and unknown keywords stay ``[UNK]``.
-            surface: ``prose`` or ``script``, from ``surface_of`` on the
-                vocabulary's path. Fixed for the tokenizer's life, which is
-                what keeps the per-text cache valid (FR-010).
-        """
+        """``surface`` is fixed for the tokenizer's life, which keeps the
+        per-text cache valid (FR-010). Without ``keyword_definitions`` no
+        keyword expands."""
         if surface not in (SURFACE_PROSE, SURFACE_SCRIPT):
             raise ValueError(f"unknown surface {surface!r}")
         self._vocab = vocab
         self._reverse = {i: t for t, i in vocab.items()}
         self._definitions = keyword_definitions or {}
         self.surface = surface
-        # Definitions are looked up by the lowercased, underscore-joined form a
-        # token carries on the token path, and by the lowercased display name
-        # on the keyword-line path.
         self._definition_by_token = {
             keyword_token(name): definition
             for name, definition in self._definitions.items()
@@ -243,11 +172,8 @@ class AbilityTokenizer:
         self._name_by_display = {
             name.lower(): name for name in self._definitions
         }
-        # Multi-word vocabulary entries, indexed by first word so
-        # _multi_word_at compares a token only against the entries that could
-        # possibly match it, rather than every multi-word entry in the
-        # vocabulary at every token position. Longest first within a bucket
-        # (by word count) so "double strike" is merged before "strike".
+        # Indexed by first word, longest first within a bucket, so "double
+        # strike" is merged before "strike".
         multi_word = sorted(
             (t for t in vocab if "_" in t and not t.startswith("[")),
             key=lambda t: t.count("_"), reverse=True,
@@ -258,8 +184,6 @@ class AbilityTokenizer:
             self._multi_word_by_first.setdefault(parts[0], []).append(
                 (entry, parts),
             )
-        #: Memoises :meth:`tokenize` by text and role spans. See
-        #: :meth:`tokenize` for why.
         self._tokenize_cache: dict[
             tuple[str, tuple[RoleSpan, ...]], tuple[Token, ...]
         ] = {}
@@ -300,28 +224,15 @@ class AbilityTokenizer:
     ) -> list[Token]:
         """Split ``text`` into tokens carrying their offsets and roles.
 
-        ``role_spans`` are character ranges over this same text, as the sidecar
-        records them for the line.
-
-        The result depends on ``text`` and ``role_spans`` alone, and
-        :class:`~effects.application.surface_batching.SurfaceBatcher` calls
-        this once per unique ability text in *every* batch of every epoch —
-        the same tens of thousands of lines, retokenized from scratch each
-        time. A profile of a training run put 80% of its wall time in this
-        method for exactly that reason, so the result is cached on the
-        instance under both (bounded by :attr:`_TOKENIZE_CACHE_CAP`) — the
-        prose surface passes every line's spans, and a cache keyed on the text
-        alone would hand one span set's roles to another's — and a **new
-        list** is always handed back: ``Token`` is frozen, so sharing its
-        elements is safe, but a caller (``expand_keywords``) builds its own
-        list from what it's given, and must never be handed the cached list
-        itself to build it from.
+        Cached by text and spans together, since the batcher retokenizes the
+        same lines every batch; a new list is always handed back, so no caller
+        can mutate the cached one.
         """
         key = (text, tuple(role_spans))
         cached = self._tokenize_cache.get(key)
         if cached is not None:
             return list(cached)
-        tokens = self._merge_multi_word(self._split_with_offsets(text), text)
+        tokens = self._merge_multi_word(self._split_with_offsets(text))
         if role_spans:
             tokens = [
                 replace(token, role=self._role_at(token, role_spans))
@@ -342,9 +253,7 @@ class AbilityTokenizer:
         ]
 
     def _token(self, raw: str, start: int, end: int) -> Token:
-        # Mana symbols and the bracketed specials keep their case; everything
-        # else lowercases, matching the shared tokenizer's selective
-        # normalization.
+        # Mana symbols and specials keep their case, as in the shared tokenizer.
         token_text = raw if raw.startswith(("{", "[")) else raw.lower()
         return Token(
             text=token_text,
@@ -359,12 +268,9 @@ class AbilityTokenizer:
     def _split_script(self, text: str) -> list[Token]:
         """The prose grammar, with the script surface's three rules on top.
 
-        Whole-token values (FR-009) and ``TokenScript$`` values (FR-009a) are
-        found by parameter name on the raw text first, because both are
-        decided by *which* parameter a value belongs to — something the
-        grammar cannot see once the text is split. Everything else is split
-        by the grammar, then each word is broken where a lowercase letter
-        meets an uppercase one (FR-008), keys and values alike.
+        Whole and ``TokenScript$`` values (FR-009, FR-009a) are found on the
+        raw text first, since which parameter a value belongs to is lost once
+        it is split; every other word then splits at camel case (FR-008).
         """
         tokens: list[Token] = []
         position = 0
@@ -400,7 +306,7 @@ class AbilityTokenizer:
 
     # ── multi-word entries and roles ────────────────────────────────────
 
-    def _merge_multi_word(self, tokens: list[Token], text: str) -> list[Token]:
+    def _merge_multi_word(self, tokens: list[Token]) -> list[Token]:
         """Join runs of words that spell a multi-word vocabulary entry."""
         if not self._multi_word_by_first:
             return tokens
@@ -426,9 +332,6 @@ class AbilityTokenizer:
     def _multi_word_at(
         self, tokens: list[Token], index: int,
     ) -> tuple[str, int] | None:
-        # Only entries whose first word matches the token here can possibly
-        # match, so this is the whole speedup: no comparison against the rest
-        # of the vocabulary's multi-word entries.
         candidates = self._multi_word_by_first.get(tokens[index].text)
         if not candidates:
             return None
@@ -457,12 +360,9 @@ class AbilityTokenizer:
     # ── keyword lines (FR-013, FR-016) ──────────────────────────────────
 
     def keyword_line_of(self, text: str) -> KeywordLine | None:
-        """The keyword a line names by its display name, or None.
-
-        Case-insensitive against the definitions table. This is the match
-        ``build-corpus`` audits (FR-015): it must only ever fire on a sidecar
-        line whose ``script_api_type`` is ``Keyword``.
-        """
+        """The keyword a line names by its display name, case-insensitively,
+        or None. ``build-corpus`` audits that it fires only on ``Keyword``
+        lines (FR-015)."""
         if not self._name_by_display:
             return None
         name = self._name_by_display.get(display_name_of(text).lower())
@@ -494,8 +394,7 @@ class AbilityTokenizer:
     def expandable(self, token: Token) -> bool:
         """Whether ``token`` names a keyword this tokenizer could expand."""
         if token.expanded_from is not None:
-            # A keyword inside an expansion stays a token: expanding
-            # recursively would bury the line's own text under definitions.
+            # Never recursively, which would bury the line under definitions.
             return False
         if token.text in _HOST_BODIED_TOKENS:
             return False
@@ -505,12 +404,8 @@ class AbilityTokenizer:
         )
 
     def must_expand(self, token: Token) -> bool:
-        """Keywords the vocabulary does not know are always expanded.
-
-        This is what lets a set the vocabulary predates be encoded at all: an
-        unknown keyword would otherwise be a bare ``[UNK]``, while its
-        definition is ordinary readable text.
-        """
+        """Keywords the vocabulary does not know are always expanded, so a set
+        the vocabulary predates reads as text rather than ``[UNK]``."""
         return self.expandable(token) and not self.is_known(token.text)
 
     def expand_keywords(
@@ -519,38 +414,28 @@ class AbilityTokenizer:
         *,
         probability: float = 0.0,
         rng: random.Random | None = None,
-        instance_values: dict[str, list[str]] | None = None,
         forced: frozenset[str] = frozenset(),
     ) -> list[Token]:
         """Replace some keywords with their definitions.
 
-        A **keyword line** — one whose display name names a definition — is
-        decided once for the whole line: it expands when any token of its name
-        is unknown to the vocabulary, and otherwise with probability
-        ``probability``; expanded, every token of the line is replaced by the
-        reminder template filled with the line's own values as Forge formats
-        them (FR-013, FR-017). Any other line goes token by token: every
-        expandable keyword unknown to the vocabulary is expanded, a known one
-        with probability ``probability`` (FR-014). ``instance_values`` supplies
-        already-formatted values for a keyword, by its token form; without
-        them a template's unfilled placeholders are removed. A keyword whose
-        token form is in ``forced`` always expands, as an unknown one does:
-        that is how ``--withhold-keyword`` shows the model a keyword's
-        definition and never its token. An empty ``forced`` takes exactly the
-        draws it always took.
+        A keyword line is decided once, as a whole: expanded when its name is
+        unknown, else with ``probability``, into the template filled with its
+        own values (FR-013, FR-017). Any other line goes token by token, the
+        template's placeholders removed (FR-014). A keyword in ``forced``
+        always expands, as an unknown one does, and an empty ``forced`` takes
+        exactly the draws it would without the parameter.
         """
         rng = rng or random.Random()
-        values = instance_values or {}
         line = tokens[0].keyword_line if tokens else None
         if line is not None:
-            return self._expand_line(tokens, line, probability, rng, values, forced)
+            return self._expand_line(tokens, line, probability, rng, forced)
         out: list[Token] = []
         for token in tokens:
             if self.must_expand(token) or (
                 self.expandable(token)
                 and (token.text in forced or rng.random() < probability)
             ):
-                out.extend(self._expansion(token, values.get(token.text)))
+                out.extend(self._expansion(token))
             else:
                 out.append(token)
         return out
@@ -566,12 +451,9 @@ class AbilityTokenizer:
     ) -> list[Token]:
         """The tokens one ability text is encoded from, wherever it is encoded.
 
-        Tokenized, keywords expanded — a ``withheld`` keyword always, as an
-        unknown one is — and then the withheld keyword's token dropped
-        everywhere it is left: where it had no definition to expand to, and
-        inside an expansion, since a reminder text can name its own keyword
-        (flying's does, and so does reach's). Training, evaluation and the
-        cache all encode through here, so none of them ever reads the token.
+        The ``withheld`` keyword always expands, and its token is then dropped
+        everywhere it is left, inside an expansion included (flying's reminder
+        text names flying).
         """
         tokens = self.expand_keywords(
             self.tokenize(text, role_spans),
@@ -587,7 +469,6 @@ class AbilityTokenizer:
         line: KeywordLine,
         probability: float,
         rng: random.Random,
-        values: dict[str, list[str]],
         forced: frozenset[str] = frozenset(),
     ) -> list[Token]:
         if not self._line_expandable(line):
@@ -601,36 +482,27 @@ class AbilityTokenizer:
         form = keyword_token(line.name)
         if not (unknown or form in forced or rng.random() < probability):
             return list(tokens)
-        text = self.expansion_text(line.name, line.details, values.get(form))
+        text = self.expansion_text(line.name, line.details)
         return self._as_expansion(text, role=tokens[0].role, keyword=form)
 
-    def expansion_text(
-        self, name: str, details: str = "", values: list[str] | None = None,
-    ) -> str:
-        """The reminder text one keyword instance expands to, specifiers removed.
-
-        ``details`` are the line's instance values as written after its first
-        colon, formatted by the definition's ``formatter``; ``values`` are
-        already-formatted values and take precedence. Neither given, the
-        template's generic wording.
-        """
+    def expansion_text(self, name: str, details: str = "") -> str:
+        """The reminder text one keyword instance expands to, ``details``
+        formatted by the definition's ``formatter``, specifiers removed."""
         definition = self._definitions[name]
         template = self._definition_text(definition) or ""
-        if values:
-            return strip_specifiers(java_format(template, list(values)))
         return format_reminder(
             getattr(definition, "formatter", None), template, details,
         )
 
-    def _expansion(self, token: Token, values: list[str] | None) -> list[Token]:
+    def _expansion(self, token: Token) -> list[Token]:
         definition = self._definition_by_token[token.text]
-        text = self._instantiate(self._definition_text(definition), values)
+        text = self._instantiate(self._definition_text(definition))
         return self._as_expansion(text, role=token.role, keyword=token.text)
 
     def _as_expansion(
         self, text: str, *, role: str | None, keyword: str,
     ) -> list[Token]:
-        expanded = self._merge_multi_word(self._split_with_offsets(text), text)
+        expanded = self._merge_multi_word(self._split_with_offsets(text))
         return [
             replace(part, start=None, end=None, role=role,
                     expanded_from=keyword)
@@ -639,37 +511,22 @@ class AbilityTokenizer:
 
     @staticmethod
     def _definition_text(definition) -> str | None:
-        """The text a keyword expands to, on both surfaces: its reminder template.
-
-        The captured implementation script is not used (FR-020). It holds only
-        the keyword's root lines, never the effect they execute.
-        """
+        """The reminder template, on both surfaces; the captured script holds
+        only root lines, never their effect (FR-020)."""
         return getattr(definition, "reminder_template", None)
 
     @staticmethod
-    def _instantiate(template: str | None, values: list[str] | None) -> str:
-        """Fill a template's placeholders in order, then strip what is left.
-
-        Forge writes parameterized reminder text with ``%s``, ``%d`` and their
-        explicit-index forms — "Cycling %s, Discard this card: Draw a card.",
-        "Target a %1$s as you cast this. This card enters attached to that
-        %1$s." An explicit index repeats its value at every use. Whatever no
-        value fills is removed, so no expansion carries a ``%`` token
-        (FR-017), leaving the template's generic wording.
-        """
+    def _instantiate(template: str | None) -> str:
+        """A template with every placeholder removed, since a bare keyword
+        token carries no values to fill them (FR-017)."""
         if not template:
             return ""
-        return strip_specifiers(java_format(template, list(values or ())))
+        return strip_specifiers(java_format(template, []))
 
 
 def camel_parts(word: str) -> list[tuple[int, int]]:
-    """``(start, end)`` of each part of ``word``, broken at lowercase→uppercase.
-
-    ``nonDragon`` is ``non`` + ``Dragon`` and ``YouCtrl`` is ``You`` +
-    ``Ctrl``; an all-caps run (``ETB``) or a lone capital stays with its word,
-    because only a lowercase letter followed by an uppercase one ends a word
-    (FR-008).
-    """
+    """``(start, end)`` of each part of ``word``, broken at lowercase→uppercase
+    only, so an all-caps run (``ETB``) stays whole (FR-008)."""
     parts: list[tuple[int, int]] = []
     start = 0
     for index in range(1, len(word)):
@@ -681,11 +538,8 @@ def camel_parts(word: str) -> list[tuple[int, int]]:
 
 
 def _script_regions(text: str) -> list[tuple[int, int, str]]:
-    """Ordered, non-overlapping ``(start, end, kind)`` spans the grammar skips.
-
-    ``whole`` spans are FR-009 values, each one token; ``underscore`` spans are
-    ``TokenScript$`` values, split at ``_`` (FR-009a).
-    """
+    """Ordered, non-overlapping ``(start, end, kind)`` spans the grammar skips:
+    ``whole`` (FR-009) or ``underscore`` (FR-009a)."""
     regions: list[tuple[int, int, str]] = []
     for match in _WHOLE_VALUE_RE.finditer(text):
         offset = match.start(1)

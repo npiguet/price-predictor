@@ -1,10 +1,10 @@
-"""``text_for_key``, extracted out of ``ability_text_of`` (build-corpus task 4).
+"""``text_for_key`` and the per-record acting text (build-corpus task 4).
 
 ``build-corpus`` surveys by provenance key and only folds keys to ability text
 once, in the main process, against the one ``SidecarCache`` it already builds
 for the holdout. ``text_for_key`` is that fold's single definition; this test
-pins it against ``ability_text_of``, which is defined in terms of it, so the
-extraction cannot drift the two apart.
+pins it against ``KeyResolver.acting_text``, the per-record text the trainer
+weights by, so the two cannot drift apart.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def _record(game_id: str, entities=(), ability=None, **overrides) -> EffectRecor
 class FakeSidecarCache:
     """The smallest double for ``SidecarCache``: an explicit key -> line map.
 
-    ``text_for_key`` (and, through it, ``ability_text_of``) calls only
+    ``text_for_key`` (and, through it, ``KeyResolver``) calls only
     ``line_for`` and ``prose_for``, so this fake implements exactly those two.
     No sidecar fake existed anywhere in the test tree before this one; a later
     task that needs a sidecar double should import this rather than write a
@@ -81,11 +81,8 @@ class FakeSidecarCache:
         return self._prose.get(key)
 
 
-def test_text_for_key_and_ability_text_of_agree_on_one_key():
-    from effects.application.ability_text import (
-        ability_text_of,
-        text_for_key,
-    )
+def test_text_for_key_and_the_acting_text_agree_on_one_key():
+    from effects.application.ability_text import KeyResolver, text_for_key
 
     key = ProvenanceKey("cardsfolder/f/flying_test.txt", 0, "keyword", 0)
     record = _record("g1", ability=(key,))
@@ -99,9 +96,9 @@ def test_text_for_key_and_ability_text_of_agree_on_one_key():
         prose={key: "Flying"},
     )
 
-    assert text_for_key(key, sidecars, "script") == ability_text_of(
-        record, sidecars, "script"
-    )
+    assert text_for_key(key, sidecars, "script") == KeyResolver(
+        sidecars, "script",
+    ).acting_text(record)
 
 
 def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
@@ -168,7 +165,7 @@ def test_a_decisions_acting_text_is_its_candidates():
     """A ``decision`` record names no acting line of its own; ``[ACT]`` reads
     its candidate's, and rarity has to key on the same text or the whole
     decision class weighs as if it had none."""
-    from effects.application.ability_text import ability_text_of
+    from effects.application.ability_text import KeyResolver
     from effects.domain.records import (
         Candidate,
         PlayabilityDecisionPayload,
@@ -190,7 +187,7 @@ def test_a_decisions_acting_text_is_its_candidates():
         )},
     )
 
-    assert ability_text_of(record, sidecars, "script") == "DealDamage"
+    assert KeyResolver(sidecars, "script").acting_text(record) == "DealDamage"
 
 
 def test_every_line_on_disk_is_a_known_text_spelled_as_the_join_spells_it(tmp_path):

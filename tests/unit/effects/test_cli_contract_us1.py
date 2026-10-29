@@ -27,12 +27,15 @@ def parse(*argv: str):
 #: ``train-effect-model`` takes no defaults without a corpus any more.
 TRAIN = ("train-effect-model", "--corpus", "output/effects/corpus")
 
+#: What ``--cards-folder`` parses to when it is not passed.
+BOTH_TREES = (Path("output/cardsfolder"), Path("output/tokenscripts"))
+
 
 class TestBuildVocab:
     def test_the_defaults_are_the_contracts(self):
         args = parse("build-vocab")
         assert args.surface == "prose"
-        assert args.cards_folders is None  # resolved to both converted trees
+        assert args.cards_folders == BOTH_TREES
         assert args.vocab_path is None  # resolved per surface
         assert args.keyword_definitions == Path("output/effects/keyword-definitions.json")
         assert args.target_size == 5000
@@ -41,24 +44,17 @@ class TestBuildVocab:
         args = parse(
             "build-vocab", "--cards-folder", "a/", "--cards-folder", "b/",
         )
-        assert args.cards_folders == ["a/", "b/"]
+        assert args.cards_folders == (Path("a/"), Path("b/"))
 
-    def test_the_default_resolves_to_both_converted_trees(self):
-        from effects.infrastructure.cli import resolve_cards_folders
-
-        folders = resolve_cards_folders(parse("build-vocab").cards_folders)
-        assert [f.as_posix() for f in folders] == [
-            "output/cardsfolder", "output/tokenscripts",
-        ]
+    def test_one_cards_folder_replaces_both_defaults(self):
+        """argparse's own ``append`` would add to the default, not replace it."""
+        args = parse("build-vocab", "--cards-folder", "a/")
+        assert args.cards_folders == (Path("a/"),)
 
     def test_the_surface_choices_are_prose_and_script(self):
         assert parse("build-vocab", "--surface", "script").surface == "script"
         with pytest.raises(SystemExit):
             parse("build-vocab", "--surface", "oracle")
-
-    def test_an_explicit_vocab_path_is_carried(self):
-        args = parse("build-vocab", "--vocab-path", "models/x.txt")
-        assert args.vocab_path == Path("models/x.txt")
 
 
 class TestExtractKeywordDefinitions:
@@ -131,8 +127,8 @@ class TestVariantAcceptsCorpusAtThePreflightCheck:
     trainer: the curated dataset's manifest is the split it inherits.
 
     The real trainer entry point (``train_effect_model.run``) is monkeypatched
-    out, so getting past the CLI is what these tests prove, not a full training
-    run, and neither case imports torch or reads a real corpus off disk.
+    out, so getting past the CLI is what this test proves, not a full training
+    run, and it neither imports torch nor reads a real corpus off disk.
     """
 
     def test_a_variant_with_corpus_gets_past_the_preflight_check(self, monkeypatch):
@@ -147,11 +143,6 @@ class TestVariantAcceptsCorpusAtThePreflightCheck:
         )
 
         assert run_train_effect_model(args) == 0
-
-    def test_a_variant_without_a_corpus_never_reaches_the_check(self):
-        """``--corpus`` is required, so the parser refuses first."""
-        with pytest.raises(SystemExit):
-            parse("train-effect-model", "--variant", "identity")
 
 
 class TestBuildCorpusDispatch:
@@ -220,15 +211,12 @@ class TestEncodeAbilities:
         config = EncodeAbilitiesConfig(variant="no-state")
         assert config.resolved_checkpoint().parent.name == "no-state"
 
-    def test_clean_is_a_flag(self):
-        assert parse("encode-abilities", "--clean").clean is True
-
 
 class TestEvaluateEffectModel:
     def test_the_defaults_are_the_contracts(self):
         args = parse("evaluate-effect-model")
         assert args.checkpoint == Path("models/effects/effect-model/latest.pt")
-        assert args.records_dir == Path("output/effects/records/")
+        assert not hasattr(args, "records_dir")
         assert args.baseline_checkpoints is None
         assert not hasattr(args, "sealed_encoder_checkpoint")
 
@@ -238,7 +226,13 @@ class TestEvaluateEffectModel:
             "--variant-checkpoint", "identity=a.pt",
             "--variant-checkpoint", "no-state=b.pt",
         )
-        assert args.baseline_checkpoints == ["identity=a.pt", "no-state=b.pt"]
+        assert args.baseline_checkpoints == [
+            ("identity", Path("a.pt")), ("no-state", Path("b.pt")),
+        ]
+
+    def test_an_unknown_variant_checkpoint_name_is_a_usage_error(self):
+        with pytest.raises(SystemExit):
+            parse("evaluate-effect-model", "--variant-checkpoint", "identiy=a.pt")
 
     def test_there_is_no_split_flag(self):
         """Splits come from the checkpoint — never a flag, never recomputed."""
@@ -259,15 +253,15 @@ class TestEvaluateEffectModel:
 
 
 class TestSubcommandTable:
-    def test_every_us1_subcommand_is_registered(self):
+    def test_every_subcommand_is_registered(self):
         parser = build_parser()
-        action = next(
-            a for a in parser._actions if isinstance(a.choices, dict)
-        )
-        assert {
-            "build-vocab", "extract-keyword-definitions", "train-effect-model",
-            "encode-abilities", "evaluate-effect-model",
-        } <= set(action.choices)
+        action = next(a for a in parser._actions if isinstance(a.choices, dict))
+        assert set(action.choices) == {
+            "build-vocab", "extract-keyword-definitions", "collect-coverage",
+            "build-corpus", "field-coverage", "validate-corpus",
+            "collect-variants", "train-effect-model", "encode-abilities",
+            "evaluate-effect-model", "holdout-cards",
+        }
 
     def test_bare_invocation_prints_help_rather_than_failing(self):
         assert getattr(build_parser().parse_args([]), "func", None) is None
@@ -304,7 +298,7 @@ class TestBuildCorpus:
         args = parse("build-corpus")
         assert args.records_dir == Path("output/effects/records/")
         assert args.output == Path("output/effects/corpus/")
-        assert args.cards_folders is None  # resolved to both converted trees
+        assert args.cards_folders == BOTH_TREES
         assert args.vocab_path == "models/effects/vocab.txt"
         assert args.variant_scripts is None
 
@@ -338,31 +332,6 @@ class TestBuildCorpus:
         assert args.verify is False
         assert parse("build-corpus", "--verify").verify is True
 
-    def test_the_parsed_defaults_and_the_configs_own_agree(self):
-        """Two default surfaces for one flag set, and only this compares them."""
-        from effects.application.build_corpus import BuildCorpusConfig
-
-        args = parse("build-corpus")
-        config = BuildCorpusConfig(records_dir=Path("."))
-        assert config.output == Path(args.output)
-        assert config.vocab_path == args.vocab_path
-        assert config.holdout_permille == args.holdout_permille
-        assert config.holdout_max_carriers == args.holdout_max_carriers
-        assert config.text_cap == args.text_cap
-        assert config.card_disjoint_text_cap == args.card_disjoint_text_cap
-        assert config.game_disjoint_share == args.game_disjoint_share
-        assert config.game_disjoint_keyword_share == args.game_disjoint_keyword_share
-        assert config.game_disjoint_keywords == args.game_disjoint_keywords
-        assert config.reuse_cap == args.reuse_cap
-        assert config.holdout_unit == args.holdout_unit
-        assert config.keyword_definitions == Path(args.keyword_definitions)
-        assert config.training_records == args.training_records
-        assert config.class_mix == args.class_mix
-        assert config.seed == args.seed
-        assert config.workers == args.workers
-        assert config.verify == args.verify
-        assert config.cards_folders == ("output/cardsfolder", "output/tokenscripts")
-
     def test_the_class_mix_is_parsed_through_the_trainers_own_syntax(self):
         args = parse("build-corpus", "--class-mix", "rewrite=0.5,combat=0.5")
         assert args.class_mix == {"rewrite": 0.5, "combat": 0.5}
@@ -373,4 +342,4 @@ class TestBuildCorpus:
 
     def test_cards_folder_is_repeatable(self):
         args = parse("build-corpus", "--cards-folder", "a/", "--cards-folder", "b/")
-        assert args.cards_folders == ["a/", "b/"]
+        assert args.cards_folders == (Path("a/"), Path("b/"))

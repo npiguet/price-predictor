@@ -1,17 +1,8 @@
 """The join between runtime Forge traits and converted ability lines.
 
-Every effect record names an ability through a :class:`ProvenanceKey`, and every
-ability-cache row is aligned by the sidecar that maps those keys to rendered
-lines. This is the most load-bearing contract in the feature, so the shapes live
-here as pure dataclasses; reading and writing the JSON is
-``infrastructure/sidecar_io.py``'s job (the same split
-``draft/domain/draft_geometry.py`` makes against ``draft_record_io``).
-
-Converted-line ordinals cannot be the key. The converter runs one per-face
-bracket counter across five mixed line kinds, emits keyword-derived lines first
-in the file though Forge appends them last in its runtime lists, and merges,
-deduplicates and splits abilities relative to the runtime objects. An ordinal
-therefore names different things on the two sides. Printed provenance is stable.
+Records name abilities by :class:`ProvenanceKey`; the sidecar maps keys to
+rendered lines and aligns the ability cache. Pure dataclasses; the JSON is
+``infrastructure/sidecar_io.py``'s.
 """
 
 from __future__ import annotations
@@ -19,17 +10,29 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-# The three converted source trees a key can name. They differ in layout as well
-# as in content: ``cardsfolder`` is letter-keyed and ``tokenscripts`` is flat, so
-# Ajani's Pridemate is ``cardsfolder/a/ajanis_pridemate.txt`` on one side and
-# ``tokenscripts/ajanis_pridemate.txt`` on the other.
-SOURCE_TREES: tuple[str, ...] = ("cardsfolder", "tokenscripts", "variant-scripts")
 
-# Prose role tags spanning the converted text of one line.
-ROLES: tuple[str, ...] = ("cost", "effect", "trigger-condition", "target-spec")
+class SourceTree(StrEnum):
+    """The tree a script file's first path segment names.
 
-#: The fields every key's dict form carries; ``option`` is the one written only
-#: when set. What tells a key dict from any other mapping in a record's raw JSON.
+    ``cardsfolder`` is letter-keyed, ``tokenscripts`` and ``variant-scripts``
+    are flat, and ``counterfactual`` is no folder at all: it prefixes the
+    copies the trainer stages in memory.
+    """
+
+    CARDSFOLDER = "cardsfolder"
+    TOKENSCRIPTS = "tokenscripts"
+    VARIANT_SCRIPTS = "variant-scripts"
+    COUNTERFACTUAL = "counterfactual"
+
+
+def split_script_file(script_file: str) -> tuple[str, str]:
+    """``(tree, path within the tree)`` of a tree-prefixed script file."""
+    tree, _, relative = script_file.partition("/")
+    return tree, relative
+
+
+#: The fields every key's dict form carries (``option`` is written only when
+#: set); what tells a key dict from any other mapping in a record's raw JSON.
 KEY_DICT_FIELDS: frozenset[str] = frozenset({
     "script_file", "face", "trait_kind", "index_within_kind",
 })
@@ -37,16 +40,11 @@ KEY_DICT_FIELDS: frozenset[str] = frozenset({
 class KeyResolution(StrEnum):
     """What a provenance key resolves to at the join.
 
-    ``LINE`` is text. ``DROPPED`` is a trait the converter rendered no line for
-    — Forge's implicit permanent spell on every permanent, most often — and is
-    no text by design. ``RUNTIME_ONLY`` is a trait Forge attaches to a live
-    card that the script never declared — level up, bestow and scavenge, a
-    trigger granted by another card's static, a disguise creature's face-down
-    face — whose text the join does not reach; it is kept apart from
-    ``DROPPED`` because refusing on it would refuse real abilities.
-    ``UNCONVERTED`` is a script no sidecar describes. The fifth outcome, a key
-    inside a declared range and in neither list, is not a value: it raises,
-    because the sidecar does not describe the record's card.
+    ``DROPPED`` has no text by design (Forge's implicit permanent spell, most
+    often); ``RUNTIME_ONLY`` has text the join cannot reach
+    (:meth:`ProvenanceSidecar.is_runtime_only`); ``UNCONVERTED`` is a script no
+    sidecar describes. A key inside a declared range and in neither list is not
+    a value: it raises.
     """
 
     LINE = "line"
@@ -59,16 +57,11 @@ class KeyResolution(StrEnum):
 class ProvenanceKey:
     """``(script_file, face, trait_kind, index_within_kind, option?)``.
 
-    ``script_file`` is the path as written, including its tree, and is produced
-    identically by the Java writer and the Python reader — a disagreement is the
-    fail-loudly case at the join. ``index_within_kind`` indexes that kind's slice
-    of the face's raw trait list, not a global ordinal.
-
-    ``option`` names one mode of a charm: its 0-based position in the root's
-    ``Choices$``. Forge gives a mode no identity of its own — it clones each
-    chosen mode and climbs every clone to the root — so the position is the one
-    identity both the converter and the collector can compute. A key without it
-    names the root, and the two never compare equal.
+    ``script_file`` includes its tree. ``index_within_kind`` indexes that
+    kind's slice of the face's raw trait list, not a global ordinal.
+    ``option`` is a charm mode's 0-based position in the root's ``Choices$`` —
+    Forge gives a mode no identity of its own, so the position is the one both
+    converter and collector can compute. A key without it names the root.
     """
 
     script_file: str
@@ -80,7 +73,7 @@ class ProvenanceKey:
     @property
     def tree(self) -> str:
         """The source tree this key's script file belongs to."""
-        return self.script_file.split("/", 1)[0]
+        return split_script_file(self.script_file)[0]
 
     @property
     def root(self) -> ProvenanceKey:
@@ -110,11 +103,7 @@ class ProvenanceKey:
 
     @classmethod
     def from_dict(cls, data: dict, *, script_file: str | None = None) -> ProvenanceKey:
-        """Parse a key, taking ``script_file`` from the sidecar's header.
-
-        Sidecar entries omit the script file because it is the same for every key
-        in one file; a key carried on a record spells it out.
-        """
+        """Parse a key; a sidecar entry omits ``script_file``, so pass its header's."""
         resolved = data.get("script_file", script_file)
         if resolved is None:
             raise ValueError(
@@ -151,21 +140,11 @@ class RoleSpan:
 class SidecarLine:
     """One rendered line of a converted card, with everything that produced it.
 
-    ``provenance`` holds several keys where the converter merged several runtime
-    traits into one line, so the join is many-to-one and never assumed
-    one-to-one. ``script_text`` is the stage-four primary encoding surface, which
-    is why every command that encodes reads it here and needs no Forge
-    cardsfolder path of its own.
-
-    ``line_index`` points into the converted ``.txt``'s rendered lines. It is not
-    the ability-cache row: that is this entry's position in the sidecar's
-    ``lines`` array, which is what the cache layout aligns to.
-
-    ``prose_offset`` is where the rendered line's prose starts, after its
-    ``kind[n]: `` prefix — zero on a continuation line of a multi-line
-    description, which has none. ``None`` on a sidecar written before the
-    converter recorded it, whose readers fall back to cutting at the first
-    ``": "``.
+    ``provenance`` holds several keys where the converter merged several
+    traits into one line. ``line_index`` points into the converted ``.txt``;
+    the ability-cache row is instead this entry's position in ``lines``.
+    ``prose_offset`` is ``None`` on a sidecar written before the converter
+    recorded it, whose readers cut at the first ``": "``.
     """
 
     line_index: int
@@ -192,47 +171,22 @@ def _note_declared(
 class ProvenanceSidecar:
     """``<name>.provenance.json``, read beside the converted ``<name>.txt``.
 
-    ``dropped_keys`` lists traits that map to no rendered line. It exists
-    because the collector computes keys from runtime trait accessors, never from
-    the sidecar: a trait the converter deduplicated away is still live at
-    runtime and still produces a key, so without this list an expected dedup and
-    a genuine corpus/sidecar mismatch would look identical at the join — and the
-    mismatch is the one condition that must fail loudly.
-
-    A third case sits between them: a trait Forge attaches to a live card that
-    the parsed script never declared. It takes three shapes. Level up, bestow
-    and scavenge each append a spell ability, so the runtime trait list is
-    longer than the parsed one. A static that grants a trigger to *other*
-    permanents — Aura Flux, Plague Sliver — installs that trigger on the
-    recipients while the key names the granting card's script, which declares
-    no trigger at all. And a face the script never wrote down, such as the
-    face-down state disguise gives a creature, carries keys under a face index
-    the sidecar has no notion of.
-
-    All three are told apart the same way, by what the sidecar declared: a key
-    whose ``(face, trait_kind)`` the sidecar never declared, or whose index is
-    past the highest it declared for that pair, is runtime-only and treated
-    like a dropped key. What stays a mismatch is a key *inside* a declared
-    range that sits in neither list. Every declared index is in one of the two
-    lists by construction — ``dropped_keys`` is declared-minus-claimed — so a
-    gap inside the range can only come from a sidecar rebuilt against a
-    different trait list, which is the reconversion the join must fail on.
+    ``dropped_keys`` lists traits that map to no rendered line. The collector
+    computes keys from runtime traits, so without it an expected dedup and a
+    genuine sidecar mismatch — the one case that must fail loudly — would look
+    identical at the join.
     """
 
     card: str
     script_file: str
     lines: tuple[SidecarLine, ...]
     dropped_keys: tuple[ProvenanceKey, ...] = ()
-    # key -> position in ``lines``, built once per card and reused across the
-    # millions of records that join through it.
     _row_by_key: dict[ProvenanceKey, int] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
-    # (face, trait_kind) -> the highest index the sidecar declared for it.
     _declared_max: dict[tuple[int, str], int] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
-    # ``dropped_keys`` as a set, for the membership test every join makes.
     _dropped: frozenset[ProvenanceKey] = field(
         default=frozenset(), init=False, repr=False, compare=False,
     )
@@ -253,25 +207,19 @@ class ProvenanceSidecar:
     def is_runtime_only(self, key: ProvenanceKey) -> bool:
         """Is this a trait Forge attached to a live card rather than one parsed?
 
-        True when the sidecar declared nothing at all for the key's
-        ``(face, trait_kind)``, and true when it declared that pair but not
-        this far along it. A trigger granted by another card's static keys to
-        the granting card's script, which declares no trigger; a disguise
-        creature's face-down state keys to a face the script never wrote down;
-        a level-up or bestow ability is appended past the end of the parsed
-        list. None of the three is a reconversion, and refusing them refuses
-        real abilities.
-
-        False only inside a declared range, where every index is accounted for
-        by one of the two lists and a gap means the sidecar describes a
-        different card.
+        True when the sidecar declared nothing for the key's
+        ``(face, trait_kind)``, or not this far along it: a trigger granted by
+        another card's static, a disguise creature's face-down face, a level-up
+        or bestow ability appended past the parsed list. False inside a
+        declared range, where ``dropped_keys`` is declared-minus-claimed, so a
+        gap means the sidecar describes a different card.
         """
         highest = self._declared_max.get((key.face, key.trait_kind))
         return highest is None or key.index_within_kind > highest
 
     @property
     def tree(self) -> str:
-        return self.script_file.split("/", 1)[0]
+        return split_script_file(self.script_file)[0]
 
     def row_for(self, key: ProvenanceKey) -> int | None:
         """The ability-cache row a key resolves to, or None where it was dropped."""
@@ -285,10 +233,7 @@ class ProvenanceSidecar:
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
         """Which of the join's answers this key gets; raises on a mismatch.
 
-        ``row_for`` answers the same question with None for three cases at
-        once, which is enough to read a cache row and not enough to decide
-        whether a record has text: a dropped key never will have, and a
-        runtime-only one has text the join cannot reach yet.
+        Unlike ``row_for``, tells a dropped key from a runtime-only one.
         """
         if key in self._row_by_key:
             return KeyResolution.LINE
@@ -301,9 +246,7 @@ class ProvenanceSidecar:
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
         """The rendered line a key resolves to, or None where it was dropped.
 
-        Raises when the key is in neither ``lines`` nor ``dropped_keys`` and its
-        index is inside what this face declared: the sidecar does not describe
-        the card the record was collected against, which means the corpus was
+        Raises on a key inside a declared range in neither list: the corpus was
         reconverted between collection and training.
         """
         row = self.row_for(key)
@@ -312,10 +255,8 @@ class ProvenanceSidecar:
     def option_rows_after(self, row: int) -> list[int]:
         """The keyed ``option`` rows that immediately follow ``row``.
 
-        A charm's modes sit right after its root line in ``Choices$`` order, so
-        adjacency plus the key is the whole link between a mode and its root.
-        A die-roll ``option`` line carries no key and ends the run, as does any
-        line that is not an ``option`` line.
+        A charm's modes follow its root line in ``Choices$`` order; a die-roll
+        ``option`` line carries no key and ends the run.
         """
         rows: list[int] = []
         for following in range(row + 1, len(self.lines)):

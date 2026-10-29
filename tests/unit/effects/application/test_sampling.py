@@ -19,18 +19,11 @@ from effects.domain.records import (
     RecordKind,
 )
 from effects.domain.sampling import (
-    CLASS_COMBAT,
-    CLASS_CONTINUOUS,
-    CLASS_PLAYABILITY_DECISION,
-    CLASS_PLAYABILITY_LEGALITY,
-    CLASS_RESOLUTION_COST,
-    CLASS_RESOLUTION_EFFECT,
-    CLASS_REWRITE,
-    CLASS_TRIGGER,
     DEFAULT_KIND_MIX,
     RARITY_CAP,
     SAMPLING_CLASSES,
     UNIFORM_CLASSES,
+    SamplingClass,
     batches_without_replacement,
     effective_games,
     parse_kind_mix,
@@ -38,32 +31,31 @@ from effects.domain.sampling import (
     sample_weights,
     sampling_class,
 )
-from effects.domain.split import CorpusSplit
 from tests.unit.effects.builders import make_record
 
 
 class TestSamplingClass:
     def test_the_two_resolution_moments_are_different_classes(self):
         assert sampling_class(make_record(RecordKind.RESOLUTION)) == (
-            CLASS_RESOLUTION_EFFECT
+            SamplingClass.RESOLUTION_EFFECT
         )
         assert sampling_class(
             make_record(RecordKind.RESOLUTION, moment=Moment.ACTIVATION)
-        ) == CLASS_RESOLUTION_COST
+        ) == SamplingClass.RESOLUTION_COST
 
     def test_the_two_playability_families_are_different_classes(self):
         assert sampling_class(make_record(RecordKind.PLAYABILITY)) == (
-            CLASS_PLAYABILITY_DECISION
+            SamplingClass.PLAYABILITY_DECISION
         )
         assert sampling_class(make_record(
             RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.ATTACKERS,
-        )) == CLASS_PLAYABILITY_LEGALITY
+        )) == SamplingClass.PLAYABILITY_LEGALITY
 
     def test_the_remaining_kinds_map_one_to_one(self):
-        assert sampling_class(make_record(RecordKind.COMBAT)) == CLASS_COMBAT
-        assert sampling_class(make_record(RecordKind.CONTINUOUS)) == CLASS_CONTINUOUS
-        assert sampling_class(make_record(RecordKind.TRIGGER)) == CLASS_TRIGGER
-        assert sampling_class(make_record(RecordKind.REWRITE)) == CLASS_REWRITE
+        assert sampling_class(make_record(RecordKind.COMBAT)) == SamplingClass.COMBAT
+        assert sampling_class(make_record(RecordKind.CONTINUOUS)) == SamplingClass.CONTINUOUS
+        assert sampling_class(make_record(RecordKind.TRIGGER)) == SamplingClass.TRIGGER
+        assert sampling_class(make_record(RecordKind.REWRITE)) == SamplingClass.REWRITE
 
     def test_every_class_is_reachable(self):
         assert set(SAMPLING_CLASSES) == set(DEFAULT_KIND_MIX)
@@ -76,12 +68,12 @@ class TestMixture:
 
     def test_the_default_mixture_is_the_eight_class_one(self):
         assert sum(DEFAULT_KIND_MIX.values()) == pytest.approx(1.0)
-        assert DEFAULT_KIND_MIX[CLASS_RESOLUTION_EFFECT] == 0.30
-        assert DEFAULT_KIND_MIX[CLASS_PLAYABILITY_LEGALITY] == 0.05
+        assert DEFAULT_KIND_MIX[SamplingClass.RESOLUTION_EFFECT] == 0.30
+        assert DEFAULT_KIND_MIX[SamplingClass.PLAYABILITY_LEGALITY] == 0.05
 
     def test_the_flag_parses_as_class_equals_share(self):
-        mix = parse_kind_mix(f"{CLASS_COMBAT}=0.5,{CLASS_TRIGGER}=0.5")
-        assert mix == {CLASS_COMBAT: 0.5, CLASS_TRIGGER: 0.5}
+        mix = parse_kind_mix(f"{SamplingClass.COMBAT}=0.5,{SamplingClass.TRIGGER}=0.5")
+        assert mix == {SamplingClass.COMBAT: 0.5, SamplingClass.TRIGGER: 0.5}
 
     def test_an_absent_flag_gives_the_default_mixture(self):
         assert parse_kind_mix(None) == DEFAULT_KIND_MIX
@@ -129,7 +121,7 @@ class TestRarityWeighting:
 
 class TestUniformClasses:
     def test_combat_and_playability_legality_sample_uniformly(self):
-        assert UNIFORM_CLASSES == {CLASS_COMBAT, CLASS_PLAYABILITY_LEGALITY}
+        assert UNIFORM_CLASSES == {SamplingClass.COMBAT, SamplingClass.PLAYABILITY_LEGALITY}
 
     def test_a_record_with_no_acting_text_weighs_one(self):
         records = [
@@ -153,8 +145,8 @@ class TestUniformClasses:
     def test_a_decision_records_examples_key_on_the_candidates_text(self):
         """One record, one example per candidate, each keyed on its own text."""
         record = make_record(RecordKind.PLAYABILITY)
-        assert sampling_class(record) == CLASS_PLAYABILITY_DECISION
-        assert CLASS_PLAYABILITY_DECISION not in UNIFORM_CLASSES
+        assert sampling_class(record) == SamplingClass.PLAYABILITY_DECISION
+        assert SamplingClass.PLAYABILITY_DECISION not in UNIFORM_CLASSES
 
 
 class TestSampleWeightsRarityTable:
@@ -225,7 +217,8 @@ class TestWeightsKeyByAbilityText:
         preparer.rarity = None
         preparer.resolver = KeyResolver(sidecars, preparer.surface)
 
-        weights = preparer._weighted([*common_records, *rare_records])
+        shard = [*common_records, *rare_records]
+        weights = preparer._weighted(shard, preparer._texts(shard))
 
         assert weights[-1] > weights[0]
 
@@ -235,33 +228,26 @@ class TestProvenanceRecordsTheCorpus:
     split, so ``evaluate-effect-model`` can refuse one rebuilt since."""
 
     def test_a_corpus_runs_provenance_records_the_manifest_digest(self):
-        from effects.application.train_effect_model import TrainEffectModelConfig
-        from effects.application.training_loop import TrainingLoop
-
-        loop = TrainingLoop(
-            TrainEffectModelConfig(corpus="output/effects/corpus"),
-            split=CorpusSplit(), training_shards=[], validation_samples={},
-            holdout_permille=20, holdout_max_carriers=8,
-            corpus_digest="abc123",
+        from effects.application.train_effect_model import (
+            CorpusFacts,
+            TrainEffectModelConfig,
         )
 
-        provenance = loop._provenance()
+        provenance = CorpusFacts(digest="abc123").provenance(
+            TrainEffectModelConfig(corpus="output/effects/corpus"),
+        )
 
         assert provenance.corpus_path == "output/effects/corpus"
         assert provenance.corpus_digest == "abc123"
 
     def test_a_run_without_a_digest_records_no_corpus(self):
         """Nothing is pinned until a manifest has been read."""
-        from effects.application.train_effect_model import TrainEffectModelConfig
-        from effects.application.training_loop import TrainingLoop
-
-        loop = TrainingLoop(
-            TrainEffectModelConfig(),
-            split=CorpusSplit(), training_shards=[], validation_samples={},
-            holdout_permille=20, holdout_max_carriers=8,
+        from effects.application.train_effect_model import (
+            CorpusFacts,
+            TrainEffectModelConfig,
         )
 
-        provenance = loop._provenance()
+        provenance = CorpusFacts().provenance(TrainEffectModelConfig())
 
         assert provenance.corpus_path == ""
         assert provenance.corpus_digest == ""

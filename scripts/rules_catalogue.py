@@ -1,7 +1,9 @@
-"""Comprehensive Rules catalogue: split the rules text, batch it for agents, validate sidecars, report status.
+"""Comprehensive Rules catalogue: split the rules text, batch it for agents, validate sidecars,
+report status.
 
 Subcommands:
-  split     parse rules/raw/MagicCompRules-*.txt into rules/rules.jsonl, rules/cr/<unit>.md and rules/cr/index.md
+  split     parse rules/raw/MagicCompRules-*.txt into rules/rules.jsonl, rules/cr/<unit>.md
+            and rules/cr/index.md
   packets   group units into agent work packets (rules/packets.json)
   validate  check every triage and scenario sidecar against the rules index and Forge's cardsfolder
   status    regenerate rules/STATUS.md from the sidecars
@@ -78,10 +80,10 @@ def raw_file():
 
 
 def cmd_split(_args):
-    lines = [clean(l) for l in raw_file().read_text(encoding="utf-8-sig").splitlines()]
-    starts = [i for i, l in enumerate(lines) if l == "1. Game Concepts"]
-    glossaries = [i for i, l in enumerate(lines) if l == "Glossary"]
-    credits = [i for i, l in enumerate(lines) if l == "Credits"]
+    lines = [clean(raw) for raw in raw_file().read_text(encoding="utf-8-sig").splitlines()]
+    starts = [i for i, line in enumerate(lines) if line == "1. Game Concepts"]
+    glossaries = [i for i, line in enumerate(lines) if line == "Glossary"]
+    credits = [i for i, line in enumerate(lines) if line == "Credits"]
     body, glossary = lines[starts[1]:glossaries[1]], lines[glossaries[1] + 1:credits[1]]
 
     rules, chapters, sections = [], {}, {}
@@ -112,12 +114,15 @@ def cmd_split(_args):
         else:
             rules[-1]["text"] += "\n" + line
 
-    # a split section's unit title is its first rule's text, e.g. "Deathtouch" from "702.2. Deathtouch"
+    # a split section's unit title is its first rule's text,
+    # e.g. "Deathtouch" from "702.2. Deathtouch"
     unit_titles = {}
     for r in rules:
         if r["unit"] not in unit_titles:
             in_split = r["section"] in SPLIT_SECTIONS
-            unit_titles[r["unit"]] = r["text"].split("\n")[0][:80] if in_split else sections[r["section"]]
+            unit_titles[r["unit"]] = (
+                r["text"].split("\n")[0][:80] if in_split else sections[r["section"]]
+            )
 
     with open(RULES / "rules.jsonl", "w", encoding="utf-8", newline="\n") as f:
         for r in rules:
@@ -135,8 +140,9 @@ def cmd_split(_args):
         rs = by_unit[unit]
         sec = rs[0]["section"]
         title = unit_titles[unit]
+        chapter = rs[0]["chapter"]
         out = [f"# {unit}. {title}", "",
-               f"Chapter {rs[0]['chapter']} ({chapters[rs[0]['chapter']]}), section {sec} ({sections[sec]}).", ""]
+               f"Chapter {chapter} ({chapters[chapter]}), section {sec} ({sections[sec]}).", ""]
         for r in rs:
             out.append(f"**{r['id']}** {r['text']}")
             for ex in r["examples"]:
@@ -157,7 +163,8 @@ def cmd_split(_args):
     (cr / "glossary.md").write_text("\n".join(gl_out), encoding="utf-8", newline="\n")
 
     idx = ["# Comprehensive Rules index", "",
-           f"Source: `rules/raw/{raw_file().name}`. {len(rules)} rules in {len(index_rows)} units.", "",
+           f"Source: `rules/raw/{raw_file().name}`. "
+           f"{len(rules)} rules in {len(index_rows)} units.", "",
            "| unit | title | rules | chars | file |", "|---|---|---|---|---|"]
     for unit, title, n, chars in index_rows:
         idx.append(f"| {unit} | {title} | {n} | {chars} | [cr/{unit}.md]({unit}.md) |")
@@ -168,7 +175,7 @@ def cmd_split(_args):
 
 def load_rules():
     with open(RULES / "rules.jsonl", encoding="utf-8") as f:
-        return [json.loads(l) for l in f]
+        return [json.loads(line) for line in f]
 
 
 def units_with_sizes(rules):
@@ -180,21 +187,25 @@ def units_with_sizes(rules):
 
 
 def cmd_packets(args):
-    """Greedy in-order packing of units up to --max-chars, never splitting a unit or crossing a chapter."""
+    """Greedy in-order packing of units up to --max-chars, never splitting a unit or crossing
+    a chapter."""
     rules = load_rules()
     sizes, counts = units_with_sizes(rules)
     chapter_of = {r["unit"]: r["chapter"] for r in rules}
     packets, current, chars = [], [], 0
     for unit in sorted(sizes, key=unit_sort_key):
-        if current and (chars + sizes[unit] > args.max_chars or chapter_of[current[-1]] != chapter_of[unit]):
+        full = chars + sizes[unit] > args.max_chars
+        if current and (full or chapter_of[current[-1]] != chapter_of[unit]):
             packets.append(current)
             current, chars = [], 0
         current.append(unit)
         chars += sizes[unit]
     packets.append(current)
     out = [{"id": f"p{i:03d}", "chapter": chapter_of[p[0]], "units": p,
-            "rules": sum(counts[u] for u in p), "chars": sum(sizes[u] for u in p)} for i, p in enumerate(packets)]
-    (RULES / "packets.json").write_text(json.dumps(out, indent=1) + "\n", encoding="utf-8", newline="\n")
+            "rules": sum(counts[u] for u in p), "chars": sum(sizes[u] for u in p)}
+           for i, p in enumerate(packets)]
+    (RULES / "packets.json").write_text(
+        json.dumps(out, indent=1) + "\n", encoding="utf-8", newline="\n")
     print(f"{len(out)} packets; chars per packet max {max(p['chars'] for p in out)}")
 
 
@@ -212,8 +223,8 @@ def cmd_premark(_args):
     for unit, rs in by_unit.items():
         with open(RULES / "triage" / f"{unit}.jsonl", "w", encoding="utf-8", newline="\n") as f:
             for r in rs:
-                f.write(json.dumps({"id": r["id"], "category": "out_of_scope", "observability": "none",
-                                    "record_kinds": [], "outcome": "",
+                f.write(json.dumps({"id": r["id"], "category": "out_of_scope",
+                                    "observability": "none", "record_kinds": [], "outcome": "",
                                     "note": PREMARKED_CHAPTERS[r["chapter"]]}) + "\n")
     print(f"premarked {len(by_unit)} units")
 
@@ -261,9 +272,14 @@ def load_heads(unit):
     return read_jsonl(p) if p.exists() else None
 
 
+def needs_scenario(triage_row):
+    return (triage_row["category"] in SCENARIO_CATEGORIES
+            and triage_row["observability"] != "none")
+
+
 def wanted_rules(triage):
     """The rules that need a scenario, and so a heads line too."""
-    return {r["id"] for r in triage if r["category"] in SCENARIO_CATEGORIES and r["observability"] != "none"}
+    return {r["id"] for r in triage if needs_scenario(r)}
 
 
 def validate_heads(unit, rows, triage):
@@ -283,7 +299,9 @@ def validate_heads(unit, rows, triage):
         for o in outputs:
             if not (o in HEAD_OUTPUTS or o.startswith(HEAD_OUTPUT_PREFIXES + OUTPUT_TAGS)):
                 errs.append(f"{rid}: unknown output {o!r}")
-        if status == "trained" and not any(o in HEAD_OUTPUTS or o.startswith(HEAD_OUTPUT_PREFIXES) for o in outputs):
+        names_existing = any(
+            o in HEAD_OUTPUTS or o.startswith(HEAD_OUTPUT_PREFIXES) for o in outputs)
+        if status == "trained" and not names_existing:
             errs.append(f"{rid}: trained but names no existing output")
         if r.get("input") not in INPUT_STATUS:
             errs.append(f"{rid}: input {r.get('input')!r}")
@@ -340,7 +358,7 @@ def validate_scenarios(unit, doc, triage, all_rule_ids, names):
     scen = doc.get("scenarios", [])
     covered = {rid for s in scen for rid in s.get("rules", [])}
     skipped = {s["id"] for s in doc.get("skipped", [])}
-    wanted = {r["id"] for r in triage if r["category"] in SCENARIO_CATEGORIES and r["observability"] != "none"}
+    wanted = wanted_rules(triage)
     for rid in sorted(wanted - covered - skipped, key=rule_sort_key):
         errs.append(f"{rid}: neither covered by a scenario nor skipped")
     for s in scen:
@@ -386,7 +404,8 @@ def cmd_validate(args):
         except json.JSONDecodeError as e:
             doc, errs = None, errs + [f"scenarios json: {e}"]
         if doc is not None and tri is not None:
-            e2, w2 = validate_scenarios(unit, doc, tri, all_ids, names if names is not None else _AnyName())
+            known = names if names is not None else _AnyName()
+            e2, w2 = validate_scenarios(unit, doc, tri, all_ids, known)
             errs += e2
             warns += w2
         if args.heads and tri is not None and wanted_rules(tri):
@@ -483,7 +502,8 @@ def gen3_line(row, entries, lookup, overrides):
     while todo:
         for req in entries[todo.pop()].get("requires", ()):
             if req not in ins | outs:
-                (outs if req.startswith(("out.", "planned.timing", "planned.failed")) else ins).add(req)
+                is_output = req.startswith(("out.", "planned.timing", "planned.failed"))
+                (outs if is_output else ins).add(req)
                 todo.append(req)
     fixes = {i for i in ins | outs if i.startswith("fix.")}
     ins -= fixes
@@ -509,7 +529,8 @@ def cmd_gen3_fields(_args):
                 row.pop(k, None)
             row.update(fields)
             all_rows.append(row)
-        path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8", newline="\n")
+        path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+                        encoding="utf-8", newline="\n")
     if n_unmapped:
         print(f"{n_unmapped} unmapped names")
         sys.exit(1)
@@ -518,7 +539,8 @@ def cmd_gen3_fields(_args):
 
 def write_gen3_summary(reg, rows):
     """rules/GEN3-FIELDS.md: each canonical field, with the rules it serves."""
-    entries = {e["id"]: e for k in ("inputs", "outputs", "extensions", "planned", "fixes") for e in reg[k]}
+    sections = ("inputs", "outputs", "extensions", "planned", "fixes")
+    entries = {e["id"]: e for k in sections for e in reg[k]}
 
     def closure(i):
         out, todo = {i}, [i]
@@ -537,22 +559,28 @@ def write_gen3_summary(reg, rows):
             continue
         # Alone: this entry and what it requires are the rule's whole change.
         for i in ids:
-            if ids <= closure(i) and not any(ids <= closure(j) for j in ids if j != i and i in closure(j)):
+            subsumed = any(ids <= closure(j) for j in ids if j != i and i in closure(j))
+            if ids <= closure(i) and not subsumed:
                 alone[i] += 1
     now = sum(1 for r in rows if r["output"] == "trained" and r["input"] == "complete")
     after = sum(1 for r in rows if r["learnable_after_gen3"])
     out = ["# Gen-3 inputs and outputs", "",
-           "Generated by `python scripts/rules_catalogue.py gen3-fields` from `rules/gen3-fields.json` "
-           "and `rules/heads/`; do not edit by hand. Each rule's line in `rules/heads/<unit>.jsonl` "
-           "carries `gen3_inputs`, `gen3_outputs`, `gen3_fixes`, `gen3_dropped` and `learnable_after_gen3`.", "",
+           "Generated by `python scripts/rules_catalogue.py gen3-fields` from "
+           "`rules/gen3-fields.json` and `rules/heads/`; do not edit by hand. Each rule's line "
+           "in `rules/heads/<unit>.jsonl` carries `gen3_inputs`, `gen3_outputs`, `gen3_fixes`, "
+           "`gen3_dropped` and `learnable_after_gen3`.", "",
            f"Rules: {len(rows)}. Learnable today: {now}. Learnable once every field, extension, "
-           f"planned item and fix below is in: {after}. Left out by a dropped name: {len(rows) - after}.", "",
-           "Columns: rules = rules that need it, counting the rules that need it through another entry's "
-           "requires; alone = rules for which it, with what it requires, is the whole change needed.", "",
-           "## Conventions", ""] + [f"- **{k.replace('_', ' ')}.** {v}" for k, v in reg["conventions"].items()] + [""]
+           f"planned item and fix below is in: {after}. "
+           f"Left out by a dropped name: {len(rows) - after}.", "",
+           "Columns: rules = rules that need it, counting the rules that need it through another "
+           "entry's requires; alone = rules for which it, with what it requires, is the whole "
+           "change needed.", "",
+           "## Conventions", ""]
+    out += [f"- **{k.replace('_', ' ')}.** {v}" for k, v in reg["conventions"].items()] + [""]
 
     def table(title, items, cols):
-        out.extend([f"## {title} ({len(items)})", "", "| id | " + " | ".join(cols) + " | rules | alone |",
+        out.extend([f"## {title} ({len(items)})", "",
+                    "| id | " + " | ".join(cols) + " | rules | alone |",
                     "|---|" + "---|" * len(cols) + "---:|---:|"])
         for e in sorted(items, key=lambda e: -serves[e["id"]]):
             cells = " | ".join(str(e.get(c, "")) for c in cols)
@@ -564,11 +592,11 @@ def write_gen3_summary(reg, rows):
     table("Extensions of existing inputs and outputs", reg["extensions"], ["applies_to", "what"])
     table("Already planned in the gen-3 design record", reg["planned"], ["what"])
     table("Collection and curation fixes", reg["fixes"], ["what"])
-    dropped = Counter(n for r in rows for n in r["gen3_dropped"])
     out.extend(["## Dropped names", "", "| reason | names | rules |", "|---|---|---:|"])
     for group in reg["dropped"]:
         hit = sum(1 for r in rows if set(r["gen3_dropped"]) & set(group["names"]))
-        out.append(f"| {group['reason']} | {', '.join(f'`{n}`' for n in group['names'])} | {hit} |")
+        names = ", ".join(f"`{n}`" for n in group["names"])
+        out.append(f"| {group['reason']} | {names} | {hit} |")
     for o in reg["overrides"]:
         if o["to"] is None:
             out.append(f"| {o['reason']} ({o['rule']}) | `{o['name']}` | 1 |")
@@ -593,7 +621,7 @@ def cmd_status(_args):
         doc = load_scenarios(unit)
         cats = Counter(r["category"] for r in tri) if tri else Counter()
         cat_total.update(cats)
-        want = sum(1 for r in tri if r["category"] in SCENARIO_CATEGORIES and r["observability"] != "none") if tri else 0
+        want = sum(1 for r in tri if needs_scenario(r)) if tri else 0
         if tri is not None:
             n_tri += 1
         ns = len(doc["scenarios"]) if doc else 0
@@ -605,13 +633,18 @@ def cmd_status(_args):
         tri_mark = "x" if tri is not None else " "
         scen_mark = "x" if doc is not None else ("–" if tri is not None and want == 0 else " ")
         ver_mark = "x" if verified else ("–" if scen_mark == "–" else " ")
-        cat_str = " ".join(f"{c[:4]}{cats[c]}" for c in ("mechanical", "legality", "decision", "definitional", "out_of_scope") if cats[c])
-        rows.append(f"| {unit} | {title.get(unit, '')} | {counts[unit]} | [{tri_mark}] | [{scen_mark}] | [{ver_mark}] | {cat_str} | {ns} |")
+        cat_order = ("mechanical", "legality", "decision", "definitional", "out_of_scope")
+        cat_str = " ".join(f"{c[:4]}{cats[c]}" for c in cat_order if cats[c])
+        rows.append(f"| {unit} | {title.get(unit, '')} | {counts[unit]} | [{tri_mark}] "
+                    f"| [{scen_mark}] | [{ver_mark}] | {cat_str} | {ns} |")
     out = ["# Rules catalogue status", "",
            "Generated by `python scripts/rules_catalogue.py status`; do not edit by hand.", "",
-           f"Units triaged: {n_tri}/{len(counts)}. Units with scenarios: {n_scen}. Scenarios: {n_pairs}.", "",
-           "Rules by category: " + ", ".join(f"{k} {v}" for k, v in cat_total.most_common()) + ".", "",
-           "Scenarios by record kind: " + (", ".join(f"{k} {v}" for k, v in kind_total.most_common()) or "none") + ".", "",
+           f"Units triaged: {n_tri}/{len(counts)}. Units with scenarios: {n_scen}. "
+           f"Scenarios: {n_pairs}.", "",
+           "Rules by category: "
+           + ", ".join(f"{k} {v}" for k, v in cat_total.most_common()) + ".", "",
+           "Scenarios by record kind: "
+           + (", ".join(f"{k} {v}" for k, v in kind_total.most_common()) or "none") + ".", "",
            "Columns: triage, scenarios (– = no rule in the unit needs one), verified.", "",
            "| unit | title | rules | triage | scen | verified | categories | scenarios |",
            "|---|---|---|---|---|---|---|---|"] + rows
@@ -620,7 +653,8 @@ def cmd_status(_args):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("split")
     p = sub.add_parser("packets")

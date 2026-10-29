@@ -408,6 +408,7 @@ class TestReadField:
 
 
 _FIELDS = tuple(PER_ENTITY_FIELDS)
+_ACTIVE = frozenset(spec.name for spec in _FIELDS)
 
 
 def _participant(record, entity_id: str):
@@ -426,7 +427,7 @@ class TestScoreObservation:
         row = _only(KEYWORDS_BY_NAME["first_strike"], "damage_taken")
         return score_observation(
             row, participant, base, stripped,
-            fields=_FIELDS, keywords_of=_overlay_keywords,
+            active=_ACTIVE, keywords_of=_overlay_keywords,
         )
 
     def test_a_change_in_the_rules_direction_agrees(self):
@@ -465,7 +466,7 @@ class TestScoreObservation:
         agreed, per_effect = score_observation(
             _only(KEYWORDS_BY_NAME["first_strike"], "damage_taken"), participant,
             {"B0": hit}, {"B0": untouched},
-            fields=_FIELDS, keywords_of=_overlay_keywords,
+            active=_ACTIVE, keywords_of=_overlay_keywords,
         )
         assert agreed
         assert per_effect == {"opponent.damage_taken": True}
@@ -477,7 +478,7 @@ class TestScoreObservation:
         stripped = {"B0": _zone_and_damage(damage=1.0, died_logit=1.0)}
         agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["first_strike"], participant, base, stripped,
-            fields=_FIELDS, keywords_of=_overlay_keywords,
+            active=_ACTIVE, keywords_of=_overlay_keywords,
         )
         # Damage moved the right way; the death probability moved the wrong way.
         assert per_effect == {
@@ -496,7 +497,7 @@ class TestScoreObservation:
         stripped = {"A": torch.zeros(PER_ENTITY_WIDTH), "P1": _player(poison=0.0, life=-2.0)}
         agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["infect"], participant, base, stripped,
-            fields=_FIELDS, keywords_of=_overlay_keywords,
+            active=_ACTIVE, keywords_of=_overlay_keywords,
         )
         assert set(per_effect) == {
             "defending_player.poison_delta", "defending_player.life_delta",
@@ -510,7 +511,7 @@ class TestScoreObservation:
         stripped = {"B0": _wither_side(counters=0.0, damage=2.0)}
         agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["infect"], participant, base, stripped,
-            fields=_FIELDS, keywords_of=_overlay_keywords,
+            active=_ACTIVE, keywords_of=_overlay_keywords,
         )
         assert set(per_effect) == {
             "opponent.counters_delta_m1m1", "opponent.damage_taken",
@@ -525,7 +526,7 @@ class TestScoreObservation:
         vectors = {"P0": torch.zeros(PER_ENTITY_WIDTH)}
         agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["lifelink"], participant, vectors, vectors,
-            fields=_FIELDS, keywords_of=_overlay_keywords,
+            active=_ACTIVE, keywords_of=_overlay_keywords,
         )
         assert per_effect == {}
         assert not agreed
@@ -533,14 +534,11 @@ class TestScoreObservation:
     def test_a_field_the_run_never_trained_is_not_scored(self):
         record = _printed_board()
         participant = _participant(record, "A")
-        without_damage = tuple(
-            spec for spec in PER_ENTITY_FIELDS if spec.name != "damage_taken"
-        )
         base = {"B0": _zone_and_damage(damage=3.0, died_logit=1.0)}
         stripped = {"B0": _zone_and_damage(damage=1.0, died_logit=0.0)}
         _agreed, per_effect = score_observation(
             KEYWORDS_BY_NAME["first_strike"], participant, base, stripped,
-            fields=without_damage, keywords_of=_overlay_keywords,
+            active=_ACTIVE - {"damage_taken"}, keywords_of=_overlay_keywords,
         )
         assert set(per_effect) == {"opponent.zone_outcome/died"}
 
@@ -734,44 +732,6 @@ class TestQualifyingObservations:
         assert sorted(p.carrier.id for _row, p in found) == ["A", "B0"]
 
 
-def count_qualifying_all(records, rows, sidecars=None) -> dict[str, int]:
-    """Every row's qualifying ``(record, carrier)`` observations."""
-    resolver = KeywordResolver(sidecars)
-    counts = {row.keyword: 0 for row in rows}
-    for record in records:
-        for row, _participant in qualifying_observations(record, rows, resolver):
-            counts[row.keyword] += 1
-    return counts
-
-
-class TestCounting:
-    def test_it_counts_the_population_the_scorer_scores(self):
-        records = [_printed_board(), _overlay_board()]
-        counts = count_qualifying_all(
-            records, (KEYWORDS_BY_NAME["first_strike"],), _Sidecars(),
-        )
-        assert counts["first_strike"] == 2
-
-    def test_a_non_combat_record_is_never_counted(self):
-        from effects.domain.records import Moment, ResolutionPayload
-
-        record = _printed_board()
-        resolution = EffectRecord(
-            record_id="x", run_id="run", timestamp="t", game_id="g",
-            kind=RecordKind.RESOLUTION, moment=Moment.RESOLUTION,
-            actor_player="P0", payload=ResolutionPayload(),
-            state=record.state, ability=(_PUMP,),
-        )
-        counts = count_qualifying_all(
-            [resolution], (KEYWORDS_BY_NAME["first_strike"],), _Sidecars(),
-        )
-        assert counts["first_strike"] == 0
-
-    def test_without_sidecars_a_printed_keyword_is_invisible(self):
-        row = KEYWORDS_BY_NAME["first_strike"]
-        assert count_qualifying_all([_printed_board()], (row,), None)[row.keyword] == 0
-
-
 # ── the whole scorer, against a model that reacts to the strip ───────────
 
 
@@ -803,13 +763,15 @@ class _AbilityCountingModel:
         return row[:, None, :].expand(-1, slot_kinds.shape[1], -1)
 
 
+def _runnable() -> Runnable:
+    return Runnable(_NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS)
+
+
 class TestScoreKeywords:
     def test_it_scores_the_qualifying_records(self):
         records = [_printed_board(game=f"g{i}") for i in range(3)]
         scores = score_keywords(
-            records, (KEYWORDS_BY_NAME["first_strike"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(),
-            fields=_FIELDS,
+            records, (KEYWORDS_BY_NAME["first_strike"],), _runnable(),
         )
         score = scores["first_strike"]
         assert score.qualifying == 3
@@ -818,9 +780,7 @@ class TestScoreKeywords:
     def test_it_reports_agreement_per_field(self):
         records = [_printed_board()]
         scores = score_keywords(
-            records, (KEYWORDS_BY_NAME["first_strike"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(),
-            fields=_FIELDS,
+            records, (KEYWORDS_BY_NAME["first_strike"],), _runnable(),
         )
         assert set(scores["first_strike"].per_field) == {
             "opponent.damage_taken", "opponent.zone_outcome/died",
@@ -828,17 +788,13 @@ class TestScoreKeywords:
 
     def test_a_keyword_no_record_qualifies_for_scores_nothing(self):
         scores = score_keywords(
-            [_printed_board()], (KEYWORDS_BY_NAME["wither"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(),
-            fields=_FIELDS,
+            [_printed_board()], (KEYWORDS_BY_NAME["wither"],), _runnable(),
         )
         assert scores["wither"] == KeywordScore()
 
     def test_an_empty_corpus_scores_every_row_at_zero(self):
         scores = score_keywords(
-            [], (KEYWORDS_BY_NAME["lifelink"],),
-            _NoEncoder(), _AbilityCountingModel(), _batcher(),
-            fields=_FIELDS,
+            [], (KEYWORDS_BY_NAME["lifelink"],), _runnable(),
         )
         assert scores["lifelink"].qualifying == 0
 
@@ -855,13 +811,13 @@ class TestEvaluatorWiring:
     """
 
     @staticmethod
-    def _runnable(_records):
-        return Runnable(_NoEncoder(), _AbilityCountingModel(), _batcher(), _FIELDS)
+    def _load(_records):
+        return _runnable()
 
     def test_it_scores_the_game_disjoint_combat_records(self):
         from effects.application.gate_two import run_gate_two
 
-        verdicts = run_gate_two([_printed_board(game="gd-1")], self._runnable)
+        verdicts = run_gate_two([_printed_board(game="gd-1")], self._load)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert first_strike.qualifying_records == 1
@@ -870,7 +826,7 @@ class TestEvaluatorWiring:
     def test_the_reason_lists_agreement_per_field(self):
         from effects.application.gate_two import run_gate_two
 
-        verdicts = run_gate_two([_printed_board(game="gd-1")], self._runnable)
+        verdicts = run_gate_two([_printed_board(game="gd-1")], self._load)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert "damage_taken 100%" in first_strike.reason
@@ -911,8 +867,7 @@ def _two_first_strikers() -> EffectRecord:
 
 def _scores(records):
     return score_keywords(
-        records, (KEYWORDS_BY_NAME["first_strike"],),
-        _NoEncoder(), _AbilityCountingModel(), _batcher(), fields=_FIELDS,
+        records, (KEYWORDS_BY_NAME["first_strike"],), _runnable(),
     )["first_strike"]
 
 
@@ -939,8 +894,8 @@ class TestPopulation:
         from effects.application.gate_two import evaluate_keyword
 
         verdict = evaluate_keyword(
-            KEYWORDS_BY_NAME["first_strike"], qualifying_records=300,
-            observations=400, agreeing=300,
+            KEYWORDS_BY_NAME["first_strike"],
+            KeywordScore(qualifying=300, agreeing=300, observations=400),
         )
         assert verdict.qualifying_records == 300
         assert verdict.observations == 400
@@ -953,23 +908,18 @@ class TestGateTwoRecords:
 
         write_shard(directory / "shard-00001.jsonl.gz", records)
 
-    def test_a_curated_corpus_is_read_rather_than_the_raw_shards(self, tmp_path):
-        """The raw shards hold records the corpus repair dropped."""
-        import dataclasses
-
+    def test_it_reads_the_recorded_games_of_the_curated_game_disjoint_stratum(
+        self, tmp_path,
+    ):
         from effects.application.gate_two import gate_two_records
         from effects.infrastructure.corpus_store import CorpusStore
         from effects.infrastructure.effect_model_store import SplitProvenance
 
-        raw, corpus = tmp_path / "raw", tmp_path / "corpus"
-        curated = _printed_board(game="gd-1")
-        dropped = dataclasses.replace(curated, record_id="gd-1.9")
-        self._write(raw, curated, dropped)
-        self._write(CorpusStore(corpus).game_disjoint_dir, curated)
-        config = type("Config", (), {"records_dir": raw})()
+        corpus = tmp_path / "corpus"
+        recorded = _printed_board(game="gd-1")
+        other = _printed_board(game="gd-2")
+        self._write(CorpusStore(corpus).game_disjoint_dir, recorded, other)
         provenance = SplitProvenance(game_disjoint_games=("gd-1",))
 
-        read = list(gate_two_records(config, provenance, corpus_path=corpus))
-        assert [r.record_id for r in read] == [curated.record_id]
-        raw_read = list(gate_two_records(config, provenance, corpus_path=None))
-        assert len(raw_read) == 2
+        read = list(gate_two_records(provenance, corpus_path=corpus))
+        assert [r.record_id for r in read] == [recorded.record_id]

@@ -1,8 +1,5 @@
-"""The training run's log lines: what each number is printed as.
-
-Kept apart from the loop that computes the numbers, so a line's shape can be
-read and tested without a run behind it.
-"""
+"""The training run's log lines, kept apart from the loop that computes the
+numbers so a line's shape can be tested without a run behind it."""
 
 from __future__ import annotations
 
@@ -21,16 +18,9 @@ def format_norms(norms: Mapping[str, float]) -> str:
 
 
 def explained(name: str, value: float, floor: Mapping[str, float] | None) -> str:
-    """How much of the constant predictor's loss this field's head removed.
-
-    ``1 - loss/floor`` against the best constant prediction for the field
+    """``1 - loss/floor`` against the best constant prediction for the field
     (FR-127c): zero is the base rate, negative is worse than predicting it. A
-    field's loss is a number in nats with no scale of its own, so on its own it
-    cannot say whether the head learned the field or learned how often it fires.
-
-    A field whose targets never vary has no deviance to explain and reads
-    ``n/a`` rather than dividing by nothing at all.
-    """
+    field whose targets never vary reads ``n/a``."""
     if floor is None:
         return ""
     reference = floor.get(name)
@@ -42,16 +32,9 @@ def explained(name: str, value: float, floor: Mapping[str, float] | None) -> str
 def format_parts(
     parts: Mapping[str, float], floor: Mapping[str, float] | None = None,
 ) -> str:
-    """Each field's loss term, largest first, and what it explains.
-
-    Ordered by size rather than by name because the question this line answers
-    is which term the loss is made of: a single field carrying nearly all of it
-    is what a blow-up looks like, and alphabetical order buries that.
-
-    ``floor`` is the card-disjoint constant-predictor floor and is passed only
-    for that breakdown; the per-shard training line has no floor of its own —
-    its records change every shard — and prints the terms alone.
-    """
+    """Each field's loss term, largest first so a blow-up stands out, and what
+    it explains. ``floor`` is passed only for the card-disjoint breakdown: a
+    shard's training line has no floor, its records changing every shard."""
     if not parts:
         return ""
     ranked = sorted(parts.items(), key=lambda kv: -kv[1])

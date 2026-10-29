@@ -18,14 +18,15 @@ from effects.application import training_loop as loop_module
 from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import StepLoss, TrainingLoop, autocast_enabled
-from effects.domain.effect_head_layout import EntityFieldTargets
+from effects.domain.effect_losses import LossParts
+from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.records import CombatPayload, RecordKind
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.domain.conftest import (  # noqa: F401
-    ability_key,
-    make_record,
-    snapshot,
+from tests.unit.effects.builders import (
+    make_cpu_training_loop,
+    make_training_loop,
+    stub_below_the_loop,
+    write_validation_samples,
 )
 
 
@@ -74,24 +75,6 @@ class TestAutocastEnabled:
         assert autocast_enabled(torch.device("cuda")) is False
 
 
-def _bare_loop(monkeypatch) -> TrainingLoop:
-    """A loop built with no corpus, sized only for `_device_loss`'s own plumbing.
-
-    Forces a real ``cpu`` device regardless of what this machine's
-    ``torch.cuda.is_available()`` says: on this box it can read ``True`` even
-    under ``CUDA_VISIBLE_DEVICES=""`` (its raw device count ignores the
-    mask — the same disagreement ``autocast_enabled`` guards against), which
-    would otherwise move this test's tensors onto a real GPU by accident.
-    """
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
-    return TrainingLoop(
-        TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
-    )
-
-
 def _run_device_loss(monkeypatch, loop, *, autocast: bool):
     """Call the real `_device_loss` with every internal step stubbed out.
 
@@ -108,7 +91,7 @@ def _run_device_loss(monkeypatch, loop, *, autocast: bool):
     monkeypatch.setattr(loop_module.torch, "autocast", _AutocastSpy)
     monkeypatch.setattr(
         loop_module, "per_entity_loss",
-        lambda *a, **k: (torch.tensor(0.0), {}),
+        lambda *a, **k: (torch.tensor(0.0), LossParts()),
     )
     monkeypatch.setattr(TrainingLoop, "_head_terms", lambda self, *a, **k: {})
 
@@ -118,7 +101,7 @@ def _run_device_loss(monkeypatch, loop, *, autocast: bool):
 
     # The host half, as training hands it over: it holds no device work, so
     # whether autocast encloses it is not the question.
-    prepared = loop_module.PreparedStep(
+    prepared = loop_module.DeviceStep(
         batch=None, fields=("dummy",),
         gate=torch.zeros((1, 1)), field_targets=EntityFieldTargets({}, {}),
         mask=torch.zeros((1, 1)),
@@ -140,29 +123,15 @@ def _run_device_loss(monkeypatch, loop, *, autocast: bool):
 
 class TestDeviceLossAutocast:
     def test_disabled_on_a_cpu_loop(self, monkeypatch):
-        calls = _run_device_loss(monkeypatch, _bare_loop(monkeypatch), autocast=False)
+        calls = _run_device_loss(monkeypatch, make_cpu_training_loop(monkeypatch), autocast=False)
         assert calls == [{"device_type": "cuda", "dtype": torch.bfloat16, "enabled": False}]
 
     def test_enabled_when_the_loop_says_so(self, monkeypatch):
-        calls = _run_device_loss(monkeypatch, _bare_loop(monkeypatch), autocast=True)
+        calls = _run_device_loss(monkeypatch, make_cpu_training_loop(monkeypatch), autocast=True)
         assert calls == [{"device_type": "cuda", "dtype": torch.bfloat16, "enabled": True}]
 
 
-class _Stub(torch.nn.Module):
-    """A module with one parameter, so backward and the optimizer have work."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.p = torch.nn.Parameter(torch.ones(2))
-
-
-class _Metrics:
-    affected_gate_f1 = 0.5
-    zone_outcome_accuracy = 0.5
-    mean_poisson_deviance = 0.5
-
-
-def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F811
+def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):
     """Run one real epoch/shard with everything below the loop stubbed.
 
     Mirrors `test_training_loop_execute.py`'s fixture (same stubs for the
@@ -178,38 +147,23 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
               for i in range(4)]
     shard = tmp_path / "train.jsonl.gz"
     write_shard(shard, combat)
-    samples = {}
-    for stratum in ("card-disjoint", "game-disjoint"):
-        samples[stratum] = tmp_path / f"{stratum}.jsonl.gz"
-        write_shard(samples[stratum], combat[:2])
+    samples = write_validation_samples(tmp_path, combat[:2])
 
-    model, encoder = _Stub(), _Stub()
-
-    monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
-    monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
-    monkeypatch.setattr(
-        StepPreparer, "_build_tokenizer",
-        lambda self: type("T", (), {"vocab_size": 8})(),
-    )
-    # The script-API vocabulary is read off every real sidecar; none here.
-    monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
-    monkeypatch.setattr(
-        loop_module, "feature_widths",
-        lambda records: dict.fromkeys(loop_module.SlotKind, 4),
-    )
+    model, _encoder = stub_below_the_loop(monkeypatch)
     monkeypatch.setattr(
         TrainingLoop, "_device_loss",
         lambda self, prepared, *a, **k: StepLoss(
-            total=model.p.sum(), shipped=model.p.sum(), parts={}, terms={},
+            total=model.p.sum(), shipped=model.p.sum(), parts=LossParts(), terms={},
         ),
     )
     # The step's host half would pin its tensors on this fake device; the plan
     # stands in for what it would have prepared.
-    monkeypatch.setattr(StepPreparer, "prepare_step", lambda self, plan, *a, **k: plan)
+    monkeypatch.setattr(
+        StepPreparer, "prepare_training_step", lambda self, plan, *a, **k: (plan, 0),
+    )
     monkeypatch.setattr(
         TrainingLoop, "_validate", lambda self, records, *a, **k: 1.0,
     )
-    monkeypatch.setattr(loop_module, "measure", lambda *a, **k: _Metrics())
 
     memory_fraction_calls: list[float] = []
     empty_cache_calls: list[None] = []
@@ -243,17 +197,13 @@ def _run_execute(monkeypatch, tmp_path, make_record, *, cuda: bool):  # noqa: F8
         # real ones.
         prefetch_workers=0,
     )
-    code = TrainingLoop(
-        config, split=CorpusSplit(), training_shards=[shard], validation_samples=samples,
-        holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
-        rarity={}, corpus_digest="",
-    ).execute()
+    code = make_training_loop(config, training_shards=[shard], validation_samples=samples).execute()
     assert code == 0
     return memory_fraction_calls, empty_cache_calls
 
 
 class TestCudaReservationAndCacheRelease:
-    def test_neither_call_happens_on_cpu(self, monkeypatch, tmp_path, make_record):  # noqa: F811
+    def test_neither_call_happens_on_cpu(self, monkeypatch, tmp_path, make_record):
         fraction_calls, cache_calls = _run_execute(
             monkeypatch, tmp_path, make_record, cuda=False,
         )
@@ -261,14 +211,14 @@ class TestCudaReservationAndCacheRelease:
         assert cache_calls == []
 
     def test_the_fraction_is_capped_once_on_a_cuda_loop(
-        self, monkeypatch, tmp_path, make_record,  # noqa: F811
+        self, monkeypatch, tmp_path, make_record,
     ):
         fraction_calls, _ = _run_execute(monkeypatch, tmp_path, make_record, cuda=True)
         assert fraction_calls == [loop_module.CUDA_MEMORY_FRACTION]
         assert loop_module.CUDA_MEMORY_FRACTION == 0.9
 
     def test_the_cache_is_released_once_per_shard_on_a_cuda_loop(
-        self, monkeypatch, tmp_path, make_record,  # noqa: F811
+        self, monkeypatch, tmp_path, make_record,
     ):
         # One epoch, one shard: exactly one shard is trained, so exactly one
         # release.

@@ -1,14 +1,8 @@
 """``holdout-cards``: the depletion list ``generate-pools --exclude-cards`` reads.
 
-The one coupling between the two halves of a depleted collection run, and it is
-a plain file of card names rather than an import: `sealed` must not depend on
-`effects` (FR-132).
-
-The list and the trainer's split have to name the same cards. They are two
-programs run hours apart, and a disagreement is silent — pools depleted of one
-set while the split holds out another means held-out cards reach training games
-and the card-disjoint stratum holds games that are not disjoint. So both go
-through ``text_keyed_holdout`` rather than reimplementing the rule.
+A plain file rather than an import, because `sealed` must not depend on
+`effects` (FR-132). It goes through ``ConvertedTrees.holdout`` like
+``build-corpus``, so the list and the split cannot silently disagree.
 """
 
 from __future__ import annotations
@@ -17,8 +11,31 @@ import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE
+
+if TYPE_CHECKING:
+    from effects.domain.split import HeldOutCards
 
 logger = logging.getLogger(__name__)
+
+
+class HoldoutCardsError(Exception):
+    """No converted card to choose a holdout from."""
+
+
+@dataclass(frozen=True, slots=True)
+class HoldoutCardsConfig:
+    """The ``holdout-cards`` flags."""
+
+    out: Path
+    cards_folders: tuple[Path, ...] = (Path("output/cardsfolder"), Path("output/tokenscripts"))
+    #: Read only to write the list in Forge's printed spelling.
+    printings_path: Path = Path("resources/AllPrintings.json")
+    holdout_permille: int = HOLDOUT_PERMILLE
+    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
+    holdout_unit: str = "template"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,41 +55,57 @@ class HoldoutReport:
         return len(self.names) / self.converted_cards if self.converted_cards else 0.0
 
 
+def run(config: HoldoutCardsConfig) -> HoldoutReport:
+    """Choose the holdout over the converted trees and write its cards to ``out``.
+
+    Raises ``HoldoutCardsError`` when no tree holds a converted card.
+    """
+    from effects.infrastructure.card_sources import load_first_printings
+    from effects.infrastructure.converted_trees import ConvertedTrees
+
+    trees = ConvertedTrees.from_folders(config.cards_folders)
+    if not trees.card_files:
+        where = trees.cards_folder or ", ".join(str(f) for f in config.cards_folders)
+        raise HoldoutCardsError(f"no converted cards under {where}")
+    printings = Path(config.printings_path)
+    canonical = load_first_printings(printings) if printings.exists() else {}
+    if not canonical:
+        logger.warning(
+            "No printings at %s: the list keeps the converted tree's lowercase "
+            "spelling. Every comparison folds case, so depletion still works.",
+            printings,
+        )
+    report = holdout_report(
+        trees.holdout(
+            permille=config.holdout_permille,
+            max_carriers=config.holdout_max_carriers,
+            unit=config.holdout_unit,
+        ),
+        unit=config.holdout_unit,
+        converted_cards=len(trees.card_files),
+        canonical_names=canonical,
+    )
+    write_depletion_list(report.names, config.out)
+    return report
+
+
 def holdout_report(
-    card_files: Mapping[str, str],
-    texts_by_card: Mapping[str, Iterable[str]],
+    held: HeldOutCards,
     *,
-    permille: int,
-    max_carriers: int,
-    unit: str = "text",
+    unit: str,
+    converted_cards: int,
     canonical_names: Mapping[str, object] | None = None,
-    token_texts: Mapping[str, Iterable[str]] | None = None,
 ) -> HoldoutReport:
     """The depletion list with its held-out template, text and card counts.
 
-    Args:
-        canonical_names: any mapping keyed by printed card name — the
-            first-printing table serves — used to resolve the converted tree's
-            lowercase spelling back to the one Forge prints. A name it does not
-            know keeps the converted spelling; every comparison folds case, so
-            an unresolved name still depletes.
-        token_texts: the converted token tree's texts, which count as carriers
-            exactly as they do for ``build-corpus`` and the trainer (FR-041).
-
-    The list is in printed case because this file crosses into another package
-    and into Forge: an operator reads it, and ``getName()`` is what it is
-    matched against. Sorted because the file is compared between runs, and one
-    that reordered would read as a changed holdout when nothing had changed.
+    ``canonical_names`` (keyed by printed name) restores Forge's printed case
+    for an operator to read; an unknown name keeps the lowercase, which still
+    depletes since every comparison folds case. Sorted so an unchanged holdout
+    writes an unchanged file.
     """
     from effects.domain.card_names import fold_card_name
-    from effects.domain.split import text_keyed_holdout
     from effects.domain.text_holdout import holdout_key
 
-    held = text_keyed_holdout(
-        dict(card_files), texts_by_card,
-        permille=permille, max_carriers=max_carriers, unit=unit,
-        token_texts=token_texts,
-    )
     printed = {
         fold_card_name(name): name for name in (canonical_names or {})
     }
@@ -81,31 +114,13 @@ def holdout_report(
         unit=unit,
         keys=len({holdout_key(text, unit) for text in held.texts}),
         texts=len(held.texts),
-        converted_cards=len(card_files),
+        converted_cards=converted_cards,
     )
 
 
-def depletion_list(
-    card_files: Mapping[str, str],
-    texts_by_card: Mapping[str, Iterable[str]],
-    *,
-    permille: int,
-    max_carriers: int,
-    unit: str = "text",
-    canonical_names: Mapping[str, object] | None = None,
-    token_texts: Mapping[str, Iterable[str]] | None = None,
-) -> list[str]:
-    """Every card carrying a held-out ability text, in printed case, sorted."""
-    return holdout_report(
-        card_files, texts_by_card, permille=permille, max_carriers=max_carriers,
-        unit=unit, canonical_names=canonical_names, token_texts=token_texts,
-    ).names
-
-
-def write_depletion_list(names: Iterable[str], out: Path) -> int:
-    """Write one card name per line. Returns how many were written."""
+def write_depletion_list(names: Iterable[str], out: Path) -> None:
+    """Write one card name per line."""
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     rows = list(names)
     out.write_text("\n".join(rows) + ("\n" if rows else ""), encoding="utf-8")
-    return len(rows)

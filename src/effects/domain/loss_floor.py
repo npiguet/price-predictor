@@ -7,41 +7,36 @@ the floor it says whether the head learned the field or only how often it fires.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import torch
 
 from effects.domain.effect_head_layout import (
+    DIRECTIONS,
     FIELD_SLICES,
     GATE_INDEX,
     PER_ENTITY_WIDTH,
-    EntityFieldTargets,
+    SIGNED_DIRECTIONS,
+    SIGNED_MAGNITUDE,
     FieldSpec,
     FieldType,
 )
-from effects.domain.effect_losses import capped, counted, per_entity_loss
+from effects.domain.effect_losses import LossParts, capped, counted, per_entity_loss
+from effects.domain.entity_field_targets import EntityFieldTargets
 
-#: A guard on the division, not the detector: a field whose targets never vary
-#: is given a floor of exactly zero by :func:`constant_predictor_floor`, and
-#: this is what keeps the ratio off a floor too small to divide by anyway.
+#: A guard on dividing by a floor, not the degenerate-field detector.
 FLOOR_EPSILON = 1e-9
 
-#: Rates are clamped away from zero and one before a log: an outcome the sample
-#: never showed would otherwise put the constant predictor at minus infinity and
-#: the floor at nan.
+#: Rates are clamped away from zero and one before a log, or an outcome the
+#: sample never showed would make the floor nan.
 _RATE_FLOOR = 1e-6
 
 
 @dataclass(frozen=True, slots=True)
 class EntityTargetBatch:
-    """One scored batch's per-entity targets, held apart from the model.
-
-    The floor is a property of the targets alone, so a batch is scored twice
-    from one set of tensors: once against what the head predicted, once against
-    the best constant. Keeping the targets rather than re-deriving them is what
-    guarantees the two numbers were measured over the same entities.
-    """
+    """One scored batch's per-entity targets, kept so the floor is measured
+    over exactly the entities the head was."""
 
     gate: torch.Tensor
     fields: EntityFieldTargets
@@ -49,7 +44,7 @@ class EntityTargetBatch:
 
 
 def _mean(values: torch.Tensor) -> torch.Tensor:
-    """The mean, or zero where nothing was selected — no entity, no statistic."""
+    """The mean, or zero where nothing was selected."""
     if values.numel() == 0:
         return torch.zeros(())
     return values.mean()
@@ -69,11 +64,8 @@ def _log_frequencies(counts: torch.Tensor) -> torch.Tensor:
 def _supervised(
     batches: Sequence[EntityTargetBatch], name: str,
 ) -> torch.Tensor | None:
-    """One field's targets over every supervised entity of every batch.
-
-    Supervised is where the gate's *target* fires and the field is present,
-    which is the same selection :func:`per_entity_loss` scores it on.
-    """
+    """One field's targets over every supervised entity of every batch, the
+    selection :func:`per_entity_loss` scores."""
     parts = [
         batch.fields.values[name][
             batch.mask.bool() & batch.gate.bool() & batch.fields.present[name].bool()
@@ -87,18 +79,10 @@ def _supervised(
 
 
 def _degenerate(batches: Sequence[EntityTargetBatch], name: str) -> bool:
-    """Whether a field's supervised targets never vary.
+    """Whether a field's supervised targets never vary, whole rows compared.
 
-    Such a field has no deviance for a head to explain, and the number the rate
-    clamp leaves behind is not a floor: an all-zero count floors at about a
-    millionth of a nat, so a head idling at a log-rate of -5 would report
-    hundreds of thousands of percent worse than constant. The sparse fields
-    this happens to are the ones the breakdown exists to make legible, so they
-    report no deviance rather than a ratio against nothing.
-
-    Whole rows are compared, so a multi-binary field one of whose bits never
-    fires is not degenerate — that bit rides the clamp inside a field the rest
-    of which still varies.
+    Such a field has no deviance to explain, and the clamp leaves a near-zero
+    floor any head would read as enormously worse than constant.
     """
     target = _supervised(batches, name)
     return target is None or bool((target == target[0]).all())
@@ -107,14 +91,9 @@ def _degenerate(batches: Sequence[EntityTargetBatch], name: str) -> bool:
 def constant_predictor_outputs(
     batches: Sequence[EntityTargetBatch], *, fields: tuple[FieldSpec, ...],
 ) -> torch.Tensor:
-    """The best constant prediction for the gate and each active field.
-
-    One ``(PER_ENTITY_WIDTH,)`` vector to broadcast over every entity of every
-    batch. Each slice holds the maximum-likelihood constant under that field's
-    own loss — the logit of a positive rate under BCE, the log of a mean under
-    Poisson, log class frequencies under cross-entropy — which is what makes the
-    loss it scores a *floor* rather than one arbitrary constant's number.
-    """
+    """The best constant prediction for the gate and each active field: one
+    ``(PER_ENTITY_WIDTH,)`` vector, each slice the maximum-likelihood constant
+    under that field's own loss."""
     vector = torch.zeros(PER_ENTITY_WIDTH)
     real = [batch.gate[batch.mask.bool()] for batch in batches]
     vector[GATE_INDEX] = _logit(_mean(torch.cat(real or [torch.zeros(0)])))
@@ -136,10 +115,11 @@ def constant_predictor_outputs(
             case FieldType.SIGNED_DELTA:
                 target = capped(target)
                 direction = torch.sign(target).long().reshape(-1) + 1
-                vector[start:start + 3] = _log_frequencies(
-                    torch.bincount(direction, minlength=3).float()
+                columns = vector[start:end]
+                columns[SIGNED_DIRECTIONS] = _log_frequencies(
+                    torch.bincount(direction, minlength=len(DIRECTIONS)).float()
                 )
-                vector[start + 3] = torch.log(
+                columns[SIGNED_MAGNITUDE] = torch.log(
                     _mean(target.abs()).clamp(min=_RATE_FLOOR)
                 )
             case FieldType.CATEGORICAL:
@@ -156,18 +136,9 @@ def constant_predictor_floor(
 ) -> dict[str, float]:
     """The loss the best constant prediction reaches, by field.
 
-    Scored through :func:`per_entity_loss` itself rather than from closed-form
-    deviance formulas, so the floor carries the same masking, the same Stirling
-    terms and the same per-record normalization as the number it is the floor
-    for. A floor derived a second way would differ from the loss by whichever of
-    those three it got wrong, and the difference would read as a head having
-    learned something.
-
-    Averaged over the batches that carried each field, the way the validation
-    pass averages the losses it scales. A field whose targets never vary is
-    reported as exactly zero rather than at whatever the rate clamp left it, so
-    the caller reads it as the absence of a floor. The gate is never treated
-    that way: it is supervised on every entity and always has a base rate.
+    Scored through :func:`per_entity_loss` itself, so the floor carries the
+    loss's own masking and normalization. A field whose targets never vary
+    reports exactly zero: no floor.
     """
     vector = constant_predictor_outputs(batches, fields=fields)
     degenerate = {
@@ -188,21 +159,26 @@ def constant_predictor_floor(
 
 
 class PartsMean:
-    """Each field's loss averaged over the batches that carried it.
-
-    Over those batches rather than every batch: a field a batch did not
-    supervise contributes no zero, which would read as the model having got
-    it right.
-    """
+    """Each field's loss averaged over the batches that carried it, summed on
+    the device and read back once in :meth:`means`."""
 
     def __init__(self) -> None:
-        self._summed: dict[str, float] = defaultdict(float)
+        self._summed: dict[str, torch.Tensor] = {}
         self._counted: dict[str, int] = defaultdict(int)
 
-    def add(self, parts: Mapping[str, float]) -> None:
-        for name, value in parts.items():
-            self._summed[name] += value
+    def add(self, parts: LossParts) -> None:
+        if parts.values is None:
+            return
+        for name, value in zip(parts.names, parts.values.unbind()):
+            held = self._summed.get(name)
+            self._summed[name] = value if held is None else held + value
             self._counted[name] += 1
 
     def means(self) -> dict[str, float]:
-        return {name: self._summed[name] / self._counted[name] for name in self._summed}
+        if not self._summed:
+            return {}
+        sums = torch.stack(list(self._summed.values())).tolist()
+        return {
+            name: summed / self._counted[name]
+            for name, summed in zip(self._summed, sums)
+        }

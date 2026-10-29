@@ -1,16 +1,7 @@
 """Split a budget equally across members, passing on what a full member leaves.
 
-Curation uses it at every level FR-049 balances: across the rule families of a
-class, across the outcome signatures of a family, across the real and what-if
-halves of the legality class, and across the ability texts of one cell. One
-allocator rather than four, because the four must agree on what "equal" means
-when a member runs out — a member that cannot take its share is written at
-capacity and the remainder is split equally again over the members that still
-can, until every member is full or the budget is spent.
-
-The result is an exact integer split: the shares sum to ``min(budget, total
-capacity)``. The remainder of an integer division goes one unit at a time to
-the members in sorted key order, so the split is a pure function of its inputs.
+One allocator for every level FR-049 balances, so they agree on what "equal"
+means when a member runs out.
 """
 
 from __future__ import annotations
@@ -24,9 +15,9 @@ K = TypeVar("K", bound=Hashable)
 def allocate(budget: int, capacities: Mapping[K, int]) -> dict[K, int]:
     """``member -> share``: equal shares, capped by capacity, redistributed.
 
-    A member with zero capacity takes nothing; with no members the result is
-    empty. A budget above the total capacity fills every member and the rest
-    goes unspent — the caller reads the shortfall from the difference.
+    The shares sum to ``min(budget, total capacity)`` exactly; an integer
+    division's remainder goes one unit at a time in sorted key order, so the
+    split is a pure function of its inputs.
     """
     shares: dict[K, int] = {key: 0 for key in capacities}
     open_members = sorted(
@@ -55,9 +46,12 @@ def allocate(budget: int, capacities: Mapping[K, int]) -> dict[K, int]:
 def _order(key) -> tuple[str, str]:
     """Sort key over arbitrary hashable members, deterministic across runs.
 
-    A set's ``repr`` follows string hashing, which is salted per process, so
-    its members are sorted first; everything else sorts by its ``repr``.
+    A set's members are sorted first, since its ``repr`` follows the salted
+    string hash. A string enum sorts as its string, so a sentinel family sorts
+    among the script words rather than ahead of them.
     """
+    if isinstance(key, str):
+        return ("str", repr(str(key)))
     if isinstance(key, (frozenset, set)):
         return (type(key).__name__, repr(sorted(key, key=repr)))
     if isinstance(key, tuple):

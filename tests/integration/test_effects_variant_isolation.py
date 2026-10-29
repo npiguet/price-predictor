@@ -11,7 +11,6 @@ all.
 
 from __future__ import annotations
 
-import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -19,12 +18,10 @@ from pathlib import Path
 import pytest
 
 from effects.application.collect_variants import generate_variants
+from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from effects.infrastructure.record_io import read_records
 from effects.infrastructure.sidecar_io import read_sidecar, sidecar_path_for
-from effects.infrastructure.variant_sidecar_connector import (
-    VariantSidecarConnector,
-)
-from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
+from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 pytestmark = pytest.mark.integration
@@ -65,11 +62,7 @@ def _run_records_only(records_dir: Path) -> int:
                 break
         return sum(1 for _ in read_records(records_dir))
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        kill_process_tree(process)
 
 
 def test_a_variant_run_leaves_the_sealed_corpora_byte_identical(
@@ -143,7 +136,7 @@ def test_every_variant_script_gets_a_sidecar(tmp_path: Path) -> None:
     )
     assert variants
 
-    code = VariantSidecarConnector().run(output)
+    code = write_variant_sidecars(output)
     assert code == 0, "VariantSidecarMain failed"
 
     for variant in variants:

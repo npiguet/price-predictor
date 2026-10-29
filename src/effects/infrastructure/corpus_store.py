@@ -1,22 +1,32 @@
 """Where a curated dataset lives on disk (FR-135).
 
-The directory layout is the contract: ``training/``,
-``validation/card-disjoint/``, ``validation/game-disjoint/`` and
-``validation/gate-one/`` hold ordinary shards, so every existing reader loads
-them unchanged, and ``manifest.json`` holds the decisions that produced them.
-
 ``validation/gate-one/`` and ``validation/samples/`` hold **copies** of
-records that are also in the strata beside them, so a consumer reads one
-directory at a time and never ``validation/`` or the corpus root recursively.
+records also in the strata beside them, so a consumer reads one directory at
+a time and never ``validation/`` or the corpus root recursively
+(``iter_shards`` recurses).
 """
 
 from __future__ import annotations
 
 import json
+import logging
+import re
+import shutil
+from collections.abc import Iterator
 from pathlib import Path
 
 from effects.domain.corpus_manifest import CorpusManifest, SourceShard
+from effects.domain.records import RecordKind, acting_keys
 from effects.domain.strata import OUTPUT_STRATA, Stratum
+from effects.infrastructure.record_io import (
+    iter_shard_lines,
+    iter_shards,
+    parse_record_line,
+    read_records_matching,
+    record_from_dict,
+)
+
+logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = "manifest.json"
 #: Where ``clear_outputs`` moves the manifest of the dataset it is clearing.
@@ -59,17 +69,8 @@ class CorpusStore:
 
     @property
     def gate_one_dir(self) -> Path:
-        """Resolution records of card-disjoint games whose acting text is held out.
-
-        **These records are copies.** Every one of them is still in
-        ``card-disjoint/`` as well; the slice exists so the evaluator reads
-        gate 1's unique-text population without re-filtering the whole
-        stratum. ``validation/samples/`` holds copies too, drawn from the
-        strata beside it. So no consumer may read ``validation/`` or the
-        corpus root recursively -- ``iter_shards`` recurses, and a reader
-        pointed one level up counts those records two and three times over.
-        Read one directory at a time.
-        """
+        """Resolution records of card-disjoint games whose acting text is held
+        out: copies of records still in ``card-disjoint/``."""
         return self.output_dir(Stratum.GATE_ONE)
 
     @property
@@ -82,11 +83,8 @@ class CorpusStore:
 
     @property
     def parts_dir(self) -> Path:
-        """Per-source parts the write pass leaves for the repack step.
-
-        Outside every stratum directory, because ``iter_shards`` is recursive
-        and a part left under ``training/`` would be read as a shard.
-        """
+        """Per-source parts the write pass leaves for the repack step, outside
+        every stratum so a recursive read never meets one."""
         return self.directory / ".parts"
 
     def parts_dir_for(self, stratum: str) -> Path:
@@ -95,27 +93,11 @@ class CorpusStore:
     def clear_outputs(self) -> None:
         """Delete every output directory, moving the manifest aside first.
 
-        Every output stratum plus the samples and the parts directory:
-        each is rewritten whole by the next build.
-
-        A dataset is rebuilt whole rather than extended (FR-144): the split and
-        the rarity table are corpus-wide, so a shard left over from an earlier
-        build belongs to a different split. Same-named shards are
-        truncate-overwritten anyway, but a source shard that has been renamed
-        or removed — or a rebuild pointed at another ``--records-dir`` — leaves
-        files behind that every reader loads as part of the dataset while the
-        manifest and its digest describe only the newer build.
-
-        The manifest is moved to :attr:`previous_manifest_path` before any
-        stratum goes, and the new one is written last. A manifest left in
-        place over a build that then failed would describe strata that are
-        empty or half written while its digest still matched every checkpoint
-        trained on the old dataset, so the evaluator would score them against
-        the wreckage. Moved rather than deleted, so the record of what used to
-        be here survives the failure.
+        A dataset is rebuilt whole (FR-144), so no leftover shard joins a
+        dataset its manifest does not describe. The manifest goes first, so a
+        build that then fails leaves no manifest whose digest still matches
+        checkpoints trained on the old dataset.
         """
-        import shutil
-
         if self.manifest_path.exists():
             self.manifest_path.replace(self.previous_manifest_path)
         for directory in (
@@ -125,11 +107,7 @@ class CorpusStore:
             shutil.rmtree(directory, ignore_errors=True)
 
     def save(self, manifest: CorpusManifest) -> Path:
-        """Write the manifest atomically, and drop the one ``clear_outputs`` set aside.
-
-        Through a temporary name and a rename, so a build killed mid-write
-        leaves no manifest rather than a truncated one.
-        """
+        """Write the manifest atomically, and drop the one ``clear_outputs`` set aside."""
         self.directory.mkdir(parents=True, exist_ok=True)
         staging = self.manifest_path.with_name(f"{MANIFEST_NAME}.tmp")
         staging.write_text(
@@ -153,10 +131,57 @@ class CorpusStore:
 
 def current_sources(records_dir: Path) -> tuple[SourceShard, ...]:
     """Every raw shard under ``records_dir``, by relative path and size."""
-    from effects.infrastructure.record_io import iter_shards
-
     root = Path(records_dir)
     return tuple(
         SourceShard(name=shard.relative_to(root).as_posix(), size=shard.stat().st_size)
         for shard in iter_shards(root)
+    )
+
+
+#: Where a shard line names its record, read before the line is parsed.
+_RECORD_ID = re.compile(r'"record_id":"([^"]*)"')
+_RECORD_ID_SPAN = 256
+
+
+def training_acting_keys(directory: Path) -> set[tuple]:
+    """Every distinct ``acting_keys`` tuple among the records under ``directory``.
+
+    ``directory`` is the curated corpus's ``training/``: what the checkpoint
+    actually trained on, and so what the identity baseline could have
+    memorized. A record curation wrote several times (``--reuse-cap``) is
+    parsed once; the set is all gate 1 needs, and the records are never held.
+    """
+    shards = iter_shards(directory)
+    read: set[str] = set()
+    acting: set[tuple] = set()
+    for done, shard in enumerate(shards, start=1):
+        for line in iter_shard_lines(shard):
+            found = _RECORD_ID.search(line, 0, _RECORD_ID_SPAN)
+            if found is not None:
+                if found.group(1) in read:
+                    continue
+                read.add(found.group(1))
+            stripped = line.strip()
+            if not stripped:
+                continue
+            keys = acting_keys(record_from_dict(parse_record_line(stripped)))
+            if keys:
+                acting.add(keys)
+        if done % 50 == 0:
+            logger.info(
+                "gate 1: %d of %d training shards read, %d acting lines",
+                done, len(shards), len(acting),
+            )
+    return acting
+
+
+def card_disjoint_resolutions(corpus_path: Path, games: frozenset[str]) -> Iterator:
+    """The resolution records of the curated corpus's card-disjoint ``games``, streamed.
+
+    Resolutions only, the one kind gate 1's stratum holds; the stratum's other
+    kinds are never parsed.
+    """
+    return read_records_matching(
+        CorpusStore(corpus_path).card_disjoint_dir,
+        game_ids=games, kinds={RecordKind.RESOLUTION.value},
     )

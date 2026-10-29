@@ -1,4 +1,4 @@
-﻿"""The collecting supervisors' flags and their shared caps (T101).
+"""The collecting supervisors' flags and their shared caps (T101).
 
 ``--effect-records`` has a default on the effects-owned collectors and **no**
 default on ``sealed match-outcomes``. That asymmetry is the contract: on this
@@ -32,7 +32,11 @@ def parse(*argv: str):
 
 class TestEffectRecordsDefaultAsymmetry:
     def test_collect_coverage_defaults_to_the_records_directory(self):
-        assert parse("collect-coverage").effect_records == Path("output/effects/records/")
+        from effects.application.collect_coverage import CollectCoverageConfig
+        from effects.infrastructure.cli import collector_config
+
+        config = collector_config(CollectCoverageConfig, parse("collect-coverage"))
+        assert config.effect_records == Path("output/effects/records/")
 
     def test_match_outcomes_has_no_default(self):
         """A default there would turn every self-play run into a collection run."""
@@ -48,7 +52,7 @@ class TestCollectCoverage:
         assert args.decks_per_round == 500
         assert args.no_progress_rounds == 3
         assert args.split_from is None
-        assert args.cards_folders is None  # both converted trees
+        assert args.cards_folders == (Path("output/cardsfolder"), Path("output/tokenscripts"))
 
     def test_split_from_is_accepted(self):
         args = parse("collect-coverage", "--split-from", "models/x/latest.pt")
@@ -58,7 +62,7 @@ class TestCollectCoverage:
         args = parse(
             "collect-coverage", "--cards-folder", "a/", "--cards-folder", "b/",
         )
-        assert args.cards_folders == ["a/", "b/"]
+        assert args.cards_folders == (Path("a/"), Path("b/"))
 
     def test_the_worker_count_has_the_repos_usual_default(self):
         assert parse("collect-coverage").workers == 12
@@ -92,13 +96,6 @@ class TestSharedCapFlags:
         and an empty string takes no probe fork at all."""
         assert parse("collect-coverage").probe_keywords
         assert parse("collect-coverage", "--probe-keywords", "").probe_keywords == ""
-
-    def test_the_same_flags_appear_on_match_outcomes(self):
-        """One cap table, shared by every collecting supervisor."""
-        theirs = sealed_parser().parse_args(["match-outcomes"])
-        ours = parse("collect-coverage")
-        for flag in CAP_DEFAULTS:
-            assert getattr(theirs, flag) == getattr(ours, flag), flag
 
     def test_continuous_records_take_no_cap(self):
         """Coalescing per stable board is itself the cap (FR-029)."""
@@ -139,21 +136,21 @@ class TestTheRandomSeatOnTheCollectors:
 
     @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
     def test_the_flags_reach_the_worker_properties(self, command):
-        from effects.domain.collection_caps import CollectionCaps
+        from effects.infrastructure.cli import collection_caps
 
         args = parse(
             command, "--random-seat-share", "0.5",
             "--random-seat-probability", "0.25",
         )
-        properties = CollectionCaps.from_args(args).as_system_properties()
+        properties = collection_caps(args).as_system_properties()
         assert properties["effect.random.seat.share"] == "0.5"
         assert properties["effect.random.seat.probability"] == "0.25"
 
     @pytest.mark.parametrize("command", ["collect-coverage", "collect-variants"])
     def test_unset_flags_leave_the_seat_off(self, command):
-        from effects.domain.collection_caps import CollectionCaps
+        from effects.infrastructure.cli import collection_caps
 
-        caps = CollectionCaps.from_args(parse(command))
+        caps = collection_caps(parse(command))
         assert caps.random_seat_share == 0.0
         assert caps.random_seat_probability == 0.0
 
@@ -250,9 +247,10 @@ class TestTheHeldOutCoverageRound:
         assert args.min_text_games == 5
 
     def test_only_cards_beside_exclude_cards_is_refused(self):
-        from effects.infrastructure.cli import coverage_config_from
+        from effects.application.collect_coverage import CollectCoverageConfig
+        from effects.infrastructure.cli import collector_config
 
         with pytest.raises(ValueError, match="--exclude-cards"):
-            coverage_config_from(parse(
+            collector_config(CollectCoverageConfig, parse(
                 "collect-coverage", "--only-cards", "h.txt", "--exclude-cards", "h.txt",
             ))

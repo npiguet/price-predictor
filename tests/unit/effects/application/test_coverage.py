@@ -13,9 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from effects.application.collect_coverage import (
-    DEFAULT_DECKS_PER_ROUND,
     DEFAULT_NO_PROGRESS_ROUNDS,
-    DEFAULT_TARGET_RECORDS,
     CollectCoverageConfig,
     residues,
 )
@@ -34,7 +32,12 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import EntityState, Refs
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from tests.unit.effects.builders import (
+    fresh_interpreter_env,
+    make_entity,
+    make_record,
+    make_snapshot,
+)
 
 
 def _entity(entity_id: str, name: str) -> EntityState:
@@ -229,18 +232,10 @@ class TestResidues:
 
 
 class TestConfig:
-    def test_the_defaults_are_the_contracts(self):
-        config = CollectCoverageConfig()
-        assert config.effect_records.as_posix() == "output/effects/records"
-        assert config.target_records == DEFAULT_TARGET_RECORDS == 50
-        assert config.decks_per_round == DEFAULT_DECKS_PER_ROUND == 500
-        assert config.no_progress_rounds == DEFAULT_NO_PROGRESS_ROUNDS == 3
-        assert config.split_from is None
-
     def test_the_coverage_unit_comes_from_the_card_tree_alone(self):
         """A token script is not a deckable card and could never be retired."""
         config = CollectCoverageConfig()
-        assert config.coverage_folder().name == "cardsfolder"
+        assert config.converted_trees().cards_folder.name == "cardsfolder"
 
     def test_a_reordered_cards_folder_still_finds_the_card_tree(self):
         from pathlib import Path
@@ -248,7 +243,7 @@ class TestConfig:
         config = CollectCoverageConfig(cards_folders=(
             Path("output/tokenscripts/"), Path("output/cardsfolder/"),
         ))
-        assert config.coverage_folder().name == "cardsfolder"
+        assert config.converted_trees().cards_folder.name == "cardsfolder"
 
 
 class TestCoverageDeckBuilding:
@@ -442,12 +437,12 @@ class TestExclusionsWithoutACheckpoint:
     """
 
     def test_the_depletion_list_is_read_and_folded(self, tmp_path) -> None:
-        from effects.application.collect_coverage import load_exclusions
+        from effects.application.collect_coverage import HoldoutSource
 
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\nLim-Dûl's Vault\n", encoding="utf-8")
 
-        excluded = load_exclusions(split_from=None, exclude_cards=listed)
+        excluded = HoldoutSource(exclude_cards=listed).exclusions()
 
         assert excluded == frozenset({"soul echo", "lim-dûl's vault"}), (
             "the file carries Forge's printed case; coverage decks are built "
@@ -455,19 +450,37 @@ class TestExclusionsWithoutACheckpoint:
         )
 
     def test_neither_source_means_no_exclusions(self) -> None:
-        from effects.application.collect_coverage import load_exclusions
+        from effects.application.collect_coverage import HoldoutSource
 
-        assert load_exclusions(split_from=None, exclude_cards=None) == frozenset()
+        assert HoldoutSource().exclusions() == frozenset()
 
     def test_both_sources_at_once_is_refused(self, tmp_path) -> None:
         """Two spellings of the same holdout is the bug this feature just had."""
-        from effects.application.collect_coverage import load_exclusions
+        from effects.application.collect_coverage import HoldoutSource
 
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\n", encoding="utf-8")
 
         with pytest.raises(ValueError, match="one source"):
-            load_exclusions(split_from=tmp_path / "latest.pt", exclude_cards=listed)
+            HoldoutSource(split_from=tmp_path / "latest.pt", exclude_cards=listed)
+
+    def test_both_sources_on_a_config_are_refused_when_it_runs(self, tmp_path) -> None:
+        """A config built in code, not from flags, still names one holdout."""
+        from effects.application import collect_coverage
+
+        listed = tmp_path / "holdout-cards.txt"
+        listed.write_text("Soul Echo\n", encoding="utf-8")
+        cards = tmp_path / "cardsfolder"
+        cards.mkdir()
+        (cards / "bears.txt").write_text(
+            "name: Grizzly Bears\ntypes: creature\n", encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="one source"):
+            collect_coverage.run(collect_coverage.CollectCoverageConfig(
+                cards_folders=(cards,), effect_records=tmp_path / "records",
+                split_from=tmp_path / "latest.pt", exclude_cards=listed,
+            ))
 
 
 class TestTheRoundPlaysTheComputedDecks:
@@ -956,7 +969,7 @@ class TestCountingReportsProgress:
         )
         result = subprocess.run(
             [sys.executable, "-c", probe],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, env=fresh_interpreter_env(),
         )
         assert result.stdout.strip() == "False"
 
@@ -1070,6 +1083,34 @@ class TestHeldOutTextUnit:
         counted = count_text_shard(shard, roots=roots, texts=frozenset(expected))
         assert counted == expected
 
+    def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
+        """A sidecar cache per shard re-read every sidecar the shard named."""
+        from effects.application import collect_coverage
+        from effects.infrastructure import sidecar_io
+
+        reads: list[Path] = []
+        real_read = sidecar_io.read_sidecar
+
+        def counting_read(path):
+            reads.append(Path(path))
+            return real_read(path)
+
+        monkeypatch.setattr(sidecar_io, "read_sidecar", counting_read)
+        collect_coverage._script_texts.cache_clear()
+        roots = {
+            "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
+            "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
+        }
+        shard = _FIXTURES / "gen1-records.jsonl.gz"
+        first = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
+        read_by_one = len(reads)
+        second = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
+        collect_coverage._script_texts.cache_clear()
+
+        assert read_by_one > 0
+        assert len(reads) == read_by_one
+        assert first == second == {}
+
     def test_satisfaction_is_distinct_games_at_the_floor(self):
         from effects.domain.coverage import TextCoverage
 
@@ -1128,13 +1169,13 @@ class TestOnlyCardsRefusals:
         ("--split-from", "models/x/latest.pt"),
     ])
     def test_only_cards_beside_another_holdout_source_is_refused(self, extra):
-        from effects.infrastructure.cli import build_parser, coverage_config_from
+        from effects.infrastructure.cli import build_parser, collector_config
 
         args = build_parser().parse_args(
             ["collect-coverage", "--only-cards", "holdout.txt", *extra],
         )
         with pytest.raises(ValueError, match="--only-cards"):
-            coverage_config_from(args)
+            collector_config(CollectCoverageConfig, args)
 
     def test_only_cards_beside_a_training_corpus_is_refused(self, tmp_path):
         from effects.infrastructure.cli import build_parser, run_collect_coverage
@@ -1151,9 +1192,9 @@ class TestOnlyCardsRefusals:
         collect.assert_not_called()
 
     def test_alone_it_selects_the_text_unit(self):
-        from effects.infrastructure.cli import build_parser, coverage_config_from
+        from effects.infrastructure.cli import build_parser, collector_config
 
-        config = coverage_config_from(build_parser().parse_args(
+        config = collector_config(CollectCoverageConfig, build_parser().parse_args(
             ["collect-coverage", "--only-cards", "holdout.txt", "--min-text-games", "7"],
         ))
         assert config.only_cards == Path("holdout.txt")
@@ -1263,7 +1304,7 @@ class TestNonDeckTypesLeaveTheUnit:
         with patch.object(collector_connector, "CollectorSupervisor",
                           return_value=MagicMock(interrupted=False)), \
              patch.object(collect_coverage, "consult_castability", _consult), \
-             patch("effects.infrastructure.card_sources.load_card_texts",
+             patch("effects.infrastructure.converted_trees.load_card_texts",
                    return_value=texts_by_card), \
              caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(

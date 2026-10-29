@@ -22,8 +22,8 @@ import pytest
 from effects.application.validate_corpus import (
     FieldPresence,
     Finding,
+    Findings,
     Thresholds,
-    event_type_coverage,
     read_window,
     validate_corpus,
 )
@@ -58,7 +58,12 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.infrastructure.sidecar_io import SidecarCache, write_sidecar
-from tests.unit.effects.builders import RawShardWriter, make_entity, make_snapshot
+from tests.unit.effects.builders import (
+    RawShardWriter,
+    make_entity,
+    make_record,
+    make_snapshot,
+)
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 _BEARS = "cardsfolder/g/grizzly_bears.txt"
@@ -83,12 +88,8 @@ def _snapshot(turn: int = 3, names: tuple[str, ...] = (), tiers=None) -> StateSn
 def _resolution(record_id: str, game_id: str = "run.0-L1.0", **overrides):
     fields: dict = {
         "record_id": record_id,
-        "run_id": "run",
         "timestamp": "2026-09-09T10:00:00.000000Z",
         "game_id": game_id,
-        "kind": RecordKind.RESOLUTION,
-        "moment": Moment.RESOLUTION,
-        "actor_player": "P0",
         "state": _snapshot(),
         "ability": (_KEY,),
         # The mode a run collected under is a property of the checkout, not of
@@ -107,7 +108,7 @@ def _resolution(record_id: str, game_id: str = "run.0-L1.0", **overrides):
         ),
     }
     fields.update(overrides)
-    return EffectRecord(**fields)
+    return make_record(**fields)
 
 
 def _mode(option: int) -> ProvenanceKey:
@@ -209,7 +210,7 @@ def _combat(record_id: str, **overrides):
 def _record_with_event(event_type: EventType, record_id: str = "r0", **overrides):
     """A minimal record whose only event is one of ``event_type``.
 
-    For :func:`event_type_coverage`, which cares only which types appear
+    For the event-type coverage check, which cares only which types appear
     anywhere in a record, not what kind of record carries them. No ``params``
     are set, so this is valid for any ``event_type`` regardless of what its
     schema row declares.
@@ -262,6 +263,10 @@ def _named(findings: list[Finding], fragment: str) -> Finding:
     return next(f for f in findings if fragment in f.name)
 
 
+def _event_types(records: list[EffectRecord]) -> Finding:
+    return _named(validate_corpus(records), "event types")
+
+
 def _broken(findings: list[Finding]) -> set[str]:
     return {f.name for f in findings if not f.ok}
 
@@ -288,6 +293,27 @@ class TestAHealthyWindowPasses:
             assert finding.ok, "a watched finding can never fail a run"
             assert finding.measured
             assert finding.lines()[0].startswith("[WATCH]")
+
+
+class TestTheSummary:
+    """The closing lines count judged invariants only: a watched one cannot fail."""
+
+    def test_a_clean_pass_says_every_judged_invariant_holds(self):
+        findings = Findings([
+            Finding(name="a", ok=True, measured="1"),
+            Finding(name="b", ok=True, measured="2", watched=True),
+        ])
+        assert findings.broken() == []
+        assert findings.summary() == [
+            "all 1 judged invariants hold (1 watched, not judged)",
+        ]
+
+    def test_a_breach_names_each_broken_invariant(self):
+        findings = Findings([
+            Finding(name="a", ok=False, measured="1"),
+            Finding(name="b", ok=True, measured="2"),
+        ])
+        assert findings.summary() == ["1 of 2 judged invariants broken:", "  a"]
 
 
 class TestRecordIdCollision:
@@ -693,7 +719,7 @@ class TestTheCli:
         assert args.max_trigger_fired_share == 0.65
         assert args.min_zone_change_from_zone_rate is None
         assert args.min_attributed_rate is None
-        assert args.cards_folders is None
+        assert args.cards_folders == (Path("output/cardsfolder"), Path("output/tokenscripts"))
 
     def test_watched_findings_are_counted_apart_from_judged_ones(
         self, tmp_path, capsys,
@@ -758,7 +784,7 @@ class TestTheCli:
                 )
             )
         assert self._run(
-            shards, cards_folders=[str(tmp_path / "cardsfolder")],
+            shards, cards_folders=(tmp_path / "cardsfolder",),
         ) == 1
         out = capsys.readouterr().out
         assert "[FAIL] keyword provenance keys join their sidecar" in out
@@ -778,7 +804,7 @@ class TestTheCli:
                 )
             )
         assert self._run(
-            shards, cards_folders=[str(tmp_path / "cardsfolder")],
+            shards, cards_folders=(tmp_path / "cardsfolder",),
         ) == 0
         assert "[PASS] keyword provenance keys join their sidecar" in (
             capsys.readouterr().out
@@ -792,7 +818,7 @@ class TestTheCli:
             for record in _healthy():
                 writer.write(record)
         assert self._run(
-            tmp_path, cards_folders=[str(tmp_path / "not-here")],
+            tmp_path, cards_folders=(tmp_path / "not-here",),
         ) == 0
         assert "[WATCH] keyword provenance keys join their sidecar" in (
             capsys.readouterr().out
@@ -1833,7 +1859,7 @@ class TestEventTypeCoverage:
             _record_with_event(EventType.DAMAGE_DEALT, "r1"),
         ]
 
-        finding = event_type_coverage(records)
+        finding = _event_types(records)
 
         assert finding.watched is True
         assert "2/" in finding.measured
@@ -1845,14 +1871,14 @@ class TestEventTypeCoverage:
             _record_with_event(EventType.ZONE_CHANGE, "r1"),
         ]
 
-        finding = event_type_coverage(records)
+        finding = _event_types(records)
 
         assert "1/" in finding.measured
         assert "zone_change" not in finding.detail
 
     def test_it_never_fails_the_run(self):
         """Watched means never a verdict, however sparse the window is."""
-        finding = event_type_coverage([_record_with_event(EventType.ZONE_CHANGE)])
+        finding = _event_types([_record_with_event(EventType.ZONE_CHANGE)])
         assert finding.ok is True
 
     def test_the_full_vocabulary_reports_nothing_unseen(self):
@@ -1861,16 +1887,11 @@ class TestEventTypeCoverage:
             for index, event_type in enumerate(EventType)
         ]
 
-        finding = event_type_coverage(records)
+        finding = _event_types(records)
 
         assert finding.detail == ()
         total = len(list(EventType))
         assert f"{total}/{total}" in finding.measured
-
-    def test_registered_in_the_full_check_list(self):
-        """The full pass reports it too, not just the standalone entry point."""
-        finding = _named(validate_corpus(_healthy()), "event types")
-        assert finding.watched is True
 
 
 @pytest.mark.parametrize(

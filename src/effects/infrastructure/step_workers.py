@@ -1,46 +1,16 @@
 """Worker processes that prepare training steps: the host half, off the GIL.
 
-The trainer's host half — parsing a shard, constructing its records, and for
-every step tokenizing, building surfaces, collating and deriving every target —
-is pure Python, and on threads it competed for the one interpreter lock with
-the training step's own Python side. Here it runs in ``--prefetch-workers``
-processes instead, the ``DataLoader``-with-``num_workers`` pattern without the
-``Dataset`` abstraction, which has no notion of a shard read once and planned
-from.
-
-Topology. Shard ``k`` of the run goes to worker ``k mod N``. Each worker reads
-its shard, plans it and prepares every step of it in order onto a bounded queue
-of its own, then moves on to its next shard. A receiver thread in the training
-process reads the shards back in run order, one worker queue at a time, unpacks
-each step and pins it, and hands it to the training loop through a short local
-queue. Round-robin plus one queue per worker is what keeps the order fixed with
-no sequencing protocol: worker ``k mod N`` produces shard ``k``'s steps in
-order, and nothing else writes to that queue. A queue holds up to one shard's
-steps, so all ``N`` workers prepare at once rather than one preparing while the
-others wait for the training loop to reach them.
-
-What crosses the boundary is never an ``EffectRecord``: a task names a shard
-path, and what comes back is finished CPU tensors. Each step's tensors are
-packed into **one** flat byte buffer plus a small pickled skeleton that names
-each tensor's dtype, shape and offset. ``torch.multiprocessing`` gives every
-tensor put on a queue a shared-memory mapping of its own, and on Windows that
-cost is paid per tensor rather than per byte; a step holds several dozen small
-tensors, so packing makes it one. The training process rebuilds them as views
-of the buffer, and pinning that one buffer pins them all — in the training
-process, because page-locked memory does not survive the trip between
-processes.
-
-Workers are spawned (the only start method on Windows), take everything they
-need as one picklable ``PreparerSettings``, build their own tokenizer and
-sidecar cache, and exit with the training process: on a normal end and on an
-exception the pool terminates them, and a watchdog thread in each exits it if
-the training process dies without saying so.
+Shard ``k`` goes to worker ``k mod N``, each with a queue of its own, which
+keeps the run order fixed with no sequencing protocol. Pinning happens in the
+training process, because page-locked memory does not survive the trip
+between processes.
 """
 
 from __future__ import annotations
 
 import io
 import logging
+import multiprocessing
 import os
 import pickle
 import queue
@@ -59,6 +29,7 @@ from effects.application.step_preparation import (
     StepPreparer,
     StepReady,
 )
+from effects.application.train_effect_model import load_shard
 
 logger = logging.getLogger(__name__)
 
@@ -66,20 +37,21 @@ logger = logging.getLogger(__name__)
 #: as a wider dtype needs its offset to be a multiple of the element size.
 ALIGNMENT = 64
 
-#: How long a blocking queue call waits before checking whether the other end
-#: is still alive. Short enough that a dead worker is noticed within a second,
-#: long enough that the polling costs nothing.
+#: How long a blocking queue call waits before checking the other end is alive.
 POLL_SECONDS = 0.5
 
-#: Prepared steps the receiver thread holds ready beyond the one training.
-#: Each is pinned memory, so the bound is what keeps pinned memory to a
-#: couple of steps whatever the workers have queued.
+#: Prepared steps the receiver thread holds ready beyond the one training;
+#: each is pinned memory, which this bounds.
 READY_STEPS = 2
 
 
 @dataclass(frozen=True)
 class PackedStep:
-    """A ``StepReady`` with every tensor moved into one flat buffer."""
+    """A ``StepReady`` with every tensor moved into one flat buffer.
+
+    ``torch.multiprocessing`` pays a shared-memory mapping per tensor, and on
+    Windows that cost is per tensor rather than per byte.
+    """
 
     #: The message pickled with each tensor replaced by its index in ``layout``.
     skeleton: bytes
@@ -139,11 +111,8 @@ def pack(message: StepReady) -> PackedStep:
 
 
 def unpack(packed: PackedStep, *, pin: bool = False) -> StepReady:
-    """The ``StepReady`` ``pack`` took apart, its tensors views of one buffer.
-
-    ``pin`` copies the buffer into page-locked memory first, once, so every
-    tensor of the step is pinned by one copy rather than one per tensor.
-    """
+    """The ``StepReady`` ``pack`` took apart, its tensors views of one buffer,
+    which ``pin`` pins in one copy."""
     flat = packed.flat.pin_memory() if pin else packed.flat
     tensors = [
         flat[start:start + nbytes].view(dtype).reshape(shape) if nbytes
@@ -154,14 +123,8 @@ def unpack(packed: PackedStep, *, pin: bool = False) -> StepReady:
 
 
 def _exit_with_parent() -> None:
-    """Exit this worker when the training process does, however it ends.
-
-    A training process killed outright runs none of its shutdown, and a
-    worker blocked on a full queue would otherwise wait forever for a reader
-    that is gone — an orphaned ``python.exe`` per worker.
-    """
-    import multiprocessing
-
+    """Exit this worker when the training process does, even when it is
+    killed outright and runs none of its shutdown."""
     parent = multiprocessing.parent_process()
     if parent is None:
         return
@@ -176,25 +139,14 @@ def _exit_with_parent() -> None:
 def work(index: int, settings: PreparerSettings, tasks, results) -> None:
     """A worker's whole life: prepare each task's shard until told to stop.
 
-    Module-level so a spawned process can import it, and doing nothing at
-    import time. An exception is sent back with its traceback in place of the
-    rest of the shard it belongs to, so the training process raises it at that
-    shard; an interrupt ends the worker quietly, since the training process
-    received the same one and is shutting the pool down.
-
-    A worker never exits on its own while the run lasts, not even after
-    failing. On Windows a tensor's shared memory lives only while some
-    process holds it open, so the steps this worker queued ahead of its
-    failure would vanish with it, and the training process would read an
-    unopenable mapping where the traceback should have been.
+    An exception is sent back in place of the rest of its shard. The worker
+    then never exits on its own: on Windows the shared memory of steps it
+    queued ahead would die with it, before the traceback is read.
     """
     _exit_with_parent()
-    # The host half is single-threaded Python; torch's own pool would only
-    # oversubscribe the cores the training process and the other workers use.
+    # Single-threaded Python; torch's own pool would only oversubscribe cores.
     torch.set_num_threads(1)
     try:
-        from effects.application.train_effect_model import load_shard
-
         preparer = StepPreparer(settings)
         while (task := tasks.get()) is not None:
             records = load_shard(task.shard)
@@ -208,7 +160,6 @@ def work(index: int, settings: PreparerSettings, tasks, results) -> None:
         return
     except BaseException:
         results.put(WorkerFailed(index, traceback.format_exc()))
-        # Until the pool terminates it; see above.
         while tasks.get() is not None:
             continue
 
@@ -216,9 +167,9 @@ def work(index: int, settings: PreparerSettings, tasks, results) -> None:
 class StepWorkerPool:
     """``workers`` step-preparing processes and the thread that reads them.
 
-    ``submit`` queues shards in run order; ``shard`` yields the next one's
-    messages — a ``ShardOpened``, its steps, a ``ShardClosed`` — in that same
-    order. ``depth`` is how many prepared steps each worker may hold queued.
+    ``shard`` yields the next submitted shard's messages (``ShardOpened``, its
+    steps, ``ShardClosed``); ``depth`` is how many prepared steps each worker
+    may hold queued.
     """
 
     def __init__(
@@ -258,11 +209,8 @@ class StepWorkerPool:
         self._order.put(worker)
 
     def shard(self) -> Iterator:
-        """The next submitted shard's messages, in order, ending at its close.
-
-        Raises a worker's exception, with the worker's traceback, at the
-        message it took the place of.
-        """
+        """The next submitted shard's messages, in order, ending at its close;
+        raises a worker's exception at the message it took the place of."""
         while True:
             item = self._take()
             if isinstance(item, BaseException):
@@ -278,8 +226,6 @@ class StepWorkerPool:
             except queue.Empty:
                 if not self._receiver.is_alive():
                     return RuntimeError("the step receiver thread is gone")
-
-    # ── the receiver thread ─────────────────────────────────────────────
 
     def _receive(self) -> None:
         """Read each shard back from its worker, unpack and pin each step."""
@@ -340,15 +286,9 @@ class StepWorkerPool:
                 continue
         return False
 
-    # ── shutdown ────────────────────────────────────────────────────────
-
     def close(self) -> None:
-        """Stop every worker and the receiver; safe to call more than once.
-
-        Terminated rather than asked to finish: a worker is usually blocked
-        on a full queue holding steps of a shard nobody will train on, and
-        it holds nothing worth flushing.
-        """
+        """Terminate every worker and stop the receiver; safe to call more
+        than once. A worker holds nothing worth flushing."""
         self._stop.set()
         for process in self._processes:
             if process.is_alive():

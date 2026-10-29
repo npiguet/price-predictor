@@ -174,7 +174,7 @@ class TestRecordKindsSuperviseTheirOwnFields:
 class TestTheFloorReadsPresenceToo:
     def test_an_absent_target_does_not_move_the_constant_predictor(self):
         """The floor is scored on the entities the loss is, absent ones excluded."""
-        from effects.domain.effect_head_layout import EntityFieldTargets
+        from effects.domain.entity_field_targets import EntityFieldTargets
         from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
 
         spec = FIELDS_BY_NAME["tap_state"]

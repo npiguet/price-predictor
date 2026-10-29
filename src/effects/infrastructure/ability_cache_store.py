@@ -1,15 +1,13 @@
-"""Writing the ability cache under ``output/effects/abilities/``.
+"""Reading and writing the ability cache under ``output/effects/abilities/``.
 
-One ``.npz`` per source file, holding a ``(n_lines, e_dim)`` float32 array under
-the key ``e``, row-aligned with that source's sidecar. The tree layout mirrors
-the source tree, so a consumer that knows a provenance key's ``script_file``
-knows where its vectors are without an index; each reads the files its own way
-(``geometry_checks.load_cache``, the scorer smoke test, the probes).
+The tree mirrors the source tree, so a provenance key's ``script_file`` locates
+its vectors without an index.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +20,7 @@ from effects.domain.ability_cache_layout import (
     validate_alignment,
     variant_of_cache_file,
 )
+from effects.domain.baselines import Baseline
 from effects.domain.provenance import ProvenanceSidecar
 
 logger = logging.getLogger(__name__)
@@ -31,13 +30,23 @@ class AbilityCacheStore:
     """The ``.npz`` cache for one variant."""
 
     def __init__(
-        self, root: Path = DEFAULT_CACHE_ROOT, *, variant: str = "full",
+        self, root: Path = DEFAULT_CACHE_ROOT, *, variant: str = Baseline.FULL,
     ) -> None:
         self.root = Path(root)
         self.variant = variant
 
     def path_for(self, script_file: str) -> Path:
         return cache_path_for(script_file, root=self.root, variant=self.variant)
+
+    def read(self, script_file: str) -> np.ndarray | None:
+        """One source's rows, or None when this variant holds no cache for it."""
+        path = self.path_for(script_file)
+        return _load(path) if path.exists() else None
+
+    def iter_matrices(self) -> Iterator[tuple[Path, np.ndarray]]:
+        """Every cache file this variant wrote, with its rows, in path order."""
+        for path in self.written_files():
+            yield path, _load(path)
 
     def write(
         self, script_file: str, matrix: np.ndarray,
@@ -52,12 +61,8 @@ class AbilityCacheStore:
         return path
 
     def written_files(self) -> list[Path]:
-        """Every cache file this variant wrote under ``root``.
-
-        A variant's files are picked out by the suffix ``cache_path_for`` gave
-        them, which is what lets ``--clean`` remove only what this command
-        wrote and leave the shipping cache — or another variant's — in place.
-        """
+        """Every cache file this variant wrote under ``root``, by the suffix
+        ``cache_path_for`` gave it, so ``--clean`` leaves other variants'."""
         if not self.root.is_dir():
             return []
         return sorted(
@@ -73,3 +78,8 @@ class AbilityCacheStore:
         logger.info("Removed %d %s cache files under %s",
                     len(paths), self.variant, self.root)
         return len(paths)
+
+
+def _load(path: Path) -> np.ndarray:
+    with np.load(path) as data:
+        return data[ARRAY_KEY]

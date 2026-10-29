@@ -206,7 +206,7 @@ card name per line, every card carrying a held-out ability text.
 | Flag | Default |
 |---|---|
 | `--out` | required — destination file |
-| `--cards-folder` | `output/cardsfolder/`; the converted token tree beside it (`tokenscripts/`) is read too, its scripts counting as carriers as they do in `build-corpus` |
+| `--cards-folder` | repeatable; `output/cardsfolder/` and `output/tokenscripts/`. Token scripts count as carriers, as they do in `build-corpus` |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `build-corpus` |
 
 Reports the held-out text count, the card count, and the share of the corpus those cards are. The
@@ -234,8 +234,6 @@ differing only in hyperparameters read the same records.
 | `--game-disjoint-games` | 1000 |
 | `--card-disjoint-text-cap` | 50 — max card-disjoint games per held-out ability text, a game counting toward a text only through a resolution record acting through it |
 | `--shard-records` | 2000 — target records per output shard; whole games are dealt to `ceil(records / N)` shards by a hash of `game_id` seeded by `--seed`, and each shard is shuffled under `--seed`. 0 keeps one output shard per source shard, unshuffled |
-| `--forge-tokenscripts` | `../forge/forge-gui/res/tokenscripts` — Forge's raw token scripts, read to remap the old collector's token keys (FR-151); the build refuses to start when the remap is on and this directory is missing |
-| `--no-remap-token-keys` | off — build without the token-key remap; every key is written exactly as collected |
 | `--seed` | 42 — selection, shard dealing and shuffle |
 | `--workers` | CPU count |
 | `--verify` | off — report drift against an existing manifest and write nothing |
@@ -295,7 +293,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--batch-size` / `--grad-accum` | 32 / 1 — accumulation counted within the epoch |
 | `--steps-per-epoch` / `--epochs` / `--patience` | 5000 / 40 / 5 |
 | `--shards-per-epoch` | 256 — training shards an epoch reads, one resident at a time, drawn at random across the whole corpus. `--steps-per-epoch` fixes how long an epoch takes; this fixes how many different shards those steps are spread over |
-| `--prefetch-workers` | 3 — worker processes that read shards and prepare each step's host half (tokenizing, surfaces, targets) while the training process runs the device half; 0 prepares them in the training process on a thread. Each step's draws are seeded by `(seed, epoch, shard position, step)`, so the value changes speed only, never results, and is not recorded on the checkpoint |
+| `--prefetch-workers` | 3 — worker processes that read shards and prepare each step's host half (tokenizing, surfaces, targets) while the training process runs the device half; 0 prepares each step in the training process just before it trains. Each step's draws are seeded by `(seed, epoch, shard position, step)`, so the value changes speed only, never results, and is not recorded on the checkpoint |
 | `--seed` | drawn from the OS — seeds weight init, batch planning and each epoch's shard draw. Reported at startup and recorded in the checkpoint's training settings, so a run repeats by passing back the seed it logged |
 | `--withhold-keyword` | none — withholds one implemented keyword's token from training so the zero-shot check has something to measure; its occurrences are always expanded and its token dropped, inside other keywords' expansions too (FR-117) |
 
@@ -338,16 +336,15 @@ otherwise, beside rather than replacing the shipping cache.
 |---|---|
 | `--checkpoint` | `models/effects/effect-model/latest.pt` |
 | `--variant-checkpoint NAME=PATH` | repeatable |
-| `--records-dir`, `--cards-folder` | the trainer's defaults |
+| `--cards-folder` | the trainer's default |
 | `--variant-scripts` | the tree the corpus manifest records |
 | `--vocab-path`, `--keyword-definitions` | the paths `--checkpoint` recorded |
-| `--corpus` | the dataset `--checkpoint` recorded, if any |
+| `--corpus` | the dataset `--checkpoint` recorded; a checkpoint that records none is refused (exit 2) |
 
 The zero-shot keyword check needs no flag: the withheld keyword is read from `--checkpoint`, which
 records it alongside the split.
 
-Gate 1 reads its stratum from the curated corpus `--checkpoint` records and reports as skipped when it
-records none. Matched real-vs-fork agreement, the probe-diff re-check and the role-polarity probe are
+Gate 1 reads its stratum from the curated corpus `--checkpoint` records. Matched real-vs-fork agreement, the probe-diff re-check and the role-polarity probe are
 not implemented and report `NOT_IMPLEMENTED` (`[todo]`) on every run (FR-111).
 
 **Splits are never a flag.** The held-out card list and `game_id` set come from `--checkpoint`. The

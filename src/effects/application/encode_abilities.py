@@ -1,16 +1,4 @@
-"""``encode-abilities``: compute the ability cache once, offline.
-
-Every downstream consumer reads the cache rather than the encoder. That is the
-point of the bottleneck: an ability's vector is computed once for the whole
-corpus and looked up thereafter, so a deck builder or a scorer pays a dictionary
-hit instead of a transformer forward pass.
-
-``--variant`` resolves the checkpoint *and* the output suffix together, so a
-baseline is never encoded with another variant's weights and never lands on top
-of the shipping cache. The ``taxonomy`` variant has no encoder at all and emits
-its lookup into the same row layout, so every ``e``-geometry check reads one
-file shape whichever variant it is looking at.
-"""
+"""``encode-abilities``: compute the ability cache once, offline."""
 
 from __future__ import annotations
 
@@ -21,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
+from effects.domain import default_paths
 from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
 from effects.domain.baselines import Baseline
 from effects.domain.provenance import ProvenanceSidecar, SidecarLine
@@ -34,8 +23,8 @@ from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, read_sidecar
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
-    Path("output/cardsfolder/"), Path("output/tokenscripts/"),
+DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
+    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
 )
 
 
@@ -51,12 +40,8 @@ class EncodeAbilitiesConfig:
     clean: bool = False
 
     def resolved_checkpoint(self) -> Path:
-        """The checkpoint this variant reads; an explicit value overrides.
-
-        Resolving it from the variant is what stops a baseline being encoded
-        with the shipping model's weights — a mistake that produces a cache
-        which loads, has the right shape, and answers a different question.
-        """
+        """The checkpoint this variant reads, so a baseline is never encoded
+        with another variant's weights; an explicit value overrides."""
         if self.checkpoint is not None:
             return Path(self.checkpoint)
         return model_output_for(self.variant) / "latest.pt"
@@ -70,31 +55,13 @@ class EncodeSummary:
     cleaned: int = 0
 
 
-def tree_of(cards_folder: Path) -> str:
-    """The source-tree name a converted folder holds.
-
-    Read from the folder's own name, which mirrors the tree it was converted
-    from — the same string a provenance key's ``script_file`` is prefixed with.
-    A kept-aside copy (``output/gen1-cardsfolder``) still holds the
-    ``cardsfolder`` tree, so its cache lands where its keys look for it.
-    """
-    from effects.infrastructure.sidecar_io import tree_of_folder
-
-    return tree_of_folder(Path(cards_folder))
-
-
 def iter_sidecars(cards_folder: Path) -> list[Path]:
     return sorted(Path(cards_folder).rglob(f"*{SIDECAR_SUFFIX}"))
 
 
 def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
-    """The ``taxonomy`` baseline's stand-in for an encoded ``e``.
-
-    A deterministic hash embedding of the sidecar's API type and parameter-key
-    set: everything the script says about what the line *does*, and nothing
-    about how it says it. If the full model cannot beat this, the encoder is
-    reading no more than a taxonomy would give for free.
-    """
+    """The ``taxonomy`` baseline's stand-in for an encoded ``e``: a
+    deterministic hash embedding of the line's API type and parameter keys."""
     vector = np.zeros(e_dim, dtype=np.float32)
     features = [f"api:{line.script_api_type or ''}"]
     features += [f"param:{key}" for key in line.script_param_keys]
@@ -107,59 +74,26 @@ def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
     return vector / norm if norm > 0 else vector
 
 
-def encode_sidecar(
-    sidecar: ProvenanceSidecar,
-    sidecar_path: Path | None = None,
-    *,
-    variant: str,
-    e_dim: int,
-    encode_lines=None,
-) -> np.ndarray:
-    """One source's ``(n_lines, e_dim)`` matrix, row-aligned to its sidecar.
-
-    ``encode_lines`` maps a whole sidecar to its ``(n_lines, e_dim)`` matrix —
-    the whole card at once rather than a line at a time, so the encoder runs one
-    batched forward pass per card instead of one per ability. It is given the
-    sidecar's own path because the prose surface reads the converted text beside
-    it. The ``taxonomy`` variant needs neither and has no encoder at all.
-    """
+def taxonomy_matrix(sidecar: ProvenanceSidecar, e_dim: int) -> np.ndarray:
+    """The ``taxonomy`` variant's ``(n_lines, e_dim)`` matrix, row-aligned to
+    its sidecar, with no encoder at all."""
     if not sidecar.lines:
         return np.zeros((0, e_dim), dtype=np.float32)
-    if variant == Baseline.TAXONOMY:
-        rows = [taxonomy_vector(line, e_dim) for line in sidecar.lines]
-        return np.stack(rows).astype(np.float32)
-    if encode_lines is None:
-        raise ValueError(
-            f"--variant {variant} needs an encoder; only {Baseline.TAXONOMY} "
-            "can be emitted without one"
-        )
-    return encode_lines(sidecar, sidecar_path).astype(np.float32)
+    return np.stack([taxonomy_vector(line, e_dim) for line in sidecar.lines])
 
 
-def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
-    """Encode every source under the configured trees.
-
-    Idempotent: re-running rewrites the same rows from the same checkpoint. The
-    hash check runs before anything is written, so a vocabulary that moved since
-    training stops the run rather than filling the cache with vectors that mean
-    nothing.
-
-    ``encode_lines`` is injected so the pure pass is testable with no torch;
-    left out, it is :func:`build_encode_lines` over the checkpoint already
-    loaded here, which builds the encoder once and batches.
-    """
+def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
+    """Encode every source under the configured trees; idempotent."""
     store = AbilityCacheStore(config.output_root, variant=config.variant)
     cleaned = store.clean() if config.clean else 0
 
-    # Loaded once and hash-checked before anything is written.
+    # Hash-checked before anything is written.
     loaded = load_for_inference(
         config.resolved_checkpoint(),
         vocab_path=config.vocab_path, keyword_path=config.keyword_definitions,
     )
     e_dim = loaded.checkpoint.encoder_config.e_dim
     provenance = loaded.checkpoint.provenance
-    if encode_lines is None and config.variant != Baseline.TAXONOMY:
-        encode_lines = build_encode_lines(loaded)
 
     folders = [Path(f) for f in config.cards_folders]
     if config.variant_scripts:
@@ -170,70 +104,80 @@ def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     if missing:
         raise FileNotFoundError(f"no source tree at {', '.join(missing)}")
 
-    sources = rows = skipped = 0
-    for folder in folders:
-        for sidecar_path in iter_sidecars(folder):
-            sidecar = read_sidecar(sidecar_path)
-            if not sidecar.lines:
-                skipped += 1
-                continue
-            matrix = encode_sidecar(
-                sidecar, sidecar_path, variant=config.variant, e_dim=e_dim,
-                encode_lines=encode_lines,
-            )
-            store.write(sidecar.script_file, matrix, sidecar)
-            sources += 1
-            rows += matrix.shape[0]
+    sources, skipped = read_sources(folders)
+    if config.variant == Baseline.TAXONOMY:
+        matrices = (taxonomy_matrix(sidecar, e_dim) for _path, sidecar in sources)
+    else:
+        matrices = encode_tree(build_runner(loaded), sources)
+    rows = 0
+    for (_path, sidecar), matrix in zip(sources, matrices, strict=True):
+        store.write(sidecar.script_file, matrix, sidecar)
+        rows += matrix.shape[0]
 
     logger.info(
         "Encoded %d sources (%d ability rows) into %s [variant=%s]%s",
-        sources, rows, config.output_root, config.variant,
+        len(sources), rows, config.output_root, config.variant,
         f", withheld keyword {provenance.withheld_keyword}"
         if provenance.withheld_keyword else "",
     )
-    return EncodeSummary(sources=sources, rows=rows, skipped=skipped, cleaned=cleaned)
+    return EncodeSummary(
+        sources=len(sources), rows=rows, skipped=skipped, cleaned=cleaned,
+    )
 
 
-def truncated_lines(
-    runner, sidecar: ProvenanceSidecar, prose: list[str],
-) -> list[tuple[SidecarLine, str]]:
-    """The lines of one source the encoder's window cuts short, with their text.
+def read_sources(
+    folders: list[Path],
+) -> tuple[list[tuple[Path, ProvenanceSidecar]], int]:
+    """Every sidecar with a line to encode, beside its path; and how many had none."""
+    sources, skipped = [], 0
+    for folder in folders:
+        for sidecar_path in iter_sidecars(folder):
+            sidecar = read_sidecar(sidecar_path)
+            if sidecar.lines:
+                sources.append((sidecar_path, sidecar))
+            else:
+                skipped += 1
+    return sources, skipped
 
-    Measured through the runner's own ``unit_of`` and ``prepare``, so a line
-    is tokenized exactly as the cache encodes it (FR-006).
-    """
-    cut: list[tuple[SidecarLine, str]] = []
-    for line in sidecar.lines:
-        text, spans = runner.unit_of(line, prose)
-        if text and runner.prepare(text, spans).truncated:
-            cut.append((line, text))
-    return cut
+
+def encode_tree(
+    runner, sources: list[tuple[Path, ProvenanceSidecar]],
+) -> list[np.ndarray]:
+    """Each source's ``(n_lines, e_dim)`` matrix, from one encode of the
+    tree's distinct inputs. A truncated text is reported under the first line
+    that printed it."""
+    index: dict[tuple[str, tuple], int] = {}
+    keys: dict[str, tuple] = {}
+    rows_of: list[list[int]] = []
+    for sidecar_path, sidecar in sources:
+        prose = prose_of(sidecar, sidecar_path)
+        rows = []
+        for line in sidecar.lines:
+            unit = runner.unit_of(line, prose)
+            rows.append(index.setdefault(unit, len(index)))
+            keys.setdefault(unit[0], line.provenance)
+        rows_of.append(rows)
+    logger.info(
+        "Encoding %d distinct ability inputs for %d sources",
+        len(index), len(sources),
+    )
+    encoded = runner.encode(list(index), keys_of=keys.__getitem__)
+    return [encoded[rows] for rows in rows_of]
 
 
 def prose_of(sidecar: ProvenanceSidecar, sidecar_path: Path) -> list[str]:
-    """The converted prose lines beside a sidecar, as the trainer's join reads them.
+    """The converted prose lines beside a sidecar, as the trainer's join reads
+    them; none for a variant, whose ``.txt`` is the Forge source script."""
+    from effects.domain.provenance import SourceTree
+    from effects.infrastructure.sidecar_io import converted_text_path, prose_lines
 
-    A variant has none: the ``.txt`` beside its sidecar is the Forge source
-    script, and read as prose it would encode a script line as card text where
-    the trainer (``SidecarCache.prose_for``) encodes the variant's script.
-    """
-    from effects.infrastructure.sidecar_io import (
-        VARIANT_SCRIPTS_TREE,
-        converted_text_path,
-        prose_lines,
-    )
-
-    if sidecar.script_file.startswith(f"{VARIANT_SCRIPTS_TREE}/"):
+    if sidecar.tree == SourceTree.VARIANT_SCRIPTS:
         return []
     return prose_lines(converted_text_path(sidecar_path))
 
 
-def build_encode_lines(loaded: InferenceCheckpoint):
-    """The real encoder as a ``sidecar -> (n_lines, e_dim)`` callable.
-
-    Built once for the whole run: moving the weights to the device is the
-    expensive part, and doing it per card would dominate the encode.
-    """
+def build_runner(loaded: InferenceCheckpoint):
+    """The checkpoint's encoder, built once for the whole run."""
     from effects.domain.ability_encoder import TruncationLog, log_truncation
     from effects.infrastructure.ability_encoder_runner import (
         AbilityEncoderRunner,
@@ -241,16 +185,8 @@ def build_encode_lines(loaded: InferenceCheckpoint):
     from effects.infrastructure.model_runner import tokenizer_for
 
     checkpoint, vocab_path, keyword_path = loaded
-    tokenizer = tokenizer_for(checkpoint, vocab_path, keyword_path)
-    runner = AbilityEncoderRunner.from_checkpoint(
-        checkpoint, tokenizer, vocab_path=vocab_path,
+    return AbilityEncoderRunner.from_checkpoint(
+        checkpoint, tokenizer_for(checkpoint, vocab_path, keyword_path),
+        vocab_path=vocab_path,
+        truncations=TruncationLog(log_truncation(logger, "encode-abilities")),
     )
-    truncations = TruncationLog(log_truncation(logger, "encode-abilities"))
-
-    def encode_lines(sidecar: ProvenanceSidecar, sidecar_path: Path) -> np.ndarray:
-        prose = prose_of(sidecar, sidecar_path)
-        for line, text in truncated_lines(runner, sidecar, prose):
-            truncations.note(text, line.provenance)
-        return runner.encode_sidecar_lines(sidecar, prose)
-
-    return encode_lines

@@ -79,6 +79,7 @@ from effects.domain.ability_tokenizer import (  # noqa: E402
     keyword_token,
     tokenizer_surface,
 )
+from effects.infrastructure.ability_cache_store import AbilityCacheStore  # noqa: E402
 from effects.infrastructure.effect_model_store import (  # noqa: E402
     load_effect_checkpoint,
     verified_inference_paths,
@@ -308,7 +309,6 @@ def main() -> None:
 def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one linear report
     global UNK_ID
     OUT = paths.out / "keyword-expansion"  # noqa: N806 — the report directory
-    CACHE_ROOT = paths.abilities_root / "cardsfolder"  # noqa: N806
     OUT.mkdir(parents=True, exist_ok=True)
     torch.set_num_threads(max(1, torch.get_num_threads()))
     encoder, vocab, provenance, keyword_path, settings = load_encoder(paths.checkpoint)
@@ -342,7 +342,7 @@ def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one l
     for name, definition in definitions.items():
         token = keyword_token(name)
         template = definition.reminder_template or ""
-        expanded = tok._instantiate(template, None)  # noqa: SLF001
+        expanded = tok._instantiate(template)  # noqa: SLF001
         parts = tok.tokenize(expanded)
         def_rows.append({
             "keyword": name,
@@ -439,10 +439,16 @@ def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one l
 
     # Sanity check: the shipping cache equals the forced encoding.
     check = []
+    cache = AbilityCacheStore(paths.abilities_root)
     for r in keyword_lines[:2000:50]:
-        npz = CACHE_ROOT / (r["source"].removeprefix("cardsfolder/") + ".npz")
-        if r["source"].startswith("cardsfolder/") and npz.exists():
-            e = np.load(npz)["e"][r["index"]]
+        # A sidecar sits beside its converted ``<name>.txt``, so its stem
+        # plus ``.txt`` is the script file the cache is keyed by.
+        matrix = (
+            cache.read(r["source"] + ".txt")
+            if r["source"].startswith("cardsfolder/") else None
+        )
+        if matrix is not None:
+            e = matrix[r["index"]]
             i = row_of[r["text"]]
             check.append((
                 float(unit(e[None])[0] @ forced_u[i]),

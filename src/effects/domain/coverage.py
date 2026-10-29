@@ -1,8 +1,7 @@
 """The coverage rules: what a coverage unit is, how it is weighted, when it is done.
 
-``collect-coverage`` puts every card into a game, not just the popular ones.
-These are the rules it plays by, kept apart from the orchestration that reads
-shards and drives Forge so they can be read, and tested, without either.
+The rules ``collect-coverage`` plays by, apart from the orchestration that
+reads shards and drives Forge.
 """
 
 from __future__ import annotations
@@ -16,15 +15,9 @@ from typing import Protocol
 from effects.domain.records import EffectRecord, events_of
 from effects.domain.text_holdout import normalize_script_text
 
-#: Card types that never go in a deck: Planechase planes and phenomena,
-#: Archenemy schemes, Vanguard avatars, Conspiracy's draft cards, and the
-#: contraptions and attractions Un-sets play from decks of their own. The
-#: converted tree holds some 450 of them, and Forge's card database does not
-#: load them as deck cards, so a coverage deck holding one fails to materialize
-#: and every other card in it sits the match out. Having no records, they weigh
-#: the most and land in most decks; leaving them in the unit made most of a
-#: round's decks unplayable and charged a stalled round to every card those
-#: decks held, until the cards retired.
+#: Card types Forge's card database does not load as deck cards, so a deck
+#: holding one fails to materialize. Having no records, they would weigh the
+#: most and land in most decks.
 NON_DECK_TYPES: frozenset[str] = frozenset({
     "scheme", "vanguard", "plane", "phenomenon", "conspiracy", "contraption",
     "attraction", "dungeon",
@@ -34,8 +27,7 @@ NON_DECK_TYPES: frozenset[str] = frozenset({
 def is_deckable(converted_text: str) -> bool:
     """Whether a converted card's first ``types:`` line names no non-deck type.
 
-    A card with no ``types:`` line is kept: the filter exists to drop known
-    non-deck types, not to second-guess a converter that wrote no line.
+    A card with no ``types:`` line is kept.
     """
     for line in converted_text.splitlines():
         if line.startswith("types:"):
@@ -52,22 +44,16 @@ class ConsultVerdict(StrEnum):
 
     @classmethod
     def parse(cls, raw: str) -> ConsultVerdict:
-        """The worker's verdict string, ``unknown`` when it is neither.
-
-        ``unknown`` rather than an error, because an unrecognised verdict was
-        always read as "not uncastable" and so ranked as castable -- the safe
-        direction, since the consult only ranks.
-        """
+        """The worker's verdict string; ``unknown``, ranked as castable, when
+        it is neither — the safe direction, since the consult only ranks."""
         try:
             return cls(raw)
         except ValueError:
             return cls.UNKNOWN
 
 
-#: An uncastable card's share of a castable card's deck weight. Above zero,
-#: because being in a game is the precondition an intervention forks from;
-#: below one, because a slot holding a card the AI cannot cast mostly produces
-#: no record toward any target, so castable cards should fill most slots.
+#: An uncastable card's share of a castable card's deck weight: above zero so
+#: interventions have it in play, below one since the AI mostly cannot cast it.
 UNCASTABLE_RANK_MULTIPLIER = 0.25
 
 
@@ -75,13 +61,9 @@ UNCASTABLE_RANK_MULTIPLIER = 0.25
 class DeckCandidate:
     """A card a coverage deck can hold, as the manabase heuristic reads it.
 
-    ``compute_basic_lands`` reads one thing of each nonland:
-    ``mana_cost_line()``. FR-002 declares only ``compute_basic_lands`` on the
-    allowed surface of ``sealed.domain.manabase``, not the ``ConvertedCardText``
-    wrapper its signature is typed against, so rather than reaching past the
-    declared surface for that wrapper this carries the one value it reads. A
-    converted card supplies it from its text; a variant, which has no
-    converted text by design (FR-056), from its script.
+    Carries the one value ``compute_basic_lands`` reads, ``mana_cost_line()``,
+    because FR-002's import surface excludes the ``ConvertedCardText`` its
+    signature is typed against — and a variant has no converted text (FR-056).
     """
 
     name: str
@@ -140,9 +122,7 @@ class TextCoverage:
     """One held-out ability text's progress toward its game floor (FR-036).
 
     Games rather than records: one long game can write hundreds of records of
-    one ability, and a text seen in one game has been seen on one board. The
-    fields ``retire_stalled`` reads are named as ``CardCoverage``'s are, so the
-    same retirement rule serves both units.
+    one ability, all on one board.
     """
 
     text: str
@@ -167,11 +147,8 @@ class TextCoverage:
 def qualifying_cards(record: EffectRecord) -> set[str]:
     """Cards this record counts toward (FR-049).
 
-    The acting line's host, every event subject, and every referenced ref —
-    but **not** an entity that merely sat in the snapshot. A card on the
-    battlefield while something else resolves teaches the model nothing about
-    that card, and counting it would let a popular card satisfy every card
-    beside it.
+    The acting line's host, every event subject and every referenced ref, but
+    not an entity that merely sat in the snapshot.
     """
     by_id: dict[str, str] = {
         entity.id: entity.name for entity in record.state.entities
@@ -196,10 +173,8 @@ def deck_weights(
 ) -> dict[str, float]:
     """Weight each card by how far it is from its target (FR-046).
 
-    A card with no records weighs most; one already satisfied weighs nothing.
-    Linear in the shortfall rather than inverse in the count, so a card at 49
-    of 50 still gets drawn occasionally and the last few records do not take
-    unboundedly many rounds.
+    Linear in the shortfall rather than inverse in the count, so the last few
+    records do not take unboundedly many rounds.
     """
     weights: dict[str, float] = {}
     for name, card in coverage.items():
@@ -229,9 +204,8 @@ def rank_by_consult(
 ) -> dict[str, float]:
     """Apply the consult as a **ranking** input, never as a filter (FR-047).
 
-    A card the consult judges uncastable keeps a weight, because being in a
-    game is the precondition an intervention forks from — dropping it here
-    would mean stage three had nothing to fork.
+    An uncastable card keeps a weight: being in a game is the precondition an
+    intervention forks from.
     """
     ranked: dict[str, float] = {}
     for name, weight in weights.items():
@@ -253,22 +227,10 @@ def retire_stalled(
 ) -> list[str]:
     """Retire units that gained no qualifying record this round (FR-050).
 
-    Without this the run never ends: some cards Forge's AI cannot cast at all,
-    and a round that makes no progress on them will make none on the next.
-
-    ``decked`` is the units this round's decks actually held, and only those
-    can stall: a card no deck contained was never attempted, so counting the
-    round against it retires a card the run has not yet tried once. That is
-    not a rare edge — at the defaults a round draws 500 x 23 slots against
-    33,680 candidates, so a given card sits out a whole round with probability
-    about 0.71 and roughly a third of the corpus would retire after three
-    rounds having never been in a game. The run still terminates, because a
-    live card keeps its weight and is drawn eventually; it just stops
-    terminating with almost nothing collected and a residue list the size of
-    the corpus.
-
-    Required rather than defaulted to "everything": a default would restore
-    the exact silent behaviour this parameter exists to remove.
+    Only units in ``decked``, the ones this round's decks held, can stall: at
+    the defaults most cards sit out any given round, and counting it against
+    them would retire cards never tried. Required rather than defaulted to
+    everything for that reason.
     """
     decked_names = frozenset(decked)
     retired: list[str] = []
@@ -295,8 +257,8 @@ def is_complete(coverage: Mapping[str, CoverageUnit], target: int) -> bool:
 def awaited_texts(coverage: Mapping[str, TextCoverage]) -> dict[str, TextCoverage]:
     """The held-out texts whose completion ends the round (FR-037).
 
-    A text no castable card carries is reported rather than awaited: no round
-    can make the AI cast it, so waiting on it is waiting forever.
+    A text no castable card carries is reported rather than awaited, since no
+    round can make the AI cast it.
     """
     return {text: unit for text, unit in coverage.items() if unit.castable}
 
@@ -306,12 +268,10 @@ def held_out_texts_of(
 ) -> dict[str, frozenset[str]]:
     """``text -> its listed carriers``, for the texts only listed cards carry.
 
-    The depletion list names every card carrying a held-out text, so every
-    held-out text is carried by listed cards alone; a text an unlisted card
-    also carries is not held out and is not this round's business. The rule
-    reads the list rather than recomputing the holdout, so the round needs none
-    of the holdout's flags — at the cost of also covering a text that only
-    listed cards carry without being held out itself, which is harmless.
+    Reads the depletion list rather than recomputing the holdout, so the round
+    needs none of the holdout's flags; a text an unlisted card also carries is
+    not held out. It may also cover a text only listed cards carry without it
+    being held out, which is harmless.
     """
     carriers: dict[str, set[str]] = defaultdict(set)
     elsewhere: set[str] = set()

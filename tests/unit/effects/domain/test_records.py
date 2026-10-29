@@ -14,7 +14,6 @@ import pytest
 
 from effects.domain.records import (
     COLLECTION_METADATA_FIELDS,
-    UNRESOLVED_REASONS,
     ActivationPayload,
     CombatPayload,
     Costs,
@@ -25,6 +24,7 @@ from effects.domain.records import (
     RecordKind,
     ResolutionOutcome,
     ResolutionPayload,
+    UnresolvedReason,
 )
 
 
@@ -227,21 +227,6 @@ class TestCollectionMetadataStaysOutOfTheModel:
 
 
 class TestIdentity:
-    def test_record_id_carries_the_worker_slot_and_the_jvm_lifetime(
-        self, make_record,
-    ):
-        record = make_record(record_id="run-uuid.4-mk3p9x2q.10237")
-        assert record.worker == "4"
-
-    def test_a_pre_lifetime_id_still_reads_as_its_worker(self, make_record):
-        """The corpus is append-only, so shards written before the segment stay.
-
-        They report no lifetime rather than failing: the worker slot is still
-        in the id, and it is the only half those shards ever had.
-        """
-        record = make_record(record_id="run-uuid.4.10237")
-        assert record.worker == "4"
-
     def test_a_record_is_immutable_once_written(self, make_record):
         record = make_record()
         with pytest.raises(AttributeError):
@@ -255,6 +240,7 @@ _JAVA_UNRESOLVED_REASON = (
     / "forge-connector" / "src" / "main" / "java" / "com" / "pricepredictor"
     / "connector" / "effects" / "UnresolvedReason.java"
 )
+_PYTHON_REASONS = {reason.value for reason in UnresolvedReason}
 
 
 class TestTheUnresolvedVocabularyIsOneSet:
@@ -262,7 +248,7 @@ class TestTheUnresolvedVocabularyIsOneSet:
 
     It was not. The collector learned to say ``granted_keyword`` and
     ``granted_trait`` -- a keyword or trait granted by something that keeps no
-    back-reference to what granted it -- while ``UNRESOLVED_REASONS`` still
+    back-reference to what granted it -- while ``UnresolvedReason`` still
     listed four values, so ``record_from_dict`` rejected every record carrying
     one. 187 of 391,168 records in a smoke corpus, spread over 17 of 32 shards,
     and the reader raises rather than skips: the first such record ends the
@@ -284,9 +270,9 @@ class TestTheUnresolvedVocabularyIsOneSet:
     def test_the_collector_writes_no_reason_the_reader_rejects(self):
         java = self._java_reasons()
         assert java, "no UnresolvedReason members found; did the file move?"
-        assert java <= UNRESOLVED_REASONS, (
+        assert java <= _PYTHON_REASONS, (
             "the collector writes reasons the reader would reject: "
-            f"{sorted(java - UNRESOLVED_REASONS)}"
+            f"{sorted(java - _PYTHON_REASONS)}"
         )
 
     def test_the_reader_accepts_no_reason_the_collector_never_writes(self):
@@ -295,9 +281,9 @@ class TestTheUnresolvedVocabularyIsOneSet:
         A reason nothing writes reads as evidence that a resolver path exists
         when it does not.
         """
-        assert UNRESOLVED_REASONS <= self._java_reasons(), (
+        assert _PYTHON_REASONS <= self._java_reasons(), (
             "the reader accepts reasons nothing writes: "
-            f"{sorted(UNRESOLVED_REASONS - self._java_reasons())}"
+            f"{sorted(_PYTHON_REASONS - self._java_reasons())}"
         )
 
 

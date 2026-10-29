@@ -1,21 +1,13 @@
 """Which record fields a corpus has ever actually carried.
 
-A collector that writes a field as a fixed literal produces records that are
-byte-identical to records where the field is genuinely empty. Nothing fails, no
-test goes red, and the contract tests pass because the *shape* is right and only
-the content is missing. Fourteen such fields were found one at a time, each
-while working on something else.
+A collector writing a field as a fixed literal produces records byte-identical
+to ones where the field is genuinely empty, and every contract test passes. This
+walks the record dataclasses rather than a field list, so a field added later is
+audited too.
 
-This walks the record dataclasses instead of a hand-written field list, so every
-field is audited and one added later is audited without being added here. What
-it reports is per field: how many instances were examined, and how many carried
-something other than the declared default.
-
-Absence is not proof. A field can read as constant because it is written as a
-literal, or because the corpus was too small or too ordinary to contain one --
-"no Volrath's Shapeshifter was drawn" and "the name channel is unwired" look the
-same from here. That asymmetry is why :data:`KNOWN_CONSTANT_FIELDS` is asserted
-in one direction only: observing a value is evidence, not observing one is not.
+Absence is not proof: a field reads constant whether it is unwired or the corpus
+merely never exercised it, which is why :data:`KNOWN_CONSTANT_FIELDS` is
+asserted in one direction only.
 """
 
 from __future__ import annotations
@@ -36,8 +28,8 @@ class FieldCoverage:
     """One field's record over a corpus."""
 
     path: str
-    #: Instances whose value differed from the field's declared default.
-    #: Meaningless for a required field, which has no default to differ from.
+    #: Instances whose value differed from the field's declared default;
+    #: meaningless for a required field.
     populated: int
     #: Instances examined. Larger than the record count for a repeated field.
     seen: int
@@ -46,73 +38,31 @@ class FieldCoverage:
 
     @property
     def constant(self) -> bool:
-        """Whether the corpus only ever saw one value here.
-
-        Never varying rather than never differing from the default, because a
-        required field has no default: ``Candidate.ability`` is written as an
-        empty list by the collector and declared without one, so comparing
-        against a default reported it as carrying data on all 160,843 rows.
-        This also catches a field pinned to a non-default constant.
-        """
+        """Whether the corpus only ever saw one value here: never varying
+        rather than never differing from the default, because a required field
+        has none, and a field pinned to a non-default constant is dead too."""
         return not self.varied
 
 
-#: Fields a collector writes as a fixed literal (deviations log, D59).
+#: Fields a collector writes as a fixed literal (deviations log, D59), each
+#: confirmed by reading the writer. Fields constant only because one run is one
+#: run (``mode``, ``run_id``, ``mirror_of`` and the probe fields under an
+#: emptied ``--probe-keywords``) are absent, or a corpus exercising them would
+#: fail the test. The list only shrinks: a listed field that carries data fails the
+#: coverage test until it is removed.
 #:
-#: Membership is a judgement, not a measurement: a field reads as constant here
-#: whether it is unwired or merely unexercised, and only the source says which.
-#: Everything below was confirmed by reading the writer. Fields that are
-#: constant only because one run is one run -- ``mode``, ``run_id``,
-#: ``mirror_of``, ``probed_keyword`` and ``probed_entity`` under an emptied
-#: ``--probe-keywords``, ``synthetic`` before stage four -- are deliberately
-#: absent, because listing them would fail the test on the corpus that does
-#: exercise them. The probe fields have read constant on every corpus collected
-#: so far, and that is a launch flag rather than a dead channel: it is
-#: ``validate-corpus``, reporting the probe count as a watched number in the
-#: first minutes of a pass, that tells the two apart -- not this list.
-#:
-#: The list only shrinks. Implementing one makes the coverage test fail until it
-#: is removed, which is what stops a fixed field from quietly staying on a list
-#: of known problems, and what stops the list itself from drifting.
+#: Never list an activation's ``outcome`` or ``costs``, an event's
+#: ``attributed_to``, a record's ``ability_unresolved`` or a rewrite's
+#: ``result`` and ``replaced_by``: each read constant through a collector
+#: defect, and listing one would make a broken channel look like a known one.
 KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset({
-    # ── deliberately not collected ──
-    # A verdict that does not name the static forbidding it. The attacker and
-    # blocker subkinds carry theirs, through cantAttackStatic and
-    # cantBlockByStatic; the decision subkind would need an equivalent
-    # cantBeCastStatic that Forge does not have, and only about a quarter of
-    # forbidden creatures find a static even where the hook exists.
+    # Forge has no cantBeCastStatic to name what forbids a decision; the
+    # attacker and blocker subkinds name theirs.
     "record.payload<PlayabilityDecisionPayload>.candidates[].responsible_static",
-    # ── collected, but the format cannot exercise it ──
-    # An emblem is a planeswalker ultimate's leavings, and a sealed limited pool
-    # essentially never resolves one. The collector reads all four trait lists
-    # off each command-zone emblem card, so this field being constant is
-    # evidence about the format rather than about the wiring — and because the
-    # list is asserted in one direction only, the day a corpus does contain an
-    # emblem the coverage test fails and this entry comes off.
+    # Collected, but a sealed pool essentially never resolves a planeswalker
+    # ultimate, so this reads constant on the format rather than the wiring.
     "record.state.global_.emblems",
 })
-
-#: Deliberately NOT listed above, and they must not be added: an activation's
-#: ``outcome``, every field of its ``costs``, an event's ``attributed_to``, and
-#: a record's ``ability_unresolved``. All four read as constant in a collected
-#: corpus, and all four are collector defects rather than format scarcity — the
-#: outcome was a hardcoded literal, the cost lists were read off a Cost object
-#: whose parts were never the ones paid, the attribution pointer was set only
-#: for the stack root, and ``ability_unresolved`` was declared and never
-#: written, so an empty ``ability`` still could not say why it was empty.
-#: Listing any of them would have made a broken channel look like a known one,
-#: which is the exact failure this list is shaped to avoid.
-#:
-#: The ``rewrite`` payload's ``result`` and ``replaced_by`` join that sentence.
-#: Both read as constant on every corpus collected so far -- ``result`` as
-#: ``None`` and ``replaced_by`` as empty, because the hook did not pass either --
-#: and both would look like format scarcity from here, since the channel itself
-#: held 34 records in 1.88M. It was not scarcity: the payload modelled an
-#: edit-the-event mechanism Forge does not have, so ``incoming`` and
-#: ``outgoing`` came back byte-identical and 87% of the channel was dropped on
-#: the floor. A field that was constant because its channel was empty must not
-#: stay excused once the channel fills; excusing these two would have hidden
-#: exactly the defect that emptied it.
 
 
 def field_coverage(records: Iterable[EffectRecord]) -> dict[str, FieldCoverage]:
@@ -133,17 +83,37 @@ def field_coverage(records: Iterable[EffectRecord]) -> dict[str, FieldCoverage]:
     }
 
 
-def constant_fields(coverage: dict[str, FieldCoverage]) -> set[str]:
-    """Paths that never carried anything but their default."""
-    return {path for path, cov in coverage.items() if cov.constant}
+def report_lines(
+    coverage: dict[str, FieldCoverage], *, all_fields: bool = False,
+) -> list[str]:
+    """``field-coverage``'s rows, constant fields only unless ``all_fields``.
+
+    A constant field is tagged ``known`` when :data:`KNOWN_CONSTANT_FIELDS`
+    lists it and ``NEW`` otherwise: only the writer says whether a new one is
+    broken or merely rare. A listed field that varied is named for removal.
+    """
+    lines = []
+    for row in coverage.values():
+        if not row.constant:
+            if all_fields:
+                lines.append(f"  [varies] {row.path}   ({row.populated}/{row.seen})")
+        elif row.path in KNOWN_CONSTANT_FIELDS:
+            lines.append(f"  [known ] {row.path}   (seen {row.seen})")
+        else:
+            lines.append(f"  [NEW   ] {row.path}   (seen {row.seen})")
+    stale = sorted(
+        path for path in KNOWN_CONSTANT_FIELDS
+        if path in coverage and not coverage[path].constant
+    )
+    if stale:
+        lines += ["", "listed as constant but carrying data — remove from the list:"]
+        lines.extend(f"  {path}" for path in stale)
+    return lines
 
 
 class _Tally:
-    """One path's running counts.
-
-    ``first`` holds the repr of the first value seen and is compared against
-    until the field varies, after which nothing more needs computing — so the
-    repr cost is paid on constant fields, whose values are the small ones.
+    """One path's running counts. ``first`` is the first value's repr,
+    compared until the field varies, so the repr cost falls on constant fields.
     """
 
     __slots__ = ("populated", "seen", "varied", "first")

@@ -24,18 +24,12 @@ from effects.application.geometry_checks import (
     check_ward,
     load_cache,
     nearest_neighbours,
-    write_scorer_smoke_cache,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY
 from effects.domain.evaluation_report import CheckStatus
 from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
-from effects.infrastructure.effect_model_store import (
-    SplitProvenance,
-    content_hash,
-    resolve_inference_paths,
-)
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
 
 
@@ -121,14 +115,14 @@ class TestLoadingTheCache:
     def test_rows_are_keyed_by_the_text_they_encode(self, cache):
         cards, abilities = cache
         loaded = load_cache(abilities, cards, surface="script")
-        assert set(loaded.texts()) == {
+        assert set(loaded.texts) == {
             "Flying", "Vigilance", "DealDamage | NumDmg$ 2",
         }
 
     def test_the_prose_surface_keys_on_prose(self, cache):
         cards, abilities = cache
         loaded = load_cache(abilities, cards, surface="prose")
-        assert "CARDNAME deals 2 damage to any target." in loaded.texts()
+        assert "CARDNAME deals 2 damage to any target." in loaded.texts
 
     def test_the_surface_is_never_defaulted(self, cache):
         """A default is how the evaluator came to key a script model on prose."""
@@ -252,12 +246,12 @@ class TestTheShippingCache:
 
     def test_it_spans_the_card_and_token_trees(self, tmp_path):
         loaded = self._load(tmp_path)
-        assert set(loaded.texts()) == {"Flying", "Sacrifice | GainLife$ 3"}
+        assert set(loaded.texts) == {"Flying", "Sacrifice | GainLife$ 3"}
 
     def test_synthetic_variant_scripts_are_not_in_it(self, tmp_path):
         """A perturbed script is collection input, not a line the cache serves."""
         loaded = self._load(tmp_path)
-        assert "DealDamage | NumDmg$ 5" not in loaded.texts()
+        assert "DealDamage | NumDmg$ 5" not in loaded.texts
 
     def test_a_token_is_not_a_card_for_the_pooled_vectors(self, tmp_path):
         loaded = self._load(tmp_path)
@@ -597,117 +591,3 @@ class TestBaselineComparison:
         for baseline in baselines:
             check_baseline_geometry(full, baseline, "no-state")
         assert len(calls) == 3
-
-
-class TestScorerSmokeCache:
-    """Pooled ``e`` spliced into a scratch tree's sealed vectors (FR-071)."""
-
-    @staticmethod
-    def _sealed(tmp_path, stem: str, text: list[float]) -> Path:
-        from sealed.domain.card_embedding_layout import FEATURE_COUNT
-
-        path = tmp_path / "scratch" / "cardsfolder" / f"{stem}.npz"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        features = np.arange(FEATURE_COUNT, dtype=np.float32)
-        np.savez_compressed(
-            path, embedding=np.concatenate([np.array(text, np.float32), features]),
-        )
-        return path
-
-    def test_it_splices_e_between_the_text_vector_and_the_features(self, tmp_path):
-        """Concatenated rather than replacing, and the trailing feature block
-        stays trailing, because the sealed layout reads it from the end."""
-        from sealed.domain.card_embedding_layout import FEATURE_COUNT, is_land_embedding
-
-        path = self._sealed(tmp_path, "s/shock", [9.0, 9.0, 9.0])
-        written, without = write_scorer_smoke_cache(
-            {"s/shock": np.array([1.0, 2.0], np.float32)},
-            tmp_path / "scratch" / "cardsfolder", e_width=2,
-        )
-        assert (written, without) == (1, 0)
-        with np.load(path) as data:
-            combined = data["embedding"]
-        np.testing.assert_allclose(combined[:5], [9.0, 9.0, 9.0, 1.0, 2.0])
-        np.testing.assert_allclose(combined[-FEATURE_COUNT:], np.arange(FEATURE_COUNT))
-        assert not is_land_embedding(combined)
-
-    def test_a_card_with_no_ability_line_gets_zeros_of_the_same_width(self, tmp_path):
-        """The scorer stacks a deck's vectors, so every card must be as wide."""
-        from sealed.domain.card_embedding_layout import FEATURE_COUNT
-
-        path = self._sealed(tmp_path, "g/grizzly_bears", [5.0])
-        written, without = write_scorer_smoke_cache(
-            {}, tmp_path / "scratch" / "cardsfolder", e_width=3,
-        )
-        assert (written, without) == (1, 1)
-        with np.load(path) as data:
-            combined = data["embedding"]
-        assert combined.shape == (1 + 3 + FEATURE_COUNT,)
-        np.testing.assert_allclose(combined[1:4], 0.0)
-
-    def test_it_writes_the_key_the_sealed_store_reads(self, tmp_path):
-        """The sealed pipeline loads ``embedding``; any other key reads as nothing."""
-        path = self._sealed(tmp_path, "s/shock", [9.0])
-        write_scorer_smoke_cache(
-            {"s/shock": np.array([1.0], np.float32)},
-            tmp_path / "scratch" / "cardsfolder", e_width=1,
-        )
-        with np.load(path) as data:
-            assert list(data.keys()) == ["embedding"]
-
-
-class TestInferencePathsResolveFromTheCheckpoint:
-    """T089: FR-097 tested by execution, not by parser inspection."""
-
-    def _provenance(self, tmp_path):
-        vocab = tmp_path / "recorded-vocab.txt"
-        vocab.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
-        keywords = tmp_path / "recorded-kw.json"
-        keywords.write_text("{}", encoding="utf-8")
-        return SplitProvenance(
-            vocab_path=str(vocab), keyword_definitions_path=str(keywords),
-            vocab_hash=content_hash(vocab),
-            keyword_definitions_hash=content_hash(keywords),
-        ), vocab, keywords
-
-    def test_absent_flags_resolve_to_the_recorded_paths(self, tmp_path):
-        provenance, vocab, keywords = self._provenance(tmp_path)
-        resolved = resolve_inference_paths(
-            provenance, vocab_path=None, keyword_path=None,
-        )
-        assert resolved == (vocab, keywords)
-
-    def test_the_resolved_paths_pass_the_hash_check(self, tmp_path):
-        provenance, _vocab, _keywords = self._provenance(tmp_path)
-        vocab_path, keyword_path = resolve_inference_paths(
-            provenance, vocab_path=None, keyword_path=None,
-        )
-        provenance.verify_hashes(
-            vocab_path=vocab_path, keyword_path=keyword_path,
-        )
-
-    def test_an_explicit_flag_overrides_the_recorded_path(self, tmp_path):
-        provenance, _vocab, keywords = self._provenance(tmp_path)
-        chosen = tmp_path / "chosen.txt"
-        chosen.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
-        vocab_path, keyword_path = resolve_inference_paths(
-            provenance, vocab_path=chosen, keyword_path=None,
-        )
-        assert vocab_path == chosen
-        assert keyword_path == keywords
-
-    def test_an_override_to_a_different_file_still_fails_the_hash_check(
-        self, tmp_path,
-    ):
-        provenance, _vocab, _keywords = self._provenance(tmp_path)
-        other = tmp_path / "other.txt"
-        other.write_text("[PAD]\n[UNK]\ndifferent\n", encoding="utf-8")
-        from effects.infrastructure.effect_model_store import HashMismatchError
-
-        vocab_path, keyword_path = resolve_inference_paths(
-            provenance, vocab_path=other, keyword_path=None,
-        )
-        with pytest.raises(HashMismatchError):
-            provenance.verify_hashes(
-                vocab_path=vocab_path, keyword_path=keyword_path,
-            )

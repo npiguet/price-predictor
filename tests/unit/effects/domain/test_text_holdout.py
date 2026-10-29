@@ -14,7 +14,6 @@ new mechanic belongs to.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -25,6 +24,7 @@ from effects.domain.text_holdout import (
     normalize_script_text,
     select_holdout,
 )
+from tests.unit.effects.builders import fresh_interpreter_env
 
 
 def test_an_eligible_text_is_held_out_when_its_hash_qualifies() -> None:
@@ -80,7 +80,7 @@ def test_the_hash_is_stable_across_processes() -> None:
         subprocess.run(
             [sys.executable, "-c", script],
             capture_output=True, text=True, check=True,
-            env={**os.environ, "PYTHONHASHSEED": seed},
+            env=fresh_interpreter_env(PYTHONHASHSEED=seed),
         ).stdout.strip()
         for seed in ("0", "1", "12345")
     }

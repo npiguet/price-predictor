@@ -1,12 +1,8 @@
 """Build a fixed training corpus and two fixed validation strata (FR-135).
 
-Two passes. The survey (:mod:`effects.application.corpus_survey`) reads every
-shard and reports what the whole corpus holds and what its training-bound
-records can supply; this module folds provenance keys to ability texts,
-decides the split and the plan (:mod:`effects.domain.corpus_plan`), and the
-write pass (:mod:`effects.application.corpus_write`) re-reads each shard and
-keeps what the decisions admit. :mod:`effects.application.corpus_report`
-assembles the manifest and the operator's report.
+Between the survey (:mod:`effects.application.corpus_survey`) and the write
+pass (:mod:`effects.application.corpus_write`), this module folds provenance
+keys to ability texts and decides the split and the plan.
 """
 
 from __future__ import annotations
@@ -14,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,6 +28,7 @@ from effects.application.corpus_survey import (
     run_survey,
 )
 from effects.application.corpus_write import WriteConfig, WritePlan, WriteResult, run_write_pass
+from effects.domain import default_paths
 from effects.domain.corpus_plan import (
     BuildCorpusError,
     GameRouting,
@@ -43,6 +40,7 @@ from effects.domain.corpus_plan import (
     plan_selection,
 )
 from effects.domain.keyword_names import normalize_keyword
+from effects.domain.provenance import SourceTree, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
 from effects.domain.sampling import DEFAULT_KIND_MIX
@@ -50,7 +48,7 @@ from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HeldOut
 from effects.domain.strata import OUTPUT_STRATA
 
 if TYPE_CHECKING:
-    from effects.domain.token_key_remap import TokenKeyRemapper
+    from effects.infrastructure.converted_trees import ConvertedTrees
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -70,74 +68,88 @@ DEFAULT_GAME_DISJOINT_KEYWORDS: tuple[str, ...] = (
 
 @dataclass(frozen=True, slots=True)
 class BuildCorpusConfig:
-    """The `build-corpus` flags (root spec § Curated corpus)."""
+    """The `build-corpus` flags (root spec § Curated corpus).
+
+    ``help`` metadata is the flag's help, so a default lives here alone.
+    """
 
     records_dir: Path
-    output: Path = Path("output/effects/corpus")
-    cards_folders: tuple[str, ...] = ("output/cardsfolder", "output/tokenscripts")
-    #: Forge's own raw token scripts, read to resolve the old collector's
-    #: token keys (FR-151). The *raw* tree, not the converted one: the remap
-    #: tells same-name scripts apart by their ``Colors:``, ``Types:`` and
-    #: ``PT:`` lines, which conversion does not preserve.
-    forge_tokenscripts: Path | None = Path("../forge/forge-gui/res/tokenscripts")
-    remap_token_keys: bool = True
-    vocab_path: str = "models/effects/vocab.txt"
+    output: Path = Path(default_paths.DEFAULT_CORPUS_OUTPUT)
+    cards_folders: tuple[Path, ...] = tuple(
+        Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
+    )
+    vocab_path: str = default_paths.DEFAULT_VOCAB_PATH
     variant_scripts: str | None = None
     holdout_permille: int = HOLDOUT_PERMILLE
     holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
     #: ``template`` (gen-2) or ``text`` (feature 023's rule, FR-041).
     holdout_unit: str = "template"
-    #: Most written records per ability text **per cell**, repeats included.
-    text_cap: int = 200
-    #: Most copies of one record toward a short family's share (FR-049).
-    reuse_cap: int = 4
+    text_cap: int = field(default=200, metadata={"help": (
+        "Max written training records per ability text per selection cell, "
+        "repeats included; 0 means no cap (default: %(default)s)"
+    )})
+    reuse_cap: int = field(default=4, metadata={"help": (
+        "Max copies of one record toward a short rule family's share (FR-049); "
+        "1 means no repeats (default: %(default)s)"
+    )})
     class_mix: dict[str, float] | None = None
-    training_records: int = 0
-    #: The per-game hash threshold of the game-disjoint stratum (FR-044).
-    game_disjoint_share: float = 0.01
-    #: The threshold for a game holding a qualifying combat for one of
-    #: ``game_disjoint_keywords`` (FR-045).
-    game_disjoint_keyword_share: float = 0.15
+    training_records: int = field(default=0, metadata={"help": (
+        "Total training records after capping, subsampled per class; 0 means "
+        "no ceiling (default: %(default)s)"
+    )})
+    game_disjoint_share: float = field(default=0.01, metadata={"help": (
+        "A game naming no held-out card enters the game-disjoint stratum when "
+        "crc32(game_id) mod 1e6 / 1e6 is below this, so a rebuild over a grown "
+        "corpus keeps every game it placed (default: %(default)s)"
+    )})
+    game_disjoint_keyword_share: float = field(default=0.15, metadata={"help": (
+        "The threshold instead for a game holding a qualifying combat for one "
+        "of --game-disjoint-keywords (default: %(default)s)"
+    )})
     game_disjoint_keywords: tuple[str, ...] = DEFAULT_GAME_DISJOINT_KEYWORDS
-    #: The keyword-definitions table the tokenizer expands with; FR-015's check
-    #: reads it. None, or a path that does not exist, skips the check: nothing
+    #: Read by FR-015's check; None or a missing file skips it, since nothing
     #: can expand without a table.
-    keyword_definitions: Path | None = Path("output/effects/keyword-definitions.json")
-    card_disjoint_text_cap: int = 50
-    shard_records: int = 2000
+    keyword_definitions: Path | None = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
+    card_disjoint_text_cap: int = field(default=50, metadata={"help": (
+        "Max card-disjoint games admitted per held-out ability text, so each "
+        "weighs comparably in gate 1; 0 means no cap (default: %(default)s)"
+    )})
+    shard_records: int = field(default=2000, metadata={"help": (
+        "Records per output shard: whole games are dealt to shards by a seeded "
+        "hash of their game id; 0 keeps one output shard per source shard "
+        "(default: %(default)s)"
+    )})
     max_events: int = MAX_EVENTS_PER_RECORD
-    validation_sample: int = 2048
-    seed: int = 42
-    workers: int | None = None
-    verify: bool = False
+    validation_sample: int = field(default=2048, metadata={"help": (
+        "Records per stratum in validation/samples/, mixture-matched; 0 writes "
+        "no sample (default: %(default)s)"
+    )})
+    seed: int = field(default=42, metadata={"help": (
+        "Seeds the selection and the repacking (default: %(default)s)"
+    )})
+    workers: int | None = field(default=None, metadata={"help": (
+        "Parallel shard readers; unset uses the CPU count"
+    )})
+    verify: bool = field(default=False, metadata={"help": (
+        "Report drift against an existing manifest and write nothing"
+    )})
 
     def __post_init__(self) -> None:
-        """Refuse a negative count, and say what zero means for each.
+        """Refuse a negative count; zero is a real setting for each.
 
-        Zero is a real setting for all seven and means something different in
-        each, which is why it is spelled out rather than rejected along with
-        the negatives:
-
-        - ``--text-cap 0`` — no per-text cap; a text's quota in a cell is bounded
-          by ``--reuse-cap`` repeats alone.
-        - ``--card-disjoint-text-cap 0`` — no cap on the card-disjoint
-          stratum; every held-out game carrying a held-out text is admitted.
+        - ``--text-cap 0`` — no per-text cap; ``--reuse-cap`` alone bounds a
+          text's quota in a cell.
+        - ``--card-disjoint-text-cap 0`` — every held-out game carrying a
+          held-out text is admitted.
         - ``--game-disjoint-share 0`` — no game-disjoint stratum, unless the
           keyword share places some games.
         - ``--training-records 0`` — no ceiling beyond ``--text-cap``.
         - ``--shard-records 0`` — no repacking; one output shard per source
-          shard, which is what the write pass did before repacking existed
-          (``repack_shards`` reads a non-positive size this way).
-        - ``--max-events-per-record 0`` — no event-flood rule; every record's
-          event count is accepted (``quality_defect`` reads a non-positive
-          maximum this way, the same reading ``--text-cap`` gives zero). The
-          other two quality rules have no number and stay on.
-        - ``--validation-sample 0`` — no fixed validation sample; nothing is
-          written under ``validation/samples/``.
-
-        A negative is none of those and has no reading at all: it would make
-        ``min(cap, total)`` negative and ``random.sample`` raise several
-        thousand records into the build.
+          shard.
+        - ``--max-events-per-record 0`` — no event-flood rule; the other two
+          quality rules stay on.
+        - ``--validation-sample 0`` — nothing written under
+          ``validation/samples/``.
         """
         for flag, value in (
             ("--text-cap", self.text_cap),
@@ -185,11 +197,8 @@ class BuildCorpusConfig:
 
     @property
     def heap_cap(self) -> int:
-        """How many smallest hashes the survey keeps per cell and key.
-
-        ``--text-cap 0`` is no cap, so a text's quota is bounded by its repeats
-        alone and every hash may be needed.
-        """
+        """How many smallest hashes the survey keeps per cell and key; every
+        one under ``--text-cap 0``."""
         return self.text_cap if self.text_cap > 0 else sys.maxsize
 
     @property
@@ -200,16 +209,12 @@ class BuildCorpusConfig:
         )
 
 
-# ── the decisions ───────────────────────────────────────────────────────
-
-
 @dataclass(frozen=True, slots=True)
 class Decisions:
     """Everything the write pass needs and the manifest records about the plan.
 
-    The fold from acting keys to ability texts happened here, once, so the
-    plans are keyed by cell and key tuple and a worker applies them without
-    folding anything.
+    Plans are keyed by cell and key tuple, so a worker applies them without
+    folding keys to texts.
     """
 
     selection: SelectionPlan
@@ -237,14 +242,8 @@ def _text_of_keys(keys: Keys, sidecars: SidecarCache, surface: str) -> str | Non
 def _keyword_misfires(
     key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
 ) -> list[str]:
-    """Texts a display-name keyword match would expand on a non-keyword line.
-
-    FR-015: the tokenizer recognises a keyword line by the text before its
-    first colon matching a definition, and the match has to land on a line
-    whose ``script_api_type`` is ``Keyword``. One that lands anywhere else
-    would replace a script with a reminder template the line does not carry,
-    and train the encoder on it; the build refuses instead.
-    """
+    """Texts a display-name keyword match would expand on a non-keyword line
+    (FR-015), replacing a script with a reminder template it does not carry."""
     if definitions is None or not Path(definitions).exists():
         return []
     from effects.application.extract_keyword_definitions import load_keyword_definitions
@@ -255,10 +254,7 @@ def _keyword_misfires(
     found: list[str] = []
     for keys in key_text:
         for key in keys:
-            try:
-                line = sidecars.line_for(key)
-            except KeyError:
-                continue
+            line = sidecars.line_or_none(key)
             if line is None or not line.script_text:
                 continue
             if line.script_api_type == KEYWORD_API_TYPE:
@@ -294,12 +290,8 @@ def decide(
     for keys in survey.rarity.key_records:
         text = _text_of_keys(keys, sidecars, surface)
         if text is None:
-            # No sidecar line carries these keys: a runtime-only trait (level
-            # up, bestow, a trigger another card's static granted) or, outside
-            # the resolution class -- whose records acting through no text the
-            # quality rules already refused -- a script the converted corpus
-            # never held. Not a text, so it cannot be capped against one: its
-            # records are sampled with the cell's keyless records.
+            # A runtime-only trait or an unconverted script: no text to cap
+            # against, so its records are sampled with the cell's keyless ones.
             continue
         key_text[keys] = text
         text_games.setdefault(text, set()).update(survey.rarity.key_games.get(keys, ()))
@@ -337,9 +329,6 @@ def decide(
     )
 
 
-# ── the build ───────────────────────────────────────────────────────────
-
-
 def build(config: BuildCorpusConfig) -> int:
     """Build a curated dataset, or verify an existing one. Returns an exit code."""
     from effects.domain.ability_encoder import surface_of
@@ -349,25 +338,26 @@ def build(config: BuildCorpusConfig) -> int:
     if config.verify:
         return _verify(config, store)
 
-    sources = _Sources.of(config)
-    held_out = _select_holdout(config, sources)
+    trees = _converted_trees(config)
+    held_out = _select_holdout(config, trees)
     surface = surface_of(config.vocab_path)
     logger.info(
         "Holdout (%s unit): %d ability text(s) on %d card(s) and %d token "
         "script(s); encoding surface %r.",
         config.holdout_unit, len(held_out.texts), len(held_out.names),
-        sum(1 for script in held_out.script_files if script.startswith("tokenscripts/")),
+        sum(
+            1 for script in held_out.script_files
+            if split_script_file(script)[0] == SourceTree.TOKENSCRIPTS
+        ),
         surface,
     )
-    remapper = _token_key_remapper(config, sources.folders, sources.card_files)
     _refuse_mixed_generations(Path(config.records_dir))
     read = ReadConfig(
-        records_dir=str(config.records_dir), sidecar_roots=sources.root_paths,
+        records_dir=str(config.records_dir), sidecar_roots=trees.root_paths,
         max_events=config.max_events, held_out=held_out, seed=config.seed,
-        remapper=remapper,
     )
     survey = _survey(config, read)
-    decisions = _decide_or_refuse(config, survey, sources, surface, held_out)
+    decisions = _decide_or_refuse(config, survey, trees, surface, held_out)
 
     # Before the first output shard, and only on a real build: a rebuild
     # replaces the dataset rather than layering over it (FR-144).
@@ -385,13 +375,13 @@ def build(config: BuildCorpusConfig) -> int:
         )),
         workers=config.workers,
     )
-    report_write_pass(survey, written, remapped=remapper is not None)
+    report_write_pass(survey, written)
     _repack_outputs(store, written, shard_records=config.shard_records, seed=config.seed)
     _write_validation_samples(config, store, WorkerContext(read))
 
     manifest = build_manifest(
         config, surface=surface, held_out=held_out, survey=survey,
-        decisions=decisions, written=written, remapped=remapper is not None,
+        decisions=decisions, written=written,
     )
     store.save(manifest)
     log_report(manifest, survey, decisions, written)
@@ -416,19 +406,6 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
                 len(names), label, ", ".join(names[:5]),
                 ", …" if len(names) > 5 else "",
             )
-    # Drift stays shard-based, but which Forge token scripts were on disk
-    # decides which old token keys resolved (FR-151), so a dataset built
-    # against another token tree is a different dataset even when every
-    # shard matches.
-    built_against = manifest.forge_tokenscripts
-    if built_against and built_against != str(Path(config.forge_tokenscripts or "")):
-        logger.warning(
-            "This dataset's token keys were remapped against %s, and "
-            "--forge-tokenscripts now names %s. Which token scripts are on "
-            "disk decides which keys resolved, so the two trees build "
-            "different datasets from the same shards.",
-            built_against, config.forge_tokenscripts,
-        )
     if added or removed or resized:
         logger.warning("Rebuild with `python -m effects build-corpus`.")
         return 1
@@ -436,60 +413,19 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
     return 0
 
 
-@dataclass(frozen=True)
-class _Sources:
-    """The converted trees a build reads its ability texts from."""
+def _converted_trees(config: BuildCorpusConfig) -> ConvertedTrees:
+    """The converted trees, the variant tree among them when one is named."""
+    from effects.infrastructure.converted_trees import ConvertedTrees
 
-    #: Tree name -> converted root (``cardsfolder``, ``tokenscripts``).
-    folders: dict[str, Path]
-    #: ``folders`` plus the variant tree, when ``--variant-scripts`` names one.
-    roots: dict[str, Path]
-    sidecars: SidecarCache
-    #: ``card name -> script file`` over the converted card tree.
-    card_files: dict[str, str]
-
-    @classmethod
-    def of(cls, config: BuildCorpusConfig) -> _Sources:
-        from effects.infrastructure.card_sources import load_card_files
-        from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
-
-        folders = sidecar_roots(config.cards_folders)
-        roots = dict(folders)
-        if config.variant_scripts:
-            # Keyed "variant-scripts" because that is the tree a variant line's
-            # own provenance names, and the trainer registers it under the same
-            # name. Without it every variant key resolves to no text, and a
-            # resolution acting through one is refused as textless.
-            roots["variant-scripts"] = Path(config.variant_scripts)
-        cards_folder = folders.get("cardsfolder", Path(config.cards_folders[0]))
-        return cls(
-            folders=folders, roots=roots, sidecars=SidecarCache(roots),
-            card_files=load_card_files(cards_folder),
-        )
-
-    @property
-    def root_paths(self) -> dict[str, str]:
-        """``roots`` as strings, which is how a worker process receives them."""
-        return {name: str(path) for name, path in self.roots.items()}
+    return ConvertedTrees.from_folders(config.cards_folders, config.variant_scripts)
 
 
-def _select_holdout(config: BuildCorpusConfig, sources: _Sources) -> HeldOutCards:
-    """The trainer's own holdout rule over the converted trees; refuses an empty one.
-
-    Token scripts are carriers like cards: a token printing a held-out text
-    puts its script in the holdout, so the games it appears in are held out.
-    """
-    from effects.domain.split import text_keyed_holdout
-    from effects.infrastructure.card_sources import load_card_texts
-    from effects.infrastructure.sidecar_io import load_tree_texts
-
-    held_out = text_keyed_holdout(
-        sources.card_files,
-        load_card_texts(sources.card_files, sources.sidecars),
+def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOutCards:
+    """The trainer's own holdout rule over the converted trees; refuses an empty one."""
+    held_out = trees.holdout(
         permille=config.holdout_permille,
         max_carriers=config.holdout_max_carriers,
         unit=config.holdout_unit,
-        token_texts=load_tree_texts(sources.folders.get("tokenscripts")),
     )
     if not held_out.names:
         tried = ", ".join(
@@ -499,71 +435,13 @@ def _select_holdout(config: BuildCorpusConfig, sources: _Sources) -> HeldOutCard
         raise BuildCorpusError(
             "Nothing is held out, so the card-disjoint stratum would be empty "
             "and gate 1 would have nothing to measure at all. Cards folders "
-            f"tried: {tried}; {len(sources.card_files)} converted card(s) read, "
+            f"tried: {tried}; {len(trees.card_files)} converted card(s) read, "
             f"{len(held_out.texts)} held-out ability text(s), no held-out card. "
             "Run from the repository root so the relative --cards-folder paths "
             "resolve, raise --holdout-permille, or check that the converted "
             "tree has sidecars with script text."
         )
     return held_out
-
-
-def _token_key_remapper(
-    config: BuildCorpusConfig, folders: dict[str, Path], card_files: dict[str, str],
-) -> TokenKeyRemapper | None:
-    """The remap both passes read through, or None when it is turned off.
-
-    Built once in the main process and pickled into every worker with its
-    config: it is dicts and frozensets, and re-reading Forge's token scripts
-    per worker would cost more than the scan they serve.
-    """
-    if not config.remap_token_keys:
-        return None
-
-    from effects.domain.token_key_remap import TokenKeyRemapper
-    from effects.infrastructure.token_script_io import load_token_script_facts
-
-    forge_tokens = Path(config.forge_tokenscripts) if config.forge_tokenscripts else None
-    if forge_tokens is None or not forge_tokens.is_dir():
-        raise BuildCorpusError(
-            f"--forge-tokenscripts {forge_tokens} is not a directory. The old "
-            "collector keyed forked tokens to cardsfolder paths; remapping them "
-            "needs Forge's raw token scripts (their Colors/PT lines) to tell "
-            "same-name scripts apart. Point the flag at "
-            "<forge checkout>/forge-gui/res/tokenscripts/, or pass "
-            "--no-remap-token-keys to build without the remap."
-        )
-    token_dir = folders.get("tokenscripts")
-    # The *converted* token tree: the remap rewrites a key only to a script
-    # this corpus holds a sidecar for, so a token Forge scripts and the
-    # converter never wrote is left alone rather than pointed at nothing.
-    token_sidecars = (
-        frozenset(path.stem for path in Path(token_dir).glob("*.txt"))
-        if token_dir is not None and Path(token_dir).is_dir()
-        else frozenset()
-    )
-    remapper = TokenKeyRemapper(
-        load_token_script_facts(forge_tokens),
-        converted_card_files=frozenset(card_files.values()),
-        token_sidecars=token_sidecars,
-    )
-    logger.info(
-        "Token key remap: %d token name(s) over %d script(s); %d converted token "
-        "sidecar(s).",
-        len(remapper.facts_by_name),
-        sum(len(facts) for facts in remapper.facts_by_name.values()),
-        len(token_sidecars),
-    )
-    if not token_sidecars:
-        logger.warning(
-            "No converted token sidecar under %s, so the remap can resolve "
-            "nothing: every old token key will stay as it was collected. Pass "
-            "--cards-folder output/tokenscripts/ beside the card tree.",
-            # The folders actually looked in, not the `tokenscripts` entry that
-            # is missing from them: `None` names nothing an operator can check.
-            ", ".join(str(folder) for folder in config.cards_folders) or "(none)",
-        )
-    return remapper
 
 
 def _refuse_mixed_generations(records_dir: Path) -> None:
@@ -606,11 +484,11 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
 
 
 def _decide_or_refuse(
-    config: BuildCorpusConfig, survey: Survey, sources: _Sources, surface: str,
+    config: BuildCorpusConfig, survey: Survey, trees: ConvertedTrees, surface: str,
     held_out: HeldOutCards,
 ) -> Decisions:
     """:func:`decide`, refusing a dataset gate 1 could not be scored on."""
-    decisions = decide(survey, sidecars=sources.sidecars, surface=surface, config=config)
+    decisions = decide(survey, sidecars=trees.sidecars, surface=surface, config=config)
     if not decisions.strata.card_disjoint:
         raise BuildCorpusError(
             "No game is admitted to the card-disjoint stratum, so the dataset "
@@ -654,12 +532,8 @@ def _repack_outputs(
 ) -> None:
     """Deal each stratum's parts into uniform, mixed shards, then drop the parts.
 
-    The write pass writes one part per source shard, so an output's shard
-    sizes mirror the raw corpus's -- hundreds of tiny files beside a handful
-    of huge ones -- and each part is one collection run's lifetime. The
-    trainer reads a shard at a time and takes that shard's share of an
-    epoch's steps, so uneven shards make the step budget uneven, and a shard
-    of one run's games makes its batches correlated by run.
+    A part is one source shard, so unrepacked the trainer's per-shard step
+    budget would be uneven and a shard's batches correlated by run.
     """
     import shutil
 

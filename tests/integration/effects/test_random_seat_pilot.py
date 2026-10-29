@@ -27,7 +27,6 @@ target. Skips when the JAR is not built, like the other collection tests.
 from __future__ import annotations
 
 import json
-import subprocess
 import time
 import uuid
 from collections import defaultdict
@@ -43,7 +42,7 @@ from effects.infrastructure.record_io import (
     iter_shards,
     record_from_dict,
 )
-from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
+from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 pytestmark = pytest.mark.integration
@@ -146,11 +145,7 @@ def _run_pilot(tmp_path: Path) -> tuple[Path, Path, Path, list]:
                 if matches >= _MIN_MATCHES and _charm_resolved(_read(records_dir)):
                     break
         finally:
-            process.terminate()
-            try:
-                process.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                process.kill()
+            kill_process_tree(process)
     return outcomes, progress, records_dir, _read(records_dir)
 
 

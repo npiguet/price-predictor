@@ -1,10 +1,8 @@
 """What a curated dataset records about how it was built (FR-143).
 
-The manifest is the dataset's identity. A training run reads its split, its
-rarity table and its caps from here rather than deriving them, and a checkpoint
-records ``digest()`` so ``evaluate-effect-model`` can refuse a dataset that has
-been rebuilt since (FR-147) — a rebuild is a different split, and scoring the
-gates against it would score them partly on games the model trained on.
+A training run reads its split, rarity table and caps from here rather than
+deriving them, and a checkpoint records ``digest()`` so ``evaluate-effect-model``
+can refuse a dataset rebuilt since (FR-147).
 """
 
 from __future__ import annotations
@@ -13,16 +11,14 @@ from dataclasses import MISSING, Field, asdict, dataclass, field, fields
 from typing import Any
 
 from effects.domain.canonical_digest import canonical_digest
+from effects.domain.text_holdout import HoldoutUnit
 
 
 @dataclass(frozen=True, slots=True)
 class SourceShard:
-    """One raw shard the dataset was built from, by path and size.
-
-    Size rather than a content hash: a shard is append-only and uniquely named,
-    so its length is what changes when a collection run extends the corpus, and
-    hashing tens of gigabytes to learn that would cost more than the build.
-    """
+    """One raw shard the dataset was built from, by path and size: a shard is
+    append-only and uniquely named, so its length is what changes, and hashing
+    tens of gigabytes would cost more than the build."""
 
     name: str
     size: int
@@ -30,12 +26,8 @@ class SourceShard:
 
 @dataclass(frozen=True, slots=True)
 class ClassCounts:
-    """What one sampling class contributed, read against kept.
-
-    ``unique_texts`` is the number no record count can stand in for: it is what
-    says whether the per-text cap trimmed the head or flattened the tail
-    (FR-145).
-    """
+    """What one sampling class contributed. ``unique_texts`` says whether the
+    per-text cap trimmed the head or flattened the tail (FR-145)."""
 
     read: int
     kept: int
@@ -109,14 +101,11 @@ class CorpusManifest:
     """Every decision ``build-corpus`` made, and what it made them from."""
 
     seed: int = field(metadata=_reads(int))
-    #: The encoding surface the rarity table's text keys were built on.
-    #: `surface_of(vocab_path)` decides it, and a table built on the other
-    #: surface keys every text differently while looking exactly as valid.
+    #: The encoding surface (``surface_of(vocab_path)``) the rarity table's
+    #: text keys were built on; the other surface keys every text differently.
     surface: str = field(metadata=_reads(str))
     vocab_path: str = field(metadata=_reads(str))
-    #: The stage-four variant tree the build resolved against, or "" when
-    #: none was given. Which trees resolved decides which keys became texts,
-    #: and so which texts the rarity table names and the cap reaches.
+    #: The variant tree the build resolved keys against, or "" when none.
     variant_scripts: str = field(metadata=_reads(str, absent=""))
     holdout_permille: int = field(metadata=_reads(int))
     holdout_max_carriers: int = field(metadata=_reads(int))
@@ -124,40 +113,25 @@ class CorpusManifest:
     card_disjoint_text_cap: int = field(metadata=_reads(int))
     training_records: int = field(metadata=_reads(int))
     class_mix: dict[str, float] = field(metadata=_reads(_float_map))
-    #: The class proportions the training output actually holds, counted from
-    #: what the write pass kept. ``class_mix`` is what the build was asked
-    #: for; this is what it delivered, and the two part company whenever a
-    #: class runs out or an availability estimate misses. Recorded rather than
-    #: left to be recomputed, because a reader comparing a mixture against the
-    #: corpus would have to re-read the whole dataset to do it (FR-139,
-    #: FR-143).
+    #: The class proportions the training output holds, beside ``class_mix``,
+    #: the ones requested (FR-139, FR-143).
     delivered_mix: dict[str, float] = field(metadata=_reads(_float_map))
     held_out_cards: tuple[str, ...] = field(metadata=_reads(tuple))
-    #: The held-out ability texts themselves — what a ``--corpus`` training
-    #: run's ``HeldOutCards.texts`` is built from. Distinct from
-    #: ``held_out_cards``: the check-holdout guard sizes the card-disjoint
-    #: stratum from ``.texts`` alone (FR-088), so a manifest that omitted this
-    #: would make every ``--corpus`` run read that stratum as empty.
+    #: The held-out ability texts a ``--corpus`` run builds
+    #: ``HeldOutCards.texts`` from, which sizes the card-disjoint stratum
+    #: (FR-088).
     held_out_texts: tuple[str, ...] = field(metadata=_reads(tuple))
     card_disjoint_games: tuple[str, ...] = field(metadata=_reads(tuple))
     game_disjoint_games: tuple[str, ...] = field(metadata=_reads(tuple))
     rarity: dict[str, int] = field(metadata=_reads(_int_map))
     sources: tuple[SourceShard, ...] = field(metadata=_reads(_sources))
     per_class: dict[str, ClassCounts] = field(metadata=_reads(_class_counts))
-    #: Records written to each output: "training", "card-disjoint",
-    #: "game-disjoint", "gate-one", and "dropped-held-out" for held-out games
-    #: the card-disjoint cap declined. The per-stratum sibling of
-    #: ``per_class``'s per-class breakdown (FR-143, FR-145). "gate-one"
-    #: overlaps "card-disjoint" -- its records are written to both -- so these
-    #: values do not sum to a record total.
+    #: Records per :class:`~effects.domain.strata.Stratum` (FR-143, FR-145).
+    #: "gate-one" overlaps "card-disjoint" and the dropped strata are never
+    #: written, so the values do not sum to a record total.
     per_stratum: dict[str, int] = field(metadata=_reads(_int_map))
-    #: Distinct ability texts in every output in ``OUTPUTS`` (not
-    #: "dropped-held-out", which writes nothing). Read together with
-    #: ``per_stratum``, this is the pair FR-145 asks an operator to read: a
-    #: stratum can hold plenty of records and still have flattened its tail,
-    #: and only the text count says so. Not to be confused with
-    #: ``ClassCounts.unique_texts``, which is the same idea sliced by
-    #: sampling class within the training output alone.
+    #: Distinct ability texts per written stratum (``OUTPUT_STRATA``), read
+    #: beside ``per_stratum``: only the text count shows a flattened tail.
     unique_texts: dict[str, int] = field(metadata=_reads(_int_map))
     shortfall: dict[str, int] = field(metadata=_reads(_int_map))
     #: Records refused by ``effects.domain.record_quality`` in both passes,
@@ -165,11 +139,9 @@ class CorpusManifest:
     quality_dropped: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
-    #: Games per top-level source directory under ``--records-dir``
-    #: ("depleted", "full-strength", …; "." for shards at the root), and how
-    #: many of them name a held-out card. A depleted directory whose held-out
-    #: count is not zero is a leak in collection, and this is where it shows
-    #: (FR-149).
+    #: Games per top-level source directory under ``--records-dir`` ("." for
+    #: the root), and how many name a held-out card: a nonzero count under a
+    #: depleted directory is a collection leak (FR-149).
     games_by_source: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
@@ -183,56 +155,40 @@ class CorpusManifest:
     validation_sample: int = field(default=0, metadata=_reads(int))
     #: ``--max-events-per-record`` the quality rule used.
     max_events_per_record: int = field(default=0, metadata=_reads(int))
-    #: A **watch** statistic, not a refusal: records the build kept whose
-    #: events the collector could not attribute to a producing clause (FR-148).
-    #: Attribution failing does not make the outcome someone else's -- the
-    #: bracket collector records what happened inside the ability's own
-    #: resolution -- so these records are trained on. A rising share is a
-    #: statement about the collector, not about the corpus.
+    #: Watched, not refused: kept records whose events the collector could not
+    #: attribute to a clause (FR-148). They are still the ability's own
+    #: outcomes, so they train.
     unattributed_records: int = field(default=0, metadata=_reads(int))
-    #: Provenance keys the build rewrote from the old collector's
-    #: ``cardsfolder/<name>.txt`` to the token script they meant (FR-151),
-    #: counted **on written records**: a record the build refused or dropped
-    #: takes its own remaps with it, so this is what the dataset carries
-    #: rather than what the raw shards held. 0 on a manifest built before the
-    #: remap existed, and on one built with ``--no-remap-token-keys``.
+    #: Legacy, with ``token_keys_ambiguous`` and ``forge_tokenscripts``: the
+    #: retired token-key remap's tallies (FR-151), kept because manifests on
+    #: disk carry them and the digest hashes them; always written empty now.
     token_keys_remapped: int = field(default=0, metadata=_reads(int))
-    #: Old token keys the remap refused to guess at, on written records, by
-    #: the old script's filename stem, largest 100 only. A stem here is a
-    #: token name whose scripts the entity's colours, types, supertypes and
-    #: P/T could not tell apart -- most often two same-stat scripts differing
-    #: only by a keyword, which a snapshot does not show at all. The records
-    #: are kept, keyed as they were collected, unless FR-148 refuses them for
-    #: acting through no text.
     token_keys_ambiguous: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
     #: Script file -> resolution records refused because every acting key
-    #: mapped to no rendered line (FR-148), largest 100 only. The refusal is
-    #: dominated by Forge's implicit permanent spell, which every permanent
-    #: carries, so the untrimmed tally is one entry per permanent script the
-    #: corpus ever resolved. Read by an operator, not by code.
+    #: mapped to no rendered line (FR-148), largest 100 only: Forge's implicit
+    #: permanent spell would otherwise add an entry per permanent. For an
+    #: operator, not code.
     no_acting_text_scripts: dict[str, int] = field(
         default_factory=dict, metadata=_reads(_int_map),
     )
-    #: The raw Forge token scripts the remap read (``--forge-tokenscripts``),
-    #: or "" when the remap was off. Which scripts were on disk decides which
-    #: keys resolved, so two datasets built against different Forge checkouts
-    #: are different datasets.
+    #: Legacy, as ``token_keys_remapped``: kept for digest stability.
     forge_tokenscripts: str = field(default="", metadata=_reads(str))
-    #: ``--game-disjoint-games``, the sampled-count rule gen-2 replaced with a
-    #: per-game threshold (FR-044). No longer written; a manifest that carries
-    #: it is still read, and keeps its digest.
+    #: Gen-1's ``--game-disjoint-games``, replaced by a per-game threshold
+    #: (FR-044). No longer written; a manifest carrying it still reads, and
+    #: keeps its digest.
     game_disjoint_target: int | None = field(
         default=None, metadata=_gen1_implied(_optional_int),
     )
 
-    # ── gen-2 (feature 024). Each is omitted from ``as_dict`` while it holds
-    # the value a gen-1 manifest implies, so a gen-1 manifest re-serializes to
-    # the same digest and every checkpoint pinned to it stays evaluable. ──
+    # Gen-2 (feature 024): each is omitted from ``as_dict`` at the value a gen-1
+    # manifest implies, so a gen-1 manifest keeps its digest.
 
     #: ``template`` or ``text`` (FR-042); absent reads as ``text``.
-    holdout_unit: str = field(default="text", metadata=_gen1_implied(str))
+    holdout_unit: HoldoutUnit = field(
+        default=HoldoutUnit.TEXT, metadata=_gen1_implied(HoldoutUnit),
+    )
     #: ``class -> family -> {available, share, written, repeats, shortfall}``.
     families: dict[str, dict[str, dict[str, int]]] = field(
         default_factory=dict, metadata=_gen1_implied(_doubly_nested_int_map),
@@ -249,9 +205,8 @@ class CorpusManifest:
     legality_counts: dict[str, dict[str, int]] = field(
         default_factory=dict, metadata=_gen1_implied(_nested_int_map),
     )
-    #: Surveyed records per legality mode. A legality record's family is its
-    #: rarest mode, so every reader placing records in families — the build's
-    #: write pass, the trainer's epoch line, the evaluator — reads it here.
+    #: Surveyed records per legality mode: every reader places a legality
+    #: record in its rarest mode's family from this table.
     legality_mode_counts: dict[str, int] = field(
         default_factory=dict, metadata=_gen1_implied(_int_map),
     )
@@ -279,8 +234,7 @@ class CorpusManifest:
     )
     reuse_cap: int | None = field(default=None, metadata=_gen1_implied(_optional_int))
     #: Training records the plan asked of each class, copies included, read
-    #: against ``per_class[...].kept``: a class delivered under its target is
-    #: a plan that counted records the write pass could not write.
+    #: against ``per_class[...].kept``.
     class_targets: dict[str, int] = field(
         default_factory=dict, metadata=_gen1_implied(_int_map),
     )
@@ -309,21 +263,13 @@ class CorpusManifest:
             values[spec.name] = spec.metadata[_READ](raw)
         return cls(**values)
 
-    #: Fields the digest leaves out: operator-facing tallies that say nothing
-    #: about which records the dataset holds. The digest is what FR-147 pins a
-    #: checkpoint to, so adding a field to this dataclass must not move it --
-    #: a manifest written before the field existed has to keep hashing the way
-    #: it did, or every checkpoint trained against it stops being evaluable.
+    #: Operator-facing tallies the digest leaves out, so a manifest written
+    #: before one existed keeps the digest its checkpoints pin (FR-147).
     _OUTSIDE_THE_DIGEST = ("no_acting_text_scripts",)
 
     def digest(self) -> str:
-        """A stable hash over every decision, insensitive to listing order.
-
-        Sorted keys and a sorted source list, so two builds of the same dataset
-        agree whatever order the filesystem enumerated shards in.
-        ``_OUTSIDE_THE_DIGEST`` names the fields that are reported rather than
-        decided, and they are dropped here rather than never recorded.
-        """
+        """A stable hash over every decision: sorted keys and sources, so the
+        order the filesystem enumerated shards in cannot move it."""
         payload = self.as_dict()
         for field_name in self._OUTSIDE_THE_DIGEST:
             payload.pop(field_name, None)
@@ -333,11 +279,8 @@ class CorpusManifest:
     def drift(
         self, current: tuple[SourceShard, ...],
     ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
-        """Shards added, removed and resized since the build, each sorted.
-
-        What ``--verify`` reports (FR-144). A resized shard is one a collection
-        run appended to after this dataset read it.
-        """
+        """Shards added, removed and resized since the build, each sorted: what
+        ``--verify`` reports (FR-144)."""
         was = {shard.name: shard.size for shard in self.sources}
         now = {shard.name: shard.size for shard in current}
         added = tuple(sorted(set(now) - set(was)))

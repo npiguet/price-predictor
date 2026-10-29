@@ -144,9 +144,9 @@ def test_the_new_fields_round_trip(manifest_dict):
     assert CorpusManifest.from_dict(loaded.as_dict()) == loaded
 
 
-def test_the_digest_changes_when_the_remap_did_something_else():
-    """Two datasets whose old token keys resolved differently are different
-    datasets: the same raw shards, keyed at different abilities."""
+def test_the_legacy_remap_tallies_stay_inside_the_digest():
+    """A manifest written while the remap ran hashed its tallies, and a
+    checkpoint pinned that digest: dropping them from it would move it."""
     assert manifest().digest() != manifest(token_keys_remapped=1).digest()
 
 

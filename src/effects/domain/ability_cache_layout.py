@@ -23,28 +23,33 @@ from pathlib import Path
 
 import numpy as np
 
+from effects.domain import default_paths
+from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.provenance import ProvenanceSidecar
 
 #: Root of the cache tree. One subtree per source tree, mirroring its layout.
-DEFAULT_CACHE_ROOT = Path("output/effects/abilities")
+DEFAULT_CACHE_ROOT = Path(default_paths.DEFAULT_ABILITIES_ROOT)
 #: The key the `.npz` stores its matrix under.
 ARRAY_KEY = "e"
 CACHE_SUFFIX = ".npz"
 
 
-def cache_path_for(
-    script_file: str, *, root: Path = DEFAULT_CACHE_ROOT, variant: str = "full",
-) -> Path:
-    """Where a source file's cache lives.
+def cache_suffix(variant: str) -> str:
+    """The file suffix a variant's cache files end in.
 
     ``full`` writes ``<name>.npz``; any other variant writes
     ``<name>.{variant}.npz`` **beside** it rather than over it, so encoding a
     baseline can never replace the cache the shipping model's checks read.
     """
+    return CACHE_SUFFIX if variant == Baseline.FULL else f".{variant}{CACHE_SUFFIX}"
+
+
+def cache_path_for(
+    script_file: str, *, root: Path = DEFAULT_CACHE_ROOT, variant: str = Baseline.FULL,
+) -> Path:
+    """Where a source file's cache lives, under the variant's :func:`cache_suffix`."""
     relative = Path(script_file)
-    stem = relative.stem
-    suffix = CACHE_SUFFIX if variant == "full" else f".{variant}{CACHE_SUFFIX}"
-    return Path(root) / relative.parent / f"{stem}{suffix}"
+    return Path(root) / relative.parent / f"{relative.stem}{cache_suffix(variant)}"
 
 
 def variant_of_cache_file(path: Path) -> str | None:
@@ -54,16 +59,14 @@ def variant_of_cache_file(path: Path) -> str | None:
     ``full`` — whatever dots the source's own name holds — and None for a file
     that is not a cache file at all.
     """
-    from effects.domain.baselines import BASELINES
-
     name = Path(path).name
     if not name.endswith(CACHE_SUFFIX):
         return None
     stem = name[: -len(CACHE_SUFFIX)]
     for variant in BASELINES:
-        if variant != "full" and stem.endswith(f".{variant}"):
+        if variant != Baseline.FULL and stem.endswith(f".{variant}"):
             return variant
-    return "full"
+    return Baseline.FULL
 
 
 def validate_alignment(matrix: np.ndarray, sidecar: ProvenanceSidecar) -> None:
@@ -89,7 +92,7 @@ def validate_alignment(matrix: np.ndarray, sidecar: ProvenanceSidecar) -> None:
 def pooled_card_vector(matrix: np.ndarray) -> np.ndarray:
     """Mean and max over a card's ability rows, concatenated (FR-114).
 
-    The pooled form the decodability battery and the scorer smoke test read. A
+    The pooled form the decodability battery reads. A
     card with no ability rows pools to zeros of the right width rather than
     raising: a vanilla creature has no ability lines and is still a card.
     """

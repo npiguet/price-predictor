@@ -1082,7 +1082,6 @@ python -m effects train-effect-model --corpus output/effects/corpus-gen2/ \
 python -m effects encode-abilities --checkpoint <arm>/latest.pt
 python -m effects evaluate-effect-model --checkpoint <arm>/latest.pt
 python scripts/effect_knowledge_probes/run.py --checkpoint <arm>/latest.pt
-python -m effects scorer-smoke-test --checkpoint <arm>/latest.pt --scratch-dir scratch/smoke-<arm>/
 python scripts/effect_knowledge_probes/compare.py output/effects/reports/knowledge-probes-*/scorecard.json
 ```
 

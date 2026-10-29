@@ -25,7 +25,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from effects.infrastructure import default_paths
+from effects.domain import default_paths
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CARDS_FOLDERS = tuple(ROOT / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
@@ -81,12 +81,6 @@ def sidecar_paths(cards_folders: Iterable[Path]) -> list[Path]:
     ]
 
 
-def cache_path(abilities_root: Path, script_file: str) -> Path:
-    """The ``.npz`` of one source file: the tree path the key itself names."""
-    relative = Path(script_file)
-    return Path(abilities_root) / relative.parent / f"{relative.stem}.npz"
-
-
 @dataclass
 class LineItem:
     """One unique ability text, as the checkpoint's cache encodes it.
@@ -118,6 +112,7 @@ def line_items(
     probe item frozen under one key finds its text whichever carrier named it.
     """
     from effects.domain.ability_encoder import encoding_text
+    from effects.infrastructure.ability_cache_store import AbilityCacheStore
     from effects.infrastructure.sidecar_io import (
         converted_text_path,
         prose_for,
@@ -125,15 +120,15 @@ def line_items(
         read_sidecar,
     )
 
+    cache = AbilityCacheStore(abilities_root) if abilities_root is not None else None
     items: dict[str, LineItem] = {}
     for path in sidecar_paths(cards_folders):
         sidecar = read_sidecar(path)
         matrix = None
-        if abilities_root is not None:
-            npz = cache_path(abilities_root, sidecar.script_file)
-            if not npz.exists():
+        if cache is not None:
+            matrix = cache.read(sidecar.script_file)
+            if matrix is None:
                 continue
-            matrix = np.load(npz)["e"]
             if len(matrix) != len(sidecar.lines):
                 continue
         rendered = prose_lines(converted_text_path(path)) if surface == "prose" else []
@@ -262,8 +257,6 @@ def load_probe_model(
     runnable = load_runnable(
         config, checkpoint, vocab_path=vocab, keyword_path=keywords, records=records,
     )
-    runnable.encoder.eval()
-    runnable.model.eval()
     return ProbeModel(
         checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,
         batcher=runnable.batcher, fields=runnable.fields,
@@ -281,11 +274,14 @@ def predict(probe_model, records: list, read) -> list:
     import torch
 
     with torch.no_grad():
-        batch, surfaces = probe_model.batcher.build(records, probe_model.encoder)
-        hidden = probe_model.model(**batch)
+        built = probe_model.batcher.build(records, probe_model.encoder)
+        hidden = probe_model.model(**built.inputs)
         outputs = probe_model.model.per_entity(hidden)
         verdict = probe_model.model.verdict(hidden)
-    return [read(outputs, verdict, surface, row) for row, surface in enumerate(surfaces)]
+    return [
+        read(outputs, verdict, surface, row)
+        for row, surface in enumerate(built.surfaces)
+    ]
 
 
 def predict_all(probe_model, records: list, read, *, chunk: int = 32) -> list:

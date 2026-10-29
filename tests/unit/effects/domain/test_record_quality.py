@@ -5,10 +5,7 @@ from __future__ import annotations
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.record_quality import (
-    EVENT_FLOOD,
-    NO_ABILITY,
-    NO_ACTING_TEXT,
-    UNJOINABLE_KEY,
+    QualityDefect,
     acting_text_defect,
     has_unattributed_events,
     quality_defect,
@@ -31,8 +28,8 @@ def test_a_clean_resolution_record_has_no_defect(make_record):
 
 
 def test_a_resolution_record_with_no_ability_is_a_defect(make_record):
-    assert quality_defect(make_record(ability=())) == NO_ABILITY
-    assert quality_defect(make_record(ability=None)) == NO_ABILITY
+    assert quality_defect(make_record(ability=())) == QualityDefect.NO_ABILITY
+    assert quality_defect(make_record(ability=None)) == QualityDefect.NO_ABILITY
 
 
 def test_a_combat_record_needs_no_ability(make_record):
@@ -60,7 +57,7 @@ def test_an_unknown_attribution_is_not_a_defect(make_record):
 
 def test_too_many_events_is_a_defect(make_record):
     payload = ResolutionPayload(events=tuple(_event("root") for _ in range(65)))
-    assert quality_defect(make_record(payload=payload)) == EVENT_FLOOD
+    assert quality_defect(make_record(payload=payload)) == QualityDefect.EVENT_FLOOD
     assert quality_defect(make_record(payload=payload), max_events=100) is None
 
 
@@ -78,7 +75,7 @@ def test_a_max_events_of_zero_means_no_cap_rather_than_refuse_everything(make_re
 
 def test_no_ability_wins_over_the_event_flood(make_record):
     payload = ResolutionPayload(events=tuple(_event("root") for _ in range(65)))
-    assert quality_defect(make_record(ability=(), payload=payload)) == NO_ABILITY
+    assert quality_defect(make_record(ability=(), payload=payload)) == QualityDefect.NO_ABILITY
 
 
 def test_a_combat_record_with_an_unresolved_event_survives(make_record):
@@ -125,13 +122,13 @@ def test_a_record_acting_through_a_rendered_line_is_kept(make_record):
 def test_a_record_acting_only_through_dropped_keys_is_refused(make_record):
     assert acting_text_defect(
         make_record(), _resolver(spell=KeyResolution.DROPPED)
-    ) == NO_ACTING_TEXT
+    ) == QualityDefect.NO_ACTING_TEXT
 
 
 def test_an_unconverted_script_counts_as_no_text(make_record):
     assert acting_text_defect(
         make_record(), _resolver(spell=KeyResolution.UNCONVERTED)
-    ) == NO_ACTING_TEXT
+    ) == QualityDefect.NO_ACTING_TEXT
 
 
 def test_a_runtime_only_key_keeps_the_record(make_record):
@@ -161,7 +158,7 @@ def _unjoinable(key: ProvenanceKey) -> KeyResolution:
 
 
 def test_a_record_acting_through_an_unjoinable_key_is_refused(make_record):
-    assert unjoinable_key_defect(make_record(), _unjoinable) == UNJOINABLE_KEY
+    assert unjoinable_key_defect(make_record(), _unjoinable) == QualityDefect.UNJOINABLE_KEY
 
 
 def test_one_unjoinable_key_among_joinable_ones_refuses_the_record(make_record, ability_key):
@@ -174,7 +171,7 @@ def test_one_unjoinable_key_among_joinable_ones_refuses_the_record(make_record, 
         return KeyResolution.LINE
 
     record = make_record(ability=(ability_key, mode))
-    assert unjoinable_key_defect(record, resolve) == UNJOINABLE_KEY
+    assert unjoinable_key_defect(record, resolve) == QualityDefect.UNJOINABLE_KEY
 
 
 def test_every_answer_the_join_gives_keeps_the_record(make_record):
@@ -190,7 +187,7 @@ def test_the_unjoinable_rule_reaches_every_kind_with_an_acting_ability(
         kind=RecordKind.TRIGGER, ability=(ability_key,),
         payload=TriggerPayload(event=_event(), fired=True),
     )
-    assert unjoinable_key_defect(trigger, _unjoinable) == UNJOINABLE_KEY
+    assert unjoinable_key_defect(trigger, _unjoinable) == QualityDefect.UNJOINABLE_KEY
     assert unjoinable_key_defect(
         make_record(kind=RecordKind.COMBAT, payload=CombatPayload(), ability=None),
         _unjoinable,
@@ -214,4 +211,4 @@ def test_a_decision_candidate_acting_through_an_unjoinable_key_is_refused(
             has_legal_target=True,
         ),)),
     )
-    assert unjoinable_key_defect(decision, _unjoinable) == UNJOINABLE_KEY
+    assert unjoinable_key_defect(decision, _unjoinable) == QualityDefect.UNJOINABLE_KEY

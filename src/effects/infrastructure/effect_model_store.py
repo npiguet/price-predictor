@@ -1,40 +1,23 @@
-"""Saving and loading effect-model checkpoints.
-
-A checkpoint carries more than weights, and the extras are what make a run's
-numbers mean anything:
-
-- **the split it trained against** — the held-out card list and the ``game_id``
-  set across both strata. The corpus is append-only and grows between runs, so
-  a recomputed split would not be the trained-against one and the gates would
-  score partly on games the model had seen.
-- **the vocabulary and keyword-definition paths, and their content hashes.**
-  Every inference command re-hashes what it actually loaded and fails fast on a
-  mismatch. Encoding a cache with a different vocabulary than the model trained
-  on produces vectors that look fine and mean nothing.
-- **the keyword withheld from training**, read by the evaluator rather than
-  passed as a flag, so the zero-shot check measures the model that was trained
-  rather than a keyword an operator remembers choosing.
-- **the curated dataset's path and digest, for a `--corpus` run** — the same
-  discipline as the vocabulary hashes above: a rebuilt dataset is a different
-  split, and `evaluate-effect-model` fails fast rather than scoring the gates
-  partly on games the model trained on.
-
-Training-only heads (MLM, script-API, value) are filtered out at save time
-(FR-076): they exist to shape the encoder and have no meaning at inference.
-"""
+"""Saving and loading effect-model checkpoints: weights plus the provenance
+``src/effects/CLAUDE.md`` § Model artifacts lists, and the resume file."""
 
 from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import asdict, dataclass, field
+import os
+import shutil
+from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
+import torch
+
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import Baseline
-from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.effect_model import EffectModelConfig
 from price_predictor.infrastructure.torch_checkpoint import (
     load_checkpoint,
     save_checkpoint,
@@ -54,12 +37,8 @@ def model_output_for(variant: str, root: Path = DEFAULT_MODEL_OUTPUT) -> Path:
 
 
 def content_hash(path: Path) -> str:
-    """SHA-256 of a file's bytes, or ``""`` when the file is absent.
-
-    Absent hashes as empty rather than raising: a run with no keyword-definition
-    file is degraded, not broken, and the mismatch check below still catches a
-    file that appears or changes between training and inference.
-    """
+    """SHA-256 of a file's bytes, or ``""`` when the file is absent: a run
+    with no keyword-definition file is degraded, not broken."""
     path = Path(path)
     if not path.exists():
         return ""
@@ -78,14 +57,16 @@ class SplitMismatchError(RuntimeError):
     """A variant checkpoint records a different split than the main one."""
 
 
+def _like(default, value):
+    """A stored ``value`` as its field's type, which a tuple's or a count's
+    serialized form may not keep."""
+    return type(default)(value) if isinstance(default, (tuple, int)) else value
+
+
 @dataclass(frozen=True, slots=True)
 class SplitProvenance:
-    """What a checkpoint records about the data it saw.
-
-    ``card_disjoint_games`` and ``game_disjoint_games`` are enumerated rather
-    than derived, because deriving them again against a grown corpus would give
-    a different answer.
-    """
+    """What a checkpoint records about the data it saw; the game sets are
+    enumerated, since re-deriving them against a grown corpus would differ."""
 
     held_out_cards: tuple[str, ...] = ()
     card_disjoint_games: tuple[str, ...] = ()
@@ -94,57 +75,40 @@ class SplitProvenance:
     keyword_definitions_path: str = ""
     vocab_hash: str = ""
     keyword_definitions_hash: str = ""
-    #: The implemented keyword held out of training, or None.
     withheld_keyword: str | None = None
-    #: The holdout flags the split was computed under (FR-134). Recorded because
-    #: a depleted corpus was composed against these values: a run that inherits
-    #: the split but reads a corpus depleted against different ones would train
-    #: on cards it believes are held out, with nothing to say so.
+    #: The holdout flags the split was computed under (FR-134).
     holdout_permille: int = 0
     holdout_max_carriers: int = 0
-    #: The curated dataset a `--corpus` run read, and its manifest digest at
-    #: read time (FR-147). Both default to `""`: an ordinary `--records-dir`
-    #: run has no dataset to pin, and a checkpoint saved before curated corpora
-    #: existed must still load. A rebuild is a different split, so scoring the
-    #: gates against the rebuilt one would score them partly on games the model
-    #: trained on — the same failure the held-out `game_id` sets exist to
-    #: prevent, arriving through the corpus instead of the split.
+    #: The curated dataset read and its manifest digest (FR-147); ``""`` on a
+    #: checkpoint saved before curated corpora existed.
     corpus_path: str = ""
     corpus_digest: str = ""
-    #: What the holdout keyed on (FR-042): ``template`` or ``text``. A
-    #: checkpoint that records none trained under ``text``, feature 023's
-    #: rule, and is written without the field so its payload is unchanged.
+    #: ``template`` or ``text`` (FR-042). ``text`` is written as no field at
+    #: all, so a checkpoint that records none reads as it trained.
     holdout_unit: str = "text"
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
+        # A plain string: an enum member would tie loading to its import path.
+        data["holdout_unit"] = str(self.holdout_unit)
         if self.holdout_unit == "text":
             del data["holdout_unit"]
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SplitProvenance:
-        return cls(
-            held_out_cards=tuple(data.get("held_out_cards", ())),
-            card_disjoint_games=tuple(data.get("card_disjoint_games", ())),
-            game_disjoint_games=tuple(data.get("game_disjoint_games", ())),
-            vocab_path=data.get("vocab_path", ""),
-            keyword_definitions_path=data.get("keyword_definitions_path", ""),
-            vocab_hash=data.get("vocab_hash", ""),
-            keyword_definitions_hash=data.get("keyword_definitions_hash", ""),
-            withheld_keyword=data.get("withheld_keyword"),
-            holdout_permille=int(data.get("holdout_permille", 0)),
-            holdout_max_carriers=int(data.get("holdout_max_carriers", 0)),
-            corpus_path=data.get("corpus_path", ""),
-            corpus_digest=data.get("corpus_digest", ""),
-            holdout_unit=data.get("holdout_unit", "text"),
-        )
+        """The provenance ``as_dict`` wrote; a field a checkpoint predates
+        takes its default, which is how such a checkpoint trained."""
+        return cls(**{
+            spec.name: _like(spec.default, data[spec.name])
+            for spec in fields(cls) if spec.name in data
+        })
 
-    @property
-    def validation_games(self) -> frozenset[str]:
-        return frozenset(self.card_disjoint_games) | frozenset(
-            self.game_disjoint_games
-        )
+    def file_hashes(self) -> dict[str, str]:
+        return {
+            "vocabulary": self.vocab_hash,
+            "keyword definitions": self.keyword_definitions_hash,
+        }
 
     def describes_same_split(self, other: SplitProvenance) -> bool:
         return (
@@ -154,15 +118,10 @@ class SplitProvenance:
         )
 
     def verify_hashes(self, *, vocab_path: Path, keyword_path: Path) -> None:
-        """Re-hash the files actually loaded; raise on a mismatch.
-
-        Raises:
-            HashMismatchError: naming the recorded and actual hashes, because
-                the operator needs to know which file moved under them.
-        """
-        for label, path, recorded in (
-            ("vocabulary", vocab_path, self.vocab_hash),
-            ("keyword definitions", keyword_path, self.keyword_definitions_hash),
+        """Re-hash the files actually loaded; raise ``HashMismatchError`` on a
+        mismatch."""
+        for (label, recorded), path in zip(
+            self.file_hashes().items(), (vocab_path, keyword_path),
         ):
             actual = content_hash(path)
             if recorded and actual != recorded:
@@ -187,52 +146,38 @@ class EffectCheckpoint:
     best_val_loss: float = float("inf")
     epoch: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
-    #: The sidecar roots the run resolved keys against (FR-063b). Empty on a
-    #: checkpoint saved before the field existed.
+    #: The sidecar roots the run resolved keys against (FR-063b); empty on a
+    #: checkpoint that predates the field.
     cards_folders: tuple[str, ...] = ()
-    #: The training flags a sweep arm differs by and the script-API head's
-    #: vocabularies (FR-063): ``e_noise``, ``value_weight``, ``mlm_weight``,
-    #: ``mlm_mask_prob``, ``api_weight``, ``api_types``, ``param_keys``. The
-    #: encoder's size is in ``encoder_config`` and the holdout unit in the
-    #: provenance; neither is repeated here.
+    #: ``TrainingLoop._training_settings`` (FR-063); empty or partial on a
+    #: checkpoint that predates the field or a key.
     training_settings: dict[str, Any] = field(default_factory=dict)
 
 
 def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
-    """Drop the training-only heads from a model state dict (FR-076).
-
-    They shape the encoder during training and have no meaning at inference, so
-    shipping them would only invite someone to read them.
-    """
-    prefixes = tuple(f"{name}." for name in EffectModel.TRAINING_ONLY_HEADS)
+    """Drop the training-only heads from a model state dict (FR-076)."""
+    prefixes = tuple(f"{name}." for name in TRAINING_ONLY_MODULES)
     return {
         key: value for key, value in state.items()
         if not key.startswith(prefixes)
     }
 
 
-#: Payload keys the checkpoint's own fields already carry; everything else in a
-#: loaded payload is a variant's ``extra``. ``model_config`` is written by
-#: ``save_checkpoint`` itself.
+#: Payload keys the checkpoint's own fields carry; anything else is ``extra``.
 _RESERVED_PAYLOAD_KEYS = frozenset({
     "encoder_state_dict", "model_state_dict", "encoder_config", "model_config",
     "provenance", "variant", "best_val_loss", "epoch", "config",
     "cards_folders", "training_settings",
 })
 
-#: Encoder-config keys an older checkpoint may carry that the config no longer
-#: has. ``e_noise`` was the encoder's own fixed-σ noise, removed when noise on
-#: ``e`` moved to the batcher (FR-057); gen-1's checkpoint records it, and it
-#: has no bearing on inference, so it is dropped on load (FR-061).
+#: Encoder-config keys a gen-1 checkpoint carries that the config no longer
+#: has, dropped on load (FR-057, FR-061).
 _REMOVED_ENCODER_KEYS = frozenset({"e_noise"})
 
 
 def encoder_config_from(data: dict[str, Any]) -> AbilityEncoderConfig:
-    """An encoder config from a checkpoint's dict, whatever it was saved by.
-
-    A config that records no size builds at the defaults, 4 layers and width
-    256, which is what every checkpoint before the size flags trained at.
-    """
+    """An encoder config from a checkpoint's dict; one that records no size
+    builds at the defaults, which every pre-size-flag checkpoint trained at."""
     return AbilityEncoderConfig(**{
         key: value for key, value in data.items()
         if key not in _REMOVED_ENCODER_KEYS
@@ -249,12 +194,7 @@ class EffectModelStore:
         return self.directory / LATEST_NAME
 
     def save(self, checkpoint: EffectCheckpoint) -> Path:
-        """Write a timestamped checkpoint and refresh ``latest.pt``.
-
-        Both files are written rather than one being a link, matching the
-        convention every other trainer in this repo uses: an operator points a
-        long-lived command at ``latest.pt`` and an experiment at a timestamp.
-        """
+        """Write a timestamped checkpoint and copy it to ``latest.pt``."""
         self.directory.mkdir(parents=True, exist_ok=True)
         payload = {
             "encoder_state_dict": checkpoint.encoder_state,
@@ -271,12 +211,11 @@ class EffectModelStore:
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         path = self.directory / f"{stamp}.pt"
         save_checkpoint(path, payload, checkpoint.model_config)
-        save_checkpoint(self.latest_path(), payload, checkpoint.model_config)
+        shutil.copyfile(path, self.latest_path())
         logger.info("Saved %s checkpoint to %s", checkpoint.variant, path)
         return path
 
     def load(self, path: Path | None = None) -> EffectCheckpoint:
-        """Load a checkpoint, defaulting to this store's ``latest.pt``."""
         path = Path(path) if path is not None else self.latest_path()
         if not path.exists():
             raise FileNotFoundError(
@@ -295,10 +234,8 @@ class EffectModelStore:
             variant=payload.get("variant", Baseline.FULL),
             best_val_loss=payload.get("best_val_loss", float("inf")),
             epoch=payload.get("epoch", 0),
-            # Whatever a variant needed to save beyond the two state dicts —
-            # the identity baseline's embedding table is the one that exists.
-            # Round-tripped rather than dropped: a baseline reloaded without it
-            # scores on random vectors.
+            # Round-tripped: the identity baseline reloaded without its table
+            # would score on random vectors.
             extra={
                 key: value for key, value in payload.items()
                 if key not in _RESERVED_PAYLOAD_KEYS
@@ -312,26 +249,16 @@ def require_same_split(
     main: EffectCheckpoint, baseline: EffectCheckpoint,
     *, main_path: Path, baseline_path: Path,
 ) -> None:
-    """Fail fast when a baseline checkpoint's split or hashes differ.
-
-    A baseline compared against a model that saw different games is not a
-    baseline. The error names both checkpoints, because the operator's next
-    move is to retrain one of them on the other's ``--corpus``.
-    """
+    """Fail fast when a baseline checkpoint's split or hashes differ."""
     if not main.provenance.describes_same_split(baseline.provenance):
         raise SplitMismatchError(
             f"{baseline_path} records a different split than {main_path}. "
             f"Retrain it on the --corpus {main_path} trained on: a baseline "
             "that saw different games is not a baseline."
         )
-    for label, recorded, actual in (
-        ("vocabulary", main.provenance.vocab_hash, baseline.provenance.vocab_hash),
-        (
-            "keyword definitions",
-            main.provenance.keyword_definitions_hash,
-            baseline.provenance.keyword_definitions_hash,
-        ),
-    ):
+    recorded_by_main = main.provenance.file_hashes()
+    for label, actual in baseline.provenance.file_hashes().items():
+        recorded = recorded_by_main[label]
         if recorded != actual:
             raise SplitMismatchError(
                 f"{baseline_path} recorded a different {label} hash than "
@@ -346,12 +273,8 @@ def resolve_inference_paths(
     vocab_path: Path | None,
     keyword_path: Path | None,
 ) -> tuple[Path, Path]:
-    """The vocabulary and keyword paths an inference command should use (FR-097).
-
-    Both default to what the checkpoint recorded at training time. An explicit
-    value overrides — and is still hash-checked, so overriding to a file that
-    differs fails rather than silently encoding against the wrong vocabulary.
-    """
+    """The vocabulary and keyword paths an inference command should use
+    (FR-097): the recorded ones unless overridden."""
     resolved_vocab = Path(vocab_path) if vocab_path else Path(provenance.vocab_path)
     resolved_keyword = (
         Path(keyword_path) if keyword_path
@@ -372,12 +295,8 @@ def verified_inference_paths(
     vocab_path: Path | None = None,
     keyword_path: Path | None = None,
 ) -> tuple[Path, Path]:
-    """:func:`resolve_inference_paths`, then the hash check on what it resolved.
-
-    One step rather than two, because every inference command needs both and
-    a caller that resolved without verifying encoded against whatever
-    vocabulary sat at the recorded path.
-    """
+    """:func:`resolve_inference_paths`, then the hash check on what it
+    resolved, an override included."""
     vocab, keywords = resolve_inference_paths(
         checkpoint.provenance, vocab_path=vocab_path, keyword_path=keyword_path,
     )
@@ -407,14 +326,8 @@ def load_for_inference(
     return InferenceCheckpoint(checkpoint, vocab, keywords)
 
 
-# ── resuming an interrupted run ─────────────────────────────────────────────
-
-#: The file a training run rewrites at the end of every epoch, beside its
-#: checkpoints. It is not a checkpoint: a checkpoint is the best epoch's
-#: weights for inference, with the training-only heads filtered out, while this
-#: is everything the next epoch needs to continue as if the run had never
-#: stopped — the full model, the optimizer, the step count, the early stopper,
-#: the noise on ``e`` and the random generators.
+#: Rewritten at the end of every epoch; not a checkpoint (see CLAUDE.md
+#: § Model artifacts).
 RESUME_NAME = "resume.pt"
 #: The resume state of the run's best card-disjoint epoch, copied from
 #: ``resume.pt`` whenever an epoch sets a new best (FR-063f). Copied into
@@ -429,16 +342,7 @@ class ResumeMismatchError(RuntimeError):
 
 
 def save_resume_state(directory: Path, state: dict[str, Any]) -> Path:
-    """Write ``state`` to ``directory/resume.pt`` atomically.
-
-    Written to a temporary name and renamed over the old file, so a machine
-    that stops mid-write leaves the previous epoch's state rather than half of
-    this one's.
-    """
-    import os
-
-    import torch
-
+    """Write ``state`` to ``directory/resume.pt`` atomically, by rename."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / RESUME_NAME
@@ -450,8 +354,6 @@ def save_resume_state(directory: Path, state: dict[str, Any]) -> Path:
 
 def load_resume_state(directory: Path) -> dict[str, Any]:
     """The state :func:`save_resume_state` wrote, on the CPU."""
-    import torch
-
     path = Path(directory) / RESUME_NAME
     if not path.exists():
         raise FileNotFoundError(

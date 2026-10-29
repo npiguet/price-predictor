@@ -53,6 +53,8 @@ from common import (  # noqa: E402
 )
 
 from effects.domain.ability_encoder import encoding_text  # noqa: E402
+from effects.domain.baselines import Baseline  # noqa: E402
+from effects.infrastructure.ability_cache_store import AbilityCacheStore  # noqa: E402
 from effects.infrastructure.sidecar_io import (  # noqa: E402
     converted_text_path,
     prose_for,
@@ -81,19 +83,17 @@ def build(paths: ProbePaths) -> pd.DataFrame:
     mismatch_max = 0.0
     skipped = {"no_cache": 0, "row_mismatch": 0, "no_text": 0, "no_taxonomy": 0}
     empty = np.zeros(0, dtype=np.float32)
+    full_cache = AbilityCacheStore(paths.abilities_root)
+    taxonomy_cache = AbilityCacheStore(paths.abilities_root, variant=Baseline.TAXONOMY)
     for folder in paths.cards_folders:
         tree = tree_of_folder(folder)
         for sidecar_path in sorted(Path(folder).rglob("*.provenance.json")):
             sidecar = read_sidecar(sidecar_path)
-            rel = Path(sidecar.script_file)
-            base = paths.abilities_root / rel.parent / rel.stem
-            full_path = base.with_suffix(".npz")
-            tax_path = base.parent / f"{rel.stem}.taxonomy.npz"
-            if not full_path.exists():
+            full = full_cache.read(sidecar.script_file)
+            if full is None:
                 skipped["no_cache"] += 1
                 continue
-            full = np.load(full_path)["e"]
-            tax = np.load(tax_path)["e"] if tax_path.exists() else None
+            tax = taxonomy_cache.read(sidecar.script_file)
             if tax is None:
                 skipped["no_taxonomy"] += 1
             if len(full) != len(sidecar.lines) or (

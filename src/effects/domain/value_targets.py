@@ -1,35 +1,17 @@
 """What a line's script states about amounts and costs: the value head's targets.
 
-The value head (FR-058) reads ``e`` alone and predicts numbers the script
-writes down — damage, a pump, counters, cards drawn, and the line's own cost —
-so the amounts a text states have to survive the bottleneck rather than being
-recoverable only from the board the trunk sees beside them.
+Read from the script text whatever the encoding surface (prose has no ``$``
+parameters), summed over a chained text's segments. Two masking rules:
 
-Everything is read from the line's script text, whatever surface encodes the
-line — the prose has no ``$`` parameters to read — which is why the targets are
-a pure function of it and are cached per text: a chained text (gen-2) is split
-on ``[SEG]`` and summed over its segments, and a one-segment text (gen-1's
-sidecars, read by the stage-0 noise pilot) is simply one segment.
-
-Two masking rules carry the whole design:
-
-- **A target is masked where the script states no fixed value.** ``NumDmg$ X``
-  or ``NumDmg$ Count$Valid Creature`` in any segment masks damage, because the
-  number depends on the board and the head reads no board. An amount no
-  segment mentions is a stated zero, not a mask: a draw spell deals no damage.
-  An API that reads its amount with a default reads it the way Forge does —
-  ``Draw`` with no ``NumCards$`` draws one, ``PutCounter`` with no
-  ``CounterNum$`` puts one — and moving counters, or choosing whether to add
-  or remove them, masks both counter targets, since the script fixes neither.
-- **Cost targets come from ``Cost$`` only (FR-058a).** A card's mana cost covers
-  the whole card and no line's text carries it, so a spell line masks its mana
-  targets even where an additional cost puts mana in ``Cost$``. Its tap and
+- **A target is masked where the script states no fixed value** (``NumDmg$ X``
+  depends on the board, which the head does not read). An amount no segment
+  mentions is a stated zero, not a mask.
+- **Cost targets come from ``Cost$`` only (FR-058a).** A card's mana cost
+  covers the whole card, so a spell line masks its mana targets; its tap and
   sacrifice targets still read from ``Cost$``.
 
-Prior art: ``ManaCost.parse`` (``price_predictor.domain.value_objects``) reads
-the mana shards and skips the rest. ``script_variants.numeric_params`` is not
-reused for the amounts, because it accepts only unsigned or negative literals
-and a pump's ``NumAtt$ +2`` — the common spelling — is a literal it skips.
+``script_variants.numeric_params`` is not reused: it skips a pump's signed
+``NumAtt$ +2``.
 """
 
 from __future__ import annotations
@@ -39,9 +21,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
 
+from effects.domain.script_text import api_of, params, segments
 from price_predictor.domain.value_objects import ManaCost
-
-SEGMENT_SEPARATOR = "[SEG]"
 
 
 class ValueKind(StrEnum):
@@ -50,8 +31,7 @@ class ValueKind(StrEnum):
     BINARY = "binary"
 
 
-#: ``(target, kind)`` in the head's output order. Appending is safe; reordering
-#: is not, because the order is the head's layout.
+#: ``(target, kind)`` in the head's output order: append, never reorder.
 VALUE_TARGETS: tuple[tuple[str, ValueKind], ...] = (
     ("damage", ValueKind.COUNT),
     ("power_change", ValueKind.SIGNED),
@@ -78,10 +58,9 @@ _AMOUNT_KEYS: dict[str, tuple[str, ...]] = {
     "power_change": ("NumAtt", "AddPower"),
     "toughness_change": ("NumDef", "AddToughness"),
 }
-#: ``API -> (target, key, Forge's default)`` for amounts whose key means that
-#: target only on that API: ``NumCards$`` elsewhere counts cards discarded,
-#: milled or dug, and ``CounterNum$`` sits on a few unrelated APIs too. A
-#: default of None has none, and an absent key masks the target.
+#: ``API -> (target, key, Forge's default)`` for keys that mean the target only
+#: on that API (``NumCards$`` elsewhere counts discards or mills). With a None
+#: default an absent key masks the target.
 _API_AMOUNTS: dict[str, tuple[str, str, str | None]] = {
     "Draw": ("cards_drawn", "NumCards", "1"),
     "PutCounter": ("counters_placed", "CounterNum", "1"),
@@ -100,19 +79,14 @@ _MANA_TARGETS: tuple[str, ...] = (
 )
 _COST_TARGETS: tuple[str, ...] = (*_MANA_TARGETS, "cost_taps", "cost_sacrifices")
 
-#: The keys whose value names the segment's API type.
-_API_KEYS: tuple[str, ...] = ("SP", "AB", "DB")
-_LABEL_RE = re.compile(r"^\s*SV\d+:\s*")
 _LITERAL_RE = re.compile(r"[+-]?\d+")
 _COST_GROUP_RE = re.compile(r"<[^>]*>")
 
 
 @dataclass(frozen=True, slots=True)
 class ValueTargets:
-    """One text's targets, aligned with :data:`VALUE_TARGETS`.
-
-    ``values[i]`` is meaningful only where ``mask[i]`` is True.
-    """
+    """One text's targets, aligned with :data:`VALUE_TARGETS`; ``values[i]``
+    is meaningful only where ``mask[i]`` is True."""
 
     values: tuple[float, ...]
     mask: tuple[bool, ...]
@@ -121,38 +95,6 @@ class ValueTargets:
         """The target by name, or None where it is masked."""
         index = VALUE_TARGET_NAMES.index(name)
         return self.values[index] if self.mask[index] else None
-
-
-def segments(text: str) -> list[str]:
-    """A chained text's segments, each without its ``SVn:`` opener."""
-    return [_LABEL_RE.sub("", part).strip() for part in text.split(SEGMENT_SEPARATOR)]
-
-
-def params(segment: str) -> dict[str, str]:
-    """``key -> raw value`` of one segment's ``Key$ value`` parameters.
-
-    Split at the first ``$`` only, so a value carrying its own ``$``-prefix
-    (``Count$Valid Creature``) stays whole and reads as a non-literal.
-    """
-    found: dict[str, str] = {}
-    for part in segment.split("|"):
-        key, separator, value = part.partition("$")
-        key = key.strip()
-        if separator and key and key not in found:
-            found[key] = value.strip()
-    return found
-
-
-def api_of(found: dict[str, str]) -> str | None:
-    """The segment's effect API, whichever of ``SP$``/``AB$``/``DB$`` names it.
-
-    None where none does, or where the one present is empty: an empty API
-    names no effect.
-    """
-    for key in _API_KEYS:
-        if found.get(key):
-            return found[key]
-    return None
 
 
 @lru_cache(maxsize=None)

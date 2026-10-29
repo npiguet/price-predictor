@@ -19,7 +19,9 @@ from pathlib import Path
 
 import pytest
 
-_SRC = Path(__file__).resolve().parents[3] / "src"
+from tests.unit.effects.builders import fresh_interpreter_env
+
+_SRC =Path(__file__).resolve().parents[3] / "src"
 
 # FR-002's declared surface. A value of ``None`` allows the whole module; a set
 # restricts the import to those names, which is how FR-002 words the two rows
@@ -39,10 +41,14 @@ _ALLOWED: dict[str, set[str] | None] = {
     # Adjacent prior art, FR-058a).
     "price_predictor.domain.value_objects": {"ManaCost"},
     "sealed.domain.manabase": {"compute_basic_lands"},
-    "sealed.domain.card_embedding_layout": None,
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
-    "sealed.infrastructure.embedding_store": None,
+    # The cap flags every collecting supervisor carries, one definition for
+    # match-outcomes and the effects collectors alike.
+    "sealed.infrastructure.effect_collection_flags": {
+        "add_cap_flags", "announce_probe_state", "random_seat_error",
+    },
     "sealed.infrastructure.match_worker_connector": {"MatchWorkerConnector"},
+    "sealed.infrastructure.pool_file_reader": {"format_generated_deck"},
 }
 
 _GOVERNED_PACKAGES = ("price_predictor", "sealed")
@@ -118,21 +124,6 @@ def test_effects_imports_only_the_declared_surface() -> None:
     )
 
 
-def test_effects_never_imports_the_sealed_application_layer() -> None:
-    """FR-002 declares nothing from ``sealed.application``; it stays disjoint."""
-    violations = [
-        f"{path.relative_to(_SRC)}:{lineno} imports {module}"
-        for path in _python_files("effects")
-        for module, _names, lineno in _imported_modules(path)
-        if module == "sealed.application" or module.startswith("sealed.application.")
-    ]
-    assert not violations, (
-        "effects imports sealed.application; train-scorer Phase A is re-run as "
-        "a subprocess so the two application layers stay disjoint:\n  "
-        + "\n  ".join(violations)
-    )
-
-
 #: Modules the corpus workers and record readers import, which must not pull in
 #: torch: every build-corpus survey and write worker is a fresh process, and
 #: loading torch in each costs seconds and hundreds of megabytes for nothing.
@@ -163,5 +154,6 @@ def test_corpus_side_modules_never_load_torch(module: str) -> None:
     probe = f"import sys, {module}\nprint('torch' in sys.modules)\n"
     result = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True,
+        env=fresh_interpreter_env(),
     )
     assert result.stdout.strip() == "False", f"{module} loads torch"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from effects.domain.budget_allocation import allocate
+from tests.unit.effects.builders import fresh_interpreter_env
 
 
 def test_a_short_member_is_filled_and_its_remainder_shared():
@@ -48,7 +49,6 @@ def test_the_remainder_goes_by_sorted_key_so_the_split_is_deterministic():
 
 def test_set_valued_members_are_ordered_independently_of_string_hashing():
     """Outcome signatures are frozensets, whose repr follows the hash seed."""
-    import os
     import subprocess
     import sys
 
@@ -61,7 +61,7 @@ def test_set_valued_members_are_ordered_independently_of_string_hashing():
     runs = {
         subprocess.run(
             [sys.executable, "-c", script], capture_output=True, text=True, check=True,
-            env={**os.environ, "PYTHONHASHSEED": seed},
+            env=fresh_interpreter_env(PYTHONHASHSEED=seed),
         ).stdout
         for seed in ("0", "1", "7")
     }

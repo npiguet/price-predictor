@@ -7,6 +7,7 @@ import pytest
 from effects.domain.corpus_curation import (
     CapHeap,
     CopyPlan,
+    KeyedCapHeap,
     class_targets,
     copy_plan,
     game_disjoint_draw,
@@ -79,6 +80,17 @@ def test_merging_equal_cap_heaps_with_overlapping_ranges():
         right.offer(value)
     left.merge(right)
     assert sorted(left.values()) == [2, 5, 8]
+
+
+def test_a_heap_keeps_items_with_their_values_and_breaks_ties_on_the_tiebreak():
+    left, right = KeyedCapHeap(3), KeyedCapHeap(3)
+    left.offer(30, "c", (0,))
+    left.offer(10, "a", (1,))
+    right.offer(10, "b", (2,))
+    right.offer(20, "z", (0,))
+    left.merge(right)
+    assert left.items() == ["b", "a", "z"]
+    assert len(left) == 3
 
 
 def test_class_targets_are_set_by_the_scarcest_class():
@@ -226,22 +238,19 @@ class TestGameDisjointPlacement:
 
     def test_a_game_below_the_share_enters(self):
         game = next(f"g{i}" for i in range(1000) if game_disjoint_draw(f"g{i}") < 0.01)
-        assert in_game_disjoint_stratum(game, False, False, 0.01, 0.15)
+        assert in_game_disjoint_stratum(game, False, 0.01, 0.15)
 
     def test_a_keyword_combat_game_uses_the_keyword_share(self):
         game = next(
             f"g{i}" for i in range(1000) if 0.01 <= game_disjoint_draw(f"g{i}") < 0.15
         )
-        assert not in_game_disjoint_stratum(game, False, False, 0.01, 0.15)
-        assert in_game_disjoint_stratum(game, False, True, 0.01, 0.15)
-
-    def test_a_game_naming_a_held_out_card_never_enters(self):
-        assert not in_game_disjoint_stratum("g0", True, True, 1.0, 1.0)
+        assert not in_game_disjoint_stratum(game, False, 0.01, 0.15)
+        assert in_game_disjoint_stratum(game, True, 0.01, 0.15)
 
     def test_placement_depends_on_the_game_alone(self):
         games = [f"g{i}" for i in range(2000)]
-        first = {g for g in games[:500] if in_game_disjoint_stratum(g, False, False, 0.05, 0.15)}
-        grown = {g for g in games if in_game_disjoint_stratum(g, False, False, 0.05, 0.15)}
+        first = {g for g in games[:500] if in_game_disjoint_stratum(g, False, 0.05, 0.15)}
+        grown = {g for g in games if in_game_disjoint_stratum(g, False, 0.05, 0.15)}
         assert first <= grown
 
     def test_the_draw_is_crc32_of_the_game_id(self):

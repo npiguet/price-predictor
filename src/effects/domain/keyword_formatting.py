@@ -1,24 +1,12 @@
 """Filling a keyword's reminder template the way Forge fills it (FR-017, FR-018).
 
-A keyword line carries its instance values after the display name —
-``Ward:2``, ``TypeCycling:Basic:1 B``, ``Equip:3`` — and Forge renders the
-reminder text by handing those details to the keyword's own class, which parses
-them and formats them into the template: a cost becomes ``{1}{B}``, a
-typecycling type becomes "a basic land card", ward's cost becomes "pays {2}".
-Filling the raw details in would put Forge's script syntax (``1 B``) into an
-English sentence, so expansion mirrors that formatting here.
-
-The classes are mirrored rather than called because expansion runs in Python.
-The table is keyed by the simple name of the keyword's ``Keyword.type`` class,
-which ``extract-keyword-definitions`` records as ``formatter``; prior art is
-each class's ``parse`` and ``formatReminderText`` in Forge's
-``forge.game.keyword`` package (``KeywordWithCost``, ``KeywordWithAmount``,
-``KeywordWithCostAndAmount``, ``KeywordWithCostAndType``, ``KeywordWithType``
-and the keyword-specific subclasses). An unknown formatter, or a definitions
-file written before the field existed, fills the raw values in order.
-
-Whatever placeholder no value fills is removed afterwards, so no expansion
-carries a ``%`` token.
+Forge hands a keyword line's values (``Ward:2``, ``TypeCycling:Basic:1 B``) to
+the keyword's ``Keyword.type`` class, which formats them into the template: a
+cost becomes ``{1}{B}``, ward's cost "pays {2}". Filling the raw values in
+would put script syntax into an English sentence, so each class's ``parse``
+and ``formatReminderText`` is mirrored here, keyed by the class's simple name
+(the definition's ``formatter``). An unknown formatter fills the raw values in
+order; an unfilled placeholder is removed.
 """
 
 from __future__ import annotations
@@ -26,32 +14,45 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
-#: Every format specifier Forge's templates use: ``%s``, ``%d`` and their
-#: explicit-index forms ``%1$s``, ``%2$d``.
+#: ``%s``, ``%d`` and their explicit-index forms ``%1$s``, ``%2$d``.
 _SPECIFIER_RE = re.compile(r"%(?:(\d+)\$)?([sd])")
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([.,;:])")
 
-#: One Forge cost part: a bracketed part (``Sac<1/Creature>``) or a bare shard.
+#: A bracketed cost part (``Sac<1/Creature>``) or a bare shard.
 _COST_PART_RE = re.compile(r"\w+<[^>]*>|\S+")
-#: A mana shard as Forge's cost strings spell it: a number, X/Y/Z, a colour or
-#: colourless, and the hybrid and Phyrexian forms built from them.
 _MANA_SHARD_RE = re.compile(r"^(\d+|[XYZ]|[WUBRGCS](/[WUBRGCP2])*|2/[WUBRG])$")
 
 _COLORS = {"white", "blue", "black", "red", "green", "colorless"}
+#: After Forge's ``CardType.isACardType``. Not the effect head's frozen
+#: ``CARD_TYPES``, which a change here must not move.
 _CARD_TYPES = {
     "artifact", "battle", "creature", "enchantment", "instant", "kindred",
     "land", "planeswalker", "sorcery", "tribal",
 }
+#: ``CardType.CoreType``'s constant names, which ``isValidEnum`` compares
+#: case-sensitively.
+_CORE_TYPE_NAMES = {
+    "Kindred", "Artifact", "Battle", "Conspiracy", "Enchantment", "Creature",
+    "Dungeon", "Instant", "Land", "Phenomenon", "Plane", "Planeswalker",
+    "Scheme", "Sorcery", "Vanguard",
+}
+#: ``Cost.NUM_NAMES``: the words ``convertIntAndTypeToWords`` counts in.
+_COST_NUM_NAMES = (
+    "zero", "a", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten",
+)
+_NUMERALS = (
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+    "sixteen", "seventeen", "eighteen", "nineteen",
+)
+_TENS = ("twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety")
 
 
 def java_format(template: str, args: list[str]) -> str:
-    """``String.format`` for the two conversions Forge's templates use.
-
-    An ordinary specifier takes the next argument in turn, an explicit-index one
-    (``%1$s``) takes that argument however often it appears, and a specifier
-    with no argument to take is left in place for :func:`strip_specifiers`.
-    """
+    """``String.format`` for ``%s`` and ``%d``; a specifier with no argument
+    is left for :func:`strip_specifiers`."""
     position = 0
 
     def substitute(match: re.Match) -> str:
@@ -89,6 +90,40 @@ def _count(amount: str, noun: str) -> str:
     return f"{amount} {noun}"
 
 
+def _numeral(n: int) -> str:
+    """``Lang.getNumeral``, for the non-negative counts a cost carries."""
+    if n < 20:
+        return _NUMERALS[n]
+    if n < 100:
+        return f"{_TENS[n // 10 - 2]} {_NUMERALS[n % 10] if n % 10 else ''}"
+    return str(n)
+
+
+def _lang_plural(noun: str) -> str:
+    """``Lang.getPlural``, whose rules differ from :func:`_plural`'s."""
+    if noun.endswith("ds"):
+        return noun
+    if noun.endswith(("s", "x", "ch")):
+        return noun + "es"
+    return noun + "s"
+
+
+def _amount_type_words(amount: str, noun: str) -> str:
+    """``Cost.convertAmountTypeToWords``: a count in words, or a raw ``X``."""
+    if not amount.isdigit():
+        return f"{amount} {noun}"
+    count = int(amount)
+    if count == 1 and noun.startswith("another"):
+        return noun
+    if count >= len(_COST_NUM_NAMES):
+        word = amount
+    elif count == 1 and noun[:1].lower() in "aeiou":
+        word = "an"
+    else:
+        word = _COST_NUM_NAMES[count]
+    return f"{word} {noun if count == 1 else noun + 's'}"
+
+
 def _bracket_part(part: str) -> str:
     """A non-mana cost part, worded the way ``CostPart.toString`` words the common ones."""
     name, _, rest = part.partition("<")
@@ -98,7 +133,22 @@ def _bracket_part(part: str) -> str:
     noun = noun.replace(".other", "").replace("card.", "")
     if name == "PayLife":
         return f"Pay {amount} life"
+    if name == "PayEnergy":
+        return "Pay " + ("X {E}" if amount == "X" else "{E}" * int(amount))
+    if name == "Behold":
+        return f"Behold {_amount_type_words(amount, fields[-1])}"
+    if name == "AddCounterYou":
+        counter = fields[1].capitalize() if len(fields) > 1 else ""
+        return f"Get {_amount_type_words(amount, counter + ' counter')}"
+    if name == "Blight":
+        return f"Blight {amount}"
+    if name == "CollectEvidence":
+        return f"Collect evidence {amount}"
+    if name == "Waterbend":
+        return f"Waterbend {cost_text(amount)}"
     if name == "Sac":
+        if noun.startswith("another"):
+            return f"Sacrifice {noun}"
         return f"Sacrifice {_count(amount, noun or 'permanent')}"
     if name == "Discard":
         if noun == "hand":
@@ -137,8 +187,10 @@ def cost_text(cost: str) -> str:
 
 
 def _only_mana(cost: str) -> bool:
+    """``Cost.isOnlyManaCost``: waterbend is a ``CostPartMana`` too."""
     return all(
-        _MANA_SHARD_RE.match(part) for part in _COST_PART_RE.findall(cost.strip())
+        _MANA_SHARD_RE.match(part) or part.startswith("Waterbend<")
+        for part in _COST_PART_RE.findall(cost.strip())
     )
 
 
@@ -226,19 +278,59 @@ def _ninjutsu(template: str, details: str) -> str:
     return java_format(template, [cost_text(fields[0]), zone])
 
 
+def _exile_ctrl_or_grave(part: str, x_min: int) -> str:
+    """``CostExile.exileMultiZoneCostString(true, xMin)``, Craft's wording of
+    an ``ExileCtrlOrGrave`` part."""
+    fields = part.partition("<")[2].rstrip(">").split("/", 2)
+    amount = int(fields[0]) if fields[0].isdigit() else 0
+    part_type = fields[1].replace(".Other", "") if len(fields) > 1 else ""
+    if len(fields) > 2:
+        noun = fields[2]
+    elif part_type in _CORE_TYPE_NAMES or part_type == "Permanent":
+        noun = part_type.lower()
+    else:
+        noun = part_type
+    nouns = noun if " " in noun else _lang_plural(noun)
+    permanent = noun == "permanent"
+    other = "other " if permanent else ""
+    if amount == 1:
+        first = f"another {noun}" if part_type == "Artifact" or permanent else _article(noun)
+        text = f"{first} you control or {_article(noun)} card from "
+    elif amount > 1:
+        text = (
+            f"the {_numeral(amount)} from among {other}{nouns} you control "
+            f"and/or {noun} cards in "
+        )
+    elif x_min == 1:
+        text = (
+            f"one or more {other}{nouns} you control and/or "
+            f"{'' if permanent else noun} cards from "
+        )
+    else:
+        text = (
+            f"{'the ' if x_min > 1 else ''}{_numeral(x_min)} or more from among "
+            f"{other}{nouns} you control and/or cards from "
+        )
+    return f"Exile {text}your graveyard"
+
+
 def _craft(template: str, details: str) -> str:
     fields = details.split(":")
-    mana = " ".join(
-        part for part in _COST_PART_RE.findall(fields[0]) if _MANA_SHARD_RE.match(part)
-    )
-    others = [part for part in _COST_PART_RE.findall(fields[0]) if "<" in part]
+    parts = _COST_PART_RE.findall(fields[0])
+    mana = " ".join(part for part in parts if _MANA_SHARD_RE.match(part))
+    others = [part for part in parts if "<" in part]
+    x_min = next((int(part[4:]) for part in parts if part.startswith("XMin")), 0)
     if len(fields) > 2:
         reminder = (
             f"Exile {fields[2]} from among permanents you control and/or cards "
             "in your graveyard"
         )
     else:
-        reminder = ", ".join(_bracket_part(part) for part in others)
+        reminder = ", ".join(
+            _exile_ctrl_or_grave(part, x_min) if part.startswith("ExileCtrlOrGrave<")
+            else _bracket_part(part)
+            for part in others
+        )
     return java_format(template, [cost_text(mana), reminder])
 
 
@@ -415,10 +507,8 @@ FORMATTERS: dict[str, Callable[[str, str], str]] = {
 def format_reminder(formatter: str | None, template: str, details: str) -> str:
     """The reminder text one keyword instance reads, specifiers removed.
 
-    ``details`` is everything after the keyword line's first colon, exactly as
-    Forge hands it to the keyword class's ``parse``. A formatter this table
-    does not know fills the raw values in order, which is what an old
-    definitions file (no ``formatter`` recorded) gets too.
+    ``details`` is everything after the keyword line's first colon, as Forge
+    hands it to the keyword class's ``parse``.
     """
     details = details.strip()
     fill = FORMATTERS.get(formatter or "")

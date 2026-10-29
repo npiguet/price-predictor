@@ -14,14 +14,13 @@ import pytest
 
 from effects.application import breakdowns as bd
 from effects.application.breakdowns import (
-    CARD_DISJOINT,
-    GAME_DISJOINT,
     RecordResult,
     breakdown_checks,
 )
 from effects.domain.evaluation_report import CheckStatus
 from effects.domain.records import WHAT_IF_SUBKINDS, LegalityDecision
 from effects.domain.rule_families import rule_family
+from effects.domain.strata import Stratum
 from effects.infrastructure.record_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -175,33 +174,33 @@ class TestTheReport:
         card = [*rows, replace(rows[0], random_seat=True),
                 replace(legality, what_if=False)]
         checks = breakdown_checks(
-            {CARD_DISJOINT: card, GAME_DISJOINT: rows},
+            {Stratum.CARD_DISJOINT: card, Stratum.GAME_DISJOINT: rows},
             games_by_text={}, withheld_keyword=None,
         )
         names = [check.name for check in checks]
-        assert CARD_DISJOINT in names
-        assert any(name.startswith(f"{CARD_DISJOINT} rarity ") for name in names)
-        assert any(name.startswith(f"{CARD_DISJOINT} family ") for name in names)
-        assert f"{CARD_DISJOINT} mean over families" in names
+        assert Stratum.CARD_DISJOINT in names
+        assert any(name.startswith(f"{Stratum.CARD_DISJOINT} rarity ") for name in names)
+        assert any(name.startswith(f"{Stratum.CARD_DISJOINT} family ") for name in names)
+        assert f"{Stratum.CARD_DISJOINT} mean over families" in names
         assert any(name.startswith("memorization-gap ") for name in names)
-        assert f"{CARD_DISJOINT} policy off" in names
-        assert f"{CARD_DISJOINT} legality real" in names
+        assert f"{Stratum.CARD_DISJOINT} policy off" in names
+        assert f"{Stratum.CARD_DISJOINT} legality real" in names
         assert all(check.status is not CheckStatus.FAIL for check in checks)
 
     def test_a_gen1_set_reports_the_policy_and_decision_slices_as_skipped(self, rows):
         checks = {c.name: c for c in breakdown_checks(
-            {CARD_DISJOINT: rows, GAME_DISJOINT: rows},
+            {Stratum.CARD_DISJOINT: rows, Stratum.GAME_DISJOINT: rows},
             games_by_text={}, withheld_keyword="flying",
         )}
-        assert checks[f"{CARD_DISJOINT} off-policy"].status is CheckStatus.SKIPPED
-        assert checks[f"{CARD_DISJOINT} real-decision legality"].status is (
+        assert checks[f"{Stratum.CARD_DISJOINT} off-policy"].status is CheckStatus.SKIPPED
+        assert checks[f"{Stratum.CARD_DISJOINT} real-decision legality"].status is (
             CheckStatus.SKIPPED
         )
 
     def test_the_per_text_mean_is_reported_beside_the_per_record_one(self, rows):
         overall = next(
             c for c in breakdown_checks(
-                {CARD_DISJOINT: rows}, games_by_text={}, withheld_keyword=None,
-            ) if c.name == CARD_DISJOINT
+                {Stratum.CARD_DISJOINT: rows}, games_by_text={}, withheld_keyword=None,
+            ) if c.name == Stratum.CARD_DISJOINT
         )
         assert bd.TOTAL in overall.values and f"text:{bd.TOTAL}" in overall.values

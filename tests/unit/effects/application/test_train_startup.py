@@ -11,17 +11,13 @@ import logging
 import pytest
 
 from effects.application.train_effect_model import (
+    CorpusFacts,
     TrainEffectModelConfig,
     run,
 )
 from effects.domain.corpus_manifest import CorpusManifest
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.domain.conftest import (  # noqa: F401
-    ability_key,
-    make_record,
-    snapshot,
-)
 
 #: Three texts ``text_is_held_out`` selects at the default permille, found by
 #: search: the trainer recomputes the holdout from its sidecars at startup and
@@ -72,7 +68,7 @@ def _manifest(**overrides) -> CorpusManifest:
 
 
 @pytest.fixture
-def corpus(tmp_path, make_record):  # noqa: F811
+def corpus(tmp_path, make_record):
     """A curated dataset with just enough on disk for ``run`` to reach the loop."""
     store = CorpusStore(tmp_path / "corpus")
     store.training_dir.mkdir(parents=True)
@@ -96,13 +92,19 @@ def config(corpus, tmp_path):
 
 
 @pytest.fixture(autouse=True)
-def _no_training(monkeypatch):
-    """Stop at the loop's door: these tests are about what ``run`` logs."""
+def started(monkeypatch):
+    """Stop at the loop's door: these tests are about what ``run`` logs and
+    hands the loop. Yields every loop that reached it."""
     from effects.application import training_loop
 
-    monkeypatch.setattr(
-        training_loop.TrainingLoop, "execute", lambda self: 0,
-    )
+    loops = []
+
+    def execute(self):
+        loops.append(self)
+        return 0
+
+    monkeypatch.setattr(training_loop.TrainingLoop, "execute", execute)
+    return loops
 
 
 def test_the_startup_line_counts_held_out_texts_not_only_cards(config, caplog):
@@ -115,6 +117,18 @@ def test_the_startup_line_counts_held_out_texts_not_only_cards(config, caplog):
         assert run(config) == 0
 
     assert "3 held-out ability text(s) on 2 card(s)" in caplog.text
+
+
+def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, started):
+    assert run(config) == 0
+    facts = started[-1].facts
+    manifest = corpus.load()
+    assert facts == CorpusFacts.of(manifest)
+    assert facts.split.card_disjoint_games == frozenset({"cg"})
+    assert facts.split.game_disjoint_games == frozenset({"gg"})
+    assert (facts.holdout_permille, facts.holdout_max_carriers) == (20, 8)
+    assert facts.gate_one_records == 4096
+    assert facts.digest == manifest.digest()
 
 
 # ── encoder size and sidecar roots (FR-061, FR-062, FR-063b) ─────────────
@@ -146,6 +160,14 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
         assert cli.run_train_effect_model(args) == 2
     assert not started
     assert "not divisible" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "shape", [{"encoder_d_model": 250}, {"encoder_d_model": 0}, {"encoder_layers": 0}],
+)
+def test_the_config_refuses_an_encoder_shape_it_cannot_build(shape):
+    with pytest.raises(ValueError, match="--encoder"):
+        TrainEffectModelConfig(**shape)
 
 
 def test_the_size_flags_reach_the_trainers_config(tmp_path):
@@ -183,10 +205,11 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
 # ── the holdout unit and its recompute (FR-041, FR-042; T043) ────────────
 
 
-def test_the_trainer_takes_the_manifests_unit_when_the_flag_is_absent(config):
+def test_the_trainer_takes_the_manifests_unit_when_the_flag_is_absent(config, started):
     """A gen-1 manifest records no unit and reads as ``text``."""
     assert run(config) == 0
-    assert config.holdout_unit == "text"
+    assert started[-1].facts.holdout_unit == "text"
+    assert config.holdout_unit is None
 
 
 def test_a_unit_differing_from_the_manifests_is_refused(config, caplog):
@@ -203,7 +226,9 @@ def test_a_recomputed_holdout_that_disagrees_is_refused(corpus, config, caplog):
     assert "recomputed" in caplog.text
 
 
-def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(tmp_path, make_record):  # noqa: F811
+def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
+    tmp_path, make_record, started,
+):
     """The trimmed real gen-1 manifest records no unit; the trainer reads text."""
     import json
     from pathlib import Path
@@ -226,10 +251,10 @@ def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(tmp_path, make_rec
     )
 
     assert run(config) == 0
-    assert config.holdout_unit == "text"
+    assert started[-1].facts.holdout_unit == "text"
 
 
-def test_a_records_set_mixing_generations_is_refused(corpus, config, caplog, make_record):  # noqa: F811
+def test_a_records_set_mixing_generations_is_refused(corpus, config, caplog, make_record):
     """FR-033: refused before any record is read."""
     from effects.infrastructure.record_io import record_to_dict
 

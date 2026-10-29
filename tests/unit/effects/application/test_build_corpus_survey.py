@@ -24,10 +24,10 @@ from effects.application.corpus_survey import (
     game_hash,
     init_survey_worker,
     merge_surveys,
-    progress_line,
     run_survey,
     survey_shard,
 )
+from effects.application.parallel_map import progress_line
 from effects.domain.corpus_curation import game_disjoint_draw
 from effects.domain.corpus_plan import Cell, GameRouting, TrainingSupply
 from effects.domain.event_schema import Event, EventType
@@ -132,14 +132,14 @@ _HOLDOUT = HeldOutCards(
 
 def a_config(
     records_dir, *, held_out: HeldOutCards | None = None, sidecar_roots=None,
-    remapper=None, heap_cap: int = 200, share: float = 0.0,
+    heap_cap: int = 200, share: float = 0.0,
 ) -> SurveyConfig:
     return SurveyConfig(
         read=ReadConfig(
             records_dir=str(records_dir), sidecar_roots=dict(sidecar_roots or {}),
             max_events=64,
             held_out=held_out or HeldOutCards(names=frozenset(), script_files=frozenset()),
-            seed=42, remapper=remapper,
+            seed=42,
         ),
         heap_cap=heap_cap,
         routing=GameRouting(game_disjoint_share=share, keyword_share=share),
@@ -270,14 +270,14 @@ def test_merging_supplies_kept_at_different_heap_sizes_fails_loudly():
 
 def test_a_defective_record_is_counted_and_otherwise_ignored(tmp_path):
     """A record with no acting ability is not a key, a class or a game (FR-148)."""
-    from effects.domain.record_quality import NO_ABILITY
+    from effects.domain.record_quality import QualityDefect
 
     out = _survey_one(tmp_path, [
         a_record(record_id="clean", game_id="g1", ability=_BOLT),
         a_record(record_id="junk", game_id="g2", ability=()),
     ], sidecar_roots=converted_tree(tmp_path, *_BOLT))
 
-    assert out.refusals.by_reason == {NO_ABILITY: 1}
+    assert out.refusals.by_reason == {QualityDefect.NO_ABILITY: 1}
     assert out.records == 2
     assert out.games.games == {"g1"}
 
@@ -386,71 +386,3 @@ def test_a_training_record_acting_through_a_held_out_text_is_not_supplied(tmp_pa
     assert out.games.held_out == set()
     assert [keys for _cell, keys in out.supply.keyed] == [_BOLT]
     assert out.held_out_text_dropped == Counter({"rewrite": 1})
-
-
-# ── the old collector's token keys are remapped before anything reads them ──
-
-#: One Forge token script, enough for the remapper to resolve "food token"
-#: by name alone (FR-151).
-_FOOD_SCRIPT = (
-    "Name:Food Token\nManaCost:no cost\nTypes:Artifact Food\n"
-    "A:AB$ GainLife | Cost$ 2 T Sac<1/CARDNAME/this token> | LifeAmount$ 3\nOracle:\n"
-)
-
-
-def _food_remapper(tmp_path):
-    """A remapper over one raw Forge token script with a converted sidecar."""
-    from effects.domain.token_key_remap import TokenKeyRemapper
-    from effects.infrastructure.token_script_io import load_token_script_facts
-
-    forge = tmp_path / "forge-tokenscripts"
-    forge.mkdir()
-    (forge / "c_a_food_sac.txt").write_text(_FOOD_SCRIPT, encoding="utf-8")
-    return TokenKeyRemapper(
-        load_token_script_facts(forge),
-        converted_card_files=frozenset(),
-        token_sidecars=frozenset({"c_a_food_sac"}),
-    )
-
-
-_OLD_FOOD = (ProvenanceKey("cardsfolder/f/food_token.txt", 0, "spell", 1),)
-_NEW_FOOD = (ProvenanceKey("tokenscripts/c_a_food_sac.txt", 0, "spell", 1),)
-
-
-def test_the_survey_reads_records_through_the_remap(tmp_path):
-    """A survey key is the remapped key, so rarity and the caps see the token script."""
-    out = _survey_one(
-        tmp_path, [a_record(record_id="run.0-a.0", game_id="g1", ability=_OLD_FOOD)],
-        sidecar_roots=converted_tree(tmp_path, *_NEW_FOOD),
-        remapper=_food_remapper(tmp_path),
-    )
-
-    assert list(out.rarity.key_records) == [_NEW_FOOD]
-    assert out.remap.remapped == 1
-
-
-def test_without_a_remapper_the_survey_keys_the_record_as_collected(tmp_path):
-    """``--no-remap-token-keys``, and every other reader: the key is untouched."""
-    out = _survey_one(
-        tmp_path, [a_record(record_id="run.0-a.0", game_id="g1", ability=_OLD_FOOD)],
-        sidecar_roots=converted_tree(tmp_path, *_OLD_FOOD),
-    )
-
-    assert list(out.rarity.key_records) == [_OLD_FOOD]
-    assert out.remap.remapped == 0
-
-
-def test_merging_shard_surveys_sums_the_remap_counts():
-    """A corpus-wide figure, not a per-shard one: the manifest records the sum."""
-    from effects.domain.token_key_remap import RemapCounts
-
-    parts = []
-    for index, remapped in enumerate((2, 3)):
-        part = _part(f"shard-{index}", {f"g{index}"}, (index,))
-        part.remap = RemapCounts(remapped=remapped, ambiguous=Counter({"goblin_token": 1}))
-        parts.append(part)
-
-    merged = merge_surveys(parts, heap_cap=2)
-
-    assert merged.remap.remapped == 5
-    assert merged.remap.ambiguous == {"goblin_token": 2}

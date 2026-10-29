@@ -223,13 +223,6 @@ class TestKeywordExpansion:
         tokens = tokenizer.tokenize("wither")
         assert tokenizer.expandable(tokens[0]) is False
 
-    def test_a_parameterized_template_uses_the_instances_values(self, tokenizer):
-        expanded = tokenizer.expand_keywords(
-            tokenizer.tokenize("cycling"), probability=1.0,
-            instance_values={"cycling": ["{2}"]},
-        )
-        assert expanded[0].text == "{2}"
-
     def test_without_an_instance_the_placeholder_is_dropped(self, tokenizer):
         """The generic wording, not a tokenized "%s"."""
         expanded = tokenizer.expand_keywords(

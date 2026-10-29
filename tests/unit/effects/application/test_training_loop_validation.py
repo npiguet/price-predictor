@@ -9,27 +9,24 @@ import pytest
 import torch
 
 from effects.application.train_effect_model import (
+    CorpusFacts,
     TrainEffectModelConfig,
     run,
 )
 from effects.application.training_log import format_floor, format_parts
-from effects.application.training_loop import FloorCache, TrainingLoop
-from effects.domain.effect_head_layout import FIELDS_BY_NAME, EntityFieldTargets
+from effects.application.training_loop import FloorCache
+from effects.domain.effect_head_layout import FIELDS_BY_NAME
+from effects.domain.effect_losses import LossParts
+from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.loss_floor import EntityTargetBatch, constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.builders import make_preparer
-from tests.unit.effects.domain.conftest import (  # noqa: F401
-    ability_key,
-    make_record,
-    snapshot,
-)
+from tests.unit.effects.builders import make_preparer, make_training_loop
 
 
 @pytest.fixture
-def samples(tmp_path, make_record):  # noqa: F811
+def samples(tmp_path, make_record):
     card = [make_record(record_id=f"c{i}", game_id="cg") for i in range(5)]
     game = [make_record(record_id=f"g{i}", game_id="gg", kind=RecordKind.COMBAT,
                         payload=CombatPayload()) for i in range(3)]
@@ -41,17 +38,15 @@ def samples(tmp_path, make_record):  # noqa: F811
 
 
 def test_the_loop_loads_both_samples_and_the_probe(samples):
-    loop = TrainingLoop(
+    loop = make_training_loop(
         TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples=samples,
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
+        validation_samples=samples,
     )
-    loop._load_validation()
-    assert [r.record_id for r in loop.card_disjoint] == [f"c{i}" for i in range(5)]
-    assert len(loop.game_disjoint) == 3
-    assert loop.probe and loop.probe[0].record_id == "c0"
-    assert loop.present == {"resolution-effect", "combat"}
+    samples = loop._load_validation()
+    assert [r.record_id for r in samples.card_disjoint] == [f"c{i}" for i in range(5)]
+    assert len(samples.game_disjoint) == 3
+    assert samples.probe and samples.probe[0].record_id == "c0"
+    assert samples.present == {"resolution-effect", "combat"}
 
 
 def test_run_refuses_to_train_without_a_corpus(caplog):
@@ -66,14 +61,9 @@ def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
     anything but the defaults would be described by a checkpoint that never
     read it.
     """
-    loop = TrainingLoop(
+    provenance = CorpusFacts(holdout_permille=30, holdout_max_carriers=5).provenance(
         TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=30, holdout_max_carriers=5,
-        gate_one_records=0, rarity={}, corpus_digest="",
     )
-
-    provenance = loop._provenance()
 
     assert provenance.holdout_permille == 30
     assert provenance.holdout_max_carriers == 5
@@ -106,7 +96,7 @@ def test_validation_batches_drop_the_augmentations_but_keep_the_withholding(tmp_
     assert scoring.rng is not stream
 
 
-def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):  # noqa: F811
+def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):
     """The epoch's field set comes from the validation samples (FR-085).
 
     A class the corpus trains on but that neither sample holds drops every
@@ -119,34 +109,26 @@ def test_a_sample_missing_a_class_says_so(tmp_path, make_record, caplog):  # noq
     write_shard(paths["game-disjoint"],
                 [make_record(record_id="g0", game_id="gg",
                              kind=RecordKind.COMBAT, payload=CombatPayload())])
-    loop = TrainingLoop(
+    loop = make_training_loop(
         TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples=paths,
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
+        validation_samples=paths,
     )
-    loop._load_validation()
+    present = loop._load_validation().present
 
     with caplog.at_level(logging.WARNING):
-        loop._warn_missing_classes()
+        loop._warn_missing_classes(present)
 
-    assert loop.present == {"resolution-effect", "combat"}
-    for absent in set(SAMPLING_CLASSES) - loop.present:
+    assert present == {"resolution-effect", "combat"}
+    for absent in set(SAMPLING_CLASSES) - present:
         assert absent in caplog.text
     assert "no loss" in caplog.text
 
 
 def test_a_sample_naming_every_class_says_nothing(caplog):
-    loop = TrainingLoop(
-        TrainEffectModelConfig(corpus="unused"),
-        split=CorpusSplit(), training_shards=[], validation_samples={},
-        holdout_permille=20, holdout_max_carriers=8,
-        gate_one_records=0, rarity={}, corpus_digest="",
-    )
-    loop.present = set(SAMPLING_CLASSES)
+    loop = make_training_loop(TrainEffectModelConfig(corpus="unused"))
 
     with caplog.at_level(logging.WARNING):
-        loop._warn_missing_classes()
+        loop._warn_missing_classes(frozenset(SAMPLING_CLASSES))
 
     assert caplog.text == ""
 
@@ -237,3 +219,27 @@ def test_a_field_whose_targets_never_vary_reads_not_applicable_end_to_end():
 
     assert floor["damage_taken"] == 0.0
     assert "damage_taken 0.007 (n/a)" in line
+
+
+def test_validation_scores_the_shipped_objective_not_the_backward_total():
+    """The training-only heads join backward, never the number validation prints.
+
+    Equal today only because a scoring step builds no training-only targets;
+    summing ``total`` would make the two diverge the day one does.
+    """
+    from types import SimpleNamespace
+
+    from effects.application.training_loop import StepLoss
+
+    loop = make_training_loop(TrainEffectModelConfig(corpus="unused", batch_size=2))
+    loop._device_loss = lambda *a, **k: StepLoss(
+        total=torch.tensor(5.0), shipped=torch.tensor(1.0), parts=LossParts(), terms={},
+    )
+    module = SimpleNamespace(eval=lambda: None, train=lambda: None)
+    run = SimpleNamespace(
+        encoder=module, model=module, step=0, scoring=None,
+        preparer=SimpleNamespace(prepare_scoring_step=lambda *a, **k: SimpleNamespace()),
+    )
+    records = [SimpleNamespace(game_id=f"g{i}") for i in range(4)]
+
+    assert loop._validate(records, run, fields=()) == 1.0

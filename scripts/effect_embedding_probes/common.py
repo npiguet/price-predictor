@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from effects.infrastructure import default_paths
+from effects.domain import default_paths
 
 ROOT = Path(__file__).resolve().parents[2]
 REPORTS = ROOT / default_paths.DEFAULT_REPORTS_DIR
@@ -157,13 +157,9 @@ def add_probe_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
 
 def cache_e_width(abilities_root: Path) -> int:
     """The width of ``e``, read from the first shipping cache file found."""
-    from effects.domain.ability_cache_layout import ARRAY_KEY
+    from effects.infrastructure.ability_cache_store import AbilityCacheStore
 
-    for path in sorted(Path(abilities_root).rglob("*.npz")):
-        if "." in path.stem:
-            continue
-        with np.load(path) as data:
-            matrix = data[ARRAY_KEY]
+    for _, matrix in AbilityCacheStore(abilities_root).iter_matrices():
         if matrix.ndim == 2 and matrix.shape[1]:
             return int(matrix.shape[1])
     raise FileNotFoundError(

@@ -12,8 +12,8 @@ from __future__ import annotations
 from effects.application.gate_one import unique_text_stratum
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import EffectRecord, RecordKind
-from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.model_runner import (
+from effects.infrastructure.corpus_store import (
+    CorpusStore,
     card_disjoint_resolutions,
     training_acting_keys,
 )

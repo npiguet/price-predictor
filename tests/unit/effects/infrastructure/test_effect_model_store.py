@@ -14,6 +14,7 @@ import pytest
 import torch
 
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.infrastructure.effect_model_store import (
@@ -132,6 +133,18 @@ class TestCorpusProvenance:
     def test_a_checkpoint_saved_before_curated_corpora_still_loads(self):
         assert SplitProvenance.from_dict({}).corpus_digest == ""
 
+    def test_an_empty_provenance_reads_as_every_default(self):
+        assert SplitProvenance.from_dict({}) == SplitProvenance()
+
+    def test_stored_lists_read_back_as_tuples(self):
+        provenance = SplitProvenance.from_dict({
+            "held_out_cards": ["Shock"], "card_disjoint_games": ["g1"],
+            "holdout_permille": 20,
+        })
+        assert provenance.held_out_cards == ("Shock",)
+        assert provenance.card_disjoint_games == ("g1",)
+        assert provenance.holdout_permille == 20
+
 
 class TestHashChecking:
     def test_matching_hashes_pass(self, files):
@@ -234,7 +247,7 @@ class TestTrainingOnlyHeadsAreFiltered:
         store = EffectModelStore(tmp_path / "effect-model")
         store.save(_checkpoint(files))
         keys = store.load().model_state.keys()
-        for name in EffectModel.TRAINING_ONLY_HEADS:
+        for name in TRAINING_ONLY_MODULES:
             assert not any(key.startswith(f"{name}.") for key in keys), name
 
     def test_the_shipped_heads_survive(self, tmp_path, files):
@@ -262,7 +275,7 @@ class TestStoreFiles:
         store = EffectModelStore(tmp_path / "effect-model")
         path = store.save(_checkpoint(files))
         assert path.exists()
-        assert store.latest_path().exists()
+        assert store.latest_path().read_bytes() == path.read_bytes()
         assert path.name != "latest.pt"
 
     def test_loading_a_missing_checkpoint_says_what_to_run(self, tmp_path):
@@ -315,16 +328,24 @@ class TestInferencePathResolution:
         )
         assert resolved == (vocab, keywords)
 
+    def test_the_resolved_paths_pass_the_hash_check(self, files):
+        provenance = _provenance(files)
+        vocab_path, keyword_path = resolve_inference_paths(
+            provenance, vocab_path=None, keyword_path=None,
+        )
+        provenance.verify_hashes(vocab_path=vocab_path, keyword_path=keyword_path)
+
     def test_an_explicit_path_overrides(self, tmp_path, files):
+        _vocab, keywords = files
         chosen = tmp_path / "other-vocab.txt"
-        vocab_path, _ = resolve_inference_paths(
+        vocab_path, keyword_path = resolve_inference_paths(
             _provenance(files), vocab_path=chosen, keyword_path=None,
         )
         assert vocab_path == chosen
+        assert keyword_path == keywords
 
     def test_an_override_is_still_hash_checked(self, tmp_path, files):
         """Overriding to a different file must fail, not silently re-encode."""
-        _vocab, keywords = files
         other = tmp_path / "other-vocab.txt"
         other.write_text("[PAD]\n[UNK]\nextra\n", encoding="utf-8")
         provenance = _provenance(files)
@@ -335,7 +356,6 @@ class TestInferencePathResolution:
             provenance.verify_hashes(
                 vocab_path=vocab_path, keyword_path=keyword_path,
             )
-
 
 
 class TestLoadForInference:
@@ -427,7 +447,7 @@ class TestGen2Checkpoint:
         assert set(missing) <= {
             key for key in model.state_dict()
             if key.startswith(("option_kind_embedding.", *(
-                f"{name}." for name in EffectModel.TRAINING_ONLY_HEADS
+                f"{name}." for name in TRAINING_ONLY_MODULES
             )))
         }
         assert checkpoint.training_settings == {} and checkpoint.cards_folders == ()

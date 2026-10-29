@@ -10,94 +10,53 @@ epoch starts. Those are the joins the per-piece suites cannot see.
 from __future__ import annotations
 
 import pytest
-import torch
 
-from effects.application import training_loop as loop_module
 from effects.application.step_preparation import StepPreparer
 from effects.application.train_effect_model import (
     EarlyStopper,
     TrainEffectModelConfig,
 )
 from effects.application.training_loop import StepLoss, TrainingLoop
+from effects.domain.effect_losses import LossParts
 from effects.domain.records import CombatPayload, RecordKind
-from effects.domain.split import CorpusSplit
 from effects.infrastructure.record_io import write_shard
-from tests.unit.effects.domain.conftest import (  # noqa: F401
-    ability_key,
-    make_record,
-    snapshot,
+from tests.unit.effects.builders import (
+    make_training_loop,
+    stub_below_the_loop,
+    write_validation_samples,
 )
 
 
-class _Stub(torch.nn.Module):
-    """A module with one parameter, so backward and the optimizer have work."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.p = torch.nn.Parameter(torch.ones(2))
-
-
-class _Metrics:
-    affected_gate_f1 = 0.5
-    zone_outcome_accuracy = 0.5
-    mean_poisson_deviance = 0.5
-
-
 @pytest.fixture
-def run(tmp_path, make_record, monkeypatch):  # noqa: F811
+def run(tmp_path, make_record, monkeypatch):
     """Run two epochs and return the ordered log of what the loop called."""
     combat = [make_record(record_id=f"r{i}", game_id=f"g{i % 2}",
                           kind=RecordKind.COMBAT, payload=CombatPayload())
               for i in range(8)]
     shard = tmp_path / "train.jsonl.gz"
     write_shard(shard, combat)
-    samples = {}
-    for stratum in ("card-disjoint", "game-disjoint"):
-        samples[stratum] = tmp_path / f"{stratum}.jsonl.gz"
-        write_shard(samples[stratum], combat[:2])
+    samples = write_validation_samples(tmp_path, combat[:2])
 
-    model, encoder = _Stub(), _Stub()
+    model, _encoder = stub_below_the_loop(monkeypatch)
     events: list[tuple] = []
-
-    monkeypatch.setattr(loop_module, "AbilityEncoder", lambda config: encoder)
-    monkeypatch.setattr(loop_module, "EffectModel", lambda config: model)
-    monkeypatch.setattr(
-        StepPreparer, "_build_tokenizer",
-        lambda self: type("T", (), {"vocab_size": 8})(),
-    )
-    # The script-API vocabulary is read off every real sidecar; none here.
-    monkeypatch.setattr(TrainingLoop, "_script_vocabularies", lambda self: ([], []))
-    monkeypatch.setattr(
-        loop_module, "feature_widths",
-        lambda records: dict.fromkeys(loop_module.SlotKind, 4),
-    )
 
     def device_loss(self, prepared, *args, **kwargs):
         events.append(("loss", id(prepared["fields"]), model.training))
         loss = model.p.sum()
-        return StepLoss(total=loss, shipped=loss, parts={}, terms={})
+        return StepLoss(total=loss, shipped=loss, parts=LossParts(), terms={})
 
-    def validate(self, records, *args, parts=None, fields=None, **kwargs):
-        events.append(("validate", id(fields), model.training))
+    def validate(self, records, *args, parts=None, fields=None, margins=None, **kwargs):
+        events.append(("validate", id(fields), margins is not None))
         return 1.0
-
-    def measure(records, enc, mdl, batcher, *, fields):
-        events.append(("measure", id(fields), batcher.stager.keyword_expand_p))
-        # The real one scores in eval mode and never switches back, which is
-        # what the next epoch's first step has to survive.
-        enc.eval()
-        mdl.eval()
-        return _Metrics()
 
     monkeypatch.setattr(TrainingLoop, "_device_loss", device_loss)
     # The step's host half reads real surfaces off real records; what it is
     # handed stands in for what it would have prepared.
     monkeypatch.setattr(
-        StepPreparer, "prepare_step",
-        lambda self, plan, *a, fields=None, **k: {"fields": fields},
+        StepPreparer, "prepare_training_step",
+        lambda self, plan, *a, fields=None, **k: ({"fields": fields}, 0),
     )
     monkeypatch.setattr(TrainingLoop, "_validate", validate)
-    monkeypatch.setattr(loop_module, "measure", measure)
 
     resets = []
     original = EarlyStopper.reset
@@ -114,11 +73,7 @@ def run(tmp_path, make_record, monkeypatch):  # noqa: F811
         # real ones.
         prefetch_workers=0,
     )
-    code = TrainingLoop(
-        config, split=CorpusSplit(), training_shards=[shard], validation_samples=samples,
-        holdout_permille=20, holdout_max_carriers=8, gate_one_records=0,
-        rarity={}, corpus_digest="",
-    ).execute()
+    code = make_training_loop(config, training_shards=[shard], validation_samples=samples).execute()
     return code, events, resets, model
 
 
@@ -130,10 +85,9 @@ def test_the_run_completes(run):
 def test_an_epoch_scores_the_field_set_it_trained_with(run):
     """Every pass of an epoch is handed the same object (FR-082).
 
-    Not merely an equal one: the training loss, the two validation strata and
-    the gate-1 probe all read ``fields`` by identity from the epoch, so a pass
-    that rebuilt its own would be scoring a different objective from the number
-    printed beside it.
+    Not merely an equal one: the training loss and the two validation strata
+    read ``fields`` by identity from the epoch, so a pass that rebuilt its own
+    would be scoring a different objective from the number printed beside it.
     """
     _, events, _, _ = run
     seen = [fields for _kind, fields, _payload in events]
@@ -144,7 +98,7 @@ def test_an_epoch_scores_the_field_set_it_trained_with(run):
     assert len(set(runs)) == 2
     for epoch_fields in runs:
         kinds = {kind for kind, fields, _ in events if fields == epoch_fields}
-        assert kinds == {"loss", "validate", "measure"}
+        assert kinds == {"loss", "validate"}
 
 
 def test_the_stopper_forgets_its_best_once_at_the_curriculum_boundary(run):
@@ -152,18 +106,17 @@ def test_the_stopper_forgets_its_best_once_at_the_curriculum_boundary(run):
     assert len(resets) == 1
 
 
-def test_the_gate_one_probe_runs_without_the_augmentations(run):
+def test_the_gate_one_margins_ride_the_card_disjoint_pass_alone(run):
+    """One validation pass per epoch feeds the progress margins, and no second
+    pass over the sample scores them."""
     _, events, _, _ = run
-    expansions = [payload for kind, _, payload in events if kind == "measure"]
-    assert expansions == [0.0, 0.0]
+    fed = [payload for kind, _, payload in events if kind == "validate"]
+    assert fed == [True, False, True, False]
 
 
 def test_the_second_epoch_starts_in_training_mode(run):
-    """``measure`` scores in eval mode and never switches back.
-
-    Epoch 2 would then train a model whose dropout and noise are off, and
-    nothing in the log would say so.
-    """
+    """Epoch 2 would otherwise train a model whose dropout and noise are off,
+    and nothing in the log would say so."""
     _, events, _, model = run
     assert all(payload for kind, _, payload in events if kind == "loss")
     # And the loop leaves the modules the way an epoch needs to find them.

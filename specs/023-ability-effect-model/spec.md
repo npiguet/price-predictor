@@ -231,12 +231,12 @@ loss.
     `ridge_probes`, and `card_filenames.sanitize_card_name` (a variant script's filename is the path
     its provenance key resolves to, and the Java `CardFilenames` mirrors this one sanitizer — a third
     implementation would break the join without failing the build);
-  - from `sealed.domain`: `manabase.compute_basic_lands`, `card_embedding_layout`;
-  - from `sealed.infrastructure`: `ConvertedCardLocator`, `embedding_store`,
+  - from `sealed.domain`: `manabase.compute_basic_lands`;
+  - from `sealed.infrastructure`: `ConvertedCardLocator`,
     `MatchWorkerConnector` (the effects collectors spawn the same Java worker main, so
-    rebuilding its system-property mapping here would be a second place for it to drift);
-  - from `sealed.application`: nothing. `train-scorer` Phase A is re-run as a subprocess, not
-    imported, so the two application layers stay disjoint.
+    rebuilding its system-property mapping here would be a second place for it to drift), and
+    `pool_file_reader.format_generated_deck` (the generated-decks line the collectors write);
+  - from `sealed.application`: nothing, so the two application layers stay disjoint.
 - **FR-003**: Java collectors, the `MatchWorkerMain` instrumentation behind `--effect-records`, and
   `KeywordDefinitionMain` MUST live in `forge-connector`.
 - **FR-004**: The engine hooks MUST live as commits on a branch of the sibling `../forge` checkout,
@@ -314,8 +314,8 @@ loss.
   `{type, subjects, params, duration, attributed_to}`, over a vocabulary that is the union of Forge
   trigger types, bus events, and bracket diffs, with the canonical member list in
   `src/effects/domain/event_schema.py`, which also fixes the per-type field normalization.
-- **FR-025**: A checked-in completeness test MUST map every Forge effect API class to a covered event
-  type or an explicit exclusion.
+- **FR-025**: A Java test in `forge-connector` (`ApiEventsTest`) MUST check that every key of the
+  API-emitter table (`ApiEvents.RULES`) is an `ApiType` member name.
 - **FR-026**: Each record kind MUST carry the per-kind payload defined in the root spec's payload
   table, including one `combat` record per damage step.
 - **FR-027**: Recorded playability verdicts MUST be rules-level only; the AI's policy judgments MUST
@@ -561,7 +561,7 @@ loss.
 - **FR-081**: Loss MUST be normalized per record over entity count; the affected gate trains on every
   entity — players included, since the per-entity head is mapped over `[PLAYER]` outputs too — and
   a conditional field only where the gate's target fires **and** the field is present
-  (`EntityFieldTargets`, `effect_head_layout.py`). A field MUST be present on an entity where the
+  (`EntityFieldTargets`, `entity_field_targets.py`). A field MUST be present on an entity where the
   record writes it (an event, or a payload's legality mark), or where it has a silent value, the
   record's sampling class supervises it, and the entity is of the field's `FieldScope` (player or
   permanent); a field the record declares unknown MUST be absent whatever its silent value. Silent
@@ -713,30 +713,7 @@ loss.
 - **FR-150**: The collector MUST resolve a token host with no `PaperToken` through its image key
   against the token database before falling back to a `cardsfolder` path
   (`ScriptLocator.tokenScriptStem`; verified by `CopiedTokenProvenanceTest`).
-- **FR-151**: `build-corpus` MUST remap a provenance key whose script file the converted card tree
-  does not hold and whose filename stem names a token script to `tokenscripts/<stem>.txt`, resolving
-  the stem by name, then by the carrying entity's colours, core types, supertypes, subtypes and P/T,
-  and MUST leave a key untouched when more than one script remains. There is no third step: a
-  snapshot's `printed` list carries a token's **spell** abilities only — a `K:`, `T:`, `S:` or `R:`
-  line produces no printed key at all — so two same-stat scripts of one name that differ only by a
-  keyword or an ability are indistinguishable from a record and MUST stay ambiguous rather than be
-  settled by a count the snapshot never carried. A key under `state.entities` (`printed`,
-  `granted_attached`, `granted_temporary`) MUST resolve per entity, against that entity's own
-  characteristics; every other key site (the acting `ability`, playability candidates,
-  `responsible_static`, `replaced_by`) MUST be rewritten only when every entity in the record that
-  carried the same old key agrees on one stem, and MUST otherwise resolve by name alone or stay
-  untouched. It MUST record `token_keys_remapped`, `token_keys_ambiguous` and `forge_tokenscripts`
-  in the manifest, the first two counted on the records the build **writes**.
-  `--no-remap-token-keys` turns the step off.
-  - **What the remap corrects.** Every old token key in the corpus is `(spell, 0)`, the permanent's
-    own cast-spell trait, which is a `dropped_keys` entry in all but a handful of token sidecars: it
-    maps to no ability text before or after the rewrite. The token's ability lines were already
-    keyed under `tokenscripts/<stem>.txt` by the old collector and resolve as they are. The remap is
-    therefore an archival correction of a contentless key, not a recovery of lost ability text.
-  - **Known limitation.** Step 2 compares the snapshot's **in-game** colours, types and P/T, so a
-    token a continuous effect has altered can match a different same-name script than the one it was
-    created from.
-- **FR-152**: The converter MUST claim, on a rendered line, every runtime trait whose text that line
+- **FR-151 (withdrawn)**: `build-corpus` does not remap token provenance keys; every key is written as collected. The manifest still carries `token_keys_remapped`, `token_keys_ambiguous` and `forge_tokenscripts`, always written `0`, `{}` and `""`, so that manifest digests pinned by checkpoints do not move. `--no-remap-token-keys` and `--forge-tokenscripts` do not exist.- **FR-152**: The converter MUST claim, on a rendered line, every runtime trait whose text that line
   carries: the synthetic land-mana line claims the runtime mana abilities it stands for, the
   survivor of a deduplicated description claims the duplicate's keys, the primary of a secondary
   trigger pair claims the secondary's key, a keyword-derived trigger, static, spell or replacement
@@ -885,11 +862,10 @@ loss.
   after the training run.
 - **FR-109**: Metrics MUST condition on affected entities, be reported per field and class-balanced
   within each categorical field, and every kind MUST report the `state-only` variant as its floor.
-- **FR-110**: The command MUST report the root spec's twelve checks: nearest-neighbor inspection and
+- **FR-110**: The command MUST report the root spec's eleven checks: nearest-neighbor inspection and
   UMAP colored by effect category; the ward canary; zero-shot keyword; role-polarity probe; scaling
   calibration; matched real-vs-fork agreement; the `identity` variant on the game-disjoint split; the
-  linear-decodability battery; the
-  pooled-`e` scorer smoke test; the `taxonomy` comparison; the average-effect control (the `no-state`
+  linear-decodability battery; the `taxonomy` comparison; the average-effect control (the `no-state`
   variant); and the probe-diff re-check.
 - **FR-111**: Three FR-110 checks are not implemented: matched real-vs-fork agreement, the probe-diff
   re-check and the role-polarity probe. Each MUST be reported on every run with status
@@ -906,23 +882,19 @@ loss.
   costs more to cast — without the keyword. Every entry MUST resolve to the key on the checkpoint's
   encoding surface, and an entry that resolves to no line MUST be named in the report rather than
   dropped. The nearest-neighbour queries follow the same rules.
-- **FR-113**: Checks over `e` geometry (gate 3, the decodability battery, the ward canary, the scorer
-  smoke test) read the `output/effects/abilities/` caches, so `encode-abilities` MUST have run for
+- **FR-113**: Checks over `e` geometry (gate 3, the decodability battery, the ward canary) read the `output/effects/abilities/` caches, so `encode-abilities` MUST have run for
   every variant those checks cover before `evaluate-effect-model` runs.
 - **FR-114**: Pooled per-card `e` MUST be the concatenation of the mean and the max over the card's
   ability rows. The linear-decodability battery MUST run that pooled vector through the ridge harness
   of [`experiments/2026-08-28-encoder-preferences.md`](../../experiments/2026-08-28-encoder-preferences.md),
   validated on the checkpoint's held-out cards and joined to the win-rate table by card name,
   ignoring case.
-- **FR-115**: The pooled-`e` scorer smoke test MUST concatenate that pooled `e` with the sealed
-  encoder's vector rather than replacing it, write the result into a scratch copy of the cards folder
-  — never `output/cardsfolder/` — and re-run `train-scorer` Phase A against it. It is informational
-  and gates nothing.
+- **FR-115 (withdrawn)**: The pooled-`e` scorer smoke test is not part of the battery.
 - **FR-116**: The remaining checks MUST be: the role-polarity probe, comparing the predicted
   mana-pool sign for `{R}` in cost position against effect position; scaling calibration, predicted
   sweeper deaths as a function of board size; the `identity` variant on the game-disjoint split as
   the in-distribution memorization ceiling; the average-effect control, comparing the `no-state`
-  variant on the decodability battery, the scorer smoke test, the ward canary, and scaling
+  variant on the decodability battery, the ward canary, and scaling
   calibration; and the probe-diff re-check, gate 2's canary re-run over real-and-fork combat pairs
   joined by `mirror_of`, for probed keywords only. The role-polarity probe and the probe-diff
   re-check are not implemented (FR-111).
@@ -938,9 +910,9 @@ loss.
   unique-text stratum over resolution records. It MUST block shipping the model or cache. The
   stratum MUST be read from the curated corpus the checkpoint records: the texts "seen in training"
   are every text a record of its `training/` stratum acts with, and the candidates are the
-  card-disjoint stratum's resolution records, streamed. A checkpoint recording no curated corpus
-  MUST report gate 1 as skipped with that reason, since a raw game outside the recorded validation
-  sets is not necessarily a training game.
+  card-disjoint stratum's resolution records, streamed. `evaluate-effect-model` MUST refuse a
+  checkpoint recording no curated corpus (exit 2, `CorpusMismatchError`), since a raw game outside
+  the recorded validation sets is not necessarily a training game.
 - **FR-119**: Gate 2 (damage-step keyword canary) MUST run per keyword over first strike, double
   strike, deathtouch, lifelink, trample, indestructible, wither, and infect; require at least 200
   qualifying records, counted as distinct `record_id`s; pass when the affected fields move in the
@@ -951,9 +923,8 @@ loss.
   probability for categoricals.
 - **FR-120**: A qualifying record for gate 2 MUST be a real combat record from the game-disjoint
   validation split in which the keyword's presence changes the damage-step outcome; a fork or an
-  interventional record MUST never qualify. A checkpoint trained on a curated corpus MUST read the
-  records from its `validation/game-disjoint`; the raw corpus is read only for a checkpoint with
-  none.
+  interventional record MUST never qualify. Gate 2 MUST read the records from the checkpoint's curated
+  corpus, `validation/game-disjoint`.
 - **FR-121**: Gate 2's perturbation MUST be model-side, not a game fork: remove the keyword from the
   carrying participant's model input — its ability token where the keyword is printed or
   attachment-granted, and the overlay's temporarily-granted-keywords channel where it is not. Gate 2
@@ -1093,5 +1064,4 @@ loss.
   responsibility to avoid.
 - Gate 2's 200-record minimum and 70% direction threshold, gate 1's three margins, and gate 3's two
   thresholds are pinned in the root spec and are not re-negotiated after seeing results.
-- Consuming `e` in the scorer, picker, or draft agent is out of scope. The pooled-`e` scorer smoke test
-  is informational only and gates nothing.
+- Consuming `e` in the scorer, picker, or draft agent is out of scope.

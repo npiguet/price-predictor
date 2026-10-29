@@ -1,23 +1,9 @@
 """The evaluation report's breakdowns: one scored record set, grouped many ways.
 
-Gen-2's arms are compared by hand, and what is compared is mostly how a field's
-loss moves across slices of the validation strata rather than one pooled
-number. A pooled loss over the card-disjoint stratum is dominated by the few
-texts with the most records; the per-text mean weighs every held-out text once,
-which is the question gate 1's population was built to ask (FR-064). The
-rarity buckets and rule families then say *where* in the tail an arm gains or
-loses, and the policy and decision slices separate what the random seat and
-the real legality declarations add (FR-066, FR-067).
-
-Every function here is pure grouping over :class:`RecordResult` rows, and the
-rendering of each group as a report line. Scoring a record — running the
-model, reading its losses — is ``gate_one.score_records``'s job; nothing here
-imports torch, so the grouping rules are testable on plain rows.
-
-A field's mean is taken over the records that supervise it, never over all
-records. A field a record does not supervise has no loss for it, and counting
-it as zero would make a slice look better the fewer of its records carry the
-field.
+Pure grouping over :class:`RecordResult` rows, torch-free; scoring is
+``record_scoring.score_records``'s job. The per-text mean weighs every held-out
+text once, where a pooled loss is dominated by the texts with the most records
+(FR-064).
 """
 
 from __future__ import annotations
@@ -30,7 +16,7 @@ from effects.domain.evaluation_report import CheckName, CheckResult, CheckStatus
 from effects.domain.keyword_names import normalize_keyword
 from effects.domain.rarity import RARITY_BUCKETS, rarity_bucket
 from effects.domain.records import WHAT_IF_SUBKINDS, LegalityDecision
-from effects.domain.strata import VALIDATION_STRATA
+from effects.domain.strata import Stratum
 
 #: The loss key every scored record carries: the per-entity loss summed over
 #: the gate and every supervised field, as the trainer's validation reads it.
@@ -44,10 +30,10 @@ WITHHELD, TRAINED = "withheld", "trained"
 class RecordResult:
     """One scored record: what identifies it, what groups it, what it scored.
 
-    ``losses`` holds :data:`TOTAL` and every field the record supervised, by
-    field name; an unsupervised field is absent rather than zero. ``keywords``
-    is every keyword on the acting line or carried by an entity of the board,
-    in the gate's spelling (``first_strike``), for the withheld-keyword slice.
+    ``losses`` holds :data:`TOTAL` and every field the record supervised; an
+    unsupervised field is absent rather than zero. ``keywords`` is every
+    keyword on the acting line or the board, in the gate's spelling
+    (``first_strike``).
     """
 
     record_id: str
@@ -82,8 +68,7 @@ def field_means(results: Iterable[RecordResult]) -> FieldMeans:
 def per_text_means(results: Iterable[RecordResult]) -> FieldMeans:
     """Each field's mean over texts, every text's own mean weighted once.
 
-    Records with no acting text cannot be grouped by one and are left out. The
-    count beside each mean is the number of texts that supervised the field.
+    Records with no acting text are left out; the counts are of texts.
     """
     by_text: dict[str, list[RecordResult]] = defaultdict(list)
     for result in results:
@@ -100,9 +85,8 @@ def _mean_of_means(groups: Iterable[FieldMeans]) -> FieldMeans:
 def _mean_per_key(rows: Iterable[dict[str, float]]) -> FieldMeans:
     """Each key's mean over the rows that carry it, beside how many did.
 
-    A row without a key is not a zero for it: a record that does not
-    supervise a field, like a text none of whose records did, says nothing
-    about that field.
+    A missing key is not a zero: counting it as one would make a slice look
+    better the fewer of its records carry the field.
     """
     sums: dict[str, float] = defaultdict(float)
     counts: dict[str, int] = defaultdict(int)
@@ -146,13 +130,11 @@ def overall(results: Iterable[RecordResult]) -> GroupResult:
 def by_rarity_bucket(
     results: Iterable[RecordResult], games_by_text: Mapping[str, float],
 ) -> dict[str, GroupResult]:
-    """Grouped by the rarity bucket of each record's text (FR-064).
+    """Grouped by the rarity bucket of each record's text (FR-064), buckets in
+    ascending order of games.
 
-    ``games_by_text`` is the number of distinct games each text acted in,
-    from the curated corpus's rarity table. A text it does not name falls back
-    to the games the scored records themselves span, so a held-out text the
-    table never counted is still bucketed by what the stratum saw of it.
-    Buckets come back in ascending order of games.
+    A text the corpus's rarity table ``games_by_text`` does not name falls back
+    to the games the scored records themselves span.
     """
     rows = [r for r in results if r.text is not None]
     seen: dict[str, set[str]] = defaultdict(set)
@@ -186,13 +168,8 @@ def memorization_gap(
     game_disjoint: Mapping[str, GroupResult],
     card_disjoint: Mapping[str, GroupResult],
 ) -> dict[str, dict[str, float]]:
-    """Per family: game-disjoint minus card-disjoint, on the fields both have.
-
-    Both strata are scored per record. The game-disjoint stratum holds texts
-    the model trained on, the card-disjoint stratum texts it never saw, so a
-    loss that rises from one to the other is what the model only remembered
-    (FR-065). A family present in one stratum alone has no gap to report.
-    """
+    """Per family: game-disjoint minus card-disjoint per-record loss, on the
+    fields and families both strata have (FR-065)."""
     gaps: dict[str, dict[str, float]] = {}
     for family in sorted(set(game_disjoint) & set(card_disjoint)):
         seen = game_disjoint[family].per_record.means
@@ -222,13 +199,8 @@ def decision_slice(results: Iterable[RecordResult]) -> dict[str, GroupResult]:
 def keyword_slice(
     results: Iterable[RecordResult], withheld: str,
 ) -> dict[str, GroupResult]:
-    """Records carrying the withheld keyword beside records carrying others.
-
-    The withheld group is every record where the keyword is on the acting line
-    or carried by a board entity (FR-068). The trained group is every record
-    carrying some keyword and not that one, so the comparison is keyword
-    records against keyword records rather than against vanilla boards.
-    """
+    """Records carrying the withheld keyword beside records carrying others
+    (FR-068), so the comparison is not against vanilla boards."""
     target = normalize_keyword(withheld)
 
     def group(result: RecordResult) -> str | None:
@@ -239,28 +211,19 @@ def keyword_slice(
     return _group(results, group)
 
 
-
-# ── the report lines ────────────────────────────────────────────────────
-
-CARD_DISJOINT, GAME_DISJOINT = VALIDATION_STRATA
-
-
 def breakdown_checks(
     scored: dict[str, list],
     *,
     games_by_text: dict[str, float],
     withheld_keyword: str | None,
 ) -> list[CheckResult]:
-    """Every breakdown of the scored strata, one report line per group.
-
-    ``scored`` maps a stratum to its :class:`RecordResult` rows, so the
-    report's shape is testable without a model.
-    """
-    card = scored.get(CARD_DISJOINT, [])
-    game = scored.get(GAME_DISJOINT, [])
+    """Every breakdown of the scored strata (stratum -> rows), one report line
+    per group."""
+    card = scored.get(Stratum.CARD_DISJOINT, [])
+    game = scored.get(Stratum.GAME_DISJOINT, [])
     checks = [*_card_disjoint_checks(card, games_by_text)]
     checks += _memorization_gap_checks(card, game)
-    for stratum, rows in ((CARD_DISJOINT, card), (GAME_DISJOINT, game)):
+    for stratum, rows in ((Stratum.CARD_DISJOINT, card), (Stratum.GAME_DISJOINT, game)):
         checks += _slice_checks(
             f"{stratum} policy", policy_slice(rows), present=OFF_POLICY,
             skipped=f"{stratum} off-policy",
@@ -289,18 +252,18 @@ def _card_disjoint_checks(card: list, games_by_text: dict[str, float]) -> list[C
     """The card-disjoint stratum overall, by rarity, by family, and over families."""
     if not card:
         return [CheckResult(
-            CARD_DISJOINT, CheckStatus.SKIPPED,
+            Stratum.CARD_DISJOINT, CheckStatus.SKIPPED,
             "the card-disjoint stratum holds no record to break down",
         )]
-    checks = [_group_check(CARD_DISJOINT, overall(card))]
+    checks = [_group_check(Stratum.CARD_DISJOINT, overall(card))]
     for bucket, group in by_rarity_bucket(card, games_by_text).items():
-        checks.append(_group_check(f"{CARD_DISJOINT} rarity {bucket}", group))
+        checks.append(_group_check(f"{Stratum.CARD_DISJOINT} rarity {bucket}", group))
     families = by_family(card)
     for family, group in families.items():
-        checks.append(_group_check(f"{CARD_DISJOINT} family {family}", group))
+        checks.append(_group_check(f"{Stratum.CARD_DISJOINT} family {family}", group))
     if families:
         checks.append(_group_check(
-            f"{CARD_DISJOINT} mean over families",
+            f"{Stratum.CARD_DISJOINT} mean over families",
             mean_over_families(families),
             detail=f"{len(families)} families, each weighted once",
         ))
@@ -327,12 +290,8 @@ def _memorization_gap_checks(card: list, game: list) -> list[CheckResult]:
 def _slice_checks(
     prefix: str, groups: dict, *, present, skipped: str, why: str,
 ) -> list[CheckResult]:
-    """Every group of one slice as a line, or one skip naming why it is absent.
-
-    ``present`` is the group whose absence means the slice measured nothing —
-    the off-policy rows, the real decisions, the withheld keyword — so the
-    other groups alone would be a comparison with one side missing.
-    """
+    """Every group of one slice as a line, or one skip when the ``present``
+    group is missing and the comparison would have one side."""
     if present not in groups:
         return [CheckResult(skipped, CheckStatus.SKIPPED, why)]
     return [
@@ -341,12 +300,8 @@ def _slice_checks(
 
 
 def _group_check(name: str, group: GroupResult, *, detail: str | None = None) -> CheckResult:
-    """One group's report line: per-record field means, then per-text ones.
-
-    Per-text means are prefixed ``text:``; the detail carries both counts, so a
-    mean over three records reads as one. A mean of group means passes its own
-    ``detail``, since its counts are groups rather than records.
-    """
+    """One group's report line: per-record field means, then ``text:``-prefixed
+    per-text ones, with both counts in the detail unless ``detail`` is given."""
     values = {
         **group.per_record.means,
         **{f"text:{key}": value for key, value in group.per_text.means.items()},

@@ -214,7 +214,7 @@ class RecordShardWriterTest {
 
     @Test
     void idsKeepThreeDotSegmentsSoParsesFromTheRightStillWork() {
-        // EffectRecord.worker is record_id.split(".")[-2]; link_id appends
+        // The worker slot is record_id.split(".")[-2]; link_id appends
         // ".link.{n}" to a game id. The token rides inside the middle segment
         // precisely so neither has to change.
         try (RecordShardWriter writer =

@@ -1,47 +1,26 @@
 """``collect-coverage``: put every card into a game, not just the popular ones.
 
-Sealed self-play only ever plays what sealed pools contain, which is a small and
-badly skewed slice of the corpus — a card that appears in no sealed-legal set
-never appears in a record at all. This command builds decks over the *whole*
-converted corpus, weighted toward the cards with the fewest records, and plays
-them until every card is either satisfied or retired.
-
-Three rules keep it honest:
-
-- **The castability consult only ranks.** It never drops a card from deck
-  building, because being in a game is the precondition a stage-three
-  intervention forks from: a card the consult judges uncastable is exactly the
-  card an intervention has to force into play.
-- **Presence in a snapshot does not count.** A card is satisfied when it has
-  been the acting line's host, an event subject, or a referenced ref — sitting
-  on the battlefield while something else happens teaches the model nothing
-  about that card.
-- **A card with no progress retires.** Without it the run would never end: some
-  cards cannot be cast by Forge's AI at all, and waiting for them is waiting
-  forever. They fall to stage-three interventions instead, which is what the
-  two residues report.
-
-Coverage matches write effect records **only**. Their decks are built for
-coverage rather than as a fair self-play sample, so mixing them into
-``match-outcomes.txt`` would corrupt what the scorer trains on. The guard is in
-the Java worker's records-only mode, not here, because that is where the writers
-are constructed.
+Decks are built over the whole converted corpus, weighted toward the cards with
+the fewest records, and played until every card is satisfied or retired.
+Coverage matches write effect records only, because their decks are no fair
+self-play sample; the guard is the Java worker's records-only mode, where the
+writers are constructed.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import random
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterator, Mapping
-from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from functools import partial
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from effects.application.parallel_map import run_parallel
+from effects.domain import default_paths
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
     CardCoverage,
@@ -61,22 +40,24 @@ from effects.domain.coverage import (
 )
 
 if TYPE_CHECKING:
+    from effects.domain.provenance import ProvenanceKey
     from effects.infrastructure.collector_connector import CollectorSupervisor
+    from effects.infrastructure.converted_trees import ConvertedTrees
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_RECORDS_DIR = Path("output/effects/records/")
-DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = (
-    Path("output/cardsfolder/"), Path("output/tokenscripts/"),
+DEFAULT_RECORDS_DIR = Path(default_paths.DEFAULT_RECORDS_DIR)
+DEFAULT_CARDS_FOLDERS: tuple[Path, ...] = tuple(
+    Path(folder) for folder in default_paths.DEFAULT_CARDS_FOLDERS
 )
+#: Java worker processes, for both collectors.
+DEFAULT_WORKERS = 12
 DEFAULT_TARGET_RECORDS = 50
 DEFAULT_DECKS_PER_ROUND = 500
 DEFAULT_NO_PROGRESS_ROUNDS = 3
 
-#: Shards between progress lines while counting. The first pass reads the whole
-#: existing corpus -- on 801 shards about 35 minutes -- and silence that long is
-#: indistinguishable from the hang this command kept producing. Ten keeps the
-#: line moving often enough to read as progress rather than as a stall.
+#: Shards between progress lines while counting: the first pass reads the whole
+#: existing corpus, and silence that long looks like a hang.
 PROGRESS_EVERY_SHARDS = 10
 
 #: A 40-card limited deck: 23 nonlands plus basics.
@@ -96,40 +77,61 @@ class CollectCoverageConfig:
     cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
     split_from: Path | None = None
     exclude_cards: Path | None = None
-    target_records: int = DEFAULT_TARGET_RECORDS
-    decks_per_round: int = DEFAULT_DECKS_PER_ROUND
-    no_progress_rounds: int = DEFAULT_NO_PROGRESS_ROUNDS
-    workers: int = 12
+    target_records: int = field(default=DEFAULT_TARGET_RECORDS, metadata={
+        "help": "Per-card satisfaction goal (default: %(default)s)",
+    })
+    decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
+        "help": "Decks played as matches per round (default: %(default)s)",
+    })
+    no_progress_rounds: int = field(default=DEFAULT_NO_PROGRESS_ROUNDS, metadata={
+        "help": (
+            "Consecutive rounds without a new qualifying record before a card "
+            "retires, which is what makes the run end (default: %(default)s)"
+        ),
+    })
+    workers: int = field(default=DEFAULT_WORKERS, metadata={
+        "help": "Parallel Java worker processes (default: %(default)s)",
+    })
     caps: CollectionCaps = field(default_factory=CollectionCaps)
     #: ``--only-cards``: the ``holdout-cards`` list. Set, the run is the
     #: held-out coverage round (FR-035): decks from these cards alone, and the
     #: unit is the held-out ability text rather than the card.
     only_cards: Path | None = None
-    #: Distinct games a held-out text must act in to be satisfied (FR-036).
-    min_text_games: int = DEFAULT_MIN_TEXT_GAMES
+    min_text_games: int = field(default=DEFAULT_MIN_TEXT_GAMES, metadata={
+        "help": (
+            "With --only-cards: distinct games a held-out text must act in to "
+            "be satisfied (FR-036; default: %(default)s)"
+        ),
+    })
 
-    def coverage_folder(self) -> Path:
-        """The one tree deck candidates and the coverage unit come from.
+    def converted_trees(self) -> ConvertedTrees:
+        """The trees ``--cards-folder`` names. Deck candidates and the coverage
+        unit come from the card tree alone (FR-046, FR-048): a token script
+        could never be satisfied or retired."""
+        from effects.infrastructure.converted_trees import ConvertedTrees
 
-        ``output/cardsfolder/`` alone (FR-046, FR-048): a token script is not a
-        deckable card and could never be satisfied or retired, so counting one
-        would guarantee the run never terminates.
-        """
-        from effects.infrastructure.sidecar_io import tree_of_folder
+        return ConvertedTrees.from_folders(self.cards_folders)
 
-        for folder in self.cards_folders:
-            if tree_of_folder(Path(folder)) == "cardsfolder":
-                return Path(folder)
-        return Path(self.cards_folders[0])
+    def holdout_source(self) -> HoldoutSource:
+        return HoldoutSource(
+            effect_records=self.effect_records, exclude_cards=self.exclude_cards,
+            split_from=self.split_from,
+        )
+
+    def no_converted_cards(self) -> str:
+        """The error for a run whose card tree holds no converted card."""
+        where = self.converted_trees().cards_folder or ", ".join(
+            str(folder) for folder in self.cards_folders
+        )
+        return (
+            f"No converted cards under {where}. Run 'python -m price_predictor "
+            "convert' first."
+        )
 
 
 def count_shard(shard: Path) -> Counter[str]:
-    """One shard's qualifying records, keyed by folded card name.
-
-    Top-level rather than a method so a process pool can pickle it. Returns
-    folded names because that is what a coverage unit is keyed by: the unit
-    comes from converted card text (lowercase) while a record's entity name is
-    Forge's own (printed case), and an unfolded key matches nothing.
+    """One shard's qualifying records, keyed by folded card name to match the
+    converted (lowercase) unit names. Top-level so a process pool can pickle it.
     """
     from effects.domain.card_names import fold_card_name
     from effects.infrastructure.record_io import read_shard
@@ -144,17 +146,9 @@ def count_shard(shard: Path) -> Counter[str]:
 class _ShardCounter:
     """Counts each shard once across a whole run, not once per round.
 
-    The recount used to re-read every shard under ``--effect-records`` after
-    every round. On a 1,502-shard corpus that is about 66 minutes against the
-    ~35 minutes a round spends playing, so most of a coverage run's wall clock
-    went to re-deriving numbers that had not changed.
-
-    Counting incrementally is sound because a shard is final once counted. A
-    round's workers are all terminated before ``play_round`` returns —
-    ``ForgeWorkerPool._supervisor_loop`` calls ``_terminate_all`` when the stop
-    condition fires — and a shard file is never reopened afterwards, because
-    its name carries the worker's JVM lifetime and each round's workers are new
-    JVMs. So a shard this has read cannot gain records later.
+    Sound because a shard is final once counted: a round's workers are all
+    terminated before ``play_round`` returns, and a shard's name carries its
+    JVM lifetime, so no later round reopens it.
     """
 
     def __init__(self, progress_every: int = PROGRESS_EVERY_SHARDS) -> None:
@@ -169,58 +163,27 @@ class _ShardCounter:
         *,
         workers: int | None,
     ) -> int:
-        """``count`` each shard not yet read and ``apply`` it. Returns how many.
-
-        Shards are independent and each contributes only its own counts, so
-        the work maps: count shards in parallel, apply each as it arrives.
-        Applying adds, which is associative, so the answer cannot depend on
-        how the shards were divided or in what order they finished.
-
-        ``workers`` defaults to the machine's usable cores. One means in-process
-        — what the tests use for the serial reference, and what a handful of
-        shards wants, since a process pool costs more to start than it saves.
-        ``count`` must pickle, since a pool ships it to every process.
-        """
+        """``count`` each shard not yet read, in parallel, and ``apply`` it;
+        returns how many. Applying adds, so the order shards finish in cannot
+        matter. ``count`` must pickle."""
         from effects.infrastructure.record_io import iter_shards
 
         fresh = [
             shard for shard in iter_shards(Path(records_dir))
             if shard not in self._counted
         ]
-        if not fresh:
-            return 0
-
-        workers = workers or (os.process_cpu_count() or 1)
-        workers = max(1, min(workers, len(fresh)))
-        if workers == 1:
-            for done, shard in enumerate(fresh, start=1):
-                apply(count(shard))
-                self._note_progress(done, len(fresh))
-        else:
-            with ProcessPoolExecutor(max_workers=workers) as pool:
-                parts = pool.map(count, fresh, chunksize=1)
-                for done, part in enumerate(parts, start=1):
-                    apply(part)
-                    self._note_progress(done, len(fresh))
-
+        for part in run_parallel(
+            fresh, count, workers=workers, label="Counted",
+            progress_every=self._progress_every,
+        ):
+            apply(part)
         self._counted.update(fresh)
         return len(fresh)
-
-    def _note_progress(self, done: int, total: int) -> None:
-        if not self._progress_every or total <= self._progress_every:
-            return
-        if done % self._progress_every == 0 or done == total:
-            logger.info(
-                "Counted %d of %d shard(s) (%.0f%%)",
-                done, total, 100.0 * done / total,
-            )
 
 
 class CoverageCounter(_ShardCounter):
     """Each card's qualifying records, each shard counted once across the run.
-
-    The consequence for callers: ``CardCoverage.records`` is accumulated
-    rather than assigned, so nothing else may overwrite it.
+    ``CardCoverage.records`` is accumulated, so nothing else may overwrite it.
     """
 
     def update(
@@ -250,14 +213,10 @@ def build_coverage_decks(
 ) -> list[list[str]]:
     """``count`` 40-card decks drawn from ``weights`` (FR-046).
 
-    23 nonlands sampled with replacement in proportion to weight, then basics
-    from ``compute_basic_lands`` over the chosen cards' mana costs. With
-    replacement because a weight of 500 against 1 should be able to fill a deck
-    with one card: the point is to get that card into games, not to build a
-    deck anyone would play.
-
-    A weighted card that is no candidate is skipped — the manabase heuristic
-    reads its cost, and a card the tree has no text for cannot be placed.
+    23 nonlands sampled with replacement in proportion to weight, since the
+    point is to get a card into games rather than a deck anyone would play,
+    then basics from ``compute_basic_lands``. A weighted card that is no
+    candidate has no cost to read and is skipped.
     """
     from sealed.domain.manabase import compute_basic_lands
 
@@ -280,12 +239,8 @@ def build_coverage_decks(
 
 @dataclass
 class CoverageResidues:
-    """What the run could not reach, split by why (FR-051).
-
-    Both fall to stage-three interventions, and the report existing is what
-    SC-006 turns on: an operator has to be able to see which cards need forcing
-    and which merely need more games.
-    """
+    """What the run could not reach, split by why (FR-051): which cards need
+    forcing by an intervention and which merely need more games."""
 
     uncastable: tuple[str, ...] = ()
     castable_but_short: tuple[str, ...] = ()
@@ -322,35 +277,94 @@ TWO_HOLDOUT_SOURCES = (
 )
 
 
-def load_exclusions(
-    *, split_from: Path | None, exclude_cards: Path | None,
-) -> frozenset[str]:
-    """Cards to keep out of every deck, from whichever source names them.
+#: The name a depletion list takes inside the corpus it depleted.
+HOLDOUT_LIST_NAME = "holdout-cards.txt"
 
-    ``--exclude-cards`` is the ordinary one: the holdout is derived from the
-    converted tree and two flags, so it needs no trained model and this command
-    no longer waits on a training run that is supposed to follow it.
-    ``--split-from`` remains for collecting more coverage against a checkpoint
-    that already exists, whose recorded split is then the authority.
 
-    Both at once is refused rather than merged. Two spellings of one holdout is
-    precisely the failure this feature has already had once, and a merge would
-    hide a disagreement instead of reporting it.
-    """
-    if split_from is not None and exclude_cards is not None:
-        raise ValueError(TWO_HOLDOUT_SOURCES)
-    if exclude_cards is not None:
-        return read_name_list(exclude_cards)
-    return load_held_out(split_from)
+@dataclass(frozen=True, slots=True)
+class HoldoutSource:
+    """Where a collector writes, and the one source of the cards it keeps out:
+    ``--exclude-cards`` (needs no trained model) or ``--split-from`` (an
+    existing checkpoint's split). Both at once is refused rather than merged,
+    since a merge would hide a disagreement."""
+
+    effect_records: Path = DEFAULT_RECORDS_DIR
+    exclude_cards: Path | None = None
+    split_from: Path | None = None
+
+    def __post_init__(self) -> None:
+        if self.split_from is not None and self.exclude_cards is not None:
+            raise ValueError(TWO_HOLDOUT_SOURCES)
+
+    @classmethod
+    def from_flags(
+        cls, *,
+        effect_records: Path | None,
+        exclude_cards: Path | None,
+        split_from: Path | None,
+        training_corpus: Path | None = None,
+        only_cards: Path | None = None,
+    ) -> HoldoutSource:
+        """The source a collector's flags name, refused before any worker starts.
+
+        ``--training-corpus DIR`` stands for ``--effect-records DIR`` with
+        ``DIR/holdout-cards.txt`` as the depletion list, so a corpus and the
+        list that depleted it cannot be named apart.
+
+        Raises ``ValueError`` when ``--only-cards`` comes with a holdout to keep
+        out, when ``--training-corpus`` comes with a flag it implies (an
+        explicit default ``--effect-records`` included) or its directory holds
+        no depletion list, or when two sources name the held-out cards.
+        """
+        if only_cards is not None:
+            clashing = [
+                flag for flag, value in (
+                    ("--exclude-cards", exclude_cards),
+                    ("--training-corpus", training_corpus),
+                    ("--split-from", split_from),
+                ) if value
+            ]
+            if clashing:
+                # FR-038: opposite instructions, so one of them is a mistake.
+                raise ValueError(
+                    f"--only-cards decks the held-out cards; {', '.join(clashing)} "
+                    "keeps a holdout out of every deck. Pass one or the other."
+                )
+        if training_corpus is None:
+            return cls(
+                effect_records=effect_records or DEFAULT_RECORDS_DIR,
+                exclude_cards=exclude_cards, split_from=split_from,
+            )
+        if effect_records is not None or exclude_cards:
+            raise ValueError(
+                "pass one source of the corpus location, not both: "
+                "--training-corpus DIR means --effect-records DIR with its own "
+                f"{HOLDOUT_LIST_NAME}"
+            )
+        listed = training_corpus / HOLDOUT_LIST_NAME
+        if not listed.is_file():
+            raise ValueError(
+                f"{training_corpus} holds no {HOLDOUT_LIST_NAME}. A training "
+                "corpus is depleted against a list, and without it this run "
+                "would deck the held-out cards and contaminate the split. Write "
+                "one with 'python -m effects holdout-cards', or pass "
+                "--effect-records and --exclude-cards separately if they "
+                "genuinely live apart."
+            )
+        return cls(
+            effect_records=training_corpus, exclude_cards=listed, split_from=split_from,
+        )
+
+    def exclusions(self) -> frozenset[str]:
+        """Cards to keep out of every deck, folded, from whichever source names them."""
+        if self.exclude_cards is not None:
+            return read_name_list(self.exclude_cards)
+        return load_held_out(self.split_from)
 
 
 def read_name_list(path: Path) -> frozenset[str]:
-    """The card names a one-per-line list holds, folded; blank lines skipped.
-
-    Folded because a list ``holdout-cards`` writes carries Forge's printed
-    case while coverage decks are built from converted names, which are
-    lowercase.
-    """
+    """The card names a one-per-line list holds, folded to match converted
+    names; blank lines skipped."""
     from effects.domain.card_names import fold_card_name
 
     return frozenset(
@@ -361,12 +375,8 @@ def read_name_list(path: Path) -> frozenset[str]:
 
 
 def load_held_out(split_from: Path | None) -> frozenset[str]:
-    """Cards to keep out of every deck (FR-045).
-
-    A coverage run that put held-out cards into games would contaminate the
-    card-disjoint split of the checkpoint it inherited from — the split is what
-    makes gate 1 mean "deployment to an unseen set".
-    """
+    """Cards to keep out of every deck (FR-045): the held-out cards of the
+    checkpoint whose card-disjoint split this run must not contaminate."""
     if split_from is None:
         return frozenset()
     from effects.infrastructure.effect_model_store import load_effect_checkpoint
@@ -378,27 +388,12 @@ def load_held_out(split_from: Path | None) -> frozenset[str]:
 def build_coverage_units(
     card_files: dict[str, str], held_out: frozenset[str],
 ) -> dict[str, CardCoverage]:
-    """Every deckable card, minus the holdout.
-
-    Takes the already-loaded ``name -> script`` mapping rather than the folder,
-    because ``run`` needs the same mapping to read each card's converted text
-    and ``load_card_files`` is a full rglob plus a read of some 33,000 files.
-    """
+    """Every deckable card, minus the holdout. Takes the loaded ``name ->
+    script`` mapping because ``run`` has already paid for reading the tree."""
     return {
         name: CardCoverage(name=name)
         for name in card_files
         if name not in held_out
-    }
-
-
-def read_converted_texts(
-    cards_folder: Path, card_files: Mapping[str, str],
-) -> dict[str, str]:
-    """``name -> converted text`` for every card whose file exists."""
-    return {
-        name: (cards_folder.parent / script).read_text(encoding="utf-8")
-        for name, script in card_files.items()
-        if (cards_folder.parent / script).exists()
     }
 
 
@@ -415,14 +410,9 @@ def collector_supervisor(
     caps: CollectionCaps,
     variant_scripts: Path | None = None,
 ) -> Iterator[CollectorSupervisor]:
-    """A records-only supervisor that is stopped however its rounds end.
-
-    ``stop()`` closes the worker log files and shuts the pool down. Without it
-    the latched effect-record failure reporters (``ApiEvents.
-    reportEmitterFailure`` and its siblings) never surface: their handles stay
-    open, unflushed and unclosed, until the interpreter exits on its own -- a
-    collection run that gets killed or piped never sees them at all.
-    """
+    """A records-only supervisor that is stopped however its rounds end:
+    without ``stop()`` the worker logs holding the latched failure reports
+    stay unflushed until the interpreter exits."""
     from effects.infrastructure.collector_connector import CollectorSupervisor
 
     supervisor = CollectorSupervisor(
@@ -452,12 +442,9 @@ def play_decks(
 
 @dataclass(frozen=True)
 class CoverageRounds:
-    """What the round loop needs from one kind of coverage unit.
-
-    The card run and the held-out round differ in what a unit is, how its
-    cards are weighted and which units have to finish; a round itself -- deck,
-    play, count, retire, stop on Ctrl-C -- is the same for both.
-    """
+    """What the round loop needs from one kind of coverage unit: the card run
+    and the held-out round differ in what a unit is, how its cards are weighted
+    and which units have to finish."""
 
     units: Mapping[str, CoverageUnit]
     #: The units whose completion ends the run: every card, but only the
@@ -524,9 +511,8 @@ def play_rounds(
         )
         logger.info("%s", round_summary(round_number, rounds, retired))
         if supervisor.interrupted:
-            # ForgeWorkerPool swallows SIGINT -- it sets its own event and
-            # returns normally -- so without this the loop builds a fresh
-            # pool and Ctrl-C means "skip this round, start another".
+            # ForgeWorkerPool swallows SIGINT, so without this Ctrl-C would only
+            # skip to the next round.
             logger.warning(
                 "Interrupted after round %d; stopping instead of starting "
                 "another round", round_number,
@@ -540,28 +526,24 @@ def run(config: CollectCoverageConfig) -> int:
     if config.only_cards is not None:
         return run_text_coverage(config)
 
-    cards_folder = config.coverage_folder()
-    if not cards_folder.is_dir():
-        logger.error(
-            "No converted cards under %s. Run 'python -m price_predictor "
-            "convert' first.", cards_folder,
-        )
+    trees = config.converted_trees()
+    converted = trees.converted_cards
+    if not converted:
+        logger.error("%s", config.no_converted_cards())
         return 1
 
-    held_out = load_exclusions(
-        split_from=config.split_from, exclude_cards=config.exclude_cards,
-    )
-    from effects.infrastructure.card_sources import load_card_files
-
-    card_files = load_card_files(cards_folder)
-    texts = read_converted_texts(cards_folder, card_files)
+    held_out = config.holdout_source().exclusions()
+    texts = {name: card.text for name, card in converted.items()}
     non_deck = non_deck_names(texts)
     coverage = build_coverage_units(
-        {name: script for name, script in card_files.items() if name not in non_deck},
+        {
+            name: card.script_file for name, card in converted.items()
+            if name not in non_deck
+        },
         held_out,
     )
     if not coverage:
-        logger.error("No deckable cards under %s", cards_folder)
+        logger.error("No deckable cards under %s", trees.cards_folder)
         return 1
     logger.info(
         "Coverage unit: %d cards (%d held out, %d of a non-deck type), target "
@@ -607,24 +589,18 @@ def run(config: CollectCoverageConfig) -> int:
 
     report = residues(coverage, config.target_records)
     logger.info("%s", report.render(config.target_records))
-    # The residues are printed either way -- what was collected before the
-    # interrupt is still what an operator needs to see -- but an interrupted
-    # run did not finish, and reporting success would be the same lie the
-    # swallowed SIGINT already told.
+    # Residues print either way, but an interrupted run did not finish.
     return 130 if interrupted else 0
 
 
 def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
-    """Ask a live Forge whether each card can be cast at all (FR-047).
-
-    Needs a game, so it runs in the JVM. A failure to consult leaves every card
-    ``unknown``, which ranks them as castable — the safe direction, since the
-    consult only ranks and an under-ranked card merely takes longer.
-    """
-    from effects.infrastructure.castability_connector import CastabilityConnector
+    """Ask a live Forge whether each card can be cast at all (FR-047). A failed
+    consult leaves every card ``unknown``, ranked as castable: the safe
+    direction, since the consult only ranks."""
+    from effects.infrastructure.one_shot_workers import castability_verdicts
 
     try:
-        verdicts = CastabilityConnector().consult(names)
+        verdicts = castability_verdicts(names)
     except (FileNotFoundError, OSError) as exc:
         logger.warning(
             "Castability consult unavailable (%s); every card ranks as "
@@ -640,35 +616,47 @@ def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
 def count_text_shard(
     shard: Path, *, roots: dict[str, str], texts: frozenset[str],
 ) -> dict[str, set[str]]:
-    """``held-out text -> the game ids it acted in``, over one shard.
-
-    A text acts in a record when the record's acting line resolves to it.
-    Top-level so a process pool can pickle it; each process builds its own
-    sidecar cache, because one does not pickle.
-    """
-    from effects.domain.text_holdout import normalize_script_text
+    """``held-out text -> the game ids it acted in``, over one shard. Top-level
+    so a process pool can pickle it; each process resolves keys through its own
+    :func:`_script_texts`, because a sidecar cache does not pickle."""
     from effects.infrastructure.record_io import read_shard
-    from effects.infrastructure.sidecar_io import SidecarCache
 
-    sidecars = SidecarCache({tree: Path(root) for tree, root in roots.items()})
-    text_by_key: dict = {}
+    script_texts = _script_texts(tuple(sorted(roots.items())))
     games: dict[str, set[str]] = defaultdict(set)
     for record in read_shard(shard):
         for key in record.ability or ():
-            if key not in text_by_key:
-                try:
-                    line = sidecars.line_for(key)
-                except KeyError:
-                    line = None
-                text = (
-                    normalize_script_text(line.script_text)
-                    if line is not None and line.script_text else None
-                )
-                text_by_key[key] = text if text in texts else None
-            text = text_by_key[key]
-            if text is not None:
+            text = script_texts.of(key)
+            if text in texts:
                 games[text].add(record.game_id)
     return dict(games)
+
+
+class _ScriptTexts:
+    """Each provenance key's normalized script text, resolved once per key."""
+
+    def __init__(self, roots: tuple[tuple[str, str], ...]) -> None:
+        from effects.infrastructure.sidecar_io import SidecarCache
+
+        self._sidecars = SidecarCache({tree: Path(root) for tree, root in roots})
+        self._by_key: dict[ProvenanceKey, str | None] = {}
+
+    def of(self, key: ProvenanceKey) -> str | None:
+        from effects.domain.text_holdout import normalize_script_text
+
+        if key not in self._by_key:
+            line = self._sidecars.line_or_none(key)
+            self._by_key[key] = (
+                normalize_script_text(line.script_text)
+                if line is not None and line.script_text else None
+            )
+        return self._by_key[key]
+
+
+@lru_cache(maxsize=1)
+def _script_texts(roots: tuple[tuple[str, str], ...]) -> _ScriptTexts:
+    """The process's resolver for ``roots``, kept across the shards it counts,
+    which name largely the same cards."""
+    return _ScriptTexts(roots)
 
 
 class TextCoverageCounter(_ShardCounter):
@@ -735,31 +723,23 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     """The held-out coverage round: listed cards only, keyed by held-out text."""
 
     from effects.domain.card_names import fold_card_name
-    from effects.infrastructure.card_sources import (
-        load_card_files,
-        load_card_texts,
-    )
-    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
 
-    cards_folder = config.coverage_folder()
-    if not cards_folder.is_dir():
-        logger.error("No converted cards under %s.", cards_folder)
+    trees = config.converted_trees()
+    converted = trees.converted_cards
+    if not converted:
+        logger.error("%s", config.no_converted_cards())
         return 1
     listed = read_name_list(config.only_cards)
-    card_files = load_card_files(cards_folder)
-    roots = sidecar_roots(config.cards_folders)
-    texts_by_card = load_card_texts(card_files, SidecarCache(roots))
+    card_files = trees.card_files
+    texts_by_card = trees.card_texts()
     listed_files = {
         name: script for name, script in card_files.items()
         if fold_card_name(name) in listed
     }
-    texts = read_converted_texts(cards_folder, listed_files)
-    # Which texts are held out is decided over every listed card, non-deck
-    # ones included: left out of ``listed``, they would read as unlisted
-    # carriers and take the texts they share out of the round. Only then do
-    # they leave as carriers, since no deck can hold one, and a text no
-    # deckable card carries leaves the unit rather than retiring after rounds
-    # of decks that never load.
+    texts = {name: converted[name].text for name in listed_files}
+    # Held-out texts are decided over every listed card, non-deck ones
+    # included, or those would read as unlisted carriers and take their texts
+    # out of the round; only then do non-deck cards leave as carriers.
     non_deck = non_deck_names(texts)
     present = frozenset(name for name in listed_files if name not in non_deck)
     carriers = {
@@ -791,7 +771,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     }
     floor = config.min_text_games
     records_dir = Path(config.effect_records)
-    counter = TextCoverageCounter({tree: str(root) for tree, root in roots.items()})
+    counter = TextCoverageCounter(trees.root_paths)
     counter.update(coverage, records_dir)
     logger.info(
         "Held-out round: %d text(s) on %d card(s); %d already at %d games; %d "

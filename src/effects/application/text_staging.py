@@ -1,11 +1,7 @@
 """Ability texts to the encoder's inputs, and the MLM pass's mask over them.
 
-The batcher's two collaborators on the host side. :class:`TextStager` turns a
-batch's unique ability texts into what the encoder reads — or, for the two
-baselines that never reach the encoder, into what stands in for it — and
-:class:`MlmMasker` draws which of those tokens the MLM pass hides. Both draw
-from the generator they are handed, so a step's draws follow its place in the
-run wherever it is prepared.
+Both collaborators draw only from the generator they are handed, so a step's
+draws follow its place in the run wherever it is prepared.
 """
 
 from __future__ import annotations
@@ -28,11 +24,9 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import AbilityTokenizer, withheld_keyword_tokens
 from effects.domain.baselines import BaselineMasks
 
-#: Texts per encoder pass. A batch's texts are sorted by length and encoded in
-#: groups this size, each padded to its own longest text: padded to the
-#: batch's longest, one 512-token chain makes every short line in the batch cost
-#: 512 positions, most of the encoder's input is padding, and the activations
-#: a batch saves for backward overrun the 8 GB card.
+#: Texts per length-sorted encoder pass. Padded to the batch's longest instead,
+#: one 512-token chain makes every line cost 512 positions and the saved
+#: activations overrun the 8 GB card.
 ENCODE_CHUNK = 32
 
 
@@ -52,11 +46,9 @@ def encode_by_length(
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """``encoder(**inputs)`` in length-sorted groups, in the inputs' row order.
 
-    ``inputs`` is a host batch from ``collate_lines``. Padding is masked out of
-    attention, so each text encodes as it would padded to any width. With
-    ``hidden`` the token outputs come back padded to the batch's width as one
-    tensor, matching the one-batch outputs at every real token; what sits at a
-    padding position is unspecified, and the MLM pass never reads one.
+    Padding is masked out of attention, so grouping changes no output. With
+    ``hidden`` the token outputs come back padded to the batch's width; what
+    sits at a padding position is unspecified.
     """
     chunks = _length_chunks(inputs["attention_mask"])
     if len(chunks) == 1:
@@ -71,7 +63,8 @@ def encode_by_length(
         }
         vectors, tokens = encoder(**batch)
         parts.append(vectors)
-        outputs.append(tokens)
+        if hidden:
+            outputs.append(tokens)
     order = torch.cat([rows for rows, _ in chunks])
     inverse = torch.empty_like(order)
     inverse[order] = torch.arange(order.numel())
@@ -87,12 +80,8 @@ def encode_by_length(
 
 
 def pinned(value):
-    """``value`` with every tensor in it copied to page-locked host memory.
-
-    A copy from pageable memory holds the host until the device has the bytes;
-    from pinned memory a ``non_blocking`` copy lets it go on queueing work.
-    Walks the dicts, lists and tuples a prepared batch is built from.
-    """
+    """``value`` with every tensor in it copied to page-locked host memory, so
+    a ``non_blocking`` copy does not hold the host."""
     if isinstance(value, torch.Tensor):
         return value.pin_memory()
     if isinstance(value, dict):
@@ -109,10 +98,8 @@ def pinned(value):
 class StagedTexts:
     """A batch's unique texts, staged for whatever produces their ``e``.
 
-    ``rows`` numbers the texts in matrix-row order. Exactly one of the rest is
-    used: ``encoder_inputs`` for the encoder, over the ``prepared`` lines;
-    ``stand_in``, the ``taxonomy`` baseline's vectors; or neither, for the
-    ``identity`` baseline, whose table looks its rows up on the device.
+    At most one of ``encoder_inputs`` and ``stand_in`` (the ``taxonomy``
+    baseline's vectors) is set; neither, for the ``identity`` baseline.
     """
 
     rows: dict[str, int]
@@ -122,19 +109,12 @@ class StagedTexts:
 
     @property
     def ordered(self) -> list[str]:
-        """The texts in matrix-row order."""
         return sorted(self.rows, key=self.rows.__getitem__)
 
 
 @dataclass(frozen=True)
 class TextStager:
-    """Ability texts to encoder inputs, the way every caller must agree on.
-
-    The withheld keyword always expands and its token is dropped everywhere
-    (``AbilityTokenizer.encoding_tokens``); a prose text reads its line's role
-    spans (FR-069); a text the encoder's window cuts short is reported once per
-    run, to ``truncations``.
-    """
+    """Ability texts to encoder inputs, the one way every caller agrees on."""
 
     tokenizer: AbilityTokenizer
     surface: str
@@ -146,12 +126,8 @@ class TextStager:
         self, texts: Mapping[str, object], *, masks: BaselineMasks, e_dim: int,
         rng: random.Random, keys_of: Callable[[str], list],
     ) -> StagedTexts:
-        """``texts`` (each to its sidecar line) staged for this variant.
-
-        Tokenizing draws from ``rng`` (keyword expansion), so it runs wherever
-        the batch is prepared, and in the order batches are. ``keys_of`` names
-        a truncated text by the keys that resolved to it.
-        """
+        """``texts`` (each to its sidecar line) staged for this variant;
+        ``keys_of`` names a truncated text by the keys that resolved to it."""
         if not texts:
             return StagedTexts({}, [], None, None)
         ordered = sorted(texts)
@@ -169,36 +145,38 @@ class TextStager:
         self, ordered: list[str], lines_of: Mapping[str, object] | None = None,
         *, rng: random.Random, keys_of: Callable[[str], list] = lambda text: [],
     ) -> list[EncodedLine]:
-        """Each text tokenized and its keywords expanded, the withheld one always.
-
-        The withheld keyword's token is dropped wherever it is left, inside an
-        expansion too, so the model never reads it. ``lines_of`` maps a text to
-        its sidecar line, whose role spans a prose text is tokenized with.
-        """
-        withheld = withheld_keyword_tokens(self.withhold_keyword)
+        """Each text through :meth:`prepare`, with the role spans of its
+        sidecar line in ``lines_of``."""
         lines_of = lines_of or {}
-        lines = []
-        for text in ordered:
-            tokens = self.tokenizer.encoding_tokens(
-                text, withheld=withheld,
-                role_spans=encoding_role_spans(lines_of.get(text), text, self.surface),
-                probability=self.keyword_expand_p, rng=rng,
+        return [
+            self.prepare(
+                text, encoding_role_spans(lines_of.get(text), text, self.surface),
+                rng=rng, keys_of=keys_of,
             )
-            line = prepare_line(self.tokenizer, tokens)
-            if line.truncated and self.truncations is not None:
-                self.truncations.note(text, keys_of(text))
-            lines.append(line)
-        return lines
+            for text in ordered
+        ]
+
+    def prepare(
+        self, text: str, role_spans: tuple = (), *, rng: random.Random,
+        keys_of: Callable[[str], list] = lambda text: [],
+    ) -> EncodedLine:
+        """One text tokenized with ``role_spans`` and its keywords expanded; a
+        truncation is reported under ``keys_of(text)``."""
+        tokens = self.tokenizer.encoding_tokens(
+            text, withheld=withheld_keyword_tokens(self.withhold_keyword),
+            role_spans=role_spans, probability=self.keyword_expand_p, rng=rng,
+        )
+        line = prepare_line(self.tokenizer, tokens)
+        if line.truncated and self.truncations is not None:
+            self.truncations.note(text, keys_of(text))
+        return line
 
 
 def _taxonomy_vectors(
     ordered: list[str], lines: Mapping[str, object], e_dim: int,
 ) -> torch.Tensor:
-    """The taxonomy baseline's stand-in for an encoded ``e``.
-
-    Deterministic and unlearned — the same hash embedding the cache writes for
-    this variant, so the trained baseline and its cache agree.
-    """
+    """The taxonomy baseline's stand-in for ``e``: the hash embedding its cache
+    writes, so the trained baseline and its cache agree."""
     from effects.application.encode_abilities import taxonomy_vector
 
     rows = np.stack([taxonomy_vector(lines[text], e_dim) for text in ordered])
@@ -210,12 +188,9 @@ def _taxonomy_vectors(
 
 @dataclass
 class MaskedTokens:
-    """The MLM pass's inputs, drawn on the host.
-
-    ``inputs`` are the encoder's keyword arguments with the picked tokens
-    replaced by ``[MASK]``, ``positions`` the flattened indices of those
-    tokens, and ``targets`` the ids that stood there.
-    """
+    """The MLM pass's inputs, drawn on the host: ``positions`` are the
+    flattened indices of the masked tokens, ``targets`` the ids that stood
+    there."""
 
     inputs: dict[str, torch.Tensor]
     positions: torch.Tensor
@@ -227,7 +202,6 @@ class MaskedTokens:
         return int(self.inputs["token_ids"].shape[0])
 
     def pin(self) -> None:
-        """Every tensor in page-locked memory; see ``pinned``."""
         self.inputs = pinned(self.inputs)
         self.positions = pinned(self.positions)
         self.targets = pinned(self.targets)
@@ -235,15 +209,9 @@ class MaskedTokens:
 
 @dataclass(frozen=True)
 class MlmMasker:
-    """The MLM pass: a second encoder forward over a batch's prepared lines.
-
-    A share of their tokens is replaced by ``[MASK]`` — never ``[CLS]``, never
-    padding — so the effect head keeps reading the unmasked ``e`` and the
-    corruption shapes only what the encoder's token outputs must recover. The
-    mask is drawn and the positions picked on the host, so the device never has
-    to report which they were; and the vocabulary projection then runs over the
-    masked positions alone rather than over every position of the batch.
-    """
+    """The MLM pass: a second encoder forward over a batch's prepared lines,
+    so the effect head keeps reading the unmasked ``e``. The mask is drawn on
+    the host, so the device never has to report which positions it picked."""
 
     pad_id: int
     mask_id: int
@@ -251,11 +219,8 @@ class MlmMasker:
     def draw(
         self, prepared: list[EncodedLine], mask_prob: float, rng: random.Random,
     ) -> MaskedTokens | None:
-        """Which tokens the pass masks, or None when it masks none.
-
-        Draws from ``rng`` after the build's own draws, so a step prepared
-        ahead of its turn takes the same draws as one prepared in place.
-        """
+        """Which tokens the pass masks, or None when it masks none. Draws from
+        ``rng`` after the build's own draws."""
         if not prepared or mask_prob <= 0.0:
             return None
         batch = collate_lines(prepared, self.pad_id)
@@ -269,8 +234,7 @@ class MlmMasker:
             return None
         targets = ids.flatten().index_select(0, positions)
         batch["token_ids"] = ids.masked_fill(picks, self.mask_id)
-        # A masked number's value goes too: the encoder adds the number
-        # embedding beside the token's, and it would hand the answer back.
+        # A masked number's value goes too, or its embedding hands it back.
         batch["numbers"] = batch["numbers"].masked_fill(picks, 0.0)
         batch["number_mask"] = batch["number_mask"].masked_fill(picks, 0)
         return MaskedTokens(inputs=batch, positions=positions, targets=targets)

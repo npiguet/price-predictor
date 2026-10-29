@@ -40,6 +40,7 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     StateSnapshot,
 )
+from tests.unit.effects.builders import fresh_interpreter_env
 
 _WHITE_KNIGHT = ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "static", 0)
 
@@ -697,4 +698,5 @@ def test_the_keyword_predicate_module_does_not_import_torch():
         "assert m.KeywordResolver and m.qualifying_observations; "
         "sys.exit(1 if 'torch' in sys.modules else 0)"
     )
-    assert subprocess.run([sys.executable, "-c", code]).returncode == 0
+    child = subprocess.run([sys.executable, "-c", code], env=fresh_interpreter_env())
+    assert child.returncode == 0

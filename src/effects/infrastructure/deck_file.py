@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sealed.infrastructure.pool_file_reader import format_generated_deck
+
 #: Sentinel set code for decks drawn from the whole corpus rather than a set.
 #: Never resolved against Forge's set table: the decks-only mode plays both
 #: sides from the file and opens no pool.
@@ -27,6 +29,6 @@ def write_deck_file(
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows = [f"{label};{set_code};{'|'.join(deck)}" for deck in decks]
+    rows = [format_generated_deck(label, set_code, deck) for deck in decks]
     path.write_text("\n".join(rows) + ("\n" if rows else ""), encoding="utf-8")
     return len(rows)

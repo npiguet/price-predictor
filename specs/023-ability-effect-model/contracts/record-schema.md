@@ -166,8 +166,9 @@ what-ifs only, and every real decision is written.
 ```
 
 The type vocabulary is the union of Forge trigger types, bus events, and bracket diffs. The canonical
-member list and per-type field normalization live in `src/effects/domain/event_schema.py`. A checked-in
-completeness test maps every Forge effect API class to a covered type or an explicit exclusion.
+member list and per-type field normalization live in `src/effects/domain/event_schema.py`. A Java test
+(`ApiEventsTest`) checks that every key of the API-emitter table (`ApiEvents.RULES`) is an `ApiType` member
+name.
 
 ### The vocabulary's reachability promise
 
@@ -266,7 +267,7 @@ blind spot, discovered by running the second against a real collection.
   (1 card), `player_removed` (2 cards), `trigger_fired` (no producing Forge effect API at all — see its
   own entry), and `turn_order_reversed` (3 cards, the largest of the seven). Two are wired and referenced
   but AI-unreachable, per `AI_CAPABILITY_GAP` above: `turn_ended` (9 cards) and `text_change` (14 cards).
-- `event_type_coverage` (`validate_corpus.py`) measures, over an actually collected window, which
+- The event-type check in `validate_corpus.py` measures, over an actually collected window, which
   declared types the corpus's records contain at all. It is watched, not judged: a short window
   legitimately misses types that are rare or depend on which decks were drawn, and a floor nobody has
   calibrated would fail every smoke run. What it must not do, and does not do, is stay silent — every
@@ -537,13 +538,12 @@ what the card actually offered.
 
 ### Two `choice_made`-family keys are not spelled like their effect classes
 
-`EFFECT_API_EVENTS` is keyed by `ApiType` name, and two of the `choice_made` family's keys are not
+`ApiEvents.RULES` is keyed by `ApiType` name, and two of the `choice_made` family's keys are not
 spelled like the effect class that implements them: `NameCard` (not `ChooseCardName`) and
 `GenericChoice` (not `ChooseGenericEffect`). A rule keyed by the class stem instead of the `ApiType` name
 matches nothing and fails silently, which is exactly the mistake this note exists to head off.
 
-`ChooseSector` is deliberately **not** covered. It is excluded (`EXCLUDED_EFFECT_APIS`,
-`event_schema.py:651`) as an Unfinity attraction not reachable in sealed or draft, the only formats this
+`ChooseSector` is deliberately **not** covered: it has no `ApiEvents.RULES` entry, being an Unfinity attraction not reachable in sealed or draft, the only formats this
 corpus collects from — not an oversight, however much an uncovered API in this family looks like one.
 
 ### Clash's `card_revealed` is Clash's own reveal
@@ -788,7 +788,7 @@ distinct `game_id` values for 31,662 games. The lifetime segment is what makes t
 It is a change to how the id is *spelled*, not to what the field means or its type, and the number of
 `.`-separated segments is unchanged — the token goes inside the middle segment, joined by `-`. So
 `link_id`'s `{game_id}.link.{n}` suffix and every parse counting segments from the right are
-unaffected, including the codebase's only structural parse, `EffectRecord.worker`. Corpora written
+unaffected, including any parse of these ids. Corpora written
 before the segment stay readable and report an empty lifetime.
 
 ### The rules
