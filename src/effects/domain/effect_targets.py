@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import partial
 
 from effects.domain.effect_head_input import (
     CARD_TYPES,
@@ -171,31 +172,36 @@ def _target_events(record: EffectRecord) -> tuple[Event, ...]:
 
 
 def _apply_event(entry: EntityTargets, event: Event) -> None:
-    """Fold one event into an entity's targets."""
-    if not _apply_tabled_event(entry, event):
-        apply = _EVENT_APPLIERS.get(event.type)
-        if apply is not None:
-            apply(entry, event)
+    """Fold one event into an entity's targets; an event no applier names
+    writes nothing."""
+    apply = _EVENT_APPLIERS.get(event.type)
+    if apply is not None:
+        apply(entry, event)
 
 
-def _apply_tabled_event(entry: EntityTargets, event: Event) -> bool:
-    """An event whose whole target one table states; False for any other."""
-    if event.type in _ADDITIVE:
-        name, parameter, default, sign = _ADDITIVE[event.type]
-        entry.add(name, sign * float(event.params.get(parameter, default)))
-    elif event.type in _SETTERS:
-        entry.set(*_SETTERS[event.type])
-    elif event.type in _ZONE_BY_EVENT:
-        entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(_ZONE_BY_EVENT[event.type]))
-    elif event.type in _LIBRARY_EVENT_BY_TYPE:
-        entry.flag(
-            HeadField.LIBRARY_EVENTS,
-            LIBRARY_EVENTS.index(_LIBRARY_EVENT_BY_TYPE[event.type]),
-            len(LIBRARY_EVENTS),
-        )
-    else:
-        return False
-    return True
+def _apply_additive(
+    entry: EntityTargets, event: Event, *,
+    name: str, parameter: str, default: float, sign: float,
+) -> None:
+    entry.add(name, sign * float(event.params.get(parameter, default)))
+
+
+def _apply_setter(entry: EntityTargets, _event: Event, *, name: str, value: int) -> None:
+    entry.set(name, value)
+
+
+def _apply_zone_outcome(
+    entry: EntityTargets, _event: Event, *, outcome: ZoneOutcome,
+) -> None:
+    entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(outcome))
+
+
+def _apply_library_event(
+    entry: EntityTargets, _event: Event, *, library_event: LibraryEvent,
+) -> None:
+    entry.flag(
+        HeadField.LIBRARY_EVENTS, LIBRARY_EVENTS.index(library_event), len(LIBRARY_EVENTS),
+    )
 
 
 def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
@@ -271,8 +277,29 @@ def _apply_mana(entry: EntityTargets, mana, *, sign: int) -> None:
             entry.add(mana_field(key), sign * float(amount))
 
 
+def _appliers() -> dict[EventType, Callable[[EntityTargets, Event], None]]:
+    """Every event's applier: the tables' events and the ones read off their
+    own parameters, each type named once."""
+    tabled: list[tuple[EventType, Callable[[EntityTargets, Event], None]]] = [
+        *((event_type, partial(
+            _apply_additive, name=name, parameter=parameter, default=default, sign=sign,
+        )) for event_type, (name, parameter, default, sign) in _ADDITIVE.items()),
+        *((event_type, partial(_apply_setter, name=name, value=value))
+          for event_type, (name, value) in _SETTERS.items()),
+        *((event_type, partial(_apply_zone_outcome, outcome=outcome))
+          for event_type, outcome in _ZONE_BY_EVENT.items()),
+        *((event_type, partial(_apply_library_event, library_event=library_event))
+          for event_type, library_event in _LIBRARY_EVENT_BY_TYPE.items()),
+        *_PARAMETER_APPLIERS.items(),
+    ]
+    appliers = dict(tabled)
+    if len(appliers) != len(tabled):
+        raise ValueError("an event type has two appliers")
+    return appliers
+
+
 #: The events no table above states, each read off its own parameters.
-_EVENT_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
+_PARAMETER_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
     EventType.ZONE_CHANGE: _apply_zone_change,
     EventType.COUNTER_CHANGE: _apply_counter_change,
     EventType.PT_CHANGE: _apply_pt_change,
@@ -286,6 +313,9 @@ _EVENT_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
         entry, event.params.get("mana_by_color"), sign=-1,
     ),
 }
+
+#: ``event type -> how it folds into an entity's targets``.
+_EVENT_APPLIERS = _appliers()
 
 
 def _apply_playability(record: EffectRecord, slot) -> None:
