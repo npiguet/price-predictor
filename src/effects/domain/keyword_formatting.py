@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 
 #: ``%s``, ``%d`` and their explicit-index forms ``%1$s``, ``%2$d``.
 _SPECIFIER_RE = re.compile(r"%(?:(\d+)\$)?([sd])")
@@ -124,52 +125,70 @@ def _amount_type_words(amount: str, noun: str) -> str:
     return f"{word} {noun if count == 1 else noun + 's'}"
 
 
-def _sacrifice(amount: str, noun: str, fields: list[str]) -> str:
-    if noun.startswith("another"):
-        return f"Sacrifice {noun}"
-    return f"Sacrifice {_count(amount, noun or 'permanent')}"
+@dataclass(frozen=True, slots=True)
+class BracketPart:
+    """One ``Name<amount/…>`` cost part's values, as ``CostPart.toString`` reads them."""
+
+    amount: str
+    #: Lower-cased, its ``.other`` and ``card.`` qualifiers dropped.
+    noun: str
+    #: The raw ``/``-separated values, the amount first.
+    fields: tuple[str, ...]
+
+    @classmethod
+    def parse(cls, values: str) -> BracketPart:
+        """The part from what sits between its ``<`` and ``>``."""
+        fields = tuple(values.rstrip(">").split("/"))
+        amount = fields[0] if fields else "1"
+        noun = (fields[2] if len(fields) > 2 else fields[1] if len(fields) > 1 else "").lower()
+        return cls(amount, noun.replace(".other", "").replace("card.", ""), fields)
 
 
-def _discard(amount: str, noun: str, fields: list[str]) -> str:
-    if noun == "hand":
+def _sacrifice(part: BracketPart) -> str:
+    if part.noun.startswith("another"):
+        return f"Sacrifice {part.noun}"
+    return f"Sacrifice {_count(part.amount, part.noun or 'permanent')}"
+
+
+def _discard(part: BracketPart) -> str:
+    if part.noun == "hand":
         return "Discard your hand"
-    return f"Discard {_count(amount, noun or 'card')}"
+    return f"Discard {_count(part.amount, part.noun or 'card')}"
 
 
-def _get_counter(amount: str, noun: str, fields: list[str]) -> str:
-    counter = fields[1].capitalize() if len(fields) > 1 else ""
-    return f"Get {_amount_type_words(amount, counter + ' counter')}"
+def _get_counter(part: BracketPart) -> str:
+    counter = part.fields[1].capitalize() if len(part.fields) > 1 else ""
+    return f"Get {_amount_type_words(part.amount, counter + ' counter')}"
 
 
-#: ``CostPart.toString`` for the common parts, by the part's script name; each
-#: takes the part's amount, its lower-cased noun and its raw ``/`` fields.
-_BRACKET_WORDINGS: dict[str, Callable[[str, str, list[str]], str]] = {
-    "PayLife": lambda amount, noun, fields: f"Pay {amount} life",
-    "PayEnergy": lambda amount, noun, fields: (
-        "Pay " + ("X {E}" if amount == "X" else "{E}" * int(amount))
+#: ``CostPart.toString`` for the common parts, by the part's script name.
+_BRACKET_WORDINGS: dict[str, Callable[[BracketPart], str]] = {
+    "PayLife": lambda part: f"Pay {part.amount} life",
+    "PayEnergy": lambda part: (
+        "Pay " + ("X {E}" if part.amount == "X" else "{E}" * int(part.amount))
     ),
-    "Behold": lambda amount, noun, fields: f"Behold {_amount_type_words(amount, fields[-1])}",
+    "Behold": lambda part: f"Behold {_amount_type_words(part.amount, part.fields[-1])}",
     "AddCounterYou": _get_counter,
-    "Blight": lambda amount, noun, fields: f"Blight {amount}",
-    "CollectEvidence": lambda amount, noun, fields: f"Collect evidence {amount}",
-    "Waterbend": lambda amount, noun, fields: f"Waterbend {cost_text(amount)}",
+    "Blight": lambda part: f"Blight {part.amount}",
+    "CollectEvidence": lambda part: f"Collect evidence {part.amount}",
+    "Waterbend": lambda part: f"Waterbend {cost_text(part.amount)}",
     "Sac": _sacrifice,
     "Discard": _discard,
-    "ExileFromGrave": lambda amount, noun, fields: (
-        f"Exile {_count(amount, noun or 'card')} from your graveyard"
+    "ExileFromGrave": lambda part: (
+        f"Exile {_count(part.amount, part.noun or 'card')} from your graveyard"
     ),
-    "Exile": lambda amount, noun, fields: f"Exile {_count(amount, noun or 'card')}",
-    "Return": lambda amount, noun, fields: (
-        f"Return {_count(amount, noun or 'permanent')} you control to its owner's hand"
+    "Exile": lambda part: f"Exile {_count(part.amount, part.noun or 'card')}",
+    "Return": lambda part: (
+        f"Return {_count(part.amount, part.noun or 'permanent')} you control to its owner's hand"
     ),
-    "tapXType": lambda amount, noun, fields: (
-        f"Tap {_count(amount, 'untapped ' + (noun or 'creature'))} you control"
+    "tapXType": lambda part: (
+        f"Tap {_count(part.amount, 'untapped ' + (part.noun or 'creature'))} you control"
     ),
-    "AddCounter": lambda amount, noun, fields: (
-        f"Put {_count(amount, (noun or 'counter') + ' counter')} on this"
+    "AddCounter": lambda part: (
+        f"Put {_count(part.amount, (part.noun or 'counter') + ' counter')} on this"
     ),
-    "SubCounter": lambda amount, noun, fields: (
-        f"Remove {_count(amount, (noun or 'counter') + ' counter')} from this"
+    "SubCounter": lambda part: (
+        f"Remove {_count(part.amount, (part.noun or 'counter') + ' counter')} from this"
     ),
 }
 
@@ -180,11 +199,7 @@ def _bracket_part(part: str) -> str:
     wording = _BRACKET_WORDINGS.get(name)
     if wording is None:
         return part
-    fields = rest.rstrip(">").split("/")
-    amount = fields[0] if fields else "1"
-    noun = (fields[2] if len(fields) > 2 else fields[1] if len(fields) > 1 else "").lower()
-    noun = noun.replace(".other", "").replace("card.", "")
-    return wording(amount, noun, fields)
+    return wording(BracketPart.parse(rest))
 
 
 def cost_text(cost: str) -> str:
@@ -230,7 +245,7 @@ def _plural(noun: str) -> str:
 # ── one formatter per Keyword.type class ────────────────────────────────
 
 
-def _simple(template: str, details: str) -> str:
+def _simple(template: str, _details: str) -> str:
     return template
 
 

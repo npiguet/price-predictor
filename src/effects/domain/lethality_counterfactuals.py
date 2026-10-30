@@ -79,26 +79,30 @@ def _shrink_lethal(toughness: int, damage: int, amount: int) -> bool:
     return left <= 0 or (damage > 0 and damage >= left)
 
 
-def _prose_damage(n: int, amount: int, symmetric: bool) -> list[tuple[str, str]]:
+def _prose_damage(effect: StatedEffect, amount: int) -> list[tuple[str, str]]:
+    n = effect.amount
     return [(rf"\b{n} damage\b", f"{amount} damage")]
 
 
-def _prose_shrink(n: int, amount: int, symmetric: bool) -> list[tuple[str, str]]:
-    if symmetric:
+def _prose_shrink(effect: StatedEffect, amount: int) -> list[tuple[str, str]]:
+    n = effect.amount
+    if effect.symmetric:
         return [(rf"-{n}/-{n}\b", f"-{amount}/-{amount}")]
     return [(rf"/-{n}\b", f"/-{amount}")]
 
 
-def _params_damage(text: str, n: int, amount: int, symmetric: bool) -> str | None:
+def _params_damage(text: str, effect: StatedEffect, amount: int) -> str | None:
+    n = effect.amount
     edited, count = re.subn(rf"(NumDmg\$\s*){n}\b", rf"\g<1>{amount}", text)
     return edited if count else None
 
 
-def _params_shrink(text: str, n: int, amount: int, symmetric: bool) -> str | None:
+def _params_shrink(text: str, effect: StatedEffect, amount: int) -> str | None:
+    n = effect.amount
     edited, count = re.subn(rf"(NumDef\$\s*)-{n}\b", rf"\g<1>-{amount}", text)
     if not count:
         return None
-    if symmetric:
+    if effect.symmetric:
         edited = re.sub(rf"(NumAtt\$\s*)-{n}\b", rf"\g<1>-{amount}", edited)
     return edited
 
@@ -116,13 +120,13 @@ class _KindRules:
     hit_fields: frozenset[HeadField]
     #: ``(toughness, marked damage, amount) -> dies`` under rule 704.5f-g.
     lethal: Callable[[int, int, int], bool]
-    #: ``(script, old amount, new amount, symmetric) -> the script with the
-    #: parameters stating the amount edited``, or None where none states it.
-    edit_params: Callable[[str, int, int, bool], str | None]
-    #: ``(old amount, new amount, symmetric) -> (pattern, replacement)`` pairs
-    #: that edit the amount where prose states it: the converted prose, and
-    #: the script's own description.
-    prose: Callable[[int, int, bool], list[tuple[str, str]]]
+    #: ``(script, effect, new amount) -> the script with the parameters
+    #: stating the effect's amount edited``, or None where none states it.
+    edit_params: Callable[[str, StatedEffect, int], str | None]
+    #: ``(effect, new amount) -> (pattern, replacement)`` pairs that edit the
+    #: amount where prose states it: the converted prose, and the script's own
+    #: description.
+    prose: Callable[[StatedEffect, int], list[tuple[str, str]]]
 
 
 _RULES: dict[EffectKind, _KindRules] = {
@@ -342,10 +346,10 @@ def _subjects_hit(state: StateSnapshot, targets: dict[str, EntityTargets], found
 def edit_text(text: str, effect: StatedEffect, amount: int) -> str | None:
     """The acting script with its literal amount set to ``amount``; None where it has none."""
     rules = _RULES[effect.kind]
-    edited = rules.edit_params(text, effect.amount, amount, effect.symmetric)
+    edited = rules.edit_params(text, effect, amount)
     if edited is None:
         return None
-    for pattern, replacement in rules.prose(effect.amount, amount, effect.symmetric):
+    for pattern, replacement in rules.prose(effect, amount):
         edited = re.sub(pattern, replacement, edited)
     return edited
 
@@ -357,9 +361,7 @@ def edit_prose(prose: str, spans: tuple[RoleSpan, ...], effect: StatedEffect, am
     state the amount, which leaves a copy with nothing it can edit.
     """
     edits: list[tuple[int, int, str]] = []
-    for pattern, replacement in _RULES[effect.kind].prose(
-        effect.amount, amount, effect.symmetric,
-    ):
+    for pattern, replacement in _RULES[effect.kind].prose(effect, amount):
         edits += [(m.start(), m.end(), replacement) for m in re.finditer(pattern, prose)]
     if not edits:
         return None
