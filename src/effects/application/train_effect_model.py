@@ -408,6 +408,16 @@ class HoldoutMismatchError(ValueError):
     """The trainer's own holdout disagrees with the one its corpus recorded."""
 
 
+class ValidationGameInTrainingError(ValueError):
+    """A training shard holds a game its corpus's manifest places in a
+    validation stratum.
+
+    ``build-corpus`` routes each game to one stratum, so the shard and the
+    manifest describe different builds; training on it would score the
+    validation strata partly on games the model trained on.
+    """
+
+
 def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
     """Refuse a holdout unit or a held-out text set the manifest does not
     record (FR-041); recomputed over this run's sidecars, since different

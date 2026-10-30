@@ -196,19 +196,17 @@ class RunReporter:
     ) -> None:
         name = Path(task.shard).name
         trainable = opened.trainable if opened is not None else 0
-        held_back = opened.held_back if opened is not None else 0
         if not trainable:
             logger.info(
-                "epoch %d | shard %d/%d %s | nothing trainable, all %d records "
-                "held back | skipped",
-                task.epoch, task.position, of, name, held_back,
+                "epoch %d | shard %d/%d %s | no records | skipped",
+                task.epoch, task.position, of, name,
             )
             return
         logger.info(
-            "epoch %d | shard %d/%d %s | %d records trainable, %d held back | "
+            "epoch %d | shard %d/%d %s | %d records | "
             "%d steps | loss %.4f | lr %.2e | %.1f steps/s | "
             "wait %.1fs, batch wait %.1fs, train %.1fs%s%s%s",
-            task.epoch, task.position, of, name, trainable, held_back, task.budget,
+            task.epoch, task.position, of, name, trainable, task.budget,
             float(stats.loss) / stats.steps if stats.steps else float("nan"),
             stats.learning_rate, task.budget / trained if trained > 0 else float("nan"),
             stats.waited, stats.batch_waited, trained, format_norms(stats.norms),

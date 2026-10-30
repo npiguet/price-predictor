@@ -37,6 +37,7 @@ from effects.application.train_effect_model import (
     HoldoutMismatchError,
     SurfaceMismatchError,
     TrainEffectModelConfig,
+    ValidationGameInTrainingError,
 )
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BASELINES, Baseline
@@ -800,6 +801,8 @@ def _train_effect_model_parser(subparsers) -> None:
 
 @exits_with({
     HoldoutMismatchError: 1,
+    # Raised in a prefetch worker too, which hands the exception itself over.
+    ValidationGameInTrainingError: 1,
     "effects.infrastructure.shard_io.MixedGenerationsError": 1,
     SurfaceMismatchError: 2,
     EmptyHoldoutError: 2,

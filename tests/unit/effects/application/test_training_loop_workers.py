@@ -2,7 +2,7 @@
 
 The determinism tests train two real epochs end to end on the gen-1 fixture
 records — split into three shards, with every draw the host half takes switched
-on and a validation game the inherited split keeps out of training — once with
+on and a validation game the split names, which no training shard holds — once with
 the host half in this process and twice with it in worker processes. A step's
 draws are seeded by its place in the run, so where it was prepared, by how many
 workers, must not move a single parameter; and two runs with one seed must be
@@ -35,6 +35,7 @@ from effects.application.step_preparation import (
     StepReady,
 )
 from effects.application.train_effect_model import (
+    ValidationGameInTrainingError,
     fields_for_epoch,
 )
 from effects.domain.ability_encoder import AbilityEncoder
@@ -158,7 +159,6 @@ def _run(
             for name, value in module.state_dict().items()
         },
         "shares": [m for m in caplog.messages if "by rarity bucket" in m],
-        "held back": [m.split("|")[2] for m in caplog.messages if "held back" in m],
         "workers": any("worker process" in m for m in caplog.messages),
         "initial": initial,
     }
@@ -167,7 +167,6 @@ def _run(
 def _assert_same(first: dict, second: dict) -> None:
     assert first["losses"] == second["losses"]
     assert first["shares"] == second["shares"]
-    assert first["held back"] == second["held back"]
     assert first["parameters"].keys() == second["parameters"].keys()
     for name, value in first["parameters"].items():
         assert torch.equal(value, second["parameters"][name]), name
@@ -221,10 +220,9 @@ class _ListHandler(logging.Handler):
 
 
 def test_the_fixture_run_exercises_what_it_claims(in_process):
-    """Steps trained, both epochs logged, and the held game held back."""
+    """Steps trained and both epochs logged."""
     assert len(in_process["losses"]) >= 14
     assert len(in_process["shares"]) == 2
-    assert all(" 0 held back" not in line for line in in_process["held back"])
 
 
 def test_worker_processes_train_exactly_what_the_in_process_path_trains(
@@ -479,20 +477,46 @@ def _assert_tensors_equal(left, right, path="step") -> None:
         assert left == right, path
 
 
+def _with_shards(corpus, shards):
+    return type("Corpus", (), {
+        **{k: v for k, v in vars(corpus).items() if not k.startswith("__")},
+        "shards": shards,
+    })
+
+
 def test_a_worker_exception_surfaces_with_its_traceback_and_no_process_survives(
     monkeypatch, corpus, tmp_path, caplog,
 ):
-    """An unreadable shard: raised at its own shard, in the training process."""
+    """An unreadable shard: raised at its own shard, in the training process,
+    as the exception the in-process path raises, the worker's traceback
+    attached."""
     missing = tmp_path / "missing.jsonl.gz"
-    corpus_with_hole = type("Corpus", (), {
-        **{k: v for k, v in vars(corpus).items() if not k.startswith("__")},
-        "shards": [missing],
-    })
-    with pytest.raises(RuntimeError) as raised:
-        _run(monkeypatch, corpus_with_hole, tmp_path / "out", caplog, workers=2)
-    assert "Traceback" in str(raised.value)
+    with pytest.raises(FileNotFoundError) as raised:
+        _run(monkeypatch, _with_shards(corpus, [missing]), tmp_path / "out", caplog, workers=2)
+    notes = "".join(getattr(raised.value, "__notes__", ()))
+    assert "Traceback" in notes and "step-preparation worker" in notes
     assert "missing.jsonl.gz" in str(raised.value)
     assert any("preparing it failed" in m for m in caplog.messages)
+    assert not multiprocessing.active_children()
+
+
+@pytest.mark.parametrize("workers", [0, 2])
+def test_a_training_shard_holding_a_validation_game_is_refused(
+    monkeypatch, corpus, records, tmp_path, caplog, workers,
+):
+    """The manifest places the game in a validation stratum, which build-corpus
+    never writes into training/: the shard and the manifest disagree, and
+    training around the game would hide it. Refused under any worker count,
+    as the exception the CLI maps to exit 1."""
+    from effects.infrastructure.shard_io import write_shard
+
+    tainted = tmp_path / "tainted.jsonl.gz"
+    write_shard(tainted, records)
+    with pytest.raises(ValidationGameInTrainingError, match=corpus.held):
+        _run(
+            monkeypatch, _with_shards(corpus, [tainted]), tmp_path / "out", caplog,
+            workers=workers,
+        )
     assert not multiprocessing.active_children()
 
 

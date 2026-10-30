@@ -62,10 +62,36 @@ class PackedStep:
 
 @dataclass(frozen=True)
 class WorkerFailed:
-    """What a worker sends in place of the rest of a shard when it raises."""
+    """What a worker sends in place of the rest of a shard when it raises.
+
+    ``error`` is the exception itself where it survives pickling, so the
+    training process raises what the in-process path would have raised and
+    the CLI maps a worker's refusal to the same exit code; None where it does
+    not, or where the worker died without raising.
+    """
 
     worker: int
     traceback: str
+    error: BaseException | None = None
+
+    def exception(self) -> BaseException:
+        """What the training process raises: ``error`` with the worker's
+        traceback attached as a note, else a ``RuntimeError`` carrying it."""
+        header = f"step-preparation worker {self.worker} failed:\n{self.traceback}"
+        if self.error is None:
+            return RuntimeError(header)
+        self.error.add_note(header)
+        return self.error
+
+
+def _portable(error: BaseException) -> BaseException | None:
+    """``error`` if a pickle round trip rebuilds it, else None: an exception
+    with a constructor of its own may not unpickle on the far side."""
+    try:
+        pickle.loads(pickle.dumps(error))
+    except Exception:  # noqa: BLE001 — any failure means "send the text only"
+        return None
+    return error
 
 
 class _Packer(pickle.Pickler):
@@ -158,8 +184,8 @@ def work(index: int, settings: PreparerSettings, tasks, results) -> None:
             del records
     except KeyboardInterrupt:
         return
-    except BaseException:
-        results.put(WorkerFailed(index, traceback.format_exc()))
+    except BaseException as error:
+        results.put(WorkerFailed(index, traceback.format_exc(), _portable(error)))
         while tasks.get() is not None:
             continue
 
@@ -242,10 +268,7 @@ class StepWorkerPool:
                     if isinstance(message, PackedStep):
                         message = unpack(message, pin=self.pin)
                     elif isinstance(message, WorkerFailed):
-                        message = RuntimeError(
-                            f"step-preparation worker {message.worker} "
-                            f"failed:\n{message.traceback}"
-                        )
+                        message = message.exception()
                     if not self._hand_over(message):
                         return
                     if isinstance(message, (ShardClosed, BaseException)):

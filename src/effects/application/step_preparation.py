@@ -24,7 +24,10 @@ from effects.application.surface_batching import (
     SurfaceSpec,
 )
 from effects.application.text_staging import MaskedTokens, TextStager, pinned
-from effects.application.train_effect_model import TrainEffectModelConfig
+from effects.application.train_effect_model import (
+    TrainEffectModelConfig,
+    ValidationGameInTrainingError,
+)
 from effects.domain.ability_encoder import TruncationLog, surface_of
 from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
 from effects.domain.aux_head_targets import (
@@ -137,7 +140,6 @@ class ShardOpened:
     """The first message of a shard: its split, before any step."""
 
     trainable: int
-    held_back: int
     #: ``(found, distinct)``: how many of the trainable records' distinct
     #: ability texts the rarity table names; None without a table.
     rarity_coverage: tuple[int, int] | None
@@ -466,23 +468,23 @@ class StepPreparer:
     def shard_steps(
         self, task: ShardTask, records: list, *, pin: bool = False,
     ) -> Iterator[ShardOpened | StepReady]:
-        """One shard's messages: a ``ShardOpened``, then ``task.budget`` steps,
-        none from a game the manifest places in a validation stratum."""
-        excluded = self.split.validation_games
-        training = [r for r in records if r.game_id not in excluded]
-        texts = self._texts(training)
-        games = self._games(training, texts)
-        yield ShardOpened(
-            trainable=len(training), held_back=len(records) - len(training),
-            rarity_coverage=games.coverage(),
-        )
-        if not training:
+        """One shard's messages: a ``ShardOpened``, then ``task.budget`` steps.
+
+        Raises :class:`ValidationGameInTrainingError` for a shard holding a
+        game the manifest places in a validation stratum, rather than training
+        around it: the corpus and its manifest disagree.
+        """
+        self._refuse_validation_games(task, records)
+        texts = self._texts(records)
+        games = self._games(records, texts)
+        yield ShardOpened(trainable=len(records), rarity_coverage=games.coverage())
+        if not records:
             return
-        weights = self._weighted(training, texts, games)
-        labels = self._shard_labels(training, texts, games)
+        weights = self._weighted(records, texts, games)
+        labels = self._shard_labels(records, texts, games)
         del texts
         batches = batches_without_replacement(
-            training, weights, batch_size=self.config.batch_size,
+            records, weights, batch_size=self.config.batch_size,
             rng=plan_rng(self.seed, task.epoch, task.position),
         )
         for index in range(task.budget):
@@ -500,6 +502,20 @@ class StepPreparer:
             if copies:
                 families[COUNTERFACTUAL_FAMILY] += copies
             yield StepReady(step, dict(buckets), dict(families))
+
+    def _refuse_validation_games(self, task: ShardTask, records: list) -> None:
+        excluded = self.split.validation_games
+        leaked = Counter(r.game_id for r in records if r.game_id in excluded)
+        if not leaked:
+            return
+        game, count = leaked.most_common(1)[0]
+        raise ValidationGameInTrainingError(
+            f"training shard {task.shard} holds {sum(leaked.values())} record(s) "
+            f"of {len(leaked)} game(s) its corpus's manifest places in a "
+            f"validation stratum, e.g. {game} ({count} record(s)). build-corpus "
+            "writes no validation game into training/, so this shard and the "
+            "manifest come from different builds: rebuild the corpus."
+        )
 
     def steps(self, task: ShardTask, records: list) -> Iterator:
         """``shard_steps``, then a ``ShardClosed``: a worker's whole shard."""

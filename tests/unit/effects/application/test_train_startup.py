@@ -200,6 +200,7 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
 @pytest.mark.parametrize("failure, code", [
     ("HoldoutMismatchError", 1),
     ("MixedGenerationsError", 1),
+    ("ValidationGameInTrainingError", 1),
     ("ResumeMismatchError", 2),
     ("FileNotFoundError", 2),
 ])
@@ -214,6 +215,7 @@ def test_an_operator_error_out_of_training_exits_with_its_code(
     kind = {
         "HoldoutMismatchError": train_effect_model.HoldoutMismatchError,
         "MixedGenerationsError": shard_io.MixedGenerationsError,
+        "ValidationGameInTrainingError": train_effect_model.ValidationGameInTrainingError,
         "ResumeMismatchError": effect_model_store.ResumeMismatchError,
         "FileNotFoundError": FileNotFoundError,
     }[failure]
