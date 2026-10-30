@@ -426,14 +426,14 @@ def test_a_masked_number_carries_no_value():
     assert torch.all(masked.inputs["numbers"][kept] == 3.0)
 
 
-def test_a_stand_in_key_reads_its_text_with_the_real_line():
+def test_an_overridden_key_reads_its_text_with_the_real_line():
     """A counterfactual copy's acting key names no sidecar (FR-063e)."""
     batcher = _batcher()
-    stand = ProvenanceKey("counterfactual/5/cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
-    batcher.stand_in(stand, "deals 5 damage to any target", _ACT)
-    assert batcher.text_of(stand) == "deals 5 damage to any target"
-    assert batcher.line_of(stand) is _LINES[_ACT]
-    assert batcher.options_for(stand) == ()
+    copy = ProvenanceKey("counterfactual/5/cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
+    batcher.override_text(copy, "deals 5 damage to any target", _ACT)
+    assert batcher.text_of(copy) == "deals 5 damage to any target"
+    assert batcher.line_of(copy) is _LINES[_ACT]
+    assert batcher.options_for(copy) == ()
 
 
 def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():

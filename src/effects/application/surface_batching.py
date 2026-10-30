@@ -251,8 +251,8 @@ class Materializer:
             return self.identity_table(
                 self.identity_table.rows(staged.ordered).to(self.device, non_blocking=True),
             )
-        if staged.stand_in is not None:
-            return staged.stand_in.to(self.device, non_blocking=True)
+        if staged.taxonomy_vectors is not None:
+            return staged.taxonomy_vectors.to(self.device, non_blocking=True)
         if staged.encoder_inputs is None:
             return None
         vectors, _hidden = encode_by_length(encoder, staged.encoder_inputs, self.device)
@@ -333,9 +333,9 @@ class SurfaceBatcher:
         #: The step's generator: keyword expansion, context dropout and the MLM
         #: mask draw from it, in that order.
         self.rng = rng or random.Random(0)
-        #: ``key -> (text, line)`` for :meth:`stand_in` keys, apart from the
-        #: resolver's memo because a copy's text belongs to its step alone.
-        self._staged: dict[object, tuple[str, object]] = {}
+        #: ``key -> (text, line)`` for :meth:`override_text` keys, apart from
+        #: the resolver's memo because a copy's text belongs to its step alone.
+        self._overrides: dict[object, tuple[str, object]] = {}
 
     @property
     def sidecars(self) -> SidecarLookup:
@@ -346,9 +346,9 @@ class SurfaceBatcher:
         return self.stager.surface
 
     def _resolve(self, key) -> tuple[str | None, object]:
-        """``(text, line)`` for one key: a staged stand-in, else the join."""
-        staged = self._staged.get(key)
-        return staged if staged is not None else self.resolver.resolve(key)
+        """``(text, line)`` for one key: its override, else the join."""
+        override = self._overrides.get(key)
+        return override if override is not None else self.resolver.resolve(key)
 
     def text_of(self, key) -> str | None:
         """The text one ability key is encoded from, on this run's surface:
@@ -358,7 +358,7 @@ class SurfaceBatcher:
     def line_of(self, key):
         return self._resolve(key)[1]
 
-    def stand_in(
+    def override_text(
         self, key, text: str, like, *, script: str | None = None,
         role_spans: tuple | None = None,
     ) -> None:
@@ -371,21 +371,21 @@ class SurfaceBatcher:
                 script_text=line.script_text if script is None else script,
                 role_spans=line.role_spans if role_spans is None else role_spans,
             )
-        self._staged[key] = (text, line)
+        self._overrides[key] = (text, line)
 
     @contextmanager
     def reading_as(self, key, text: str) -> Iterator[None]:
         """Inside the block ``key`` reads ``text``, keeping its own line: how a
         probe has the encoder read one edited script."""
-        previous = self._staged.get(key)
-        self.stand_in(key, text, like=key)
+        previous = self._overrides.get(key)
+        self.override_text(key, text, like=key)
         try:
             yield
         finally:
             if previous is None:
-                del self._staged[key]
+                del self._overrides[key]
             else:
-                self._staged[key] = previous
+                self._overrides[key] = previous
 
     def batch_texts(self, records) -> dict[str, object]:
         """Every ability text this batch's surfaces reference, to its line:
@@ -412,13 +412,13 @@ class SurfaceBatcher:
 
     def options_for(self, key) -> tuple:
         """The keys of the charm-mode lines that follow ``key``'s line
-        (FR-063a); none for a stood-in key."""
-        return () if key in self._staged else self.resolver.options_for(key)
+        (FR-063a); none for an overridden key."""
+        return () if key in self._overrides else self.resolver.options_for(key)
 
     def _keys_of(self, text: str) -> list:
         """The keys resolved to ``text`` so far: how a truncation is named."""
-        staged = [key for key, (known, _) in self._staged.items() if known == text]
-        return self.resolver.keys_of(text) + staged
+        overridden = [key for key, (known, _) in self._overrides.items() if known == text]
+        return self.resolver.keys_of(text) + overridden
 
     def stage(self, texts: Mapping[str, object]) -> StagedTexts:
         return self.stager.stage(

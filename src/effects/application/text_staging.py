@@ -99,8 +99,8 @@ def pinned(value):
 class StagedTexts:
     """A batch's unique texts, staged for whatever produces their ``e``.
 
-    At most one of ``encoder_inputs`` and ``stand_in`` (the ``taxonomy``
-    baseline's vectors) is set; neither, for the ``identity`` baseline.
+    At most one of ``encoder_inputs`` and ``taxonomy_vectors`` is set;
+    neither, for the ``identity`` baseline.
     """
 
     #: Each text's row of the batch's ``e`` matrix.
@@ -109,7 +109,8 @@ class StagedTexts:
     prepared: list[EncodedLine]
     #: None when the encoder is not called.
     encoder_inputs: dict[str, torch.Tensor] | None
-    stand_in: torch.Tensor | None
+    #: The ``taxonomy`` baseline's hashed ``e``, which no encoder computes.
+    taxonomy_vectors: torch.Tensor | None
 
     @property
     def ordered(self) -> list[str]:
@@ -118,7 +119,7 @@ class StagedTexts:
 
     def pin(self) -> None:
         self.encoder_inputs = pinned(self.encoder_inputs)
-        self.stand_in = pinned(self.stand_in)
+        self.taxonomy_vectors = pinned(self.taxonomy_vectors)
 
 
 @dataclass(frozen=True)

@@ -343,7 +343,7 @@ class StepPreparer:
                 )
                 edit = copy.edit
                 if edit.key is not None:
-                    batcher.stand_in(
+                    batcher.override_text(
                         edit.key, edit.text, key,
                         script=edit.script, role_spans=edit.role_spans,
                     )

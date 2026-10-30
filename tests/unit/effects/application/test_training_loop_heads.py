@@ -85,7 +85,7 @@ class _Batcher:
             texts=dict(self.encoded.lines),
             staged=StagedTexts(
                 rows={text: row for row, text in enumerate(texts)},
-                prepared=[object()] * len(texts), encoder_inputs=None, stand_in=None,
+                prepared=[object()] * len(texts), encoder_inputs=None, taxonomy_vectors=None,
             ),
             surfaces=[], inputs=None,
         )

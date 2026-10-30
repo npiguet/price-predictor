@@ -440,7 +440,7 @@ class TestStepWiring:
     class _Batcher:
         def __init__(self):
             self.rng = random.Random(11)
-            self.staged = {}
+            self.overrides = {}
 
         def line_of(self, key):
             return _line(BOLT)
@@ -448,8 +448,8 @@ class TestStepWiring:
         def text_of(self, key):
             return BOLT
 
-        def stand_in(self, key, text, like, *, script=None, role_spans=None):
-            self.staged[key] = (text, like)
+        def override_text(self, key, text, like, *, script=None, role_spans=None):
+            self.overrides[key] = (text, like)
 
     def test_each_qualifying_record_gets_its_copies_and_their_texts(self):
         from effects.application.step_preparation import StepPreparer
@@ -465,5 +465,5 @@ class TestStepWiring:
         copies = StepPreparer._counterfactuals(
             preparer, records, [derive_targets(r) for r in records], batcher)
         assert len(copies) == 3
-        assert {copy.edit.key for copy in copies} == set(batcher.staged)
-        assert all(batcher.staged[copy.edit.key] == (copy.edit.text, KEY) for copy in copies)
+        assert {copy.edit.key for copy in copies} == set(batcher.overrides)
+        assert all(batcher.overrides[copy.edit.key] == (copy.edit.text, KEY) for copy in copies)
