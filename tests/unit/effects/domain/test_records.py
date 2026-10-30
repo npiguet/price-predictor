@@ -22,7 +22,9 @@ from effects.domain.records import (
     REWRITE_RESULTS_WITHOUT_ABILITY,
     ActivationPayload,
     Candidate,
+    ChannelChange,
     CombatPayload,
+    Contribution,
     Costs,
     EffectRecord,
     Moment,
@@ -459,3 +461,25 @@ class TestRewrite:
         assert payload.outgoing is None
         assert not payload.rewritten
         assert payload.replaced_by == (_REPLACED_BY,)
+
+
+class TestContributionChannels:
+    """The ``+x`` / ``-x`` / ``=`` token grammar, read in one place."""
+
+    def test_a_bare_token_is_gained_and_a_dashed_one_lost(self):
+        contribution = Contribution(entity="E1", types=("Creature", "-Land", "Elf"))
+        assert contribution.type_changes == ChannelChange(
+            gained=("Creature", "Elf"), lost=("Land",), sets_outright=False,
+        )
+
+    def test_a_lone_equals_sets_the_line_outright_and_names_nothing(self):
+        contribution = Contribution(entity="E1", colors=("=", "C"))
+        assert contribution.color_changes == ChannelChange(
+            gained=("C",), lost=(), sets_outright=True,
+        )
+
+    def test_the_keyword_channel_takes_the_dash_too(self):
+        contribution = Contribution(entity="E1", keywords=("flying", "-haste"))
+        assert contribution.keyword_changes == ChannelChange(
+            gained=("flying",), lost=("haste",),
+        )

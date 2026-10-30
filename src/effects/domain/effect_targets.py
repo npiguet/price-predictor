@@ -328,40 +328,22 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
         if contribution.pt_boost != (0, 0):
             entry.add(HeadField.POWER_DELTA, float(contribution.pt_boost[0]))
             entry.add(HeadField.TOUGHNESS_DELTA, float(contribution.pt_boost[1]))
-        for keyword in contribution.keywords:
-            # The type and colour channels' "-" convention.
-            lost = keyword.startswith("-")
-            _flag_keyword(
-                entry, HeadField.KEYWORDS_LOST if lost else HeadField.KEYWORDS_GAINED,
-                keyword.lstrip("-"),
-            )
-        for channel, vocabulary, gained_field, lost_field in (
-            (contribution.types, CARD_TYPES, HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
-            (contribution.colors, COLORS, HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
+        keywords = contribution.keyword_changes
+        for keyword in keywords.gained:
+            _flag_keyword(entry, HeadField.KEYWORDS_GAINED, keyword)
+        for keyword in keywords.lost:
+            _flag_keyword(entry, HeadField.KEYWORDS_LOST, keyword)
+        # Whole-class tokens (``all-creature-types``) match no slot and drop.
+        for change, vocabulary, gained_field, lost_field in (
+            (contribution.type_changes, CARD_TYPES,
+             HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
+            (contribution.color_changes, COLORS,
+             HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
         ):
-            gained, lost = _split_contribution(channel)
-            _apply_multi(entry, gained_field, gained, vocabulary)
-            _apply_multi(entry, lost_field, lost, vocabulary)
-            if "=" in channel and lost_field not in entry.fields:
+            _apply_multi(entry, gained_field, change.gained, vocabulary)
+            _apply_multi(entry, lost_field, change.lost, vocabulary)
+            # The displaced values cannot be named, so the lost field is
+            # unknown rather than silently empty.
+            if change.sets_outright and lost_field not in entry.fields:
                 entry.unknown.add(lost_field)
-
-
-def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
-    """One contribution channel, split into what it grants and what it takes.
-
-    A removal carries a leading ``-``; a lone ``=`` marks a channel the static
-    sets outright, whose displaced values the record cannot name (the snapshot
-    is the board after the static), so the caller marks the lost field
-    unknown. Whole-class tokens (``all-creature-types``) match no slot and drop.
-    """
-    gained: list[str] = []
-    lost: list[str] = []
-    for token in tokens:
-        if token == "=":
-            continue
-        if token.startswith("-"):
-            lost.append(token[1:])
-        else:
-            gained.append(token)
-    return gained, lost
 

@@ -275,6 +275,32 @@ class RewritePayload(_PayloadQueries):
 
 
 @dataclass(frozen=True, slots=True)
+class ChannelChange:
+    """One contribution channel, read through the token grammar
+    :class:`Contribution` describes."""
+
+    gained: tuple[str, ...] = ()
+    #: Each removed value, its leading ``-`` dropped.
+    lost: tuple[str, ...] = ()
+    #: A lone ``=``: the static sets the line outright, so what it displaced is
+    #: not named (the snapshot is the board after the static).
+    sets_outright: bool = False
+
+    @classmethod
+    def parse(cls, tokens: tuple[str, ...]) -> ChannelChange:
+        gained: list[str] = []
+        lost: list[str] = []
+        for token in tokens:
+            if token == "=":
+                continue
+            if token.startswith("-"):
+                lost.append(token[1:])
+            else:
+                gained.append(token)
+        return cls(gained=tuple(gained), lost=tuple(lost), sets_outright="=" in tokens)
+
+
+@dataclass(frozen=True, slots=True)
 class Contribution:
     """One entity's share of a continuous effect, per layer channel.
 
@@ -300,6 +326,19 @@ class Contribution:
     types: tuple[str, ...] = ()
     colors: tuple[str, ...] = ()
     name: str | None = None
+
+    @property
+    def keyword_changes(self) -> ChannelChange:
+        """The keywords granted and removed; the channel takes the ``-`` too."""
+        return ChannelChange.parse(self.keywords)
+
+    @property
+    def type_changes(self) -> ChannelChange:
+        return ChannelChange.parse(self.types)
+
+    @property
+    def color_changes(self) -> ChannelChange:
+        return ChannelChange.parse(self.colors)
 
 
 @dataclass(frozen=True, slots=True)
