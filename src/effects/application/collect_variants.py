@@ -246,7 +246,7 @@ def _size_budget(config: CollectVariantsConfig) -> int:
 
 
 def _generate(config: CollectVariantsConfig, budget: int) -> list[GeneratedVariant]:
-    held_out = config.holdout_source().exclusions()
+    held_out = config.deck_holdout.exclusions()
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
         held_out=held_out, limit=budget, seed=config.seed,

@@ -32,6 +32,37 @@ DEFAULT_DECKS_PER_ROUND = 500
 NONLANDS_PER_DECK = 23
 
 
+@dataclass(frozen=True, slots=True)
+class DeckHoldout:
+    """The held-out cards a collector's decks are drawn against: one list kept
+    out of every deck, ``--exclude-cards`` (needs no trained model) or
+    ``--split-from`` (an existing checkpoint's split), or, for the held-out
+    coverage round, ``--only-cards``, the list decked alone.
+
+    Two sources at once are refused rather than merged, since a merge would
+    hide a disagreement, and ``--only-cards`` beside a list to keep out is
+    refused as the opposite instruction.
+    """
+
+    exclude_cards: Path | None = None
+    split_from: Path | None = None
+    only_cards: Path | None = None
+
+    def __post_init__(self) -> None:
+        if self.only_cards is not None:
+            _refuse_holdout_beside_only_cards(
+                exclude_cards=self.exclude_cards, split_from=self.split_from,
+            )
+        if self.split_from is not None and self.exclude_cards is not None:
+            raise ValueError(TWO_HOLDOUT_SOURCES)
+
+    def exclusions(self) -> frozenset[str]:
+        """Cards to keep out of every deck, folded, from whichever source names them."""
+        if self.exclude_cards is not None:
+            return read_name_list(self.exclude_cards)
+        return load_held_out(self.split_from)
+
+
 @dataclass
 class CollectorConfig:
     """What both collectors take: the corpus they write to, the converted
@@ -39,8 +70,7 @@ class CollectorConfig:
 
     effect_records: Path = Path(default_paths.DEFAULT_RECORDS_DIR)
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
-    split_from: Path | None = None
-    exclude_cards: Path | None = None
+    deck_holdout: DeckHoldout = DeckHoldout()
     decks_per_round: int = field(default=DEFAULT_DECKS_PER_ROUND, metadata={
         "help": "Decks played as matches per round (default: %(default)s)",
     })
@@ -62,12 +92,6 @@ class CollectorConfig:
 
         return SourceTrees.of(self.cards_folders)
 
-    def holdout_source(self) -> HoldoutSource:
-        return HoldoutSource(
-            effect_records=self.effect_records, exclude_cards=self.exclude_cards,
-            split_from=self.split_from,
-        )
-
 
 TWO_HOLDOUT_SOURCES = (
     "pass one source of held-out cards, not both: --exclude-cards "
@@ -81,78 +105,60 @@ TWO_HOLDOUT_SOURCES = (
 HOLDOUT_LIST_NAME = "holdout-cards.txt"
 
 
-@dataclass(frozen=True, slots=True)
-class HoldoutSource:
-    """Where a collector writes, and the one source of the cards it keeps out:
-    ``--exclude-cards`` (needs no trained model) or ``--split-from`` (an
-    existing checkpoint's split). Both at once is refused rather than merged,
-    since a merge would hide a disagreement."""
+def collection_target(
+    *,
+    effect_records: Path | None,
+    exclude_cards: Path | None,
+    split_from: Path | None,
+    training_corpus: Path | None = None,
+    only_cards: Path | None = None,
+) -> tuple[Path, DeckHoldout]:
+    """Where a collector's flags write and the holdout they name, refused
+    before any worker starts.
 
-    effect_records: Path = Path(default_paths.DEFAULT_RECORDS_DIR)
-    exclude_cards: Path | None = None
-    split_from: Path | None = None
+    ``--training-corpus DIR`` stands for ``--effect-records DIR`` with
+    ``DIR/holdout-cards.txt`` as the depletion list, so a corpus and the list
+    that depleted it cannot be named apart; an unset ``--effect-records`` is
+    the default directory.
 
-    def __post_init__(self) -> None:
-        if self.split_from is not None and self.exclude_cards is not None:
-            raise ValueError(TWO_HOLDOUT_SOURCES)
-
-    @classmethod
-    def from_flags(
-        cls, *,
-        effect_records: Path | None,
-        exclude_cards: Path | None,
-        split_from: Path | None,
-        training_corpus: Path | None = None,
-        only_cards: Path | None = None,
-    ) -> HoldoutSource:
-        """The source a collector's flags name, refused before any worker starts.
-
-        ``--training-corpus DIR`` stands for ``--effect-records DIR`` with
-        ``DIR/holdout-cards.txt`` as the depletion list, so a corpus and the
-        list that depleted it cannot be named apart.
-
-        Raises ``ValueError`` when ``--only-cards`` comes with a holdout to keep
-        out, when ``--training-corpus`` comes with a flag it implies (an
-        explicit default ``--effect-records`` included) or its directory holds
-        no depletion list, or when two sources name the held-out cards.
-        """
-        if only_cards is not None:
-            _refuse_holdout_beside_only_cards(
-                exclude_cards=exclude_cards, training_corpus=training_corpus,
-                split_from=split_from,
-            )
-        if training_corpus is None:
-            return cls(
-                effect_records=effect_records or Path(default_paths.DEFAULT_RECORDS_DIR),
-                exclude_cards=exclude_cards, split_from=split_from,
-            )
-        if effect_records is not None or exclude_cards:
-            raise ValueError(
-                "pass one source of the corpus location, not both: "
-                "--training-corpus DIR means --effect-records DIR with its own "
-                f"{HOLDOUT_LIST_NAME}"
-            )
-        return cls(
-            effect_records=training_corpus,
-            exclude_cards=_depletion_list(training_corpus), split_from=split_from,
+    Raises ``ValueError`` when ``--only-cards`` comes with a holdout to keep
+    out, when ``--training-corpus`` comes with a flag it implies (an explicit
+    default ``--effect-records`` included) or its directory holds no depletion
+    list, or when two sources name the held-out cards.
+    """
+    if only_cards is not None:
+        _refuse_holdout_beside_only_cards(
+            exclude_cards=exclude_cards, training_corpus=training_corpus,
+            split_from=split_from,
         )
-
-    def exclusions(self) -> frozenset[str]:
-        """Cards to keep out of every deck, folded, from whichever source names them."""
-        if self.exclude_cards is not None:
-            return read_name_list(self.exclude_cards)
-        return load_held_out(self.split_from)
+    if training_corpus is None:
+        records = effect_records if effect_records is not None else Path(
+            default_paths.DEFAULT_RECORDS_DIR,
+        )
+        return records, DeckHoldout(
+            exclude_cards=exclude_cards, split_from=split_from, only_cards=only_cards,
+        )
+    if effect_records is not None or exclude_cards is not None:
+        raise ValueError(
+            "pass one source of the corpus location, not both: "
+            "--training-corpus DIR means --effect-records DIR with its own "
+            f"{HOLDOUT_LIST_NAME}"
+        )
+    return training_corpus, DeckHoldout(
+        exclude_cards=_depletion_list(training_corpus), split_from=split_from,
+    )
 
 
 def _refuse_holdout_beside_only_cards(
-    *, exclude_cards: Path | None, training_corpus: Path | None, split_from: Path | None,
+    *, exclude_cards: Path | None, split_from: Path | None,
+    training_corpus: Path | None = None,
 ) -> None:
     clashing = [
         flag for flag, value in (
             ("--exclude-cards", exclude_cards),
             ("--training-corpus", training_corpus),
             ("--split-from", split_from),
-        ) if value
+        ) if value is not None
     ]
     if clashing:
         # FR-038: opposite instructions, so one of them is a mistake.

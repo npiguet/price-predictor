@@ -76,10 +76,6 @@ class CollectCoverageConfig(CollectorConfig):
             "retires, which is what makes the run end (default: %(default)s)"
         ),
     })
-    #: ``--only-cards``: the ``holdout-cards`` list. Set, the run is the
-    #: held-out coverage round (FR-035): decks from these cards alone, and the
-    #: unit is the held-out ability text rather than the card.
-    only_cards: Path | None = None
     min_text_games: int = field(default=HELD_OUT_GAME_FLOOR, metadata={
         "help": (
             "With --only-cards: distinct games a held-out text must act in to "
@@ -382,7 +378,10 @@ class CardRounds(_RoundsBase):
 
 def run(config: CollectCoverageConfig) -> int:
     """Play rounds until every card is satisfied or retired."""
-    if config.only_cards is not None:
+    # ``--only-cards``, the ``holdout-cards`` list: the held-out coverage
+    # round (FR-035), decks from these cards alone, each unit a held-out
+    # ability text rather than a card.
+    if config.deck_holdout.only_cards is not None:
         return run_text_coverage(config)
 
     trees = config.source_trees.converted()
@@ -391,7 +390,7 @@ def run(config: CollectCoverageConfig) -> int:
         logger.error("%s", no_converted_cards(trees))
         return 1
 
-    held_out = config.holdout_source().exclusions()
+    held_out = config.deck_holdout.exclusions()
     texts = {name: card.text for name, card in converted.items()}
     non_deck = non_deck_names(texts)
     coverage = build_coverage_units(
@@ -618,7 +617,8 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     if not converted:
         logger.error("%s", no_converted_cards(trees))
         return 1
-    listed = read_name_list(config.only_cards)
+    only_cards = config.deck_holdout.only_cards
+    listed = read_name_list(only_cards)
     listed_files = {
         name: script for name, script in trees.card_files.items()
         if fold_card_name(name) in listed
@@ -635,7 +635,7 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     if not carriers:
         logger.error(
             "None of the %d card(s) in %s carries a text only listed cards "
-            "carry; nothing to cover.", len(listed), config.only_cards,
+            "carry; nothing to cover.", len(listed), only_cards,
         )
         return 1
 

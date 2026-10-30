@@ -198,7 +198,7 @@ class TestTheTrainingCorpusFlag:
         config = self._config("--training-corpus", str(corpus))
 
         assert config.effect_records == corpus
-        assert config.exclude_cards == corpus / "holdout-cards.txt"
+        assert config.deck_holdout.exclude_cards == corpus / "holdout-cards.txt"
 
     def test_a_corpus_without_a_holdout_list_is_refused(self, tmp_path):
         """Silently running undepleted is the failure this whole area had."""
@@ -244,7 +244,7 @@ class TestTheTrainingCorpusFlag:
         config = self._config("--effect-records", str(tmp_path / "records"))
 
         assert config.effect_records == tmp_path / "records"
-        assert config.exclude_cards is None
+        assert config.deck_holdout.exclude_cards is None
 
 
 # ── the template unit (FR-040, FR-043; T040, T042) ──────────────────────

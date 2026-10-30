@@ -16,6 +16,7 @@ from effects.application.collect_coverage import (
     CollectCoverageConfig,
     residues,
 )
+from effects.application.collector_common import DeckHoldout
 from effects.domain.coverage import (
     CardCoverage,
     ConsultVerdict,
@@ -200,12 +201,10 @@ class TestExclusionsWithoutACheckpoint:
     """
 
     def test_the_depletion_list_is_read_and_folded(self, tmp_path) -> None:
-        from effects.application.collector_common import HoldoutSource
-
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\nLim-Dûl's Vault\n", encoding="utf-8")
 
-        excluded = HoldoutSource(exclude_cards=listed).exclusions()
+        excluded = DeckHoldout(exclude_cards=listed).exclusions()
 
         assert excluded == frozenset({"soul echo", "lim-dûl's vault"}), (
             "the file carries Forge's printed case; coverage decks are built "
@@ -213,19 +212,15 @@ class TestExclusionsWithoutACheckpoint:
         )
 
     def test_neither_source_means_no_exclusions(self) -> None:
-        from effects.application.collector_common import HoldoutSource
-
-        assert HoldoutSource().exclusions() == frozenset()
+        assert DeckHoldout().exclusions() == frozenset()
 
     def test_both_sources_at_once_is_refused(self, tmp_path) -> None:
         """Two spellings of the same holdout is the bug this feature just had."""
-        from effects.application.collector_common import HoldoutSource
-
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\n", encoding="utf-8")
 
         with pytest.raises(ValueError, match="one source"):
-            HoldoutSource(split_from=tmp_path / "latest.pt", exclude_cards=listed)
+            DeckHoldout(split_from=tmp_path / "latest.pt", exclude_cards=listed)
 
     def test_both_sources_on_a_config_are_refused_when_it_runs(self, tmp_path) -> None:
         """A config built in code, not from flags, still names one holdout."""
@@ -242,7 +237,9 @@ class TestExclusionsWithoutACheckpoint:
         with pytest.raises(ValueError, match="one source"):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 cards_folders=(cards,), effect_records=tmp_path / "records",
-                split_from=tmp_path / "latest.pt", exclude_cards=listed,
+                deck_holdout=DeckHoldout(
+                    split_from=tmp_path / "latest.pt", exclude_cards=listed,
+                ),
             ))
 
 
@@ -1047,7 +1044,7 @@ class TestOnlyCardsRefusals:
         config = collector_config(CollectCoverageConfig, build_parser().parse_args(
             ["collect-coverage", "--only-cards", "holdout.txt", "--min-text-games", "7"],
         ))
-        assert config.only_cards == Path("holdout.txt")
+        assert config.deck_holdout.only_cards == Path("holdout.txt")
         assert config.min_text_games == 7
 
 
@@ -1151,7 +1148,7 @@ class TestNonDeckTypesLeaveTheUnit:
              caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
-                only_cards=listed, min_text_games=0,
+                deck_holdout=DeckHoldout(only_cards=listed), min_text_games=0,
             ))
 
         assert consulted == [["alpha"]]

@@ -28,7 +28,7 @@ from effects.application.build_corpus import (
 from effects.application.build_vocab import DEFAULT_TARGET_SIZE, EmptyCardsFolderError
 from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
-from effects.application.collector_common import HOLDOUT_LIST_NAME, HoldoutSource
+from effects.application.collector_common import HOLDOUT_LIST_NAME, collection_target
 from effects.application.corpus_validation.findings import Thresholds
 from effects.application.evaluation_context import CorpusMismatchError
 from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
@@ -455,18 +455,6 @@ def _collect_variants_parser(subparsers) -> None:
     add_cap_flags(parser)
 
 
-def holdout_source(args: argparse.Namespace) -> HoldoutSource:
-    """A collector's :class:`HoldoutSource`; raises ValueError on a
-    contradictory one, before any worker starts."""
-    return HoldoutSource.from_flags(
-        effect_records=args.effect_records,
-        exclude_cards=args.exclude_cards,
-        split_from=args.split_from,
-        training_corpus=args.training_corpus,
-        only_cards=getattr(args, "only_cards", None),
-    )
-
-
 def collection_caps(args: argparse.Namespace) -> CollectionCaps:
     # An unset --random-seat-probability is None so a share above 0 without
     # one can be refused; with the share at 0 the worker never reads it.
@@ -482,12 +470,18 @@ def collection_caps(args: argparse.Namespace) -> CollectionCaps:
 def collector_config(
     config_type: type[_Config], args: argparse.Namespace, **overrides: Any,
 ) -> _Config:
-    """A collector's config, with its corpus location and holdout resolved."""
-    source = holdout_source(args)
+    """A collector's config, with its corpus location and holdout resolved;
+    raises ValueError on a contradictory holdout, before any worker starts."""
+    effect_records, deck_holdout = collection_target(
+        effect_records=args.effect_records,
+        exclude_cards=args.exclude_cards,
+        split_from=args.split_from,
+        training_corpus=args.training_corpus,
+        only_cards=getattr(args, "only_cards", None),
+    )
     return config_from_args(
         config_type, args,
-        effect_records=source.effect_records,
-        exclude_cards=source.exclude_cards,
+        effect_records=effect_records, deck_holdout=deck_holdout,
         caps=collection_caps(args),
         **overrides,
     )

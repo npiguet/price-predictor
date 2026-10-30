@@ -24,10 +24,11 @@ def parse(*argv: str):
 
 class TestCollectVariants:
     def test_the_defaults_are_the_contracts(self):
-        from effects.infrastructure.cli import holdout_source
+        from effects.application.collect_variants import CollectVariantsConfig
+        from effects.infrastructure.cli import collector_config
 
         args = parse("collect-variants")
-        records = holdout_source(args).effect_records
+        records = collector_config(CollectVariantsConfig, args).effect_records
         assert records == Path("output/effects/records/")
         assert args.forge_cards_path == Path("../forge/forge-gui/res/cardsfolder/")
         assert args.variant_scripts == Path("output/effects/variant-scripts/")
