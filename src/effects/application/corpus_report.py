@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict
 from typing import TYPE_CHECKING
 
 from effects.application.corpus_survey import RefusalTally, Survey
@@ -154,21 +153,21 @@ def _nested(counts: Counter[tuple[str, str]]) -> dict[str, dict[str, int]]:
 
 def family_tables(
     decisions: Decisions, written: WriteResult,
-) -> tuple[dict[str, dict[str, dict[str, int]]], dict[str, dict[str, dict[str, int]]]]:
+) -> tuple[dict[str, dict[str, FamilyRow]], dict[str, dict[str, dict[str, int]]]]:
     """The manifest's per-family and per-signature tables (FR-053)."""
-    families: dict[str, dict[str, dict[str, int]]] = {}
+    families: dict[str, dict[str, FamilyRow]] = {}
     for klass, per_family in decisions.selection.families.items():
         for label, row in per_family.items():
             wrote = written.families.written.get((klass, label), 0)
             distinct = written.families.distinct.get((klass, label), 0)
-            families.setdefault(klass, {})[label] = asdict(FamilyRow(
+            families.setdefault(klass, {})[label] = FamilyRow(
                 available=row.available,
                 share=row.share,
                 planned=row.planned,
                 written=wrote,
                 repeats=wrote - distinct,
                 shortfall=max(0, row.share - wrote),
-            ))
+            )
     signatures: dict[str, dict[str, dict[str, int]]] = {}
     for (klass, label, signature), count in sorted(written.families.signatures.items()):
         if signature:
@@ -366,8 +365,7 @@ def _log_mixture(manifest: CorpusManifest) -> None:
             "more than the corpus can supply at this mixture.", name, missing,
         )
     for klass, per_family in sorted(manifest.families.items()):
-        for family, counts in sorted(per_family.items()):
-            row = FamilyRow(**counts)
+        for family, row in sorted(per_family.items()):
             if row.shortfall:
                 logger.warning(
                     "%-22s family %-28s short %7d of its share %d (%d available, "

@@ -55,11 +55,29 @@ class FamilyRow:
 
     available: int
     share: int
-    planned: int
+    #: None on a manifest built before the column existed, which leaves it
+    #: out of the row again on the way back, so its digest does not move.
+    planned: int | None
     #: Copies included; ``repeats`` is how many of them are copies.
     written: int
     repeats: int
     shortfall: int
+
+    def as_dict(self) -> dict[str, int]:
+        row = asdict(self)
+        if self.planned is None:
+            del row["planned"]
+        return row
+
+    @classmethod
+    def from_dict(cls, values: dict) -> FamilyRow:
+        planned = values.get("planned")
+        return cls(
+            available=int(values["available"]), share=int(values["share"]),
+            planned=None if planned is None else int(planned),
+            written=int(values["written"]), repeats=int(values["repeats"]),
+            shortfall=int(values["shortfall"]),
+        )
 
 
 def _optional_float(value) -> float | None:
@@ -92,6 +110,13 @@ def _sources(values: list) -> tuple[SourceShard, ...]:
 
 def _class_counts(values: dict) -> dict[str, ClassCounts]:
     return {name: ClassCounts(**_int_map(counts)) for name, counts in values.items()}
+
+
+def _family_rows(values: dict) -> dict[str, dict[str, FamilyRow]]:
+    return {
+        klass: {family: FamilyRow.from_dict(row) for family, row in rows.items()}
+        for klass, rows in values.items()
+    }
 
 
 #: Field metadata: how ``from_dict`` reads the field's JSON value back.
@@ -223,11 +248,9 @@ class CorpusManifest:
     holdout_unit: HoldoutUnit = field(
         default=HoldoutUnit.TEXT, metadata=_gen1_implied(HoldoutUnit),
     )
-    #: ``class -> family ->`` a :class:`FamilyRow`'s fields. Stored as plain
-    #: numbers rather than rows: a manifest built before ``planned`` existed
-    #: lacks it, and reading one in as a row would change its digest.
-    families: dict[str, dict[str, dict[str, int]]] = field(
-        default_factory=dict, metadata=_gen1_implied(_doubly_nested_int_map),
+    #: ``class -> family -> FamilyRow``.
+    families: dict[str, dict[str, FamilyRow]] = field(
+        default_factory=dict, metadata=_gen1_implied(_family_rows),
     )
     #: ``class -> family -> {outcome signature: records written}``.
     signatures: dict[str, dict[str, dict[str, int]]] = field(
@@ -295,8 +318,9 @@ class CorpusManifest:
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["sources"] = [asdict(shard) for shard in self.sources]
-        data["per_class"] = {
-            name: asdict(counts) for name, counts in self.per_class.items()
+        data["families"] = {
+            klass: {family: row.as_dict() for family, row in rows.items()}
+            for klass, rows in self.families.items()
         }
         for name, default in _GEN1_DEFAULTS.items():
             if getattr(self, name) == default:

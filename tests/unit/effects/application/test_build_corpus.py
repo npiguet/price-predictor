@@ -1389,10 +1389,12 @@ def test_the_manifest_records_families_policy_and_the_flags(tmp_path, shared_cor
     assert manifest.game_disjoint_target is None
     effect = manifest.families["resolution-effect"]
     assert all(
-        set(row) == {"available", "share", "planned", "written", "repeats", "shortfall"}
+        set(row.as_dict()) == {
+            "available", "share", "planned", "written", "repeats", "shortfall",
+        }
         for row in effect.values()
     )
-    written = sum(row["written"] for row in effect.values())
+    written = sum(row.written for row in effect.values())
     assert written == manifest.per_class["resolution-effect"].kept
     assert manifest.signatures["resolution-effect"]
     assert manifest.policy_counts["resolution-effect"]["on_policy"] == written
@@ -1420,11 +1422,11 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
     # half's share; its two records can supply at most 8 with four copies
     # each, and the what-if half is planned the 14 left over.
     families = manifest.families["playability-legality"]
-    assert families["real:none"]["written"] == 8
-    assert families["real:none"]["repeats"] == 6
-    assert families["real:none"]["shortfall"] == 3
+    assert families["real:none"].written == 8
+    assert families["real:none"].repeats == 6
+    assert families["real:none"].shortfall == 3
     # Records with no acting text are sampled by hash rate: 14 in expectation.
-    what_if = families["what-if:none"]["written"]
+    what_if = families["what-if:none"].written
     assert 8 <= what_if <= 20
     assert manifest.legality_counts["blockers"] == {"real": 8, "what-if": what_if}
 
