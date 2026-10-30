@@ -769,8 +769,8 @@ added.
   trains every output.
 - Under `--rule-mask soft`, every copy trains every output. Outputs other than those of a
   rule an added copy was drawn for weigh n / d on each copy.
-- Under both, the outputs of every rule an added copy of the record was drawn for weigh
-  n / d on each copy of that record.
+- Under both, the outputs of every rule an added copy of the record was drawn for train at
+  full weight on each copy of that record.
 - A gen-2 lethality copy trains every output at full weight.
 
 ## 13.2 One loss scale

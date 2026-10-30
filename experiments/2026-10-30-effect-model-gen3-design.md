@@ -714,10 +714,19 @@ minimal pair.
 
 **The mask removes the bias in the labels, not in the boards.** The trunk still reads the boards a
 rule's copies bring, such as many infect boards when infect is rebalanced. That skews what the
-model reads, not what it is told the answer is, and training on varied boards limits it. The
-rule's own outputs still need an importance weight: on every copy of a record, the record's natural
-share divided by the number of copies drawn, as the calibration constraint of the [gen-4
-record](XXXX-XX-XX-effect-model-gen4-design.md) sets out.
+model reads, not what it is told the answer is, and training on varied boards limits it.
+
+**The rule's own outputs train at full weight on every copy, so a rebalanced rule counts more in
+training than its natural share.** The model then learns too high a base rate for a rebalanced
+rule's outcome. Gen-3 accepts that shift, as gen-2 accepted it for the lethality copies. Checkpoints
+are judged by probes and rule tests that rank outcomes, and a shifted base rate leaves a ranking
+unchanged. Calibration stays a reported number.
+
+**An importance weight on the rule's outputs is not taken.** The calibration constraint of the
+[gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md) weighs every copy of a record by its natural
+share divided by the number of copies drawn. A record drawn d times at that weight adds up to its
+natural weight. The rule's labels would then count exactly as often as without rebalancing, and
+the extra copies would only repeat the same boards at a lower weight.
 
 **A soft mask replaces the hard one if the hard mask is shown to cost the other outputs.** Under
 the soft mask, a record drawn k times keeps its other outputs at weight 1/k on each copy. Its
