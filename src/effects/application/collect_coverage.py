@@ -132,7 +132,7 @@ class _ShardCounter:
         from effects.infrastructure.shard_io import iter_shards
 
         fresh = [
-            shard for shard in iter_shards(Path(records_dir))
+            shard for shard in iter_shards(records_dir)
             if shard not in self._counted
         ]
         for part in run_parallel(
@@ -278,7 +278,7 @@ def play_rounds(
     config: CollectCoverageConfig,
 ) -> bool:
     """Play rounds until every awaited unit is done. True when Ctrl-C ended them."""
-    decks_file = Path(config.effect_records) / "coverage-decks.txt"
+    decks_file = config.effect_records / "coverage-decks.txt"
     rng = random.Random(config.seed)
     round_number = 0
     while not is_complete(rounds.awaited, rounds.target):
@@ -402,7 +402,7 @@ def run(config: CollectCoverageConfig) -> int:
         len(coverage), len(held_out), len(non_deck), config.target_records,
     )
 
-    records_dir = Path(config.effect_records)
+    records_dir = config.effect_records
     counter = CoverageCounter()
     seeded = counter.update(coverage, records_dir)
     logger.info(
@@ -449,7 +449,7 @@ def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
 
 
 def count_text_shard(
-    shard: Path, *, roots: dict[str, str], held_out: HeldOutCards,
+    shard: Path, *, roots: dict[str, Path], held_out: HeldOutCards,
 ) -> dict[str, set[str]]:
     """``held-out text -> the game ids it resolved in``, over one shard.
 
@@ -483,7 +483,7 @@ class TextCoverageCounter(_ShardCounter):
     """
 
     def __init__(
-        self, roots: dict[str, str], held_out: HeldOutCards,
+        self, roots: dict[str, Path], held_out: HeldOutCards,
         progress_every: int = PROGRESS_EVERY_SHARDS,
     ) -> None:
         super().__init__(progress_every)
@@ -638,9 +638,9 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     verdicts = consult_castability(sorted(present))
     coverage = _text_coverage(carriers, verdicts)
     floor = config.min_text_games
-    records_dir = Path(config.effect_records)
+    records_dir = config.effect_records
     counter = TextCoverageCounter(
-        config.source_trees.root_paths(), trees.holdout(config.holdout),
+        config.source_trees.sidecar_roots(), trees.holdout(config.holdout),
     )
     counter.update(coverage, records_dir)
     logger.info(

@@ -36,7 +36,7 @@ class WritePlan:
     """What the write pass applies, decided once in the main process."""
 
     #: One part per source shard goes here, for ``build()`` to repack.
-    parts_dirs: dict[Stratum, str]
+    parts_dirs: dict[Stratum, Path]
     strata: GameStrata
     plans: dict[tuple[Cell, Keys], CopyPlan]
     keyless_plans: dict[Cell, CopyPlan]
@@ -217,7 +217,7 @@ class _ShardWriter:
 
         for stratum, records in self.outputs.items():
             if records:
-                write_shard(Path(self.plan.parts_dirs[stratum]) / name, records)
+                write_shard(self.plan.parts_dirs[stratum] / name, records)
         return self.out
 
 

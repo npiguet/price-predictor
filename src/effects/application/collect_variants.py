@@ -216,7 +216,7 @@ def generate_variants(
 
 def run(config: CollectVariantsConfig) -> int:
     """Generate variants, then play them through the records-only worker."""
-    if not Path(config.forge_cards_path).is_dir():
+    if not config.forge_cards_path.is_dir():
         logger.error(
             "No Forge card scripts at %s. This command reads the *source* "
             "scripts, not the converted ones.", config.forge_cards_path,
@@ -228,10 +228,10 @@ def run(config: CollectVariantsConfig) -> int:
     variants = _generate(config, budget)
     if not variants:
         return 1
-    code = _write_sidecars(Path(config.variant_scripts))
+    code = _write_sidecars(config.variant_scripts)
     if code != 0:
         return code
-    variants = _keep_loadable(variants, Path(config.variant_scripts))
+    variants = _keep_loadable(variants, config.variant_scripts)
     if not variants:
         return 1
     variants = _keep_unheld(config, variants)
@@ -244,7 +244,7 @@ def _size_budget(config: CollectVariantsConfig) -> int:
     """How many variant scripts this run may generate; says why when none."""
     from effects.infrastructure.shard_io import count_records
 
-    source_scripts = sum(1 for _ in Path(config.forge_cards_path).rglob("*.txt"))
+    source_scripts = sum(1 for _ in config.forge_cards_path.rglob("*.txt"))
     source = config.volume_source()
     existing = count_records(
         source,
@@ -374,7 +374,7 @@ def _play_and_check_growth(
     from effects.infrastructure.shard_io import count_records, count_shard_records, iter_shards
 
     # Equal weights: a fresh variant has no records to balance against.
-    decks_file = Path(config.effect_records) / "variant-decks.txt"
+    decks_file = config.effect_records / "variant-decks.txt"
     decks = build_coverage_decks(
         {variant.name: 1.0 for variant in variants},
         {variant.name: variant.deck_candidate() for variant in variants},
@@ -383,7 +383,7 @@ def _play_and_check_growth(
     )
     with collector_supervisor(
         workers=config.workers, effect_records=config.effect_records,
-        caps=config.caps, variant_scripts=Path(config.variant_scripts),
+        caps=config.caps, variant_scripts=config.variant_scripts,
     ) as supervisor:
         # Listed rather than counted: a shard is never reopened, so what the
         # round wrote is exactly the shards it added.

@@ -59,9 +59,9 @@ logger = logging.getLogger(__name__)
 class ReadConfig:
     """How both passes read and judge a record; pickled into every worker."""
 
-    records_dir: str
+    records_dir: Path
     #: Roots rather than a ``SidecarCache``, which does not pickle.
-    sidecar_roots: dict[str, str]
+    sidecar_roots: dict[str, Path]
     #: ``--max-events-per-record``.
     max_events: int
     held_out: HeldOutCards
@@ -100,7 +100,7 @@ class WorkerContext:
     def records(self, shard: SourceShard) -> Iterator[EffectRecord]:
         from effects.infrastructure.shard_io import read_shard
 
-        return read_shard(shard.path(Path(self.read.records_dir)))
+        return read_shard(shard.path(self.read.records_dir))
 
     def refusal(self, record: EffectRecord) -> QualityDefect | None:
         """The one refusal rule both passes apply."""

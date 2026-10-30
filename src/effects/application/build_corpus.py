@@ -277,7 +277,7 @@ class Decisions:
         """What the write pass applies: these decisions, its parts in ``store``."""
         return WritePlan(
             parts_dirs={
-                stratum: str(store.parts_dir_for(stratum)) for stratum in OUTPUT_STRATA
+                stratum: store.parts_dir_for(stratum) for stratum in OUTPUT_STRATA
             },
             strata=self.strata,
             plans=self.selection.plans,
@@ -390,14 +390,14 @@ def build(config: BuildCorpusConfig) -> int:
     if config.verify:
         return _verify(config, store)
 
-    roots = config.source_trees.root_paths()
+    roots = config.source_trees.sidecar_roots()
     trees = _converted_trees(config, roots)
     held_out = _select_holdout(config, trees)
     surface = surface_of(config.vocab_path)
     _log_holdout(config, held_out, surface)
-    _refuse_mixed_generations(Path(config.records_dir))
+    _refuse_mixed_generations(config.records_dir)
     read = ReadConfig(
-        records_dir=str(config.records_dir), sidecar_roots=roots,
+        records_dir=config.records_dir, sidecar_roots=roots,
         max_events=config.max_events_per_record, held_out=held_out, seed=config.seed,
     )
     survey = _survey(config, read)
@@ -445,7 +445,7 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
     """``--verify``: the manifest's drift against the corpus on disk; writes nothing."""
     from effects.infrastructure.shard_io import list_shards
 
-    records_dir = Path(config.records_dir)
+    records_dir = config.records_dir
     manifest = store.load()
     added, removed, resized = manifest.drift(list_shards(records_dir))
     for label, names in (("added", added), ("removed", removed), ("resized", resized)):
@@ -462,7 +462,7 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
     return 0
 
 
-def _converted_trees(config: BuildCorpusConfig, roots: dict[str, str]) -> ConvertedTrees:
+def _converted_trees(config: BuildCorpusConfig, roots: dict[str, Path]) -> ConvertedTrees:
     """The converted trees, the variant tree among them when one is named.
 
     Read through this process's own cache over ``roots``, the one every
@@ -508,7 +508,7 @@ def _refuse_mixed_generations(records_dir: Path) -> None:
 def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
     """The parallel survey, its supply's legality cells folded into families."""
     survey = run_survey(
-        Path(config.records_dir),
+        config.records_dir,
         config=SurveyConfig(
             read=read, heap_cap=config.heap_cap, routing=config.routing,
             game_disjoint_keywords=tuple(

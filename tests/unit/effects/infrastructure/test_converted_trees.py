@@ -44,11 +44,7 @@ def test_each_folder_is_keyed_by_the_tree_its_name_names(tmp_path) -> None:
         SourceTree.VARIANT_SCRIPTS: tmp_path / "variants",
     }
     assert trees.cards_folder == tmp_path / "gen1-cardsfolder"
-    assert source.root_paths() == {
-        "tokenscripts": str(tmp_path / "tokenscripts"),
-        "cardsfolder": str(tmp_path / "gen1-cardsfolder"),
-        "variant-scripts": str(tmp_path / "variants"),
-    }
+    assert source.sidecar_roots() == trees.roots
 
 
 def test_without_a_card_tree_there_are_no_cards(tmp_path) -> None:
@@ -97,13 +93,13 @@ def test_the_variant_tree_is_the_last_folder_and_absent_when_unnamed(tmp_path) -
 
 def test_a_converted_reading_can_share_a_cache_already_built(tmp_path) -> None:
     source = SourceTrees.of((tmp_path / "cardsfolder",))
-    shared = process_sidecars(source.root_paths())
+    shared = process_sidecars(source.sidecar_roots())
     assert source.converted(sidecars=shared).sidecars is shared
     assert source.converted().sidecars is not shared
 
 
 def test_a_process_keeps_one_cache_per_roots(tmp_path) -> None:
-    roots = SourceTrees.of((tmp_path / "cardsfolder",)).root_paths()
+    roots = SourceTrees.of((tmp_path / "cardsfolder",)).sidecar_roots()
     assert process_sidecars(roots) is process_sidecars(dict(roots))
-    other = SourceTrees.of((tmp_path / "other-cardsfolder",)).root_paths()
+    other = SourceTrees.of((tmp_path / "other-cardsfolder",)).sidecar_roots()
     assert process_sidecars(other) is not process_sidecars(roots)

@@ -60,11 +60,6 @@ class SourceTrees:
         in (FR-063b), so ``output/gen1-cardsfolder`` serves ``cardsfolder/`` keys."""
         return sidecar_roots(self.cards_folders, self.variant_scripts)
 
-    def root_paths(self) -> dict[str, str]:
-        """:meth:`sidecar_roots` as plain strings, which is how a worker
-        process receives them (:func:`process_sidecars`)."""
-        return {str(tree): str(folder) for tree, folder in self.sidecar_roots().items()}
-
     def sidecar_cache(self) -> SidecarCache:
         """A fresh cache over these trees, for a caller that owns its tallies."""
         return SidecarCache(self.sidecar_roots())
@@ -75,21 +70,22 @@ class SourceTrees:
         return ConvertedTrees(self.sidecar_roots(), sidecars)
 
 
-def process_sidecars(roots: Mapping[str, str | Path]) -> SidecarCache:
+def process_sidecars(roots: Mapping[str, Path]) -> SidecarCache:
     """This process's sidecar cache over ``roots``, built once and kept.
 
-    For worker processes, which receive the roots rather than a cache (a cache
-    does not pickle) and read largely the same cards shard after shard. One
-    cache per process: a different ``roots`` replaces it.
+    For worker processes, which receive the roots (:meth:`SourceTrees.sidecar_roots`)
+    rather than a cache, which does not pickle, and read largely the same
+    cards shard after shard. One cache per process: a different ``roots``
+    replaces it.
     """
     return _process_sidecars(tuple(sorted(
-        (str(tree), str(folder)) for tree, folder in roots.items()
+        (str(tree), Path(folder)) for tree, folder in roots.items()
     )))
 
 
 @lru_cache(maxsize=1)
-def _process_sidecars(roots: tuple[tuple[str, str], ...]) -> SidecarCache:
-    return SidecarCache({tree: Path(folder) for tree, folder in roots})
+def _process_sidecars(roots: tuple[tuple[str, Path], ...]) -> SidecarCache:
+    return SidecarCache(dict(roots))
 
 
 @dataclass(frozen=True)

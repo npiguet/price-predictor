@@ -13,6 +13,7 @@ write pass will route to training alone.
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
@@ -82,7 +83,7 @@ def a_record(
     )
 
 
-def converted_tree(tmp_path, *keys: ProvenanceKey, text=None) -> dict[str, str]:
+def converted_tree(tmp_path, *keys: ProvenanceKey, text=None) -> dict[str, Path]:
     """A converted tree whose sidecars render one line for each of ``keys``.
 
     ``sidecar_roots`` for a survey config. The survey refuses a resolution
@@ -114,7 +115,7 @@ def converted_tree(tmp_path, *keys: ProvenanceKey, text=None) -> dict[str, str]:
             sidecar_path_for(path),
         )
     return {
-        tree: str(root / tree)
+        tree: root / tree
         for tree in {key.script_file.split("/", 1)[0] for key in keys}
     }
 
@@ -134,7 +135,7 @@ def a_config(
 ) -> SurveyConfig:
     return SurveyConfig(
         read=ReadConfig(
-            records_dir=str(records_dir), sidecar_roots=dict(sidecar_roots or {}),
+            records_dir=Path(records_dir), sidecar_roots=dict(sidecar_roots or {}),
             max_events=64,
             held_out=held_out or HeldOutCards(names=frozenset(), script_files=frozenset()),
             seed=42,
