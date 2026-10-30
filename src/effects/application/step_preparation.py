@@ -271,17 +271,17 @@ class StepPreparer:
         )
 
     def prepare_training_step(
-        self, plan, *, fields: tuple[FieldSpec, ...], rng: random.Random,
-        pin: bool = False,
+        self, records: Sequence[EffectRecord], *, fields: tuple[FieldSpec, ...],
+        rng: random.Random, pin: bool = False,
     ) -> tuple[DeviceStep, int]:
-        """One training step's host half, and how many counterfactual copies
-        it appended to the planned records (FR-063e).
+        """One training step's host half over its planned ``records``, and how
+        many counterfactual copies it appended to them (FR-063e).
 
         ``pin`` is for the training process only: page-locked memory does not
         survive a trip between processes.
         """
         batcher = self.training_batcher(rng)
-        records = plan.records
+        records = list(records)
         targets = [derive_targets(record) for record in records]
         copies = []
         if self.config.lethality_copies > 0:
@@ -293,10 +293,11 @@ class StepPreparer:
             step.pin()
         return step, len(copies)
 
-    def prepare_scoring_step(self, plan, fields: tuple[FieldSpec, ...]) -> DeviceStep:
+    def prepare_scoring_step(
+        self, records: Sequence[EffectRecord], fields: tuple[FieldSpec, ...],
+    ) -> DeviceStep:
         """One validation batch's host half: no augmentation, no copies, and
         only the shipped heads' targets."""
-        records = plan.records
         return self._build(
             records, [derive_targets(record) for record in records], fields,
             self.scoring_batcher(), heads=frozenset(),
@@ -486,7 +487,7 @@ class StepPreparer:
                 buckets[counted.bucket] += 1
                 families[counted.family] += 1
             step, copies = self.prepare_training_step(
-                plan, fields=task.fields, pin=pin,
+                plan.records, fields=task.fields, pin=pin,
                 rng=step_rng(self.seed, task.epoch, task.position, index),
             )
             if copies:
