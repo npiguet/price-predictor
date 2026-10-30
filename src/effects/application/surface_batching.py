@@ -30,7 +30,7 @@ from effects.domain.effect_head_input import (
     SurfaceBuilder,
     feature_widths,
 )
-from effects.domain.provenance import SidecarLookup
+from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import acting_keys
 from effects.domain.surface_collation import TrunkInputs, collate_surfaces
 
@@ -144,7 +144,7 @@ class EncodedBatch:
     """
 
     texts: list[str]
-    lines: dict[str, object]
+    lines: Mapping[str, SidecarLine | None]
     matrix: torch.Tensor | None
 
 
@@ -157,8 +157,9 @@ class PreparedBatch:
     the step would carry no gradient.
     """
 
-    #: Each unique ability text to its sidecar line.
-    texts: dict[str, object]
+    #: Each unique ability text to its sidecar line; None for a text no line
+    #: carries.
+    texts: dict[str, SidecarLine | None]
     #: The same texts staged for whatever produces their ``e``.
     staged: StagedTexts
     surfaces: list
@@ -330,7 +331,7 @@ class SurfaceBatcher:
         self.rng = rng or random.Random(0)
         #: ``key -> (text, line)`` for :meth:`override_text` keys, apart from
         #: the resolver's memo because a copy's text belongs to its step alone.
-        self._overrides: dict[object, tuple[str, object]] = {}
+        self._overrides: dict[ProvenanceKey, tuple[str, SidecarLine | None]] = {}
 
     @property
     def sidecars(self) -> SidecarLookup:
@@ -340,7 +341,7 @@ class SurfaceBatcher:
     def surface(self) -> Surface:
         return self.stager.surface
 
-    def _resolve(self, key) -> tuple[str | None, object]:
+    def _resolve(self, key) -> tuple[str | None, SidecarLine | None]:
         """``(text, line)`` for one key: its override, else the join."""
         override = self._overrides.get(key)
         return override if override is not None else self.resolver.resolve(key)
@@ -382,11 +383,11 @@ class SurfaceBatcher:
             else:
                 self._overrides[key] = previous
 
-    def batch_texts(self, records) -> dict[str, object]:
+    def batch_texts(self, records) -> dict[str, SidecarLine | None]:
         """Every ability text this batch's surfaces reference, to its line:
         the acting line of each record and every ability on every entity, since
         a text left out reaches the model as a zero vector."""
-        texts: dict[str, object] = {}
+        texts: dict[str, SidecarLine | None] = {}
 
         def note(key) -> str | None:
             text, line = self._resolve(key)
@@ -415,14 +416,14 @@ class SurfaceBatcher:
         overridden = [key for key, (known, _) in self._overrides.items() if known == text]
         return self.resolver.keys_of(text) + overridden
 
-    def stage(self, texts: Mapping[str, object]) -> StagedTexts:
+    def stage(self, texts: Mapping[str, SidecarLine | None]) -> StagedTexts:
         return self.stager.stage(
             texts, masks=self.spec.masks, e_dim=self.spec.e_dim, rng=self.rng,
             keys_of=self._keys_of,
         )
 
     def encode_texts(
-        self, texts: dict[str, object], encoder: AbilityEncoder,
+        self, texts: Mapping[str, SidecarLine | None], encoder: AbilityEncoder,
     ) -> tuple[dict[str, int], torch.Tensor | None]:
         """Encode each unique ability text once: ``(row_of_text, matrix)``."""
         staged = self.stage(texts)

@@ -41,7 +41,7 @@ from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.sampling import sampling_class
 from effects.domain.surface_collation import entity_index, per_entity_targets
 from effects.domain.tokenizer_files import TokenizerFiles
-from effects.infrastructure.effect_model_store import load_weights
+from effects.infrastructure.effect_model_store import EffectCheckpoint, load_weights
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import tokenizer_for
 from effects.infrastructure.torch_device import default_device
@@ -112,7 +112,7 @@ class LoadedModel:
     record set gets a :class:`Runnable` with a batcher and generator of its
     own."""
 
-    checkpoint: object
+    checkpoint: EffectCheckpoint
     encoder: AbilityEncoder
     model: EffectModel
     tokenizer: AbilityTokenizer

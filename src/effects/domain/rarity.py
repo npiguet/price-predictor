@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 #: Labels in ascending order of games. Each is a closed range; the last is open.
 RARITY_BUCKETS: tuple[str, ...] = ("1", "2-4", "5-19", "20+")
@@ -75,9 +75,24 @@ class TextGames:
     def bucket(self, text: str) -> str:
         return rarity_bucket(self.games(text))
 
-    def coverage(self) -> tuple[int, int] | None:
-        """``(named, distinct)``: how many of the records' distinct texts the
-        table names; None without a table, which has nothing to report."""
+    def coverage(self) -> RarityCoverage | None:
+        """How many of the records' distinct texts the table names; None
+        without a table, which has nothing to report."""
         if self.table is None:
             return None
-        return sum(1 for text in self.observed if text in self.table), len(self.observed)
+        return RarityCoverage(
+            sum(1 for text in self.observed if text in self.table), len(self.observed),
+        )
+
+
+class RarityCoverage(NamedTuple):
+    """How much of a set of records' distinct ability texts a rarity table
+    names: a table matching nothing otherwise looks exactly like a healthy one."""
+
+    named: int
+    distinct: int
+
+    @property
+    def percent(self) -> float:
+        """``named`` as a percentage of ``distinct``; 0 for no text at all."""
+        return 100.0 * self.named / self.distinct if self.distinct else 0.0

@@ -42,7 +42,7 @@ from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.provenance import SidecarLine
-from effects.domain.rarity import TextGames
+from effects.domain.rarity import RarityCoverage, TextGames
 from effects.domain.records import EffectRecord
 from effects.domain.rule_families import rule_family
 from effects.domain.sampling import (
@@ -134,9 +134,9 @@ class ShardOpened:
     """The first message of a shard: its split, before any step."""
 
     trainable: int
-    #: ``(found, distinct)``: how many of the trainable records' distinct
-    #: ability texts the rarity table names; None without a table.
-    rarity_coverage: tuple[int, int] | None
+    #: How many of the trainable records' distinct ability texts the rarity
+    #: table names; None without a table.
+    rarity_coverage: RarityCoverage | None
 
 
 @dataclass

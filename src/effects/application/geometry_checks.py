@@ -41,6 +41,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Cached cards with a win rate the decodability battery needs before it fits
+#: a probe: fewer, and a held-out R² measures the split rather than ``e``.
+MIN_DECODABILITY_CARDS = 50
+
 
 @dataclass(frozen=True, slots=True)
 class Resolution:
@@ -394,7 +398,7 @@ def check_decodability(
     canonical = {name.casefold(): name for name in load_labels(Path(win_rates_path))}
     labelled = [canonical.get(name.casefold(), name) for name in shared]
     with_rate = sum(name.casefold() in canonical for name in shared)
-    if with_rate < 50:
+    if with_rate < MIN_DECODABILITY_CARDS:
         return CheckResult(
             CheckName.DECODABILITY, CheckStatus.SKIPPED,
             f"only {with_rate} of {len(shared)} cached cards have a win rate, "

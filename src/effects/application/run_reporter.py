@@ -161,13 +161,12 @@ class RunReporter:
         ):
             return
         self._rarity_reported = True
-        found, distinct = opened.rarity_coverage
-        share = 100.0 * found / distinct if distinct else 0.0
-        report = logger.info if found else logger.warning
+        coverage = opened.rarity_coverage
+        report = logger.info if coverage.named else logger.warning
         report(
             "Rarity table names %d of this shard's %d distinct ability "
             "text(s) (%.1f%%); the rest weigh by this shard's own game count.",
-            found, distinct, share,
+            coverage.named, coverage.distinct, coverage.percent,
         )
 
     def shard_closed(self, closed: ShardClosed) -> None:

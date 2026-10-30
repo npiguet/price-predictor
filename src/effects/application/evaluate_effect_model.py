@@ -99,7 +99,7 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
         )
         for stratum, rows in strata.items()
     }
-    games_by_text: dict[str, float] = dict(manifest.rarity)
+    games_by_text: dict[str, int] = dict(manifest.rarity)
     return breakdown_checks(
         scored, games_by_text=games_by_text,
         withheld_keyword=context.main.provenance.withheld_keyword,

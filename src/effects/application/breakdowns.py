@@ -127,7 +127,7 @@ def overall(results: Iterable[RecordResult]) -> GroupResult:
 
 
 def by_rarity_bucket(
-    results: Iterable[RecordResult], games_by_text: Mapping[str, float],
+    results: Iterable[RecordResult], games_by_text: Mapping[str, int],
 ) -> dict[str, GroupResult]:
     """Grouped by the rarity bucket of each record's text (FR-064), buckets in
     ascending order of games.
@@ -204,7 +204,7 @@ def keyword_slice(
 def breakdown_checks(
     scored: dict[str, list],
     *,
-    games_by_text: dict[str, float],
+    games_by_text: Mapping[str, int],
     withheld_keyword: str | None,
 ) -> list[CheckResult]:
     """Every breakdown of the scored strata (stratum -> rows), one report line
@@ -238,7 +238,7 @@ def breakdown_checks(
     return checks
 
 
-def _card_disjoint_checks(card: list, games_by_text: dict[str, float]) -> list[CheckResult]:
+def _card_disjoint_checks(card: list, games_by_text: Mapping[str, int]) -> list[CheckResult]:
     """The card-disjoint stratum overall, by rarity, by family, and over families."""
     if not card:
         return [CheckResult(
