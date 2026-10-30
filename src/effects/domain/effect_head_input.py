@@ -31,7 +31,14 @@ from effects.domain.records import (
     RecordKind,
     ResolutionOutcome,
 )
-from effects.domain.state_snapshot import COLORS, EntityState, PlayerState, normalize_counter_type
+from effects.domain.state_snapshot import (
+    COLORS,
+    CombatSubstep,
+    EntityState,
+    PlayerState,
+    Zone,
+    normalize_counter_type,
+)
 
 
 class SlotKind(IntEnum):
@@ -42,19 +49,17 @@ class SlotKind(IntEnum):
     ABILITY = 4
 
 
-# Each vocabulary's one-hot ends in an "other" slot. Never edit these tuples:
-# a checkpoint trained on them reads them bit for bit; a new spelling goes in a
-# new InputLayout instead.
+# Each vocabulary's one-hot ends in an "other" slot. Never edit these tuples,
+# nor the enums two of them are read off: a checkpoint trained on them reads
+# them bit for bit; a new spelling goes in a new InputLayout instead.
 
 PHASES: tuple[str, ...] = (
     "untap", "upkeep", "draw", "main1", "begin_combat", "declare_attackers",
     "declare_blockers", "first_strike_damage", "combat_damage", "end_combat",
     "main2", "end_of_turn", "cleanup",
 )
-COMBAT_SUBSTEPS: tuple[str, ...] = ("first_strike", "regular")
-ZONES: tuple[str, ...] = (
-    "battlefield", "stack", "hand", "graveyard", "library", "exile", "command",
-)
+COMBAT_SUBSTEPS: tuple[str, ...] = tuple(substep.value for substep in CombatSubstep)
+ZONES: tuple[str, ...] = tuple(zone.value for zone in Zone)
 CARD_TYPES: tuple[str, ...] = (
     "artifact", "battle", "creature", "enchantment", "instant", "land",
     "planeswalker", "sorcery", "kindred", "emblem",

@@ -9,9 +9,17 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-#: A signed delta's direction classes, in the head's column order; a target's
-#: sign plus one is its class.
-DIRECTIONS: tuple[str, ...] = ("negative", "zero", "positive")
+
+class Direction(StrEnum):
+    """A signed delta's direction classes, in the head's column order; a
+    target's sign plus one is its class."""
+
+    NEGATIVE = "negative"
+    ZERO = "zero"
+    POSITIVE = "positive"
+
+
+DIRECTIONS: tuple[str, ...] = tuple(direction.value for direction in Direction)
 #: A signed delta's columns: a logit per direction, then the magnitude's log
 #: rate under the count loss.
 SIGNED_DIRECTIONS = slice(0, len(DIRECTIONS))

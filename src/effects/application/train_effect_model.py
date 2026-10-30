@@ -139,7 +139,7 @@ class TrainEffectModelConfig:
         "Checkpoint directory (default: models/effects/effect-model/, under "
         "{variant}/ for a baseline)"
     )})
-    variant: str = Baseline.FULL
+    variant: Baseline = Baseline.FULL
     e_dim: int = 64
     e_noise: float = field(default=0.1, metadata={"help": (
         "Noise ratio on e relative to e's running covariance (FR-056), ramped "

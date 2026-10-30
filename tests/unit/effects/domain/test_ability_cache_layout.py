@@ -20,6 +20,7 @@ from effects.domain.ability_cache_layout import (
     pooled_card_vector,
     validate_alignment,
 )
+from effects.domain.baselines import Baseline
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 
 _SCRIPT = "cardsfolder/s/serra_angel.txt"
@@ -52,7 +53,7 @@ class TestCachePaths:
 
     def test_a_variant_writes_beside_the_shipping_cache_not_over_it(self):
         shipping = cache_path_for(_SCRIPT)
-        variant = cache_path_for(_SCRIPT, variant="no-state")
+        variant = cache_path_for(_SCRIPT, variant=Baseline.NO_STATE)
         assert variant != shipping
         assert variant.name == "serra_angel.no-state.npz"
         assert variant.parent == shipping.parent

@@ -132,7 +132,7 @@ class CachedVectors:
 
 
 def cached_vectors(
-    index: SidecarIndex, abilities_root: Path, *, variant: str = Baseline.FULL,
+    index: SidecarIndex, abilities_root: Path, *, variant: Baseline = Baseline.FULL,
 ) -> CachedVectors:
     """One variant's cache over sidecars already read. Only a ``cardsfolder``
     source contributes a pooled per-card vector."""
@@ -178,7 +178,9 @@ def gate_three_verdict(geometry: CacheGeometry) -> CheckResult:
     )
 
 
-def _uncached(check: CheckName, missing: str, *, variant: str | None = None) -> CheckResult:
+def _uncached(
+    check: CheckName, missing: str, *, variant: Baseline | None = None,
+) -> CheckResult:
     """The skip a check reading the ability cache reports when there is none
     to read, naming the command that writes it."""
     command = "encode-abilities" + (f" --variant {variant}" if variant else "")

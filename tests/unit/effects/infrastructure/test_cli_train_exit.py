@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from effects.domain.baselines import Baseline
+
 
 class TestEmptyHoldoutIsAnExitCodeNotATraceback:
     """An empty card-disjoint stratum is a corpus problem, not a crash.
@@ -26,7 +28,7 @@ class TestEmptyHoldoutIsAnExitCodeNotATraceback:
         monkeypatch.setattr(train_effect_model, "run", refuse)
         monkeypatch.setattr(cli, "config_from_args", lambda cls, args: None)
         args = argparse.Namespace(
-            variant="full", corpus="x",
+            variant=Baseline.FULL, corpus="x",
             encoder_d_model=256, encoder_layers=4,
         )
 

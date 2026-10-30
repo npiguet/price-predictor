@@ -35,7 +35,7 @@ class AbilityCacheStore:
     """The ``.npz`` cache for one variant."""
 
     def __init__(
-        self, root: Path = DEFAULT_CACHE_ROOT, *, variant: str = Baseline.FULL,
+        self, root: Path = DEFAULT_CACHE_ROOT, *, variant: Baseline = Baseline.FULL,
     ) -> None:
         self.root = Path(root)
         self.variant = variant
@@ -135,7 +135,7 @@ class SidecarIndex:
         self.sources: tuple[IndexedSource, ...] = tuple(sources)
 
     def matrices(
-        self, abilities_root: Path, *, variant: str = Baseline.FULL,
+        self, abilities_root: Path, *, variant: Baseline = Baseline.FULL,
     ) -> Iterator[tuple[IndexedSource, np.ndarray]]:
         """Each source this variant's cache holds rows for, beside them, in
         tree and path order; a cache whose rows do not match its sidecar is

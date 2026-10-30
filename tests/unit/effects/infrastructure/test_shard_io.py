@@ -326,7 +326,7 @@ class TestReadRecordsMatching:
         ]
         got = [
             r.record_id for r in read_records_matching(
-                directory, game_ids=games, kinds={"combat"},
+                directory, game_ids=games, kinds={RecordKind.COMBAT},
             )
         ]
         assert got == expected and expected
@@ -349,7 +349,7 @@ class TestReadRecordsMatching:
         path = tmp_path / "x.jsonl"
         path.write_text(json.dumps(reordered) + "\n", encoding="utf-8")
         got = list(read_records_matching(
-            tmp_path, game_ids={record.game_id}, kinds={"playability"},
+            tmp_path, game_ids={record.game_id}, kinds={RecordKind.PLAYABILITY},
         ))
         assert [r.record_id for r in got] == [record.record_id]
 

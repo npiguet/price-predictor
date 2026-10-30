@@ -469,7 +469,7 @@ def count_text_shard(
 
     sidecars = process_sidecars(roots)
     games: dict[str, set[str]] = defaultdict(set)
-    for record in iter_shard_matching(shard, kinds={RecordKind.RESOLUTION.value}):
+    for record in iter_shard_matching(shard, kinds={RecordKind.RESOLUTION}):
         if record_refusal(record, sidecars.resolution_of) is not None:
             continue
         text = held_out.text_acted_through(acting_keys(record), sidecars.script_text)

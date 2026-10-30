@@ -280,7 +280,8 @@ def holdout_rule(args: argparse.Namespace) -> HoldoutRule:
 
 def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = None) -> None:
     parser.add_argument(
-        "--variant", choices=BASELINES, default=Baseline.FULL.value, help=help_text,
+        "--variant", type=Baseline, choices=BASELINES, default=Baseline.FULL,
+        help=help_text,
     )
 
 

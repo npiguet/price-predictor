@@ -47,6 +47,10 @@ BLOCKED_PARAMS = frozenset({
 #: Keywords on the source that change what damage does.
 SOURCE_EXCLUSIONS = frozenset({"deathtouch", "wither", "infect", "lifelink"})
 
+#: The counter a creature spends instead of being dealt damage or destroyed,
+#: so a hit on one carrying it obeys no lethality rule.
+SHIELD_COUNTER = "SHIELD"
+
 _INT = re.compile(r"^-?\d+$")
 _DIED = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
 _STAYED = ZONE_OUTCOMES.index(ZoneOutcome.STAYED)
@@ -270,7 +274,7 @@ def _creature_hit(entity: EntityState | None, fields: dict, found: _Amount,
     if set(fields) - rules.hit_fields:
         return _Hit.REFUSED
     if ("indestructible" in keywords_of(entity) or entity.id in attached
-            or any(normalize_counter_type(name) == "SHIELD" for name in entity.counters)):
+            or any(normalize_counter_type(name) == SHIELD_COUNTER for name in entity.counters)):
         return _Hit.REFUSED
     zone = fields.get(HeadField.ZONE_OUTCOME, _STAYED)
     if zone not in (_STAYED, _DIED) or (zone == _DIED) != lethal(found.kind, found.amount, entity):

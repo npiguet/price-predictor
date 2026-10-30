@@ -137,7 +137,9 @@ def _sidecar_index(context: EvaluationContext):
     return SidecarIndex(context.config.cards_folders, surface=context.tokenizer_files.surface)
 
 
-def _load_cache(context: EvaluationContext, sidecars, variant: str = "full"):
+def _load_cache(
+    context: EvaluationContext, sidecars, variant: Baseline = Baseline.FULL,
+):
     """One variant's cache: a vector per unique text on the checkpoint's surface."""
     root = context.config.abilities_root
     logger.info("loading the %s ability cache under %s", variant, root)

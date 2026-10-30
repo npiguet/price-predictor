@@ -44,8 +44,30 @@ class ZoneOutcome(StrEnum):
 
 #: The zone outcomes in the head's column order, which a target stores as an index.
 ZONE_OUTCOMES: tuple[ZoneOutcome, ...] = tuple(ZoneOutcome)
-DURATIONS: tuple[str, ...] = ("instant", "end_of_turn", "permanent")
-LIBRARY_EVENTS: tuple[str, ...] = ("scry", "surveil", "tutor", "reveal", "reorder")
+
+
+class Duration(StrEnum):
+    """How long a lasting change lasts, in the record's spelling (FR-077)."""
+
+    INSTANT = "instant"
+    END_OF_TURN = "end_of_turn"
+    PERMANENT = "permanent"
+
+
+class LibraryEvent(StrEnum):
+    """What a player's library underwent, the library-events field's members."""
+
+    SCRY = "scry"
+    SURVEIL = "surveil"
+    TUTOR = "tutor"
+    REVEAL = "reveal"
+    REORDER = "reorder"
+
+
+#: The durations and library events in the head's column order. Append to
+#: the enums, never reorder: a target stores a position.
+DURATIONS: tuple[str, ...] = tuple(duration.value for duration in Duration)
+LIBRARY_EVENTS: tuple[str, ...] = tuple(event.value for event in LibraryEvent)
 
 
 #: Classes whose records list every outcome event of what they describe, so an
@@ -163,6 +185,11 @@ class FieldSpec:
         return self.silent
 
 
+#: The counter type named for the generated field every counter type the
+#: layout does not list lands in, :attr:`HeadField.COUNTERS_DELTA_OTHER`.
+OTHER_COUNTER = "OTHER"
+
+
 def counter_field(counter_type: str) -> str:
     """The generated per-entity field one counter type's changes land in."""
     return f"counters_delta_{counter_type.lower()}"
@@ -182,7 +209,7 @@ def _counter_fields() -> tuple[FieldSpec, ...]:
             group=FieldGroup.SPARSE,
             silent=0.0,
         )
-        for name in (*COUNTER_TYPES, "OTHER")
+        for name in (*COUNTER_TYPES, OTHER_COUNTER)
     )
 
 

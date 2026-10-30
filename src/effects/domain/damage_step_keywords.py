@@ -20,10 +20,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from effects.domain.effect_head_layout import HeadField, ZoneOutcome
+from effects.domain.effect_head_layout import HeadField, ZoneOutcome, counter_field
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import RecordKind
-from effects.domain.state_snapshot import EntityState, StateSnapshot
+from effects.domain.state_snapshot import CombatSubstep, EntityState, StateSnapshot
 
 
 class Subject(StrEnum):
@@ -136,6 +136,8 @@ def _deals_damage(participant: CombatParticipant) -> bool:
 
 _STRIKES_FIRST = frozenset({"first_strike", "double_strike"})
 _COUNTER_DAMAGE = frozenset({"wither", "infect"})
+#: Where wither's and infect's damage to a creature lands.
+_M1M1_COUNTERS = counter_field("M1M1")
 
 
 def _lone_opponent(participant: CombatParticipant) -> EntityState | None:
@@ -196,7 +198,7 @@ def _strikes_first_because_of(keyword: str) -> Applies:
         participant: CombatParticipant, keywords_of: KeywordsOf,
     ) -> bool:
         return (
-            participant.combat_substep == "first_strike"
+            participant.combat_substep == CombatSubstep.FIRST_STRIKE
             and _deals_damage(participant)
             and not (others & keywords_of(participant.carrier))
         )
@@ -438,7 +440,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         qualifies_when="the carrier deals combat damage to a creature",
         effects=(
             KeywordEffect(
-                "counters_delta_m1m1", Subject.OPPONENT, direction=1,
+                _M1M1_COUNTERS, Subject.OPPONENT, direction=1,
                 applies=_damages_a_creature,
             ),
             KeywordEffect(
@@ -452,7 +454,7 @@ DAMAGE_STEP_KEYWORDS: tuple[DamageStepKeyword, ...] = (
         qualifies_when="the carrier deals combat damage to a creature or player",
         effects=(
             KeywordEffect(
-                "counters_delta_m1m1", Subject.OPPONENT, direction=1,
+                _M1M1_COUNTERS, Subject.OPPONENT, direction=1,
                 applies=_damages_a_creature,
             ),
             KeywordEffect(

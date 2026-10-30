@@ -31,6 +31,7 @@ from effects.application.geometry_checks import (
     nearest_neighbours,
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY
+from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import CheckStatus
 from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
@@ -206,10 +207,10 @@ class TestLoadingTheCache:
         _write_source(
             cards, abilities, "Serra Angel", "s/serra_angel",
             ["Flying", "Vigilance"], [[9.0, 9.0], [9.0, 9.0]],
-            variant="no-state", prose=["flying", "vigilance"],
+            variant=Baseline.NO_STATE, prose=["flying", "vigilance"],
         )
         variant = read_cache(
-            abilities, cards, variant="no-state", surface="script",
+            abilities, cards, variant=Baseline.NO_STATE, surface="script",
         )
         assert variant.by_text["Flying"].tolist() == [9.0, 9.0]
         np.testing.assert_allclose(
@@ -227,7 +228,7 @@ class TestLoadingTheCache:
         _write_source(
             cards, abilities, "Serra Angel", "s/serra_angel",
             ["Flying", "Vigilance"], [[9.0, 9.0], [9.0, 9.0]],
-            variant="no-state", prose=["flying", "vigilance"],
+            variant=Baseline.NO_STATE, prose=["flying", "vigilance"],
         )
         expected = {
             variant: read_cache(abilities, cards, surface="script", variant=variant)

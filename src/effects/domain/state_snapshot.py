@@ -51,6 +51,17 @@ class Zone(StrEnum):
     COMMAND = "command"
 
 
+class CombatSubstep(StrEnum):
+    """Which combat-damage step a ``combat`` record's snapshot was taken in.
+
+    The snapshot keeps the string the record carries; the enum is what code
+    compares it against.
+    """
+
+    FIRST_STRIKE = "first_strike"
+    REGULAR = "regular"
+
+
 @dataclass(frozen=True, slots=True)
 class GlobalState:
     """Turn structure and the parts of the board that belong to nobody."""

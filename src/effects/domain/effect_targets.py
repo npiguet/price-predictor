@@ -22,10 +22,12 @@ from effects.domain.effect_head_input import (
 from effects.domain.effect_head_layout import (
     DURATIONS,
     LIBRARY_EVENTS,
+    OTHER_COUNTER,
     ZONE_OUTCOMES,
     FieldScope,
     FieldSpec,
     HeadField,
+    LibraryEvent,
     ZoneOutcome,
     counter_field,
     mana_field,
@@ -42,7 +44,7 @@ from effects.domain.records import (
     events_of,
 )
 from effects.domain.sampling import sampling_class
-from effects.domain.state_snapshot import COLORS
+from effects.domain.state_snapshot import COLORS, Zone
 
 #: The zone outcome each moving event implies; the record keeps destroy and
 #: sacrifice apart, the target collapses them.
@@ -54,20 +56,20 @@ _ZONE_BY_EVENT: dict[EventType, ZoneOutcome] = {
     EventType.SPELL_COUNTERED: ZoneOutcome.COUNTERED,
 }
 
-_ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
-    "graveyard": ZoneOutcome.DIED,
-    "exile": ZoneOutcome.EXILED,
-    "hand": ZoneOutcome.TO_HAND,
-    "library": ZoneOutcome.LIBRARY_TOP,
-    "battlefield": ZoneOutcome.BLINKED,
+_ZONE_BY_DESTINATION: dict[Zone, ZoneOutcome] = {
+    Zone.GRAVEYARD: ZoneOutcome.DIED,
+    Zone.EXILE: ZoneOutcome.EXILED,
+    Zone.HAND: ZoneOutcome.TO_HAND,
+    Zone.LIBRARY: ZoneOutcome.LIBRARY_TOP,
+    Zone.BATTLEFIELD: ZoneOutcome.BLINKED,
 }
 #: The outcome of a ``zone_change`` to a destination the table does not name.
 _STAYED = ZoneOutcome.STAYED
 
-_LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
-    EventType.CARD_LOOKED_AT: "scry",
-    EventType.LIBRARY_REORDERED: "reorder",
-    EventType.CARD_REVEALED: "reveal",
+_LIBRARY_EVENT_BY_TYPE: dict[EventType, LibraryEvent] = {
+    EventType.CARD_LOOKED_AT: LibraryEvent.SCRY,
+    EventType.LIBRARY_REORDERED: LibraryEvent.REORDER,
+    EventType.CARD_REVEALED: LibraryEvent.REVEAL,
 }
 
 #: ``type -> (field, parameter, default when absent, sign)``.
@@ -205,7 +207,7 @@ def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
 
 
 def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
-    counter = str(event.params.get("counter_type", "OTHER")).upper()
+    counter = str(event.params.get("counter_type", OTHER_COUNTER)).upper()
     name = (
         counter_field(counter)
         if counter in COUNTER_TYPES

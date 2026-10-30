@@ -233,7 +233,7 @@ class TestVariantIsolation:
 
     def test_a_matching_variant_checkpoint_is_accepted(self, tmp_path, files):
         main = _checkpoint(files)
-        variant = _checkpoint(files, variant="identity")
+        variant = _checkpoint(files, variant=Baseline.IDENTITY)
         require_same_split(
             main, variant, main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
         )
@@ -241,7 +241,7 @@ class TestVariantIsolation:
     def test_a_different_split_fails_fast_naming_both(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(
-            files, variant="identity",
+            files, variant=Baseline.IDENTITY,
             provenance=_provenance(files, game_disjoint_games=("g9",)),
         )
         with pytest.raises(SplitMismatchError) as excinfo:
@@ -255,7 +255,7 @@ class TestVariantIsolation:
     def test_a_different_vocabulary_hash_fails_fast(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(
-            files, variant="identity",
+            files, variant=Baseline.IDENTITY,
             provenance=_provenance(files, vocab_hash="deadbeef"),
         )
         with pytest.raises(SplitMismatchError, match="vocabulary"):
@@ -267,7 +267,7 @@ class TestVariantIsolation:
     def test_a_different_keyword_definition_hash_fails_fast(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(
-            files, variant="identity",
+            files, variant=Baseline.IDENTITY,
             provenance=_provenance(files, keyword_definitions_hash="deadbeef"),
         )
         with pytest.raises(SplitMismatchError, match="keyword definitions"):
@@ -279,7 +279,7 @@ class TestVariantIsolation:
     def test_a_different_held_out_card_list_fails_fast(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(
-            files, variant="identity",
+            files, variant=Baseline.IDENTITY,
             provenance=_provenance(files, held_out_cards=("Shock",)),
         )
         with pytest.raises(SplitMismatchError):
@@ -352,7 +352,7 @@ class TestExtraRoundTrip:
         store = EffectModelStore(tmp_path / "effect-model")
         store.save(replace(
             _checkpoint(files),
-            variant="identity",
+            variant=Baseline.IDENTITY,
             extra={"identity_table": table.state()},
         ))
         loaded = IdentityTable.from_state(store.load().extra["identity_table"])

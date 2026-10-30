@@ -348,7 +348,7 @@ def gate_two_records(provenance, *, corpus_path: Path) -> Iterator:
         return iter(())
     return read_records_matching(
         CorpusStore(corpus_path).game_disjoint_dir,
-        game_ids=games, kinds={RecordKind.COMBAT.value},
+        game_ids=games, kinds={RecordKind.COMBAT},
     )
 
 

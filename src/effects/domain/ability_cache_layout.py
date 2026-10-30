@@ -34,7 +34,7 @@ ARRAY_KEY = "e"
 CACHE_SUFFIX = ".npz"
 
 
-def cache_suffix(variant: str) -> str:
+def cache_suffix(variant: Baseline) -> str:
     """The file suffix a variant's cache files end in.
 
     ``full`` writes ``<name>.npz``; any other variant writes
@@ -45,14 +45,14 @@ def cache_suffix(variant: str) -> str:
 
 
 def cache_path_for(
-    script_file: str, *, root: Path = DEFAULT_CACHE_ROOT, variant: str = Baseline.FULL,
+    script_file: str, *, root: Path = DEFAULT_CACHE_ROOT, variant: Baseline = Baseline.FULL,
 ) -> Path:
     """Where a source file's cache lives, under the variant's :func:`cache_suffix`."""
     relative = Path(script_file)
     return Path(root) / relative.parent / f"{relative.stem}{cache_suffix(variant)}"
 
 
-def variant_of_cache_file(path: Path) -> str | None:
+def variant_of_cache_file(path: Path) -> Baseline | None:
     """The variant a cache file belongs to, as :func:`cache_path_for` named it.
 
     ``<name>.{variant}.npz`` for a variant the store knows, ``<name>.npz`` for

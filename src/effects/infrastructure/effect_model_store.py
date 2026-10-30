@@ -32,7 +32,7 @@ LATEST_NAME = "latest.pt"
 
 
 
-def model_output_for(variant: str, root: Path = DEFAULT_MODEL_OUTPUT) -> Path:
+def model_output_for(variant: Baseline, root: Path = DEFAULT_MODEL_OUTPUT) -> Path:
     """``models/effects/effect-model/`` for ``full``, a subdirectory otherwise."""
     root = Path(root)
     return root if variant == Baseline.FULL else root / variant
@@ -96,7 +96,7 @@ class EffectCheckpoint:
     encoder_state: dict[str, Any]
     model_state: dict[str, Any]
     provenance: SplitProvenance
-    variant: str = Baseline.FULL
+    variant: Baseline = Baseline.FULL
     best_val_loss: float = float("inf")
     epoch: int = 0
     extra: dict[str, Any] = field(default_factory=dict)
@@ -179,7 +179,7 @@ class EffectModelStore:
             "model_state_dict": filter_training_only(checkpoint.model_state),
             "encoder_config": asdict(checkpoint.encoder_config),
             "provenance": checkpoint.provenance.as_dict(),
-            "variant": checkpoint.variant,
+            "variant": Baseline(checkpoint.variant).value,
             "best_val_loss": checkpoint.best_val_loss,
             "epoch": checkpoint.epoch,
             "cards_folders": list(checkpoint.cards_folders),
@@ -218,7 +218,7 @@ class EffectModelStore:
             encoder_state=payload["encoder_state_dict"],
             model_state=payload["model_state_dict"],
             provenance=SplitProvenance.from_dict(payload.get("provenance", {})),
-            variant=payload.get("variant", Baseline.FULL),
+            variant=Baseline(payload.get("variant", Baseline.FULL)),
             best_val_loss=payload.get("best_val_loss", float("inf")),
             epoch=payload.get("epoch", 0),
             # Round-tripped: the identity baseline reloaded without its table

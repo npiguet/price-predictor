@@ -174,5 +174,5 @@ def card_disjoint_resolutions(corpus_path: Path, games: frozenset[str]) -> Itera
     """
     return read_records_matching(
         CorpusStore(corpus_path).card_disjoint_dir,
-        game_ids=games, kinds={RecordKind.RESOLUTION.value},
+        game_ids=games, kinds={RecordKind.RESOLUTION},
     )

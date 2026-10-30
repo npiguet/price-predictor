@@ -18,6 +18,7 @@ from effects.application.train_effect_model import (
     learning_rate_at,
     warmup_steps,
 )
+from effects.domain.baselines import Baseline
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
 )
@@ -65,11 +66,11 @@ class TestModelOutput:
         )
 
     def test_a_variant_writes_under_its_own_name(self):
-        config = TrainEffectModelConfig(variant="identity")
+        config = TrainEffectModelConfig(variant=Baseline.IDENTITY)
         assert config.resolved_model_output() == DEFAULT_MODEL_OUTPUT / "identity"
 
     def test_an_explicit_model_output_wins(self, tmp_path):
-        config = TrainEffectModelConfig(variant="identity", model_output=tmp_path)
+        config = TrainEffectModelConfig(variant=Baseline.IDENTITY, model_output=tmp_path)
         assert config.resolved_model_output() == tmp_path
 
 

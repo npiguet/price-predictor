@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import IO, NamedTuple
 
 from effects.domain.corpus_curation import record_hash
-from effects.domain.records import EffectRecord
+from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.shard_generation import MixedGenerationsError, ShardGeneration
 from effects.infrastructure.record_codec import (
     format_record_line,
@@ -307,7 +307,7 @@ def read_records_matching(
     directory: Path,
     *,
     game_ids: Collection[str] | None = None,
-    kinds: Collection[str] | None = None,
+    kinds: Collection[RecordKind] | None = None,
 ) -> Iterator[EffectRecord]:
     """The records under ``directory`` of the named games and kinds.
 
@@ -326,7 +326,7 @@ def iter_shard_matching(
     shard: Path,
     *,
     game_ids: Collection[str] | None = None,
-    kinds: Collection[str] | None = None,
+    kinds: Collection[RecordKind] | None = None,
 ) -> Iterator[EffectRecord]:
     """The records of one shard of the named games and kinds, the rest
     skipped unparsed; :func:`read_records_matching` for one shard."""
@@ -341,9 +341,11 @@ def iter_shard_matching(
 
 
 def _wanted(
-    game_id: str, kind: str, game_ids: Collection[str] | None, kinds: Collection[str] | None,
+    game_id: str, kind: str, game_ids: Collection[str] | None,
+    kinds: Collection[RecordKind] | None,
 ) -> bool:
-    """Whether a record of ``game_id`` and ``kind`` passes both filters."""
+    """Whether a record of ``game_id`` and ``kind`` passes both filters: a
+    :class:`RecordKind` hashes as its value, so the envelope's string finds it."""
     return (game_ids is None or game_id in game_ids) and (kinds is None or kind in kinds)
 
 

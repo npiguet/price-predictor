@@ -16,7 +16,7 @@ from effects.domain.effect_head_layout import (
     HeadField,
     ZoneOutcome,
 )
-from effects.domain.field_types import DIRECTIONS, SIGNED_DIRECTIONS
+from effects.domain.field_types import DIRECTIONS, SIGNED_DIRECTIONS, Direction
 
 
 def field_outputs(outputs: torch.Tensor, spec: FieldSpec) -> torch.Tensor:
@@ -44,8 +44,8 @@ def direction_balance(spec: FieldSpec, slice_: torch.Tensor) -> torch.Tensor:
         raise ValueError(f"{spec.name} is a {spec.type} field and has no direction")
     probabilities = torch.softmax(slice_[..., SIGNED_DIRECTIONS], dim=-1)
     return (
-        probabilities[..., DIRECTIONS.index("positive")]
-        - probabilities[..., DIRECTIONS.index("negative")]
+        probabilities[..., DIRECTIONS.index(Direction.POSITIVE)]
+        - probabilities[..., DIRECTIONS.index(Direction.NEGATIVE)]
     )
 
 

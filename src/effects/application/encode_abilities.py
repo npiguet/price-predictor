@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class EncodeAbilitiesConfig:
-    variant: str = Baseline.FULL
+    variant: Baseline = Baseline.FULL
     checkpoint: Path | None = None
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None

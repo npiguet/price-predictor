@@ -160,10 +160,11 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
     from effects.domain.effect_head_layout import ZONE_OUTCOMES, HeadField, ZoneOutcome
     from effects.domain.effect_targets import derive_targets
     from effects.domain.records import CombatPayload, RecordKind
+    from effects.domain.state_snapshot import CombatSubstep
 
     if record.kind is not RecordKind.COMBAT or record.fork or record.interventional:
         return None
-    if record.state.global_.combat_substep != "regular":
+    if record.state.global_.combat_substep != CombatSubstep.REGULAR:
         return None
     payload = record.payload
     if not isinstance(payload, CombatPayload) or getattr(payload, "probed_keyword", None):
