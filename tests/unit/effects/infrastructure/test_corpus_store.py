@@ -24,11 +24,35 @@ def test_load_fails_loudly_when_no_manifest_was_written(tmp_path):
         CorpusStore(tmp_path).load()
 
 
-def test_the_store_names_the_three_output_directories(tmp_path):
+@pytest.mark.parametrize(("path_of", "relative"), [
+    (lambda store: store.manifest_path, "manifest.json"),
+    (lambda store: store.previous_manifest_path, "manifest.previous.json"),
+    (lambda store: store.training_dir, "training"),
+    (lambda store: store.card_disjoint_dir, "validation/card-disjoint"),
+    (lambda store: store.game_disjoint_dir, "validation/game-disjoint"),
+    (lambda store: store.gate_one_dir, "validation/gate-one"),
+    (lambda store: store.samples_dir, "validation/samples"),
+    (lambda store: store.sample_path("card-disjoint"),
+     "validation/samples/card-disjoint.jsonl.gz"),
+    (lambda store: store.parts_dir_for("training"), ".parts/training"),
+], ids=[
+    "manifest", "previous-manifest", "training", "card-disjoint", "game-disjoint",
+    "gate-one", "samples", "sample", "parts",
+])
+def test_the_store_lays_out_the_dataset(tmp_path, path_of, relative):
+    """Every reader of a curated dataset finds its parts by these paths."""
+    assert path_of(CorpusStore(tmp_path)) == tmp_path / relative
+
+
+def test_clearing_the_outputs_removes_every_stratum_sample_and_part(tmp_path):
     store = CorpusStore(tmp_path)
-    assert store.training_dir == tmp_path / "training"
-    assert store.card_disjoint_dir == tmp_path / "validation" / "card-disjoint"
-    assert store.game_disjoint_dir == tmp_path / "validation" / "game-disjoint"
+    for directory in (store.gate_one_dir, store.samples_dir, store.parts_dir_for("training")):
+        directory.mkdir(parents=True)
+        (directory / "x").write_text("x")
+    store.clear_outputs()
+    assert not store.gate_one_dir.exists()
+    assert not store.samples_dir.exists()
+    assert not store.parts_dir.exists()
 
 
 def test_the_listing_names_shards_relative_to_the_corpus_root(tmp_path):
