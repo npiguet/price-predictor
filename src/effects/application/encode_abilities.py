@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -36,7 +36,7 @@ class EncodeAbilitiesConfig:
     variant_scripts: Path | None = None
     vocab_path: Path | None = None
     keyword_definitions: Path | None = None
-    output_root: Path = field(default_factory=lambda: DEFAULT_CACHE_ROOT)
+    output_root: Path = DEFAULT_CACHE_ROOT
     clean: bool = False
 
     @property

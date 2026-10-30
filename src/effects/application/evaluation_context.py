@@ -67,9 +67,7 @@ class EvaluationContext:
 
 @dataclass
 class EvaluateEffectModelConfig:
-    checkpoint: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_CHECKPOINT),
-    )
+    checkpoint: Path = Path(default_paths.DEFAULT_CHECKPOINT)
     baseline_checkpoints: dict[str, Path] = field(default_factory=dict)
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
@@ -78,13 +76,9 @@ class EvaluateEffectModelConfig:
     #: A curated dataset directory (`build-corpus`); defaults to the one
     #: `--checkpoint` recorded (FR-147).
     corpus: Path | None = None
-    abilities_root: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_ABILITIES_ROOT),
-    )
+    abilities_root: Path = Path(default_paths.DEFAULT_ABILITIES_ROOT)
     #: The per-card win-rate table the decodability battery reads (FR-070).
-    win_rates: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_WIN_RATES),
-    )
+    win_rates: Path = Path(default_paths.DEFAULT_WIN_RATES)
 
     @property
     def source_trees(self) -> SourceTrees:

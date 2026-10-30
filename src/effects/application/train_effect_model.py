@@ -96,18 +96,14 @@ class TrainEffectModelConfig:
     variant_scripts: Path | None = None
     #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
     holdout_unit: HoldoutUnit | None = None
-    vocab_path: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_VOCAB_PATH),
-    )
+    vocab_path: Path = Path(default_paths.DEFAULT_VOCAB_PATH)
     #: ``None`` draws one, so runs do not all measure one arrangement of the
     #: corpus; the checkpoint records the drawn value.
     seed: int | None = field(default=None, metadata={"help": (
         "Seeds weight init, batch planning and each epoch's shard draw; drawn "
         "from the OS and logged when omitted, so any run can be repeated"
     )})
-    keyword_definitions: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS),
-    )
+    keyword_definitions: Path = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
     model_output: Path | None = field(default=None, metadata={"help": (
         "Checkpoint directory (default: models/effects/effect-model/, under "
         "{variant}/ for a baseline)"

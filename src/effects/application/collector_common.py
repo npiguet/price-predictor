@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.converted_trees import SourceTrees
 
-DEFAULT_RECORDS_DIR = Path(default_paths.DEFAULT_RECORDS_DIR)
 #: Java worker processes, for both collectors.
 DEFAULT_WORKERS = 12
 DEFAULT_DECKS_PER_ROUND = 500
@@ -38,7 +37,7 @@ class CollectorConfig:
     """What both collectors take: the corpus they write to, the converted
     trees, the holdout they keep out of their decks, and how they play."""
 
-    effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
+    effect_records: Path = Path(default_paths.DEFAULT_RECORDS_DIR)
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     split_from: Path | None = None
     exclude_cards: Path | None = None
@@ -48,7 +47,7 @@ class CollectorConfig:
     workers: int = field(default=DEFAULT_WORKERS, metadata={
         "help": "Parallel Java worker processes (default: %(default)s)",
     })
-    caps: CollectionCaps = field(default_factory=CollectionCaps)
+    caps: CollectionCaps = CollectionCaps()
     #: The holdout ``build-corpus`` chooses, over ``cards_folders``: a variant
     #: printing a held-out text is dropped under it, and the held-out round
     #: credits a game to a held-out text by it. Given the flags
@@ -89,7 +88,7 @@ class HoldoutSource:
     existing checkpoint's split). Both at once is refused rather than merged,
     since a merge would hide a disagreement."""
 
-    effect_records: Path = DEFAULT_RECORDS_DIR
+    effect_records: Path = Path(default_paths.DEFAULT_RECORDS_DIR)
     exclude_cards: Path | None = None
     split_from: Path | None = None
 
@@ -124,7 +123,7 @@ class HoldoutSource:
             )
         if training_corpus is None:
             return cls(
-                effect_records=effect_records or DEFAULT_RECORDS_DIR,
+                effect_records=effect_records or Path(default_paths.DEFAULT_RECORDS_DIR),
                 exclude_cards=exclude_cards, split_from=split_from,
             )
         if effect_records is not None or exclude_cards:

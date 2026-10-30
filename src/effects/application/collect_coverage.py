@@ -440,7 +440,7 @@ def consult_castability(names: list[str]) -> dict[str, ConsultVerdict]:
 
     try:
         verdicts = castability_verdicts(names)
-    except (FileNotFoundError, OSError) as exc:
+    except OSError as exc:
         logger.warning(
             "Castability consult unavailable (%s); every card ranks as "
             "castable, which only slows the run down", exc,

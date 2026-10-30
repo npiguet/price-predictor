@@ -62,9 +62,7 @@ class BuildVocabConfig:
     surface: Surface = Surface.PROSE
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     vocab_path: Path | None = None
-    keyword_definitions: Path = field(
-        default_factory=lambda: DEFAULT_KEYWORD_DEFINITIONS,
-    )
+    keyword_definitions: Path = DEFAULT_KEYWORD_DEFINITIONS
     target_size: int = DEFAULT_TARGET_SIZE
 
     def __post_init__(self) -> None:

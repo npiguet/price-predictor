@@ -42,12 +42,8 @@ RANDOM_SEED = 42
 
 @dataclass
 class CollectVariantsConfig(CollectorConfig):
-    forge_cards_path: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_FORGE_CARDS_PATH),
-    )
-    variant_scripts: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_VARIANT_SCRIPTS),
-    )
+    forge_cards_path: Path = Path(default_paths.DEFAULT_FORGE_CARDS_PATH)
+    variant_scripts: Path = Path(default_paths.DEFAULT_VARIANT_SCRIPTS)
     variant_volume: float = field(default=DEFAULT_VARIANT_VOLUME, metadata={
         "help": (
             "Cap on generated variant scripts, as a fraction of the real records "

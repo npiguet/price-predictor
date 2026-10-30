@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from effects.domain import default_paths
@@ -15,7 +15,7 @@ DEFAULT_OUTPUT = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
 
 @dataclass
 class ExtractKeywordDefinitionsConfig:
-    output: Path = field(default_factory=lambda: DEFAULT_OUTPUT)
+    output: Path = DEFAULT_OUTPUT
 
 
 def run(config: ExtractKeywordDefinitionsConfig) -> int:
