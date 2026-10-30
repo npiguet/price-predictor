@@ -5,8 +5,8 @@
 Gen-2's model can reach a good loss without learning many rules of the game: its corpus is balanced
 by card text and rule family rather than by rule, its collectors lost or mislabelled some events,
 and its input and outputs leave out what decides many rules. Gen-3 plans to collect a new corpus
-without gen-2's defects, rebalance training rule by rule, read every line of a permanent, and judge
-checkpoints by probes and rule scenarios. A catalogue of the Comprehensive Rules finds 1,647 rules
+without gen-2's defects, rebalance training rule by rule, read every line of a permanent tied to its
+card, and judge checkpoints by probes and rule scenarios. A catalogue of the Comprehensive Rules finds 1,647 rules
 with an outcome the engine decides, and gives all but 95 of them a minimal pair of boards. Checked
 against the model, only 505 of those rules are learnable today. 33 new inputs, 22 new outputs and
 three collection fixes, with the items already planned, would make 1,570 learnable. No gen-3 corpus is collected yet, and no
@@ -84,6 +84,35 @@ record does not.** An anthem's +1/+1 is in the toughness and a granted keyword i
 "can't block" static, a replacement that exiles instead of destroying, a damage doubler, or a lord
 whose removal shrinks its creatures are text the model needs and never sees. Pacifism shows it an
 enchantment attached to a creature and nothing more.
+
+### The model cannot tell which card an ability line sits on, nor what a link between two cards points to
+
+**An ability slot carries no trace of its card.** The trunk reads the board as one sequence: a
+`[CARD]` slot for each entity, followed by an ability slot for each of its lines. An ability slot is
+the sum of its `e`, an embedding of its slot kind, a position embedding and the charm-mode flag.
+Position ids restart at 0 at each `[CARD]`, so the first line of every card has position 1.
+Attention knows no order beyond those ids. The trunk therefore reads the lines on the board as one
+unordered set, and cannot tell whether lifelink sits on the 2/2 or on the 5/5. The slot's entity id
+is kept to key the targets and never reaches the trunk. The specification asks for the reset and
+nothing else, and the code does what it asks.
+
+**The gen-2 probes found the board's lines unused, and this explains it.** Replacing the `e` in the card blocks' ability
+slots with noise costs nothing measurable on any gen-1 or gen-2 checkpoint ([probes
+record](2026-09-19-effect-knowledge-probes-design.md#the-trunk-relies-on-the-acting-abilitys-e-and-replacing-the-e-of-the-abilities-on-the-board-costs-nothing-as-expected)).
+A model that cannot place a line on its card has little use for the line. Gen-3's plan to list every
+line of a permanent rests on fixing this.
+
+**Several links are recorded with one end only.** A card slot says that the card is attached,
+blocking or blocked, and a stack object says how many targets it has, but neither says which slot
+is at the other end. Only the links to the acting ability have both ends, as a target bit and a
+source bit on each card, because a record has one `[ACT]` slot. With two Auras and two creatures on
+the board, the model cannot tell which Aura enchants which creature.
+
+**Which permanents a static affects is a training label and never an input.** A `continuous` record
+lists every permanent its static changes and how, and the model is trained to predict that list. On
+every other record a creature's boosts are one sum, and nothing says which static supplies them. To
+predict that destroying an anthem kills a damaged token, the model has to combine the anthem's
+text, the token's boost and what the `continuous` records taught it about that anthem.
 
 ### Keywords reach the model only as flags, so it infers what each one does from outcomes alone
 
@@ -452,7 +481,8 @@ the plan rests on them:
    which situations illustrate each.
 2. **Inputs and outputs that let the model learn each rule.** Every rule is mapped to what decides
    it and to the output trained on its outcome, and the missing ones are added together with the
-   record schema.
+   record schema. Each line is tied to its card, and each link between two cards is read as a
+   relation between their slots.
 3. **Training that draws records by rule.** Adaptive sampling draws more of what a weak field or a
    short rule needs, and a record drawn for a rule trains only that rule's outputs.
 4. **Checkpoints judged by probes and rule scenarios**, with every output field on one scale in the
@@ -598,11 +628,12 @@ Temporary grants become lines as well, with a keyword read through its reminder 
 flag keeps them apart from printed lines, which the gate-2 keyword test needs, since it strips a
 keyword from the channel that carries it.
 
-**A link between two objects is an edge, not a flag on one end.** What an Aura is attached to,
-what an attacker attacks, what a spell targets and what a permanent exiled are each an attention
-bias between two slots, as [the block-pairing plan](#the-board-input-should-say-which-attacker-each-blocker-blocks)
-proposes for blockers. Names are edges too: the rules only compare names, as the legend rule does,
-so two slots whose names match are linked, and no name embedding is learned.
+**A link between two objects is a typed relation between their slots, not a flag on one end.**
+What an Aura is attached to, what an attacker attacks, what a spell targets and what a permanent
+exiled are each a relation the trunk's attention reads, as [the relation
+plan](#each-cards-slots-share-a-random-group-id-and-every-link-between-two-slots-is-a-typed-relation-in-attention)
+describes. Names are relations too: the rules only compare names, as the legend rule does, so two
+slots whose names match are related, and no name embedding is learned.
 
 **Outputs use the existing field types and supervision.** A new output is a binary, a count, a
 signed delta, a categorical or a multi-binary, supervised only by the records that carry it. An
@@ -632,7 +663,8 @@ another player are rare enough to leave out.
 
 **The changes go in from the one that needs the least work to the one that needs the most.**
 
-1. **Every line of a permanent**, already planned below.
+1. **Every line of a permanent**, already planned below, with the group id that ties each line to
+   its card.
 2. **The facts the snapshot already records.** Subtypes, faces, copy sources, names, attachments,
    attack targets and stack targets need input slots and no new collection.
 3. **The collection and curation gaps.** Permanent-spell resolutions have to survive
@@ -863,6 +895,89 @@ beside controls of the same kinds. A gen-3 model that reads the new lines should
 subsets' loss toward their controls, and noise in its card slots should start to cost something
 there.
 
+### Each card's slots share a random group id, and every link between two slots is a typed relation in attention
+
+**A card slot and its ability slots add the same group embedding, drawn at random for each
+record.** The trunk gains a table of a few hundred group embeddings. Each record draws a distinct
+row for each card, and the card's own slot, its ability slots and its charm-mode slots all add that
+row. A row means nothing by itself, so the one thing the model can learn from it is that slots
+carrying the same row belong together. The draw comes from the step's seeded generator, as context
+dropout does, so a run is the same under any number of workers. The change sits at the input, as
+the slot-kind embedding does, and leaves the attention layers as they are.
+
+**Every other link is a directed relation type, and each type adds a learned vector to a key and to
+a value.** When slot i attends to slot j, the key of j gains the vector of the relation from i to j
+before the score is taken. The value of j gains a second vector of that relation before it is passed
+to i. The key vector lets whether i attends to j depend on the relation and on what both slots hold.
+The value vector makes the message say what kind of partner sent it, so a creature receives its
+blocker's information as a blocker's. Several relations on one pair add as vectors. The mechanism
+is relation-aware self-attention, introduced for relative word positions by Shaw, Uszkoreit and
+Vaswani, [Self-Attention with Relative Position Representations](https://arxiv.org/abs/1803.02155)
+(NAACL 2018), and applied to typed relations over a graph by Wang et al., [RAT-SQL: Relation-Aware
+Schema Encoding and Linking for Text-to-SQL Parsers](https://arxiv.org/abs/1911.04942) (ACL 2020).
+
+| relation, one type per direction | source |
+|---|---|
+| attached to | the snapshot's `attached_to` |
+| blocks, attacks | the combat status's `blocking` and `blocked_by`, and the attack target |
+| targets | the acting ability's targets, and each stack object's |
+| affects, as a static | a new snapshot field listing, for each static line on the board, the entities it changes |
+| controls, owns | the controller, and the planned `owner` field |
+| has the same name | the names in the snapshot |
+| exiled with | the planned field of objects exiled with a card |
+
+**How the collector lists what each static affects on every snapshot has to be established.** The
+`continuous` collector already computes it, one static at a time, by recomputing the board without
+that static. Running that for every static on every snapshot would be too slow, so the field needs a
+cheaper reading of Forge's layer state.
+
+**The probes measure both changes.** Noise in the card blocks' ability slots should start to cost
+something. Gen-2's combat grid reads only combats with one blocked attacker, and gen-3's can read
+combats with several. A probe that destroys an anthem should predict the deaths of exactly the
+damaged creatures the anthem kept alive.
+
+**Four alternatives are not taken:**
+
+- **A learned scalar per relation type and head, added to the attention score**, as Graphormer
+  does for graph edges (Ying et al., [Do Transformers Really Perform Bad for Graph
+  Representation?](https://arxiv.org/abs/2106.05234), NeurIPS 2021). It changes how
+  much a slot attends to its partner, not what it receives, so the kind of relation reaches the
+  receiver only through the partner's content. The trunk's four heads cannot each specialise in one
+  of a dozen directed types. Summed scalars are ambiguous, since 0.8 can be 0.3 + 0.5 or eight
+  times 0.1.
+- **Group ids for every link.** A slot carries one group id, and the links are many to many: a
+  static changes many permanents, and a permanent can be changed by several statics. Several ids
+  summed on one slot bring back the ambiguity of the scalars.
+- **An embedding of each card's place on the board.** It gives the order of the cards a meaning
+  that the game does not.
+- **A card slot holding the board position of its partner**, such as the attacker a blocker blocks.
+  It carries one partner per feature, and the model has to learn to match the position against the
+  other slot's.
+
+**The relation terms cost one product per relation type, not per pair.** The key term is computed
+once for each slot and each relation type and then looked up for each pair. The value term sums each
+slot's attention weights by relation type and multiplies them by the value vectors. Both scale with
+batch × slots × relation types. The value term needs the attention weights explicitly, so the trunk
+replaces `nn.TransformerEncoderLayer` with a layer of its own. The trunk is small beside the ability
+encoder, so explicit attention should cost a small share of a step. Step time and peak memory on one
+fixed shard, before and after, measure it.
+
+**The custom layer is written test first, because its mistakes train without an error.** A
+transposed relation matrix or one built in a different slot order still lowers the loss. Five tests
+guard it:
+
+- With both relation tables at zero and the weights copied from `nn.TransformerEncoderLayer`, the
+  layer reproduces the stock layer's outputs and gradients in fp32.
+- Permuting the slots and the relation matrix together permutes the outputs the same way.
+- A relation set from i to j changes the output of i and not of j.
+- On a toy task that only the relation can solve, such as reading a feature of the partner among
+  identical-looking slots, a small model learns with the relation and stays at chance with the
+  tables at zero.
+- The anthem probe above passes on real records.
+
+The group id needs only two tests: the rows drawn for one record are distinct, and one seed draws
+the same rows under any number of workers.
+
 ### A keyword with a Forge script gets its own `e`, and keeps its flag only where other text names it
 
 **Every keyword whose fragment Forge can produce gets a line, and so an `e`, in its card slot.** The
@@ -986,13 +1101,6 @@ the game at the phase event, before any damage, so the observed record can take 
 same moment. The combat shape is read at the first damage event, as now, because no creature has
 left combat by then. The assignment can be read at any point of the step, because Forge holds each
 step's assignment as it was made.
-
-### The board input should say which attacker each blocker blocks
-
-**The pairing belongs in the trunk's input.** Two forms would carry it: each card slot gains the
-board position of the attacker it blocks, or the trunk's attention gains a bias between a blocker
-and its attacker, as it could between an aura and the permanent it enchants. Either needs no new
-collection, since the snapshot already holds the pairing.
 
 ### The keyword flags should say what a creature has protection from
 
@@ -1200,6 +1308,11 @@ a triggered ability fired. The castability verdict says whether a spell or abili
 static, triggered or replacement ability of a permanent other than the acting one cannot be learned:
 an anthem on another creature, an enchantment that says creatures can't block, a cost reducer. For
 187 rules those lines are the only gap.
+
+**The map counts a line as read whichever card it sits on.** Gen-2's input does not say which card
+that is ([Background](#the-model-cannot-tell-which-card-an-ability-line-sits-on-nor-what-a-link-between-two-cards-points-to)),
+so for a rule that turns on which permanent carries a line, the count of rules learnable today is
+an upper bound. The counts with every planned change assume the group id.
 
 | fact the model does not read | rules needing it | rules for which it is the only gap |
 |---|---:|---:|
@@ -1723,8 +1836,10 @@ pilot should count them.
 - **Compare the scenarios with Forge**, starting with the ten suspected Forge departures in
   `rules/FINDINGS.md`.
 - **Build the collection items not yet in**: every line of a permanent, the timing bit and failed
-  checks, the owner field, the combat snapshot at the start of the damage step, the block pairing,
-  permanent-spell resolutions, turn-based action records, anchored attackers records and the
-  dropped-event count.
+  checks, the owner field, the combat snapshot at the start of the damage step, the entities each
+  static affects, permanent-spell resolutions, turn-based action records, anchored attackers
+  records and the dropped-event count.
+- **Add the group id first, then the relation-aware trunk**, each with its tests written before
+  it, and measure the trunk's step time and peak memory on a fixed shard.
 - **Train with the hard mask on rule-drawn records first**, and move to the soft mask only if a
   comparison shows the hard mask costs the other outputs.
