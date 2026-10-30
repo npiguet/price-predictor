@@ -13,6 +13,11 @@ from __future__ import annotations
 PROTECTION_FROM = "protection_from_"
 
 
+def display_name_of(line_text: str) -> str:
+    """A keyword line's display name: its text before the first colon (FR-013)."""
+    return line_text.split(":", 1)[0].strip()
+
+
 def normalize_keyword(raw: str) -> str:
     """Forge's spelling of a keyword, in the one this package reads.
 

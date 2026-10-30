@@ -29,7 +29,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from enum import StrEnum
 
-from effects.domain.ability_tokenizer import display_name_of
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, KeywordResolver
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import (
@@ -60,26 +59,13 @@ class FamilySentinel(StrEnum):
     NO_LEGAL_TARGET = "no-legal-target"
 
 
-KEYWORD_API_TYPE = "Keyword"
-
-
-def _is_keyword_line(line) -> bool:
-    return line.script_api_type == KEYWORD_API_TYPE and bool(line.script_text)
-
-
-def _keyword_family(line) -> str | None:
-    if line is not None and _is_keyword_line(line):
-        return display_name_of(line.script_text)
-    return None
-
-
 def _declared_mode(line) -> str | None:
     """The mode a static line declares: its keyword family, else ``Mode$``.
 
     The root segment is read before ``script_api_type`` because the two part
     company on a merged line.
     """
-    keyword = _keyword_family(line)
+    keyword = line.keyword_display_name
     if keyword is not None:
         return keyword
     return root_param(line.script_text, "Mode") or line.script_api_type
@@ -123,7 +109,7 @@ def legality_modes(record: EffectRecord, sidecars: SidecarLookup) -> frozenset[s
         if line is None:
             continue
         declared = _declared_mode(line)
-        if _is_keyword_line(line):
+        if line.keyword_display_name is not None:
             modes.add(declared)
         elif declared:
             modes.update(part.strip() for part in declared.split(",") if part.strip())
@@ -180,7 +166,7 @@ def rule_family(
     line = sidecars.first_line(record.ability or ())
     if line is None:
         return FamilySentinel.NO_TEXT
-    keyword = _keyword_family(line)
+    keyword = line.keyword_display_name
     if keyword is not None:
         return keyword
     match record.kind:

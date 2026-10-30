@@ -23,6 +23,7 @@ from effects.domain.keyword_formatting import (
     java_format,
     strip_specifiers,
 )
+from effects.domain.keyword_names import display_name_of
 from effects.domain.provenance import Role, RoleSpan
 from effects.domain.recorded_version import recorded_version
 from effects.domain.script_text import CHAIN_KEYS, SEG
@@ -112,11 +113,6 @@ def withheld_keyword_tokens(withheld: str | None) -> frozenset[str]:
 _HOST_BODIED_TOKENS: frozenset[str] = frozenset(
     keyword_token(name) for name in HOST_BODIED_KEYWORDS
 )
-
-
-def display_name_of(line_text: str) -> str:
-    """A keyword line's display name: its text before the first colon (FR-013)."""
-    return line_text.split(":", 1)[0].strip()
 
 
 @dataclass(frozen=True, slots=True)

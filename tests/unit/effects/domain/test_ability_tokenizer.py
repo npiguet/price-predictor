@@ -588,7 +588,7 @@ class TestKeywordLines:
     """Spec Story 1 scenarios 6, 7, 10."""
 
     def test_the_display_name_is_the_text_before_the_first_colon(self):
-        from effects.domain.ability_tokenizer import display_name_of
+        from effects.domain.keyword_names import display_name_of
 
         assert display_name_of("Ward:2") == "Ward"
         assert display_name_of("TypeCycling:Basic:1 B") == "TypeCycling"

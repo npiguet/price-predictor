@@ -26,7 +26,6 @@ from effects.application.text_staging import (
 from effects.domain.ability_encoder import AbilityEncoder, EncodedLine
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks, baseline_masks
-from effects.domain.damage_step_keywords import keyword_of_line
 from effects.domain.effect_head_input import (
     ACT_SLOT,
     INPUT_LAYOUT,
@@ -445,8 +444,9 @@ class SurfaceBatcher:
         )
 
     def keyword_of_key(self, key) -> str | None:
-        """Which damage-step keyword one ability key's line *is*, if any."""
-        return keyword_of_line(self._resolve(key)[1])
+        """Which keyword one ability key's line *is*, if any."""
+        line = self._resolve(key)[1]
+        return line.bare_keyword if line is not None else None
 
     def surface_builder(self, rows: dict[str, int]) -> SurfaceBuilder:
         """The builder of one batch's surfaces, each ``e`` a row of ``rows``;

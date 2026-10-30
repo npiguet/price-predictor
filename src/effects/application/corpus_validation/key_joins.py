@@ -14,7 +14,7 @@ from effects.application.corpus_validation.findings import (
     keep_example,
     share_of,
 )
-from effects.domain.provenance import KeyResolution, ProvenanceKey, SidecarLookup
+from effects.domain.provenance import KeyResolution, ProvenanceKey, SidecarLookup, TraitKind
 from effects.domain.records import (
     EffectRecord,
     key_sites,
@@ -147,7 +147,7 @@ class _JoinTally:
         if join.outcome is JoinOutcome.UNCHECKED:
             self.unchecked_by_tree[key.tree] += 1
         else:
-            (self.keyword if key.trait_kind == "keyword" else self.other).add(key, join)
+            (self.keyword if key.trait_kind == TraitKind.KEYWORD else self.other).add(key, join)
 
     def keyword_finding(self) -> Finding:
         broken = self.keyword.unjoinable.total()

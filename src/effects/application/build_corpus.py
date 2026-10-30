@@ -42,7 +42,7 @@ from effects.domain.corpus_plan import (
     plan_selection,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
-from effects.domain.keyword_names import normalize_keyword
+from effects.domain.keyword_names import display_name_of, normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SourceTree, first_text, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
@@ -258,8 +258,6 @@ def _keyword_misfires(
     (FR-015), replacing a script with a reminder template it does not carry."""
     if definitions is None or not Path(definitions).exists():
         return []
-    from effects.domain.ability_tokenizer import display_name_of
-    from effects.domain.rule_families import KEYWORD_API_TYPE
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 
     names = {name.lower() for name in load_keyword_definitions(Path(definitions))}
@@ -269,7 +267,7 @@ def _keyword_misfires(
             line = sidecars.line_or_none(key)
             if line is None or not line.script_text:
                 continue
-            if line.script_api_type == KEYWORD_API_TYPE:
+            if line.keyword_display_name is not None:
                 continue
             if display_name_of(line.script_text).lower() in names:
                 found.append(f"{key.script_file}: {line.script_text!r}")

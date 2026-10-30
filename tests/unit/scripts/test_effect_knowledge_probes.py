@@ -823,11 +823,18 @@ class _Sidecars:
 
     def line_or_none(self, key):
         api = self.api_by_kind.get(key.trait_kind)
-        return None if api is None else SimpleNamespace(script_api_type=api)
+        return None if api is None else _line_of(api)
 
 
 def _line_of(api, *keys):
-    return SimpleNamespace(script_api_type=api, provenance=keys)
+    from effects.domain.provenance import SidecarLine
+
+    # A keyword line's script is its keyword; any other line's, a script.
+    text = "Flying" if api == "Keyword" else f"AB$ {api}"
+    return SidecarLine(
+        line_index=0, line_kind="static", provenance=keys,
+        script_api_type=api, script_text=text,
+    )
 
 
 def _legality(*forbidden_kinds):

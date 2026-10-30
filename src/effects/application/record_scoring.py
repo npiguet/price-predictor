@@ -12,7 +12,7 @@ import torch
 
 from effects.application.breakdowns import TOTAL, RecordResult
 from effects.application.model_loading import forward_chunks
-from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_losses import per_entity_loss
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.keyword_names import normalize_keyword
@@ -94,7 +94,7 @@ def record_keywords(
     found: set[str] = set()
     for key in acting_keys(record):
         line = batcher.sidecars.line_or_none(key)
-        keyword = keyword_of_line(line) if line is not None else None
+        keyword = line.bare_keyword if line is not None else None
         if keyword is not None:
             found.add(normalize_keyword(keyword))
     for entity in record.state.entities:

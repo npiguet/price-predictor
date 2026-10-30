@@ -62,8 +62,6 @@ def unlisted_kinds(entity, sidecars) -> frozenset[str]:
     is left out whatever trait it folds in, because the keyword flags already
     carry it.
     """
-    from effects.domain.rule_families import KEYWORD_API_TYPE
-
     if not entity.printed:
         return frozenset()
     try:
@@ -72,7 +70,7 @@ def unlisted_kinds(entity, sidecars) -> frozenset[str]:
         return frozenset()
     kinds: set[str] = set()
     for line in sidecar.lines:
-        if line.script_api_type == KEYWORD_API_TYPE:
+        if line.keyword_display_name is not None:
             continue
         for key in line.provenance:
             if key.face == entity.face and key.trait_kind in UNLISTED_KINDS:
@@ -82,12 +80,10 @@ def unlisted_kinds(entity, sidecars) -> frozenset[str]:
 
 def _keyword_static(keys, sidecars) -> bool | None:
     """Whether a responsible static is a keyword line; None where it resolves to none."""
-    from effects.domain.rule_families import KEYWORD_API_TYPE
-
     for key in keys:
         line = sidecars.line_or_none(key)
         if line is not None:
-            return line.script_api_type == KEYWORD_API_TYPE
+            return line.keyword_display_name is not None
     return None
 
 
