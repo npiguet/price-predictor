@@ -31,6 +31,7 @@ from scipy import stats
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.markdown import banner
 from _lib.stats import mean_se
 from scorer_probes import probe_lib as pl
 from scorer_probes.probe_lib import CardBook, context_queue, resolve_context, score_streaming
@@ -59,10 +60,6 @@ def sample_contexts(book: CardBook, n_ctx: int, rng: random.Random) -> list[dict
     return out
 
 
-# --------------------------------------------------------------------------
-# reporting helpers
-# --------------------------------------------------------------------------
-
 def report_fit(tag: str, x, y) -> None:
     x = np.asarray(x, dtype=np.float64)
     y = np.asarray(y, dtype=np.float64)
@@ -77,10 +74,6 @@ def report_fit(tag: str, x, y) -> None:
     print(f"  {tag:<34} n={x.size:>6}  r={r:+.4f} (p={p:.2e})  "
           f"slope={slope:+.5f}  intercept={intercept:+.6f}  resid_sd={resid.std():.5f}")
 
-
-# --------------------------------------------------------------------------
-# main
-# --------------------------------------------------------------------------
 
 def build_rows(probe: pl.Probe, book: CardBook, contexts: list[dict],
                max_cand: int, rng: random.Random) -> list[dict]:
@@ -177,11 +170,8 @@ def analyse(rows: list[dict]) -> None:
     dr = np.array([r["delta_rel"] for r in rows], dtype=np.float64)
     mv = np.array([r["mv"] for r in rows], dtype=np.float64)
 
-    print()
-    print("=" * 78)
-    print(f"T1  ADD-DELTA ANALYSIS   rows={len(rows)}  "
-          f"contexts={len({r['context_id'] for r in rows})}")
-    print("=" * 78)
+    banner(f"T1  ADD-DELTA ANALYSIS   rows={len(rows)}  "
+           f"contexts={len({r['context_id'] for r in rows})}")
 
     m, se, n = mean_se(d)
     print(f"\ndelta_add overall: mean={m:+.5f} +/- {se:.5f} (n={n})  "
