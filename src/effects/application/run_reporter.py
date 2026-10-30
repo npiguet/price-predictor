@@ -177,11 +177,11 @@ class RunReporter:
             self.truncations.note(text, keys)
 
     def shard(
-        self, task: ShardTask, of: int, opened: ShardOpened | None,
+        self, task: ShardTask, of: int, opened: ShardOpened,
         stats: ShardStats, *, trained: float,
     ) -> None:
         name = Path(task.shard).name
-        trainable = opened.trainable if opened is not None else 0
+        trainable = opened.trainable
         if not trainable:
             logger.info(
                 "epoch %d | shard %d/%d %s | no records | skipped",

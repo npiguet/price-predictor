@@ -34,6 +34,7 @@ from effects.application.step_preparation import (
     ShardOpened,
     ShardTask,
     StepPreparer,
+    StepReady,
 )
 from effects.application.step_workers import StepWorkerPool
 from effects.application.surface_batching import IDENTITY_TABLE_KEY
@@ -63,6 +64,9 @@ from effects.infrastructure.torch_device import default_device
 from price_predictor.infrastructure.torch_training import clip_per_group
 
 logger = logging.getLogger(__name__)
+
+#: What a shard that never opened reports: no records, so no line of steps.
+UNOPENED = ShardOpened(trainable=0, rarity_coverage=None)
 
 #: The most prepared steps one worker process may hold queued: room for one
 #: shard's steps, capped to bound the shared memory of a run with long shards.
@@ -328,27 +332,29 @@ class TrainingLoop:
         """
         stats = ShardStats(loss=torch.zeros((), device=self.device))
         started = time.perf_counter()
-        opened: ShardOpened | None = None
+        opened = UNOPENED
         index = 0
         try:
             for message, elapsed in _timed(steps, task, of):
-                if isinstance(message, ShardOpened):
-                    stats.waited += elapsed
-                    started = time.perf_counter()
-                    opened = message
-                    self.reporter.shard_opened(message)
-                    continue
-                if isinstance(message, ShardClosed):
-                    self.reporter.shard_closed(message)
-                    continue
-                stats.batch_waited += elapsed
-                stats.learning_rate = self._set_learning_rate(run)
-                tally.add_shares(message)
-                # Decided before the forward pass, which is when the per-field
-                # decomposition has to be asked for.
-                due = reports_now(index=index, budget=task.budget)
-                index += 1
-                self._train_step(message.prepared, run, tally, stats, due)
+                match message:
+                    case ShardOpened():
+                        stats.waited += elapsed
+                        started = time.perf_counter()
+                        opened = message
+                        self.reporter.shard_opened(message)
+                    case ShardClosed():
+                        self.reporter.shard_closed(message)
+                    case StepReady():
+                        stats.batch_waited += elapsed
+                        stats.learning_rate = self._set_learning_rate(run)
+                        tally.add_shares(message)
+                        # Decided before the forward pass, which is when the
+                        # per-field decomposition has to be asked for.
+                        due = reports_now(index=index, budget=task.budget)
+                        index += 1
+                        self._train_step(message.prepared, run, tally, stats, due)
+                    case _:
+                        raise TypeError(f"unexpected shard message {type(message).__name__}")
         finally:
             steps.close()
         self.reporter.shard(task, of, opened, stats, trained=time.perf_counter() - started)
