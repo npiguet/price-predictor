@@ -51,6 +51,28 @@ class LossParts:
         return dict(zip(self.names, self.values.tolist()))
 
 
+@dataclass(frozen=True, slots=True)
+class _Rows:
+    """The rows a host mask selects: tested and indexed on the host, where the
+    mask was built, and copied to the device once for gathering there."""
+
+    host: torch.Tensor
+    device: torch.Tensor
+
+    @classmethod
+    def of(cls, mask: torch.Tensor, device: torch.device) -> _Rows:
+        host = mask.detach().bool().cpu().flatten().nonzero().squeeze(1)
+        return cls(host, host.to(device, non_blocking=True))
+
+    @property
+    def empty(self) -> bool:
+        return self.host.numel() == 0
+
+    def select(self, tensor: torch.Tensor) -> torch.Tensor:
+        """``tensor``'s selected rows, gathered wherever ``tensor`` lives."""
+        return tensor.index_select(0, self.host if tensor.device.type == "cpu" else self.device)
+
+
 def per_row(total: torch.Tensor, rows: int) -> torch.Tensor:
     return total / max(int(rows), 1)
 
@@ -128,10 +150,10 @@ def per_entity_loss(
 def _gate_term(flat_outputs: torch.Tensor, targets: EntityTargetBatch) -> torch.Tensor:
     """The affected gate's BCE over every real entity, summed."""
     device = flat_outputs.device
-    real = targets.real.flatten().nonzero().squeeze(1)
-    affected = targets.gate.detach().cpu().flatten().index_select(0, real).float()
+    real = _Rows.of(targets.real, device)
+    affected = real.select(targets.gate.detach().cpu().flatten()).float()
     return functional.binary_cross_entropy_with_logits(
-        flat_outputs.index_select(0, real.to(device, non_blocking=True))[:, GATE_INDEX],
+        real.select(flat_outputs)[:, GATE_INDEX],
         affected.to(device, non_blocking=True),
         reduction="sum",
     )
@@ -145,18 +167,15 @@ def _field_term(
     target = targets.fields.values.get(spec.name)
     if target is None:
         return None
-    rows = targets.scored(spec.name).flatten().nonzero().squeeze(1)
-    if rows.numel() == 0:
-        return None
     device = flat_outputs.device
-    rows_device = rows.to(device, non_blocking=True)
+    rows = _Rows.of(targets.scored(spec.name), device)
+    if rows.empty:
+        return None
     start, end = FIELD_SLICES[spec.name]
     flat_target = target.reshape(-1, *target.shape[2:])
     return field_loss(
-        spec, flat_outputs.index_select(0, rows_device)[:, start:end],
-        flat_target.index_select(
-            0, rows if flat_target.device.type == "cpu" else rows_device,
-        ).to(device, non_blocking=True),
+        spec, rows.select(flat_outputs)[:, start:end],
+        rows.select(flat_target).to(device, non_blocking=True),
     )
 
 
@@ -169,12 +188,11 @@ def created_objects_loss(
     that supervise the head."""
     records = int(prediction.shape[0])
     if mask is not None:
-        rows = mask.detach().bool().cpu().nonzero().squeeze(1)
-        if rows.numel() == 0:
+        rows = _Rows.of(mask, prediction.device)
+        if rows.empty:
             return prediction.new_zeros(())
-        rows = rows.to(prediction.device, non_blocking=True)
-        prediction = prediction.index_select(0, rows)
-        target = target.to(prediction.device).index_select(0, rows)
+        prediction = rows.select(prediction)
+        target = rows.select(target).to(prediction.device)
     # Every slot at once, as ``(records, slots, slot width)``.
     slots = (-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
     predicted = prediction[:, :-1].reshape(slots)
@@ -235,23 +253,25 @@ def value_loss(
     per-entity fields' losses by type, plus each amount's at-least bits."""
     rows = int(prediction.shape[0])
     mask = mask.detach().bool().cpu()
+    target = target.to(prediction.device)
     total = prediction.new_zeros(())
     for index, (name, field_type) in enumerate(VALUE_TARGETS):
-        selected = mask[:, index].nonzero().squeeze(1)
-        if selected.numel() == 0:
+        selected = _Rows.of(mask[:, index], prediction.device)
+        if selected.empty:
             continue
-        selected = selected.to(prediction.device, non_blocking=True)
+        predicted = selected.select(prediction)
         start, end = VALUE_SLICES[name]
-        output = prediction.index_select(0, selected)[:, start:end]
-        wanted = target.to(prediction.device).index_select(0, selected)[:, index]
+        wanted = selected.select(target)[:, index]
         # Uncapped: a stated amount is the text's own, which no game compounds.
-        total = total + FIELD_KINDS[field_type].loss(output, wanted, arity=1, cap=None)
+        total = total + FIELD_KINDS[field_type].loss(
+            predicted[:, start:end], wanted, arity=1, cap=None,
+        )
         if name in AT_LEAST_SLICES:
             # Averaged over the steps, so forty bits weigh what one binary
             # target does rather than dominating the encoder's gradient.
             start, end = AT_LEAST_SLICES[name]
             total = total + functional.binary_cross_entropy_with_logits(
-                prediction.index_select(0, selected)[:, start:end],
+                predicted[:, start:end],
                 at_least_targets(wanted.float()), reduction="sum",
             ) / AT_LEAST_STEPS
     return per_row(total, rows)
@@ -277,12 +297,11 @@ def api_loss(
     rows = int(type_logits.shape[0])
     total = None
     # A line with no API type carries -1 and is skipped.
-    known = (type_targets.detach().cpu() >= 0).nonzero().squeeze(1)
-    if known.numel():
-        known = known.to(type_logits.device, non_blocking=True)
+    known = _Rows.of(type_targets.detach().cpu() >= 0, type_logits.device)
+    if not known.empty:
         total = functional.cross_entropy(
-            type_logits.index_select(0, known),
-            type_targets.to(type_logits.device).index_select(0, known),
+            known.select(type_logits),
+            known.select(type_targets).to(type_logits.device),
             reduction="sum",
         )
     if key_logits is not None and key_targets is not None:
