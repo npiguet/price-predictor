@@ -525,9 +525,9 @@ class TestSweepEditor:
 
     def test_an_amount_edit_changes_only_the_amount(self):
         text = "NumDmg$ 3 | SP$ DealDamage | ValidTgts$ Creature [SEG] SV1: DB$ Draw"
-        assert sweeps.set_damage_amount(text, 7) == text.replace("NumDmg$ 3", "NumDmg$ 7")
+        assert sweeps.set_amount(text, "NumDmg", 7) == text.replace("NumDmg$ 3", "NumDmg$ 7")
         text = "SP$ Draw | NumCards$ 2 | ValidTgts$ Player"
-        assert zone_effects.set_amount(text, 5) == text.replace("$ 2", "$ 5")
+        assert sweeps.set_amount(text, "NumCards", 5) == text.replace("$ 2", "$ 5")
 
     def test_cost_pips_read_generic_and_coloured_mana(self):
         assert sweeps.cost_pips("{2}{G}") == ["1", "1", "G"]
@@ -1287,9 +1287,6 @@ class TestEvasionGrid:
 
 class TestTargetRestrictions:
     def test_numbers_are_masked(self):
-        text = "SP$ Destroy | ValidTgts$ Creature.nonLegendary | TgtPrompt$ x [SEG] SV1 | " \
-               "ValidTgts$ Player"
-        assert target_restrictions.restriction_of(text) == "Creature.nonLegendary"
         assert target_restrictions.masked("Creature.powerLE2") == "Creature.powerLE#"
 
     @pytest.mark.parametrize("restriction, expected", [
@@ -1328,7 +1325,7 @@ class TestTargetRestrictions:
 
 class TestColourPips:
     def test_the_cost_parses_into_coloured_pips_and_generic(self):
-        assert colour_pips.parse_cost("{2}{R}{W/U}") == ([("R",), ("W", "U")], 2)
+        assert sweeps.parse_cost("{2}{R}{W/U}") == ([("R",), ("W", "U")], 2)
         assert colour_pips.shape([("U",)]) == "one pip"
         assert colour_pips.shape([("U",), ("U",)]) == "repeated pip"
         assert colour_pips.shape([("W",), ("U",)]) == "several colours"
@@ -1344,13 +1341,13 @@ class TestColourPips:
         ("{W/U}{W/U}", ["W", "G"], False),
     ])
     def test_the_rule_matches_pips_to_lands(self, cost, lands, expected):
-        assert colour_pips.payable(*colour_pips.parse_cost(cost), lands) is expected
+        assert colour_pips.payable(*sweeps.parse_cost(cost), lands) is expected
 
     @pytest.mark.parametrize("cost", ["{2}{R}", "{U}{U}", "{1}{U}{U}", "{W}{U}", "{W/U}",
                                       "{G}"])
     def test_configurations_keep_their_rule_answers(self, cost):
         configs = colour_pips.configurations(cost)
-        coloured, generic = colour_pips.parse_cost(cost)
+        coloured, generic = sweeps.parse_cost(cost)
         total = len(coloured) + generic
         assert configs["exact"] == (configs["exact"][0], True)
         assert configs["surplus"][1] is True

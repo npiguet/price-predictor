@@ -35,7 +35,7 @@ if __package__ in (None, ""):
 
 from _lib.markdown import print_table  # noqa: E402
 
-from effect_knowledge_probes import common, record_walk  # noqa: E402
+from effect_knowledge_probes import common, readout, record_walk  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
 COLOUR_WORDS = {"W": "white", "U": "blue", "B": "black", "R": "red", "G": "green"}
@@ -162,21 +162,6 @@ def qualifying_pair(record, keywords_of) -> tuple[str, str] | None:
     return None
 
 
-# ── reading the model ───────────────────────────────────────────────────
-
-
-def _may_block(outputs, surface, row, entity_id) -> float:
-    import torch
-
-    from effects.domain.effect_head_layout import FIELD_SLICES, HeadField
-
-    start, _ = FIELD_SLICES[HeadField.BLOCKER_LEGAL]
-    for index, slot in enumerate(surface.slots):
-        if slot.entity_id == entity_id and slot.kind.name == "CARD":
-            return float(torch.sigmoid(outputs[row, index, start]))
-    return float("nan")
-
-
 def label(name: str | None) -> str:
     return "none" if name is None else name
 
@@ -196,12 +181,11 @@ def main() -> None:
     grid = np.zeros((len(ATTACKER_KEYWORDS), len(BLOCKER_TRAITS)))
     rule = np.zeros_like(grid)
     per_row = {row: ([], []) for row in ATTACKER_KEYWORDS}
+    may_block = readout.at_cards("may_block", [b for _, _, b in triples])
     for i, row in enumerate(ATTACKER_KEYWORDS):
         for j, column in enumerate(BLOCKER_TRAITS):
             cells = [edited(record, a, b, row, column) for record, a, b in triples]
-            predictions = common.predict(
-                probe_model, [c[0] for c in cells],
-                lambda o, v, s, r, ids=[b for _, _, b in triples]: _may_block(o, s, r, ids[r]))
+            predictions = common.predict(probe_model, [c[0] for c in cells], may_block)
             grid[i, j] = float(np.mean(predictions))
             rule[i, j] = float(np.mean([c[1] for c in cells]))
             per_row[row][0].extend(c[1] for c in cells)

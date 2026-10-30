@@ -31,6 +31,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 import numpy as np
+from _lib.stats import weighted_r2
+
+from effect_knowledge_probes import readout
 
 # ── constants fixed in code (research.md § Constants fixed in code) ─────
 
@@ -99,12 +102,7 @@ def score(kind: str, y: np.ndarray, prediction: np.ndarray,
         if len(np.unique(y)) < 2:
             return float("nan")
         return float(roc_auc_score(y, prediction, sample_weight=weight))
-    w = np.ones_like(y) if weight is None else weight
-    mean = np.average(y, weights=w)
-    total = float((w * (y - mean) ** 2).sum())
-    if total <= 0:
-        return float("nan")
-    return float(1.0 - (w * (y - prediction) ** 2).sum() / total)
+    return weighted_r2(y, prediction, weight)
 
 
 #: Standardized features are clipped here, as the embedding probes clip theirs:
@@ -369,54 +367,14 @@ def verdict_head_trained(checkpoint) -> bool:
 
 def _readout(target: str, outputs, verdict, slot: int, row: int, *,
              verdict_trained: bool = True) -> float:
-    """Rung 3: the head's own prediction for one item.
-
-    Read through :class:`HeadReading`, gated as gate 2 and the sweeps read it:
-    a field head trains only where an entity was affected, so its answer is
-    scaled by the gate's. ``damage_taken`` is the exception: every one of its
-    items took damage, so the gate's doubt would scale the amount by noise, and
-    the amount is read alone.
+    """Rung 3: the head's own prediction for one item (:mod:`readout`).
 
     NaN where the head this target reads was never trained, which
     :func:`ladder_inputs` turns into an unavailable rung 3 rather than a score.
     """
     if target in VERDICT_TARGETS and not verdict_trained:
         return float("nan")
-    import torch
-
-    from effects.domain.effect_head_layout import (
-        FIELD_SLICES,
-        VERDICT_BITS,
-        HeadField,
-        ZoneOutcome,
-    )
-    from effects.domain.head_decoding import HeadReading
-
-    reading = HeadReading(outputs[row, slot])
-
-    if target == "affected":
-        value = reading.p_affected
-    elif target == "dies":
-        value = reading.p_zone(ZoneOutcome.DIED)
-    elif target == "damage_taken":
-        value = reading.expected(HeadField.DAMAGE_TAKEN, conditional=True)
-    elif target == "pt_until_end_of_turn":
-        value = reading.p_class(HeadField.PT_DURATION, "end_of_turn")
-    elif target == "may_block":
-        value = torch.sigmoid(outputs[row, slot, FIELD_SLICES[HeadField.BLOCKER_LEGAL][0]])
-    elif target in ("legal_target", "legal_target_protected"):
-        # The gate, not the `target_legal` field: training sets that field only
-        # on legal targets, always to 1, so on an illegal entity its output was
-        # never supervised and ranks nothing. Legality is learned through the
-        # gate, which a decision record raises exactly on its legal targets.
-        value = reading.p_affected
-    elif target == "affordable":
-        value = torch.sigmoid(verdict[row, VERDICT_BITS.index("affordable")])
-    elif target == "fires":
-        value = torch.sigmoid(verdict[row, -1])
-    else:
-        raise KeyError(target)
-    return float(value)
+    return readout.read(target, outputs, verdict, row, slot)
 
 
 @dataclass
@@ -480,13 +438,11 @@ class ItemFeatureBuilder:
         self.batcher = batcher
         self.e_dim = e_dim
         self.zero_e = np.zeros(e_dim, dtype=np.float32)
-        self.card_slot: dict[str, int] = {}
+        self.card_slot = readout.card_slots(surface)
         self.player_slot: dict[str, int] = {}
         self.rows_of: dict[str, list[int]] = defaultdict(list)
         for index, slot in enumerate(surface.slots):
-            if slot.kind is SlotKind.CARD:
-                self.card_slot[slot.entity_id] = index
-            elif slot.kind is SlotKind.PLAYER:
+            if slot.kind is SlotKind.PLAYER:
                 self.player_slot[slot.player_id] = index
             elif slot.kind is SlotKind.ABILITY and isinstance(slot.e, int):
                 self.rows_of[slot.entity_id].append(slot.e)

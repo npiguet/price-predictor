@@ -31,6 +31,7 @@ from dataclasses import replace
 
 import numpy as np
 
+from effect_knowledge_probes import readout
 from effect_knowledge_probes.board_edits import BoardEdit
 from effect_knowledge_probes.common import predict
 
@@ -61,18 +62,28 @@ _MANA_APIS = frozenset({"Mana", "ManaReflected"})
 # ── the edits ───────────────────────────────────────────────────────────
 
 
-def cost_pips(cost: str) -> list[str]:
-    """A ``{2}{R}``-style cost as pips: one colour symbol per coloured pip,
-    ``"1"`` per point of generic mana."""
-    pips: list[str] = []
+def parse_cost(cost: str) -> tuple[list[tuple[str, ...]], int]:
+    """``(coloured pips, generic)`` of a ``{2}{R}``-style cost: each coloured
+    pip as the colours that pay it.
+
+    ``{2}{R}{W/U}`` is ``([("R",), ("W", "U")], 2)``. Read only for costs
+    :func:`land_payable` admits, so a ``{X}`` or ``{2/W}`` pip never reaches it.
+    """
+    coloured: list[tuple[str, ...]] = []
+    generic = 0
     for pip in _PIP_RE.findall(cost or ""):
         if pip.isdigit():
-            pips.extend(["1"] * int(pip))
-        elif pip in ("W", "U", "B", "R", "G", "C"):
-            pips.append(pip)
+            generic += int(pip)
         else:
-            pips.append(pip[0] if pip[0] in "WUBRG" else "1")
-    return pips
+            coloured.append(tuple(pip.split("/")))
+    return coloured, generic
+
+
+def cost_pips(cost: str) -> list[str]:
+    """A cost as pips: ``"1"`` per point of generic mana, then one colour per
+    coloured pip, a hybrid by its first colour."""
+    coloured, generic = parse_cost(cost)
+    return ["1"] * generic + [pip[0] for pip in coloured]
 
 
 def candidate_mana(record) -> str:
@@ -243,9 +254,10 @@ def set_opposing_creatures(record, count: int):
     return BoardEdit(record).with_entities([*kept, *copies]).record
 
 
-def set_damage_amount(text: str, amount: int) -> str:
-    """The acting text with every literal ``NumDmg$`` set to ``amount``."""
-    return _NUMDMG_RE.sub(lambda m: f"{m.group(1)}{amount}", text)
+def set_amount(text: str, key: str, amount: int) -> str:
+    """The acting text with every literal ``key$`` (``NumDmg``, ``NumCards``) set
+    to ``amount``."""
+    return re.sub(rf"({key}\$\s*)(\d+)", lambda m: f"{m.group(1)}{amount}", text)
 
 
 # ── which records each sweep runs on ────────────────────────────────────
@@ -316,56 +328,30 @@ class SweepSelector:
         return out
 
 
-def select_sweep_records(records, sidecars, *, per_sweep: int = RECORDS_PER_SWEEP) -> dict:
-    """:class:`SweepSelector` over a whole iterable of records."""
-    selector = SweepSelector(sidecars, per_sweep)
-    for record in records:
-        selector.observe(record)
-    return selector.result()
-
-
 # ── running them ────────────────────────────────────────────────────────
-
-
-def death(outputs, surface, row, entity_id) -> float:
-    """One card's predicted death, gated (:class:`HeadReading`); NaN off the board."""
-    from effects.domain.effect_head_layout import ZoneOutcome
-    from effects.domain.head_decoding import HeadReading
-
-    for index, slot in enumerate(surface.slots):
-        if slot.entity_id == entity_id and slot.kind.name == "CARD":
-            return float(HeadReading(outputs[row, index]).p_zone(ZoneOutcome.DIED))
-    return float("nan")
 
 
 def run_sweep(name: str, probe_model, record, row: dict) -> list[dict]:
     """``[{value, prediction}]`` for one record of one sweep."""
-    import torch
-
-    from effects.domain.effect_head_layout import VERDICT_BITS
-
+    dies = readout.at_card("dies", row.get("entity"))
     if name == "toughness":
         values = TOUGHNESS_VALUES
         edited = [BoardEdit(record).set_toughness(row["entity"], t).record for t in values]
-        predictions = predict(probe_model, edited,
-                              lambda o, v, s, r: death(o, s, r, row["entity"]))
+        predictions = predict(probe_model, edited, dies)
     elif name == "affordability":
         pips = candidate_cost(record)
         values = tuple(range(0, len(pips) + 3))
         edited = [set_untapped_lands(record, record.actor_player, pips, v) for v in values]
-        affordable = VERDICT_BITS.index("affordable")
-        predictions = predict(probe_model, edited, lambda o, v, s, r: float(
-            torch.sigmoid(v[r, affordable])))
+        predictions = predict(probe_model, edited, readout.of_record("affordable"))
     elif name == "board_size":
         values = BOARD_SIZES
         edited = [set_opposing_creatures(record, n) for n in values]
 
+        deaths = readout.at_every_card("dies")
+
         def summed(o, v, s, r):
-            return float(np.nansum([
-                death(o, s, r, slot.entity_id) for slot in s.slots
-                if slot.kind.name == "CARD" and slot.entity_id is not None
-                and _is_opposing(edited[r], slot.entity_id)
-            ]))
+            return float(np.nansum([p for entity, p in deaths(o, v, s, r).items()
+                                    if _is_opposing(edited[r], entity)]))
         predictions = predict(probe_model, edited, summed)
     elif name == "damage":
         values = DAMAGE_VALUES
@@ -375,9 +361,8 @@ def run_sweep(name: str, probe_model, record, row: dict) -> list[dict]:
         key = record.ability[0]
         original = batcher.text_of(key)
         for amount in values:
-            with batcher.reading_as(key, set_damage_amount(original, amount)):
-                predictions += predict(probe_model, [base],
-                                       lambda o, v, s, r: death(o, s, r, row["entity"]))
+            with batcher.reading_as(key, set_amount(original, "NumDmg", amount)):
+                predictions += predict(probe_model, [base], dies)
     else:
         raise KeyError(name)
     return [{"value": int(v), "prediction": p} for v, p in zip(values, predictions)]

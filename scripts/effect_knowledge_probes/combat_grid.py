@@ -49,7 +49,7 @@ if __package__ in (None, ""):
 
 from _lib.markdown import print_table  # noqa: E402
 
-from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
+from effect_knowledge_probes import common, readout, record_walk  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
 VALUES = range(1, 9)
@@ -277,11 +277,10 @@ def main() -> None:
             rule = np.zeros((8, 8))
             for record, attacker, blocker in triples:
                 rows, rules = grid_records(record, attacker, blocker, which, variant)
-                read_id = blocker if which == "blocker" else attacker
-                for i, row in enumerate(rows):
-                    grid[i] += common.predict(
-                        probe_model, row,
-                        lambda o, v, s, r, e=read_id: sweeps.death(o, s, r, e))
+                dies = readout.at_card("dies", blocker if which == "blocker" else attacker)
+                cells = common.predict_all(probe_model, [cell for row in rows for cell in row],
+                                           dies)
+                grid += np.reshape(cells, grid.shape)
                 rule += rules
             grid /= max(len(triples), 1)
             rule /= max(len(triples), 1)

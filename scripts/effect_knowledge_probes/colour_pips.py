@@ -50,7 +50,7 @@ if __package__ in (None, ""):
 
 from _lib.markdown import print_table  # noqa: E402
 
-from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
+from effect_knowledge_probes import common, readout, record_walk, sweeps  # noqa: E402
 
 WUBRG = ("W", "U", "B", "R", "G")
 CONFIGURATIONS = ("exact", "surplus", "one short", "pip missing", "pip missing, +2",
@@ -58,21 +58,6 @@ CONFIGURATIONS = ("exact", "surplus", "one short", "pip missing", "pip missing, 
 
 
 # ── the cost and the rule ───────────────────────────────────────────────
-
-
-def parse_cost(cost: str) -> tuple[list[tuple[str, ...]], int]:
-    """``(coloured pips, generic)``: each coloured pip as the colours that pay it.
-
-    ``{2}{R}{W/U}`` is ``([("R",), ("W", "U")], 2)``.
-    """
-    coloured: list[tuple[str, ...]] = []
-    generic = 0
-    for pip in sweeps._PIP_RE.findall(cost or ""):
-        if pip.isdigit():
-            generic += int(pip)
-        else:
-            coloured.append(tuple(pip.split("/")))
-    return coloured, generic
 
 
 def payable(coloured: list[tuple[str, ...]], generic: int, lands: list[str]) -> bool:
@@ -103,7 +88,7 @@ def shape(coloured: list[tuple[str, ...]]) -> str:
 
 def configurations(cost: str) -> dict[str, tuple[list[str], bool]]:
     """``configuration -> (land colours, the rule's answer)`` for one cost."""
-    coloured, generic = parse_cost(cost)
+    coloured, generic = sweeps.parse_cost(cost)
     named = {colour for pip in coloured for colour in pip}
     off = next(colour for colour in WUBRG if colour not in named)
     exact = [pip[0] for pip in coloured] + [off] * generic
@@ -123,7 +108,7 @@ def configurations(cost: str) -> dict[str, tuple[list[str], bool]]:
 
 def missing_colour_present(cost: str) -> bool:
     """Whether ``pip missing`` still leaves a land of the missing pip's colour."""
-    coloured, _ = parse_cost(cost)
+    coloured, _ = sweeps.parse_cost(cost)
     return coloured[-1][0] in [pip[0] for pip in coloured[:-1]]
 
 
@@ -140,23 +125,12 @@ def land_payable(sidecars):
             return None
         if not sweeps.affordability_ready(record, sidecars):
             return None
-        coloured, _ = parse_cost(sweeps.candidate_mana(record))
+        coloured, _ = sweeps.parse_cost(sweeps.candidate_mana(record))
         if len({c for pip in coloured for c in pip}) >= len(WUBRG):
             return None
         return record
 
     return choose
-
-
-# ── reading the model ───────────────────────────────────────────────────
-
-
-def _affordable(outputs, verdict, surface, row) -> float:
-    import torch
-
-    from effects.domain.effect_head_layout import VERDICT_BITS
-
-    return float(torch.sigmoid(verdict[row, VERDICT_BITS.index("affordable")]))
 
 
 def main() -> None:
@@ -170,22 +144,19 @@ def main() -> None:
     # predicted[name][i], rule[name][i] for record i
     predicted: dict[str, list[float]] = {name: [] for name in CONFIGURATIONS}
     rule: dict[str, list[bool]] = {name: [] for name in CONFIGURATIONS}
-    shapes, present = [], []
-    for start in range(0, len(records), 16):
-        chunk = records[start:start + 16]
-        edited, answers = [], []
-        for record in chunk:
-            cost = sweeps.candidate_mana(record)
-            shapes.append(shape(parse_cost(cost)[0]))
-            present.append(missing_colour_present(cost))
-            for name, (lands, answer) in configurations(cost).items():
-                edited.append(sweeps.set_untapped_lands(
-                    record, record.actor_player, list(lands), len(lands)))
-                answers.append((name, answer))
-        for (name, answer), p in zip(answers, common.predict(probe_model, edited,
-                                                             _affordable)):
-            predicted[name].append(p)
-            rule[name].append(answer)
+    shapes, present, edited, answers = [], [], [], []
+    for record in records:
+        cost = sweeps.candidate_mana(record)
+        shapes.append(shape(sweeps.parse_cost(cost)[0]))
+        present.append(missing_colour_present(cost))
+        for name, (lands, answer) in configurations(cost).items():
+            edited.append(sweeps.set_untapped_lands(
+                record, record.actor_player, list(lands), len(lands)))
+            answers.append((name, answer))
+    for (name, answer), p in zip(answers, common.predict_all(
+            probe_model, edited, readout.of_record("affordable"))):
+        predicted[name].append(p)
+        rule[name].append(answer)
     predicted = {k: np.asarray(v) for k, v in predicted.items()}
     rule = {k: np.asarray(v, bool) for k, v in rule.items()}
     shapes, present = np.asarray(shapes), np.asarray(present, bool)

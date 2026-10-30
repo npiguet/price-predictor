@@ -24,7 +24,7 @@ if __package__ in (None, ""):
 
 from _lib.markdown import print_table  # noqa: E402
 
-from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
+from effect_knowledge_probes import common, readout, record_walk, sweeps  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
 
 VALUES = range(1, 9)
@@ -64,7 +64,7 @@ def _options(parser) -> None:
     parser.add_argument("--source", choices=("probe", "training", "card-disjoint"),
                         default="probe")
     parser.add_argument("--host", default="spell", help="probe source: spell or triggered")
-    parser.add_argument("--probe-set-dir", type=Path, default=common.DEFAULT_REPORTS,
+    parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
                         help="where the corpus's frozen probe set is (probe source)")
 
 
@@ -83,18 +83,18 @@ def main() -> None:
                                        shards=args.shards)
     records = [record for record, _ in pairs]
     probe_model = context.model(records)
+    common.heading(args, context, f"{len(pairs)} {args.source} records")
     grid = np.zeros((8, 8))
     batcher = probe_model.batcher
     for record, entity in pairs:
         key = record.ability[0]
         original = batcher.text_of(key)
         edited = [BoardEdit(record).set_toughness(entity, t).record for t in VALUES]
+        dies = readout.at_card("dies", entity)
         for i, amount in enumerate(VALUES):
-            with batcher.reading_as(key, sweeps.set_damage_amount(original, amount)):
-                grid[i] += common.predict(probe_model, edited,
-                                          lambda o, v, s, r: sweeps.death(o, s, r, entity))
+            with batcher.reading_as(key, sweeps.set_amount(original, "NumDmg", amount)):
+                grid[i] += common.predict(probe_model, edited, dies)
     grid /= max(len(pairs), 1)
-    print(f"{args.checkpoint.parent.name}, {len(pairs)} {args.source} records")
     print_table(["damage \\ toughness", *VALUES],
                 [[amount, *(f"{v:.2f}" for v in row)] for amount, row in zip(VALUES, grid)],
                 "l" + "r" * 8)
