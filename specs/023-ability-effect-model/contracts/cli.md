@@ -347,6 +347,11 @@ records it alongside the split.
 Gate 1 reads its stratum from the curated corpus `--checkpoint` records. Matched real-vs-fork agreement, the probe-diff re-check and the role-polarity probe are
 not implemented and report `NOT_IMPLEMENTED` (`[todo]`) on every run (FR-111).
 
+The UMAP check (FR-110) writes two files into `<checkpoint stem>.evaluation/` beside `--checkpoint`,
+and its report line names both: `umap.png`, one panel per script API type (the twelve most frequent,
+the rest as `other`), and `umap.csv`, one row per unique cached text with columns
+`x,y,api_type,text`. The report itself is printed, not written.
+
 **Splits are never a flag.** The held-out card list and `game_id` set come from `--checkpoint`. The
 command fails fast when a `--variant-checkpoint` records a different split, or different vocabulary or
 keyword-definition hashes, than `--checkpoint`. It also fails fast when the dataset `--corpus` names

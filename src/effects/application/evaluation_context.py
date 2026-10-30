@@ -93,6 +93,14 @@ class EvaluateEffectModelConfig:
 
         return SourceTrees.of(self.cards_folders, self.variant_scripts)
 
+    @property
+    def output_dir(self) -> Path:
+        """Where the files the report names are written: a directory beside
+        ``--checkpoint`` named for it, since the report itself is printed and
+        two checkpoints in one directory must not overwrite each other's."""
+        checkpoint = Path(self.checkpoint)
+        return checkpoint.parent / f"{checkpoint.stem}.evaluation"
+
 
 def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:
     """``NAME=PATH`` for ``--variant-checkpoint``, ``NAME`` a baseline.

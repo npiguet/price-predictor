@@ -161,7 +161,7 @@ def _geometry_checks(context: EvaluationContext, cached, sidecars) -> list[Check
     checks = [
         check_ward(cached),
         check_nearest_neighbours(cached, NEIGHBOUR_QUERIES),
-        check_umap(cached),
+        check_umap(cached, context.config.output_dir),
         check_decodability(
             cached, Path(context.config.win_rates),
             held_out_cards=context.main.provenance.held_out_cards,

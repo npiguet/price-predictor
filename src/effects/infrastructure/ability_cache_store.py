@@ -93,10 +93,12 @@ def _load(path: Path) -> np.ndarray:
 @dataclass(frozen=True, slots=True)
 class CachedLine:
     """One sidecar line as its cache row is keyed: the text it encodes on the
-    checkpoint's surface, and its converted prose where it has any."""
+    checkpoint's surface, its converted prose where it has any, and the script
+    API type its sidecar line records."""
 
     text: str
     prose: str | None
+    api_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,7 +130,8 @@ class SidecarIndex:
         for root in roots:
             for path, sidecar in iter_sidecars(root):
                 lines = tuple(
-                    CachedLine(encoded.text, encoded.prose) if encoded.text else None
+                    CachedLine(encoded.text, encoded.prose, encoded.line.script_api_type)
+                    if encoded.text else None
                     for encoded in encoded_lines(path, sidecar, surface)
                 )
                 sources.append(IndexedSource(sidecar.script_file, sidecar.card, lines))

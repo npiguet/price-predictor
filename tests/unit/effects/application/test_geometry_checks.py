@@ -407,19 +407,71 @@ class TestNearestNeighbours:
 
 
 class TestUmap:
-    def test_too_few_vectors_skips(self, cache):
+    def test_too_few_vectors_skips_and_writes_nothing(self, cache, tmp_path):
         cards, abilities = cache
+        out = tmp_path / "evaluation"
         assert check_umap(
-            read_cache(abilities, cards, surface="script"),
+            read_cache(abilities, cards, surface="script"), out,
         ).status is CheckStatus.SKIPPED
+        assert not out.exists()
 
-    def test_a_populated_cache_projects(self):
+    def test_a_populated_cache_writes_the_picture_and_the_table(self, tmp_path):
+        """FR-110: the projection is kept, coloured by what each text does."""
+        import csv
+
         rng = np.random.default_rng(0)
-        cached = CachedVectors(by_text={
-            f"text {i}": rng.normal(size=8) for i in range(30)
-        })
-        result = check_umap(cached)
-        assert result.status in (CheckStatus.REPORTED, CheckStatus.SKIPPED)
+        types = ["DealDamage", "Pump", "Draw"]
+        texts = [f"text {i}" for i in range(30)]
+        cached = CachedVectors(
+            by_text={text: rng.normal(size=8) for text in texts},
+            # One text with no recorded type: it is plotted as "none".
+            api_types={text: types[i % 3] for i, text in enumerate(texts[:-1])},
+        )
+        out = tmp_path / "evaluation"
+
+        result = check_umap(cached, out)
+
+        assert result.status is CheckStatus.REPORTED
+        png, table = out / "umap.png", out / "umap.csv"
+        assert png.stat().st_size > 0 and table.exists()
+        assert str(png) in result.detail and str(table) in result.detail
+        with table.open(encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        assert len(rows) == len(cached)
+        assert [row["text"] for row in rows] == texts
+        assert {row["api_type"] for row in rows} == {*types, "none"}
+        assert all(math.isfinite(float(row["x"])) for row in rows)
+
+    def test_the_picture_is_the_same_file_every_run(self, tmp_path):
+        rng = np.random.default_rng(1)
+        cached = CachedVectors(by_text={f"t{i}": rng.normal(size=4) for i in range(20)})
+        check_umap(cached, tmp_path / "a")
+        check_umap(cached, tmp_path / "b")
+        for name in ("umap.png", "umap.csv"):
+            assert (tmp_path / "a" / name).read_bytes() == (tmp_path / "b" / name).read_bytes()
+
+
+class TestUmapPanels:
+    def test_the_most_frequent_types_get_panels_and_the_rest_share_other(self):
+        from effects.application.umap_check import api_type_panels
+
+        types = ["A"] * 3 + ["B"] * 2 + ["C"] * 2 + ["D"]
+        panels, panel_of = api_type_panels(types, top=2)
+        # B and C tie on two; the tie goes by name, never by the cache's order.
+        assert panels == ["A", "B", "other"]
+        assert panel_of == ["A"] * 3 + ["B"] * 2 + ["other"] * 3
+
+    def test_no_other_panel_when_every_type_fits(self):
+        from effects.application.umap_check import api_type_panels
+
+        assert api_type_panels(["A", "B", "A"], top=12) == (["A", "B"], ["A", "B", "A"])
+
+
+def test_the_evaluation_files_go_beside_the_checkpoint_named_for_it(tmp_path):
+    from effects.application.evaluation_context import EvaluateEffectModelConfig
+
+    config = EvaluateEffectModelConfig(checkpoint=tmp_path / "arm" / "latest.pt")
+    assert config.output_dir == tmp_path / "arm" / "latest.evaluation"
 
 
 def _ward_cache(tmp_path, *, missing: tuple[LineQuery, ...] = ()):

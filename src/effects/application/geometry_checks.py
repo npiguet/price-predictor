@@ -42,6 +42,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: A cached text whose sidecar line records no script API type.
+NO_API_TYPE = "none"
+
 #: Cached cards with a win rate the decodability battery needs before it fits
 #: a probe: fewer, and a held-out R² measures the split rather than ``e``.
 MIN_DECODABILITY_CARDS = 50
@@ -86,6 +89,8 @@ class CachedVectors:
     by_card: dict[str, np.ndarray] = field(default_factory=dict)
     display: dict[str, str] = field(default_factory=dict)
     by_prose: dict[str, dict[str, set[str]]] = field(default_factory=dict)
+    #: Each text's script API type, where its sidecar line records one.
+    api_types: dict[str, str] = field(default_factory=dict)
 
     @cached_property
     def matrix(self) -> np.ndarray:
@@ -110,6 +115,11 @@ class CachedVectors:
     def label(self, key: str) -> str:
         """``key`` as a person reads it: its prose, where it has any."""
         return self.display.get(key, key)
+
+    def api_type_of(self, key: str) -> str:
+        """``key``'s script API type, or :data:`NO_API_TYPE` where its line
+        records none."""
+        return self.api_types.get(key, NO_API_TYPE)
 
     def resolve(self, query: LineQuery) -> Resolution:
         """The cache key ``query`` names, or the reason it names none. Several
@@ -149,6 +159,8 @@ def cached_vectors(
                 continue
             cached.by_text.setdefault(line.text, row)
             cached.display.setdefault(line.text, line.prose or line.text)
+            if line.api_type:
+                cached.api_types.setdefault(line.text, line.api_type)
             if line.prose:
                 cached.by_prose.setdefault(
                     normalize_prose(line.prose), {},
