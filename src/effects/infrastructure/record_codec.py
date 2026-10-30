@@ -120,6 +120,75 @@ def _event_from_json(item: Any) -> Event:
 # ── snapshot ────────────────────────────────────────────────────────────
 
 
+def _optional[T, R](convert: Callable[[T], R], value: T | None) -> R | None:
+    """``convert(value)``, or None for an absent block: null, or empty on read."""
+    return convert(value) if value else None
+
+
+def _pt_to_json(pt: PowerToughness) -> dict:
+    return {
+        "base": list(pt.base),
+        "boosts": list(pt.boosts),
+        "counters": list(pt.counters),
+    }
+
+
+def _pt_from_json(data: dict) -> PowerToughness:
+    return PowerToughness(
+        base=tuple(data["base"]),
+        boosts=tuple(data.get("boosts", (0, 0))),
+        counters=tuple(data.get("counters", (0, 0))),
+    )
+
+
+def _combat_status_to_json(combat: CombatStatus) -> dict:
+    return {
+        "attacking": combat.attacking,
+        "blocking": list(combat.blocking),
+        "blocked_by": list(combat.blocked_by),
+        "became_blocked": combat.became_blocked,
+    }
+
+
+def _combat_status_from_json(data: dict) -> CombatStatus:
+    return CombatStatus(
+        attacking=data.get("attacking"),
+        blocking=tuple(data.get("blocking", ())),
+        blocked_by=tuple(data.get("blocked_by", ())),
+        became_blocked=data.get("became_blocked", False),
+    )
+
+
+def _granted_temporary_to_json(granted: GrantedTemporary) -> dict:
+    return {
+        "keywords": list(granted.keywords),
+        "abilities": _keys_to_json(granted.abilities),
+    }
+
+
+def _granted_temporary_from_json(data: dict) -> GrantedTemporary:
+    return GrantedTemporary(
+        keywords=tuple(normalize_keyword(k) for k in data.get("keywords", ())),
+        abilities=_keys_from_json(data.get("abilities")),
+    )
+
+
+def _stack_extras_to_json(extras: StackExtras) -> dict:
+    return {
+        "targets": list(extras.targets),
+        "per_target_amounts": dict(extras.per_target_amounts),
+        "up_to_counts": dict(extras.up_to_counts),
+    }
+
+
+def _stack_extras_from_json(data: dict) -> StackExtras:
+    return StackExtras(
+        targets=tuple(data.get("targets", ())),
+        per_target_amounts=dict(data.get("per_target_amounts", {})),
+        up_to_counts=dict(data.get("up_to_counts", {})),
+    )
+
+
 def _entity_to_json(entity: EntityState) -> dict:
     return {
         "id": entity.id, "name": entity.name, "zone": entity.zone,
@@ -129,52 +198,20 @@ def _entity_to_json(entity: EntityState) -> dict:
         "types": list(entity.types), "subtypes": list(entity.subtypes),
         "supertypes": list(entity.supertypes), "colors": list(entity.colors),
         "mana_value": entity.mana_value,
-        "pt": (
-            {
-                "base": list(entity.pt.base),
-                "boosts": list(entity.pt.boosts),
-                "counters": list(entity.pt.counters),
-            }
-            if entity.pt
-            else None
-        ),
+        "pt": _optional(_pt_to_json, entity.pt),
         "tapped": entity.tapped, "sick": entity.sick, "damage": entity.damage,
         "counters": dict(entity.counters),
-        "combat": (
-            {
-                "attacking": entity.combat.attacking,
-                "blocking": list(entity.combat.blocking),
-                "blocked_by": list(entity.combat.blocked_by),
-                "became_blocked": entity.combat.became_blocked,
-            }
-            if entity.combat
-            else None
-        ),
+        "combat": _optional(_combat_status_to_json, entity.combat),
         "attached_to": entity.attached_to,
         "face_down": entity.face_down,
         "granted_attached": _keys_to_json(entity.granted_attached),
-        "granted_temporary": {
-            "keywords": list(entity.granted_temporary.keywords),
-            "abilities": _keys_to_json(entity.granted_temporary.abilities),
-        },
+        "granted_temporary": _granted_temporary_to_json(entity.granted_temporary),
         "printed": _keys_to_json(entity.printed),
-        "stack_extras": (
-            {
-                "targets": list(entity.stack_extras.targets),
-                "per_target_amounts": dict(entity.stack_extras.per_target_amounts),
-                "up_to_counts": dict(entity.stack_extras.up_to_counts),
-            }
-            if entity.stack_extras
-            else None
-        ),
+        "stack_extras": _optional(_stack_extras_to_json, entity.stack_extras),
     }
 
 
 def _entity_from_json(data: dict) -> EntityState:
-    pt = data.get("pt")
-    combat = data.get("combat")
-    extras = data.get("stack_extras")
-    granted = data.get("granted_temporary") or {}
     return EntityState(
         id=data["id"], name=data["name"], zone=data["zone"],
         controller=data["controller"], face=data.get("face", 0),
@@ -185,46 +222,18 @@ def _entity_from_json(data: dict) -> EntityState:
         supertypes=tuple(data.get("supertypes", ())),
         colors=tuple(data.get("colors", ())),
         mana_value=data.get("mana_value", 0),
-        pt=(
-            PowerToughness(
-                base=tuple(pt["base"]),
-                boosts=tuple(pt.get("boosts", (0, 0))),
-                counters=tuple(pt.get("counters", (0, 0))),
-            )
-            if pt
-            else None
-        ),
+        pt=_optional(_pt_from_json, data.get("pt")),
         tapped=data.get("tapped", False), sick=data.get("sick", False),
         damage=data.get("damage", 0), counters=dict(data.get("counters", {})),
-        combat=(
-            CombatStatus(
-                attacking=combat.get("attacking"),
-                blocking=tuple(combat.get("blocking", ())),
-                blocked_by=tuple(combat.get("blocked_by", ())),
-                became_blocked=combat.get("became_blocked", False),
-            )
-            if combat
-            else None
-        ),
+        combat=_optional(_combat_status_from_json, data.get("combat")),
         attached_to=data.get("attached_to"),
         face_down=data.get("face_down", False),
         granted_attached=_keys_from_json(data.get("granted_attached")),
-        granted_temporary=GrantedTemporary(
-            keywords=tuple(
-                normalize_keyword(k) for k in granted.get("keywords", ())
-            ),
-            abilities=_keys_from_json(granted.get("abilities")),
+        granted_temporary=_granted_temporary_from_json(
+            data.get("granted_temporary") or {}
         ),
         printed=_keys_from_json(data.get("printed")),
-        stack_extras=(
-            StackExtras(
-                targets=tuple(extras.get("targets", ())),
-                per_target_amounts=dict(extras.get("per_target_amounts", {})),
-                up_to_counts=dict(extras.get("up_to_counts", {})),
-            )
-            if extras
-            else None
-        ),
+        stack_extras=_optional(_stack_extras_from_json, data.get("stack_extras")),
     )
 
 
