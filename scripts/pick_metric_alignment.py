@@ -61,48 +61,28 @@ what separates candidates tied on the raw percentile.
 from __future__ import annotations
 
 import argparse
-import sys
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from draft_corpus_common import (  # noqa: E402
+from _lib.corpora import load_win_rates
+from _lib.stats import spearman
+from draft_corpus_common import (
+    WUBRG,
     ColourResolver,
     parse_drafts_arg,
     read_records,
-    seat_pool,
     top_two_colours,
 )
 
 AXES = ["score_play", "score_draw", "played_rate", "cast_lift"]
-WUBRG = "WUBRG"
 
 
 def load_winrates(path: Path, min_obs: int) -> dict:
     """card -> {axis: value}, keeping cards with enough in-deck observations."""
-    out: dict = {}
-    with path.open(encoding="utf-8") as fh:
-        header = fh.readline().rstrip("\n").split(";")
-        idx = {name: i for i, name in enumerate(header)}
-        for line in fh:
-            f = line.rstrip("\n").split(";")
-            if len(f) != len(header):
-                continue
-            n = int(f[idx["wins_when_in_deck"]]) + int(f[idx["losses_when_in_deck"]])
-            if n < min_obs:
-                continue
-            row = {}
-            for axis in AXES:
-                raw = f[idx[f"shrunk_{axis}"]]
-                if raw:
-                    row[axis] = float(raw)
-            for c in WUBRG:
-                raw = f[idx[f"shrunk_color_lift_{c}"]]
-                if raw:
-                    row[f"cl_{c}"] = float(raw)
-            out[f[idx["card_name"]]] = row
-    return out
+    columns = {**{axis: f"shrunk_{axis}" for axis in AXES},
+               **{f"cl_{c}": f"shrunk_color_lift_{c}" for c in WUBRG}}
+    return {name: {key: row[col] for key, col in columns.items() if row[col] is not None}
+            for name, row in load_win_rates(path, min_obs).items()}
 
 
 def percentile(values: list, taken: float) -> float:
@@ -110,31 +90,6 @@ def percentile(values: list, taken: float) -> float:
     below = sum(1 for v in values if v < taken)
     equal = sum(1 for v in values if v == taken)
     return (below + (equal - 1) / 2.0) / (len(values) - 1)
-
-
-def spearman(pairs: list) -> float:
-    xs, ys = zip(*pairs)
-
-    def ranks(v):
-        order = sorted(range(len(v)), key=lambda i: v[i])
-        r = [0.0] * len(v)
-        i = 0
-        while i < len(order):
-            j = i
-            while j + 1 < len(order) and v[order[j + 1]] == v[order[i]]:
-                j += 1
-            avg = (i + j) / 2.0 + 1
-            for k in range(i, j + 1):
-                r[order[k]] = avg
-            i = j + 1
-        return r
-
-    rx, ry = ranks(list(xs)), ranks(list(ys))
-    n = len(rx)
-    mx, my = sum(rx) / n, sum(ry) / n
-    num = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
-    den = (sum((a - mx) ** 2 for a in rx) * sum((b - my) ** 2 for b in ry)) ** 0.5
-    return num / den if den else float("nan")
 
 
 def main() -> None:
@@ -156,7 +111,7 @@ def main() -> None:
         acc: dict = defaultdict(lambda: defaultdict(lambda: [0.0, 0, 0]))
         for record, geom in read_records(path):
             for seat_i, seat in enumerate(record.seats):
-                pool = seat_pool(record, geom, seat_i)
+                pool = geom.drafted_pool(record, seat_i)
                 lane = sorted(top_two_colours(pool, colours))
                 for pack in range(1, geom.packs + 1):
                     for pick in range(1, geom.pack_size + 1):
@@ -204,7 +159,8 @@ def main() -> None:
         row = f"     {a:12s}"
         for b in names:
             pairs = [(r[a], r[b]) for r in wr.values() if a in r and b in r]
-            row += f"{spearman(pairs) if len(pairs) > 100 else float('nan'):12.2f}"
+            rho = spearman(*zip(*pairs)) if len(pairs) > 100 else float("nan")
+            row += f"{rho:12.2f}"
         print(row)
 
 

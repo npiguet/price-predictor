@@ -36,6 +36,8 @@ if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.markdown import print_table  # noqa: E402
+
 from effect_knowledge_probes import common, labels, ladder  # noqa: E402
 
 
@@ -122,11 +124,9 @@ def main() -> None:
         items_by_stratum[frozen.stratum][frozen.record_id].append(
             replace(frozen, partner=None).record_item())
     records_by_stratum = {}
-    for stratum, game_ids in probe_set.games.items():
-        shards = context.source_shards(probe_set.sources.get(stratum, []))
-        wanted = set(items_by_stratum[stratum])
-        records_by_stratum[stratum] = [
-            record for _, record in common.read_games(shards, set(game_ids), wanted)]
+    for stratum in probe_set.games:
+        records_by_stratum[stratum] = context.probe_records(
+            probe_set, stratum, set(items_by_stratum[stratum]))
         print(f"{stratum}: {len(records_by_stratum[stratum])} records", flush=True)
     every = [r for rows in records_by_stratum.values() for r in rows]
     probe_model = context.model(every)
@@ -152,11 +152,9 @@ def main() -> None:
                   f"{len(set(games))} games, {singles} items alone in their record "
                   f"({'AUC' if kind == 'binary' else 'R²'})")
             columns = list(rows[0][1])
-            print("| read-out | " + " | ".join(columns) + " |")
-            print("|---|" + "---:|" * len(columns))
-            for name, row in rows:
-                print(f"| {name} | " + " | ".join(f"{row[c]:.3f}" for c in columns) + " |",
-                      flush=True)
+            print_table(["read-out", *columns],
+                        [[name, *(f"{row[c]:.3f}" for c in columns)] for name, row in rows],
+                        "l" + "r" * len(columns))
 
 
 if __name__ == "__main__":

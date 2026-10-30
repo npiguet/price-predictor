@@ -24,16 +24,16 @@ import pandas as pd
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
-import q_common as qc  # noqa: E402
 
 N_CARDS = 320
 BUCKETS = ("cost", "types", "pt", "keyword", "body", "label")
 
 
-def normalize_text(raw: str) -> str:
+def normalize_text(stripped: str) -> str:
     """Name-stripped text with the tokenizer's implicit ``mana cost: none``."""
-    lines = [ln for ln in raw.splitlines() if not ln.startswith("name:") and ln.strip()]
+    lines = cc.lines(stripped)
     if not any(ln.startswith("mana cost:") for ln in lines):
         lines.append("mana cost: none")
     return "\n".join(lines)
@@ -109,7 +109,7 @@ def pool_attention(runner: pl.EncoderRunner, texts: list[str]):
 
 
 def main() -> None:
-    join, _ = qc.load_frame()
+    join = pl.load_frame(text=True)
     rng = np.random.default_rng(42)
     # A deliberately mixed sample: creatures, spells, lands, other permanents.
     strata = {
@@ -133,9 +133,7 @@ def main() -> None:
     kind_of = {i: k for k, m in strata.items() for i in np.flatnonzero(m)}
     dropped = 0
     for i in picks:
-        raw = Path(join.loc[i, "txt_path"]).read_text(encoding="utf-8",
-                                                      errors="replace")
-        text = normalize_text(raw)
+        text = normalize_text(join.loc[i, "text"])
         b = token_buckets(text, tok)
         if b is None or len(b) > runner.max_seq_len:
             dropped += 1
@@ -184,7 +182,7 @@ def main() -> None:
     share = pd.DataFrame(mass / n, columns=list(BUCKETS))
     share.insert(0, "query", range(n_q))
     share.loc[len(share)] = ["token-share", *(counts / n)]
-    share.to_csv(qc.SCRATCH / "q2_bucket_share.csv", index=False)
+    share.to_csv(pl.SCRATCH / "q2_bucket_share.csv", index=False)
 
     ent_tab = pd.DataFrame({
         "query": range(n_q),
@@ -192,7 +190,7 @@ def main() -> None:
         "mean_entropy_norm": [float(np.mean(e)) for e in ent_norm],
         "mean_top1_mass": [float(np.mean(t)) for t in top1],
     })
-    ent_tab.to_csv(qc.SCRATCH / "q2_entropy.csv", index=False)
+    ent_tab.to_csv(pl.SCRATCH / "q2_entropy.csv", index=False)
 
     # Per-query token preference: mean attention weight a token receives,
     # relative to the uniform share it would get by chance.
@@ -206,7 +204,7 @@ def main() -> None:
         best = sorted(lift.items(), key=lambda kv: -kv[1])[:12]
         rows.append({"query": k, "top_tokens": ", ".join(
             f"{t}({v:.3f})" for t, v in best)})
-    pd.DataFrame(rows).to_csv(qc.SCRATCH / "q2_top_tokens.csv", index=False)
+    pd.DataFrame(rows).to_csv(pl.SCRATCH / "q2_top_tokens.csv", index=False)
 
     # Query-to-query similarity of the attention distribution, per card.
     cross = np.zeros((n_q, n_q))
@@ -216,9 +214,9 @@ def main() -> None:
         a = a / a.sum(axis=1, keepdims=True)
         cross += np.corrcoef(a)
     cross /= n
-    pd.DataFrame(cross).to_csv(qc.SCRATCH / "q2_query_corr.csv", index=False)
+    pd.DataFrame(cross).to_csv(pl.SCRATCH / "q2_query_corr.csv", index=False)
 
-    pd.DataFrame(per_card_rows).to_csv(qc.SCRATCH / "q2_per_card.csv", index=False)
+    pd.DataFrame(per_card_rows).to_csv(pl.SCRATCH / "q2_per_card.csv", index=False)
     summary = {
         "n_cards": n,
         "mean_tokens": float(np.mean([len(b) for b in buckets])),
@@ -227,7 +225,7 @@ def main() -> None:
         "query_attn_corr_offdiag_min": float(cross[np.triu_indices(n_q, 1)].min()),
         "replay_max_abs_diff": float(np.abs(pooled - cached).max()),
     }
-    with open(qc.SCRATCH / "q2_summary.json", "w", encoding="utf-8") as f:
+    with open(pl.SCRATCH / "q2_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(share.round(4).to_string(index=False))
     print(ent_tab.round(4).to_string(index=False))

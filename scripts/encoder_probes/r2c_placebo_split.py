@@ -22,33 +22,21 @@ import pandas as pd
 from scipy.stats import mannwhitneyu
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
 
-ABILITY_PREFIXES = ("static:", "spell[", "activated[", "triggered", "replacement")
 N_PAIRS = 500
 SEED = 31337
 BATCH = 96
-SD_SCORE_PLAY = 0.06181
-SD_PLAYED_RATE = 0.1247
-
-
-def card_text(path: str) -> str:
-    return "\n".join(ln for ln in Path(path).read_text(encoding="utf-8", errors="replace")
-                     .splitlines() if ln.strip() and not ln.startswith("name:"))
+SD_SCORE_PLAY = pl.SD["score_play"]
+SD_PLAYED_RATE = pl.SD["played_rate"]
 
 
 def main() -> None:
-    join = pl.build_join()
-    join = join[join["is_primary"]].reset_index(drop=True)
-
-    texts, n_lines, n_ab = [], [], []
-    for p in join["txt_path"]:
-        t = card_text(p)
-        lines = t.splitlines()
-        texts.append(t)
-        n_lines.append(len(lines))
-        n_ab.append(sum(1 for ln in lines if ln.startswith(ABILITY_PREFIXES)))
-    join["n_lines"], join["n_ability_lines"] = n_lines, n_ab
+    join = pl.load_frame(features=False, text=True)
+    texts = ["\n".join(cc.lines(t)) for t in join["text"]]
+    join["n_lines"] = [len(cc.lines(t)) for t in texts]
+    join["n_ability_lines"] = [len(cc.ability_lines(t)) for t in texts]
 
     ok = (join["n_ability_lines"] >= 2).to_numpy()
     is_train = (join["split"] == "train").to_numpy() & ok
@@ -88,12 +76,11 @@ def main() -> None:
                 if variant is not None:
                     specs.append((split, idx, key, variant))
 
-    runner = pl.EncoderRunner()
+    runner = pl.runner()
     emb = runner.encode_texts([s[3] for s in specs], batch_size=BATCH)
     print(f"encoded {len(specs)} variants on {runner.device}", flush=True)
 
-    probes = pl.load_probes("fidelity", True)
-    pred = pl.predict_labels(emb, probes)
+    pred = pl.predict_labels(emb, pl.fidelity_probes())
     frame = pd.DataFrame({
         "split": [s[0] for s in specs], "row": [s[1] for s in specs],
         "edit": [s[2] for s in specs],

@@ -29,38 +29,31 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from draft_corpus_common import ColourResolver  # noqa: E402
-from probe_lib import (  # noqa: E402
-    TYPE_POOL,
+from _lib.stats import auc, weighted_r2
+from draft_corpus_common import ColourResolver
+from draft_probes.probe_lib import (
+    CARDS,
+    CORPUS,
+    MODELS,
+    OUT,
+    WUBRG,
     CardTable,
-    PolicyRunner,
+    deck_lane,
     iter_corpus_records,
     iter_corpus_states,
-    load_agent,
+    iter_runners,
+    pool_colour_fraction,
 )
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-G4 = REPO / "models/draft/agent/gen4"
-CORPUS = G4 / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl"
-CARDS = REPO / "output" / "cardsfolder-512"
+from draft.application.draft_training_common import leave_one_out_rewards
 
-MODELS = {
-    "gen1": REPO / "models/draft/agent/gen1/l6_lr3e-4_decay_20260604_080249.pt",
-    "gen3": REPO / "models/draft/agent/gen3/temperature-on-all-agents"
-                   "/lr1e-5_t2_20260805_221050.pt",
-    "gen4": G4 / "lr1e-5_t2all_decay0.3.pt",
-}
-BASIC = {"Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"}
-WUBRG = "WUBRG"
+PROBED = {gen: MODELS[gen] for gen in ("gen1", "gen3", "gen4")}
 
 
 def ridge_fit(X: np.ndarray, y: np.ndarray, lam: float = 30.0) -> np.ndarray:
@@ -72,23 +65,6 @@ def ridge_fit(X: np.ndarray, y: np.ndarray, lam: float = 30.0) -> np.ndarray:
 
 def ridge_pred(X: np.ndarray, w: np.ndarray) -> np.ndarray:
     return np.hstack([X, np.ones((X.shape[0], 1), dtype=X.dtype)]) @ w
-
-
-def r2(y: np.ndarray, p: np.ndarray) -> float:
-    ss = float(((y - p) ** 2).sum())
-    tot = float(((y - y.mean()) ** 2).sum())
-    return 1.0 - ss / tot if tot > 0 else float("nan")
-
-
-def auc(y: np.ndarray, s: np.ndarray) -> float:
-    pos, neg = s[y > 0.5], s[y <= 0.5]
-    if pos.size == 0 or neg.size == 0:
-        return float("nan")
-    order = np.argsort(np.concatenate([pos, neg]))
-    ranks = np.empty(order.size)
-    ranks[order] = np.arange(1, order.size + 1)
-    return float((ranks[:pos.size].sum() - pos.size * (pos.size + 1) / 2)
-                 / (pos.size * neg.size))
 
 
 def main() -> None:
@@ -106,24 +82,14 @@ def main() -> None:
     final_colours: dict[tuple[str, int], np.ndarray] = {}
     reward: dict[tuple[str, int], float] = {}
     for rec in iter_corpus_records(CORPUS, args.limit_drafts):
-        scores = [s.deck_score for s in rec.seats]
+        loo = leave_one_out_rewards(rec)
         for i, seat in enumerate(rec.seats):
             if not seat.deck or seat.deck_score is None:
                 continue
-            acc: dict[str, float] = defaultdict(float)
-            for name in seat.deck:
-                if name in BASIC:
-                    continue
-                ids = colours(name)
-                for c in ids:
-                    acc[c] += 1.0 / len(ids)
-            top = {c for c, _ in sorted(acc.items(), key=lambda kv: -kv[1])[:2]}
+            top = deck_lane(seat.deck, colours)
             final_colours[(rec.draft_id, i)] = np.array(
                 [1.0 if c in top else 0.0 for c in WUBRG], dtype=np.float32)
-            others = [s for j, s in enumerate(scores)
-                      if j != i and s is not None]
-            reward[(rec.draft_id, i)] = seat.deck_score - (
-                sum(others) / len(others) if others else 0.0)
+            reward[(rec.draft_id, i)] = loo[i]
 
     table = CardTable()
     samples = [
@@ -135,18 +101,8 @@ def main() -> None:
 
     table.matrix()
     colour_of_row = [colours(n) for n in table.names]
-    pool_frac = np.zeros((len(samples), 5), dtype=np.float32)
-    for k, s in enumerate(samples):
-        rows = s.state.card_idx[s.state.type_idx == TYPE_POOL]
-        if rows.size == 0:
-            continue
-        for r in rows:
-            ids = colour_of_row[r]
-            if not ids:
-                continue
-            for c in ids:
-                pool_frac[k, WUBRG.index(c)] += 1.0 / len(ids)
-        pool_frac[k] /= rows.size
+    pool_frac = np.array([pool_colour_fraction(s.state, colour_of_row) for s in samples],
+                         dtype=np.float32)
 
     y_col = np.stack([final_colours[(s.draft_id, s.seat)] for s in samples])
     y_rew = np.array([reward[(s.draft_id, s.seat)] for s in samples],
@@ -159,12 +115,7 @@ def main() -> None:
 
     buckets = [(1, 5), (6, 10), (11, 15), (16, 22), (23, 30), (31, 38), (39, 45)]
     results = {}
-    for gen, ckpt in MODELS.items():
-        if not ckpt.exists():
-            print(f"skip {gen}")
-            continue
-        model, _ = load_agent(ckpt)
-        runner = PolicyRunner(model, table, batch_size=args.batch)
+    for gen, runner in iter_runners(table, args.batch, PROBED):
         ctx = runner.context_vectors(samples)
         ctx = (ctx - ctx.mean(0)) / (ctx.std(0) + 1e-6)
         rows = []
@@ -178,9 +129,9 @@ def main() -> None:
                 w = ridge_fit(ctx[tr], y_col[tr, c])
                 aucs.append(auc(y_col[va, c], ridge_pred(ctx[va], w)))
             w = ridge_fit(ctx[tr], y_rew[tr])
-            r2_rew = r2(y_rew[va], ridge_pred(ctx[va], w))
+            r2_rew = weighted_r2(y_rew[va], ridge_pred(ctx[va], w))
             r2_pool = float(np.mean([
-                r2(pool_frac[va, c],
+                weighted_r2(pool_frac[va, c],
                    ridge_pred(ctx[va], ridge_fit(ctx[tr], pool_frac[tr, c])))
                 for c in range(5)
             ]))
@@ -199,7 +150,6 @@ def main() -> None:
             print(f"{r['pick_lo']:3d}-{r['pick_hi']:<4d} {r['n_val']:7d} "
                   f"{r['colour_auc']:11.3f} {r['reward_r2']:10.3f} "
                   f"{r['pool_colour_r2']:8.3f}")
-        del model
 
     (OUT / "d7_contextprobe.json").write_text(
         json.dumps({"n_states": len(samples), "buckets": buckets,

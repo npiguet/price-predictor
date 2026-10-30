@@ -11,16 +11,15 @@ arrow and label is fixed here, from the two records and the code under
 from __future__ import annotations
 
 import sys
-from pathlib import Path
+from functools import partial
 
+import chart_style
 import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch  # noqa: E402
-
-REPO = Path(__file__).resolve().parents[2]
-CHARTS = REPO / "experiments" / "2026-09-18-effect-model-gen2" / "charts"
+import matplotlib.pyplot as plt
+import numpy as np
+from chart_style import WIDTH_COLOUR
+from chart_style import shade as tint
+from matplotlib.patches import Circle, Ellipse, FancyArrowPatch, FancyBboxPatch
 
 plt.rcParams.update({
     "font.family": "sans-serif",
@@ -36,8 +35,6 @@ MUTED = "#7b8191"
 RULE = "#c9ccd3"
 PANEL = "#f4f5f7"
 WHITE = "#ffffff"
-# make_charts.py's colour for each width of e, and only ever used for that.
-WIDTH_COLOUR = {64: "#3b6fb6", 128: "#e08f3c", 256: "#4a9a62"}
 # Meanings that recur across the diagrams. None of them shares a hue with the
 # widths above: rose, violet, crimson and slate.
 PROBE = "#c23b6e"        # where a probe reads, and the card-disjoint stratum
@@ -47,18 +44,7 @@ TRAIN_ONLY = "#8a8f9c"   # parts that exist only while training
 STRUCT = "#39475c"       # model structure: encoder, trunk
 
 
-def tint(colour: str, amount: float) -> tuple:
-    """``colour`` blended toward white; 1 keeps it, 0 is white."""
-    r, g, b = matplotlib.colors.to_rgb(colour)
-    return (1 - amount * (1 - r), 1 - amount * (1 - g), 1 - amount * (1 - b))
-
-
-def save(fig, name: str) -> None:
-    CHARTS.mkdir(parents=True, exist_ok=True)
-    fig.savefig(CHARTS / f"{name}.png", bbox_inches="tight", dpi=150,
-                facecolor=WHITE, pad_inches=0.12)
-    plt.close(fig)
-    print("wrote", name)
+save = partial(chart_style.save, pad_inches=0.12)
 
 
 def canvas(width: float, height: float, scale: float = 0.62, bottom: float = 0.0):
@@ -667,7 +653,6 @@ CHARM_GEN2 = [
 
 class Mono:
     """Monospaced lines laid out on a canvas, with any substring highlightable."""
-
     def __init__(self, fig, ax, size: float):
         self.ax, self.size = ax, size
         probe = ax.text(0, 0, "M" * 40, fontsize=size, family="monospace")
@@ -817,8 +802,6 @@ NOISE = "#5e6370"  # the training noise: a darker shade of TRAIN_ONLY, read on a
 
 def _cloud(n: int = 260, seed: int = 7):
     """A schematic e cloud: elongated, tilted 30° off both coordinate axes."""
-    import numpy as np
-
     rng = np.random.default_rng(seed)
     angle = np.radians(30)
     rot = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
@@ -829,9 +812,6 @@ def _cloud(n: int = 260, seed: int = 7):
 
 def _ellipse(ax, centre, cov, k, **kw):
     """The ``k``-sigma ellipse of ``cov`` around ``centre``."""
-    import numpy as np
-    from matplotlib.patches import Ellipse
-
     values, vectors = np.linalg.eigh(cov)
     angle = np.degrees(np.arctan2(vectors[1, 1], vectors[0, 1]))
     ax.add_patch(Ellipse(centre, 2 * k * np.sqrt(values[1]), 2 * k * np.sqrt(values[0]),
@@ -840,8 +820,6 @@ def _ellipse(ax, centre, cov, k, **kw):
 
 def noise_shapes() -> None:
     """One panel per shape of the noise; the cloud is schematic, the noise exaggerated."""
-    import numpy as np
-
     points, cov = _cloud()
     ratio = 0.35  # drawn far above gen-2's 0.1 so that every shape is visible
     std = np.sqrt(np.diag(cov))
@@ -888,7 +866,6 @@ def noise_shapes() -> None:
         elif kind == "iso":
             ax.add_patch(Circle(centre, ratio * 2 * np.sqrt(np.trace(cov) / 2), **noise))
         elif kind == "axis":
-            from matplotlib.patches import Ellipse
             ax.add_patch(Ellipse(centre, 2 * ratio * 2 * std[0], 2 * ratio * 2 * std[1],
                                  **noise))
         else:

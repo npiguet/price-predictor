@@ -42,18 +42,16 @@ from pathlib import Path
 import numpy as np
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from price_predictor.domain.card_text import ConvertedCardText
+from price_predictor.infrastructure.tokenizer_store import load_tokenizer
+from sealed.infrastructure.encoder_store import SealedEncoderStore
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _lib.stats import participation_ratio  # noqa: E402
 
 # The report (and --help) print a few math symbols (≈, ‖·‖, ², …) that the
 # default Windows cp1252 stdout can't encode; force UTF-8.
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-
-from price_predictor.domain.card_text import ConvertedCardText  # noqa: E402
-from price_predictor.infrastructure.tokenizer_store import (  # noqa: E402
-    load_tokenizer,
-)
-from sealed.infrastructure.encoder_store import SealedEncoderStore  # noqa: E402
+sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
 DEFAULT_CKPT = Path("models/sealed/encoder/latest.pt")
 DEFAULT_VOCAB = Path("models/sealed/encoder/vocab.txt")
@@ -121,7 +119,7 @@ def _spectrum_report(X: np.ndarray, *, standardize: bool) -> None:
         print("  (degenerate: zero total variance)")
         return
     cum = np.cumsum(lam) / total
-    eff_rank = float((lam.sum() ** 2) / (lam ** 2).sum())
+    eff_rank = participation_ratio(lam)
     stable_rank = float(lam.sum() / lam.max())
     label = "standardized per-dim" if standardize else "raw, centered"
     print(f"\n--- embedding spectrum [{label}] ---")

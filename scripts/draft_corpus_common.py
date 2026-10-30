@@ -1,38 +1,33 @@
 """Shared helpers for the draft-corpus colour/lane diagnostics.
 
-Imported by ``analyze_draft_lanes.py`` and ``analyze_pick_quality.py``; both are
-run as ``python scripts/<name>.py``, which puts this directory on ``sys.path``.
+Imported by the draft-corpus scripts beside it and by ``draft_probes/``.
 
 What lives here: parsing ``--drafts LABEL=PATH`` arguments, streaming
-``drafts.jsonl`` into the ``draft.domain.draft_geometry`` dataclasses, resolving
-a card's WUBRG colour identity from its converted-card ``.txt``, and the two
-colour summaries both scripts need (mana-base width, effective colour count).
+``drafts.jsonl`` with each record's geometry, the prefix-deck-scores reader and
+the models that produce those scores, the ``shrunk_score_play`` card grader,
+resolving a card's WUBRG colour identity from its converted-card ``.txt``, and
+the colour summaries the lane diagnostics share (top-two lane, mana-base width,
+effective colour count).
 """
 
 from __future__ import annotations
 
 import json
 import re
-import sys
-from collections import Counter
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Iterator
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from _lib.corpora import load_win_rates
 
-from draft.domain.draft_geometry import (  # noqa: E402
-    Booster,
-    DraftGeometry,
-    DraftRecord,
-    Seat,
-)
-from sealed.infrastructure.converted_card_locator import ConvertedCardLocator  # noqa: E402
+from draft.domain.draft_geometry import DraftGeometry, DraftRecord
+from draft.infrastructure import draft_record_io
+from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
 WUBRG = "WUBRG"
 BASIC_LAND_TYPES = frozenset(
     {"Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"}
 )
-_MANA_RE = re.compile(r"^mana cost:\s*(.*)$", re.IGNORECASE | re.MULTILINE)
 
 
 class ColourResolver:
@@ -52,14 +47,13 @@ class ColourResolver:
         cached = self._cache.get(card_name)
         if cached is not None:
             return cached
-        path = self._locator.text_path(card_name)
+        text = self._locator.load_text(card_name)
         out: frozenset = frozenset()
-        if path is None:
+        if text is None:
             self.unresolved[card_name] += 1
         else:
-            match = _MANA_RE.search(path.read_text(encoding="utf-8", errors="replace"))
-            if match:
-                cost = match.group(1).upper()
+            cost = (text.mana_cost_line() or "").upper()
+            if cost:
                 out = frozenset(c for c in WUBRG if "{%s}" % c in cost)
                 if not out:
                     # hybrid / phyrexian pips ({W/U}, {W/P}) miss the exact-pip
@@ -80,39 +74,69 @@ def parse_drafts_arg(value: str) -> tuple[str, Path]:
 
 
 def read_records(path: Path) -> Iterator[tuple[DraftRecord, DraftGeometry]]:
-    """Stream one ``(record, geometry)`` per JSONL line.
+    """Stream one ``(record, geometry)`` per complete JSONL line."""
+    for record in draft_record_io.read_records(path):
+        yield record, DraftGeometry.from_record(record)
 
-    A trailing partial line (JVM crash mid-write) is skipped rather than fatal,
-    matching every other reader of this corpus.
+
+def read_prefix_scores(paths: Iterable[Path], key_by_file: bool = False):
+    """``(rows, agent_of)`` from prefix-deck-scores JSONL files.
+
+    ``rows`` maps a seat to ``{n_picks: deck_score}`` and ``agent_of`` the seat to
+    its agent. A seat is ``(draft_id, seat)``, prefixed by the file name when
+    ``key_by_file`` (corpora whose draft ids may collide). A torn final line from
+    an interrupted run is skipped.
     """
-    with path.open(encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                raw = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            record = DraftRecord(
-                draft_id=raw["draft_id"],
-                run_id=raw["run_id"],
-                timestamp=raw["timestamp"],
-                seats=[
-                    Seat(s["agent"], s["deck"], s["deck_score"]) for s in raw["seats"]
-                ],
-                boosters=[Booster(b["set_code"], b["picks"]) for b in raw["boosters"]],
-            )
-            yield record, DraftGeometry.from_record(record)
+    rows: dict = defaultdict(dict)
+    agent_of: dict = {}
+    for path in map(Path, paths):
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                key = (r["draft_id"], r["seat"])
+                if key_by_file:
+                    key = (path.name, *key)
+                rows[key][r["n_picks"]] = r["deck_score"]
+                agent_of[key] = r["agent"]
+    return rows, agent_of
 
 
-def seat_pool(record: DraftRecord, geometry: DraftGeometry, seat: int) -> list[str]:
-    """The seat's 45 picks in (pack, pick) order."""
-    return [
-        geometry.taken_card(record, seat, pack, pick)
-        for pack in range(1, geometry.packs + 1)
-        for pick in range(1, geometry.pack_size + 1)
-    ]
+def load_labeler_and_scorer(cards_path: Path, scorer_path: Path, picker_path: Path,
+                            build_method: str):
+    """The deck labeler for full pools and the bare scorer for scoring a pool as is,
+    over one shared card locator: ``(labeler, scorer, locator)``."""
+    import torch
+
+    from draft.application.generate_draft_data import GenerateDraftDataConfig, build_labeler
+    from sealed.domain.scorer_model import SetTransformerScorer
+    from sealed.infrastructure.scorer_store import ScorerStore
+
+    locator = ConvertedCardLocator(cards_path)
+    labeler = build_labeler(GenerateDraftDataConfig(
+        n_drafts=0, agent_mix=[], scorer_checkpoint=scorer_path,
+        picker_checkpoint=picker_path, cards_path=cards_path,
+        build_method=build_method,     # never leave this defaulted: it defaults to picker
+    ), locator=locator)
+    ckpt = ScorerStore().load_checkpoint(scorer_path)
+    scorer = SetTransformerScorer(ckpt.config)
+    scorer.load_state_dict(ckpt.model_state_dict)
+    scorer.eval()
+    scorer.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    return labeler, scorer, locator
+
+
+def score_play(path: Path, min_in_deck: int = 0) -> dict[str, float]:
+    """card -> ``shrunk_score_play`` from ``cards-win-rates.txt``, for cards seen in
+    at least ``min_in_deck`` decks; blank cells (no signal) are skipped."""
+    return {name: row["shrunk_score_play"]
+            for name, row in load_win_rates(path, min_in_deck).items()
+            if row["shrunk_score_play"] is not None}
 
 
 def top_two_colours(pool: list[str], colours: ColourResolver) -> set[str]:

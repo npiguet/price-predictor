@@ -61,18 +61,20 @@ import math
 import re
 import sys
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
-REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO / "src"))
-sys.path.insert(0, str(REPO / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from draft.domain.draft_geometry import DraftGeometry  # noqa: E402
-from draft.infrastructure.draft_record_io import read_records  # noqa: E402
+from _lib import stats
+from draft_probes.probe_lib import G4, HINTS, OUT
 
-G4 = REPO / "models" / "draft" / "agent" / "gen4"
+from draft.application.draft_training_common import leave_one_out_rewards
+from draft.domain.draft_geometry import DraftGeometry
+from draft.infrastructure.draft_record_io import read_records
+
 RUNS = (
     "lr1e-5_t2all_decay0.3",
     "lr1e-5_t2all_nodecay",
@@ -81,8 +83,6 @@ RUNS = (
 )
 CORPUS_SUFFIX = "-yardstick-v-forge-drafts.jsonl"
 LOG_SUFFIX = "-training.log"
-HINTS_CSV = REPO / "output" / "scorer-probes" / "forge_hints.csv"
-DEFAULT_OUT = REPO / "output" / "draft-probes"
 
 LABELS = ("gen4", "gen1", "forge-full")
 
@@ -137,42 +137,31 @@ def stars(beta: float, se: float) -> str:
 
 
 def pearson(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
-    """Pearson r and a large-sample SE (Fisher z), NaN when degenerate."""
-    if len(a) < 4 or a.std() == 0 or b.std() == 0:
-        return float("nan"), float("nan")
-    r = float(np.corrcoef(a, b)[0, 1])
-    se_z = 1.0 / math.sqrt(len(a) - 3)
-    # delta-method back-transform of the Fisher-z SE onto the r scale
-    return r, float((1 - r * r) * se_z)
+    """Pearson r and its large-sample SE, NaN when degenerate."""
+    r = stats.pearson(a, b, min_n=4)
+    return r, stats.pearson_fisher_se(r, len(a))
 
 
-def spearman(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
-    def rank(v: np.ndarray) -> np.ndarray:
-        order = v.argsort()
-        r = np.empty(len(v), dtype=float)
-        r[order] = np.arange(len(v), dtype=float)
-        # average ties
-        _, inv, cnt = np.unique(v, return_inverse=True, return_counts=True)
-        sums = np.zeros(len(cnt))
-        np.add.at(sums, inv, r)
-        return (sums / cnt)[inv]
-
-    return pearson(rank(a), rank(b))
+def spearman(a: np.ndarray, b: np.ndarray) -> float:
+    return stats.spearman(a, b, min_n=4)
 
 
 # ------------------------------------------------------------------ seat table
 
+@dataclass(slots=True)
 class SeatRow:
     """One (draft, seat) observation, everything three analyses need."""
 
-    __slots__ = (
-        "corpus", "draft_id", "seat", "agent", "score", "loo",
-        "up_agent", "down_agent", "pod_gen4", "n_flagged", "deck",
-    )
-
-    def __init__(self, **kw) -> None:
-        for key, value in kw.items():
-            setattr(self, key, value)
+    corpus: str
+    draft_id: str
+    seat: int
+    agent: str
+    score: float | None
+    loo: float | None
+    up_agent: str
+    down_agent: str
+    pod_gen4: int
+    n_flagged: int
 
 
 def pass_neighbours(geo: DraftGeometry) -> tuple[list[int], list[int]]:
@@ -192,26 +181,13 @@ def pass_neighbours(geo: DraftGeometry) -> tuple[list[int], list[int]]:
     return down, up
 
 
-def loo_rewards(scores: list[float | None]) -> list[float | None]:
-    """deck_score minus the pod mean of the *other* seats (the RL reward)."""
-    ok = [s for s in scores if s is not None]
-    total = sum(ok)
-    out: list[float | None] = []
-    for s in scores:
-        if s is None or len(ok) < 2:
-            out.append(None)
-        else:
-            out.append(s - (total - s) / (len(ok) - 1))
-    return out
-
-
 def load_flagged() -> set[str]:
     """Card names carrying ``AI:RemoveDeck:Random`` (``RemRandomDecks``)."""
-    if not HINTS_CSV.exists():
+    if not HINTS.exists():
         raise SystemExit(
-            f"missing {HINTS_CSV}; run scripts/scorer_probes/forge_hints.py first"
+            f"missing {HINTS}; run scripts/scorer_probes/forge_hints.py first"
         )
-    with HINTS_CSV.open(encoding="utf-8", newline="") as handle:
+    with HINTS.open(encoding="utf-8", newline="") as handle:
         return {
             row["name"]
             for row in csv.DictReader(handle)
@@ -219,17 +195,19 @@ def load_flagged() -> set[str]:
         }
 
 
+@dataclass(slots=True)
 class PickStats:
     """Per-agent pick-level counters for A2."""
 
-    __slots__ = (
-        "picks", "avail", "took", "avail_choice", "took_choice",
-        "avail_alt", "took_alt", "taken_total", "taken_in_deck",
-    )
-
-    def __init__(self) -> None:
-        for slot in self.__slots__:
-            setattr(self, slot, 0)
+    picks: int = 0
+    avail: int = 0
+    took: int = 0
+    avail_choice: int = 0
+    took_choice: int = 0
+    avail_alt: int = 0
+    took_alt: int = 0
+    taken_total: int = 0
+    taken_in_deck: int = 0
 
 
 def build_tables(flagged: set[str]) -> tuple[list[SeatRow], dict[str, PickStats]]:
@@ -243,7 +221,7 @@ def build_tables(flagged: set[str]) -> tuple[list[SeatRow], dict[str, PickStats]
             geo = DraftGeometry.from_record(record)
             down, up = pass_neighbours(geo)
             agents = [s.agent for s in record.seats]
-            loo = loo_rewards([s.deck_score for s in record.seats])
+            loo = leave_one_out_rewards(record)
             pod_gen4 = sum(1 for a in agents if a == "gen4")
 
             taken_flagged: list[Counter] = [Counter() for _ in agents]
@@ -289,7 +267,6 @@ def build_tables(flagged: set[str]) -> tuple[list[SeatRow], dict[str, PickStats]
                     down_agent=agents[down[seat]],
                     pod_gen4=pod_gen4,
                     n_flagged=sum(tf.values()),
-                    deck=None,
                 ))
     return rows, dict(stats)
 
@@ -543,7 +520,7 @@ def analysis3() -> dict:
                         ("grad_norm_preclip", arr["grad_norm"]),
                         ("lr", arr["lr"])):
             r_p, se_p = pearson(arr["kl_step"], x)
-            r_s, _ = spearman(arr["kl_step"], x)
+            r_s = spearman(arr["kl_step"], x)
             r_l, se_l = pearson(log_kl, x)
             corrs[name] = {
                 "pearson_r": r_p, "pearson_se": se_p,
@@ -623,7 +600,16 @@ def report(a1: dict, a2: dict, a3: dict) -> None:
     print(line)
     print("D5 - corpus probes: seating geometry, build-around traps, step size")
     print(line)
+    if a1:
+        report_a1(a1)
+    if a2:
+        report_a2(a2)
+    if a3:
+        report_a3(a3)
+    print("\n" + line)
 
+
+def report_a1(a1: dict) -> None:
     print("\n[A1] THE GEOMETRY THE MODEL CANNOT SEE")
     print(f"  pooled over 4 yardstick corpora: {a1['n_all_seats']} seats, "
           f"{a1['n_gen4_seats']} of them gen-4")
@@ -661,6 +647,9 @@ def report(a1: dict, a2: dict, a3: dict) -> None:
     print_terms(a1["mirror_all_seats_upstream"],
                 "outcome loo ~ upstream neighbour label")
 
+
+
+def report_a2(a2: dict) -> None:
     print("\n[A2] BUILD-AROUND TRAPS (AI:RemoveDeck:Random / RemRandomDecks)")
     pa = a2["per_agent"]
     print(f"    {'agent':<12} {'picks':>9} {'flagged avail':>14} {'take%':>8} "
@@ -697,6 +686,9 @@ def report(a1: dict, a2: dict, a3: dict) -> None:
         print(f"    {'':<12} slope per flagged card (net of crowding): "
               f"{s['beta']:+.4f} +- {s['se']:.4f} {stars(s['beta'], s['se'])}")
 
+
+
+def report_a3(a3: dict) -> None:
     print("\n[A3] DID THE SIGNAL DRIVE THE STEP?")
     for run, d in a3["runs"].items():
         print(f"\n  {run}")
@@ -731,13 +723,22 @@ def report(a1: dict, a2: dict, a3: dict) -> None:
     for name, c in p["correlations_kl_step_vs"].items():
         print(f"    KL(pi_k||pi_k+1) vs {name:<12} r={c['pearson_r']:+.3f}"
               f" +- {c['pearson_se']:.3f}")
-    print("\n" + line)
 
 
 # ------------------------------------------------------------------------ main
 
 def write_csvs(out_dir: Path, a1: dict, a2: dict, a3: dict) -> list[Path]:
     written = []
+    if a1:
+        written.append(write_a1_csv(out_dir, a1))
+    if a2:
+        written.append(write_a2_csv(out_dir, a2))
+    if a3:
+        written.append(write_a3_csv(out_dir, a3))
+    return written
+
+
+def write_a1_csv(out_dir: Path, a1: dict) -> Path:
     p = out_dir / "d5_a1_neighbour_terms.csv"
     with p.open("w", encoding="utf-8", newline="") as h:
         w = csv.writer(h)
@@ -750,8 +751,10 @@ def write_csvs(out_dir: Path, a1: dict, a2: dict, a3: dict) -> list[Path]:
                 w.writerow([key, res["base"], res["n"], res["n_clusters"],
                             t["name"], f"{t['beta']:.6f}", f"{t['se']:.6f}",
                             "" if t["t"] is None else f"{t['t']:.4f}"])
-    written.append(p)
+    return p
 
+
+def write_a2_csv(out_dir: Path, a2: dict) -> Path:
     p = out_dir / "d5_a2_flagged_rates.csv"
     with p.open("w", encoding="utf-8", newline="") as h:
         w = csv.writer(h)
@@ -763,8 +766,10 @@ def write_csvs(out_dir: Path, a1: dict, a2: dict, a3: dict) -> list[Path]:
                 w.writerow([label, key, r["k"], r["n"],
                             "" if r["rate"] is None else f"{r['rate']:.6f}",
                             "" if r["se"] is None else f"{r['se']:.6f}"])
-    written.append(p)
+    return p
 
+
+def write_a3_csv(out_dir: Path, a3: dict) -> Path:
     p = out_dir / "d5_a3_run_summary.csv"
     with p.open("w", encoding="utf-8", newline="") as h:
         w = csv.writer(h)
@@ -785,13 +790,12 @@ def write_csvs(out_dir: Path, a1: dict, a2: dict, a3: dict) -> list[Path]:
                 f"{d['kl_init_accumulation']['kl_init_final']:.4f}",
                 d["best_margin"], d["best_round"],
                 f"{d['best_round_frac_of_run']:.4f}", f"{d['margin_final']:.4f}"])
-    written.append(p)
-    return written
+    return p
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT,
+    ap.add_argument("--out-dir", type=Path, default=OUT,
                     help="where the d5_*.json / d5_*.csv staging files go")
     ap.add_argument("--skip", nargs="*", default=[], choices=["a1", "a2", "a3"],
                     help="analyses to skip")

@@ -1,61 +1,26 @@
 """The embedding-probe scripts read any checkpoint's cache (T114; Story 6
 scenarios 9 and 10).
 
-``scripts/`` is not part of the installed package, so the modules are loaded by
-file path. The sidecars are real gen-1 ones from the fixture tree; the cache
-rows beside them are written here, row-aligned, at a width no checkpoint has
-shipped, so nothing can pass by assuming 64.
+``scripts/`` is not part of the installed package; the conftest puts it on the
+path, so the battery imports as the package its scripts make it. The sidecars
+are real gen-1 ones from the fixture tree; the cache rows beside them are
+written here, row-aligned, at a width no checkpoint has shipped, so nothing can
+pass by assuming 64.
 """
 
 from __future__ import annotations
 
 import datetime
-import importlib.util
 import shutil
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from _lib.stats import participation_ratio
+from effect_embedding_probes import build_texts, common, effect_profiles
 
-_PROBES = Path(__file__).resolve().parents[3] / "scripts" / "effect_embedding_probes"
 _FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "effects"
-
-
-def _load(name: str, *, common_module=None):
-    """Load one script by path.
-
-    The scripts import their sibling ``common`` by its bare name, which the
-    knowledge-probe suite's ``common`` shares. So ``common`` is registered
-    under that name only while a script that imports it loads, and the
-    previous holder of the name is put back afterwards: ``build_texts`` binds
-    the very module the tests patch, and neither suite sees the other's.
-    """
-    spec = importlib.util.spec_from_file_location(
-        f"effect_embedding_probes_{name}", _PROBES / f"{name}.py",
-    )
-    module = importlib.util.module_from_spec(spec)
-    # A dataclass resolves its annotations through its module's entry.
-    sys.modules[spec.name] = module
-    previous = sys.modules.get("common")
-    if common_module is not None:
-        sys.modules["common"] = common_module
-    sys.path.insert(0, str(_PROBES))
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.remove(str(_PROBES))
-        if common_module is not None:
-            if previous is None:
-                sys.modules.pop("common", None)
-            else:
-                sys.modules["common"] = previous
-    return module
-
-
-common = _load("common")
-build_texts = _load("build_texts", common_module=common)
 
 _WIDTH = 12
 
@@ -207,23 +172,23 @@ class TestParticipationRatio:
     """Scenario 10: ``(Σλ)² / Σλ²``."""
 
     def test_an_even_spectrum_uses_every_dimension(self):
-        assert common.participation_ratio(np.full(8, 0.125)) == pytest.approx(8.0)
+        assert participation_ratio(np.full(8, 0.125)) == pytest.approx(8.0)
 
     def test_one_dominant_direction_uses_one(self):
-        assert common.participation_ratio(
+        assert participation_ratio(
             np.array([1.0, 0.0, 0.0]),
         ) == pytest.approx(1.0)
 
     def test_a_known_spectrum(self):
         # (4 + 2 + 1 + 1)² / (16 + 4 + 1 + 1) = 64 / 22.
-        assert common.participation_ratio(
+        assert participation_ratio(
             np.array([4.0, 2.0, 1.0, 1.0]),
         ) == pytest.approx(64 / 22)
 
     def test_it_reads_the_same_from_shares_as_from_eigenvalues(self):
         eigenvalues = np.array([5.0, 3.0, 2.0])
-        assert common.participation_ratio(eigenvalues) == pytest.approx(
-            common.participation_ratio(eigenvalues / eigenvalues.sum()),
+        assert participation_ratio(eigenvalues) == pytest.approx(
+            participation_ratio(eigenvalues / eigenvalues.sum()),
         )
 
 
@@ -255,14 +220,19 @@ class TestEffectProfiles:
                                     "params": {"count": 2}}]},
         }
 
-    def test_a_record_written_several_times_is_profiled_once(self, tmp_path):
+    @pytest.mark.parametrize("name", ["shard-00001.jsonl.gz", "shard-00001.jsonl"])
+    def test_a_record_written_several_times_is_profiled_once(self, tmp_path, monkeypatch,
+                                                             name):
+        """Either shard spelling: the corpus keeps plain shards collected before gzip."""
         import gzip
         import json
 
-        profiles = _load("effect_profiles", common_module=common)
-        profiles._KEYMAP = {("cardsfolder/d/divination.txt", 0, "spell", 0, None): "draw two"}
-        shard = tmp_path / "shard-00001.jsonl.gz"
-        with gzip.open(shard, "wt", encoding="utf-8") as handle:
+        profiles = effect_profiles
+        monkeypatch.setattr(profiles, "_KEYMAP", {
+            ("cardsfolder/d/divination.txt", 0, "spell", 0, None): "draw two"})
+        shard = tmp_path / name
+        opener = gzip.open if name.endswith(".gz") else open
+        with opener(shard, "wt", encoding="utf-8") as handle:
             for record in [self._record("r.1")] * 4 + [self._record("r.2", "g2")]:
                 handle.write(json.dumps(record) + "\n")
 

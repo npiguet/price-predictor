@@ -4,94 +4,150 @@ Regressing (pred − y) on (nb_mean − y) is biased: both sides carry −y, so 
 slope is positive even for a prediction that ignores the neighbourhood. The
 honest question is whether ``nb_mean`` adds anything to ``pred`` **once the
 card's own label is controlled for**, so that is what this fits.
+
+``--neighbours embedding`` (the default) takes each card's k=10 neighbourhood
+by cosine in the encoder's own embedding, as ``s_r17`` saved it, and also
+reports the naive slope against its mechanical nulls; writes ``s_r17b.json``.
+That metric risks reading the encoder's smoothing back off itself, so
+``--neighbours bow`` rebuilds the neighbourhood from a plain bag-of-tokens
+cosine over the converted text — a metric the encoder had no hand in — and
+re-runs the controlled regression; writes ``s_r17c.json``.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+from collections import Counter
 
 import numpy as np
 import probe_lib as pl
 import s_common as S
+from _lib.stats import wls
 
-d = S.load_all()
-join, emb = d["join"], d["emb"]
-val = d["val"]
-pf, ph = d["pf"], d["ph"]
-pred_f = pl.predict_labels(emb, pf)
-pred_h = pl.predict_labels(emb, ph)
-nb_idx = np.load(S.OUT / "s_r17_neighbours.npy")
-n_in = S.num(join, "n_in_deck")
+K = 10
+BOW_CACHE = S.OUT / "s_r17c_bow_neighbours.npy"
 
-Xn = emb / np.linalg.norm(emb, axis=1, keepdims=True)
-nb_cos = np.array([float(Xn[i] @ Xn[nb_idx[i]].mean(0)) for i in range(len(Xn))])
 
-flag_cols = [c for c in join.columns if c.startswith(("kw_", "ph_"))]
-rare_masks = {c: (np.nan_to_num(S.num(join, c)) > 0) for c in flag_cols}
-rare_masks = {c: v for c, v in rare_masks.items() if 20 <= v.sum() < 200}
-rare_any = np.any(np.stack(list(rare_masks.values())), 0)
+def bow_neighbours(join) -> np.ndarray:
+    """k nearest cards by cosine over log-scaled bag-of-token counts (cached)."""
+    if BOW_CACHE.exists():
+        return np.load(BOW_CACHE)
+    tok = pl.load_tokenizer(pl.VOCAB_PATH)
+    seqs = [tok.tokenize_to_ids(t) for t in join["text"]]
+    vocab = sorted({t for s in seqs for t in s})
+    index = {t: i for i, t in enumerate(vocab)}
+    M = np.zeros((len(seqs), len(vocab)), dtype=np.float32)
+    for r, s in enumerate(seqs):
+        for t, c in Counter(s).items():
+            M[r, index[t]] = c
+    M = np.log1p(M)
+    M /= np.maximum(np.linalg.norm(M, axis=1, keepdims=True), 1e-9)
+    nb = S.top_k_cosine(M, K, chunk=512)
+    np.save(BOW_CACHE, nb)
+    print(f"bag-of-tokens vocab: {len(vocab)}", flush=True)
+    return nb
 
-out: dict = {"n_rare_cards": int(rare_any.sum()),
-             "mean_cosine_to_neighbour_centroid": float(nb_cos.mean()),
-             "p10_cosine": float(np.quantile(nb_cos, 0.1))}
 
-rows = []
-for head in ("score_play", "played_rate"):
-    y = S.num(join, f"shrunk_{head}")
-    w = S.num(join, f"w_{head}")
-    have = np.isfinite(y) & (w > 0)
-    nb_mean = np.array([np.nanmean(y[nb_idx[i]]) for i in range(len(y))])
-    for tag, p in (("fidelity/all", np.asarray(pred_f[head], float)),
-                   ("honest/val", np.asarray(pred_h[head], float))):
-        for sub_name, sub in (("all cards", np.ones(len(join), bool)),
-                              ("rare-mechanic cards", rare_any),
-                              ("n_in_deck < 200", n_in < 200),
-                              ("n_in_deck ≥ 2000", n_in >= 2000)):
-            m = have & np.isfinite(nb_mean) & sub
-            if tag == "honest/val":
-                m = m & val
-            if m.sum() < 60:
-                continue
-            one = np.ones(int(m.sum()))
-            XA = np.column_stack([one, y[m]])
-            XB = np.column_stack([one, y[m], nb_mean[m]])
-            bA, _, _ = S.wls(XA, p[m], w[m])
-            bB, seB, tB = S.wls(XB, p[m], w[m])
-            r2A = pl._r2(p[m], XA @ bA, w[m])
-            r2B = pl._r2(p[m], XB @ bB, w[m])
-            rows.append([head, tag, sub_name, int(m.sum()),
-                         f"{bA[1]:+.3f}", f"{bB[1]:+.3f}", f"{bB[2]:+.3f}",
-                         f"{seB[2]:.3f}", f"{tB[2]:+.1f}",
-                         f"{r2A:.4f}", f"{r2B:.4f}", f"{r2B - r2A:+.4f}"])
-out["neighbourhood_controlled"] = rows
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--neighbours", choices=("embedding", "bow"), default="embedding")
+    bow = ap.parse_args().neighbours == "bow"
 
-# the naive (biased) slope and its mechanical null, for the record
-rows_null = []
-for head in ("score_play", "played_rate"):
-    y = S.num(join, f"shrunk_{head}")
-    w = S.num(join, f"w_{head}")
-    have = np.isfinite(y) & (w > 0)
-    nb_mean = np.array([np.nanmean(y[nb_idx[i]]) for i in range(len(y))])
-    for tag, p in (("fidelity/all", np.asarray(pred_f[head], float)),
-                   ("honest/val", np.asarray(pred_h[head], float))):
-        m = have & np.isfinite(nb_mean) & (val if tag == "honest/val"
-                                           else np.ones(len(join), bool))
-        pull = nb_mean[m] - y[m]
-        # observed
-        X = np.column_stack([np.ones(int(m.sum())), pull])
-        b, se, t = S.wls(X, p[m] - y[m], w[m])
-        # mechanical null: replace the prediction with the corpus mean
-        mu = np.average(y[m], weights=w[m])
-        b0, _, _ = S.wls(X, mu - y[m], w[m])
-        # and with a label-preserving permutation of the prediction
-        rng = np.random.default_rng(0)
-        ps = p[m].copy()
-        rng.shuffle(ps)
-        b1, _, _ = S.wls(X, ps - y[m], w[m])
-        rows_null.append([head, tag, int(m.sum()), f"{b[1]:+.3f}",
-                          f"{b0[1]:+.3f}", f"{b1[1]:+.3f}"])
-out["naive_slope_vs_null"] = rows_null
+    d = S.load_all(text=bow)
+    join, emb = d["join"], d["emb"]
+    val = d["val"]
+    pred_f = pl.predict_labels(emb, d["pf"])
+    pred_h = pl.predict_labels(emb, d["ph"])
+    n_in = S.num(join, "n_in_deck")
+    nb_emb = np.load(S.OUT / "s_r17_neighbours.npy")
+    nb_idx = bow_neighbours(join) if bow else nb_emb
 
-with open(S.OUT / "s_r17b.json", "w") as f:
-    json.dump(out, f, indent=1, default=float)
-print(json.dumps(out, indent=1, default=float))
+    flag_cols = [c for c in join.columns if c.startswith(("kw_", "ph_"))]
+    rare = {c: S.flag(join, c) > 0 for c in flag_cols}
+    rare_any = np.any(np.stack([v for v in rare.values() if 20 <= v.sum() < 200]), 0)
+
+    if bow:
+        overlap = np.mean([len(set(nb_idx[i]) & set(nb_emb[i])) / K
+                           for i in range(len(nb_idx))])
+        out: dict = {"k": K, "mean_overlap_with_embedding_neighbourhood": float(overlap)}
+    else:
+        Xn = emb / np.linalg.norm(emb, axis=1, keepdims=True)
+        nb_cos = np.array([float(Xn[i] @ Xn[nb_idx[i]].mean(0)) for i in range(len(Xn))])
+        out = {"n_rare_cards": int(rare_any.sum()),
+               "mean_cosine_to_neighbour_centroid": float(nb_cos.mean()),
+               "p10_cosine": float(np.quantile(nb_cos, 0.1))}
+
+    rows = []
+    for head in ("score_play", "played_rate"):
+        y = S.num(join, f"shrunk_{head}")
+        w = S.num(join, f"w_{head}")
+        have = np.isfinite(y) & (w > 0)
+        nb_mean = S.neighbour_mean(y, nb_idx)
+        for tag, p in (("fidelity/all", np.asarray(pred_f[head], float)),
+                       ("honest/val", np.asarray(pred_h[head], float))):
+            for sub_name, sub in (("all cards", np.ones(len(join), bool)),
+                                  ("rare-mechanic cards", rare_any),
+                                  ("n_in_deck < 200", n_in < 200),
+                                  ("n_in_deck >= 2000" if bow else "n_in_deck ≥ 2000",
+                                   n_in >= 2000)):
+                m = have & np.isfinite(nb_mean) & sub
+                if tag == "honest/val":
+                    m = m & val
+                if m.sum() < 60:
+                    continue
+                one = np.ones(int(m.sum()))
+                XA = np.column_stack([one, y[m]])
+                XB = np.column_stack([one, y[m], nb_mean[m]])
+                fA, fB = wls(XA, p[m], w[m]), wls(XB, p[m], w[m])
+                r2A = pl._r2(p[m], XA @ fA.beta, w[m])
+                r2B = pl._r2(p[m], XB @ fB.beta, w[m])
+                rows.append([head, tag, sub_name, int(m.sum()),
+                             f"{fA.beta[1]:+.3f}", f"{fB.beta[1]:+.3f}", f"{fB.beta[2]:+.3f}",
+                             f"{fB.se[2]:.3f}", f"{fB.t[2]:+.1f}", f"{r2A:.4f}", f"{r2B:.4f}"]
+                            + ([] if bow else [f"{r2B - r2A:+.4f}"]))
+
+    if bow:
+        out["controlled"] = rows
+        with open(S.OUT / "s_r17c.json", "w") as f:
+            json.dump(out, f, indent=1, default=float)
+        for r in rows:
+            print(" | ".join(str(x) for x in r))
+        print("overlap", out["mean_overlap_with_embedding_neighbourhood"])
+        return
+
+    out["neighbourhood_controlled"] = rows
+    out["naive_slope_vs_null"] = naive_slopes(join, val, nb_idx, pred_f, pred_h)
+    with open(S.OUT / "s_r17b.json", "w") as f:
+        json.dump(out, f, indent=1, default=float)
+    print(json.dumps(out, indent=1, default=float))
+
+
+def naive_slopes(join, val, nb_idx, pred_f, pred_h) -> list[list]:
+    """The naive (biased) slope and its mechanical nulls, for the record."""
+    rows = []
+    for head in ("score_play", "played_rate"):
+        y = S.num(join, f"shrunk_{head}")
+        w = S.num(join, f"w_{head}")
+        have = np.isfinite(y) & (w > 0)
+        nb_mean = S.neighbour_mean(y, nb_idx)
+        for tag, p in (("fidelity/all", np.asarray(pred_f[head], float)),
+                       ("honest/val", np.asarray(pred_h[head], float))):
+            m = have & np.isfinite(nb_mean) & (val if tag == "honest/val"
+                                               else np.ones(len(join), bool))
+            X = np.column_stack([np.ones(int(m.sum())), nb_mean[m] - y[m]])
+            observed = wls(X, p[m] - y[m], w[m]).beta
+            # null 1: the prediction replaced by the corpus mean
+            mu = np.average(y[m], weights=w[m])
+            to_mean = wls(X, mu - y[m], w[m]).beta
+            # null 2: a label-preserving permutation of the prediction
+            ps = p[m].copy()
+            np.random.default_rng(0).shuffle(ps)
+            permuted = wls(X, ps - y[m], w[m]).beta
+            rows.append([head, tag, int(m.sum()), f"{observed[1]:+.3f}",
+                         f"{to_mean[1]:+.3f}", f"{permuted[1]:+.3f}"])
+    return rows
+
+
+if __name__ == "__main__":
+    main()

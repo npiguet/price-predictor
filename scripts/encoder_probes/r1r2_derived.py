@@ -21,9 +21,10 @@ from scipy.stats import wilcoxon
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import probe_lib as pl  # noqa: E402
+from _lib.stats import bootstrap_ci  # noqa: E402
 
-SD = 0.06181
-GATE = 0.35325
+SD = pl.SD["score_play"]
+GATE = pl.MANIFOLD_GATE
 
 
 def r1a() -> None:
@@ -44,7 +45,7 @@ def r1a() -> None:
                    pearson_vs_base=("pearson_vs_base", "mean"))
               .reset_index())
     s["mean_abs_delta_sd"] = np.where(
-        s["head"] == "played_rate", s["mean_abs_delta"] / 0.1247,
+        s["head"] == "played_rate", s["mean_abs_delta"] / pl.SD["played_rate"],
         s["mean_abs_delta"] / SD)
     s.to_csv(pl.SCRATCH / "r1a_pred_shift_table.csv", index=False)
     print("\n=== R1a fidelity-probe prediction shift\n",
@@ -86,9 +87,7 @@ def r1c() -> None:
                 continue
             d_null = (nv.loc[common] - base.loc[common])
             adj = (d_flip.loc[common] - d_null).to_numpy()
-            rng = np.random.default_rng(5)
-            idx = rng.integers(0, len(adj), size=(4000, len(adj)))
-            draws = adj[idx].mean(axis=1) / SD
+            lo, hi = bootstrap_ci(adj, seed=5)
             try:
                 _, p = wilcoxon(adj, alternative="less")
             except ValueError:
@@ -98,8 +97,8 @@ def r1c() -> None:
                 "flip_mean_sd": float(d_flip.loc[common].mean() / SD),
                 "null_mean_sd": float(d_null.mean() / SD),
                 "adjusted_mean_sd": float(adj.mean() / SD),
-                "adj_ci_lo": float(np.percentile(draws, 2.5)),
-                "adj_ci_hi": float(np.percentile(draws, 97.5)),
+                "adj_ci_lo": lo / SD,
+                "adj_ci_hi": hi / SD,
                 "frac_adj_negative": float((adj < 0).mean()),
                 "wilcoxon_p_less": float(p),
             })

@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
+from cardtool import LOC, info, set_cards
+
 HERE = Path(__file__).parent
-sys.path.insert(0, str(HERE))
-from cardtool import LOC, info, set_cards  # noqa: E402
 
 data = json.loads((HERE / "synergy_pairs.json").read_text(encoding="utf-8"))
 

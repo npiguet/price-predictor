@@ -3,7 +3,9 @@ numbers so a line's shape can be tested without a run behind it."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import re
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 
 from effects.application.training_schedule import MAX_GRAD_NORM
 from effects.domain.loss_floor import FLOOR_EPSILON
@@ -71,3 +73,51 @@ def format_terms(terms: Mapping[str, float]) -> str:
         return ""
     body = ", ".join(f"{name} {value:.3f}" for name, value in terms.items())
     return f"\n  heads: {body}"
+
+
+_EPOCH_LINE = re.compile(
+    r"epoch (\d+) \| train ([\d.]+) \| card-disjoint ([\d.]+) \| "
+    r"game-disjoint ([\d.]+) \| gate F1 ([\d.]+) \| zone acc ([\d.]+) \| "
+    r"deviance ([\d.]+)"
+)
+_FIELD_ITEM = re.compile(r"(\w+) ([\d.]+) \((-?\d+%|n/a)\)")
+
+
+@dataclass(frozen=True)
+class EpochSummary:
+    """One epoch as the run's log reports it, read back by the analysis scripts.
+
+    ``fields`` maps each output field to its card-disjoint loss and the share
+    of the constant prediction's loss it removes, in percent (None: ``n/a``).
+    """
+
+    epoch: int
+    train: float
+    card_disjoint: float
+    game_disjoint: float
+    gate_f1: float
+    zone_accuracy: float
+    deviance: float
+    fields: dict[str, tuple[float, float | None]]
+
+
+def parse_epoch_summaries(lines: Iterable[str]) -> list[EpochSummary]:
+    """The epoch summaries of a training log, in epoch order of first appearance.
+
+    A resumed run logs the epochs after its last checkpoint again; the later
+    line is the one the resumed weights produced, so it replaces the earlier.
+    """
+    lines = list(lines)
+    found: dict[int, EpochSummary] = {}
+    for i, line in enumerate(lines):
+        m = _EPOCH_LINE.search(line)
+        if not m:
+            continue
+        fields: dict[str, tuple[float, float | None]] = {}
+        following = lines[i + 1].strip() if i + 1 < len(lines) else ""
+        if following.startswith("fields:"):
+            for name, loss, pct in _FIELD_ITEM.findall(following):
+                fields[name] = (float(loss), None if pct == "n/a" else float(pct[:-1]))
+        epoch = int(m[1])
+        found[epoch] = EpochSummary(epoch, *(float(v) for v in m.groups()[1:]), fields)
+    return list(found.values())

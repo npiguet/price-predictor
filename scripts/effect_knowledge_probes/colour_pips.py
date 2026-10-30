@@ -39,7 +39,6 @@ altogether (``{1}{R}`` given no Mountain: it only has to see the colour).
 """
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -48,6 +47,8 @@ import numpy as np
 if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
 
@@ -129,7 +130,9 @@ def missing_colour_present(cost: str) -> bool:
 # ── which records qualify ───────────────────────────────────────────────
 
 
-def qualifying_records(directories, count: int, shards: int, per_game: int, sidecars):
+def land_payable(sidecars):
+    """``choose`` for real playability decisions whose cost lands can pay, leaving a
+    colour no pip asks for."""
     from effects.domain.records import PlayabilityDecisionPayload
 
     def choose(record):
@@ -142,8 +145,7 @@ def qualifying_records(directories, count: int, shards: int, per_game: int, side
             return None
         return record
 
-    return record_walk.qualifying(
-        directories, choose, count, per_game=per_game, shards=shards)
+    return choose
 
 
 # ── reading the model ───────────────────────────────────────────────────
@@ -158,19 +160,12 @@ def _affordable(outputs, verdict, surface, row) -> float:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("checkpoint", type=Path)
-    parser.add_argument("--records", type=int, default=300)
-    parser.add_argument("--shards", type=int, default=200)
-    parser.add_argument("--per-game", type=int, default=2)
-    args = parser.parse_args()
-
-    context = common.probe_context(args.checkpoint)
-    records = qualifying_records(context.validation_dirs(), args.records, args.shards,
-                                 args.per_game, context.sidecars())
+    args, context = common.grid_run(__doc__, records=300, per_game=2)
+    records = record_walk.qualifying(
+        context.validation_dirs(), land_payable(context.sidecars()), args.records,
+        per_game=args.per_game, shards=args.shards)
     probe_model = context.model(records)
-    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), {len(records)} validation "
-          f"decisions with a land-payable cost", flush=True)
+    common.heading(args, context, f"{len(records)} validation decisions with a land-payable cost")
 
     # predicted[name][i], rule[name][i] for record i
     predicted: dict[str, list[float]] = {name: [] for name in CONFIGURATIONS}
@@ -196,44 +191,38 @@ def main() -> None:
     shapes, present = np.asarray(shapes), np.asarray(present, bool)
 
     print("\nby configuration")
-    print("| configuration | records | rule: affordable | predicted, mean | "
-          "below exact, mean | below exact, share |")
-    print("|---|---:|---:|---:|---:|---:|")
     exact = predicted["exact"]
-    for name in CONFIGURATIONS:
-        drop = exact - predicted[name]
-        print(f"| {name} | {len(drop)} | {rule[name].mean():.2f} | "
-              f"{common.fmt_mean(predicted[name])} | {common.fmt_mean(drop)} | "
-              f"{(drop > 0).mean():.2f} |")
+    print_table(["configuration", "records", "rule: affordable", "predicted, mean",
+                 "below exact, mean", "below exact, share"],
+                [[name, len(exact), f"{rule[name].mean():.2f}", common.fmt_mean(predicted[name]),
+                  common.fmt_mean(exact - predicted[name]),
+                  f"{(exact - predicted[name] > 0).mean():.2f}"] for name in CONFIGURATIONS],
+                "lrrrrr")
 
-    auc = common.auc
     print("\nranking: rule-affordable configurations against unaffordable ones")
-    print("| items | AUC |")
-    print("|---|---:|")
-    for title, names in (("every configuration", CONFIGURATIONS),
-                         ("colours only (exact, surplus against pip missing, +2 and "
-                          "all off colour)",
-                          ("exact", "surplus", "pip missing, +2", "all off colour")),
-                         ("amount only (exact against one short)", ("exact", "one short"))):
-        labels = np.concatenate([rule[n] for n in names])
-        scores = np.concatenate([predicted[n] for n in names])
-        print(f"| {title} | {auc(labels, scores):.3f} |")
+    rankings = (("every configuration", CONFIGURATIONS),
+                ("colours only (exact, surplus against pip missing, +2 and all off colour)",
+                 ("exact", "surplus", "pip missing, +2", "all off colour")),
+                ("amount only (exact against one short)", ("exact", "one short")))
+
+    def ranking_auc(names) -> float:
+        return common.auc(np.concatenate([rule[n] for n in names]),
+                          np.concatenate([predicted[n] for n in names]))
+
+    print_table(["items", "AUC"],
+                [[title, f"{ranking_auc(names):.3f}"] for title, names in rankings], "lr")
 
     print("\npip missing against one short, by the cost's coloured requirement "
           "(drop below exact, mean)")
-    print("| cost | records | pip missing | one short | pip missing, +2 | "
-          "all off colour |")
-    print("|---|---:|---:|---:|---:|---:|")
     groups = [(s, shapes == s) for s in ("one pip", "repeated pip", "several colours",
                                          "hybrid")]
     groups += [("missing colour still among the lands", present),
                ("missing colour gone from the lands", ~present)]
-    for title, mask in groups:
-        if not mask.any():
-            continue
-        cells = [common.fmt_mean((exact - predicted[n])[mask & ~rule[n]])
-                 for n in ("pip missing", "one short", "pip missing, +2", "all off colour")]
-        print(f"| {title} | {int(mask.sum())} | " + " | ".join(cells) + " |", flush=True)
+    off = ("pip missing", "one short", "pip missing, +2", "all off colour")
+    print_table(["cost", "records", *off],
+                [[title, int(mask.sum()),
+                  *(common.fmt_mean((exact - predicted[n])[mask & ~rule[n]]) for n in off)]
+                 for title, mask in groups if mask.any()], "lrrrrr")
 
 
 if __name__ == "__main__":

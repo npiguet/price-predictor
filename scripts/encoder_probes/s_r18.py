@@ -8,50 +8,13 @@ import numpy as np
 import pandas as pd
 import probe_lib as pl
 import s_common as S
+from _lib.stats import wls
 from sklearn.ensemble import HistGradientBoostingRegressor
 
 d = S.load_all()
 join, emb = d["join"], d["emb"]
 pf = d["pf"]
 pred_f = pl.predict_labels(emb, pf)
-
-
-def col(c):
-    return np.nan_to_num(S.num(join, c))
-
-
-mv = col("mv")
-kw_cols = sorted(c for c in join.columns if c.startswith("kw_"))
-ph_cols = sorted(c for c in join.columns if c.startswith("ph_"))
-fly_cols = ["kw_flying", "kw_flying_anywhere", "ph_flying_grant"]
-kw_rest = [c for c in kw_cols if c not in fly_cols]
-
-BLOCKS = [
-    ("MV", [("mv", mv), ("mv2", mv**2)]),
-    ("+ type class", [(c, col(c)) for c in
-                      ("is_creature", "is_instant", "is_sorcery", "is_artifact",
-                       "is_enchantment", "is_land", "is_planeswalker", "is_aura",
-                       "is_equipment", "is_vehicle", "is_legendary", "is_basic")]),
-    ("+ P/T", [("power", col("power")), ("toughness", col("toughness")),
-               ("has_pt", np.isfinite(S.num(join, "power")).astype(float))]),
-    ("+ flying", [(c, col(c)) for c in fly_cols if c in join.columns]),
-    ("+ keyword flags", [(c, col(c)) for c in kw_rest] + [("kw_count", col("kw_count"))]),
-    ("+ phrase / archetype flags", [(c, col(c)) for c in ph_cols]),
-    ("+ pips", [(c, col(c)) for c in
-                ("pip_w", "pip_u", "pip_b", "pip_r", "pip_g", "pip_c", "pips_total",
-                 "generic", "n_colors", "is_gold", "hybrid", "has_x",
-                 "is_colorless_cost", "phyrexian")]),
-    ("+ ability-line count", [(c, col(c)) for c in
-                              ("n_abilities", "n_lines", "n_body_lines", "n_words",
-                               "n_body_words", "n_sym", "n_types", "big_tribe")]),
-    ("+ era / rarity", None),   # handled specially (adds a categorical set code)
-]
-
-year = pd.to_numeric(join["first_year"], errors="coerce").to_numpy(float)
-year = np.where(np.isfinite(year), year, np.nanmedian(year))
-rarity = pd.Categorical(join["first_rarity"].fillna("unknown")).codes.astype(float)
-setcode = pd.Categorical(join["first_set_code"].fillna("unknown")).codes.astype(float)
-ERA = [("first_year", year), ("first_rarity", rarity), ("first_set_code", setcode)]
 
 TARGETS = {}
 for head in ("score_play", "played_rate"):
@@ -79,21 +42,18 @@ def cv_r2(X, y, w, cat_idx, folds=5, seed=42, model="gbm"):
             pred[part] = g.predict(X[part])
         else:
             Xa = np.column_stack([np.ones(m.sum()), X[m]])
-            b, _, _ = S.wls(Xa, y[m], w[m])
+            b = wls(Xa, y[m], w[m]).beta
             pred[part] = np.column_stack([np.ones(len(part)), X[part]]) @ b
     return pl._r2(y, pred, w)
 
 
 rows = []
+blocks = S.nameable_blocks(join)
 for tname, (y, w, have, head) in TARGETS.items():
     cols: list[tuple[str, np.ndarray]] = []
-    cat: list[int] = []
-    for bname, block in BLOCKS:
-        if block is None:
-            cols += ERA
-            cat += [len(cols) - 1, len(cols) - 2]
-        else:
-            cols += block
+    for bname, block in blocks:
+        cols += block
+        cat = S.categorical_indices(cols)
         X = np.column_stack([c for _, c in cols])[have]
         r_gbm = cv_r2(X, y[have], w[have], cat, model="gbm")
         r_lin = cv_r2(X, y[have], w[have], cat, model="linear")
@@ -108,28 +68,25 @@ curve.to_pickle(S.OUT / "s_r18_curve.pkl")
 out = {"curve": curve.to_dict("records")}
 
 # reconciliation numbers
+ph = d["ph"]
 out["reference"] = {
     "equivalence_class_text_explainable_vs_members": 0.515,
-    "honest_val_r2_score_play":
-        pl.load_probes("honest", True).probes["score_play"].metrics["val_r2"],
-    "honest_val_r2_played_rate":
-        pl.load_probes("honest", True).probes["played_rate"].metrics["val_r2"],
+    "honest_val_r2_score_play": ph.probes["score_play"].metrics["val_r2"],
+    "honest_val_r2_played_rate": ph.probes["played_rate"].metrics["val_r2"],
     "fidelity_insample_r2_score_play": pf.probes["score_play"].metrics["in_sample_r2"],
     "fidelity_insample_r2_played_rate": pf.probes["played_rate"].metrics["in_sample_r2"],
 }
 
+
+def weighted_var(v: np.ndarray, w: np.ndarray) -> float:
+    return float(np.average((v - np.average(v, weights=w)) ** 2, weights=w))
+
+
 # variance budget: how much of the *label* variance the encoder's taste itself carries
-for head in ("score_play", "played_rate"):
-    y = S.num(join, f"shrunk_{head}")
-    w = S.num(join, f"w_{head}")
-    have = np.isfinite(y) & (w > 0)
+for y, w, have, head in list(TARGETS.values())[::2]:
     p = np.asarray(pred_f[head], float)
-    out[f"budget_{head}"] = {
-        "var_label": float(np.average((y[have] - np.average(y[have], weights=w[have]))**2,
-                                      weights=w[have])),
-        "var_encoder_taste": float(np.average((p[have] - np.average(p[have], weights=w[have]))**2,
-                                              weights=w[have])),
-    }
+    out[f"budget_{head}"] = {"var_label": weighted_var(y[have], w[have]),
+                             "var_encoder_taste": weighted_var(p[have], w[have])}
 
 with open(S.OUT / "s_r18.json", "w") as f:
     json.dump(out, f, indent=1, default=float)

@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -30,10 +31,12 @@ import pandas as pd
 from scipy.stats import mannwhitneyu
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
+from _lib.stats import bootstrap_ci  # noqa: E402
 
-GATE = 0.35325
-SD_SCORE_PLAY = 0.06181
+GATE = pl.MANIFOLD_GATE
+SD_SCORE_PLAY = pl.SD["score_play"]
 BATCH = 96
 SEED = 909
 MAX_PER_FAMILY = 400
@@ -42,12 +45,6 @@ LOCKDOWN = re.compile(r"enchanted creature can't attack or block", re.I)
 REMOVAL = re.compile(r"(destroy target (?:[a-z]+ )?creature)\.", re.I)
 PUMP = re.compile(r"\+(\d+)/\+(\d+) until end of turn", re.I)
 OPPONENT = re.compile(r"target opponent", re.I)
-
-
-def card_text(path: str) -> str:
-    text = Path(path).read_text(encoding="utf-8", errors="replace")
-    return "\n".join(ln for ln in text.splitlines()
-                     if ln.strip() and not ln.startswith("name:"))
 
 
 def edit_lockdown(t: str) -> str | None:
@@ -89,17 +86,9 @@ def line_shuffle(t: str, rng: np.random.Generator) -> str:
     return "\n".join(lines[i] for i in order)
 
 
-def boot_ci(v: np.ndarray, n: int = 4000, seed: int = 0):
-    rng = np.random.default_rng(seed)
-    idx = rng.integers(0, len(v), size=(n, len(v)))
-    d = v[idx].mean(axis=1)
-    return float(np.percentile(d, 2.5)), float(np.percentile(d, 97.5))
-
-
 def main() -> None:
-    join = pl.build_join()
-    join = join[join["is_primary"]].reset_index(drop=True)
-    texts = {i: card_text(p) for i, p in enumerate(join["txt_path"])}
+    join = pl.load_frame(features=False, text=True)
+    texts = {i: "\n".join(cc.lines(t)) for i, t in enumerate(join["text"])}
 
     rng = np.random.default_rng(SEED)
     freq = pl.subtype_frequencies()
@@ -119,14 +108,12 @@ def main() -> None:
                 if variant is not None:
                     specs.append((family, i, f"null_{key}", variant))
 
-    runner = pl.EncoderRunner()
+    runner = pl.runner()
     emb = runner.encode_texts([s[3] for s in specs], batch_size=BATCH)
     print(f"encoded {len(specs)} variants on {runner.device}", flush=True)
 
-    probes = pl.load_probes("fidelity", True)
-    pred = pl.predict_labels(emb, probes)
-    _, corpus_ref = pl.corpus_embedding_matrix()
-    mdist, _ = pl.manifold_distance(emb, corpus_ref)
+    pred = pl.predict_labels(emb, pl.fidelity_probes())
+    mdist, _ = pl.manifold_distance(emb, pl.reference_cloud()[1])
 
     frame = pd.DataFrame({
         "family": [s[0] for s in specs], "row": [s[1] for s in specs],
@@ -151,7 +138,8 @@ def main() -> None:
             d = (v.loc[common, "score_play"] - base.loc[common, "score_play"]).to_numpy()
             if len(d) < 3:
                 continue
-            lo, hi = boot_ci(d, seed=hash(variant) % 1000)
+            # str hash() is salted per process; crc32 keeps the CI reproducible
+            lo, hi = bootstrap_ci(d, seed=zlib.crc32(variant.encode()) % 1000)
             off = int((v.loc[common, "manifold_dist"] > GATE).sum())
             entry = {
                 "n": int(len(d)),

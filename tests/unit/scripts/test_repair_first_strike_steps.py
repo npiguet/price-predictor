@@ -9,9 +9,11 @@ and keywords already normalized as ``record_codec`` parses them.
 from __future__ import annotations
 
 import gzip
-import importlib.util
 import json
 from pathlib import Path
+
+import pytest
+import repair_first_strike_steps as repair_module
 
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.event_schema import Event, EventType
@@ -25,18 +27,6 @@ from effects.domain.state_snapshot import (
 from effects.infrastructure.record_codec import format_record_line
 from effects.infrastructure.shard_io import read_shard
 from tests.unit.effects.domain.test_effect_head_input import _entity, _record, _snapshot
-
-_SCRIPT = Path(__file__).parents[3] / "scripts" / "repair_first_strike_steps.py"
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("repair_first_strike_steps", _SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-repair_module = _load()
 
 
 def _attacker(entity_id: str, *keywords: str, blocked_by=()):
@@ -156,7 +146,8 @@ def test_regular_steps_probe_forks_and_complete_records_are_left_alone():
         assert repair_module.repair(raw, _keywords()) == ("kept", raw)
 
 
-def test_a_shard_is_rewritten_and_still_reads(tmp_path: Path):
+@pytest.mark.parametrize("name", ["shard-00001.jsonl.gz", "shard-00001.jsonl"])
+def test_a_shard_is_rewritten_in_its_own_spelling_and_still_reads(tmp_path: Path, name: str):
     kept = _first_strike_record(
         [_attacker("E1", "first_strike")], [_hit("P1", 3, "E1")], {"E1": ()},
         substep="regular",
@@ -168,8 +159,9 @@ def test_a_shard_is_rewritten_and_still_reads(tmp_path: Path):
         [_attacker("E1", "first_strike", blocked_by=("E9",)),
          _entity("E9", controller="P1")], [], {"E1": ("E9",)},
     )
-    shard = tmp_path / "shard-00001.jsonl.gz"
-    with gzip.open(shard, "wt", encoding="utf-8") as handle:
+    shard = tmp_path / name
+    opener = gzip.open if name.endswith(".gz") else open
+    with opener(shard, "wt", encoding="utf-8") as handle:
         for raw in (kept, repaired, dropped):
             handle.write(json.dumps(raw, separators=(",", ":")) + "\n")
 

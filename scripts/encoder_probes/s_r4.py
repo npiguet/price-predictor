@@ -7,6 +7,7 @@ import json
 import numpy as np
 import probe_lib as pl
 import s_common as S
+from _lib.stats import pearson_fisher_se, wcorr, wls
 
 d = S.load_all()
 join, emb = d["join"], d["emb"]
@@ -46,8 +47,8 @@ rows_a = []
 for name, (a, b) in pairs.items():
     a = np.asarray(a, float)[sel]
     b = np.asarray(b, float)[sel]
-    r_u, r_w = S.wcorr(a, b), S.wcorr(a, b, w_cast[sel])
-    rows_a.append([name, n, f"{r_u:+.4f}", f"±{S.corr_se(r_u, n):.4f}", f"{r_w:+.4f}"])
+    r_u, r_w = wcorr(a, b), wcorr(a, b, w_cast[sel])
+    rows_a.append([name, n, f"{r_u:+.4f}", f"±{pearson_fisher_se(r_u, n):.4f}", f"{r_w:+.4f}"])
 out["a_corr"] = rows_a
 
 # ── (b) probe-weight cosines ────────────────────────────────────────────
@@ -64,16 +65,14 @@ def design(cols):
 
 def r2_of(X, y, w, folds=5, seed=42):
     """In-sample and 5-fold-CV weighted R²."""
-    beta, _, _ = S.wls(X, y, w)
-    ins = pl._r2(y, X @ beta, w)
+    ins = pl._r2(y, X @ wls(X, y, w).beta, w)
     rng = np.random.default_rng(seed)
     order = rng.permutation(len(y))
     pred = np.empty(len(y))
     for part in np.array_split(order, folds):
         m = np.ones(len(y), bool)
         m[part] = False
-        b, _, _ = S.wls(X[m], y[m], w[m])
-        pred[part] = X[part] @ b
+        pred[part] = X[part] @ wls(X[m], y[m], w[m]).beta
     return ins, pl._r2(y, pred, w)
 
 
@@ -113,7 +112,7 @@ for name, cols in (("without cast head",
                     [pred_h["score_play"], mv, mv**2, pred_h["played_rate"],
                      pred_h["cast_lift"]])):
     X = design(cols)
-    beta, _, _ = S.wls(X, y, w)
+    beta = wls(X, y, w).beta
     out[f"c_resid_sd_{name}"] = float(np.sqrt(np.average((y - X @ beta) ** 2, weights=w)))
 
 # the mirror question: is the *predicted* cast_lift a re-encoding?
@@ -130,8 +129,7 @@ for name, cols in (("pred score_play", [pred_h["score_play"]]),
                     [pred_h["score_play"], pred_h["score_draw"], mv, mv**2,
                      pred_h["played_rate"], pips])):
     X = design(cols)
-    beta, _, _ = S.wls(X, yp, w)
-    rows_m.append([name, f"{pl._r2(yp, X @ beta, w):.4f}"])
+    rows_m.append([name, f"{pl._r2(yp, X @ wls(X, yp, w).beta, w):.4f}"])
 out["c_pred_cast_reencoding"] = rows_m
 
 # what fraction of the cast head's 512 weights is spanned by the other heads?

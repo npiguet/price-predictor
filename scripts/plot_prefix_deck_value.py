@@ -42,11 +42,13 @@ Usage
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import statistics as st
 from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from draft_corpus_common import read_prefix_scores
 
 DECK = 23
 # entity -> (light, dark, slot). Colour follows the entity everywhere, including
@@ -65,23 +67,6 @@ LEVEL_FLOOR = -3.0
 # Shaded regimes. Neutral tints, not hues: a coloured band would read as a
 # category and compete with the series. One step off the surface in each mode.
 REGION_FILL = ("#f2f1ee", "#232320")
-
-
-def load(raw_paths, cap):
-    rows, agent_of = defaultdict(dict), {}
-    for p in raw_paths:
-        with Path(p).open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    r = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                rows[(r["draft_id"], r["seat"])][r["n_picks"]] = r["deck_score"]
-                agent_of[(r["draft_id"], r["seat"])] = r["agent"]
-    return rows, agent_of
 
 
 def curves(rows, agent_of, cap):
@@ -121,17 +106,34 @@ def nice_ticks(lo, hi, n=5):
             if lo - step / 2 <= start + i * step <= hi + step / 2]
 
 
-def build(panels, geom, xdom, xticks, xlabel, title, subtitle, marks,
-          palette=None, legend=None, regions=()) -> str:
-    """panels: (label, {(key, x): y}, [(key, cls, text)], zero_line, base0).
+@dataclass
+class ChartSpec:
+    """One chart: its panels, layout and labels.
 
-    palette maps a css class to (light, dark); legend is [(cls, text)].
-    Defaults to the categorical agent palette used by the by-pick views.
+    A panel is ``(label, {(key, x): y}, [(key, cls, text)], zero_line, base0)``;
+    ``geom`` holds one ``(top, height)`` per panel. ``palette`` maps a css class to
+    ``(light, dark)`` and ``legend`` is ``[(cls, text)]``; both default to the
+    categorical agent palette. ``regions`` are shaded ``(x_lo, x_hi, label)`` bands.
     """
-    if palette is None:
-        palette = {f'a{n}': (lt, d) for lt, d, n in COLOR.values()}
-    if legend is None:
-        legend = [(f'a{COLOR[e][2]}', e) for e in ORDER]
+
+    panels: list
+    geom: list
+    xdom: tuple
+    xticks: list
+    xlabel: str
+    title: str
+    subtitle: list
+    marks: list
+    palette: dict = field(
+        default_factory=lambda: {f"a{n}": (lt, d) for lt, d, n in COLOR.values()})
+    legend: list = field(default_factory=lambda: [(f"a{COLOR[e][2]}", e) for e in ORDER])
+    regions: tuple = ()
+
+
+def build(spec: ChartSpec) -> str:
+    panels, geom, xdom, xticks = spec.panels, spec.geom, spec.xdom, spec.xticks
+    xlabel, title, subtitle, marks = spec.xlabel, spec.title, spec.subtitle, spec.marks
+    palette, legend, regions = spec.palette, spec.legend, spec.regions
     height_total = geom[-1][0] + geom[-1][1] + 78
     plot_w = W - ML - MR
     x_lo, x_hi = xdom
@@ -275,11 +277,10 @@ def view_by_pick(rows_f, ag_f, rows_g, ag_g, cap):
     panels = [("deck score", level, four, False, False),
               ("gain from the pick", step, four, True, False),
               ("gen-4's lead over each reference", gap, gaps, True, True)]
-    geom = [(98, 250), (416, 144), (682, 152)]
     ticks = [(t, str(t)) for t in (1, 5, 10, 15, 20, 25, 30, 35, 40, 45) if t <= cap]
-    return (panels, geom, (1, cap), ticks, "picks taken",
-            "The deck the builder makes from the first t picks", [],
-            [(16, "pack 2"), (DECK, "deck size"), (31, "pack 3")])
+    return ChartSpec(panels, [(98, 250), (416, 144), (682, 152)], (1, cap), ticks,
+                     "picks taken", "The deck the builder makes from the first t picks", [],
+                     [(16, "pack 2"), (DECK, "deck size"), (31, "pack 3")])
 
 
 def view_by_level(rows_f, ag_f, rows_g, ag_g, cap):
@@ -300,14 +301,10 @@ def view_by_level(rows_f, ag_f, rows_g, ag_g, cap):
     series = [(a, f"a{COLOR[a][2]}", a) for a in ORDER]
     ticks = [(v / 2, f"{v / 2:+.0f}") for v in range(int(lo_x * 2), int(hi_x * 2) + 1)
              if v % 2 == 0]
-    return ([("", data, series, True, True)],
-            [(104, 420)], (lo_x - 0.25, hi_x + 0.25), ticks,
-            "deck score before the pick",
-            "Mean gain from one pick, by the deck score before it", [],
-            [], None, None,
-            [(None, -1.0, None), (3.0, None, None)])
-
-
+    return ChartSpec([("", data, series, True, True)], [(104, 420)],
+                     (lo_x - 0.25, hi_x + 0.25), ticks, "deck score before the pick",
+                     "Mean gain from one pick, by the deck score before it", [], [],
+                     regions=((None, -1.0, None), (3.0, None, None)))
 
 
 def main() -> None:
@@ -321,12 +318,11 @@ def main() -> None:
     ap.add_argument("--max-picks", type=int, default=45)
     args = ap.parse_args()
 
-    rows_f, ag_f = load(args.raw, args.max_picks)
-    rows_g, ag_g = load(args.raw_gen3, args.max_picks) if args.raw_gen3 else ({}, {})
+    rows_f, ag_f = read_prefix_scores(args.raw)
+    rows_g, ag_g = read_prefix_scores(args.raw_gen3)
     fn = view_by_pick if args.view == "by-pick" else view_by_level
-    spec = fn(rows_f, ag_f, rows_g, ag_g, args.max_picks)
-    regions = spec[10] if len(spec) > 10 else ()
-    args.out.write_text(build(*spec[:10], regions=regions), encoding="utf-8")
+    args.out.write_text(build(fn(rows_f, ag_f, rows_g, ag_g, args.max_picks)),
+                        encoding="utf-8")
     print(f"wrote {args.out}  ({len(rows_f)} v-forge + {len(rows_g)} v-gen3 seats)")
     if args.png:
         import cairosvg

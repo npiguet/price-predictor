@@ -1,12 +1,14 @@
-"""Helper: inspect Forge edition set lists + converted card corpus."""
+"""Helper: inspect Forge edition set lists + converted card corpus.
+
+Usage: cardtool.py check NAME... | cardtool.py sets  (``dump.py`` filters a set)
+"""
 from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from sealed.infrastructure.converted_card_locator import ConvertedCardLocator  # noqa: E402
+from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
 EDITIONS = Path(__file__).resolve().parents[2].parent / "forge" / "forge-gui" / "res" / "editions"
 CARDS = Path(__file__).resolve().parents[2] / "output" / "cardsfolder-512"
@@ -57,10 +59,8 @@ def set_cards(code: str) -> dict[str, str]:
 
 
 def card_text(name: str) -> str | None:
-    p = LOC.text_path(name)
-    if p is None:
-        return None
-    return p.read_text(encoding="utf-8", errors="replace")
+    t = LOC.load_text(name)
+    return None if t is None else t.text
 
 
 def summary(name: str) -> str:
@@ -81,9 +81,6 @@ def summary(name: str) -> str:
         else:
             rules.append(line.strip())
     return f"{mc:<14} {types:<38} {pt:<6} | {' / '.join(rules)[:170]}"
-
-
-PIP = re.compile(r"\{(.)\}")
 
 
 def mv(mc: str) -> int:
@@ -125,19 +122,7 @@ def info(name: str):
 
 if __name__ == "__main__":
     cmd = sys.argv[1]
-    if cmd == "dump":
-        code = sys.argv[2]
-        filt = sys.argv[3] if len(sys.argv) > 3 else ""
-        cards = set_cards(code)
-        print(f"== {code}: {len(cards)} cards ==")
-        for n, r in sorted(cards.items()):
-            i = info(n)
-            if i is None:
-                continue
-            if filt and filt not in "".join(sorted(i["colors"])) if filt else False:
-                continue
-            print(f"{r} {n:<32} {summary(n)}")
-    elif cmd == "check":
+    if cmd == "check":
         for n in sys.argv[2:]:
             print(f"{n:<34} {summary(n)}")
     elif cmd == "sets":

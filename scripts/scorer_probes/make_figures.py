@@ -9,35 +9,21 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
-import matplotlib
+import numpy as np
+import pandas as pd
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "scorer-probes"
-FIG = REPO / "experiments" / "images"
-FIG.mkdir(parents=True, exist_ok=True)
+from _lib.paths import EXPERIMENT_IMAGES as FIG
+from _lib.paths import OUTPUT
+from _lib.style import BLUE, GRAY, GREEN, ORANGE, RED, figure_saver, plt, use_probe_style
 
-plt.rcParams.update({
-    "font.size": 10, "axes.titlesize": 11, "axes.spines.top": False,
-    "axes.spines.right": False, "axes.grid": True, "grid.alpha": 0.25,
-    "figure.dpi": 110,
-})
-
-BLUE, ORANGE, GREEN, RED, GRAY = "#3b6fb6", "#e08f3c", "#4a9a62", "#c05555", "#8a8a8a"
-
-
-def save(fig, name):
-    for ext in ("png", "svg"):
-        fig.savefig(FIG / f"2026-08-27-scorer-{name}.{ext}", bbox_inches="tight",
-                    dpi=150 if ext == "png" else None)
-    plt.close(fig)
-    print("wrote", name)
+OUT = OUTPUT / "scorer-probes"
+use_probe_style()
+save = figure_saver("2026-08-27-scorer")
 
 
 def fig_calibration():
@@ -62,7 +48,7 @@ def fig_calibration():
 
 
 def fig_ablation():
-    cond = json.load(open(OUT / "t5_results.json"))["conditions"]
+    cond = json.load(open(OUT / "t5_ablation.json"))["conditions"]
     rows = [("full model", cond["full"]["acc"], BLUE),
             ("text shuffled within deck", cond["text_shuffle"]["acc"], BLUE),
             ("det features → corpus mean", cond["det_mean"]["acc"], ORANGE),
@@ -180,9 +166,7 @@ def fig_shape_ladders():
 
 
 def fig_card_values():
-    import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import probe_lib as pl
+    from scorer_probes import probe_lib as pl
 
     df = pd.read_csv(OUT / "t2_card_values.csv")
     df = df[df.v_swap.notna() & (df.det_is_land == 0)].copy()
@@ -372,7 +356,6 @@ def fig_color_economics():
 
 
 def fig_land_adds():
-    import pandas as pd_local  # noqa: F401
     df = pd.read_csv(OUT / "t1_add_deltas.csv")
     sp = df[df.is_land == False]  # noqa: E712
     groups = [

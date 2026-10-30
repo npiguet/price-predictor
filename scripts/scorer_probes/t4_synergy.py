@@ -55,35 +55,28 @@ CPU. Results land in t4_results.json plus a printed markdown summary.
 from __future__ import annotations
 
 import argparse
-import gzip
 import json
 import random
 import re
+import sys
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
-import probe_lib as pl
 from scipy import stats
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.stats import mean_se
+from scorer_probes import probe_lib as pl
+from scorer_probes.probe_lib import WUBRG, CardBook, DeckBank, iter_match_decks
+
 SEED = 42
-FC = pl.layout.FEATURE_COUNT
-WUBRG = "WUBRG"
 
 PAIRS_JSON = pl.DATA_DIR / "synergy_pairs.json"
 OUT_JSON = pl.SCRATCH / "t4_results.json"
 
-# same corpora / iteration pattern as t0_landscape.py
-MATCH_FILES = [
-    "matches-b07/match-outcomes-gen0.txt.gz",
-    "matches-b07/match-outcomes-gen1-vs-0.txt.gz",
-    "matches-b07/match-outcomes-gen2-vs-0-1.txt.gz",
-    "matches-b07/match-outcomes-gen3-vs-0-2.txt",
-    "matches-b07/match-outcomes-gen3-vs-forge-best.txt",
-    "matches-b07/match-outcomes-gen4-vs-forge-best-gen3.txt",
-    "matches-b07/match-outcomes-gen5-vs-gen4-forge.txt",
-]
 PREFERRED_METHODS = ("forge-best", "forge-3sub", "gen4-512", "gen4-256")
 
 # loose removal regex, applied to the whole converted text (P-C, creatures)
@@ -126,14 +119,6 @@ def mechanism_family(mech: str) -> str:
 # small stats helpers
 # --------------------------------------------------------------------------
 
-def mean_se(xs) -> tuple[float, float, int]:
-    a = np.asarray([v for v in xs if v is not None and np.isfinite(v)], dtype=np.float64)
-    if a.size == 0:
-        return float("nan"), float("nan"), 0
-    se = float(a.std(ddof=1) / np.sqrt(a.size)) if a.size > 1 else float("nan")
-    return float(a.mean()), se, int(a.size)
-
-
 def summarize(xs) -> dict:
     """mean / SE / n / t / two-sided p of a one-sample (paired) mean."""
     m, se, n = mean_se(xs)
@@ -171,110 +156,24 @@ def jsonify(obj):
 # the task forbids adding a shared module to the scratchpad)
 # --------------------------------------------------------------------------
 
-class CardBook:
-    def __init__(self, probe: pl.Probe, win_rates: dict):
-        self.probe = probe
-        self.wr = win_rates
-        vals = [r["shrunk_score_play"] for r in win_rates.values()
-                if r.get("shrunk_score_play") is not None]
-        self.q_median = float(np.median(vals)) if vals else 0.0
-        self._cache: dict[str, dict | None] = {}
-
-    def get(self, name: str) -> dict | None:
-        if name not in self._cache:
-            self._cache[name] = self._build(name)
-        return self._cache[name]
+class SynergyBook(CardBook):
+    """``CardBook`` plus the removal classification probe C counts."""
 
     def _build(self, name: str) -> dict | None:
-        if name.lower() in pl.BASIC_LAND_NAMES:
+        info = super()._build(name)
+        if info is None:
             return None
-        emb = self.probe.embedding(name)
-        if emb is None:
-            return None
-        text = self.probe.locator.load_text(name)
-        if text is None:
-            return None
-        d = emb[-FC:]
-        feats = pl.card_features(text.text)
-        low = text.text.lower()
-        is_creature = bool(feats["is_creature"])
-        regex_hit = bool(REMOVAL_TEXT_RE.search(low))
-        if is_creature:
-            is_removal = regex_hit
-        else:
-            is_removal = bool(feats["is_removal"]) or regex_hit
-        q = (self.wr.get(name) or {}).get("shrunk_score_play")
-        mana_cost = text.mana_cost_line()
-        return {
-            "name": name,
-            "emb": np.ascontiguousarray(emb, dtype=np.float32),
-            "is_land": float(d[pl.layout.IS_LAND]) > 0.5,
-            "mv": float(d[pl.layout.MANA_VALUE]),
-            "pips": np.asarray(d[pl.layout.COLOR_PIPS], dtype=np.float64),
-            "colors": frozenset(c for c, f in zip(WUBRG, d[pl.layout.COLOR_FLAGS])
-                                if float(f) > 0.5),
-            "hybrid": bool(mana_cost and "/" in mana_cost),
-            "is_creature": is_creature,
-            "is_removal": is_removal,
-            "removal_creature": is_creature and regex_hit,
-            "q": None if q is None else float(q),
-            "qv": self.q_median if q is None else float(q),
-        }
-
-
-# --------------------------------------------------------------------------
-# deck bank: dedup by sorted-name multiset, one forward per distinct deck
-# --------------------------------------------------------------------------
-
-class DeckBank:
-    def __init__(self, book: CardBook):
-        self.book = book
-        self.index: dict[tuple, int] = {}
-        self.keys: list[tuple] = []
-        self.scores: np.ndarray | None = None
-        self._scored = 0
-
-    def add(self, names) -> tuple:
-        key = tuple(sorted(names))
-        if key not in self.index:
-            self.index[key] = len(self.keys)
-            self.keys.append(key)
-        return key
-
-    def score_pending(self, probe: pl.Probe, batch: int = 1024, label: str = "") -> None:
-        n = len(self.keys)
-        if n == self._scored:
-            return
-        out = np.empty(n, dtype=np.float64)
-        if self.scores is not None:
-            out[: self._scored] = self.scores
-        t0 = time.time()
-        for lo in range(self._scored, n, batch):
-            hi = min(n, lo + batch)
-            mats = [np.stack([self.book.get(c)["emb"] for c in self.keys[i]])
-                    for i in range(lo, hi)]
-            out[lo:hi] = probe.score_matrices(mats, batch_size=batch)
-            print(f"  [{label}] scored {hi - self._scored}/{n - self._scored} "
-                  f"({time.time() - t0:.1f}s)", flush=True)
-        self.scores = out
-        self._scored = n
-
-    def s(self, key: tuple) -> float:
-        return float(self.scores[self.index[key]])
+        regex_hit = bool(REMOVAL_TEXT_RE.search(info["text"].lower()))
+        is_creature = info["is_creature"]
+        info["is_removal"] = regex_hit if is_creature else (
+            bool(info["feats"]["is_removal"]) or regex_hit)
+        info["removal_creature"] = is_creature and regex_hit
+        return info
 
 
 # --------------------------------------------------------------------------
 # corpus: context decks per set
 # --------------------------------------------------------------------------
-
-def iter_match_lines(path: Path):
-    op = gzip.open if path.suffix == ".gz" else open
-    with op(path, "rt", encoding="utf-8") as f:
-        for line in f:
-            parts = line.rstrip("\n").split(";")
-            if len(parts) >= 10:
-                yield parts
-
 
 def make_deck_record(book: CardBook, set_code: str, method: str,
                      names: list[str], did: int) -> dict | None:
@@ -315,22 +214,19 @@ def collect_context_decks(book: CardBook, sets_needed: set[str],
     out: dict[str, list[dict]] = defaultdict(list)
     stats_ = Counter()
     did = 0
-    for rel in MATCH_FILES:
+    for rel in pl.MATCH_FILES:
         path = pl.YDATA / rel
         if not path.exists():
             print("  missing corpus:", path)
             continue
-        for parts in iter_match_lines(path):
-            set_code = parts[2]
+        for set_code, method_a, deck_a, method_b, deck_b in iter_match_decks(path):
             if set_code not in sets_needed:
                 continue
-            for m_idx, d_idx in ((3, 5), (4, 6)):
-                method = parts[m_idx]
+            for method, names in ((method_a, deck_a), (method_b, deck_b)):
                 pref = method in PREFERRED_METHODS
                 cap = cap_pref if pref else cap_other
                 if per[(set_code, pref)] >= cap:
                     continue
-                names = parts[d_idx].split("|")
                 key = (set_code, tuple(sorted(names)))
                 if key in seen:
                     continue
@@ -515,9 +411,9 @@ def analyze_a(cells: list[dict], bank: DeckBank, entries: list[dict],
         kmax = c["kmax"]
         m_pay, m_ctl, d = {}, {}, {}
         for k, keys in c["dose"].items():
-            b = bank.s(keys["base"])
-            m_pay[k] = bank.s(keys["pay"]) - b
-            m_ctl[k] = bank.s(keys["ctl"]) - b
+            b = bank.score(keys["base"])
+            m_pay[k] = bank.score(keys["pay"]) - b
+            m_ctl[k] = bank.score(keys["ctl"]) - b
             d[k] = m_pay[k] - m_ctl[k]
         ks = sorted(d)
         row = {
@@ -536,9 +432,9 @@ def analyze_a(cells: list[dict], bank: DeckBank, entries: list[dict],
                      else float("nan"),
         }
         if c["mis"]:
-            b = bank.s(c["mis"]["base"])
-            mp = bank.s(c["mis"]["pay"]) - b
-            mc = bank.s(c["mis"]["ctl"]) - b
+            b = bank.score(c["mis"]["base"])
+            mp = bank.score(c["mis"]["pay"]) - b
+            mc = bank.score(c["mis"]["ctl"]) - b
             row["mis_d"] = mp - mc
             row["mis_ddose"] = (mp - mc) - d[0]
             row["mis_pay_dose"] = mp - m_pay[0]
@@ -710,14 +606,14 @@ def probe_b_prepass(cards: list[dict], decks_by_set: dict[str, list[dict]],
 
 def probe_b_ladders(units: list[dict], bank: DeckBank) -> None:
     for u in units:
-        d_a = bank.s(u["single"][u["card"]]) - bank.s(u["base"])
-        deltas = [(abs((bank.s(u["single"][n]) - bank.s(u["base"])) - d_a), n)
+        d_a = bank.score(u["single"][u["card"]]) - bank.score(u["base"])
+        deltas = [(abs((bank.score(u["single"][n]) - bank.score(u["base"])) - d_a), n)
                   for n in u["cands"]]
         deltas.sort()
         matched = [n for _, n in deltas[:3]]
         u["d_a"] = d_a
         u["matched"] = matched
-        u["matched_d"] = [bank.s(u["single"][n]) - bank.s(u["base"]) for n in matched]
+        u["matched_d"] = [bank.score(u["single"][n]) - bank.score(u["base"]) for n in matched]
         f = u["fillers"]
         u["copies"] = [bank.add(swapped(u["names"], {f[j]: u["card"]
                                                      for j in range(k)}))
@@ -730,9 +626,9 @@ def probe_b_ladders(units: list[dict], bank: DeckBank) -> None:
 def analyze_b(units: list[dict], bank: DeckBank) -> dict:
     rows = []
     for u in units:
-        s0 = bank.s(u["base"])
-        cop = [s0] + [bank.s(k) for k in u["copies"]]
-        dis = [s0] + [bank.s(k) for k in u["distinct"]]
+        s0 = bank.score(u["base"])
+        cop = [s0] + [bank.score(k) for k in u["copies"]]
+        dis = [s0] + [bank.score(k) for k in u["distinct"]]
         rows.append({
             "card": u["card"], "set": u["set"], "ctx": u["ctx"],
             "single_delta": u["d_a"],
@@ -855,15 +751,15 @@ def count_removal(key: tuple, book: CardBook) -> int:
 def analyze_c(units: list[dict], bank: DeckBank, book: CardBook) -> dict:
     rows = []
     for u in units:
-        s0 = bank.s(u["base"])
+        s0 = bank.score(u["base"])
         row = {"ctx": u["ctx"], "set": u["set"], "base_removal": u["base_removal"],
                "n_spells": u["n_spells"], "rung_delta": {}, "rung_removal": {},
                "neutral_delta": {}, "net": {}}
         for r, key in u["rungs"].items():
-            row["rung_delta"][r] = bank.s(key) - s0
-            row["rung_removal"][r] = count_removal(key, book)
+            row["rung_delta"][r] = bank.score(key) - s0
+            row["rung_removal"][r] = count_removal(bank.keys[key], book)
         for n, key in u["neutral"].items():
-            row["neutral_delta"][n] = bank.s(key) - s0
+            row["neutral_delta"][n] = bank.score(key) - s0
         for r in row["rung_delta"]:
             nswap = abs(r)
             if nswap in row["neutral_delta"]:
@@ -1079,7 +975,7 @@ def main() -> None:
           f"seed={SEED} entries={n_entries or 'all'} contexts={n_ctx}")
     probe = pl.Probe(device=device)
     print(f"device={probe.device} d_model={probe.d_model}", flush=True)
-    book = CardBook(probe, pl.load_win_rates())
+    book = SynergyBook(probe, pl.load_win_rates(), q_fallback="median")
     print(f"label fallback (corpus median shrunk_score_play): {book.q_median:+.5f}")
 
     entries, dropped = prepare_entries(raw, book)
@@ -1099,7 +995,7 @@ def main() -> None:
     pools = build_set_pools(decks_by_set)
     all_decks = [d for s in sorted(decks_by_set) for d in decks_by_set[s]]
 
-    bank = DeckBank(book)
+    bank = DeckBank(lambda n: book.get(n)["emb"])
     results: dict = {"meta": {
         "seed": SEED, "smoke": smoke, "device": probe.device,
         "sections": sorted(sections), "n_entries_file": len(raw),
@@ -1108,7 +1004,7 @@ def main() -> None:
         "c_decks": c_decks, "cap_pref": cap_pref, "cap_other": cap_other,
         "sets": sets_needed, "n_context_decks": len(all_decks),
         "checkpoint": str(pl.SCORER_CKPT), "pairs_json": str(PAIRS_JSON),
-        "match_files": MATCH_FILES, "preferred_methods": list(PREFERRED_METHODS),
+        "match_files": pl.MATCH_FILES, "preferred_methods": list(PREFERRED_METHODS),
     }}
 
     a_cells = a_skipped = None

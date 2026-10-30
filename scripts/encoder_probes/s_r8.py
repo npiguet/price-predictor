@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import probe_lib as pl
 import s_common as S
+from _lib.stats import wls
 from sklearn.linear_model import LogisticRegression
 
 d = S.load_all()
@@ -27,7 +28,7 @@ out: dict = {}
 
 # ── (a) how much of played_rate is cost? ────────────────────────────────
 def col(c):
-    return np.nan_to_num(S.num(join, c))
+    return S.flag(join, c)
 
 
 cost = [mv, mv**2, col("pips_total"), col("generic"), col("n_colors"),
@@ -48,7 +49,7 @@ for name, cols in (("MV, MV² only", [mv, mv**2]),
                    ("cost + type + P/T + keywords + phrases",
                     cost + types + pt + kws + phs)):
     X = np.column_stack([np.ones(len(join))] + cols)
-    b, _, _ = S.wls(X[tr], y[tr], w[tr])
+    b = wls(X[tr], y[tr], w[tr]).beta
     rows_a.append([name, len(cols), f"{pl._r2(y[tr], X[tr] @ b, w[tr]):.4f}",
                    f"{pl._r2(y[va], X[va] @ b, w[va]):.4f}"])
 rows_a.append(["512-dim embedding, honest ridge probe", 512, "0.9009",
@@ -56,39 +57,8 @@ rows_a.append(["512-dim embedding, honest ridge probe", 512, "0.9009",
 out["a_nested_r2"] = rows_a
 
 # ── (b) the AI-hostility classes ────────────────────────────────────────
-noncre_artifact = (col("is_artifact") > 0) & (col("is_creature") == 0)
-classes = {
-    "fog / prevent damage": (col("ph_fog") + col("ph_prevent_damage")) > 0,
-    "sweeper": col("ph_sweeper") > 0,
-    "counterspell": col("ph_counterspell") > 0,
-    "morph": col("ph_morph") > 0,
-    "mana rock": noncre_artifact & (col("ph_tap_for_mana") > 0),
-}
-type_cell = np.select(
-    [col("is_creature") > 0, col("is_land") > 0, col("is_instant") > 0,
-     col("is_sorcery") > 0, col("is_artifact") > 0, col("is_enchantment") > 0],
-    [0, 1, 2, 3, 4, 5], default=6)
-mv_cell = np.clip(mv, 0, 8).astype(int)
-cell = mv_cell * 10 + type_cell
-
-
-def matched_deficit(flag, values, wts):
-    """Cell-weighted (MV × broad type) mean difference, class − control."""
-    tot_w = 0.0
-    tot = 0.0
-    per_cell = 0
-    for cval in np.unique(cell):
-        m = (cell == cval) & np.isfinite(values) & (wts > 0)
-        a, b = m & flag, m & ~flag
-        na, nb = int(a.sum()), int(b.sum())
-        if na == 0 or nb < 5:
-            continue
-        wa = min(na, nb)
-        tot += wa * (np.average(values[a], weights=wts[a])
-                     - np.average(values[b], weights=wts[b]))
-        tot_w += wa
-        per_cell += 1
-    return (tot / tot_w if tot_w else np.nan), per_cell
+classes = S.hostile_classes(join)
+cell = S.control_cells(join)
 
 
 targets_b = {
@@ -100,7 +70,7 @@ rows_b = []
 for name, flag in classes.items():
     row = [name, int(flag.sum())]
     for tname, (vals, wts) in targets_b.items():
-        dfc, ncell = matched_deficit(flag, vals, wts)
+        dfc, ncell = S.matched_deficit(cell, flag, vals, wts)
         row += [f"{dfc:+.4f}", f"{dfc / S.SD['played_rate']:+.2f}"]
     rows_b.append(row)
 out["b_matched_deficits"] = rows_b
@@ -137,8 +107,8 @@ emb_def2 = emb - np.outer(emb @ pc_pr, pc_pr)
 pred_def2 = emb_def2 @ probe.coef + probe.intercept
 rows_b2 = []
 for name, flag in classes.items():
-    base, _ = matched_deficit(flag, pred_raw, w)
-    defl, _ = matched_deficit(flag, pred_def, w)
+    base, _ = S.matched_deficit(cell, flag, pred_raw, w)
+    defl, _ = S.matched_deficit(cell, flag, pred_def, w)
     rows_b2.append([name, f"{base:+.4f}", f"{defl:+.4f}",
                     f"{(1 - defl / base) * 100:+.0f}%" if base else "—"])
 out["b_deflation"] = rows_b2
@@ -160,11 +130,11 @@ for c in flag_cols:
     for tname, vals in (("pred", np.asarray(pred_f["played_rate"], float)),
                         ("label", y)):
         X = np.column_stack([base, fv])
-        b, se, t = S.wls(X[have], vals[have], w[have])
+        fit = wls(X[have], vals[have], w[have])
         if tname == "pred":
-            bp, tp = b[-1], t[-1]
+            bp, tp = fit.beta[-1], fit.t[-1]
         else:
-            bl, tl = b[-1], t[-1]
+            bl, tl = fit.beta[-1], fit.t[-1]
     rows_c.append([c, int(fv.sum()), bp / S.SD["played_rate"], tp,
                    bl / S.SD["played_rate"], tl])
 rc = pd.DataFrame(rows_c, columns=["feature", "n", "pred_sd", "pred_t", "label_sd", "label_t"])

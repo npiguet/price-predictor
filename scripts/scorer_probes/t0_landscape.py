@@ -7,35 +7,20 @@ downstream statistical cuts.
 
 from __future__ import annotations
 
-import gzip
+import csv
 import hashlib
+import sys
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
-import probe_lib as pl
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scorer_probes import probe_lib as pl
 
 OUT = pl.SCRATCH / "t0_decks.csv"
 PER_METHOD_CAP = 4000
-
-MATCH_FILES = [
-    "matches-b07/match-outcomes-gen0.txt.gz",
-    "matches-b07/match-outcomes-gen1-vs-0.txt.gz",
-    "matches-b07/match-outcomes-gen2-vs-0-1.txt.gz",
-    "matches-b07/match-outcomes-gen3-vs-0-2.txt",
-    "matches-b07/match-outcomes-gen3-vs-forge-best.txt",
-    "matches-b07/match-outcomes-gen4-vs-forge-best-gen3.txt",
-    "matches-b07/match-outcomes-gen5-vs-gen4-forge.txt",
-]
-
-
-def iter_match_lines(path: Path):
-    op = gzip.open if path.suffix == ".gz" else open
-    with op(path, "rt", encoding="utf-8") as f:
-        for line in f:
-            parts = line.rstrip("\n").split(";")
-            if len(parts) >= 10:
-                yield parts
 
 
 def collect_decks():
@@ -43,18 +28,15 @@ def collect_decks():
     seen: set[str] = set()
     per_method: Counter = Counter()
     out = []
-    for rel in MATCH_FILES:
+    for rel in pl.MATCH_FILES:
         path = pl.YDATA / rel
         if not path.exists():
             print("missing:", path)
             continue
-        for parts in iter_match_lines(path):
-            set_code = parts[2]
-            for m_idx, d_idx in ((3, 5), (4, 6)):
-                method = parts[m_idx]
+        for set_code, method_a, deck_a, method_b, deck_b in pl.iter_match_decks(path):
+            for method, deck in ((method_a, deck_a), (method_b, deck_b)):
                 if per_method[method] >= PER_METHOD_CAP:
                     continue
-                deck = parts[d_idx].split("|")
                 key = hashlib.md5(
                     ("|".join(sorted(deck)) + set_code).encode()
                 ).hexdigest()
@@ -162,7 +144,6 @@ def main():
     for r, s in zip(rows, scores):
         r["score"] = float(s)
 
-    import csv
     cols = list(rows[0].keys())
     with open(OUT, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols)

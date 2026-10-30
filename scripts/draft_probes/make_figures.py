@@ -9,30 +9,22 @@ from __future__ import annotations
 
 import csv
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
 
-import matplotlib
+import numpy as np
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-FIG = REPO / "experiments" / "images"
-FIG.mkdir(parents=True, exist_ok=True)
+from _lib.style import BLUE, GRAY, GREEN, ORANGE, RED, figure_saver, plt, use_probe_style
+from draft_probes.probe_lib import OUT, WUBRG
 
-plt.rcParams.update({
-    "font.size": 10, "axes.titlesize": 11, "axes.spines.top": False,
-    "axes.spines.right": False, "axes.grid": True, "grid.alpha": 0.25,
-    "figure.dpi": 110,
-})
+use_probe_style()
+save = figure_saver("2026-08-29-draft")
 
-BLUE, ORANGE, GREEN, RED, GRAY = "#3b6fb6", "#e08f3c", "#4a9a62", "#c05555", "#8a8a8a"
 # Roughly the five colours as Magic prints them, darkened enough to read on white.
 PIE = {"W": "#c9b071", "U": "#2f6fb5", "B": "#4b4b55", "R": "#c0392b", "G": "#3f8f4f"}
-WUBRG = "WUBRG"
 GENS = ["gen1", "gen3", "gen4"]
 GEN_LABEL = {"gen1": "gen-1", "gen3": "gen-3", "gen4": "gen-4",
              "gen4b": "gen-4 sibling"}
@@ -41,14 +33,6 @@ GEN_COLOUR = {"gen1": GRAY, "gen3": ORANGE, "gen4": BLUE, "gen4b": GREEN}
 
 def load(name: str) -> dict:
     return json.loads((OUT / name).read_text(encoding="utf-8"))
-
-
-def save(fig, name: str) -> None:
-    for ext in ("png", "svg"):
-        fig.savefig(FIG / f"2026-08-29-draft-{name}.{ext}", bbox_inches="tight",
-                    dpi=150 if ext == "png" else None)
-    plt.close(fig)
-    print("wrote", name)
 
 
 def fig_channels() -> None:

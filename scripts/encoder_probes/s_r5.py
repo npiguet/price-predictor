@@ -7,6 +7,7 @@ import json
 import numpy as np
 import probe_lib as pl
 import s_common as S
+from _lib.stats import auc, pearson_fisher_se, wcorr, wls
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import LogisticRegression
 
@@ -32,7 +33,7 @@ for i, c in enumerate(S.COLORS):
     y, w = lab[:, i], wcl[:, i]
     have = np.isfinite(y) & (w > 0)
     tr, va = have & train, have & val
-    r2_ridge, alpha, _, _ = S.ridge_fit_eval(emb[tr], y[tr], emb[va], y[va], w[tr])
+    r2_ridge, alpha, _, _ = pl.ridge_fit_eval(emb[tr], y[tr], emb[va], y[va], w[tr])
     g = HistGradientBoostingRegressor(
         max_iter=400, learning_rate=0.06, max_leaf_nodes=31,
         early_stopping=True, validation_fraction=0.15, random_state=42)
@@ -49,7 +50,7 @@ for head in ("score_play", "played_rate"):
     y, w = S.num(join, f"shrunk_{head}"), S.num(join, f"w_{head}")
     have = np.isfinite(y) & (w > 0)
     tr, va = have & train, have & val
-    r2_ridge, alpha, _, _ = S.ridge_fit_eval(emb[tr], y[tr], emb[va], y[va], w[tr])
+    r2_ridge, alpha, _, _ = pl.ridge_fit_eval(emb[tr], y[tr], emb[va], y[va], w[tr])
     g = HistGradientBoostingRegressor(
         max_iter=400, learning_rate=0.06, early_stopping=True,
         validation_fraction=0.15, random_state=42)
@@ -78,8 +79,9 @@ for tag, y in (("predicted mean off-colour lift", mean_off_pred),
                      ("n_colors", n_colors),
                      ("MV", np.nan_to_num(S.num(join, "mv")))):
         m = sel & np.isfinite(x)
-        r = S.wcorr(y[m], x[m])
-        rows_b.append([tag, xname, int(m.sum()), f"{r:+.4f}", f"±{S.corr_se(r, int(m.sum())):.4f}"])
+        r = wcorr(y[m], x[m])
+        rows_b.append([tag, xname, int(m.sum()), f"{r:+.4f}",
+                       f"±{pearson_fisher_se(r, int(m.sum())):.4f}"])
 out["b_offdiag_correlates"] = rows_b
 out["b_frac_negative_pred"] = float(np.nanmean(np.where(off, prd, np.nan) < 0))
 out["b_frac_negative_lab"] = float(np.nanmean(lab_off < 0))
@@ -129,12 +131,7 @@ for i, c in enumerate(S.COLORS):
     clf.fit(emb[train], y[train])
     p = clf.predict_proba(emb[val])[:, 1]
     acc = float(((p > 0.5).astype(int) == y[val]).mean())
-    order = np.argsort(p)
-    ranks = np.empty(len(p))
-    ranks[order] = np.arange(len(p))
-    pos, neg = y[val] == 1, y[val] == 0
-    auc = float((ranks[pos].mean() - (pos.sum() - 1) / 2) / neg.sum())
-    rows_d1.append([c, int(y[val].sum()), f"{acc:.4f}", f"{auc:.4f}"])
+    rows_d1.append([c, int(y[val].sum()), f"{acc:.4f}", f"{auc(y[val] == 1, p):.4f}"])
 out["d_identity_readoff"] = rows_d1
 
 # d2: R² of colour_lift from colour identity alone vs from the embedding
@@ -146,16 +143,15 @@ for i, c in enumerate(S.COLORS):
     tr, va = have & train, have & val
     # identity-only (own-colour dummies)
     X_id = np.column_stack([np.ones(len(join)), own.astype(float)])
-    b, _, _ = S.wls(X_id[tr], y[tr], w[tr])
-    r2_id = pl._r2(y[va], X_id[va] @ b, w[va])
+    r2_id = pl._r2(y[va], X_id[va] @ wls(X_id[tr], y[tr], w[tr]).beta, w[va])
     # identity + colour count/pips/MV
     X_id2 = np.column_stack([np.ones(len(join)), ident])
-    b2, _, _ = S.wls(X_id2[tr], y[tr], w[tr])
+    b2 = wls(X_id2[tr], y[tr], w[tr]).beta
     r2_id2 = pl._r2(y[va], X_id2[va] @ b2, w[va])
     # embedding ridge, and embedding ridge on the identity-residual
-    r2_emb, alpha, coef, b0 = S.ridge_fit_eval(emb[tr], y[tr], emb[va], y[va], w[tr])
+    r2_emb, alpha, coef, b0 = pl.ridge_fit_eval(emb[tr], y[tr], emb[va], y[va], w[tr])
     resid = y - X_id2 @ b2
-    r2_res, _, _, _ = S.ridge_fit_eval(emb[tr], resid[tr], emb[va], resid[va], w[tr])
+    r2_res, _, _, _ = pl.ridge_fit_eval(emb[tr], resid[tr], emb[va], resid[va], w[tr])
     rows_d2.append([c, f"{r2_id:.4f}", f"{r2_id2:.4f}", f"{r2_emb:.4f}", f"{r2_res:.4f}"])
 out["d_identity_share"] = rows_d2
 

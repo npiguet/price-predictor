@@ -19,7 +19,6 @@ Usage
 
 from __future__ import annotations
 
-import csv
 import json
 import sys
 from collections import defaultdict
@@ -27,32 +26,24 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from probe_lib import (  # noqa: E402
-    TYPE_PASSED,
-    TYPE_POOL,
-    TYPE_TAKEN,
-    CardTable,
-    iter_corpus_states,
-)
+from draft_probes.d1_channels import BLOCKS
+from draft_probes.probe_lib import CORPUS, OUT, CardTable, iter_corpus_states, write_csv
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-CORPUS = (REPO / "models/draft/agent/gen4"
-          / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl")
-BLOCKS = {"POOL": TYPE_POOL, "PASSED": TYPE_PASSED, "TAKEN": TYPE_TAKEN}
+# d1_channels.json written before the run recorded its draft count came from a
+# 40-draft run.
+LEGACY_LIMIT_DRAFTS = 40
 
 
 def main() -> None:
     data = json.loads((OUT / "d1_channels.json").read_text(encoding="utf-8"))
-    n_drafts = 40  # the run this report reads
-
+    meta = data["meta"]
     table = CardTable()
     sizes: dict[int, dict[str, list[int]]] = defaultdict(
         lambda: defaultdict(list))
-    for s in iter_corpus_states(CORPUS, table, labels=["gen4"],
-                                limit_drafts=n_drafts):
+    for s in iter_corpus_states(CORPUS, table, labels=[meta.get("seat_label", "gen4")],
+                                limit_drafts=meta.get("limit_drafts", LEGACY_LIMIT_DRAFTS)):
         for name, tt in BLOCKS.items():
             sizes[s.state.pack_number][name].append(
                 int((s.state.type_idx == tt).sum()))
@@ -81,11 +72,7 @@ def main() -> None:
                     else float("nan"),
                 })
 
-    with (OUT / "d1_placebo_table.csv").open("w", encoding="utf-8",
-                                             newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-        w.writeheader()
-        w.writerows(rows)
+    write_csv(OUT / "d1_placebo_table.csv", rows)
 
     print("Blanking a block, against blanking the same number of random tokens.")
     print("ratio > 1: the block carries more than its size predicts.\n")

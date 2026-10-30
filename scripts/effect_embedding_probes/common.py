@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import json
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -455,29 +454,23 @@ def group_means_residual(E: np.ndarray, groups: pd.Series) -> np.ndarray:
     return E - means + E.mean(axis=0)
 
 
-def weighted_corr(a: np.ndarray, b: np.ndarray, w: np.ndarray) -> float:
-    ok = np.isfinite(a) & np.isfinite(b) & (w > 0)
-    a, b, w = a[ok], b[ok], w[ok]
-    if a.size < 3:
-        return float("nan")
-    w = w / w.sum()
-    am, bm = w @ a, w @ b
-    cov = w @ ((a - am) * (b - bm))
-    va, vb = w @ ((a - am) ** 2), w @ ((b - bm) ** 2)
-    return float(cov / np.sqrt(va * vb)) if va > 0 and vb > 0 else float("nan")
+def profile_weight(table: pd.DataFrame, column: str) -> np.ndarray:
+    """``n / (n + 5)`` for an effect-profile statistic, ``n`` the records it is a share of.
 
-
-def participation_ratio(share: np.ndarray) -> float:
-    """``(Σλ)² / Σλ²`` over the covariance eigenvalues (FR-073).
-
-    How many dimensions the space effectively uses: ``d`` when every
-    direction carries equal variance, 1 when one direction carries it all.
-    Scale-free, so it reads the same from variance shares as from eigenvalues.
+    A share over a handful of records is mostly noise, so it counts for less.
     """
-    share = np.asarray(share, dtype=np.float64)
-    total = float(share.sum())
-    squares = float((share ** 2).sum())
-    return total * total / squares if squares > 0 else float("nan")
+    if column.startswith(("p_cost", "mean_cost")):
+        n = table["cost_n"]
+    elif column.startswith("mean_cont"):
+        n = table["cont_n"]
+    elif column.startswith("p_trigger"):
+        n = table["n_trigger"]
+    elif column.startswith("kind_share"):
+        n = table["n_records"]
+    else:
+        n = table["res_n"]
+    n = n.fillna(0).to_numpy(float)
+    return n / (n + 5.0)
 
 
 def pca(E: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -521,10 +514,12 @@ def load_manifest_sets(paths: ProbePaths) -> tuple[set[str], dict[str, int]]:
     Empty for a checkpoint that names no curated corpus: every text then reads
     as trained and unrated rather than the run failing.
     """
+    from effects.infrastructure.corpus_store import CorpusStore
+
     if paths.manifest is None or not paths.manifest.exists():
         return set(), {}
-    manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
-    return set(manifest["held_out_texts"]), dict(manifest["rarity"])
+    manifest = CorpusStore(paths.manifest.parent).load()
+    return set(manifest.held_out_texts), dict(manifest.rarity)
 
 
 def top_keys(texts: pd.Series, min_share: float = 0.01) -> list[str]:

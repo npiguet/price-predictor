@@ -38,12 +38,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Ridge
-from sklearn.model_selection import GroupKFold
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import (  # noqa: E402
+from _lib.markdown import md_table
+from _lib.stats import participation_ratio, ridge_cv_r2, wcorr  # noqa: E402
+
+from effect_embedding_probes.common import (  # noqa: E402
     BINARY_SCRIPT,
     CARD,
     CORPUS,
@@ -55,11 +56,10 @@ from common import (  # noqa: E402
     has_taxonomy,
     matrix,
     multivariate_eta_squared,
-    participation_ratio,
     pca,
     prepared,
+    profile_weight,
     resolve_paths,
-    weighted_corr,
     write_markdown,
 )
 
@@ -99,17 +99,6 @@ def space_r2_numeric(E: np.ndarray, x: np.ndarray) -> float:
     xc = x[ok] - x[ok].mean()
     beta = (xc @ Ec) / (xc @ xc)
     return float(((np.outer(xc, beta)) ** 2).sum() / (Ec ** 2).sum())
-
-
-def cv_r2(X: np.ndarray, Y: np.ndarray, groups: np.ndarray) -> np.ndarray:
-    """Per-column out-of-fold R² of a ridge fit, plus the pooled R²."""
-    pred = np.zeros_like(Y)
-    for train, test in GroupKFold(n_splits=5).split(X, Y, groups):
-        model = Ridge(alpha=10.0).fit(X[train], Y[train])
-        pred[test] = model.predict(X[test])
-    ss_res = ((Y - pred) ** 2).sum(axis=0)
-    ss_tot = ((Y - Y.mean(axis=0)) ** 2).sum(axis=0)
-    return np.append(1 - ss_res / ss_tot, 1 - ss_res.sum() / ss_tot.sum())
 
 
 def main() -> None:
@@ -153,14 +142,13 @@ def main() -> None:
         for label, idx in (("negative end", order[:10]),
                            ("positive end", order[::-1][:10])):
             lines.append(f"\n**{label}**\n")
-            lines.append("| SD | card | API | kind | prose | script |")
-            lines.append("|---:|---|---|---|---|---|")
-            for i in idx:
-                row = table.iloc[i]
-                prose = str(row.prose)[:110].replace("|", "/")
-                script = str(row.text)[:150].replace("|", "/")
-                lines.append(f"| {z[i, k]:+.2f} | {row.card} | {row.api} | "
-                             f"{row.line_kind} | {prose} | `{script}` |")
+            rows = [table.iloc[i] for i in idx]
+            lines.append(md_table(
+                ["SD", "card", "API", "kind", "prose", "script"],
+                [[f"{z[i, k]:+.2f}", row.card, row.api, row.line_kind,
+                  str(row.prose)[:110].replace("|", "/"),
+                  f"`{str(row.text)[:150].replace('|', '/')}`"]
+                 for i, row in zip(idx, rows)], "rlllll"))
         lines.append("")
     (paths.out / f"pca_{space}_extremes.md").write_text("\n".join(lines),
                                                    encoding="utf-8")
@@ -216,8 +204,8 @@ def main() -> None:
     Y = scores[:, :N_PCS]
     nested = []
     for name, X in sets.items():
-        per_pc = cv_r2(X, Y, groups)
-        whole = cv_r2(X, E - E.mean(axis=0), groups)[-1]
+        per_pc = ridge_cv_r2(X, Y, groups, alpha=10.0)
+        whole = ridge_cv_r2(X, E - E.mean(axis=0), groups, alpha=10.0)[-1]
         row = {"feature set": name, "columns": X.shape[1]}
         for k in range(N_PCS):
             row[f"PC{k + 1}"] = per_pc[k]
@@ -249,27 +237,16 @@ def main() -> None:
 
     # ── observed effects vs components ──
     if "res_n" in table:
-        weight = table["res_n"].fillna(0).to_numpy(float)
-        weight = weight / (weight + 5.0)
         stats = [c for c in table.columns
                  if c.startswith(("p_", "mean_", "share_opp", "kind_share_"))]
         corr_rows = []
         for column in stats:
             values = table[column].to_numpy(float)
-            w = weight
-            if column.startswith(("p_cost", "mean_cost")):
-                n = table["cost_n"].fillna(0).to_numpy(float)
-                w = n / (n + 5.0)
-            elif column.startswith("mean_cont"):
-                n = table["cont_n"].fillna(0).to_numpy(float)
-                w = n / (n + 5.0)
-            elif column.startswith("kind_share_"):
-                n = table["n_records"].fillna(0).to_numpy(float)
-                w = n / (n + 5.0)
+            w = profile_weight(table, column)
             row = {"statistic": column,
                    "texts": int(np.isfinite(values).sum())}
             for k in range(N_PCS):
-                row[f"PC{k + 1}"] = weighted_corr(values, scores[:, k], w)
+                row[f"PC{k + 1}"] = wcorr(values, scores[:, k], w)
             corr_rows.append(row)
         corr = pd.DataFrame(corr_rows)
         corr.to_csv(paths.out / f"pca_{space}_effect_corr.csv", index=False)

@@ -35,9 +35,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import (  # noqa: E402
+from effect_embedding_probes.common import (  # noqa: E402
     CARD_TYPES,
     VARIANT_TREE,
     ProbePaths,
@@ -51,7 +51,6 @@ from common import (  # noqa: E402
     resolve_paths,
     target_type,
 )
-
 from effects.domain.ability_encoder import encoding_text  # noqa: E402
 from effects.domain.baselines import Baseline  # noqa: E402
 from effects.infrastructure.ability_cache_store import AbilityCacheStore  # noqa: E402

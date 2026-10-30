@@ -30,8 +30,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
-from c2_statlines import PT_RE, set_pt  # noqa: E402
-from c10_cost_sweep import parse_cost, set_cost  # noqa: E402
+import probe_lib as pl  # noqa: E402
 
 SEED = 17
 N_BASES = 100
@@ -42,15 +41,12 @@ GENERIC = list(range(0, 10))
 
 
 def main() -> None:
-    j = cc.join_table()
-    stripped = [cc.strip_name(t) for t in j["text"]]
+    j = pl.load_frame(text=True)
+    stripped = list(j["text"])
     is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
     cost = [cc.get_field(s, "mana cost:") for s in stripped]
-    parsed = [parse_cost(c) if c else None for c in cost]
-    lit_pt = np.array([bool(PT_RE.match(ln))
-                       for s in stripped
-                       for ln in [next((x for x in cc.lines(s)
-                                       if x.startswith("power toughness:")), "")]])
+    parsed = [cc.parse_cost(c) if c else None for c in cost]
+    lit_pt = np.array([cc.has_literal_pt(s) for s in stripped])
     strict_vanilla = np.array([
         len(ls := cc.lines(s)) == 3
         and all(any(ln.startswith(p) for ln in ls) for p in CORE)
@@ -87,15 +83,11 @@ def main() -> None:
     for r, m in zip(elig, pip):
         for p in POWERS:
             for t in TOUGHS:
-                body = set_pt(stripped[r], p, t)
+                body = cc.set_pt(stripped[r], p, t)
                 for g in GENERIC:
                     c = f"{{{g}}}{{{m}}}" if g else f"{{{m}}}"
-                    texts.append(set_cost(body, c))
-    emb = cc.encode(texts)
-    pred = cc.predict_sd(emb)
-    shape = (len(elig), len(POWERS), len(TOUGHS), len(GENERIC))
-    S = pred["score_play"].to_numpy().reshape(shape)
-    D = cc.offmanifold(emb).reshape(shape)
+                    texts.append(cc.set_cost(body, c))
+    scored = pl.score_texts(texts).reshape(len(elig), len(POWERS), len(TOUGHS), len(GENERIC))
 
     rows = []
     for pi, p in enumerate(POWERS):
@@ -103,19 +95,18 @@ def main() -> None:
             for gi, g in enumerate(GENERIC):
                 rows.append({
                     "power": p, "toughness": t, "mv": g + 1,
-                    "score_play_sd": float(S[:, pi, ti, gi].mean()),
-                    "off_manifold": float(
-                        (D[:, pi, ti, gi] > cc.MANIFOLD_GATE).mean()),
+                    "score_play_sd": float(scored.sp[:, pi, ti, gi].mean()),
+                    "off_manifold": float(scored.off[:, pi, ti, gi].mean()),
                     "n_real": n_real.get((p, t, g + 1), 0),
                 })
     df = pd.DataFrame(rows)
-    df.to_csv(cc.SCRATCH / "c12_on_curve.csv", index=False)
+    df.to_csv(pl.SCRATCH / "c12_on_curve.csv", index=False)
 
     best = (df.loc[df.groupby(["power", "toughness"])["score_play_sd"].idxmax()]
             .pivot(index="power", columns="toughness", values="mv"))
     print("best MV by statline (rows P, cols T):", flush=True)
     print(best.to_string(), flush=True)
-    best.to_csv(cc.SCRATCH / "c12_best_mv.csv")
+    best.to_csv(pl.SCRATCH / "c12_best_mv.csv")
 
 
 if __name__ == "__main__":

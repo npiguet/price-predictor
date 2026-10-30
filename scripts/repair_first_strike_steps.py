@@ -170,7 +170,9 @@ def repair_shard(path: Path, keywords_of, *, write: bool) -> Counter:
     counts["records"] = len(lines) + counts["dropped"]
     if write and (counts["repaired"] or counts["dropped"]):
         temporary = path.with_name(path.name + ".repairing")
-        with gzip.open(temporary, "wt", encoding="utf-8") as handle:
+        # Rewritten in its own spelling: the corpus keeps plain shards beside gzipped ones.
+        opener = gzip.open if path.suffix == ".gz" else open
+        with opener(temporary, "wt", encoding="utf-8") as handle:
             for text in lines:
                 handle.write(text)
                 handle.write("\n")
@@ -190,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from effects.domain.damage_step_keywords import KeywordResolver
     from effects.infrastructure.converted_trees import SourceTrees
+    from effects.infrastructure.shard_io import iter_shards
 
     folders = args.cards_folder or [
         Path("output/cardsfolder"), Path("output/tokenscripts"),
@@ -197,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     keywords_of = ResolvedKeywords(KeywordResolver(
         SourceTrees.of(folders, args.variant_scripts).sidecar_cache(),
     ))
-    shards = sorted(args.corpus.rglob("*.jsonl.gz"))
+    shards = iter_shards(args.corpus)
     print(f"{len(shards)} shards under {args.corpus}", flush=True)
     total: Counter = Counter()
     by_part: dict[str, Counter] = defaultdict(Counter)

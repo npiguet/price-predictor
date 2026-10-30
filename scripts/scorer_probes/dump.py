@@ -7,10 +7,8 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from cardtool import card_text, info, set_cards, summary  # noqa: E402
+from cardtool import card_text, info, set_cards, summary
 
 p = argparse.ArgumentParser()
 p.add_argument("set")

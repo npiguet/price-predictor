@@ -21,6 +21,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
+import probe_lib as pl  # noqa: E402
 
 TEMPLATES = [
     "destroy target creature.",
@@ -50,21 +51,15 @@ AURA_TEMPLATES = [
 
 
 def main() -> None:
-    j = cc.join_table()
-    stripped = [cc.strip_name(t) for t in j["text"]]
-    is_sp = (j["is_instant"].fillna(False) | j["is_sorcery"].fillna(False)) \
-        .astype(bool).to_numpy()
+    j = pl.load_frame(text=True)
+    stripped = list(j["text"])
+    is_inst = j["is_instant"].fillna(False).astype(bool).to_numpy()
+    is_sp = is_inst | j["is_sorcery"].fillna(False).astype(bool).to_numpy()
     mv = pd.to_numeric(j["mv"], errors="coerce").to_numpy(float)
     rng = np.random.default_rng(9)
     out: dict = {}
 
-    def spell_line(s: str) -> int:
-        for i, ln in enumerate(cc.lines(s)):
-            if ln.startswith("spell[1]:"):
-                return i
-        return -1
-
-    sl = np.array([spell_line(s) for s in stripped])
+    sl = np.array([cc.find_line(cc.lines(s), "spell[1]:") for s in stripped])
     n_ab = np.array([len(cc.ability_lines(s)) for s in stripped])
     base = np.flatnonzero(is_sp & (sl >= 0) & (n_ab == 1) &
                           np.isfinite(mv) & (mv >= 1) & (mv <= 5))
@@ -72,48 +67,37 @@ def main() -> None:
         base = np.sort(rng.choice(base, 200, replace=False))
     print(f"[C3] {len(base)} base spells, {len(TEMPLATES)} arms", flush=True)
 
-    texts = [cc.replace_in_line(stripped[r], sl[r], f"spell[1]: {tmpl}")
-             for r in base for tmpl in TEMPLATES]
-    emb = cc.encode(texts)
-    pred = cc.predict_sd(emb)
-    dist = cc.offmanifold(emb)
-    nt = len(TEMPLATES)
-    S = pred["score_play"].to_numpy().reshape(len(base), nt)
-    P = pred["played_rate"].to_numpy().reshape(len(base), nt)
-    D = dist.reshape(len(base), nt)
-
-    grand = S.mean(axis=1, keepdims=True)
-    rows = []
+    L = pl.score_texts([cc.replace_in_line(stripped[r], sl[r], f"spell[1]: {tmpl}")
+                        for r in base for tmpl in TEMPLATES]).reshape(len(base), -1)
+    grand = L.sp.mean(axis=1)
     ref = TEMPLATES.index("destroy target creature.")
+    rows = []
     for i, tmpl in enumerate(TEMPLATES):
-        centred = S[:, i] - grand[:, 0]
-        vs_ref = S[:, i] - S[:, ref]
-        lo, hi = cc.bootstrap_ci(centred)
-        rlo, rhi = cc.bootstrap_ci(vs_ref)
+        vs_ref = pl.mean_ci(L.sp[:, i] - L.sp[:, ref], "vs_destroy_creature")
         rows.append({
             "effect": tmpl, "n": len(base),
-            "value_sp": float(centred.mean()), "ci_lo": lo, "ci_hi": hi,
-            "vs_destroy_creature": float(vs_ref.mean()),
-            "ref_ci_lo": rlo, "ref_ci_hi": rhi,
-            "value_pr": float((P[:, i] - P.mean(axis=1)).mean()),
-            "off_manifold": float((D[:, i] > cc.MANIFOLD_GATE).mean()),
+            **pl.mean_ci(L.sp[:, i] - grand, "value_sp"),
+            "vs_destroy_creature": vs_ref["vs_destroy_creature"],
+            "ref_ci_lo": vs_ref["ci_lo"], "ref_ci_hi": vs_ref["ci_hi"],
+            "value_pr": float((L.pr[:, i] - L.pr.mean(axis=1)).mean()),
+            "off_manifold": float(L.off[:, i].mean()),
         })
     tab = pd.DataFrame(rows).sort_values("value_sp", ascending=False)
-    tab.to_csv(cc.SCRATCH / "c3_spell_ladder.csv", index=False)
+    tab.to_csv(pl.SCRATCH / "c3_spell_ladder.csv", index=False)
     print(tab.to_string(index=False), flush=True)
 
     # instant vs sorcery split of the same ladder
-    is_inst = j["is_instant"].fillna(False).astype(bool).to_numpy()[base]
+    inst = is_inst[base]
     split_rows = []
     for i, tmpl in enumerate(TEMPLATES):
-        c = S[:, i] - grand[:, 0]
+        c = L.sp[:, i] - grand
         split_rows.append({"effect": tmpl,
-                           "instant_n": int(is_inst.sum()),
-                           "instant_sp": float(c[is_inst].mean()),
-                           "sorcery_n": int((~is_inst).sum()),
-                           "sorcery_sp": float(c[~is_inst].mean())})
+                           "instant_n": int(inst.sum()),
+                           "instant_sp": float(c[inst].mean()),
+                           "sorcery_n": int((~inst).sum()),
+                           "sorcery_sp": float(c[~inst].mean())})
     pd.DataFrame(split_rows).to_csv(
-        cc.SCRATCH / "c3_ladder_by_type.csv", index=False)
+        pl.SCRATCH / "c3_ladder_by_type.csv", index=False)
 
     # ── auras ───────────────────────────────────────────────────────────
     is_aura = j["is_aura"].fillna(False).astype(bool).to_numpy()
@@ -128,33 +112,21 @@ def main() -> None:
     if len(abase) > 200:
         abase = np.sort(rng.choice(abase, 200, replace=False))
     print(f"[C3] {len(abase)} base auras", flush=True)
-    atexts = [cc.replace_in_line(stripped[r], ss[r], f"static: {tmpl}")
-              for r in abase for tmpl in AURA_TEMPLATES]
-    aemb = cc.encode(atexts)
-    apred = cc.predict_sd(aemb)
-    adist = cc.offmanifold(aemb)
-    na = len(AURA_TEMPLATES)
-    AS = apred["score_play"].to_numpy().reshape(len(abase), na)
-    AP = apred["played_rate"].to_numpy().reshape(len(abase), na)
-    AD = adist.reshape(len(abase), na)
+    AU = pl.score_texts([cc.replace_in_line(stripped[r], ss[r], f"static: {tmpl}")
+                         for r in abase for tmpl in AURA_TEMPLATES]).reshape(len(abase), -1)
     aref = AURA_TEMPLATES.index("enchanted creature gets +2/+2.")
-    arows = []
-    for i, tmpl in enumerate(AURA_TEMPLATES):
-        v = AS[:, i] - AS[:, aref]
-        lo, hi = cc.bootstrap_ci(v)
-        arows.append({"aura_text": tmpl, "n": len(abase),
-                      "vs_plus2_sp": float(v.mean()), "ci_lo": lo, "ci_hi": hi,
-                      "frac_pos": float((v > 0).mean()),
-                      "vs_plus2_pr": float((AP[:, i] - AP[:, aref]).mean()),
-                      "off_manifold": float((AD[:, i] > cc.MANIFOLD_GATE).mean())})
+    arows = [pl.contrast_row(AU.sp[:, i] - AU.sp[:, aref], AU.pr[:, i] - AU.pr[:, aref],
+                             AU.off[:, i], key="vs_plus2_sp", pr_key="vs_plus2_pr",
+                             aura_text=tmpl)
+             for i, tmpl in enumerate(AURA_TEMPLATES)]
     atab = pd.DataFrame(arows).sort_values("vs_plus2_sp", ascending=False)
-    atab.to_csv(cc.SCRATCH / "c3_aura.csv", index=False)
+    atab.to_csv(pl.SCRATCH / "c3_aura.csv", index=False)
     print(atab.to_string(index=False), flush=True)
 
     out["ladder_spread_sd"] = float(tab["value_sp"].max() - tab["value_sp"].min())
-    out["off_manifold_ladder"] = float((D > cc.MANIFOLD_GATE).mean())
-    out["off_manifold_aura"] = float((AD > cc.MANIFOLD_GATE).mean())
-    (cc.SCRATCH / "c3_summary.json").write_text(
+    out["off_manifold_ladder"] = float(L.off.mean())
+    out["off_manifold_aura"] = float(AU.off.mean())
+    (pl.SCRATCH / "c3_summary.json").write_text(
         json.dumps(out, indent=2), encoding="utf-8")
     print(json.dumps(out, indent=2), flush=True)
 

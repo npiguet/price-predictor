@@ -55,7 +55,6 @@ pass into a crawl without ever raising an OOM.
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import math
 import sys
@@ -65,51 +64,32 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from probe_lib import (  # noqa: E402
+from _lib.corpora import card_column
+from _lib.stats import js_distance, kl_divergence, softmax, spearman
+from draft_corpus_common import score_play
+from draft_probes.probe_lib import (
+    CORPUS,
+    HINTS,
+    MODELS,
+    OUT,
+    WIN_RATES,
     CardTable,
     PolicyRunner,
+    argmaxes,
     iter_corpus_states,
     load_agent,
+    write_csv,
 )
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-G4 = REPO / "models/draft/agent/gen4"
-
-CORPUS = G4 / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl"
-POLICIES = [
-    ("gen1", REPO / "models/draft/agent/gen1/l6_lr3e-4_decay_20260604_080249.pt"),
-    ("gen3", REPO / "models/draft/agent/gen3/temperature-on-all-agents"
-     "/lr1e-5_t2_20260805_221050.pt"),
-    ("gen4", G4 / "lr1e-5_t2all_decay0.3.pt"),
-]
+POLICIES = [(gen, MODELS[gen]) for gen in ("gen1", "gen3", "gen4")]
 SOURCES = ["gen4", "gen1", "forge-full"]
 FOREIGN = ["forge-full", "gen1"]  # state sources gen-4 never produced
 
-WIN_RATES = Path(
-    "Y:/Nicolas/mtg/mtg-models-data/sealed/training-data/matches-bo1"
-    "/cards-win-rates.txt"
-)
-HINTS_CSV = REPO / "output" / "scorer-probes" / "forge_hints.csv"
-
-
-# ---------------------------------------------------------------- small maths
-
-def _softmax(x: np.ndarray) -> np.ndarray:
-    e = np.exp(x - x.max())
-    return e / e.sum()
-
 
 def _kl(p: np.ndarray, q: np.ndarray) -> float:
-    m = p > 0
-    return float(np.sum(p[m] * np.log(p[m] / np.maximum(q[m], 1e-12))))
-
-
-def _js(p: np.ndarray, q: np.ndarray) -> float:
-    m = 0.5 * (p + q)
-    return float(np.sqrt(max(0.0, 0.5 * _kl(p, m) + 0.5 * _kl(q, m))))
+    return kl_divergence(p, q, floor=1e-12)
 
 
 def cluster_se(values: np.ndarray, clusters: list[str]) -> float:
@@ -125,57 +105,19 @@ def cluster_se(values: np.ndarray, clusters: list[str]) -> float:
     return float(math.sqrt(max(var, 0.0)))
 
 
-def spearman(x: np.ndarray, y: np.ndarray) -> float:
-    def rank(a):
-        order = np.argsort(a)
-        r = np.empty(len(a), dtype=float)
-        r[order] = np.arange(len(a), dtype=float)
-        return r
-    rx, ry = rank(np.asarray(x, float)), rank(np.asarray(y, float))
-    rx -= rx.mean()
-    ry -= ry.mean()
-    d = np.sqrt((rx * rx).sum() * (ry * ry).sum())
-    return float((rx * ry).sum() / d) if d > 0 else float("nan")
-
-
-# ------------------------------------------------------------------- graders
-
 def load_win_rate_grader() -> dict[str, float]:
     """name -> shrunk_score_play, dropping blank cells (no signal)."""
-    out: dict[str, float] = {}
     if not WIN_RATES.exists():
         print(f"WARNING: missing {WIN_RATES}")
-        return out
-    with WIN_RATES.open(encoding="utf-8") as fh:
-        header = fh.readline().rstrip("\n").split(";")
-        col = header.index("shrunk_score_play")
-        for line in fh:
-            parts = line.rstrip("\n").split(";")
-            if len(parts) != len(header) or parts[col] == "":
-                continue
-            try:
-                out[parts[0]] = float(parts[col])
-            except ValueError:
-                continue
-    return out
+        return {}
+    return score_play(WIN_RATES)
 
 
 def load_rank_grader() -> dict[str, float]:
     """name -> -draft_rank (Forge's human pick order; lower rank is better)."""
-    out: dict[str, float] = {}
-    if not HINTS_CSV.exists():
-        print(f"WARNING: missing {HINTS_CSV}")
-        return out
-    with HINTS_CSV.open(encoding="utf-8", newline="") as fh:
-        for row in csv.DictReader(fh):
-            v = (row.get("draft_rank") or "").strip()
-            if not v:
-                continue
-            try:
-                out[row["name"]] = -float(v)
-            except ValueError:
-                continue
-    return out
+    if not HINTS.exists():
+        print(f"WARNING: missing {HINTS}")
+    return card_column(HINTS, "draft_rank", -1.0)
 
 
 # ------------------------------------------------------------------ the probe
@@ -217,8 +159,8 @@ def run_policies(table: CardTable, samples: list, batch: int) -> dict[str, dict]
         logits: list = [None] * len(samples)
         for pos, i in enumerate(order):
             logits[i] = got[pos]
-        probs = [_softmax(ln) for ln in logits]
-        arg = np.array([int(np.argmax(ln)) for ln in logits])
+        probs = [softmax(ln) for ln in logits]
+        arg = argmaxes(logits)
         res[name] = {"probs": probs, "argmax": arg}
         del model, runner
         try:
@@ -267,7 +209,7 @@ def part1(buckets: dict[str, list], runs: dict[str, dict[str, dict]]) -> list[di
             for b in names[i + 1:]:
                 aa, ab = runs[src][a]["argmax"], runs[src][b]["argmax"]
                 pa, pb = runs[src][a]["probs"], runs[src][b]["probs"]
-                js = np.array([_js(x, y) for x, y in zip(pa, pb)])
+                js = np.array([js_distance(x, y) for x, y in zip(pa, pb)])
                 for sname, mask in sl.items():
                     rows.append({
                         "state_source": src, "a": a, "b": b, "slice": sname,
@@ -308,13 +250,13 @@ def part2(buckets: dict[str, list], runs: dict[str, dict[str, dict]],
                 ])
                 d = pol - rec
                 same = np.array([arg[i] == samples[i].target for i in keep])
+                se = cluster_se(d, clusters)
                 rows.append({
                     "state_source": src, "grader": gname, "policy": p,
                     "n": len(keep),
                     "mean_delta": float(d.mean()),
-                    "se_clustered": cluster_se(d, clusters),
-                    "t": float(d.mean() / cluster_se(d, clusters))
-                    if cluster_se(d, clusters) > 0 else float("nan"),
+                    "se_clustered": se,
+                    "t": float(d.mean() / se) if se > 0 else float("nan"),
                     "mean_grade_policy": float(pol.mean()),
                     "mean_grade_recorded": float(rec.mean()),
                     "agree_with_recorded": float(same.mean()),
@@ -487,13 +429,8 @@ def main() -> None:
                     "leverage": lev}, indent=2), encoding="utf-8")
     for name, rows in (("d3_agreement", agree), ("d3_grades", grades),
                        ("d3_leverage", lev)):
-        if not rows:
-            continue
-        with (args.out / f"{name}.csv").open("w", newline="",
-                                             encoding="utf-8") as fh:
-            w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-            w.writeheader()
-            w.writerows(rows)
+        if rows:
+            write_csv(args.out / f"{name}.csv", rows)
 
     report(agree, grades, lev, meta)
     print(f"\nwrote {args.out / 'd3_exchange.json'} and d3_*.csv")

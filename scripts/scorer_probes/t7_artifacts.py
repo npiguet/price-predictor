@@ -41,12 +41,17 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
-import probe_lib as pl
-from scipy.stats import spearmanr
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.stats import auc, pearson, spearman
+from scorer_probes import probe_lib as pl
+from scorer_probes.probe_lib import DeckBank, score_streaming
 
 SEED = 42
 
@@ -74,31 +79,6 @@ FP_FEATURES = ["n_cards", "n_colors", "n_creatures", "avg_mv",
 
 def sigmoid(z: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-np.clip(z, -60, 60)))
-
-
-def rank_avg(x: np.ndarray) -> np.ndarray:
-    """Ranks 1..n with ties averaged."""
-    order = np.argsort(x, kind="mergesort")
-    s = x[order]
-    ranks = np.empty(len(x), dtype=float)
-    i = 0
-    while i < len(x):
-        j = i
-        while j + 1 < len(x) and s[j + 1] == s[i]:
-            j += 1
-        ranks[order[i:j + 1]] = 0.5 * (i + j) + 1.0
-        i = j + 1
-    return ranks
-
-
-def auc_rank(y: np.ndarray, score: np.ndarray) -> float:
-    """AUC as the Mann-Whitney rank statistic (ties count 0.5)."""
-    y = np.asarray(y, dtype=float)
-    n1, n0 = float(y.sum()), float((1 - y).sum())
-    if n1 == 0 or n0 == 0:
-        return float("nan")
-    r = rank_avg(np.asarray(score, dtype=float))
-    return float((r[y == 1].sum() - n1 * (n1 + 1) / 2.0) / (n1 * n0))
 
 
 def logistic_irls(X: np.ndarray, y: np.ndarray, lam: float = 1e-3,
@@ -131,19 +111,6 @@ def resid(y: np.ndarray, controls: np.ndarray) -> np.ndarray:
         if controls.ndim == 2 else np.column_stack([np.ones(len(y)), controls])
     beta, *_ = np.linalg.lstsq(A, y, rcond=None)
     return y - A @ beta
-
-
-def pearson(a: np.ndarray, b: np.ndarray) -> float:
-    if len(a) < 3 or np.std(a) == 0 or np.std(b) == 0:
-        return float("nan")
-    return float(np.corrcoef(a, b)[0, 1])
-
-
-def spearman(a, b) -> float:
-    a, b = np.asarray(a, float), np.asarray(b, float)
-    if len(a) < 3 or np.std(a) == 0 or np.std(b) == 0:
-        return float("nan")
-    return float(spearmanr(a, b).statistic)
 
 
 def jsonify(o):
@@ -179,37 +146,14 @@ def header(title: str) -> None:
 
 # ====================================================== shared deck plumbing
 
-def ensure_cards(probe: pl.Probe, cache: dict, names) -> bool:
-    """Populate ``cache`` with float32 embeddings; False if any is missing."""
-    for n in names:
-        if n in cache:
-            if cache[n] is None:
-                return False
-            continue
-        e = probe.embedding(n)
-        cache[n] = None if e is None else e.astype(np.float32)
-        if cache[n] is None:
-            return False
-    return True
-
-
-def score_name_lists(probe: pl.Probe, cache: dict, lists: list[list[str]],
+def score_name_lists(probe: pl.Probe, bank: DeckBank, lists: list[list[str]],
                      chunk: int = 256) -> np.ndarray:
     """Score decks given as name lists, building matrices chunk by chunk."""
-    out = np.empty(len(lists), dtype=np.float64)
-    for lo in range(0, len(lists), chunk):
-        sub = lists[lo:lo + chunk]
-        mats = [np.stack([cache[n] for n in names]) for names in sub]
-        out[lo:lo + len(sub)] = probe.score_matrices(mats, batch_size=len(sub))
-    return out
+    return score_streaming(probe, len(lists),
+                           lambda i: np.stack([bank.emb[n] for n in lists[i]]), chunk)
 
 
-def read_lines(path: Path) -> list[str]:
-    with open(path, encoding="utf-8") as f:
-        return [ln.rstrip("\n") for ln in f]
-
-
-def load_aligned_pairs(probe: pl.Probe, cache: dict, n_decks: int,
+def load_aligned_pairs(bank: DeckBank, n_decks: int,
                        label_of, seed: int = SEED) -> tuple[list[dict], Counter]:
     """Sample line-aligned (pool, deck) pairs from the gen4-256 corpus.
 
@@ -217,7 +161,7 @@ def load_aligned_pairs(probe: pl.Probe, cache: dict, n_decks: int,
     (never touched) and spells, plus the unused-pool spells that are legal
     additions. Records carry the labels used to pick the best/worst card.
     """
-    pools, decks = read_lines(POOLS), read_lines(GEN_DECKS)
+    pools, decks = pl.read_pools(POOLS), pl.read_generated_decks(GEN_DECKS)
     n = min(len(pools), len(decks))
     stats: Counter = Counter(pool_lines=len(pools), deck_lines=len(decks))
     rng = np.random.default_rng(seed)
@@ -227,21 +171,11 @@ def load_aligned_pairs(probe: pl.Probe, cache: dict, n_decks: int,
     for idx in order:
         if len(out) >= n_decks:
             break
-        prow, drow = pools[idx], decks[idx]
-        if ";" not in prow:
-            stats["bad_pool_line"] += 1
-            continue
-        pset, pcards = prow.split(";", 1)
-        dparts = drow.split(";")
-        if len(dparts) != 3:
-            stats["bad_deck_line"] += 1
-            continue
-        _, dset, dcards = dparts
-        if pset != dset:
+        pset, pool = pools[idx].set_code, pools[idx].cards
+        if pset != decks[idx].set_code:
             stats["set_mismatch"] += 1
             continue
-        pool = pcards.split("|")
-        deck = dcards.split("|")
+        deck = decks[idx].cards
 
         nonbasic = [c for c in deck if c.lower() not in pl.BASIC_LAND_NAMES]
         pool_cnt = Counter(pool)
@@ -249,13 +183,13 @@ def load_aligned_pairs(probe: pl.Probe, cache: dict, n_decks: int,
         if any(deck_cnt[k] > pool_cnt.get(k, 0) for k in deck_cnt):
             stats["deck_not_in_pool"] += 1
             continue
-        if not ensure_cards(probe, cache, nonbasic):
+        if not all(bank.card_ok(c) for c in nonbasic):
             stats["deck_card_no_embedding"] += 1
             continue
 
         lands, spells = [], []
         for c in nonbasic:
-            det = pl.det_features(cache[c])
+            det = pl.det_features(bank.emb[c])
             (lands if det["is_land"] > 0.5 else spells).append(c)
         if len(spells) < 4:
             stats["too_few_spells"] += 1
@@ -266,17 +200,17 @@ def load_aligned_pairs(probe: pl.Probe, cache: dict, n_decks: int,
             extra = k - deck_cnt.get(card, 0)
             if extra <= 0 or card.lower() in pl.BASIC_LAND_NAMES:
                 continue
-            if not ensure_cards(probe, cache, [card]):
+            if not bank.card_ok(card):
                 stats["pool_card_no_embedding"] += 1
                 continue
-            if pl.det_features(cache[card])["is_land"] > 0.5:
+            if pl.det_features(bank.emb[card])["is_land"] > 0.5:
                 continue                       # only nonland cards may move
             unused.extend([card] * extra)
         if not unused:
             stats["no_unused_spell"] += 1
             continue
 
-        mvs = [float(pl.det_features(cache[c])["mv"]) for c in spells]
+        mvs = [float(pl.det_features(bank.emb[c])["mv"]) for c in spells]
         out.append({
             "line": int(idx),
             "set": pset,
@@ -376,14 +310,14 @@ def probe_a(rows: list[dict]) -> dict:
         X = np.column_stack([np.ones(len(Xr)), (Xr - mu) / sd])
         w = logistic_irls(X, y, lam=1e-3)
         p_gen = sigmoid(X @ w)
-        auc = auc_rank(y, p_gen)
+        auc_gen = auc(y, p_gen)
         sep = float(np.mean((p_gen > 0.01) & (p_gen < 0.99)))
 
         print(f"\n### Fingerprint classifier [{tag}]  (y=1 is the gen family)\n")
         print(f"rows: {len(keep)}  gen={int(y.sum())}  "
               f"forge={int((1 - y).sum())}")
         print(f"features: {', '.join(feats)} (standardized, L2 lambda=1e-3)")
-        print(f"AUC(P_hat(gen) vs family) = {fmt(auc)}   "
+        print(f"AUC(P_hat(gen) vs family) = {fmt(auc_gen)}   "
               f"accuracy@0.5 = {fmt(((p_gen > 0.5) == (y > 0.5)).mean())}   "
               f"share of P_hat strictly inside (0.01, 0.99) = {fmt(sep, 3)}")
         print("\n| feature | standardized coef |")
@@ -404,7 +338,7 @@ def probe_a(rows: list[dict]) -> dict:
         print("| score vs P_hat(gen), partial \\| mean_score_play + "
               f"n_creatures + n_colors | {fmt(r2)} |")
         return {
-            "features": feats, "auc_gen": auc,
+            "features": feats, "auc_gen": auc_gen,
             "acc_at_half": float(((p_gen > 0.5) == (y > 0.5)).mean()),
             "share_unsaturated": sep,
             "coef_standardized": dict(zip(["intercept"] + feats, w.tolist())),
@@ -470,7 +404,7 @@ def probe_a(rows: list[dict]) -> dict:
 
 # ================================================================= probe B
 
-def probe_b(probe: pl.Probe, cache: dict, pairs: list[dict],
+def probe_b(probe: pl.Probe, bank: DeckBank, pairs: list[dict],
             chunk: int) -> dict:
     header("B -- LAND-COUNT OPINION (H-landcount)")
     if not pairs:
@@ -504,7 +438,7 @@ def probe_b(probe: pl.Probe, cache: dict, pairs: list[dict],
 
     print(f"scoring {len(lists)} variants over {len(pairs)} decks "
           f"({len(variants)} per deck) ...")
-    s = score_name_lists(probe, cache, lists, chunk)
+    s = score_name_lists(probe, bank, lists, chunk)
     S = {v: np.array([s[k] for k, (_, vv) in enumerate(meta) if vv == v])
          for v in variants}
 
@@ -607,64 +541,26 @@ def probe_b(probe: pl.Probe, cache: dict, pairs: list[dict],
 
 # ================================================================= probe C
 
-def parse_matches(path: Path, limit: int | None = None):
-    """Yield (set, method_A, deck_A, method_B, deck_B, winner) per match line.
-
-    Winner = the side with more game wins in field 7 (a string like "ABAAA").
-    """
-    rows, undecided, malformed = [], 0, 0
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            p = line.rstrip("\n").split(";")
-            if len(p) < 10:
-                malformed += 1
-                continue
-            a, b = p[7].count("A"), p[7].count("B")
-            if a == b:
-                undecided += 1
-                continue
-            rows.append((p[2], p[3], p[5].split("|"), p[4], p[6].split("|"),
-                         "A" if a > b else "B"))
-            if limit and len(rows) >= limit:
-                break
-    return rows, undecided, malformed
-
-
-def probe_c(probe: pl.Probe, cache: dict, limit: int | None,
+def probe_c(probe: pl.Probe, bank: DeckBank, limit: int | None,
             chunk: int, min_n: int = 30) -> dict:
     header("C -- PER-SET BLIND SPOTS + SCORE CALIBRATION (H-perset)")
-    raw, undecided, malformed = parse_matches(MATCH_FILE, limit)
+    raw, undecided, malformed = pl.decided_matches(MATCH_FILE, limit)
     print(f"parsed {len(raw)} decided matches "
           f"({undecided} undecided, {malformed} malformed) from "
           f"{MATCH_FILE.name}")
 
     rng = np.random.default_rng([SEED, 2])
-    index: dict[tuple, int] = {}
-    decks: list[list[str]] = []
     recs, dropped, flipped = [], 0, 0
-
-    def add(deck: list[str]) -> int | None:
-        nb = tuple(sorted(c for c in deck
-                          if c.lower() not in pl.BASIC_LAND_NAMES))
-        if not nb:
-            return None
-        hit = index.get(nb)
-        if hit is not None:
-            return hit
-        if not ensure_cards(probe, cache, nb):
-            return None
-        index[nb] = len(decks)
-        decks.append(list(nb))
-        return len(decks) - 1
-
-    for set_code, m_a, deck_a, m_b, deck_b, winner in raw:
+    for m, winner in raw:
+        set_code, m_a, deck_a, m_b, deck_b = (m.set_code, m.method_a, m.deck_a.cards,
+                                              m.method_b, m.deck_b.cards)
         # Side A is systematically the newer builder in this corpus; a seeded
         # coin flip makes the calibration table symmetric around delta=0.
         if rng.random() < 0.5:
             m_a, deck_a, m_b, deck_b = m_b, deck_b, m_a, deck_a
             winner = "B" if winner == "A" else "A"
             flipped += 1
-        ia, ib = add(deck_a), add(deck_b)
+        ia, ib = bank.add(deck_a), bank.add(deck_b)
         if ia is None or ib is None:
             dropped += 1
             continue
@@ -672,12 +568,13 @@ def probe_c(probe: pl.Probe, cache: dict, limit: int | None,
                      1.0 if winner == "A" else 0.0))
     print(f"kept {len(recs)} matches ({dropped} dropped for missing "
           f"embeddings, {flipped} orientation-flipped); "
-          f"{len(decks)} distinct decks, {len(cache)} cards cached")
+          f"{len(bank.keys)} distinct decks, "
+          f"{len(bank.emb) + len(bank.missing)} cards cached")
     if not recs:
         return {}
 
-    print(f"scoring {len(decks)} distinct decks ...")
-    s = score_name_lists(probe, cache, decks, chunk)
+    print(f"scoring {len(bank.keys)} distinct decks ...")
+    s = bank.score_all(probe, list(range(len(bank.keys))), chunk)
     delta = np.array([s[ia] - s[ib] for _, _, ia, ib, _ in recs])
     y = np.array([w for _, _, _, _, w in recs])
     sets = [r[0] for r in recs]
@@ -791,7 +688,7 @@ def probe_c(probe: pl.Probe, cache: dict, limit: int | None,
     return {
         "match_file": str(MATCH_FILE),
         "n_matches": len(recs), "n_dropped": dropped,
-        "n_undecided": undecided, "n_distinct_decks": len(decks),
+        "n_undecided": undecided, "n_distinct_decks": len(bank.keys),
         "overall_acc": float(correct.mean()),
         "tie_rate": float((delta == 0).mean()),
         "min_n_per_set": min_n,
@@ -812,7 +709,7 @@ def probe_c(probe: pl.Probe, cache: dict, limit: int | None,
 
 # ================================================================= probe D
 
-def probe_d_swaps(probes: dict[str, pl.Probe], cache: dict, pairs: list[dict],
+def probe_d_swaps(probes: dict[str, pl.Probe], bank: DeckBank, pairs: list[dict],
                   n_swaps: int, chunk: int) -> dict:
     header("D1 -- SIBLING-CHECKPOINT AGREEMENT (H-swap-resolution)")
     if not pairs:
@@ -839,7 +736,7 @@ def probe_d_swaps(probes: dict[str, pl.Probe], cache: dict, pairs: list[dict],
     scores: dict[str, np.ndarray] = {}
     for name, p in probes.items():
         print(f"scoring {len(lists)} decks with {name} ...")
-        scores[name] = score_name_lists(p, cache, lists, chunk)
+        scores[name] = score_name_lists(p, bank, lists, chunk)
 
     names = list(probes)
     base_scores = {n: np.array([s[d["base"]] for d in per_deck])
@@ -1070,11 +967,11 @@ def main() -> None:
         results["A_builder_fingerprint"] = probe_a(load_t0(a_rows))
 
     need_probe = bool({"B", "C", "D"} & sections)
-    probe = None
-    cache: dict = {}
+    probe = bank = None
     if need_probe:
         print(f"\nloading production scorer (device={device or 'auto'}) ...")
         probe = pl.Probe(device=device)
+        bank = DeckBank(probe.embedding)
         results["meta"]["device"] = probe.device
         print(f"device={probe.device}  d_model={probe.d_model}")
 
@@ -1096,18 +993,18 @@ def main() -> None:
     if {"B", "D"} & sections:
         want = max(b_decks if "B" in sections else 0,
                    d_decks if "D" in sections else 0)
-        pairs, pstats = load_aligned_pairs(probe, cache, want, label_of)
+        pairs, pstats = load_aligned_pairs(bank, want, label_of)
         print(f"aligned gen4-256 pairs: kept {len(pairs)} of {want} requested; "
               "skips " + str(dict((k, v) for k, v in pstats.items()
                                   if 'line' not in k and k != 'pairs_used')))
         results["meta"]["pair_stats"] = dict(pstats)
 
     if "B" in sections:
-        results["B_land_count"] = probe_b(probe, cache, pairs[:b_decks], chunk)
+        results["B_land_count"] = probe_b(probe, bank, pairs[:b_decks], chunk)
 
     if "C" in sections:
         results["C_per_set_calibration"] = probe_c(
-            probe, cache, c_limit, chunk, min_n=3 if smoke else 30)
+            probe, bank, c_limit, chunk, min_n=3 if smoke else 30)
 
     if "D" in sections:
         probes = {"prod_mwlog_ff2176": probe}
@@ -1117,7 +1014,7 @@ def main() -> None:
             print(f"\nloading sibling scorer {name} ...")
             probes[name] = pl.Probe(device=device, checkpoint=ck)
         results["D_sibling_agreement"] = probe_d_swaps(
-            probes, cache, pairs[:d_decks], d_swaps, chunk)
+            probes, bank, pairs[:d_decks], d_swaps, chunk)
         results["D_forge_annotation_joins"] = probe_d_joins(wr)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

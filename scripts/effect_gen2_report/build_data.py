@@ -20,48 +20,20 @@ import csv
 import glob
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-import transcribed
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-REPO = Path(__file__).resolve().parents[2]
-RUNS = REPO / "models" / "effects" / "runs"
+import transcribed  # noqa: E402
+from _lib.paths import MODELS, OUTPUT, REPO  # noqa: E402
+from lineage import GEN1, RUN_LIST, Run  # noqa: E402
+
+from effects.application.training_log import EpochSummary, parse_epoch_summaries  # noqa: E402
+
+RUNS = MODELS / "effects" / "runs"
 OUT = REPO / "experiments" / "2026-09-18-effect-model-gen2" / "data"
-
-
-@dataclass(frozen=True)
-class Run:
-    """One training run: a directory whose ``train.log`` holds its epochs."""
-
-    name: str
-    directory: str
-    width: int
-    copies: int
-    lr_scale: float
-    parent: str | None = None
-
-
-RUN_LIST = [
-    Run("e64 (earlier inputs)", "2026-10-gen2-e64-earlier-inputs", 64, 0, 1.0),
-    Run("e64", "2026-10-gen2-e64", 64, 0, 1.0),
-    Run("e128", "2026-10-gen2-e128", 128, 0, 1.0),
-    Run("e64-lethality", "2026-10-gen2-e64-lethality", 64, 8, 1.0),
-    Run("e128-lethality", "2026-10-gen2-e128-lethality", 128, 8, 1.0),
-    Run("e256-lethality", "2026-10-gen2-e256-lethality", 256, 8, 1.0),
-    Run("A64", "2026-10-gen2-e64-lethality-ext20", 64, 8, 1.0, "e64-lethality"),
-    Run("B64", "2026-10-gen2-e64-lethality-lr0.1", 64, 8, 0.1, "A64"),
-    Run("A128", "2026-10-gen2-e128-lethality-ext20", 128, 8, 1.0, "e128-lethality"),
-    Run("B128", "2026-10-gen2-e128-lethality-lr0.1", 128, 8, 0.1, "A128"),
-    Run("A256", "2026-10-gen2-e256-lethality-ext20", 256, 8, 1.0, "e256-lethality"),
-    Run("B256", "2026-10-gen2-e256-lethality-lr0.1", 256, 8, 0.1, "A256"),
-]
-GEN1 = Run("gen-1", "2026-09-17-full-textless-corpus", 64, 0, 1.0)
-
-EPOCH_LINE = re.compile(
-    r"epoch (\d+) \| train ([\d.]+) \| card-disjoint ([\d.]+) \| game-disjoint ([\d.]+)"
-    r" \| gate F1 ([\d.]+) \| zone acc ([\d.]+) \| deviance ([\d.]+)")
-FIELD_ITEM = re.compile(r"([a-z_0-9]+) ([\d.]+) \((-?\d+|n/a)%?\)")
 
 
 def write(name: str, header: list[str], rows: list[list]) -> None:
@@ -82,24 +54,8 @@ def read(path: Path) -> str:
 # ── training logs ──────────────────────────────────────────────────────────
 
 
-def epochs_of(run: Run) -> list[dict]:
-    """Every epoch summary line of a run, with the per-field line that follows it."""
-    lines = read(RUNS / run.directory / "train.log").splitlines()
-    out = []
-    for i, line in enumerate(lines):
-        m = EPOCH_LINE.search(line)
-        if not m:
-            continue
-        fields = {}
-        if i + 1 < len(lines) and lines[i + 1].strip().startswith("fields:"):
-            for name, loss, pct in FIELD_ITEM.findall(lines[i + 1]):
-                fields[name] = (float(loss), None if pct == "n/a" else float(pct))
-        e = dict(zip(("epoch", "train", "card_disjoint", "game_disjoint", "gate_f1",
-                      "zone_acc", "deviance"), (int(m.group(1)), *map(float, m.groups()[1:]))))
-        e["fields"] = fields
-        out.append(e)
-    # A resumed run logs an epoch again after the restart; keep the last line for each.
-    return list({e["epoch"]: e for e in out}.values())
+def epochs_of(run: Run) -> list[EpochSummary]:
+    return parse_epoch_summaries(read(RUNS / run.directory / "train.log").splitlines())
 
 
 @dataclass(frozen=True)
@@ -116,13 +72,14 @@ class Checkpoint:
         return RUNS / self.directory
 
 
-def checkpoints(epochs: dict[str, list[dict]]) -> list[tuple[Checkpoint, dict]]:
+def checkpoints(epochs: dict[str, list[EpochSummary]]
+                ) -> list[tuple[Checkpoint, EpochSummary]]:
     out = []
     for run in RUN_LIST:
         eps = epochs.get(run.name)
         if not eps or "arm complete" not in read(RUNS / run.directory / "arm.log"):
             continue  # still training: its best epoch is not final
-        best = min(eps, key=lambda e: e["card_disjoint"])
+        best = min(eps, key=lambda e: e.card_disjoint)
         # A continuation that never beat its starting checkpoint keeps that checkpoint,
         # which its parent already probed; its own lowest epoch is probed in "-best".
         best_dir = (run.directory + "-best" if (RUNS / (run.directory + "-best")).exists()
@@ -131,7 +88,7 @@ def checkpoints(epochs: dict[str, list[dict]]) -> list[tuple[Checkpoint, dict]]:
                                best_dir), best))
         last_dir = run.directory + "-last"
         if run.parent and (RUNS / last_dir).exists():
-            last = max(eps, key=lambda e: e["epoch"])
+            last = max(eps, key=lambda e: e.epoch)
             out.append((Checkpoint(f"{run.name} last", run, "last", last_dir), last))
     return out
 
@@ -213,15 +170,15 @@ def combat(ck: Checkpoint) -> list[list]:
     for variant, which, cells in combat_blocks(main):
         if variant in STEPPED and not per_step_in_main:
             continue  # read on regular-step boards before the per-step fix
-        rows += _cells(ck.id, variant, which, cells)
+        rows += cell_rows([ck.id, variant, which], cells)
     for variant, which, cells in combat_blocks(steps):
-        rows += _cells(ck.id, variant, which, cells)
+        rows += cell_rows([ck.id, variant, which], cells)
     return rows
 
 
-def _cells(cid, variant, which, cells):
-    return [[cid, variant, which, p + 1, t + 1, v]
-            for p, row in enumerate(cells) for t, v in enumerate(row)]
+def cell_rows(key: list, cells: list[list[float]]) -> list[list]:
+    """An 8×8 grid as one row per cell: ``key``, the row and column from 1, the value."""
+    return [[*key, r + 1, c + 1, v] for r, row in enumerate(cells) for c, v in enumerate(row)]
 
 
 def boundary(run: Run) -> list[list]:
@@ -370,26 +327,26 @@ def main() -> None:
     write("runs.csv", ["run", "directory", "e_width", "lethality_copies", "lr_scale",
                        "continues", "first_epoch", "last_epoch"],
           [[r.name, r.directory, r.width, r.copies, r.lr_scale, r.parent or "",
-            min(e["epoch"] for e in epochs[r.name]), max(e["epoch"] for e in epochs[r.name])]
+            min(e.epoch for e in epochs[r.name]), max(e.epoch for e in epochs[r.name])]
            for r in [GEN1, *RUN_LIST] if epochs[r.name]])
 
     write("epochs.csv", ["run", "epoch", "train", "card_disjoint", "game_disjoint", "gate_f1",
                          "zone_acc", "deviance"],
-          [[name, e["epoch"], e["train"], e["card_disjoint"], e["game_disjoint"], e["gate_f1"],
-            e["zone_acc"], e["deviance"]] for name, eps in epochs.items() for e in eps])
+          [[name, e.epoch, e.train, e.card_disjoint, e.game_disjoint, e.gate_f1,
+            e.zone_accuracy, e.deviance] for name, eps in epochs.items() for e in eps])
 
     write("fields_by_epoch.csv", ["run", "epoch", "field", "card_disjoint_loss",
                                   "explained_pct"],
-          [[name, e["epoch"], f, loss, pct] for name, eps in epochs.items() for e in eps
-           for f, (loss, pct) in e["fields"].items()])
+          [[name, e.epoch, f, loss, pct] for name, eps in epochs.items() for e in eps
+           for f, (loss, pct) in e.fields.items()])
 
     cks = checkpoints(epochs)
     write("checkpoints.csv", ["checkpoint", "run", "role", "epoch", "e_width", "lethality_copies",
                               "lr_scale", "card_disjoint", "game_disjoint", "gate_f1", "zone_acc",
                               "deviance", "probe_directory"],
-          [[ck.id, ck.run.name, ck.role, e["epoch"], ck.run.width, ck.run.copies,
-            ck.run.lr_scale, e["card_disjoint"], e["game_disjoint"], e["gate_f1"],
-            e["zone_acc"], e["deviance"], ck.directory] for ck, e in cks])
+          [[ck.id, ck.run.name, ck.role, e.epoch, ck.run.width, ck.run.copies,
+            ck.run.lr_scale, e.card_disjoint, e.game_disjoint, e.gate_f1,
+            e.zone_accuracy, e.deviance, ck.directory] for ck, e in cks])
 
     write("gate2.csv", ["checkpoint", "keyword", "qualifying_records", "agreement_pct",
                         "verdict"], [r for ck, _ in cks for r in gate2(ck)])
@@ -398,7 +355,7 @@ def main() -> None:
           [r for ck, _ in cks if (r := gate3(ck))] + transcribed.GATE3)
 
     ladder, sweeps, sweep_records, board, ablation = [], [], [], [], []
-    gen1_card = (REPO / "output/effects/reports"
+    gen1_card = (OUTPUT / "effects" / "reports"
                  / "knowledge-probes-2026-09-17-full-textless-corpus-20261009/scorecard.json")
     probed = [(ck.id, ck, scorecard(ck)) for ck, _ in cks]
     if gen1_card.exists():
@@ -446,14 +403,11 @@ def main() -> None:
                                    "constant_baseline"],
           [r for ck, _ in cks for r in embedding_probes(ck)] + transcribed.EMBEDDING_GEN1)
 
-    grids = []
-    for ck, _ in cks:
-        for record_set, f in damage_grid_files(ck):
-            if f.exists():
-                for d, row in enumerate(grid_cells(read(f))):
-                    grids += [[ck.id, record_set, d + 1, t + 1, v] for t, v in enumerate(row)]
+    grids = [row for ck, _ in cks for record_set, f in damage_grid_files(ck) if f.exists()
+             for row in cell_rows([ck.id, record_set], grid_cells(read(f)))]
     known = {(g[0], g[1]) for g in grids}
-    grids += [g for g in transcribed.DAMAGE_GRIDS if (g[0], g[1]) not in known]
+    grids += [row for key, cells in transcribed.DAMAGE_GRIDS.items() if key not in known
+              for row in cell_rows(list(key), cells)]
     write("damage_grids.csv", ["checkpoint", "record_set", "damage", "toughness",
                                "predicted_death"], grids)
 

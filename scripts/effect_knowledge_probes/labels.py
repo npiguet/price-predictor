@@ -111,10 +111,6 @@ TARGETS: tuple[TargetSpec, ...] = (
 TARGETS_BY_NAME: dict[str, TargetSpec] = {spec.name: spec for spec in TARGETS}
 
 
-def target_id(spec: TargetSpec) -> str:
-    return f"{spec.family}/{spec.name}"
-
-
 def capped(value: float) -> float:
     """``value`` with its magnitude at most the model's ``MAGNITUDE_CAP``, sign kept.
 
@@ -133,7 +129,6 @@ def capped(value: float) -> float:
 
 _LABEL_RE = re.compile(r"^\s*SV\d+:\s*")
 _INT_RE = re.compile(r"^[+-]?\d+$")
-_PIP_RE = re.compile(r"\{([^}]+)\}")
 
 
 def segments(script: str | None) -> list[dict[str, str]]:

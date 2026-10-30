@@ -24,59 +24,53 @@ from pathlib import Path
 import numpy as np
 from scipy import stats
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import probe_lib as pl  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scorer_probes import probe_lib as pl
+
+from sealed.domain import card_embedding_layout as layout
 
 MATCH_FILES = [
     pl.YDATA / "matches-b07" / "match-outcomes-gen5-vs-gen4-forge.txt",
     pl.YDATA / "matches-b07" / "match-outcomes-gen4-vs-forge-best-gen3.txt",
 ]
-TEXT_DIM = 512
 OUT_JSON = pl.SCRATCH / "t5b_results.json"
 
-# label -> indices within the trailing 32-dim deterministic block
-# (see sealed.domain.card_embedding_layout)
+# label -> indices within the trailing deterministic block
 GROUPS = {
-    "is_land": [0],
-    "mana cost (pips+generic+X+MV)": list(range(1, 10)),
-    "color pips only": list(range(1, 7)),
-    "mana value only": [9],
-    "color flags": list(range(10, 16)),
-    "mana production": list(range(16, 23)),
-    "power/toughness/loyalty": [23, 24, 25],
-    "all 32": list(range(32)),
+    "is_land": [layout.IS_LAND],
+    "mana cost (pips+generic+X+MV)": list(range(layout.COLOR_PIPS.start, layout.MANA_VALUE + 1)),
+    "color pips only": list(range(layout.COLOR_PIPS.start, layout.COLORLESS_PIP + 1)),
+    "mana value only": [layout.MANA_VALUE],
+    "color flags": list(range(layout.COLOR_FLAGS.start, layout.IS_COLORLESS + 1)),
+    "mana production": list(range(layout.PRODUCES_COLORS.start, layout.MANA_PRODUCED + 1)),
+    "power/toughness/loyalty": [layout.POWER, layout.TOUGHNESS, layout.LOYALTY],
+    f"all {layout.FEATURE_COUNT}": list(range(layout.FEATURE_COUNT)),
 }
 
 
 def main():
     probe = pl.Probe()
+    text_dim = probe.d_model - layout.FEATURE_COUNT
 
     matches, decks = [], {}
     for path in MATCH_FILES:
         n0 = len(matches)
-        with open(path, encoding="utf-8") as f:
-            for line in f:
-                p = line.rstrip("\n").split(";")
-                if len(p) < 10:
-                    continue
-                a, b = p[7].count("A"), p[7].count("B")
-                if a == b:
-                    continue
-                pair, ok = [], True
-                for di in (5, 6):
-                    names = [c for c in p[di].split("|")
-                             if c.lower() not in pl.BASIC_LAND_NAMES]
-                    key = "|".join(sorted(names))
-                    if key not in decks:
-                        try:
-                            probe.deck_matrix(names)
-                        except KeyError:
-                            ok = False
-                            break
-                        decks[key] = names
-                    pair.append(key)
-                if ok:
-                    matches.append((pair[0], pair[1], a > b))
+        for m, winner in pl.decided_matches(path)[0]:
+            pair, ok = [], True
+            for deck in (m.deck_a, m.deck_b):
+                names = pl.nonbasic(deck.cards)
+                key = "|".join(sorted(names))
+                if key not in decks:
+                    try:
+                        probe.deck_matrix(names)
+                    except KeyError:
+                        ok = False
+                        break
+                    decks[key] = names
+                pair.append(key)
+            if ok:
+                matches.append((pair[0], pair[1], winner == "A"))
         print(f"{path.name}: +{len(matches) - n0} matches", flush=True)
     keys = list(decks)
     n = len(matches)
@@ -85,17 +79,16 @@ def main():
     mats = {k: probe.deck_matrix(decks[k]) for k in keys}
     card_rows = {}
     for k in keys:
-        nonbasic = [c for c in decks[k] if c.lower() not in pl.BASIC_LAND_NAMES]
-        for name, row in zip(nonbasic, mats[k]):
+        for name, row in zip(decks[k], mats[k]):
             card_rows.setdefault(name, row)
-    det_mean = np.stack(list(card_rows.values()))[:, TEXT_DIM:].mean(axis=0)
+    det_mean = np.stack(list(card_rows.values()))[:, text_dim:].mean(axis=0)
 
     def run(feat_idx):
         edited = []
         for k in keys:
             m = mats[k].copy()
             if feat_idx:
-                cols = [TEXT_DIM + i for i in feat_idx]
+                cols = [text_dim + i for i in feat_idx]
                 m[:, cols] = det_mean[feat_idx]
             edited.append(m)
         return dict(zip(keys, probe.score_matrices(edited)))

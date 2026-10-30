@@ -1,8 +1,8 @@
 """The knowledge-probe suite (FR-089): share, labels, sweeps, folds, digest, compare.
 
-``scripts/`` is not part of the installed package, so ``scripts/`` is put on
-the path and the suite imports as the package its entry scripts make it, so a
-test reads the very modules a run would.
+``scripts/`` is not part of the installed package; the conftest puts it on the
+path, so the suite imports as the package its entry scripts make it and a test
+reads the very modules a run would.
 
 Fixtures are real: the gen-1 records and sidecars cut from the corpus by
 ``scripts/make_fixture_records.py``, and the real gen-2 chained sidecars.
@@ -18,15 +18,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
-_ROOT = Path(__file__).resolve().parents[3]
-_SUITE = _ROOT / "scripts" / "effect_knowledge_probes"
-_FIXTURES = _ROOT / "tests" / "fixtures" / "effects"
-
-if str(_ROOT / "scripts") not in sys.path:
-    sys.path.insert(0, str(_ROOT / "scripts"))
-
-from effect_knowledge_probes import (  # noqa: E402
+from effect_knowledge_probes import (
     board,
     colour_pips,
     combat_grid,
@@ -41,7 +33,10 @@ from effect_knowledge_probes import (  # noqa: E402
     target_restrictions,
     zone_effects,
 )
-from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
+from effect_knowledge_probes.board_edits import BoardEdit
+
+_ROOT = Path(__file__).resolve().parents[3]
+_FIXTURES = _ROOT / "tests" / "fixtures" / "effects"
 
 from tests.unit.effects.builders import player_of  # noqa: E402
 
@@ -1114,6 +1109,21 @@ def _keywords(entity):
     return set(entity.granted_temporary.keywords)
 
 
+def _outcome_by_the_rule(monkeypatch, record, attacker: str, blocker: str) -> dict:
+    """``derive_targets`` patched to report the deaths the damage-step rule gives the
+    block; returned so a test can change one creature's outcome."""
+    import effects.domain.effect_targets as effect_targets
+    from effects.domain.effect_head_layout import ZONE_OUTCOMES
+
+    a, _ = combat_grid.side_of(record, attacker)
+    b, _ = combat_grid.side_of(record, blocker)
+    died = ZONE_OUTCOMES.index("died")
+    outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
+               for e, dies in zip((attacker, blocker), combat_grid.step_deaths(a, b))}
+    monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+    return outcome
+
+
 class TestCombatGrid:
     @pytest.mark.parametrize("attacker, blocker, keywords, step, expected", [
         ((3, 3, 0), (2, 2, 0), ({}, {}), "regular", (False, True)),
@@ -1150,20 +1160,14 @@ class TestCombatGrid:
     def test_a_one_on_one_block_qualifies_when_its_outcome_obeys_the_rule(
         self, records, monkeypatch,
     ):
-        import effects.domain.effect_targets as effect_targets
         from effects.domain.effect_head_layout import ZONE_OUTCOMES
 
         record, attacker, blocker = _one_on_one(records)
-        a, _ = combat_grid.side_of(record, attacker)
-        b, _ = combat_grid.side_of(record, blocker)
-        attacker_dies, blocker_dies = combat_grid.step_deaths(a, b)
-        died = ZONE_OUTCOMES.index("died")
-        outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
-                   for e, dies in ((attacker, attacker_dies), (blocker, blocker_dies))}
-        monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+        outcome = _outcome_by_the_rule(monkeypatch, record, attacker, blocker)
         assert combat_grid.single_block(record, _keywords) == (attacker, blocker)
+        dies = bool(outcome[blocker].fields)
         outcome[blocker] = SimpleNamespace(
-            fields={} if blocker_dies else {"zone_outcome": died})
+            fields={} if dies else {"zone_outcome": ZONE_OUTCOMES.index("died")})
         assert combat_grid.single_block(record, _keywords) is None
 
     def test_a_probe_fork_or_two_blockers_never_qualify(self, records):
@@ -1228,16 +1232,8 @@ class TestCombatGrid:
         assert blocker not in choices, "the blocker deals nothing in the first-strike step"
 
     def test_a_first_strike_step_record_never_qualifies(self, records, monkeypatch):
-        import effects.domain.effect_targets as effect_targets
-        from effects.domain.effect_head_layout import ZONE_OUTCOMES
-
         record, attacker, blocker = _one_on_one(records)
-        a, _ = combat_grid.side_of(record, attacker)
-        b, _ = combat_grid.side_of(record, blocker)
-        died = ZONE_OUTCOMES.index("died")
-        outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
-                   for e, dies in zip((attacker, blocker), combat_grid.step_deaths(a, b))}
-        monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+        _outcome_by_the_rule(monkeypatch, record, attacker, blocker)
         assert combat_grid.single_block(record, _keywords) == (attacker, blocker)
         first = BoardEdit(record).set_step("first_strike").record
         assert combat_grid.single_block(first, _keywords) is None
@@ -1245,19 +1241,10 @@ class TestCombatGrid:
     def test_damage_the_step_already_marked_is_cleared_and_other_damage_disqualifies(
         self, records, monkeypatch,
     ):
-        import effects.domain.effect_targets as effect_targets
-        from effects.domain.effect_head_layout import ZONE_OUTCOMES
-
         record, attacker, blocker = _one_on_one(records)
         power = record.state.entity(attacker).pt.total[0]
         marked = BoardEdit(record).set_marked_damage(blocker, power).record
-        a, _ = combat_grid.side_of(record, attacker)
-        b, _ = combat_grid.side_of(record, blocker)
-        attacker_dies, blocker_dies = combat_grid.step_deaths(a, b)
-        died = ZONE_OUTCOMES.index("died")
-        outcome = {e: SimpleNamespace(fields={"zone_outcome": died} if dies else {})
-                   for e, dies in ((attacker, attacker_dies), (blocker, blocker_dies))}
-        monkeypatch.setattr(effect_targets, "derive_targets", lambda r: outcome)
+        _outcome_by_the_rule(monkeypatch, record, attacker, blocker)
         assert combat_grid.single_block(marked, _keywords) == (attacker, blocker)
         earlier = BoardEdit(record).set_marked_damage(blocker, power + 1).record
         assert combat_grid.single_block(earlier, _keywords) is None
@@ -1284,10 +1271,6 @@ def _block_pair(records):
         board = board.edit_entity(entity, lambda e: replace(
             e, granted_temporary=replace(e.granted_temporary, keywords=())))
     return board.record, attacker, blocker
-
-
-def _no_keywords(entity):
-    return set(entity.granted_temporary.keywords)
 
 
 class TestEvasionGrid:
@@ -1338,12 +1321,12 @@ class TestEvasionGrid:
         from dataclasses import replace
 
         record, attacker, blocker = _block_pair(records)
-        assert evasion_grid.qualifying_pair(record, _no_keywords) == (attacker, blocker)
-        assert evasion_grid.qualifying_pair(replace(record, fork=True), _no_keywords) is None
+        assert evasion_grid.qualifying_pair(record, _keywords) == (attacker, blocker)
+        assert evasion_grid.qualifying_pair(replace(record, fork=True), _keywords) is None
         flying = BoardEdit(record).grant_keyword(attacker, "flying").record
-        assert evasion_grid.qualifying_pair(flying, _no_keywords) is None
+        assert evasion_grid.qualifying_pair(flying, _keywords) is None
         black = BoardEdit(record).set_colours(blocker, ("B",)).record
-        assert evasion_grid.qualifying_pair(black, _no_keywords) is None
+        assert evasion_grid.qualifying_pair(black, _keywords) is None
 
 
 class TestTargetRestrictions:
@@ -1387,15 +1370,6 @@ class TestTargetRestrictions:
         lost = target_restrictions.flipped(record, entity.id, "loses creature")
         assert "creature" not in lost.state.entity(entity.id).types
 
-    def test_auc(self):
-        assert common.auc([1, 1, 0, 0], [0.9, 0.8, 0.2, 0.1]) == 1.0
-        assert common.auc([1, 1, 0, 0], [0.1, 0.2, 0.8, 0.9]) == 0.0
-        assert np.isnan(common.auc([1, 1], [0.5, 0.6]))
-
-    def test_a_tie_counts_half(self):
-        """A score that cannot tell a positive from a negative ranks at chance."""
-        assert common.auc([1, 0], [0.5, 0.5]) == 0.5
-        assert common.auc([1, 1, 0, 0], [0.9, 0.5, 0.5, 0.1]) == pytest.approx(0.875)
 
 
 

@@ -33,17 +33,21 @@ from __future__ import annotations
 import argparse
 import csv
 import re
+import sys
 from collections import Counter, defaultdict
+from pathlib import Path
 
 import numpy as np
-import probe_lib as pl
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scorer_probes import probe_lib as pl
+from scorer_probes.probe_lib import WUBRG, CardBook
 
 POOLS = pl.YDATA / "pools" / "pools-gen4-512.txt"
 DECKS = pl.YDATA / "decks" / "generated-decks-gen4-512.txt"
 OUT_CSV = pl.SCRATCH / "t8_noncreature_mix.csv"
 OUT_MD = pl.SCRATCH / "t8_report.md"
-
-WUBRG = "WUBRG"
 
 # ---------------------------------------------------------------------------
 # archetype classification
@@ -174,28 +178,18 @@ def classify(text: str, types: str, mana_cost: str) -> str:
 # card facts
 # ---------------------------------------------------------------------------
 
-class Book:
-    """Memoized per-name facts: kind, colors, MV, archetype, winnability label."""
+class Book(CardBook):
+    """Card facts as this probe reads them: colours from the cost pips, kind from
+    the type line, and the noncreature archetype."""
 
     def __init__(self, probe: pl.Probe, win_rates: dict):
-        self.probe = probe
-        self.wr = win_rates
-        self._cache: dict[str, dict | None] = {}
-
-    def get(self, name: str) -> dict | None:
-        if name in self._cache:
-            return self._cache[name]
-        self._cache[name] = self._build(name)
-        return self._cache[name]
+        super().__init__(probe, win_rates, colors_from="pips")
 
     def _build(self, name: str) -> dict | None:
-        if name.lower() in pl.BASIC_LAND_NAMES:
+        info = super()._build(name)
+        if info is None:
             return None
-        rec = self.probe.locator.load_text(name)
-        emb = self.probe.locator.load_embedding(name)
-        if rec is None or emb is None:
-            return None
-        raw = rec.text.lower()
+        raw = info["text"].lower()
         types = mana_cost = ""
         for ln in raw.splitlines():
             if ln.startswith("types:"):
@@ -204,21 +198,16 @@ class Book:
                 mana_cost = ln.split(":", 1)[1].strip()
         body = "\n".join(ln for ln in raw.splitlines()
                          if not ln.startswith(("name:", "mana cost:", "types:")))
-        det = emb[-pl.layout.FEATURE_COUNT:]
-        colors = frozenset(c for i, c in enumerate(WUBRG) if det[1 + i] > 0)
         is_creature = "creature" in types
         is_land = "land" in types
-        label = (self.wr.get(name) or {}).get("shrunk_score_play")
-        return {
-            "name": name,
-            "is_creature": is_creature,
-            "is_land": is_land,
-            "colors": colors,
-            "mv": float(det[pl.layout.MANA_VALUE]),
-            "label": label,
-            "detail": ("creature" if is_creature else
-                       "land" if is_land else classify(body, types, mana_cost)),
-        }
+        info.update(
+            is_creature=is_creature,
+            is_land=is_land,
+            label=info["q"],
+            detail=("creature" if is_creature else
+                    "land" if is_land else classify(body, types, mana_cost)),
+        )
+        return info
 
 
 # ---------------------------------------------------------------------------
@@ -227,8 +216,8 @@ class Book:
 
 def collect(book: Book, limit: int | None):
     """One row per (deck, eligible noncreature pool card): taken or not."""
-    pools = list(pl.read_pools(POOLS, limit=limit))
-    decks = list(pl.read_generated_decks(DECKS, limit=limit))
+    pools = pl.read_pools(POOLS, limit=limit)
+    decks = pl.read_generated_decks(DECKS, limit=limit)
     if len(pools) != len(decks):
         raise SystemExit(f"corpus misalignment: {len(pools)} pools vs {len(decks)} decks")
 
@@ -237,7 +226,9 @@ def collect(book: Book, limit: int | None):
     slots_by_color = defaultdict(Counter)
     deck_shape = []
     creatures = [0, 0]         # on-color creature availability / inclusions
-    for i, ((pset, pool), (_lbl, dset, deck)) in enumerate(zip(pools, decks)):
+    for i, (pool_rec, deck_rec) in enumerate(zip(pools, decks)):
+        pset, pool, dset, deck = (pool_rec.set_code, pool_rec.cards,
+                                  deck_rec.set_code, deck_rec.cards)
         if pset != dset:
             raise SystemExit(f"line {i}: pool set {pset} != deck set {dset}")
 

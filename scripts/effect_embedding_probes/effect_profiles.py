@@ -36,8 +36,6 @@ Run: ``python scripts/effect_embedding_probes/effect_profiles.py --checkpoint PA
 from __future__ import annotations
 
 import argparse
-import gzip
-import json
 import pickle
 import sys
 from collections import defaultdict
@@ -47,9 +45,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import add_probe_arguments, resolve_paths  # noqa: E402
+from effect_embedding_probes.common import add_probe_arguments, resolve_paths  # noqa: E402
 
 _KEYMAP: dict | None = None
 
@@ -244,19 +242,16 @@ def fold_record(acc: dict, record: dict) -> None:
 
 def fold_shard(path: str) -> list[tuple[str, str, str, dict]]:
     """``(record_id, acting text, game_id, sums)`` for each record of one shard."""
+    from effects.infrastructure.shard_io import iter_record_dicts
+
     rows = []
-    with gzip.open(path, "rt", encoding="utf-8") as handle:
-        for raw in handle:
-            try:
-                record = json.loads(raw)
-            except json.JSONDecodeError:
-                break
-            text = acting_text(record)
-            if text is None:
-                continue
-            acc: dict = defaultdict(float)
-            fold_record(acc, record)
-            rows.append((record["record_id"], text, record["game_id"], dict(acc)))
+    for record in iter_record_dicts(Path(path)):
+        text = acting_text(record)
+        if text is None:
+            continue
+        acc: dict = defaultdict(float)
+        fold_record(acc, record)
+        rows.append((record["record_id"], text, record["game_id"], dict(acc)))
     return rows
 
 
@@ -289,6 +284,8 @@ class ProfileTotals:
 
 
 def main() -> None:
+    from effects.infrastructure.shard_io import iter_shards
+
     parser = add_probe_arguments(
         argparse.ArgumentParser(description=__doc__.splitlines()[0]),
     )
@@ -300,7 +297,7 @@ def main() -> None:
             f"{paths.checkpoint} names no curated corpus, so there are no "
             "training shards to profile"
         )
-    shards = sorted(str(p) for p in paths.training.glob("*.jsonl*"))
+    shards = [str(p) for p in iter_shards(paths.training)]
     keymap = paths.reusable("cache/keymap.pkl")
     totals = ProfileTotals()
     with Pool(args.workers, initializer=_init,

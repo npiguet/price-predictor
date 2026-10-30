@@ -17,22 +17,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
-
-# Allow running from the repo root without installing the package
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from price_predictor.application.evaluate_transformer import evaluate_transformer
 from price_predictor.application.train_transformer import train_transformer
-
-# ---------------------------------------------------------------------------
-# Parameter grid
-# ---------------------------------------------------------------------------
-
-_D_MODELS_DEFAULT = [64, 128, 256]
-_N_LAYERS_DEFAULT = [2, 4, 6]
-_N_HEADS_DEFAULT = [4]
 
 
 def _build_grid(d_models: list[int], n_layers: list[int], n_heads: list[int]) -> list[dict]:
@@ -64,10 +52,6 @@ def _parse_int_list(value: str) -> list[int]:
         )
 
 
-# ---------------------------------------------------------------------------
-# Scoring
-# ---------------------------------------------------------------------------
-
 # Weights per bucket label (lower composite score = better model)
 _BUCKET_WEIGHTS: dict[str, float] = {
     "€2–10":       4.0,
@@ -91,10 +75,6 @@ def _composite_score(buckets: dict[str, dict]) -> float:
     return score
 
 
-# ---------------------------------------------------------------------------
-# Results file helpers
-# ---------------------------------------------------------------------------
-
 def _load_results(path: Path) -> list[dict]:
     if path.exists():
         with open(path, encoding="utf-8") as f:
@@ -106,16 +86,6 @@ def _save_results(path: Path, results: list[dict]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
-
-def _already_done(results: list[dict], model_dir: Path) -> bool:
-    """Return True if a run for this model_dir already has a saved result."""
-    existing_dirs = {r["model_dir"] for r in results}
-    return str(model_dir) in existing_dirs
-
-
-# ---------------------------------------------------------------------------
-# Table printing
-# ---------------------------------------------------------------------------
 
 def _print_results_table(results: list[dict], top_n: int = 5) -> None:
     sorted_results = sorted(results, key=lambda r: r["composite_score"])
@@ -153,10 +123,6 @@ def _print_results_table(results: list[dict], top_n: int = 5) -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Search transformer architecture hyperparameters.",
@@ -187,19 +153,16 @@ def _parse_args() -> argparse.Namespace:
         help="Base directory for model artifacts",
     )
     parser.add_argument(
-        "--d-models", type=_parse_int_list, default=None,
-        metavar="INT,INT,...",
-        help="Comma-separated d_model values to search (default: 64,128,256)",
+        "--d-models", type=_parse_int_list, default=[64, 128, 256],
+        metavar="INT,INT,...", help="Comma-separated d_model values to search",
     )
     parser.add_argument(
-        "--n-layers", type=_parse_int_list, default=None,
-        metavar="INT,INT,...",
-        help="Comma-separated n_layers values to search (default: 2,4,6)",
+        "--n-layers", type=_parse_int_list, default=[2, 4, 6],
+        metavar="INT,INT,...", help="Comma-separated n_layers values to search",
     )
     parser.add_argument(
-        "--n-heads", type=_parse_int_list, default=None,
-        metavar="INT,INT,...",
-        help="Comma-separated n_heads values to search (default: 4)",
+        "--n-heads", type=_parse_int_list, default=[4],
+        metavar="INT,INT,...", help="Comma-separated n_heads values to search",
     )
     parser.add_argument(
         "--epochs", type=int, default=20,
@@ -214,10 +177,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
-    d_models = args.d_models if args.d_models is not None else _D_MODELS_DEFAULT
-    n_layers = args.n_layers if args.n_layers is not None else _N_LAYERS_DEFAULT
-    n_heads = args.n_heads if args.n_heads is not None else _N_HEADS_DEFAULT
-    grid = _build_grid(d_models, n_layers, n_heads)
+    grid = _build_grid(args.d_models, args.n_layers, args.n_heads)
 
     print(f"Architecture search — {len(grid)} combinations")
     print(f"{'d_model':>8}  {'n_layers':>8}  {'n_heads':>7}  {'ff_dim':>6}")
@@ -230,6 +190,7 @@ def main() -> None:
     print()
 
     results = _load_results(args.results_file)
+    done = {r["model_dir"] for r in results}
 
     for i, combo in enumerate(grid, start=1):
         d_model = combo["d_model"]
@@ -243,16 +204,12 @@ def main() -> None:
               f"n_heads={n_heads}, ff_dim={ff_dim}")
         print(f"      model_dir: {model_dir}")
 
-        # Resume: skip if already done
-        if _already_done(results, model_dir):
+        # A checkpoint without a result record may be a partial run, so only a
+        # recorded result counts as done.
+        if str(model_dir) in done:
             print("      → skipping (already in results file)")
             continue
 
-        # Skip if latest.pt already exists but no result record yet — retrain
-        # (could be a partially-completed run; safer to redo than to evaluate a
-        # potentially-incomplete checkpoint)
-
-        # --- Train ---
         print("      Training...")
         train_result = train_transformer(
             output_dir=args.output_dir,
@@ -268,7 +225,6 @@ def main() -> None:
             ff_dim=ff_dim,
         )
 
-        # --- Evaluate ---
         print("      Evaluating...")
         eval_result = evaluate_transformer(
             model_dir=model_dir,
@@ -278,15 +234,11 @@ def main() -> None:
             vocab_path=args.vocab_path,
         )
 
-        # --- Build buckets dict ---
-        buckets: dict[str, dict] = {}
-        if eval_result.per_bucket:
-            for bm in eval_result.per_bucket:
-                buckets[bm.label] = {
-                    "n": bm.count,
-                    "med_log": bm.median_log_error,
-                    "signed": bm.median_signed_log_error,
-                }
+        buckets = {
+            bm.label: {"n": bm.count, "med_log": bm.median_log_error,
+                       "signed": bm.median_signed_log_error}
+            for bm in eval_result.per_bucket or ()
+        }
 
         score = _composite_score(buckets)
 

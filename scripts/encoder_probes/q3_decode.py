@@ -18,7 +18,8 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import q_common as qc  # noqa: E402
+import probe_lib as pl  # noqa: E402
+from _lib.stats import auc  # noqa: E402
 
 REG_TARGETS = (
     ("mv", "mana value", None),
@@ -37,7 +38,8 @@ BIN_TARGETS = (
 
 
 def main() -> None:
-    join, emb = qc.load_frame()
+    join = pl.load_frame()
+    emb = pl.load_embedding_matrix(list(join["name"]), join)
     is_train = (join["split"] == "train").to_numpy()
     is_val = (join["split"] == "val").to_numpy()
 
@@ -53,7 +55,7 @@ def main() -> None:
         keep = np.isfinite(y)
         if gate == "creature":
             keep &= creature
-        r = qc.honest_ridge(emb, y, is_train, is_val, keep)
+        r = pl.honest_ridge(emb, y, is_train, is_val, keep)
         fits[col] = r
         va = r["val_mask"]
         rows.append({
@@ -66,18 +68,18 @@ def main() -> None:
 
     for col, label in BIN_TARGETS:
         y = pd.to_numeric(join[col], errors="coerce").fillna(0).to_numpy(float)
-        r = qc.honest_ridge(emb, y, is_train, is_val, np.isfinite(y))
+        r = pl.honest_ridge(emb, y, is_train, is_val, np.isfinite(y))
         va = r["val_mask"]
         rows.append({
             "target": label, "kind": "AUC", "n_val": r["n_val"],
             "val_r2": r["val_r2"], "val_pearson": r["val_pearson"],
-            "auc": qc.auc(y[va] > 0.5, r["val_pred"]),
+            "auc": auc(y[va] > 0.5, r["val_pred"]),
             "base_rate": float((y[va] > 0.5).mean()),
         })
         print("decode", col, round(r["val_r2"], 4), flush=True)
 
     table = pd.DataFrame(rows)
-    table.to_csv(qc.SCRATCH / "q3_decodability.csv", index=False)
+    table.to_csv(pl.SCRATCH / "q3_decodability.csv", index=False)
 
     # ── MV as a classification into 0..8+ ────────────────────────────────
     mv = pd.to_numeric(join["mv"], errors="coerce").to_numpy(float)
@@ -93,52 +95,41 @@ def main() -> None:
     }
     by_mv = pd.DataFrame({"true": mv_true, "pred": r_mv["val_pred"][:]}) \
         .groupby("true")["pred"].agg(["count", "mean", "std"]).reset_index()
-    by_mv.to_csv(qc.SCRATCH / "q3_mv_by_class.csv", index=False)
+    by_mv.to_csv(pl.SCRATCH / "q3_mv_by_class.csv", index=False)
 
     # ── the {X} question: decode MV from a no-X, MV<=7 fit ───────────────
     has_x = pd.to_numeric(join["has_x"], errors="coerce").fillna(0).to_numpy(float) > 0
     fit_keep = np.isfinite(mv) & (~has_x) & (mv <= 7)
-    r_nox = qc.honest_ridge(emb, mv, is_train, is_val, fit_keep)
+    r_nox = pl.honest_ridge(emb, mv, is_train, is_val, fit_keep)
     coef, b = r_nox["coef"], r_nox["intercept"]
     decoded = emb @ coef + b
     x_val = has_x & is_val & np.isfinite(mv)
     nox_val = (~has_x) & is_val & np.isfinite(mv) & (mv <= 7)
-    x_rows = []
-    for name, m in (("no-X (fit class, MV<=7)", nox_val), ("{X} cards", x_val)):
-        x_rows.append({
+
+    def decoded_row(name: str, m: np.ndarray) -> dict:
+        return {
             "class": name, "n": int(m.sum()),
             "mean_printed_mv": float(np.mean(mv[m])),
             "mean_decoded_mv": float(np.mean(decoded[m])),
             "mean_gap": float(np.mean(decoded[m] - mv[m])),
             "median_decoded_mv": float(np.median(decoded[m])),
-        })
-    # {X} cards split by their printed (X=0) MV
+        }
+
+    x_rows = []
+    for name, m in (("no-X (fit class, MV<=7)", nox_val), ("{X} cards", x_val)):
+        x_rows.append(decoded_row(name, m))
+    # {X} cards split by their printed (X=0) MV, each beside the matched
+    # no-X control at the same printed MV
     for lo, hi in ((0, 1), (2, 2), (3, 3), (4, 9)):
         m = x_val & (mv >= lo) & (mv <= hi)
         if m.sum() < 10:
             continue
-        x_rows.append({
-            "class": f"{{X}} with printed MV {lo}-{hi}" if lo != hi
-                     else f"{{X}} with printed MV {lo}",
-            "n": int(m.sum()),
-            "mean_printed_mv": float(np.mean(mv[m])),
-            "mean_decoded_mv": float(np.mean(decoded[m])),
-            "mean_gap": float(np.mean(decoded[m] - mv[m])),
-            "median_decoded_mv": float(np.median(decoded[m])),
-        })
-        # the matched no-X control at the same printed MV
-        c = nox_val & (mv >= lo) & (mv <= hi)
-        x_rows.append({
-            "class": f"  control no-X, MV {lo}-{hi}" if lo != hi
-                     else f"  control no-X, MV {lo}",
-            "n": int(c.sum()),
-            "mean_printed_mv": float(np.mean(mv[c])),
-            "mean_decoded_mv": float(np.mean(decoded[c])),
-            "mean_gap": float(np.mean(decoded[c] - mv[c])),
-            "median_decoded_mv": float(np.median(decoded[c])),
-        })
+        band = f"{lo}-{hi}" if lo != hi else f"{lo}"
+        x_rows.append(decoded_row(f"{{X}} with printed MV {band}", m))
+        x_rows.append(decoded_row(f"  control no-X, MV {band}",
+                                  nox_val & (mv >= lo) & (mv <= hi)))
     x_table = pd.DataFrame(x_rows)
-    x_table.to_csv(qc.SCRATCH / "q3_x_cost.csv", index=False)
+    x_table.to_csv(pl.SCRATCH / "q3_x_cost.csv", index=False)
 
     # ── decoded power vs printed power, real cards, 0..12+ ───────────────
     pw = pd.to_numeric(join["power"], errors="coerce").to_numpy(float)
@@ -148,12 +139,12 @@ def main() -> None:
     bins = np.clip(pw[m], 0, 12)
     pw_tab = pd.DataFrame({"printed": bins, "decoded": pw_pred_all[m]}) \
         .groupby("printed")["decoded"].agg(["count", "mean", "std"]).reset_index()
-    pw_tab.to_csv(qc.SCRATCH / "q3_power_ladder.csv", index=False)
+    pw_tab.to_csv(pl.SCRATCH / "q3_power_ladder.csv", index=False)
 
     summary = {"mv_classification": mv_cls,
                "n_x_cards_val": int(x_val.sum()),
                "mv_nox_fit_val_r2": r_nox["val_r2"]}
-    with open(qc.SCRATCH / "q3_summary.json", "w", encoding="utf-8") as f:
+    with open(pl.SCRATCH / "q3_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     print(table.round(4).to_string(index=False))
     print(json.dumps(mv_cls, indent=2))

@@ -15,14 +15,15 @@ Nothing here does work at import time.
 
 from __future__ import annotations
 
+import argparse
 import json
-import re
 import zlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+from _lib.stats import auc  # noqa: F401  (re-exported: the probes score with common.auc)
 
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
@@ -34,9 +35,6 @@ DEFAULT_REPORTS = ROOT / default_paths.DEFAULT_REPORTS_DIR
 
 #: The two validation strata, as the corpus names its directories.
 STRATA: tuple[str, ...] = ("card-disjoint", "game-disjoint")
-
-_GAME_ID_RE = re.compile(r'"game_id":\s*"([^"]+)"')
-_RECORD_ID_RE = re.compile(r'"record_id":\s*"([^"]+)"')
 
 
 def stable_hash(value: str) -> int:
@@ -166,38 +164,38 @@ def stratum_dir(corpus: Path, stratum: str) -> Path:
     return Path(corpus) / "validation" / stratum
 
 
-def shards_of(directory: Path) -> list[Path]:
-    from effects.infrastructure.shard_io import iter_shards
-
-    return list(iter_shards(Path(directory))) if Path(directory).exists() else []
-
-
 def read_games(
     shards: Iterable[Path], game_ids: set[str] | frozenset[str],
     record_ids: set[str] | frozenset[str] | None = None,
 ) -> Iterator[tuple[Path, object]]:
     """``(shard, record)`` for every record of the named games.
 
-    A line is parsed only once its ``game_id`` matches, read with a regex: the
-    strata hold whole games, so most lines of a shard belong to games nobody
-    asked for, and parsing them would cost most of the read. ``record_ids``
-    narrows it further to the records a probing run actually reads.
+    A line is parsed only once its envelope names a wanted game: the strata
+    hold whole games, so most lines of a shard belong to games nobody asked
+    for, and parsing them would cost most of the read. ``record_ids`` narrows
+    it further to the records a probing run actually reads.
     """
-    from effects.infrastructure.record_codec import record_from_dict
-    from effects.infrastructure.shard_io import iter_shard_lines, refuse_mixed_generations
+    from effects.infrastructure.record_codec import parse_record_line, record_from_dict
+    from effects.infrastructure.shard_io import (
+        iter_shard_lines,
+        peek_envelope,
+        refuse_mixed_generations,
+    )
+
+    def wanted(record_id: str, game_id: str) -> bool:
+        return game_id in game_ids and (record_ids is None or record_id in record_ids)
 
     shards = list(shards)
     refuse_mixed_generations(shards)
     for shard in shards:
         for line in iter_shard_lines(shard):
-            match = _GAME_ID_RE.search(line[:4000])
-            if match is None or match.group(1) not in game_ids:
+            head = peek_envelope(line)
+            if head is not None and not wanted(head.record_id, head.game_id):
                 continue
-            if record_ids is not None:
-                found = _RECORD_ID_RE.search(line[:400])
-                if found is None or found.group(1) not in record_ids:
-                    continue
-            yield shard, record_from_dict(json.loads(line))
+            record = record_from_dict(parse_record_line(line))
+            if head is None and not wanted(record.record_id, record.game_id):
+                continue
+            yield shard, record
 
 
 # ── the model ───────────────────────────────────────────────────────────
@@ -283,18 +281,6 @@ def predict_all(probe_model, records: list, read, *, chunk: int = 32) -> list:
 # ── scores and tables ───────────────────────────────────────────────────
 
 
-def auc(labels, scores) -> float:
-    """ROC AUC of ``scores`` against yes/no ``labels``, ties counted half; NaN
-    without both labels."""
-    from sklearn.metrics import roc_auc_score
-
-    labels = np.asarray(labels, dtype=bool)
-    scores = np.asarray(scores, dtype=np.float64)
-    if labels.all() or not labels.any():
-        return float("nan")
-    return float(roc_auc_score(labels, scores))
-
-
 def fmt(value) -> str:
     """One table cell: blank for None, three decimals for a float."""
     if value is None:
@@ -371,6 +357,12 @@ class ProbeContext:
             probe_set_path(directory, self.corpus_digest), self.corpus_digest,
         )
 
+    def probe_records(self, probe_set, stratum: str, record_ids=None) -> list:
+        """The records of the probe set's ``stratum`` games, narrowed to ``record_ids``."""
+        shards = self.source_shards(probe_set.sources.get(stratum, []))
+        return [record for _, record in
+                read_games(shards, set(probe_set.games[stratum]), record_ids)]
+
     def model(self, records: list, *, vocab_path: Path | None = None,
               keyword_path: Path | None = None) -> ProbeModel:
         """The checkpoint ready to run over ``records``, on this context's trees."""
@@ -421,6 +413,31 @@ def probe_context(
         cards_folders=tuple(Path(f) for f in cards_folders),
         variant_scripts=variant_scripts,
     )
+
+
+def grid_run(doc: str, *, records: int, per_game: int | None = None,
+             options=None) -> tuple[argparse.Namespace, ProbeContext]:
+    """A one-off probe's command line, parsed, and its checkpoint's context.
+
+    Every grid reads ``--records`` qualifying records from at most ``--shards``
+    shards per directory, ``--per-game`` from one game where it takes more
+    than one; ``options(parser)`` adds the grid's own arguments.
+    """
+    parser = argparse.ArgumentParser(description=doc.splitlines()[0])
+    parser.add_argument("checkpoint", type=Path)
+    parser.add_argument("--records", type=int, default=records)
+    parser.add_argument("--shards", type=int, default=200)
+    if per_game is not None:
+        parser.add_argument("--per-game", type=int, default=per_game)
+    if options is not None:
+        options(parser)
+    args = parser.parse_args()
+    return args, probe_context(args.checkpoint)
+
+
+def heading(args, context: ProbeContext, what: str) -> None:
+    """A grid's first line: the checkpoint's run and epoch, and what it read."""
+    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), {what}", flush=True)
 
 
 def peak_gpu_bytes() -> int:

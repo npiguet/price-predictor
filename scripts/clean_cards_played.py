@@ -30,9 +30,8 @@ import json
 import re
 import sys
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from sealed.infrastructure.cards_played_reader import iter_rows
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
@@ -160,121 +159,62 @@ def build_alias_map(
     return alias_map, drop_tokens, conflicts
 
 
-_DROP = object()  # sentinel: "this name resolves to nothing on disk"
+@dataclass
+class _Cleaner:
+    """Rewrites card-list columns to canonical names, tallying what it changed."""
+
+    alias_map: dict[str, str]
+    drop_tokens: frozenset[str]
+    locator: ConvertedCardLocator
+    resolved: dict[str, str | None] = field(default_factory=dict)
+    junk_counter: Counter[tuple[str, str]] = field(default_factory=Counter)
+    rewrite_counter: Counter[tuple[str, str]] = field(default_factory=Counter)
+    unmapped_counter: Counter[str] = field(default_factory=Counter)
+
+    def resolve(self, raw: str) -> str | None:
+        """The name to record for ``raw``, or None if no form of it resolves.
+
+        A name only survives if the converted corpus has a ``.txt`` for it, so
+        the encoder's FR-023d corpus-consistency check can't fail on the cleaned
+        output. The alias-map target (canonical MTG name) is preferred; the
+        original name is the fallback for e.g. a Forge filename typo the
+        locator's prefix search catches under the front-face name.
+        """
+        if raw not in self.resolved:
+            candidate = self.alias_map.get(raw, raw)
+            found = next((n for n in dict.fromkeys((candidate, raw))
+                          if self.locator.text_path(n) is not None), None)
+            self.resolved[raw] = found
+        return self.resolved[raw]
+
+    def column(self, names: list[str]) -> set[str]:
+        cleaned: set[str] = set()
+        for raw in names:
+            reason = _junk_reason(raw, self.drop_tokens)
+            if reason is not None:
+                self.junk_counter[(raw, reason)] += 1
+                continue
+            resolved = self.resolve(raw)
+            if resolved is None:
+                self.unmapped_counter[raw] += 1
+                continue
+            if resolved != raw:
+                self.rewrite_counter[(raw, resolved)] += 1
+            cleaned.add(resolved)
+        return cleaned
 
 
-def _resolve_name(
-    raw: str,
-    alias_map: dict[str, str],
-    locator: ConvertedCardLocator,
-    cache: dict[str, str | object],
-) -> str | object:
-    """Return the name to record for ``raw`` (canonical if mapped and the
-    result resolves to a converted card), or ``_DROP`` if no resolvable
-    form exists. Memoized per ``raw``.
-
-    A name only survives if the converted corpus actually has a ``.txt``
-    for it — so the encoder's FR-023d corpus-consistency check can't fail
-    on the cleaned output. We prefer the alias-map target (canonical MTG
-    name), but fall back to the original name when only that resolves
-    (e.g. a Forge filename typo the locator's prefix search catches under
-    the front-face name).
-    """
-    cached = cache.get(raw, None)
-    if cached is not None:
-        return cached
-    candidate = alias_map.get(raw, raw)
-    if locator.text_path(candidate) is not None:
-        cache[raw] = candidate
-        return candidate
-    if candidate != raw and locator.text_path(raw) is not None:
-        cache[raw] = raw
-        return raw
-    cache[raw] = _DROP
-    return _DROP
-
-
-def _rewrite_column(
-    names: list[str],
-    alias_map: dict[str, str],
-    drop_tokens: frozenset[str],
-    locator: ConvertedCardLocator,
-    resolve_cache: dict[str, str | object],
-    junk_counter: Counter[tuple[str, str]],
-    rewrite_counter: Counter[tuple[str, str]],
-    unmapped_counter: Counter[str],
-) -> set[str]:
-    """Rewrite one card-list column. Mutates the counters in place."""
-    cleaned: set[str] = set()
-    for raw in names:
-        reason = _junk_reason(raw, drop_tokens)
-        if reason is not None:
-            junk_counter[(raw, reason)] += 1
-            continue
-        resolved = _resolve_name(raw, alias_map, locator, resolve_cache)
-        if resolved is _DROP:
-            unmapped_counter[raw] += 1
-            continue
-        assert isinstance(resolved, str)
-        if resolved != raw:
-            rewrite_counter[(raw, resolved)] += 1
-        cleaned.add(resolved)
-    return cleaned
-
-
-def _format_row(
-    timestamp: str, run_id: str, set_code: str,
-    method_a: str, method_b: str,
-    cards_played_a: set[str], cards_played_b: set[str],
-    cards_not_played_a: set[str], cards_not_played_b: set[str],
-    winner: str, starter: str,
-) -> str:
-    return ";".join((
-        timestamp, run_id, set_code, method_a, method_b,
-        "|".join(sorted(cards_played_a)),
-        "|".join(sorted(cards_played_b)),
-        "|".join(sorted(cards_not_played_a)),
-        "|".join(sorted(cards_not_played_b)),
-        winner, starter,
-    ))
-
-
-def _process(
-    input_path: Path,
-    alias_map: dict[str, str],
-    drop_tokens: frozenset[str],
-    locator: ConvertedCardLocator,
-    output_path: Path | None,
-) -> dict:
+def _process(input_path: Path, cleaner: _Cleaner, output_path: Path | None) -> dict:
     """Stream-process the input. Returns counts + counters for the report."""
-    rows_in = 0
-    rows_written = 0
-    rows_dropped_empty = 0
-    junk_counter: Counter[tuple[str, str]] = Counter()
-    rewrite_counter: Counter[tuple[str, str]] = Counter()
-    unmapped_counter: Counter[str] = Counter()
-    resolve_cache: dict[str, str | object] = {}
-
+    rows_in = rows_written = rows_dropped_empty = 0
     out_handle = output_path.open("w", encoding="utf-8") if output_path else None
     try:
         for row in iter_rows(input_path):
             rows_in += 1
-            played_a = _rewrite_column(
-                row.cards_played_a, alias_map, drop_tokens, locator,
-                resolve_cache, junk_counter, rewrite_counter, unmapped_counter,
-            )
-            played_b = _rewrite_column(
-                row.cards_played_b, alias_map, drop_tokens, locator,
-                resolve_cache, junk_counter, rewrite_counter, unmapped_counter,
-            )
-            not_played_a = _rewrite_column(
-                row.cards_not_played_a, alias_map, drop_tokens, locator,
-                resolve_cache, junk_counter, rewrite_counter, unmapped_counter,
-            )
-            not_played_b = _rewrite_column(
-                row.cards_not_played_b, alias_map, drop_tokens, locator,
-                resolve_cache, junk_counter, rewrite_counter, unmapped_counter,
-            )
+            played_a, played_b, not_played_a, not_played_b = map(cleaner.column, (
+                row.cards_played_a, row.cards_played_b,
+                row.cards_not_played_a, row.cards_not_played_b,
+            ))
             # FR-004: a canonical that ended up in both played and
             # not_played (from two distinct faces of the same card)
             # belongs in played only.
@@ -284,13 +224,12 @@ def _process(
                 rows_dropped_empty += 1
                 continue
             if out_handle is not None:
-                line = _format_row(
-                    row.timestamp, row.run_id, row.set_code,
-                    row.method_a, row.method_b,
-                    played_a, played_b, not_played_a, not_played_b,
-                    row.winner, row.starter,
-                )
-                out_handle.write(line + "\n")
+                out_handle.write(";".join((
+                    row.timestamp, row.run_id, row.set_code, row.method_a, row.method_b,
+                    *("|".join(sorted(column)) for column in
+                      (played_a, played_b, not_played_a, not_played_b)),
+                    row.winner.value, row.starter.value,
+                )) + "\n")
             rows_written += 1
             if rows_in % 100_000 == 0:
                 print(f"  ... {rows_in:,} rows processed", file=sys.stderr, flush=True)
@@ -302,9 +241,9 @@ def _process(
         "rows_in": rows_in,
         "rows_written": rows_written,
         "rows_dropped_empty": rows_dropped_empty,
-        "junk_counter": junk_counter,
-        "rewrite_counter": rewrite_counter,
-        "unmapped_counter": unmapped_counter,
+        "junk_counter": cleaner.junk_counter,
+        "rewrite_counter": cleaner.rewrite_counter,
+        "unmapped_counter": cleaner.unmapped_counter,
     }
 
 
@@ -319,12 +258,6 @@ def _write_report(report_path: Path, stats: dict) -> None:
     total_junk = sum(junk_counter.values())
     total_unmapped = sum(unmapped_counter.values())
 
-    # Rewrites
-    rewrites_by_total = Counter()
-    for (src, dst), count in rewrite_counter.items():
-        rewrites_by_total[(src, dst)] = count
-
-    # Column widths for prettier output
     def _max_width(items: list[str]) -> int:
         return max((len(s) for s in items), default=0)
 
@@ -462,7 +395,7 @@ def main(argv: list[str] | None = None) -> int:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Processing {args.input}...", file=sys.stderr, flush=True)
-    stats = _process(args.input, alias_map, drop_tokens, locator, output_path)
+    stats = _process(args.input, _Cleaner(alias_map, drop_tokens, locator), output_path)
 
     _write_report(args.report, stats)
 

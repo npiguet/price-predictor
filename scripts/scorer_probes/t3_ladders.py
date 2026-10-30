@@ -25,110 +25,28 @@ from __future__ import annotations
 import argparse
 import csv
 import random
-from collections import Counter
+import sys
+from pathlib import Path
 
 import numpy as np
-import probe_lib as pl
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.stats import mean_se
+from scorer_probes import probe_lib as pl
+from scorer_probes.probe_lib import (
+    WUBRG,
+    CardBook,
+    DeckBank,
+    context_queue,
+    deck_pips,
+    resolve_context,
+)
 
 OUT = pl.SCRATCH / "t3_ladders.csv"
 POOLS = pl.YDATA / "pools" / "pools-gen4-256.txt"
 DECKS = pl.YDATA / "decks" / "generated-decks-gen4-256.txt"
-
-WUBRG = "WUBRG"
-FC = pl.layout.FEATURE_COUNT
 SEED = 42
-
-
-# --------------------------------------------------------------------------
-# shared card-fact section (duplicated from t1_meansum.py by design: the task
-# forbids adding a third module to the scratchpad)
-# --------------------------------------------------------------------------
-
-class CardBook:
-    """Memoized per-name card facts: embedding + classification + label."""
-
-    def __init__(self, probe: pl.Probe, win_rates: dict):
-        self.probe = probe
-        self.wr = win_rates
-        self._cache: dict[str, dict | None] = {}
-
-    def get(self, name: str) -> dict | None:
-        if name in self._cache:
-            return self._cache[name]
-        info = self._build(name)
-        self._cache[name] = info
-        return info
-
-    def _build(self, name: str) -> dict | None:
-        if name.lower() in pl.BASIC_LAND_NAMES:
-            return None
-        emb = self.probe.embedding(name)
-        if emb is None:
-            return None
-        text = self.probe.locator.load_text(name)
-        if text is None:
-            return None
-        d = emb[-FC:]
-        mana_cost = text.mana_cost_line()
-        feats = pl.card_features(text.text)
-        q = (self.wr.get(name) or {}).get("shrunk_score_play")
-        return {
-            "name": name,
-            "emb": np.ascontiguousarray(emb, dtype=np.float32),
-            "is_land": float(d[pl.layout.IS_LAND]) > 0.5,
-            "mv": float(d[pl.layout.MANA_VALUE]),
-            "pips": np.asarray(d[pl.layout.COLOR_PIPS], dtype=np.float64),
-            "colors": frozenset(
-                c for c, f in zip(WUBRG, d[pl.layout.COLOR_FLAGS]) if float(f) > 0.5
-            ),
-            "produces": frozenset(
-                c for c, f in zip(WUBRG, d[pl.layout.PRODUCES_COLORS]) if float(f) > 0.5
-            ),
-            "hybrid": bool(mana_cost and "/" in mana_cost),
-            "is_creature": bool(feats["is_creature"]),
-            # split / adventure / transform / meld: the converted text marks the
-            # second face with a bare 'ALTERNATE' line ('alternate cost:' is a
-            # different thing -- madness and friends -- and must not match).
-            "is_multiface": " // " in name or any(
-                ln.strip() == "ALTERNATE" for ln in text.text.splitlines()
-            ),
-            "q": q,
-            "qv": 0.0 if q is None else float(q),   # ordering fallback
-        }
-
-
-def deck_pips(book: CardBook, deck: list[str]) -> np.ndarray:
-    pips = np.zeros(5)
-    for n in deck:
-        info = book.get(n)
-        if info is not None:
-            pips += info["pips"]
-    return pips
-
-
-def main_colors(book: CardBook, deck: list[str], k: int = 2) -> tuple[str, ...]:
-    pips = deck_pips(book, deck)
-    order = np.argsort(-pips)
-    return tuple(WUBRG[i] for i in order[:k] if pips[i] > 0)
-
-
-def score_streaming(probe: pl.Probe, n: int, build, batch_size: int = 1024,
-                    label: str = "") -> np.ndarray:
-    out = np.empty(n, dtype=np.float64)
-    for lo in range(0, n, batch_size):
-        hi = min(n, lo + batch_size)
-        out[lo:hi] = probe.score_matrices([build(i) for i in range(lo, hi)],
-                                          batch_size=batch_size)
-        print(f"  {label} scored {hi}/{n}", flush=True)
-    return out
-
-
-def mean_se(x) -> tuple[float, float, int]:
-    a = np.asarray([v for v in x if np.isfinite(v)], dtype=np.float64)
-    if a.size == 0:
-        return float("nan"), float("nan"), 0
-    se = a.std(ddof=1) / np.sqrt(a.size) if a.size > 1 else float("nan")
-    return float(a.mean()), float(se), int(a.size)
 
 
 # --------------------------------------------------------------------------
@@ -153,32 +71,7 @@ def sample_contexts(book: CardBook, n_ctx: int, n_ef: int, scan_cap: int,
     scanning past the base block for eligible contexts until each ladder hits
     its target or `scan_cap` contexts have been examined.
     """
-    pools = list(pl.read_pools(POOLS))
-    decks = list(pl.read_generated_decks(DECKS))
-    if len(pools) != len(decks):
-        raise SystemExit(f"corpus misalignment: {len(pools)} pools vs {len(decks)} decks")
-
-    by_set: dict[str, list[int]] = {}
-    for i, ((set_code, _pool), (_lab, deck_set, _deck)) in enumerate(zip(pools, decks)):
-        if set_code == deck_set:
-            by_set.setdefault(set_code, []).append(i)
-    for v in by_set.values():
-        rng.shuffle(v)
-    set_order = sorted(by_set)
-    rng.shuffle(set_order)
-
-    queue: list[int] = []
-    depth = 0
-    while True:
-        added = False
-        for s in set_order:
-            if depth < len(by_set[s]):
-                queue.append(by_set[s][depth])
-                added = True
-        if not added:
-            break
-        depth += 1
-
+    pools, decks, queue = context_queue(POOLS, DECKS, rng)
     base: list[dict] = []
     extra: list[dict] = []
     need_e = need_f = n_ef
@@ -188,25 +81,12 @@ def sample_contexts(book: CardBook, n_ctx: int, n_ef: int, scan_cap: int,
             break
         if len(base) >= n_ctx and need_e <= 0 and need_f <= 0:
             break
-        set_code, pool = pools[idx]
-        deck = decks[idx][2]
-        nonbasic = [c for c in deck if c.lower() not in pl.BASIC_LAND_NAMES]
-        if any(book.get(n) is None for n in pool) or any(book.get(n) is None for n in nonbasic):
-            skipped += 1
-            continue
-        avail = Counter(pool) - Counter(nonbasic)
-        if not avail:
+        ctx = resolve_context(book, pools, decks, idx)
+        if ctx is None:
             skipped += 1
             continue
         scanned += 1
-        ctx = {
-            "cid": idx,
-            "set_code": set_code,
-            "deck": nonbasic,
-            "avail": avail,
-            "main": main_colors(book, nonbasic),
-            "n_colors": int((deck_pips(book, nonbasic) > 0).sum()),
-        }
+        ctx["n_colors"] = int((deck_pips(book, ctx["deck"]) > 0).sum())
         e_ok, f_ok = ef_eligible(ctx, book)
         ctx["e_ok"], ctx["f_ok"] = e_ok, f_ok
         if len(base) < n_ctx:
@@ -728,7 +608,7 @@ def main() -> None:
     rng = random.Random(SEED)
     probe = pl.Probe(device=device)
     print(f"device={probe.device} contexts={n_ctx}", flush=True)
-    book = CardBook(probe, pl.load_win_rates())
+    book = CardBook(probe, pl.load_win_rates(), q_fallback=0.0)
     base, extra = sample_contexts(book, n_ctx, n_ctx, args.scan or 12 * n_ctx, rng)
 
     variants: list[dict] = []
@@ -765,23 +645,14 @@ def main() -> None:
         print(f"built {name}: {n_keep}/{n_try} contexts, "
               f"{sum(1 for v in variants if v['ladder'] == name)} variants", flush=True)
 
-    # one forward per DISTINCT deck (rung 0 is shared across ladders); decks are
-    # canonicalised to sorted name order so equal multisets collapse exactly.
-    uniq: dict[tuple, int] = {}
-    for v in variants:
-        uniq.setdefault(v["names"], len(uniq))
-    keys = [None] * len(uniq)
-    for names, i in uniq.items():
-        keys[i] = names
-    print(f"{len(variants)} variants -> {len(uniq)} distinct decks", flush=True)
+    # one forward per DISTINCT deck (rung 0 is shared across ladders)
+    bank = DeckBank(lambda n: book.get(n)["emb"])
+    deck_of = [bank.add(v["names"]) for v in variants]
+    print(f"{len(variants)} variants -> {len(bank.keys)} distinct decks", flush=True)
+    bank.score_pending(probe, label="t3")
 
-    def build(i: int) -> np.ndarray:
-        return np.stack([book.get(n)["emb"] for n in keys[i]])
-
-    scores = score_streaming(probe, len(uniq), build, label="t3")
-
-    for v in variants:
-        v["score"] = float(scores[uniq[v["names"]]])
+    for v, i in zip(variants, deck_of):
+        v["score"] = bank.score(i)
     base = {(v["ladder"], v["context_id"]): v["score"]
             for v in variants if v["rung"] == 0}
     rows = []

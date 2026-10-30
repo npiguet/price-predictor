@@ -1,17 +1,22 @@
 """Join per-card empirical labels to converted card text properties (read-only)."""
 import os
 import re
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-_REPO = Path(__file__).resolve().parents[2]
-_OUT = _REPO / "output" / "scorer-probes"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.corpora import load_win_rates
+from _lib.paths import OUTPUT, SEALED_TRAINING_DATA
+
+_OUT = OUTPUT / "scorer-probes"
 _OUT.mkdir(parents=True, exist_ok=True)
 
-CF = str(_REPO / "output" / "cardsfolder-512")
-LAB = r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1\cards-win-rates.txt"
+CF = str(OUTPUT / "cardsfolder-512")
+LAB = SEALED_TRAINING_DATA / "matches-bo1" / "cards-win-rates.txt"
 
 cards = {}
 for root, _dirs, files in os.walk(CF):
@@ -83,27 +88,20 @@ def props(txt):
     return d
 
 rows = []
-with open(LAB, encoding="utf-8", errors="replace") as fh:
-    header = fh.readline().rstrip("\n").split(";")
-    idx = {n: i for i, n in enumerate(header)}
-    for line in fh:
-        parts = line.rstrip("\n").split(";")
-        if len(parts) != len(header):
-            continue
-        name = parts[0].strip().lower()
-        txt = cards.get(name)
-        if txt is None:
-            continue
-        def g(col):
-            v = parts[idx[col]]
-            return float(v) if v not in ("", None) else np.nan
-        n_in_deck = g("wins_when_in_deck") + g("losses_when_in_deck")
-        r = {"name": parts[0], "n": n_in_deck,
-             "sp": g("shrunk_score_play"), "sd": g("shrunk_score_draw"),
-             "pr": g("shrunk_played_rate"), "cl": g("shrunk_cast_lift"),
-             "rsp": g("raw_score_play")}
-        r.update(props(txt))
-        rows.append(r)
+for name, rec in load_win_rates(LAB).items():
+    txt = cards.get(name.strip().lower())
+    if txt is None:
+        continue
+
+    def g(col, rec=rec):
+        return np.nan if rec[col] is None else float(rec[col])
+
+    r = {"name": name, "n": g("wins_when_in_deck") + g("losses_when_in_deck"),
+         "sp": g("shrunk_score_play"), "sd": g("shrunk_score_draw"),
+         "pr": g("shrunk_played_rate"), "cl": g("shrunk_cast_lift"),
+         "rsp": g("raw_score_play")}
+    r.update(props(txt))
+    rows.append(r)
 
 df = pd.DataFrame(rows)
 print("joined:", len(df), " with n>=200:", (df.n >= 200).sum(), " n>=1000:", (df.n >= 1000).sum())
@@ -173,11 +171,6 @@ for mv in range(0, 9):
         print(f"MV {mv}: n={len(s):4d} sp={s.sp.mean():+.4f} pr={s.pr.mean():.3f} "
               f"cl={s.cl.mean():+.4f}")
 
-print("\n--- by color (nonland) ---")
-for col in "wubrg":
-    mask = d.apply(lambda r: False, axis=1)
-    # recompute color membership from name lookup is costly; approximate via colors count
-    # is not enough
 print("\n--- rarity join skipped (see separate step) ---")
 d.to_csv(str(_OUT / "labels_joined.csv"), index=False)
 print("wrote labels_joined.csv")

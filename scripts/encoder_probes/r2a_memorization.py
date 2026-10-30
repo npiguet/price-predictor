@@ -25,7 +25,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from price_predictor.application.ridge_probes import _r2 as wr2
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
 
 HEADS = ("score_play", "score_draw", "played_rate", "cast_lift")
@@ -49,20 +52,12 @@ def reliability_at(n: float) -> float:
     return RELIABILITY_BUCKETS[0][2] if n < 50 else RELIABILITY_BUCKETS[-1][2]
 
 
-def wr2(y, pred, w):
-    mean = float((w * y).sum() / w.sum())
-    ss_res = float((w * (y - pred) ** 2).sum())
-    ss_tot = float((w * (y - mean) ** 2).sum())
-    return 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
-
-
 def resid_sd(y, pred, w):
     return float(np.sqrt((w * (y - pred) ** 2).sum() / w.sum()))
 
 
 def main() -> None:
-    join = pl.build_join()
-    join = join[join["is_primary"]].reset_index(drop=True)
+    join = pl.load_frame(features=False, text=True)
     emb = pl.load_embedding_matrix(list(join["name"]), join)
 
     is_train = (join["split"] == "train").to_numpy()
@@ -153,21 +148,19 @@ def main() -> None:
     classes = pl.equivalence_classes(join)
     member_names = {n for c in classes for n in c["names"]}
 
-    def card_stats(path: str) -> dict:
-        lines = [ln for ln in Path(path).read_text(encoding="utf-8", errors="replace")
-                 .splitlines() if ln.strip() and not ln.startswith("name:")]
+    def card_stats(text: str) -> dict:
+        lines = cc.lines(text)
         cost = next((ln for ln in lines if ln.startswith("mana cost:")), "")
         mv = 0.0
         for sym in re.findall(r"\{([^}]*)\}", cost):
             mv += int(sym) if sym.isdigit() else (0 if sym.upper() == "X" else 1)
         types = next((ln for ln in lines if ln.startswith("types:")), "")
-        ab = [ln for ln in lines if ln.startswith(("static:", "spell[", "activated[",
-                                                "triggered", "replacement"))]
+        ab = [ln for ln in lines if ln.startswith(cc.ABILITY_PREFIXES)]
         return {"mv": mv, "n_lines": len(lines), "n_ability_lines": len(ab),
                 "is_creature": "creature" in types, "is_land": "land" in types,
                 "is_instant_sorcery": ("instant" in types or "sorcery" in types)}
 
-    stats = pd.DataFrame([card_stats(p) for p in join["txt_path"]])
+    stats = pd.DataFrame([card_stats(t) for t in join["text"]])
     stats["name"] = join["name"].to_numpy()
     stats["n_in_deck"] = n_in_deck
     stats["rarity"] = join["first_rarity"].to_numpy()

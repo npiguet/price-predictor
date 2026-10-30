@@ -14,43 +14,14 @@ pf = d["pf"]
 pred_f = pl.predict_labels(emb, pf)
 
 
-def col(c):
-    return np.nan_to_num(S.num(join, c))
-
-
-mv = col("mv")
 y = S.num(join, "shrunk_played_rate")
 w = S.num(join, "w_played_rate")
-type_cell = np.select(
-    [col("is_creature") > 0, col("is_land") > 0, col("is_instant") > 0,
-     col("is_sorcery") > 0, col("is_artifact") > 0, col("is_enchantment") > 0],
-    [0, 1, 2, 3, 4, 5], default=6)
-cell = np.clip(mv, 0, 8).astype(int) * 10 + type_cell
-classes = {
-    "fog / prevent damage": (col("ph_fog") + col("ph_prevent_damage")) > 0,
-    "sweeper": col("ph_sweeper") > 0,
-    "counterspell": col("ph_counterspell") > 0,
-    "morph": col("ph_morph") > 0,
-    "mana rock": (col("is_artifact") > 0) & (col("is_creature") == 0)
-                 & (col("ph_tap_for_mana") > 0),
-}
+cell = S.control_cells(join)
+classes = S.hostile_classes(join)
 
 
 def deficit(flag, vals, wts, idx):
-    tot = totw = 0.0
-    c = cell[idx]
-    f = flag[idx]
-    v = vals[idx]
-    ww = wts[idx]
-    for cv in np.unique(c):
-        m = c == cv
-        a, b = m & f, m & ~f
-        if a.sum() == 0 or b.sum() < 5:
-            continue
-        k = min(a.sum(), b.sum())
-        tot += k * (np.average(v[a], weights=ww[a]) - np.average(v[b], weights=ww[b]))
-        totw += k
-    return tot / totw if totw else np.nan
+    return S.matched_deficit(cell[idx], flag[idx], vals[idx], wts[idx])[0]
 
 
 rng = np.random.default_rng(42)

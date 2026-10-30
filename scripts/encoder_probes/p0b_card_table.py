@@ -6,9 +6,8 @@ per-color pips, generic, {X}, hybrid/Phyrexian), type-class flags, statline,
 keyword flags (one flag for the keyword on the card's own static lines and
 one for a mention anywhere in the text), phrase/archetype regex flags,
 text-shape counts, and the big-tribe flag. This is the feature source behind
-the 135-feature comparison in ``s_r18.py`` and the flag columns the shared
-loaders (``c_common``, ``s_common``, ``q_common``, ``l_*``) merge into the
-join table.
+the nameable-feature comparison in ``s_r18*.py`` and the flag columns
+``probe_lib.load_frame`` and ``l_analyze`` merge into the join table.
 
 Reads the Y: label file and ``output/cardsfolder-512``; writes
 ``output/encoder-probes/card_table.pkl``.
@@ -22,14 +21,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-REPO = Path(__file__).resolve().parents[2]
-CARDS = REPO / "output" / "cardsfolder-512"
-WIN_RATES = Path(
-    r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1\cards-win-rates.txt")
-OUT = REPO / "output" / "encoder-probes"
+from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
-sys.path.insert(0, str(REPO / "src"))
-from sealed.infrastructure.converted_card_locator import ConvertedCardLocator  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _lib.paths import OUTPUT, SEALED_TRAINING_DATA  # noqa: E402
+
+CARDS = OUTPUT / "cardsfolder-512"
+WIN_RATES = SEALED_TRAINING_DATA / "matches-bo1" / "cards-win-rates.txt"
+OUT = OUTPUT / "encoder-probes"
 
 # ---------------- mana cost parsing ----------------
 
@@ -143,6 +142,17 @@ PHRASES = {
 }
 PHRASE_RE = {k: [re.compile(p) for p in v] for k, v in PHRASES.items()}
 
+# Flags the label-side analysis needs on top of the phrases: the fog class, a
+# mana-rock refinement and the flying grants. Matched line by line (``.`` and
+# ``[^\n]`` stop at a line end) over the text without its name line.
+LINE_PHRASES = {
+    "ph_fog": [r"prevent all combat damage", r"prevent all damage that would be dealt"],
+    "ph_prevent_damage": [r"\bprevent\b.*\bdamage\b"],
+    "ph_tap_for_mana": [r"\{t\}[^\n]*:\s*add \{"],
+    "ph_flying_grant": [r"gains? flying", r"has flying", r"have flying"],
+}
+LINE_PHRASE_RE = {k: [re.compile(p) for p in v] for k, v in LINE_PHRASES.items()}
+
 BIG_TRIBES = ("dragon", "angel", "demon", "sphinx", "hydra", "giant", "wurm", "titan")
 
 
@@ -214,6 +224,9 @@ def parse_card(text: str) -> dict:
     f["kw_count"] = sum(1 for k in COMBAT_KW if k in statics)
     for col, pats in PHRASE_RE.items():
         f[col] = int(any(p.search(full) for p in pats))
+    unnamed = "\n".join(ln for ln in lines if not ln.startswith("name:"))
+    for col, pats in LINE_PHRASE_RE.items():
+        f[col] = int(any(p.search(unnamed) for p in pats))
     # colors
     f["n_colors"] = sum(1 for c in "wubrg" if f[f"pip_{c}"] > 0)
     f["pips_total"] = sum(f[f"pip_{c}"] for c in "wubrg")
@@ -222,15 +235,8 @@ def parse_card(text: str) -> dict:
     return f
 
 
-# ---------------- labels ----------------
-
-def load_labels() -> pd.DataFrame:
-    df = pd.read_csv(WIN_RATES, sep=";", dtype={"card_name": str})
-    return df
-
-
 def main() -> None:
-    labels = load_labels()
+    labels = pd.read_csv(WIN_RATES, sep=";", dtype={"card_name": str})
     loc = ConvertedCardLocator(CARDS)
     rows = []
     miss = 0

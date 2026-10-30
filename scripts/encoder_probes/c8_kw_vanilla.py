@@ -28,29 +28,19 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
-from c7_labelside import effect, wls  # noqa: E402
+import probe_lib as pl  # noqa: E402
+from _lib.stats import wls  # noqa: E402
+from c7_labelside import effect  # noqa: E402
 
-SD = cc.SD["score_play"]
+SD = pl.SD["score_play"]
 W_BAR, M_BAR = 0.4654, 0.3169  # corpus means from l_report §a
-
-KW = {
-    "flying": "kw_flying", "lifelink": "kw_lifelink",
-    "deathtouch": "kw_deathtouch", "vigilance": "kw_vigilance",
-    "first strike": "kw_first_strike", "double strike": "kw_double_strike",
-    "trample": "kw_trample", "haste": "kw_haste", "reach": "kw_reach",
-    "menace": "kw_menace", "defender": "kw_defender",
-    "hexproof": "kw_hexproof", "shroud": "kw_shroud",
-    "indestructible": "kw_indestructible", "flash": "kw_flash",
-    "ward {2}": "kw_ward",
-}
+KW = cc.KEYWORD_FLAGS
 
 
 def main() -> None:
-    import pickle
-
-    j = cc.join_table().copy()
+    j = pl.load_frame()
     j["label_sp"] = pd.to_numeric(j["shrunk_score_play"], errors="coerce") / SD
-    med = pickle.load(open(cc.SCRATCH / "l_mediation_table.pkl", "rb"))
+    med = pd.read_pickle(pl.SCRATCH / "l_mediation_table.pkl")
     mc = med["cards"][["card_name", "w", "m", "d"]].rename(
         columns={"w": "ch_w", "m": "ch_m", "d": "ch_d"})
     j = j.merge(mc, on="card_name", how="left")
@@ -79,12 +69,12 @@ def main() -> None:
     y = dfk["label_sp"].to_numpy(float)
     w = dfk["w_score_play"].to_numpy(float)
     ok = np.isfinite(y) & np.isfinite(X).all(axis=1) & (w > 0)
-    beta, se = wls(X[ok], y[ok], w[ok])
-    vals = dict(zip(KW, beta[1:len(KW) + 1]))
-    errs = dict(zip(KW, se[1:len(KW) + 1]))
+    fit = wls(X[ok], y[ok], w[ok])
+    vals = dict(zip(KW, fit.beta[1:len(KW) + 1]))
+    errs = dict(zip(KW, fit.se[1:len(KW) + 1]))
     mean_v = float(np.mean(list(vals.values())))
 
-    edit = pd.read_csv(cc.SCRATCH / "c1_scale.csv").set_index("keyword")
+    edit = pd.read_csv(pl.SCRATCH / "c1_scale.csv").set_index("keyword")
     rows = []
     dkwn = pd.to_numeric(dfk["kw_count"], errors="coerce").fillna(0).to_numpy(float)
     for kw, col in KW.items():
@@ -105,7 +95,7 @@ def main() -> None:
             "contrib_term": chan["ch_d"] / 2 / SD,
         })
     out = pd.DataFrame(rows).sort_values("edit_zero_mean", ascending=False)
-    out.to_csv(cc.SCRATCH / "c8_kw_vanilla.csv", index=False)
+    out.to_csv(pl.SCRATCH / "c8_kw_vanilla.csv", index=False)
 
     sp = out["label_zero_mean"].rank().corr(out["edit_zero_mean"].rank())
     r = float(np.corrcoef(out["label_zero_mean"], out["edit_zero_mean"])[0, 1])

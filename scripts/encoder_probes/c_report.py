@@ -16,9 +16,9 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import c_common as cc  # noqa: E402
+import probe_lib as pl  # noqa: E402
 
-S = cc.SCRATCH
+S = pl.SCRATCH
 
 
 def load(name: str):

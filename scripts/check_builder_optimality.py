@@ -42,16 +42,11 @@ Usage
 from __future__ import annotations
 
 import argparse
-import json
 import statistics as st
-import sys
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from draft_corpus_common import read_records, seat_pool  # noqa: E402
+from draft_corpus_common import load_labeler_and_scorer, read_prefix_scores, read_records
 
 DECK = 23       # NONLAND_DECK_SIZE
 TOL = 1e-3      # below this a score difference cannot change which deck is better
@@ -59,21 +54,7 @@ TOL = 1e-3      # below this a score difference cannot change which deck is bett
 
 def report(raw_paths: list[Path], last: int) -> None:
     """Where do the falls sit, and do they stick?"""
-    rows: dict = defaultdict(dict)
-    agent_of: dict = {}
-    for path in raw_paths:
-        with path.open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    r = json.loads(line)
-                except json.JSONDecodeError:
-                    continue        # a torn final line from an interrupted run
-                key = (path.name, r["draft_id"], r["seat"])
-                rows[key][r["n_picks"]] = r["deck_score"]
-                agent_of[key] = r["agent"]
+    rows, agent_of = read_prefix_scores(raw_paths, key_by_file=True)
 
     by_pick: dict = defaultdict(lambda: [0, 0])
     by_agent: dict = defaultdict(lambda: [0, 0])
@@ -148,24 +129,10 @@ def _legal_decks(pool: list[str], locator, scorer) -> list[list[str]] | None:
 
 def probe(corpus: Path, n_drafts: int, args) -> None:
     """At pick 24 the optimum is 24 decks away. Score them all and compare."""
-    import torch
-
-    from draft.application.generate_draft_data import GenerateDraftDataConfig, build_labeler
     from sealed.application.evaluate_scorer import score_decks
-    from sealed.domain.scorer_model import SetTransformerScorer
-    from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
-    from sealed.infrastructure.scorer_store import ScorerStore
 
-    locator = ConvertedCardLocator(args.cards_path)
-    labeler = build_labeler(GenerateDraftDataConfig(
-        n_drafts=0, agent_mix=[], scorer_checkpoint=args.scorer,
-        picker_checkpoint=args.picker, cards_path=args.cards_path,
-        build_method=args.build_method), locator=locator)
-    ckpt = ScorerStore().load_checkpoint(args.scorer)
-    scorer = SetTransformerScorer(ckpt.config)
-    scorer.load_state_dict(ckpt.model_state_dict)
-    scorer.eval()
-    scorer.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    labeler, scorer, locator = load_labeler_and_scorer(
+        args.cards_path, args.scorer, args.picker, args.build_method)
 
     size = DECK + 1
     pools = []
@@ -173,7 +140,7 @@ def probe(corpus: Path, n_drafts: int, args) -> None:
         if n >= n_drafts:
             break
         for i in range(geo.pod_size):
-            pools.append(seat_pool(record, geo, i)[:size])
+            pools.append(geo.drafted_pool(record, i)[:size])
 
     pools = [p for p in pools if _legal_decks(p, locator, scorer) is not None]
     built = [sc for _deck, sc in labeler.build_and_score_many(pools)]

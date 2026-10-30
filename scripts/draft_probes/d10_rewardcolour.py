@@ -44,40 +44,15 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from draft_corpus_common import ColourResolver  # noqa: E402
+from _lib.corpora import card_column
+from _lib.stats import ols
+from draft_corpus_common import ColourResolver
+from draft_probes.probe_lib import CARD_VALUES, CARDS, CORPUS, OUT, WUBRG, iter_corpus_records
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-G4 = REPO / "models/draft/agent/gen4"
-CORPUS = G4 / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl"
-CARDS = REPO / "output" / "cardsfolder-512"
-VALUES = REPO / "output" / "scorer-probes" / "t2_card_values.csv"
 P1P1 = OUT / "d2_p1p1_values.csv"
-
-COLOURS = "WUBRG"
-
-
-def card_column(path: Path, key: str, name_col: str = "name") -> dict[str, float]:
-    out: dict[str, float] = {}
-    if not path.exists():
-        return out
-    with path.open("r", encoding="utf-8", errors="replace", newline="") as fh:
-        for row in csv.DictReader(fh):
-            try:
-                out[row[name_col]] = float(row[key])
-            except (TypeError, ValueError, KeyError):
-                continue
-    return out
-
-
-def ols(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
-    beta, *_ = np.linalg.lstsq(X, y, rcond=None)
-    resid = y - X @ beta
-    cov = float(resid @ resid) / (len(y) - X.shape[1]) * np.linalg.inv(X.T @ X)
-    return beta, np.sqrt(np.diag(cov)), 1.0 - float(resid.var() / y.var())
+COLOURS = WUBRG
 
 
 def wg_ur(beta: np.ndarray) -> float:
@@ -91,28 +66,21 @@ def main() -> None:
 
     OUT.mkdir(parents=True, exist_ok=True)
     colours = ColourResolver(CARDS)
-    quality = card_column(VALUES, "shrunk_score_play")
-    swap = card_column(VALUES, "v_swap")
+    quality = card_column(CARD_VALUES, "shrunk_score_play")
+    swap = card_column(CARD_VALUES, "v_swap")
     print(f"card controls: win-rate label {len(quality)}, swap value {len(swap)}")
 
     pods: dict[str, list[dict]] = defaultdict(list)
-    for line in CORPUS.open(encoding="utf-8"):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except json.JSONDecodeError:
-            continue                      # tolerated trailing partial line
+    for rec in iter_corpus_records(CORPUS):
         if args.limit_drafts and len(pods) >= args.limit_drafts:
             break
-        for seat in rec["seats"]:
-            if seat.get("deck_score") is None or not seat.get("deck"):
+        for seat in rec.seats:
+            if seat.deck_score is None or not seat.deck:
                 continue                  # failed build: no deck, no reward
             acc: Counter[str] = Counter()
             n = nq = nv = 0
             q = v = 0.0
-            for name in seat["deck"]:
+            for name in seat.deck:
                 ids = colours(name)
                 if ids:                   # basics and other colourless: no lane
                     n += 1
@@ -126,8 +94,8 @@ def main() -> None:
                     nv += 1
             if min(n, nq, nv) < 10:
                 continue
-            pods[rec["draft_id"]].append({
-                "agent": seat.get("agent"), "score": float(seat["deck_score"]),
+            pods[rec.draft_id].append({
+                "agent": seat.agent, "score": float(seat.deck_score),
                 "frac": [acc[c] / n for c in COLOURS], "q": q / nq, "v": v / nv,
             })
 
@@ -163,7 +131,8 @@ def main() -> None:
         ("+ swap value", np.column_stack([C, v]), list(COLOURS) + ["v"]),
         ("+ both", np.column_stack([C, q, v]), list(COLOURS) + ["q", "v"]),
     ):
-        beta, se, r2 = ols(X, y)
+        fit = ols(X, y)
+        beta, se, r2 = fit.beta, fit.se, fit.r2
         fits[label] = {"beta": beta.tolist(), "se": se.tolist(), "r2": r2,
                        "names": names, "wg_ur": wg_ur(beta)}
         print(f"  {label:18s} "
@@ -185,7 +154,8 @@ def main() -> None:
         sel = np.array([r[0] == a for r in rows])
         if sel.sum() < 200:
             continue
-        beta, se, _ = ols(np.column_stack([C[sel], q[sel], v[sel]]), y[sel])
+        fit = ols(np.column_stack([C[sel], q[sel], v[sel]]), y[sel])
+        beta, se = fit.beta, fit.se
         per_agent[a] = {"n": int(sel.sum()), "beta": beta.tolist(),
                         "se": se.tolist(), "wg_ur": wg_ur(beta),
                         "share": C[sel].mean(0).tolist()}

@@ -37,7 +37,6 @@ assigns, because the input carries each creature's assignment beside its power.
 """
 from __future__ import annotations
 
-import argparse
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -47,6 +46,8 @@ import numpy as np
 if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
@@ -208,19 +209,6 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
     return attacker_id, blocker_id
 
 
-def qualifying_records(directories, count: int, shards: int, keywords_of):
-    """The first ``count`` qualifying ``(record, attacker, blocker)`` triples, one per game.
-
-    One per game because a game repeats its creatures from combat to combat, and forty
-    blocks by one large attacker would read one board forty times.
-    """
-    def choose(record):
-        pair = single_block(record, keywords_of)
-        return None if pair is None else (record, *pair)
-
-    return record_walk.qualifying(directories, choose, count, per_game=1, shards=shards)
-
-
 # ── the grids ───────────────────────────────────────────────────────────
 
 
@@ -265,23 +253,24 @@ def score(grid: np.ndarray, rule: np.ndarray) -> str:
 def main() -> None:
     from effects.domain.damage_step_keywords import KeywordResolver
 
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("checkpoint", type=Path)
-    parser.add_argument("--source", choices=("validation", "training"), default="validation")
-    parser.add_argument("--variant", choices=(*VARIANTS, "all"), nargs="+", default=["all"])
-    parser.add_argument("--records", type=int, default=40)
-    parser.add_argument("--shards", type=int, default=200)
-    args = parser.parse_args()
-    variants = list(VARIANTS) if "all" in args.variant else args.variant
+    def options(parser) -> None:
+        parser.add_argument("--source", choices=("validation", "training"),
+                            default="validation")
+        parser.add_argument("--variant", choices=(*VARIANTS, "all"), nargs="+",
+                            default=["all"])
 
-    context = common.probe_context(args.checkpoint)
+    args, context = common.grid_run(__doc__, records=40, options=options)
+    variants = list(VARIANTS) if "all" in args.variant else args.variant
     resolver = KeywordResolver(context.sidecars())
     directories = ([context.training_dir] if args.source == "training"
                    else context.validation_dirs())
-    triples = qualifying_records(directories, args.records, args.shards, resolver.keywords_of)
+    # One block a game: a game repeats its creatures from combat to combat, and forty
+    # blocks by one large attacker would read one board forty times.
+    triples = record_walk.qualifying(
+        directories, record_walk.with_record(lambda r: single_block(r, resolver.keywords_of)),
+        args.records, shards=args.shards)
     probe_model = context.model([r for r, _, _ in triples])
-    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), "
-          f"{len(triples)} {args.source} one-on-one blocks", flush=True)
+    common.heading(args, context, f"{len(triples)} {args.source} one-on-one blocks")
     for variant in variants:
         for which in ("blocker", "attacker"):
             grid = np.zeros((8, 8))
@@ -299,12 +288,10 @@ def main() -> None:
             striker, struck = (("attacker", "blocker") if which == "blocker"
                                else ("blocker", "attacker"))
             print(f"\n{variant}, {struck}'s death: {score(grid, rule)}")
-            print(f"| {striker} power \\ {struck} toughness | "
-                  + " | ".join(str(t) for t in VALUES) + " |")
-            print("|---|" + "---:|" * 8)
-            for i, power in enumerate(VALUES):
-                print(f"| {power} | " + " | ".join(f"{grid[i, j]:.2f}" for j in range(8))
-                      + " |", flush=True)
+            print_table([f"{striker} power \\ {struck} toughness", *VALUES],
+                        [[power, *(f"{v:.2f}" for v in row)] for power, row in zip(VALUES, grid)],
+                        "l" + "r" * 8)
+            sys.stdout.flush()
 
 
 if __name__ == "__main__":

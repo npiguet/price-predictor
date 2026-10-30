@@ -49,3 +49,13 @@ def qualifying(
                 if len(chosen) >= count:
                     return chosen
     return chosen
+
+
+def with_record(find: Callable[[object], tuple | None]) -> Callable[[object], tuple | None]:
+    """A ``choose`` keeping ``(record, *find(record))`` wherever ``find`` finds something."""
+
+    def choose(record):
+        found = find(record)
+        return None if found is None else (record, *found)
+
+    return choose

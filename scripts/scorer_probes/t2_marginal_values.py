@@ -22,26 +22,19 @@ from __future__ import annotations
 
 import argparse
 import csv
-import gzip
 import hashlib
+import sys
 import time
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-import probe_lib as pl
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scorer_probes import probe_lib as pl
 
 OUT_DEFAULT = pl.SCRATCH / "t2_card_values.csv"
-
-MATCH_FILES = [
-    "matches-b07/match-outcomes-gen0.txt.gz",
-    "matches-b07/match-outcomes-gen1-vs-0.txt.gz",
-    "matches-b07/match-outcomes-gen2-vs-0-1.txt.gz",
-    "matches-b07/match-outcomes-gen3-vs-0-2.txt",
-    "matches-b07/match-outcomes-gen3-vs-forge-best.txt",
-    "matches-b07/match-outcomes-gen4-vs-forge-best-gen3.txt",
-    "matches-b07/match-outcomes-gen5-vs-gen4-forge.txt",
-]
 
 KEEP_METHODS = ("forge-best", "forge-3sub", "forge-8sub", "gen3-256", "gen4-512", "gen5")
 CONTEXT_METHOD = "forge-best"
@@ -65,38 +58,22 @@ SWAP_CHUNK = 2048           # swapped matrices built per scoring call
 # corpus collection (same pattern as t0_landscape.collect_decks)
 # --------------------------------------------------------------------------
 
-def iter_match_lines(path: Path, max_lines: int | None = None):
-    op = gzip.open if path.suffix == ".gz" else open
-    n = 0
-    with op(path, "rt", encoding="utf-8") as f:
-        for line in f:
-            parts = line.rstrip("\n").split(";")
-            if len(parts) >= 10:
-                yield parts
-            n += 1
-            if max_lines and n >= max_lines:
-                return
-
-
 def collect_decks(per_method_cap: int, max_lines: int | None = None):
     """Dedup by content, cap per method. Returns {method: [(set_code, deck)]}."""
     seen: set[str] = set()
     per_method: dict[str, list] = {m: [] for m in KEEP_METHODS}
-    for rel in MATCH_FILES:
+    for rel in pl.MATCH_FILES:
         path = pl.YDATA / rel
         if not path.exists():
             print("missing:", path, flush=True)
             continue
         if all(len(v) >= per_method_cap for v in per_method.values()):
             break
-        for parts in iter_match_lines(path, max_lines):
-            set_code = parts[2]
-            for m_idx, d_idx in ((3, 5), (4, 6)):
-                method = parts[m_idx]
+        for set_code, method_a, deck_a, method_b, deck_b in pl.iter_match_decks(path, max_lines):
+            for method, deck in ((method_a, deck_a), (method_b, deck_b)):
                 bucket = per_method.get(method)
                 if bucket is None or len(bucket) >= per_method_cap:
                     continue
-                deck = parts[d_idx].split("|")
                 key = hashlib.md5(("|".join(sorted(deck)) + set_code).encode()).hexdigest()
                 if key in seen:
                     continue
