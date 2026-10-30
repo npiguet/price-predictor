@@ -510,10 +510,8 @@ class ProbeForks:
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         shown = histogram(self.probed_keywords.most_common())
-        yield Finding(
+        yield Finding.watch(
             name="probe forks were taken",
-            ok=True,
-            watched=True,
             measured=(
                 f"{self.probe_forks} damage-step probe forks, "
                 f"{self.interventions} interventional forks; keywords probed: "

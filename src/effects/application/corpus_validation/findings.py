@@ -113,6 +113,11 @@ class Finding:
     detail: tuple[str, ...] = ()
     watched: bool = False
 
+    @classmethod
+    def watch(cls, name: str, measured: str, detail: tuple[str, ...] = ()) -> Finding:
+        """A number reported every pass with no threshold to fail it."""
+        return cls(name=name, ok=True, measured=measured, detail=detail, watched=True)
+
     def lines(self) -> tuple[str, ...]:
         tag = "WATCH" if self.watched else ("PASS" if self.ok else "FAIL")
         head = f"[{tag}] {self.name}: {self.measured}"

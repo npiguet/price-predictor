@@ -92,8 +92,8 @@ class KeyJoins:
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         if self.sidecars is None:
-            unchecked = Finding(
-                name=_KEYWORD_JOIN, ok=True, watched=True,
+            unchecked = Finding.watch(
+                name=_KEYWORD_JOIN,
                 measured=(
                     f"{len(self.keys)} distinct keys, none checked: no converted "
                     "tree was readable (pass --cards-folder)"
@@ -171,10 +171,8 @@ class _JoinTally:
         other_checked = other.checked.total()
         other_broken = other.unjoinable.total()
         other_rate = share_of(other_broken, other_checked)
-        return Finding(
+        return Finding.watch(
             name=_OTHER_JOIN,
-            ok=True,
-            watched=True,
             measured=(
                 f"{other_broken}/{other_checked} keys of every other trait "
                 f"kind fail to join ({other_rate:.1%}, watched, no ceiling)"
@@ -191,10 +189,8 @@ class _JoinTally:
         total_checked = checked.total()
         outside = runtime_only.total()
         outside_rate = share_of(outside, total_checked)
-        return Finding(
+        return Finding.watch(
             name=_OUTSIDE_JOIN,
-            ok=True,
-            watched=True,
             measured=(
                 f"{outside}/{total_checked} keys resolve outside every "
                 f"(face, trait_kind) range their sidecar declares "
