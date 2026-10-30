@@ -25,23 +25,15 @@ import numpy as np
 import pandas as pd
 import torch
 
-REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
-
-from price_predictor.infrastructure.tokenizer_store import load_tokenizer  # noqa: E402
-
-OUT = REPO / "output" / "encoder-probes"
 
 
 def token_projections(max_n: int = 15) -> pd.DataFrame:
-    tok = load_tokenizer(REPO / "models/sealed/encoder/vocab.txt")
-    ck = torch.load(pl.ENCODER_CKPT if hasattr(pl, "ENCODER_CKPT") else
-                    REPO / "models/sealed/encoder"
-                    / "full-20260517-014759-attn-6l-8h-8q-0.1mlm-512d.pt",
-                    map_location="cpu", weights_only=False)
+    tok = pl.load_tokenizer(pl.VOCAB_PATH)
+    ck = torch.load(pl.ENCODER_CKPT, map_location="cpu", weights_only=False)
     emb = ck["model_state_dict"]["token_encoder.token_embedding.weight"].numpy()
 
     ids = {}
@@ -63,22 +55,20 @@ def token_projections(max_n: int = 15) -> pd.DataFrame:
     })
 
 
+def printed_power(text: str) -> float | None:
+    """The literal power on the statline; None for ``*`` and the like."""
+    pt = cc.get_field(text, "power toughness:")
+    if pt is None:
+        return None
+    try:
+        return float(pt.split("/", 1)[0])
+    except ValueError:
+        return None
+
+
 def power_label_curve() -> pd.DataFrame:
-    join = pl.build_join()
-    join = join[join["is_primary"]]
-    powers = []
-    for _, row in join.iterrows():
-        p = None
-        for line in Path(row["txt_path"]).read_text(encoding="utf-8").splitlines():
-            if line.startswith("power toughness:"):
-                head = line.split(":", 1)[1].strip().split("/", 1)[0]
-                try:
-                    p = float(head)
-                except ValueError:
-                    p = None
-                break
-        powers.append(p)
-    join = join.assign(power=powers)
+    join = pl.load_frame(features=False, text=True)
+    join = join.assign(power=[printed_power(t) for t in join["text"]])
     cr = join[join["power"].notna()]
     g = (cr.groupby("power")["shrunk_score_play"]
            .agg(mean_score_play="mean", n="count").reset_index())
@@ -87,11 +77,11 @@ def power_label_curve() -> pd.DataFrame:
 
 if __name__ == "__main__":
     t = token_projections()
-    t.to_csv(OUT / "q4_token_geometry.csv", index=False)
+    t.to_csv(pl.SCRATCH / "q4_token_geometry.csv", index=False)
     print("integer-token position on the 1-7 number line (units of one step):")
     print(t.round(2).to_string(index=False))
 
     c = power_label_curve()
-    c.to_csv(OUT / "q4_power_labels.csv", index=False)
+    c.to_csv(pl.SCRATCH / "q4_power_labels.csv", index=False)
     print("\nmean shrunk_score_play by printed power (creatures, n >= 8):")
     print(c.round(4).to_string(index=False))

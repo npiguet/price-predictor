@@ -15,7 +15,6 @@ the sixteen substitutable keywords.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -24,6 +23,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
+import probe_lib as pl  # noqa: E402
 
 RIDERS = [
     ("you gain 2 life.", "control rider (gain 2 life)"),
@@ -42,19 +42,37 @@ END_TRIGGERS = [
 ]
 
 
+def vs_base_and_control(S: pl.Scored, labels: list[str], label_key: str,
+                        base_key: str, control_key: str) -> pd.DataFrame:
+    """Each edited arm (columns 1..) against the unedited card (column 0) and
+    against the control arm (column 1)."""
+    rows = []
+    for i, label in enumerate(labels, start=1):
+        vs_ctrl = pl.mean_ci(S.sp[:, i] - S.sp[:, 1], control_key)
+        rows.append({label_key: label, "n": S.sp.shape[0],
+                     **pl.mean_ci(S.sp[:, i] - S.sp[:, 0], base_key),
+                     control_key: vs_ctrl[control_key],
+                     "c_ci_lo": vs_ctrl["ci_lo"], "c_ci_hi": vs_ctrl["ci_hi"],
+                     "delta_pr": float((S.pr[:, i] - S.pr[:, 0]).mean()),
+                     "off_manifold": float(S.off[:, i].mean())})
+    return pd.DataFrame(rows)
+
+
+def write(tab: pd.DataFrame, name: str) -> None:
+    tab.to_csv(pl.SCRATCH / name, index=False)
+    print(tab.to_string(index=False), flush=True)
+
+
 def main() -> None:
-    j = cc.join_table()
-    stripped = [cc.strip_name(t) for t in j["text"]]
+    j = pl.load_frame(text=True)
+    stripped = list(j["text"])
     is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
-    is_sp = (j["is_instant"].fillna(False) | j["is_sorcery"].fillna(False)) \
-        .astype(bool).to_numpy()
+    is_sp = j[["is_instant", "is_sorcery"]].fillna(0).astype(bool).any(axis=1).to_numpy()
     n_ab = np.array([len(cc.ability_lines(s)) for s in stripped])
     rng = np.random.default_rng(21)
-    out: dict = {}
 
     # ── (i) riders appended inside the spell line ───────────────────────
-    sl = np.array([next((i for i, ln in enumerate(cc.lines(s))
-                         if ln.startswith("spell[1]:")), -1) for s in stripped])
+    sl = np.array([cc.find_line(cc.lines(s), "spell[1]:") for s in stripped])
     ends_dot = np.array([sl[i] >= 0 and cc.lines(stripped[i])[sl[i]].rstrip().endswith(".")
                          for i in range(len(stripped))])
     sel = np.flatnonzero(is_sp & (sl >= 0) & (n_ab == 1) & ends_dot)
@@ -63,36 +81,13 @@ def main() -> None:
     print(f"[C6] rider base: {len(sel)}", flush=True)
     texts = []
     for r in sel:
-        ls = cc.lines(stripped[r])
-        base_line = ls[sl[r]].rstrip()
+        base_line = cc.lines(stripped[r])[sl[r]].rstrip()
         texts.append(stripped[r])
-        for rider, _ in RIDERS:
-            texts.append(cc.replace_in_line(stripped[r], sl[r],
-                                            f"{base_line} {rider}"))
-    k = 1 + len(RIDERS)
-    emb = cc.encode(texts)
-    pred = cc.predict_sd(emb)
-    dist = cc.offmanifold(emb)
-    S = pred["score_play"].to_numpy().reshape(len(sel), k)
-    P = pred["played_rate"].to_numpy().reshape(len(sel), k)
-    D = dist.reshape(len(sel), k)
-    ctrl = 1  # index of the control rider
-    rows = []
-    for i, (_, label) in enumerate(RIDERS, start=1):
-        v_base = S[:, i] - S[:, 0]
-        v_ctrl = S[:, i] - S[:, ctrl]
-        lo, hi = cc.bootstrap_ci(v_base)
-        clo, chi = cc.bootstrap_ci(v_ctrl)
-        rows.append({"rider": label, "n": len(sel),
-                     "vs_no_rider_sd": float(v_base.mean()),
-                     "ci_lo": lo, "ci_hi": hi,
-                     "vs_control_rider_sd": float(v_ctrl.mean()),
-                     "c_ci_lo": clo, "c_ci_hi": chi,
-                     "delta_pr": float((P[:, i] - P[:, 0]).mean()),
-                     "off_manifold": float((D[:, i] > cc.MANIFOLD_GATE).mean())})
-    riders = pd.DataFrame(rows)
-    riders.to_csv(cc.SCRATCH / "c6_riders.csv", index=False)
-    print(riders.to_string(index=False), flush=True)
+        texts += [cc.replace_in_line(stripped[r], sl[r], f"{base_line} {rider}")
+                  for rider, _ in RIDERS]
+    S = pl.score_texts(texts).reshape(len(sel), 1 + len(RIDERS))
+    write(vs_base_and_control(S, [label for _, label in RIDERS], "rider",
+                              "vs_no_rider_sd", "vs_control_rider_sd"), "c6_riders.csv")
 
     # ── (iii) end-step trigger: drawback vs control vs upside ───────────
     kw_count = pd.to_numeric(j["kw_count"], errors="coerce").fillna(0).to_numpy()
@@ -103,73 +98,31 @@ def main() -> None:
     texts = []
     for r in csel:
         texts.append(stripped[r])
-        for clause, _ in END_TRIGGERS:
-            texts.append(cc.add_line(
-                stripped[r],
-                f"triggered: at the beginning of your end step, {clause}"))
-    k = 1 + len(END_TRIGGERS)
-    emb = cc.encode(texts)
-    pred = cc.predict_sd(emb)
-    dist = cc.offmanifold(emb)
-    S = pred["score_play"].to_numpy().reshape(len(csel), k)
-    P = pred["played_rate"].to_numpy().reshape(len(csel), k)
-    D = dist.reshape(len(csel), k)
-    rows = []
-    for i, (_, label) in enumerate(END_TRIGGERS, start=1):
-        v_base = S[:, i] - S[:, 0]
-        v_ctrl = S[:, i] - S[:, 1]
-        lo, hi = cc.bootstrap_ci(v_base)
-        clo, chi = cc.bootstrap_ci(v_ctrl)
-        rows.append({"added_trigger": label, "n": len(csel),
-                     "vs_no_line_sd": float(v_base.mean()),
-                     "ci_lo": lo, "ci_hi": hi,
-                     "vs_control_line_sd": float(v_ctrl.mean()),
-                     "c_ci_lo": clo, "c_ci_hi": chi,
-                     "delta_pr": float((P[:, i] - P[:, 0]).mean()),
-                     "off_manifold": float((D[:, i] > cc.MANIFOLD_GATE).mean())})
-    trig = pd.DataFrame(rows)
-    trig.to_csv(cc.SCRATCH / "c6_end_triggers.csv", index=False)
-    print(trig.to_string(index=False), flush=True)
+        texts += [cc.add_line(stripped[r],
+                              f"triggered: at the beginning of your end step, {clause}")
+                  for clause, _ in END_TRIGGERS]
+    S = pl.score_texts(texts).reshape(len(csel), 1 + len(END_TRIGGERS))
+    write(vs_base_and_control(S, [label for _, label in END_TRIGGERS], "added_trigger",
+                              "vs_no_line_sd", "vs_control_line_sd"), "c6_end_triggers.csv")
 
     # ── (iv) dies -> enters on real death triggers ──────────────────────
-    die_i = np.array([
-        next((i for i, ln in enumerate(cc.lines(s))
-              if ln.startswith("triggered: when CARDNAME dies,")), -1)
-        for s in stripped])
+    die_i = np.array([cc.find_line(cc.lines(s), "triggered: when CARDNAME dies,")
+                      for s in stripped])
     dsel = np.flatnonzero(is_crea & (die_i >= 0))
     print(f"[C6] death-trigger creatures: {len(dsel)}", flush=True)
     texts = []
     for r in dsel:
-        ls = cc.lines(stripped[r])
-        line = ls[die_i[r]]
+        line = cc.lines(stripped[r])[die_i[r]]
         texts.append(stripped[r])
-        texts.append(cc.replace_in_line(
-            stripped[r], die_i[r],
-            line.replace("when CARDNAME dies,", "when CARDNAME enters,", 1)))
-        texts.append(cc.replace_in_line(
-            stripped[r], die_i[r],
-            line.replace("when CARDNAME dies,",
-                         "when CARDNAME attacks,", 1)))
-    emb = cc.encode(texts)
-    pred = cc.predict_sd(emb)
-    dist = cc.offmanifold(emb).reshape(len(dsel), 3)
-    S = pred["score_play"].to_numpy().reshape(len(dsel), 3)
-    P = pred["played_rate"].to_numpy().reshape(len(dsel), 3)
-    rows = []
-    for i, label in enumerate(["dies -> enters", "dies -> attacks"], start=1):
-        v = S[:, i] - S[:, 0]
-        lo, hi = cc.bootstrap_ci(v)
-        rows.append({"contrast": label, "n": len(dsel),
-                     "mean_sd": float(v.mean()), "ci_lo": lo, "ci_hi": hi,
-                     "frac_pos": float((v > 0).mean()),
-                     "delta_pr": float((P[:, i] - P[:, 0]).mean()),
-                     "off_manifold": float((dist[:, i] > cc.MANIFOLD_GATE).mean())})
-    timing = pd.DataFrame(rows)
-    timing.to_csv(cc.SCRATCH / "c6_timing.csv", index=False)
-    print(timing.to_string(index=False), flush=True)
-
-    (cc.SCRATCH / "c6_summary.json").write_text(
-        json.dumps(out, indent=2, default=float), encoding="utf-8")
+        texts += [cc.replace_in_line(stripped[r], die_i[r],
+                                     line.replace("when CARDNAME dies,", f"when CARDNAME {w},", 1))
+                  for w in ("enters", "attacks")]
+    S = pl.score_texts(texts).reshape(len(dsel), 3)
+    write(pd.DataFrame([
+        pl.contrast_row(S.sp[:, i] - S.sp[:, 0], S.pr[:, i] - S.pr[:, 0], S.off[:, i],
+                        contrast=label)
+        for i, label in enumerate(["dies -> enters", "dies -> attacks"], start=1)]),
+        "c6_timing.csv")
 
 
 if __name__ == "__main__":

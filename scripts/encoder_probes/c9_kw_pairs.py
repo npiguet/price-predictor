@@ -29,16 +29,17 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
-from c1_keywords import KEYWORDS  # noqa: E402
+import probe_lib as pl  # noqa: E402
 
+KEYWORDS = cc.KEYWORDS
 CONTROL = "fear"
 N_BASE = 150
 SEED = 7
 
 
 def main() -> None:
-    j = cc.join_table()
-    stripped = [cc.strip_name(t) for t in j["text"]]
+    j = pl.load_frame(text=True)
+    stripped = list(j["text"])
     is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
     power = pd.to_numeric(j["power"], errors="coerce").to_numpy(float)
     tough = pd.to_numeric(j["toughness"], errors="coerce").to_numpy(float)
@@ -69,11 +70,8 @@ def main() -> None:
             texts.append(cc.add_line(t, f"static: {k2}"))
     print(f"encoding {len(texts)} texts ({len(base)} bases x {len(arms)} arms)",
           flush=True)
-    emb = cc.encode(texts)
-    pred = cc.predict_sd(emb)
-    dist = cc.offmanifold(emb)
-    P = pred["score_play"].to_numpy().reshape(len(base), len(arms))
-    D = dist.reshape(len(base), len(arms))
+    scored = pl.score_texts(texts).reshape(len(base), len(arms))
+    P = scored.sp
 
     p00 = P[:, idx[(CONTROL, CONTROL)]]
     rows = []
@@ -83,13 +81,11 @@ def main() -> None:
         inter_ba = (P[:, idx[(b, a)]] - P[:, idx[(b, CONTROL)]]
                     - P[:, idx[(CONTROL, a)]] + p00)
         inter = (inter_ab + inter_ba) / 2
-        lo, hi = cc.bootstrap_ci(inter, n_boot=1000)
         joint = ((P[:, idx[(a, b)]] + P[:, idx[(b, a)]]) / 2 - p00)
-        off = float((D[:, [idx[(a, b)], idx[(b, a)]]] > cc.MANIFOLD_GATE).mean())
+        off = float(scored.off[:, [idx[(a, b)], idx[(b, a)]]].mean())
         rows.append({
             "kw_a": a, "kw_b": b, "n": len(base),
-            "interaction_sd": float(inter.mean()),
-            "ci_lo": lo, "ci_hi": hi,
+            **pl.mean_ci(inter, "interaction_sd", n_boot=1000),
             "joint_vs_control_sd": float(joint.mean()),
             "order_gap_sd": float((inter_ab - inter_ba).mean()),
             "frac_pos": float((inter > 0).mean()),
@@ -111,7 +107,7 @@ def main() -> None:
         r["interaction_sd"] - row_mean[r["kw_a"]] - row_mean[r["kw_b"]] + grand
         for r in rows]
     out = out.sort_values("interaction_sd", ascending=False)
-    out.to_csv(cc.SCRATCH / "c9_kw_pairs.csv", index=False)
+    out.to_csv(pl.SCRATCH / "c9_kw_pairs.csv", index=False)
 
     sig = out[(out["ci_lo"] > 0) | (out["ci_hi"] < 0)]
     print(f"\npairs with CI excluding zero: {len(sig)} of {len(out)}")

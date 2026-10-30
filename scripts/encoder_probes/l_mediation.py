@@ -34,17 +34,31 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "encoder-probes"
-DEFAULT_CORPUS = Path(
-    r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1"
-    r"\cards-played-bo1-embedding.cleaned.txt"
-)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _lib.paths import OUTPUT, SEALED_TRAINING_DATA  # noqa: E402
+
+OUT = OUTPUT / "encoder-probes"
+DEFAULT_CORPUS = (SEALED_TRAINING_DATA / "matches-bo1"
+                  / "cards-played-bo1-embedding.cleaned.txt")
 DEFAULT_TABLE = OUT / "card_table.pkl"  # written by p0b_card_table.py
 
 N_LEN_BUCKETS = 5
 LEN_BUCKET_LABELS = ["0-4", "5-6", "7-8", "9-11", "12+"]
 TOT_BUCKET_LABELS = ["0-10", "11-13", "14-16", "17-20", "21+"]
+
+WIN, LOSS = 0, 1
+IN_DECK, PLAYED = 0, 1
+# Strata: all games; games the side started; the forge-best mirror; any forge
+# method against itself; a game-length bucket by the owning side's (GL), the
+# opponent's (OG) and both sides' (TG) distinct cards played; split half H,
+# and split half restricted to games the side started (HP).
+ALL, PLAY, FB, FF = 0, 1, 2, 3
+GL = 4
+OG = GL + N_LEN_BUCKETS
+TG = OG + N_LEN_BUCKETS
+H = TG + N_LEN_BUCKETS
+HP = H + 2
+N_STRATA = HP + 2
 
 
 def len_bucket(n: int) -> int:
@@ -93,47 +107,12 @@ def main() -> None:
     pips[: len(names)] = tbl["pips_total"].to_numpy(dtype=np.float64)
     gold[: len(names)] = (tbl["n_colors"].to_numpy(dtype=np.float64) >= 2).astype(float)
 
-    z = lambda: np.zeros(cap, dtype=np.int64)  # noqa: E731
-
-    # --- primary counters -------------------------------------------------
-    w_ind, w_pl = z(), z()          # wins when in deck / when played
-    l_ind, l_pl = z(), z()          # losses when in deck / when played
-    w_ind_p, w_pl_p = z(), z()      # ... @play (owner was starter)
-    l_ind_p, l_pl_p = z(), z()
-
-    # --- matchup strata (0 = forge-best vs forge-best, 1 = forge X vs forge X)
-    s_w_ind = np.zeros((2, cap), dtype=np.int64)
-    s_w_pl = np.zeros((2, cap), dtype=np.int64)
-    s_l_ind = np.zeros((2, cap), dtype=np.int64)
-    s_l_pl = np.zeros((2, cap), dtype=np.int64)
-
-    # --- game-length strata ----------------------------------------------
-    g_w_ind = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    g_w_pl = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    g_l_ind = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    g_l_pl = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-
-    # --- opponent-side length strata (game-length proxy not conditioned on
-    #     the owner's own mana development) and whole-game length strata ----
-    o_w_ind = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    o_w_pl = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    o_l_ind = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    o_l_pl = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    t_w_ind = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    t_w_pl = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    t_l_ind = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-    t_l_pl = np.zeros((N_LEN_BUCKETS, cap), dtype=np.int64)
-
-    # --- split halves ------------------------------------------------------
+    # One counter array, [stratum, outcome, kind, card]. A game adds 1 to the
+    # in-deck (and played) counters of every card on the winning side under
+    # WIN, and of every card on the losing side under LOSS, in each stratum
+    # the game belongs to for that side.
+    C = np.zeros((N_STRATA, 2, 2, cap), dtype=np.int64)
     appear = np.zeros(cap, dtype=np.int64)
-    h_w_ind = np.zeros((2, cap), dtype=np.int64)
-    h_w_pl = np.zeros((2, cap), dtype=np.int64)
-    h_l_ind = np.zeros((2, cap), dtype=np.int64)
-    h_l_pl = np.zeros((2, cap), dtype=np.int64)
-    h_w_ind_p = np.zeros((2, cap), dtype=np.int64)
-    h_w_pl_p = np.zeros((2, cap), dtype=np.int64)
-    h_l_ind_p = np.zeros((2, cap), dtype=np.int64)
-    h_l_pl_p = np.zeros((2, cap), dtype=np.int64)
 
     # --- scalar / per-set / per-method accumulators -------------------------
     set_num = Counter()      # sum over cards of (played & win) - (played & loss)
@@ -198,70 +177,44 @@ def main() -> None:
         ILP = np.array(ilp, dtype=np.int64)
         ILD = np.array(ilp + iln, dtype=np.int64)
 
-        w_ind[IWD] += 1
-        w_pl[IWP] += 1
-        l_ind[ILD] += 1
-        l_pl[ILP] += 1
+        def tally(outcome, s_deck, s_played=None):
+            deck, played = (IWD, IWP) if outcome == WIN else (ILD, ILP)
+            C[s_deck, outcome, IN_DECK, deck] += 1
+            C[s_deck if s_played is None else s_played, outcome, PLAYED, played] += 1
 
-        if winner == starter:
-            w_ind_p[IWD] += 1
-            w_pl_p[IWP] += 1
-        else:
-            l_ind_p[ILD] += 1
-            l_pl_p[ILP] += 1
+        starter_won = winner == starter
+        tally(WIN, ALL)
+        tally(LOSS, ALL)
+        tally(WIN if starter_won else LOSS, PLAY)
 
-        # matchup strata
-        st = -1
-        if mA == "forge-best" and mB == "forge-best":
-            st = 0
-        elif mA == mB and mA.startswith("forge"):
-            st = 1
-        if st >= 0:
-            s_w_ind[st, IWD] += 1
-            s_w_pl[st, IWP] += 1
-            s_l_ind[st, ILD] += 1
-            s_l_pl[st, ILP] += 1
-            if st == 0:  # forge-best vs forge-best also belongs to the wider stratum
-                s_w_ind[1, IWD] += 1
-                s_w_pl[1, IWP] += 1
-                s_l_ind[1, ILD] += 1
-                s_l_pl[1, ILP] += 1
+        if mA == mB and mA.startswith("forge"):
+            # forge-best vs forge-best also belongs to the wider same-method stratum
+            for st in ((FB, FF) if mA == "forge-best" else (FF,)):
+                tally(WIN, st)
+                tally(LOSS, st)
 
-        # game-length strata (owning side's played count)
-        bw = len_bucket(len(iwp))
-        bl = len_bucket(len(ilp))
-        g_w_ind[bw, IWD] += 1
-        g_w_pl[bw, IWP] += 1
-        g_l_ind[bl, ILD] += 1
-        g_l_pl[bl, ILP] += 1
-        # opponent-side bucket: swap the two sides' buckets
-        o_w_ind[bl, IWD] += 1
-        o_w_pl[bl, IWP] += 1
-        o_l_ind[bw, ILD] += 1
-        o_l_pl[bw, ILP] += 1
+        # game-length strata: the owning side's played count (gl), the
+        # opponent's (og) and both sides' together (tg)
+        bw, bl = len_bucket(len(iwp)), len_bucket(len(ilp))
         bt = tot_bucket(len(iwp) + len(ilp))
-        t_w_ind[bt, IWD] += 1
-        t_w_pl[bt, IWP] += 1
-        t_l_ind[bt, ILD] += 1
-        t_l_pl[bt, ILP] += 1
+        tally(WIN, GL + bw)
+        tally(LOSS, GL + bl)
+        tally(WIN, OG + bl)
+        tally(LOSS, OG + bw)
+        tally(WIN, TG + bt)
+        tally(LOSS, TG + bt)
 
         # split halves: parity of this card's own in-deck appearance counter
         hw = appear[IWD] & 1
         appear[IWD] += 1
         hl = appear[ILD] & 1
         appear[ILD] += 1
-        hwp = hw[: len(iwp)]
-        hlp = hl[: len(ilp)]
-        h_w_ind[hw, IWD] += 1
-        h_w_pl[hwp, IWP] += 1
-        h_l_ind[hl, ILD] += 1
-        h_l_pl[hlp, ILP] += 1
-        if winner == starter:
-            h_w_ind_p[hw, IWD] += 1
-            h_w_pl_p[hwp, IWP] += 1
+        tally(WIN, H + hw, H + hw[: len(iwp)])
+        tally(LOSS, H + hl, H + hl[: len(ilp)])
+        if starter_won:
+            tally(WIN, HP + hw, HP + hw[: len(iwp)])
         else:
-            h_l_ind_p[hl, ILD] += 1
-            h_l_pl_p[hlp, ILP] += 1
+            tally(LOSS, HP + hl, HP + hl[: len(ilp)])
 
         # scalars
         n_games += 1
@@ -291,46 +244,20 @@ def main() -> None:
           f"{n_cards:,} card ids ({len(extra_names)} new), "
           f"{time.time() - t0:.0f}s", flush=True)
 
-    sl = slice(0, n_cards)
-    df = pd.DataFrame({"card_name": all_names})
-    df["wins_when_played"] = w_pl[sl]
-    df["wins_when_in_deck"] = w_ind[sl]
-    df["losses_when_played"] = l_pl[sl]
-    df["losses_when_in_deck"] = l_ind[sl]
-    df["wins_played_play"] = w_pl_p[sl]
-    df["wins_in_deck_play"] = w_ind_p[sl]
-    df["losses_played_play"] = l_pl_p[sl]
-    df["losses_in_deck_play"] = l_ind_p[sl]
+    def counts(s: int, prefix: str = "", suffix: str = "", when: str = "") -> dict:
+        n = slice(0, n_cards)
+        return {f"{prefix}wins_{when}played{suffix}": C[s, WIN, PLAYED, n],
+                f"{prefix}wins_{when}in_deck{suffix}": C[s, WIN, IN_DECK, n],
+                f"{prefix}losses_{when}played{suffix}": C[s, LOSS, PLAYED, n],
+                f"{prefix}losses_{when}in_deck{suffix}": C[s, LOSS, IN_DECK, n]}
 
-    for k, tag in ((0, "fb"), (1, "ff")):
-        df[f"{tag}_wins_played"] = s_w_pl[k, sl]
-        df[f"{tag}_wins_in_deck"] = s_w_ind[k, sl]
-        df[f"{tag}_losses_played"] = s_l_pl[k, sl]
-        df[f"{tag}_losses_in_deck"] = s_l_ind[k, sl]
-
-    for b, lab in enumerate(LEN_BUCKET_LABELS):
-        df[f"gl{b}_wins_played"] = g_w_pl[b, sl]
-        df[f"gl{b}_wins_in_deck"] = g_w_ind[b, sl]
-        df[f"gl{b}_losses_played"] = g_l_pl[b, sl]
-        df[f"gl{b}_losses_in_deck"] = g_l_ind[b, sl]
-        df[f"og{b}_wins_played"] = o_w_pl[b, sl]
-        df[f"og{b}_wins_in_deck"] = o_w_ind[b, sl]
-        df[f"og{b}_losses_played"] = o_l_pl[b, sl]
-        df[f"og{b}_losses_in_deck"] = o_l_ind[b, sl]
-        df[f"tg{b}_wins_played"] = t_w_pl[b, sl]
-        df[f"tg{b}_wins_in_deck"] = t_w_ind[b, sl]
-        df[f"tg{b}_losses_played"] = t_l_pl[b, sl]
-        df[f"tg{b}_losses_in_deck"] = t_l_ind[b, sl]
-
+    cols = {"card_name": all_names, **counts(ALL, when="when_"),
+            **counts(PLAY, suffix="_play"), **counts(FB, "fb_"), **counts(FF, "ff_")}
+    for b in range(N_LEN_BUCKETS):
+        cols |= counts(GL + b, f"gl{b}_") | counts(OG + b, f"og{b}_") | counts(TG + b, f"tg{b}_")
     for h in (0, 1):
-        df[f"h{h}_wins_played"] = h_w_pl[h, sl]
-        df[f"h{h}_wins_in_deck"] = h_w_ind[h, sl]
-        df[f"h{h}_losses_played"] = h_l_pl[h, sl]
-        df[f"h{h}_losses_in_deck"] = h_l_ind[h, sl]
-        df[f"h{h}_wins_played_play"] = h_w_pl_p[h, sl]
-        df[f"h{h}_wins_in_deck_play"] = h_w_ind_p[h, sl]
-        df[f"h{h}_losses_played_play"] = h_l_pl_p[h, sl]
-        df[f"h{h}_losses_in_deck_play"] = h_l_ind_p[h, sl]
+        cols |= counts(H + h, f"h{h}_") | counts(HP + h, f"h{h}_", "_play")
+    df = pd.DataFrame(cols)
 
     # derived mediation quantities
     n_in = df.wins_when_in_deck + df.losses_when_in_deck
@@ -382,9 +309,6 @@ def main() -> None:
         pickle.dump({"cards": df, "meta": meta}, f)
     print(f"wrote {args.out}  ({len(df):,} cards)")
 
-    # --- inline sanity check against the label snapshot ---------------------
-    snap = REPO  # placeholder to keep flake quiet
-    del snap
     print(f"winner mean cards played {sum_played_w / n_games:.3f}  "
           f"loser {sum_played_l / n_games:.3f}")
 

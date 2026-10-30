@@ -9,39 +9,21 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
-import matplotlib
+import numpy as np
+import pandas as pd
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _lib.paths import OUTPUT  # noqa: E402
+from _lib.style import BLUE, GRAY, ORANGE, RED, figure_saver, plt, use_probe_style  # noqa: E402
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "encoder-probes"
-FIG = REPO / "experiments" / "images"
-FIG.mkdir(parents=True, exist_ok=True)
-
-plt.rcParams.update({
-    "font.size": 10, "axes.titlesize": 11, "axes.spines.top": False,
-    "axes.spines.right": False, "axes.grid": True, "grid.alpha": 0.25,
-    "figure.dpi": 110,
-})
-
-# Same palette as scripts/scorer_probes/make_figures.py. The pairs used
-# together (blue/orange, blue/red, each vs gray) were checked in OKLab under
-# deutan/protan simulation; red carries sign, which bar direction re-encodes.
-BLUE, ORANGE, RED, GRAY = "#3b6fb6", "#e08f3c", "#c05555", "#8a8a8a"
+OUT = OUTPUT / "encoder-probes"
 LABEL_SD = 0.06181
 
-
-def save(fig, name):
-    for ext in ("png", "svg"):
-        fig.savefig(FIG / f"2026-08-28-encoder-{name}.{ext}", bbox_inches="tight",
-                    dpi=150 if ext == "png" else None)
-    plt.close(fig)
-    print("wrote", name)
+use_probe_style()
+save = figure_saver("2026-08-28-encoder")
 
 
 def _report_table(path: Path, header_frag: str) -> list[list[str]]:

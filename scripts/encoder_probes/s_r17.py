@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import probe_lib as pl
 import s_common as S
+from _lib.stats import wcorr, wls
 
 d = S.load_all()
 join, emb = d["join"], d["emb"]
@@ -16,8 +17,8 @@ pf, ph = d["pf"], d["ph"]
 pred_f = pl.predict_labels(emb, pf)
 pred_h = pl.predict_labels(emb, ph)
 
-mv = np.nan_to_num(S.num(join, "mv"))
-creature = np.nan_to_num(S.num(join, "is_creature"))
+mv = S.flag(join, "mv")
+creature = S.flag(join, "is_creature")
 n_in = S.num(join, "n_in_deck")
 
 out: dict = {}
@@ -48,13 +49,12 @@ flag_cols = sorted({c for c in join.columns
                    | {"big_tribe", "has_x", "hybrid", "phyrexian",
                       "is_colorless_cost", "has_cost_line"})
 extra_flags = {
-    "ai_remove_deck": np.nan_to_num(S.num(join, "ai_remove_deck")) > 0,
+    "ai_remove_deck": S.flag(join, "ai_remove_deck") > 0,
     "mana rock (noncreature artifact, taps for mana)":
-        (np.nan_to_num(S.num(join, "is_artifact")) > 0)
-        & (creature == 0) & (np.nan_to_num(S.num(join, "ph_tap_for_mana")) > 0),
+        (S.flag(join, "is_artifact") > 0) & (creature == 0)
+        & (S.flag(join, "ph_tap_for_mana") > 0),
     "fog / prevent damage":
-        (np.nan_to_num(S.num(join, "ph_fog"))
-         + np.nan_to_num(S.num(join, "ph_prevent_damage"))) > 0,
+        (S.flag(join, "ph_fog") + S.flag(join, "ph_prevent_damage")) > 0,
 }
 for r_ in ("common", "uncommon", "rare", "mythic"):
     extra_flags[f"rarity={r_}"] = (join["first_rarity"] == r_).to_numpy()
@@ -68,7 +68,7 @@ for k in range(int(np.nanmax(dec)) + 1):
 
 feats: dict[str, np.ndarray] = {}
 for c in flag_cols:
-    v = np.nan_to_num(S.num(join, c)) > 0
+    v = S.flag(join, c) > 0
     if 40 <= v.sum() <= len(join) - 40:
         feats[c] = v
 feats.update(extra_flags)
@@ -89,13 +89,12 @@ for head in HEADS:
                 continue
             ff = fv[mm].astype(float)
             X0 = np.column_stack([np.ones(int(mm.sum())), ff])
-            b0, se0, t0 = S.wls(X0, res[mm], w[mm])
-            X1 = np.column_stack([base[mm], ff])
-            b1, se1, t1 = S.wls(X1, res[mm], w[mm])
+            raw = wls(X0, res[mm], w[mm])
+            adj = wls(np.column_stack([base[mm], ff]), res[mm], w[mm])
             rows.append({
                 "head": head, "fit": tag, "feature": name, "n": int(fv[mm].sum()),
-                "raw_sd": b0[-1] / S.SD[head], "raw_t": t0[-1],
-                "adj_sd": b1[-1] / S.SD[head], "adj_t": t1[-1],
+                "raw_sd": raw.beta[-1] / S.SD[head], "raw_t": raw.t[-1],
+                "adj_sd": adj.beta[-1] / S.SD[head], "adj_t": adj.t[-1],
             })
 div = pd.DataFrame(rows)
 div.to_pickle(S.OUT / "s_r17_divergence.pkl")
@@ -138,34 +137,26 @@ for k in range(int(np.nanmax(dec)) + 1):
 out["r17_decile_profile"] = rows_n
 
 # ── blacklist ───────────────────────────────────────────────────────────
-bl = np.nan_to_num(S.num(join, "ai_remove_deck")) > 0
+bl = S.flag(join, "ai_remove_deck") > 0
 rows_bl = []
 for head in HEADS:
     r = resid[head]
     for tag, res in (("fidelity/all", r["f"]), ("honest/val", r["h"])):
         m = r["have"] & (val if tag == "honest/val" else np.ones(len(join), bool))
         X = np.column_stack([base[m], bl[m].astype(float)])
-        b, se, t = S.wls(X, res[m], r["w"][m])
+        fit = wls(X, res[m], r["w"][m])
         mb = np.average(res[m & bl], weights=r["w"][m & bl]) / S.SD[head]
         mn = np.average(res[m & ~bl], weights=r["w"][m & ~bl]) / S.SD[head]
         rows_bl.append([head, tag, int((m & bl).sum()), f"{mb:+.3f}", f"{mn:+.3f}",
-                        f"{b[-1] / S.SD[head]:+.3f}", f"{se[-1] / S.SD[head]:.3f}",
-                        f"{t[-1]:+.1f}"])
+                        f"{fit.beta[-1] / S.SD[head]:+.3f}",
+                        f"{fit.se[-1] / S.SD[head]:.3f}", f"{fit.t[-1]:+.1f}"])
 out["r17_blacklist"] = rows_bl
 
 # ── MLM-neighbourhood test ──────────────────────────────────────────────
-Xn = emb / np.linalg.norm(emb, axis=1, keepdims=True)
-K = 10
-nb_idx = np.empty((len(Xn), K), dtype=np.int64)
-for lo in range(0, len(Xn), 1024):
-    sims = Xn[lo:lo + 1024] @ Xn.T
-    sims[np.arange(sims.shape[0]), np.arange(lo, min(lo + 1024, len(Xn)))] = -np.inf
-    part = np.argpartition(-sims, K, axis=1)[:, :K]
-    ordr = np.take_along_axis(sims, part, 1).argsort(axis=1)[:, ::-1]
-    nb_idx[lo:lo + 1024] = np.take_along_axis(part, ordr, 1)
+nb_idx = S.top_k_cosine(emb / np.linalg.norm(emb, axis=1, keepdims=True), 10)
 np.save(S.OUT / "s_r17_neighbours.npy", nb_idx)
 
-rare = {c: (np.nan_to_num(S.num(join, c)) > 0) for c in flag_cols}
+rare = {c: S.flag(join, c) > 0 for c in flag_cols}
 rare = {c: v for c, v in rare.items() if 20 <= v.sum() < 200}
 out["r17_rare_classes"] = {c: int(v.sum()) for c, v in rare.items()}
 
@@ -173,10 +164,7 @@ rows_nb = []
 for head in HEADS:
     r = resid[head]
     y, w, hv = r["y"], r["w"], r["have"]
-    nb_mean = np.array([
-        np.nanmean(y[nb_idx[i]]) if np.isfinite(y[nb_idx[i]]).any() else np.nan
-        for i in range(len(y))])
-    pull = nb_mean - y
+    pull = S.neighbour_mean(y, nb_idx) - y
     for tag, res in (("fidelity/all", r["f"]), ("honest/val", r["h"])):
         for sub_name, sub in (("all cards", np.ones(len(join), bool)),
                               ("rare-mechanic cards",
@@ -189,10 +177,10 @@ for head in HEADS:
             if m.sum() < 50:
                 continue
             X = np.column_stack([np.ones(int(m.sum())), pull[m]])
-            b, se, t = S.wls(X, res[m], w[m])
-            rows_nb.append([head, tag, sub_name, int(m.sum()), f"{b[1]:+.4f}",
-                            f"{se[1]:.4f}", f"{t[1]:+.1f}",
-                            f"{S.wcorr(res[m], pull[m], w[m]):+.3f}"])
+            fit = wls(X, res[m], w[m])
+            rows_nb.append([head, tag, sub_name, int(m.sum()), f"{fit.beta[1]:+.4f}",
+                            f"{fit.se[1]:.4f}", f"{fit.t[1]:+.1f}",
+                            f"{wcorr(res[m], pull[m], w[m]):+.3f}"])
 out["r17_neighbourhood"] = rows_nb
 
 # per-rare-class residual (fidelity) — is each pulled toward its neighbourhood?
@@ -203,7 +191,7 @@ for c, v in sorted(rare.items(), key=lambda kv: -kv[1].sum()):
     if m.sum() < 20:
         continue
     y = r["y"]
-    nb_mean = np.array([np.nanmean(y[nb_idx[i]]) for i in np.where(m)[0]])
+    nb_mean = S.neighbour_mean(y, nb_idx[m])
     rows_rc.append([c, int(m.sum()),
                     f"{np.average(r['f'][m], weights=r['w'][m]) / S.SD['score_play']:+.3f}",
                     f"{np.nanmean(nb_mean - y[m]) / S.SD['score_play']:+.3f}"])

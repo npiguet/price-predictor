@@ -31,22 +31,18 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
+from _lib.stats import bootstrap_ci  # noqa: E402
 
-ABILITY_PREFIXES = ("static:", "spell[", "activated[", "triggered", "replacement")
 GRANT_LINE = "spell[1]: target creature gains flying until end of turn."
 NEGATED_LINE = "static: CARDNAME can't block creatures with flying."
 FLY_LINE = "static: flying"
-GATE = 0.35325
+GATE = pl.MANIFOLD_GATE
 N_SAMPLE = 300
 SEED = 4242
 BATCH = 96
-SD_SCORE_PLAY = 0.06181
-
-
-def card_lines(path: str) -> list[str]:
-    text = Path(path).read_text(encoding="utf-8", errors="replace")
-    return [ln for ln in text.splitlines() if ln.strip() and not ln.startswith("name:")]
+SD_SCORE_PLAY = pl.SD["score_play"]
 
 
 def mana_value(lines: list[str]) -> float:
@@ -76,13 +72,6 @@ def drop_line(lines: list[str], target: str) -> list[str]:
     return [ln for ln in lines if ln.strip() != target]
 
 
-def boot_ci(values: np.ndarray, stat=np.mean, n: int = 4000, seed: int = 0):
-    rng = np.random.default_rng(seed)
-    idx = rng.integers(0, len(values), size=(n, len(values)))
-    draws = stat(values[idx], axis=1)
-    return float(np.percentile(draws, 2.5)), float(np.percentile(draws, 97.5))
-
-
 def ratio_boot_ci(num: np.ndarray, den: np.ndarray, n: int = 4000, seed: int = 0):
     """Bootstrap CI of mean(num)/mean(den) over paired cards."""
     rng = np.random.default_rng(seed)
@@ -92,17 +81,16 @@ def ratio_boot_ci(num: np.ndarray, den: np.ndarray, n: int = 4000, seed: int = 0
 
 
 def main() -> None:
-    join = pl.build_join()
-    join = join[join["is_primary"]].reset_index(drop=True)
+    join = pl.load_frame(features=False, text=True)
 
-    lines_by_idx = {i: card_lines(p) for i, p in enumerate(join["txt_path"])}
+    lines_by_idx = {i: cc.lines(t) for i, t in enumerate(join["text"])}
 
     singles, multi, nonfly = [], [], []
     for i, lines in lines_by_idx.items():
         types = next((ln for ln in lines if ln.startswith("types:")), "")
         if "creature" not in types:
             continue
-        ab = [ln for ln in lines if ln.startswith(ABILITY_PREFIXES)]
+        ab = [ln for ln in lines if ln.startswith(cc.ABILITY_PREFIXES)]
         has_fly = any(ln.strip() == FLY_LINE for ln in ab)
         text_low = "\n".join(lines).lower()
         if has_fly and len(ab) == 1:
@@ -162,14 +150,12 @@ def main() -> None:
             ("nonfly", j, "ii_added", "\n".join(base + [FLY_LINE])),
         ]
 
-    runner = pl.EncoderRunner()
+    runner = pl.runner()
     emb = runner.encode_texts([s[3] for s in specs], batch_size=BATCH)
     print(f"encoded {len(specs)} variants on {runner.device}", flush=True)
 
-    probes = pl.load_probes("fidelity", True)
-    pred = pl.predict_labels(emb, probes)
-    _, corpus_ref = pl.corpus_embedding_matrix()
-    mdist, _ = pl.manifold_distance(emb, corpus_ref)
+    pred = pl.predict_labels(emb, pl.fidelity_probes())
+    mdist, _ = pl.manifold_distance(emb, pl.reference_cloud()[1])
 
     frame = pd.DataFrame({
         "family": [s[0] for s in specs],
@@ -207,7 +193,7 @@ def main() -> None:
         rec = {"n": int(len(sub))}
         for key, d in (("true_flying_premium", d_true), ("grant_spell", d_grant),
                        ("negated_static", d_neg)):
-            lo, hi = boot_ci(d, seed=1)
+            lo, hi = bootstrap_ci(d, seed=1)
             rec[key] = {"mean": float(d.mean()), "mean_sd_units": float(d.mean() / SD_SCORE_PLAY),
                         "ci95": [lo, hi], "ci95_sd_units": [lo / SD_SCORE_PLAY, hi / SD_SCORE_PLAY],
                         "frac_positive": float((d > 0).mean())}
@@ -220,7 +206,7 @@ def main() -> None:
     # ── family B / C: bidirectional ─────────────────────────────────────
     B = wide[wide["family"] == "multi"].copy()
     d_rem = (B["score_play__i_original"] - B["score_play__ii_deleted"]).to_numpy()
-    lo, hi = boot_ci(d_rem, seed=3)
+    lo, hi = bootstrap_ci(d_rem, seed=3)
     out["family_B_remove_from_real_fliers"] = {
         "n": int(len(B)), "mean": float(d_rem.mean()),
         "mean_sd_units": float(d_rem.mean() / SD_SCORE_PLAY), "ci95": [lo, hi],
@@ -229,7 +215,7 @@ def main() -> None:
     }
     C = wide[wide["family"] == "nonfly"].copy()
     d_add = (C["score_play__ii_added"] - C["score_play__i_original"]).to_numpy()
-    lo, hi = boot_ci(d_add, seed=4)
+    lo, hi = bootstrap_ci(d_add, seed=4)
     out["family_C_add_to_nonfliers"] = {
         "n": int(len(C)), "mean": float(d_add.mean()),
         "mean_sd_units": float(d_add.mean() / SD_SCORE_PLAY), "ci95": [lo, hi],

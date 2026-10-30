@@ -7,6 +7,7 @@ import json
 import numpy as np
 import probe_lib as pl
 import s_common as S
+from _lib.stats import participation_ratio, pearson_fisher_se, wcorr, wls
 
 d = S.load_all()
 join, emb = d["join"], d["emb"]
@@ -38,9 +39,10 @@ for tag, mask in (("all cards", np.ones(len(join), bool)), ("val cards", val),
         ("honest preds", (pred_h["score_play"].to_numpy()[have],
                           pred_h["score_draw"].to_numpy()[have])),
     ):
-        r_u = S.wcorr(*series)
-        r_w = S.wcorr(*series, w=w_both[have])
-        rows.append([tag, label, n, f"{r_u:+.4f}", f"±{S.corr_se(r_u, n):.4f}", f"{r_w:+.4f}"])
+        r_u = wcorr(*series)
+        r_w = wcorr(*series, w=w_both[have])
+        rows.append([tag, label, n, f"{r_u:+.4f}", f"±{pearson_fisher_se(r_u, n):.4f}",
+                     f"{r_w:+.4f}"])
 out["a_corr"] = rows
 
 # label correlation of the *difference* with each level
@@ -77,7 +79,7 @@ out["b_spectrum"] = {
     "frac_top10": float(evals[:10].sum() / evals.sum()),
     "frac_top20": float(evals[:20].sum() / evals.sum()),
     "frac_top50": float(evals[:50].sum() / evals.sum()),
-    "participation_ratio": float(evals.sum() ** 2 / (evals**2).sum()),
+    "participation_ratio": participation_ratio(evals),
 }
 
 # Decompose the output correlation across PCs:
@@ -113,11 +115,11 @@ va = have & val
 res_c = []
 for floor, tag in ((0, "all"), (200, "n≥200"), (800, "n≥800")):
     trm, vam = tr & (n_in >= floor), va & (n_in >= floor)
-    r2, alpha, coef, b = S.ridge_fit_eval(
+    r2, alpha, coef, b = pl.ridge_fit_eval(
         emb[trm], diff_lab[trm], emb[vam], diff_lab[vam], w_both[trm])
     pred = emb[vam] @ coef + b
     res_c.append([tag, int(trm.sum()), int(vam.sum()), alpha, r2,
-                  S.wcorr(pred, diff_lab[vam])])
+                  wcorr(pred, diff_lab[vam])])
     # placebo: same fit on a shuffled target
     rng = np.random.default_rng(0)
     y_sh = diff_lab[trm].copy()
@@ -125,11 +127,11 @@ for floor, tag in ((0, "all"), (200, "n≥200"), (800, "n≥800")):
     coef2, b2 = pl._ridge_solve(emb[trm], y_sh, w_both[trm], [alpha])[alpha]
     res_c.append([tag + " (shuffled target)", int(trm.sum()), int(vam.sum()), alpha,
                   pl._r2(diff_lab[vam], emb[vam] @ coef2 + b2),
-                  S.wcorr(emb[vam] @ coef2 + b2, diff_lab[vam])])
+                  wcorr(emb[vam] @ coef2 + b2, diff_lab[vam])])
 out["c_ridge_on_difference"] = res_c
 
 # reference: the same honest pipeline on score_play itself
-r2p, ap, _, _ = S.ridge_fit_eval(emb[tr], y_play[tr], emb[va], y_play[va], w_play[tr])
+r2p, ap, _, _ = pl.ridge_fit_eval(emb[tr], y_play[tr], emb[va], y_play[va], w_play[tr])
 out["c_reference_score_play_val_r2"] = r2p
 
 # ── (d) are the label difference's correlates visible in predictions? ───
@@ -160,9 +162,9 @@ for name, f in flags.items():
     for tname, y in targets.items():
         m = sel & np.isfinite(y)
         X = np.column_stack([base[m], fv[m]])
-        beta, se, t = S.wls(X, y[m], w_both[m])
-        row += [f"{beta[-1]:+.4f}", f"{se[-1]:.4f}", f"{t[-1]:+.1f}",
-                f"{beta[-1] / noise_sd:+.3f}"]
+        fit = wls(X, y[m], w_both[m])
+        row += [f"{fit.beta[-1]:+.4f}", f"{fit.se[-1]:.4f}", f"{fit.t[-1]:+.1f}",
+                f"{fit.beta[-1] / noise_sd:+.3f}"]
     rows_d.append(row)
 out["d_correlates"] = rows_d
 
@@ -170,9 +172,10 @@ out["d_correlates"] = rows_d
 for tag, y in (("fidelity", targets["fidelity pred diff"]),
                ("honest", targets["honest pred diff"])):
     m = np.isfinite(diff_lab) & (n_in >= 200)
-    out[f"d_corr_preddiff_labeldiff_{tag}_n200"] = S.wcorr(y[m], diff_lab[m], w_both[m])
+    out[f"d_corr_preddiff_labeldiff_{tag}_n200"] = wcorr(y[m], diff_lab[m], w_both[m])
     mv_ = m & val
-    out[f"d_corr_preddiff_labeldiff_{tag}_val_n200"] = S.wcorr(y[mv_], diff_lab[mv_], w_both[mv_])
+    out[f"d_corr_preddiff_labeldiff_{tag}_val_n200"] = wcorr(y[mv_], diff_lab[mv_],
+                                                             w_both[mv_])
 
 with open(S.OUT / "s_r3.json", "w") as f:
     json.dump(out, f, indent=1, default=float)

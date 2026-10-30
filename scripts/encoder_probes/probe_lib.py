@@ -8,20 +8,25 @@ probes from the 512-dim text vector to each of the nine shrunk labels.
 Also provides the counterfactual scaffolding the later probes need:
 re-encoding of edited card text (bit-exact against the cache in ``exact``
 mode), a placebo-edit family that changes text without changing meaning,
-and a nearest-neighbour manifold gate over the full embedding cache.
+a nearest-neighbour manifold gate over the full embedding cache, and the
+read-off of edited texts in label-SD units.
 
-All probe scripts import from this module. Read-only with respect to the
-repo and the Y: drive; generated artifacts go to ``output/encoder-probes/``.
+All probe scripts import from this module; importing it also puts
+``scripts/`` on the path, so a probe can reach ``_lib`` after it. Read-only
+with respect to the repo and the Y: drive; generated artifacts go to
+``output/encoder-probes/``.
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import pickle
 import re
 import sys
 import unicodedata
 from collections import Counter, defaultdict
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -29,25 +34,9 @@ import numpy as np
 import pandas as pd
 import torch
 
-REPO = Path(__file__).resolve().parents[2]
-ENCODER_CKPT = REPO / "models/sealed/encoder/full-20260517-014759-attn-6l-8h-8q-0.1mlm-512d.pt"
-VOCAB_PATH = REPO / "models/sealed/encoder/vocab.txt"
-CARDS_PATH = REPO / "output/cardsfolder-512"
-ALLPRINTINGS = REPO / "resources/AllPrintings.json"
-FORGE_HINTS = REPO / "output/scorer-probes/forge_hints.csv"
-YDATA = Path(r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data")
-WIN_RATES = YDATA / "matches-bo1" / "cards-win-rates.txt"
-SCRATCH = REPO / "output" / "encoder-probes"  # generated artifacts (gitignored)
-SCRATCH.mkdir(parents=True, exist_ok=True)
-
-sys.path.insert(0, str(REPO / "src"))
-
-from price_predictor.application.ridge_probes import (  # noqa: E402, F401
+from price_predictor.application.ridge_probes import (  # noqa: F401
     ALPHA_GRID,
-    COUNTER_COLUMNS,
     HEADS,
-    LOGIT_CLIP,
-    SHRINKAGE_K,
     HeadProbe,
     ProbeSet,
     _choose_alpha,
@@ -59,21 +48,37 @@ from price_predictor.application.ridge_probes import (  # noqa: E402, F401
     head_weight,
     to_logit,
 )
-from price_predictor.application.ridge_probes import (  # noqa: E402
-    load_labels as _load_labels,
-)
-from price_predictor.domain.card_text import ConvertedCardText  # noqa: E402
-from price_predictor.infrastructure.tokenizer_store import load_tokenizer  # noqa: E402
-from sealed.domain.card_encoder import CardEncoder  # noqa: E402
-from sealed.infrastructure.encoder_store import SealedEncoderStore  # noqa: E402
+from price_predictor.application.ridge_probes import load_labels as _load_labels
+from price_predictor.domain.card_text import ConvertedCardText
+from price_predictor.infrastructure.tokenizer_store import load_tokenizer
+from sealed.infrastructure.encoder_store import SealedEncoderStore
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _lib.paths import REPO, SEALED_TRAINING_DATA  # noqa: E402
+from _lib.stats import bootstrap_ci  # noqa: E402
+from c_common import ABILITY_PREFIXES, subtypes  # noqa: E402
+
+ENCODER_CKPT = REPO / "models/sealed/encoder/full-20260517-014759-attn-6l-8h-8q-0.1mlm-512d.pt"
+VOCAB_PATH = REPO / "models/sealed/encoder/vocab.txt"
+CARDS_PATH = REPO / "output/cardsfolder-512"
+ALLPRINTINGS = REPO / "resources/AllPrintings.json"
+FORGE_HINTS = REPO / "output/scorer-probes/forge_hints.csv"
+WIN_RATES = SEALED_TRAINING_DATA / "matches-bo1" / "cards-win-rates.txt"
+SCRATCH = REPO / "output" / "encoder-probes"  # generated artifacts (gitignored)
+SCRATCH.mkdir(parents=True, exist_ok=True)
+CARD_TABLE = SCRATCH / "card_table.pkl"  # written by p0b_card_table.py
 
 # The ridge harness, the label reader, and the per-head weighting live in
 # ``price_predictor.application.ridge_probes`` so the effects decodability
-# battery can import them too; they are re-exported here because every probe
-# script reaches them through this module. Only the NAS default path and the
-# pickle helpers over ``SCRATCH`` stay local.
+# battery can import them too; the probe scripts reach them through here.
 
 TEXT_DIM = 512          # pooled text vector; the cached .npz is 512 + 32 features
+
+# Label SDs the counterfactual read-offs are quoted in, and the real-card p95
+# nearest-neighbour cosine distance (p0_report) beyond which an edit is
+# off-manifold.
+SD = {"score_play": 0.06181, "played_rate": 0.1247}
+MANIFOLD_GATE = 0.35325
 
 
 # ── labels ──────────────────────────────────────────────────────────────
@@ -98,16 +103,6 @@ def load_labels(path: Path = WIN_RATES) -> dict[str, dict]:
 # carries the authoritative name on its ``name:`` line — 32,606 files,
 # 32,606 distinct names — so the join here is built from that reverse
 # index instead, with a punctuation-insensitive fallback.
-
-_TYPE_WORDS = frozenset({
-    "artifact", "battle", "conspiracy", "creature", "dungeon", "emblem",
-    "enchantment", "instant", "kindred", "land", "phenomenon", "plane",
-    "planeswalker", "scheme", "sorcery", "tribal", "vanguard",
-})
-_SUPERTYPE_WORDS = frozenset({
-    "basic", "elite", "host", "legendary", "ongoing", "snow", "world",
-})
-
 
 def _norm_name(name: str) -> str:
     """Accent-folded, lowercased, whitespace-collapsed name key."""
@@ -174,12 +169,6 @@ def resolve_card_file(
         if len(hits) == 1:
             return hits[0], "front-punct"
     return None, "unresolved"
-
-
-# ── per-head observation counts ─────────────────────────────────────────
-
-
-_head_n = head_effective_n  # the name the probe scripts already call it by
 
 
 # ── the encoder's own train/val split ───────────────────────────────────
@@ -360,7 +349,7 @@ def build_join(
         row["n_in_deck"] = rec["wins_when_in_deck"] + rec["losses_when_in_deck"]
         row["n_played"] = rec["wins_when_played"] + rec["losses_when_played"]
         for head in HEADS:
-            n = _head_n(rec, head)
+            n = head_effective_n(rec, head)
             row[f"n_{head}"] = n
             row[f"w_{head}"] = head_weight(n)
         rows.append(row)
@@ -404,6 +393,31 @@ def build_join(
     df.to_pickle(JOIN_TABLE)
     pd.DataFrame(unjoined).to_csv(SCRATCH / "unjoined.csv", index=False)
     return df
+
+
+def read_text(path: Path | str) -> str:
+    return ConvertedCardText.from_file(Path(path)).text
+
+
+def load_frame(*, features: bool = True, text: bool = False) -> pd.DataFrame:
+    """The primary rows of the join table — the frame every probe analyses.
+
+    ``features`` merges in the ``card_table.pkl`` columns the join table
+    lacks, keyed by the table's ``card_name`` (kept as a column). ``text``
+    adds ``text``: the card's converted text without its ``name:`` line,
+    which is what the encoder reads.
+    """
+    frame = build_join()
+    frame = frame[frame["is_primary"]].reset_index(drop=True)
+    if features:
+        table = pd.read_pickle(CARD_TABLE)
+        extra = [c for c in table.columns if c not in set(frame.columns) | {"card_name"}]
+        table = table[["card_name", *extra]].drop_duplicates("card_name")
+        frame = frame.merge(table, left_on="name", right_on="card_name", how="left")
+    if text:
+        frame["text"] = [ConvertedCardText(read_text(p)).without_name_line()
+                         for p in frame["txt_path"]]
+    return frame
 
 
 # ── embeddings ──────────────────────────────────────────────────────────
@@ -487,9 +501,6 @@ class EncoderRunner:
         self.model.eval().to(self.device)
         self.tokenizer = load_tokenizer(vocab_path)
         self.max_seq_len = self.config.max_seq_len
-        self.card_encoder = CardEncoder(
-            self.model, self.tokenizer, self.max_seq_len, self.device,
-        )
 
     def _to(self, device: str) -> None:
         if device != self.device:
@@ -503,10 +514,7 @@ class EncoderRunner:
         """``(len(texts), 512)`` float32 pooled text vectors."""
         device, batch_size = (("cpu", 1) if exact else (self.device, batch_size))
         self._to(device)
-        stripped = [
-            "\n".join(ln for ln in t.splitlines() if not ln.startswith("name:"))
-            for t in texts
-        ]
+        stripped = [ConvertedCardText(t).without_name_line() for t in texts]
         out = np.empty((len(texts), TEXT_DIM), dtype=np.float32)
         for lo in range(0, len(stripped), batch_size):
             chunk = stripped[lo:lo + batch_size]
@@ -521,8 +529,8 @@ class EncoderRunner:
     def encode_files(
         self, paths: Sequence[Path], *, batch_size: int = 64, exact: bool = False,
     ) -> np.ndarray:
-        texts = [ConvertedCardText.from_file(Path(p)).text for p in paths]
-        return self.encode_texts(texts, batch_size=batch_size, exact=exact)
+        return self.encode_texts([read_text(p) for p in paths],
+                                 batch_size=batch_size, exact=exact)
 
     def check_bit_exact(self, paths: Sequence[Path]) -> dict:
         """Re-encode ``paths`` in exact mode and diff against their ``.npz``.
@@ -541,11 +549,6 @@ class EncoderRunner:
             "n_exact": int((got == cached).all(axis=1).sum()),
             "max_abs_diff": float(np.abs(got - cached).max()),
         }
-
-
-# The ridge harness lives in ``price_predictor.application.ridge_probes``
-# and is re-exported at the top of this module; the pickle helpers below
-# stay here because they are about this study's SCRATCH directory.
 
 
 def save_probes(probe_set: ProbeSet, directory: Path = SCRATCH) -> Path:
@@ -585,6 +588,53 @@ def probe_metrics_frame(probe_sets: Iterable[ProbeSet]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def ridge_fit(X: np.ndarray, y: np.ndarray, w: np.ndarray | None = None):
+    """Ridge with alpha chosen by 5-fold CV, as ``fit_probes`` chooses it.
+
+    Returns ``(alpha, cv_r2, coef, intercept)``.
+    """
+    w = np.ones(len(y)) if w is None else w
+    alpha, cv_r2 = _choose_alpha(X, y, w, folds=5)
+    coef, b = _ridge_solve(X, y, w, [alpha])[alpha]
+    return alpha, cv_r2, coef, b
+
+
+def ridge_fit_eval(X_tr, y_tr, X_te, y_te, w_tr=None):
+    """Ridge fitted on the train part; returns ``(r2_te, alpha, coef, b)``."""
+    alpha, _, coef, b = ridge_fit(X_tr, y_tr, w_tr)
+    return _r2(y_te, X_te @ coef + b), alpha, coef, b
+
+
+def honest_ridge(
+    X: np.ndarray, y: np.ndarray, is_train: np.ndarray, is_val: np.ndarray,
+    keep: np.ndarray | None = None,
+) -> dict:
+    """Unweighted ridge fitted on the encoder's train split, scored on its val split.
+
+    Comparable to the p0 honest/unweighted table; ``val_r2`` is the number
+    to report.
+    """
+    keep = np.ones(len(y), dtype=bool) if keep is None else keep
+    good = keep & np.isfinite(y)
+    tr = good & is_train
+    va = good & is_val
+    alpha, cv_r2, coef, b = ridge_fit(X[tr], y[tr])
+    pred_va = X[va] @ coef + b
+    return {
+        "alpha": alpha,
+        "cv_r2": cv_r2,
+        "train_r2": _r2(y[tr], X[tr] @ coef + b),
+        "val_r2": _r2(y[va], pred_va),
+        "val_pearson": _pearson(y[va], pred_va),
+        "n_train": int(tr.sum()),
+        "n_val": int(va.sum()),
+        "coef": coef,
+        "intercept": b,
+        "val_mask": va,
+        "val_pred": pred_va,
+    }
+
+
 # ── tokenization / equivalence classes ──────────────────────────────────
 
 
@@ -596,10 +646,7 @@ def token_key(text: str, tokenizer=None) -> tuple[int, ...]:
     gives the functional-reprint equivalence classes.
     """
     tokenizer = tokenizer or load_tokenizer(VOCAB_PATH)
-    stripped = "\n".join(
-        ln for ln in text.splitlines() if not ln.startswith("name:")
-    )
-    return tuple(tokenizer.tokenize_to_ids(stripped))
+    return tuple(tokenizer.tokenize_to_ids(ConvertedCardText(text).without_name_line()))
 
 
 def equivalence_classes(
@@ -615,8 +662,7 @@ def equivalence_classes(
     frame = join[join["is_primary"]] if primary_only else join
     groups: dict[tuple[int, ...], list[int]] = defaultdict(list)
     for idx, path in zip(frame.index, frame["txt_path"]):
-        groups[token_key(Path(path).read_text(encoding="utf-8", errors="replace"),
-                         tokenizer)].append(idx)
+        groups[token_key(read_text(path), tokenizer)].append(idx)
     out = []
     for key, idxs in groups.items():
         if len(idxs) < min_size:
@@ -697,9 +743,6 @@ def variance_decomposition(
 
 # ── placebo edits ───────────────────────────────────────────────────────
 
-_ABILITY_PREFIXES = ("static:", "spell[", "activated[", "triggered", "replacement")
-
-
 def subtype_frequencies(
     cards_path: Path = CARDS_PATH, *, cache: Path | None = None,
 ) -> Counter:
@@ -717,10 +760,7 @@ def subtype_frequencies(
                 words = line[6:].split()
                 if "creature" not in words:
                     continue
-                freq.update(
-                    w for w in words
-                    if w not in _TYPE_WORDS and w not in _SUPERTYPE_WORDS
-                )
+                freq.update(subtypes(words))
     with open(cache, "wb") as f:
         pickle.dump(freq, f)
     return freq
@@ -774,12 +814,11 @@ def placebo_edits(text: str, freq: Counter | None = None) -> dict[str, str | Non
         words = line[6:].split()
         if "creature" not in words:
             continue
-        subtypes = [w for w in words
-                    if w not in _TYPE_WORDS and w not in _SUPERTYPE_WORDS]
-        if not subtypes:
+        subs = subtypes(words)
+        if not subs:
             continue
-        victim = subtypes[-1]
-        replacement = _same_frequency_subtype(victim, freq, set(subtypes))
+        victim = subs[-1]
+        replacement = _same_frequency_subtype(victim, freq, set(subs))
         if replacement is None:
             continue
         edited = list(lines)
@@ -789,7 +828,7 @@ def placebo_edits(text: str, freq: Counter | None = None) -> dict[str, str | Non
         out["subtype_swap"] = "\n".join(edited)
         break
 
-    abilities = [i for i, ln in enumerate(lines) if ln.startswith(_ABILITY_PREFIXES)]
+    abilities = [i for i, ln in enumerate(lines) if ln.startswith(ABILITY_PREFIXES)]
     if len(abilities) >= 2:
         a, b = abilities[0], abilities[-1]
         edited = list(lines)
@@ -840,3 +879,87 @@ def manifold_distance(
         idx[lo:lo + chunk] = best
         dist[lo:lo + chunk] = 1.0 - sims[np.arange(sims.shape[0]), best]
     return dist, idx
+
+
+# ── counterfactual read-off ─────────────────────────────────────────────
+
+
+@functools.cache
+def runner() -> EncoderRunner:
+    return EncoderRunner()
+
+
+@functools.cache
+def fidelity_probes() -> ProbeSet:
+    return load_probes("fidelity", True)
+
+
+@functools.cache
+def reference_cloud() -> tuple[list[str], np.ndarray]:
+    return corpus_embedding_matrix()
+
+
+def predict_sd(embeddings: np.ndarray) -> pd.DataFrame:
+    """Fidelity-probe predictions, ``score_play``/``played_rate`` in label-SD units."""
+    pred = predict_labels(embeddings, fidelity_probes())
+    return pd.DataFrame({
+        "score_play": pred["score_play"] / SD["score_play"],
+        "played_rate": pred["played_rate"] / SD["played_rate"],
+        "cast_lift": pred["cast_lift"],
+    })
+
+
+@dataclass(frozen=True)
+class Scored:
+    """Read-off of a batch of texts, index-aligned: both headline heads in
+    label-SD units, the manifold distance and the nearest real card's row."""
+
+    sp: np.ndarray
+    pr: np.ndarray
+    dist: np.ndarray
+    nearest: np.ndarray
+
+    def _map(self, fn) -> Scored:
+        return Scored(*(fn(getattr(self, f.name)) for f in fields(self)))
+
+    def reshape(self, *shape: int) -> Scored:
+        return self._map(lambda a: a.reshape(*shape))
+
+    def __getitem__(self, key) -> Scored:
+        return self._map(lambda a: a[key])
+
+    @property
+    def off(self) -> np.ndarray:
+        return self.dist > MANIFOLD_GATE
+
+
+def score_texts(texts: Sequence[str]) -> Scored:
+    """Encode edited card texts in one batched pass and read both heads off them."""
+    emb = runner().encode_texts(list(texts), batch_size=96)
+    pred = predict_sd(emb)
+    dist, nearest = manifold_distance(emb, reference_cloud()[1])
+    return Scored(pred["score_play"].to_numpy(), pred["played_rate"].to_numpy(),
+                  dist, nearest)
+
+
+def mean_ci(delta: np.ndarray, key: str = "mean_sd", n_boot: int = 4000) -> dict:
+    """``{key: mean, ci_lo, ci_hi}`` of a paired per-card difference."""
+    lo, hi = bootstrap_ci(delta, n_boot=n_boot, seed=7)
+    return {key: float(np.mean(delta)), "ci_lo": lo, "ci_hi": hi}
+
+
+def contrast_row(delta: np.ndarray, pr_delta: np.ndarray | None = None,
+                 off: np.ndarray | None = None, *, key: str = "mean_sd",
+                 pr_key: str = "delta_pr", n_boot: int = 4000, **lead) -> dict:
+    """One paired arm-minus-arm result row over the base cards.
+
+    ``lead`` names the contrast; ``pr_delta`` and ``off`` (the edited arm's
+    off-manifold mask) add the played_rate shift and the off-manifold share.
+    """
+    row = {**lead, "n": len(delta), **mean_ci(delta, key, n_boot),
+           "frac_pos": float((delta > 0).mean())}
+    if pr_delta is not None:
+        row[pr_key] = float(pr_delta.mean())
+    if off is not None:
+        row["off_manifold"] = float(np.mean(off))
+    return row

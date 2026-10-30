@@ -21,22 +21,17 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
-from c7_labelside import effect  # noqa: E402
+from c7_labelside import effect, with_predictions  # noqa: E402
 
 SOLE_RE = re.compile(r"spell\[1\]: (?:you gain|target player gains) \d+ life\.")
 
 
 def main() -> None:
-    j = cc.join_table().copy()
-    E = pl.load_embedding_matrix(j["name"].tolist(), j)
-    P = cc.predict_sd(E)
-    j["pred_sp"] = P["score_play"].to_numpy()
-    j["label_sp"] = pd.to_numeric(j["shrunk_score_play"],
-                                  errors="coerce") / cc.SD["score_play"]
+    j = with_predictions(pl.load_frame(text=True))
 
     spells = j[j["is_instant"].fillna(False).astype(bool)
                | j["is_sorcery"].fillna(False).astype(bool)].reset_index(drop=True)
-    stripped = [cc.strip_name(t) for t in spells["text"]]
+    stripped = list(spells["text"])
 
     def is_sole(s: str) -> bool:
         body = [ln for ln in cc.lines(s)
@@ -69,7 +64,7 @@ def main() -> None:
                 np.nan_to_num(spells["pred_sp"]), weights=w)) if w.sum() else np.nan,
         })
     tab = pd.DataFrame(rows)
-    tab.to_csv(cc.SCRATCH / "c13_lifegain_split.csv", index=False)
+    tab.to_csv(pl.SCRATCH / "c13_lifegain_split.csv", index=False)
     print(tab.to_string(index=False), flush=True)
 
 

@@ -40,10 +40,6 @@ HEADS = ("score_play", "score_draw", "played_rate", "cast_lift",
 BATCH = 96
 
 
-def strip_name(text: str) -> str:
-    return "\n".join(ln for ln in text.splitlines() if not ln.startswith("name:"))
-
-
 def degrade(text: str, condition: str, rng: np.random.Generator) -> str:
     """One degraded variant of a name-stripped card text."""
     lines = [ln for ln in text.splitlines() if ln.strip()]
@@ -73,21 +69,19 @@ def cosine_shift(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def main() -> None:
-    join = pl.build_join()
-    join = join[join["is_primary"]].reset_index(drop=True)
+    join = pl.load_frame(features=False, text=True)
     print(f"joined primary cards: {len(join)}", flush=True)
 
-    texts = [strip_name(Path(p).read_text(encoding="utf-8", errors="replace"))
-             for p in join["txt_path"]]
+    texts = list(join["text"])
     base_emb = pl.load_embedding_matrix(list(join["name"]), join)
 
-    fidelity = pl.load_probes("fidelity", True)
+    fidelity = pl.fidelity_probes()
     base_pred = pl.predict_labels(base_emb, fidelity)
 
-    runner = pl.EncoderRunner()
+    runner = pl.runner()
     print(f"encoder on {runner.device}, max_seq_len={runner.max_seq_len}", flush=True)
 
-    _, corpus_ref = pl.corpus_embedding_matrix()
+    _, corpus_ref = pl.reference_cloud()
     sample_idx = np.random.default_rng(7).choice(len(join), 2000, replace=False)
 
     rows: list[dict] = []
@@ -128,7 +122,7 @@ def main() -> None:
                 "mean_cosine_shift": float(cos.mean()),
                 "median_cosine_shift": float(np.median(cos)),
                 "median_manifold_dist": float(np.median(mdist)),
-                "frac_off_manifold": float((mdist > 0.35325).mean()),
+                "frac_off_manifold": float((mdist > pl.MANIFOLD_GATE).mean()),
             })
         print(f"[{condition} seed={seed}] "
               f"score_play val_r2={ps.probes['score_play'].metrics['val_r2']:.4f} "

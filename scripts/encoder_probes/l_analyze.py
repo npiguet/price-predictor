@@ -10,28 +10,27 @@ CPU only, seconds to run.
 from __future__ import annotations
 
 import pickle
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "encoder-probes"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _lib.markdown import md_table  # noqa: E402
+from _lib.paths import OUTPUT, SEALED_TRAINING_DATA  # noqa: E402
+from _lib.stats import wcorr, wls  # noqa: E402
+
+OUT = OUTPUT / "encoder-probes"
 TABLE = OUT / "card_table.pkl"  # written by p0b_card_table.py
-HINTS = REPO / "output" / "scorer-probes" / "forge_hints.csv"
+HINTS = OUTPUT / "scorer-probes" / "forge_hints.csv"
 SD_SCORE_PLAY = 0.062
 K = 20.0
 MIN_N = 50
 
 L = []  # report lines
 
-
-try:
-    import sys as _sys
-
-    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except Exception:  # pragma: no cover
-    pass
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
 def say(s: str = "") -> None:
@@ -40,25 +39,6 @@ def say(s: str = "") -> None:
 
 
 # ----------------------------------------------------------------- helpers
-
-
-def wls(y, X, w):
-    """Weighted least squares with HC0 (heteroscedasticity-robust) SEs."""
-    y = np.asarray(y, dtype=float)
-    X = np.asarray(X, dtype=float)
-    w = np.asarray(w, dtype=float)
-    ok = np.isfinite(y) & np.isfinite(X).all(axis=1) & np.isfinite(w) & (w > 0)
-    y, X, w = y[ok], X[ok], w[ok]
-    A = X.T @ (X * w[:, None])
-    Ainv = np.linalg.pinv(A)
-    b = Ainv @ (X.T @ (w * y))
-    r = y - X @ b
-    meat = (X * (w * r)[:, None]).T @ (X * (w * r)[:, None])
-    V = Ainv @ meat @ Ainv
-    se = np.sqrt(np.clip(np.diag(V), 0, None))
-    ss_t = np.sum(w * (y - np.average(y, weights=w)) ** 2)
-    r2 = 1.0 - np.sum(w * r**2) / ss_t if ss_t > 0 else np.nan
-    return b, se, r2, int(ok.sum())
 
 
 def wmean(x, w):
@@ -70,33 +50,13 @@ def wmean(x, w):
     return float(np.average(x[ok], weights=w[ok]))
 
 
-def wcorr(x, y, w=None):
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    if w is None:
-        w = np.ones_like(x)
-    w = np.asarray(w, dtype=float)
-    ok = np.isfinite(x) & np.isfinite(y) & np.isfinite(w)
-    x, y, w = x[ok], y[ok], w[ok]
-    if len(x) < 3:
-        return np.nan
-    mx, my = np.average(x, weights=w), np.average(y, weights=w)
-    cxy = np.average((x - mx) * (y - my), weights=w)
-    cxx = np.average((x - mx) ** 2, weights=w)
-    cyy = np.average((y - my) ** 2, weights=w)
-    return float(cxy / np.sqrt(cxx * cyy))
-
-
 def sb(r: float) -> float:
     """Spearman-Brown: half-length reliability -> full-length reliability."""
     return 2 * r / (1 + r) if np.isfinite(r) else np.nan
 
 
 def table(rows, header):
-    say("| " + " | ".join(header) + " |")
-    say("|" + "|".join(["---"] * len(header)) + "|")
-    for r in rows:
-        say("| " + " | ".join(str(x) for x in r) + " |")
+    say(md_table(header, rows))
     say()
 
 
@@ -114,9 +74,7 @@ d = pickle.load(open(OUT / "l_mediation_table.pkl", "rb"))
 med, meta = d["cards"], d["meta"]
 feat = pickle.load(open(TABLE, "rb"))
 featcols = [c for c in feat.columns if c not in med.columns] + ["card_name"]
-extra = pd.read_pickle(OUT / "l_extra_flags.pkl")
 df = med.merge(feat[featcols], on="card_name", how="left")
-df = df.merge(extra, on="card_name", how="left")
 hints = pd.read_csv(HINTS)
 hints = hints.rename(columns={"name": "card_name"})[
     ["card_name", "ai_remove_deck", "draft_rank"]
@@ -209,12 +167,8 @@ say()
 # ---------------------------------------------------------------- verify
 say("## 0. Verification")
 say()
-snap = pd.read_csv(
-    r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1"
-    r"\cards-win-rates.txt",
-    sep=";",
-    dtype={"card_name": str},
-)
+snap = pd.read_csv(SEALED_TRAINING_DATA / "matches-bo1" / "cards-win-rates.txt",
+                   sep=";", dtype={"card_name": str})
 mm = med.merge(snap, on="card_name", suffixes=("", "_s"))
 rows = []
 for c in [
@@ -352,8 +306,6 @@ FEATURES = [
     ("lifegain", "ph_gain_life", "all"),
     ("card-draw spell (noncreature)", "draw_spell", "all"),
 ]
-for k, (lab, col, scope) in enumerate(FEATURES):
-    pass
 C["mv_b1"] = ((C.mv >= 3) & (C.mv <= 4)).astype(int)
 C["mv_b2"] = ((C.mv >= 5) & (C.mv <= 6)).astype(int)
 C["mv_b3"] = (C.mv >= 7).astype(int)
@@ -386,8 +338,8 @@ def channel_effects(frame, col, scope, chan_cols, extra_ctrl=True):
     wt = f.wt.to_numpy(dtype=float)
     for ch in chan_cols:
         y = f[ch].to_numpy(dtype=float)
-        b, se, _, nn = wls(y, X, wt)
-        out[ch] = (b[-1], se[-1])
+        fit = wls(X, y, wt)
+        out[ch] = (fit.beta[-1], fit.se[-1])
         sel = np.isfinite(y) & (x == 1)
         sel0 = np.isfinite(y) & (x == 0)
         out[ch + "_raw"] = (wmean(y[sel], wt[sel]) - wmean(y[sel0], wt[sel0]))
@@ -518,11 +470,11 @@ STRATA = [
 for xname, xcol in (("MV", "mv"), ("total coloured pips", "pips_total")):
     rows = []
     X = np.column_stack([np.ones(len(C)), C[xcol].to_numpy(dtype=float)])
-    b, se, _, n = wls(C.score_overall, X, C.wt)
-    overall = b[1]
+    fit = wls(X, C.score_overall, C.wt)
+    overall = fit.beta[1]
     pr_all = wmean(C.played_rate, C.wt)
     rows.append(["**unstratified**", f"{meta['n_games']:,} games",
-                 f"{overall:+.5f} ({se[1]:.5f})", "100%",
+                 f"{overall:+.5f} ({fit.se[1]:.5f})", "100%",
                  f"{overall / pr_all:+.5f}"])
     for pre, labels, desc in STRATA:
         num, den, numn = 0.0, 0.0, 0.0
@@ -532,7 +484,8 @@ for xname, xcol in (("MV", "mv"), ("total coloured pips", "pips_total")):
                 [np.ones(len(sub)), sub[xcol].to_numpy(dtype=float)]
             )
             wts = sub[f"n_{pre}{b_}"] / (sub[f"n_{pre}{b_}"] + K)
-            bb, ss, _, nn = wls(sub[f"score_{pre}{b_}"], Xs, wts)
+            fit = wls(Xs, sub[f"score_{pre}{b_}"], wts)
+            bb, ss = fit.beta, fit.se
             tot_obs = float(sub[f"n_{pre}{b_}"].sum())
             prb = wmean(sub[f"pr_{pre}{b_}"], sub[f"n_{pre}{b_}"])
             num += bb[1] * tot_obs
@@ -550,9 +503,7 @@ for xname, xcol in (("MV", "mv"), ("total coloured pips", "pips_total")):
     table(rows, ["stratum", "size", "slope per unit (HC0 SE)",
                  "share of unstratified slope",
                  "slope ÷ bucket mean played_rate (A1-normalised)"])
-_mvslope = wls(
-    C.score_overall, np.column_stack([np.ones(len(C)), C.mv]), C.wt
-)[0][1]
+_mvslope = wls(np.column_stack([np.ones(len(C)), C.mv]), C.score_overall, C.wt).beta[1]
 say(f"For scale: 1 MV point at the unstratified slope is "
     f"{abs(_mvslope) / SD_SCORE_PLAY:.2f}σ of score_play SD; "
     f"MV 0→8 spans {abs(_mvslope) * 8 / SD_SCORE_PLAY:.2f}σ.")
@@ -674,7 +625,6 @@ D = df[df.n_in_deck >= 200].copy()
 D["dif"] = D.score_play - D.score_draw
 D["wt"] = D.n_in_deck / (D.n_in_deck + K)
 D["mv2"] = D.mv**2
-r_d = wcorr(D.score_play - D.score_draw, D.score_play - D.score_draw)
 obs_sd = D.dif.std()
 Hd = H[(H.hw >= 100)].copy()
 Hd["dif0"] = Hd.h0_score_play - Hd.h0_score_draw
@@ -703,8 +653,9 @@ for lab, col in [("haste", "kw_haste"), ("sweeper", "ph_sweeper"),
     else:
         X = np.column_stack([np.ones(len(D)), D.mv, D.mv2,
                              D.is_creature.fillna(0), x])
-    b, se, _, n = wls(D.dif, X, D.wt)
-    rows.append([lab, int(np.nansum(x)) if col != "mv" else n,
+    fit = wls(X, D.dif, D.wt)
+    b, se = fit.beta, fit.se
+    rows.append([lab, int(np.nansum(x)) if col != "mv" else fit.n,
                  f"{b[-1]:+.4f}", f"{se[-1]:.4f}",
                  f"{b[-1] / se[-1]:+.1f}",
                  f"{b[-1] / (obs_sd * np.sqrt(max(1 - rel_full, 1e-9))):+.3f}"])
@@ -785,7 +736,7 @@ G["inv_pr"] = 1.0 / np.clip(G.played_rate, .02, 1)
 prev = 0.0
 for lab, cols in specs:
     X = np.column_stack(base + [G[c].to_numpy(dtype=float) for c in cols])
-    b, se, r2, n = wls(G.cast_lift, X, G.wt)
+    r2 = wls(X, G.cast_lift, G.wt).r2
     rows.append([lab, f"{r2:.4f}", f"{r2 - prev:+.4f}" if "algebraic" not in lab
                  else "—",
                  f"{np.sqrt(max(0, 1 - r2)) * G.cast_lift.std():.4f}"])

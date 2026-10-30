@@ -23,7 +23,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
-from c10_cost_sweep import fmt_cost, parse_cost, set_cost  # noqa: E402
+import probe_lib as pl  # noqa: E402
+from c10_cost_sweep import head_ci  # noqa: E402
 
 SEED = 13
 CAP = 300
@@ -33,19 +34,19 @@ CLASSES = ("vanilla creature", "creature with text", "noncreature spell",
 
 def arms(g: int, color: str) -> list[str]:
     m = f"{{{color}}}"
-    return [fmt_cost(g + 1, ""), fmt_cost(g, m), fmt_cost(g - 1, m * 2),
-            fmt_cost(g - 2, m * 3)]
+    return [cc.fmt_cost(g + 1, ""), cc.fmt_cost(g, m), cc.fmt_cost(g - 1, m * 2),
+            cc.fmt_cost(g - 2, m * 3)]
 
 
 def main() -> None:
-    j = cc.join_table()
-    stripped = [cc.strip_name(t) for t in j["text"]]
+    j = pl.load_frame(text=True)
+    stripped = list(j["text"])
     is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
     types = [cc.get_field(s, "types:") or "" for s in stripped]
     is_spell = np.array([("instant" in t or "sorcery" in t) for t in types])
     n_abil = np.array([len(cc.ability_lines(s)) for s in stripped])
     cost = [cc.get_field(s, "mana cost:") for s in stripped]
-    parsed = [parse_cost(c) if c else None for c in cost]
+    parsed = [cc.parse_cost(c) if c else None for c in cost]
     single_pip = np.array([
         p is not None and p[1].count("{") == 1 and 2 <= p[0] <= 6
         for p in parsed])
@@ -66,14 +67,9 @@ def main() -> None:
     cls = card_class[idx_all]
     color = np.array([parsed[r][1][1] for r in idx_all])
 
-    texts = [set_cost(stripped[r], a)
-             for r in idx_all
-             for a in arms(parsed[r][0], parsed[r][1][1])]
-    emb = cc.encode(texts)
-    pred = cc.predict_sd(emb)
-    S = pred["score_play"].to_numpy().reshape(len(idx_all), 4)
-    P = pred["played_rate"].to_numpy().reshape(len(idx_all), 4)
-    D = cc.offmanifold(emb).reshape(len(idx_all), 4)
+    L = pl.score_texts([cc.set_cost(stripped[r], a)
+                        for r in idx_all
+                        for a in arms(parsed[r][0], parsed[r][1][1])]).reshape(len(idx_all), 4)
 
     groups = [(c, "all", cls == c) for c in CLASSES]
     groups += [("all", m, color == m) for m in "WUBRG"]
@@ -81,20 +77,16 @@ def main() -> None:
     rows = []
     for cname, cl, m in groups:
         for pips in range(4):
-            ds = S[m, pips] - S[m, 1]
-            dp = P[m, pips] - P[m, 1]
+            ds = L.sp[m, pips] - L.sp[m, 1]
+            dp = L.pr[m, pips] - L.pr[m, 1]
             rows.append({
                 "class": cname, "color": cl, "n_pips": pips, "n": int(m.sum()),
-                "d_score_play_sd": float(ds.mean()),
-                "ds_ci_lo": cc.bootstrap_ci(ds)[0],
-                "ds_ci_hi": cc.bootstrap_ci(ds)[1],
-                "d_played_rate_sd": float(dp.mean()),
-                "dp_ci_lo": cc.bootstrap_ci(dp)[0],
-                "dp_ci_hi": cc.bootstrap_ci(dp)[1],
-                "off_manifold": float((D[m][:, pips] > cc.MANIFOLD_GATE).mean()),
+                "d_score_play_sd": float(ds.mean()), **head_ci(ds, "ds_ci_lo", "ds_ci_hi"),
+                "d_played_rate_sd": float(dp.mean()), **head_ci(dp, "dp_ci_lo", "dp_ci_hi"),
+                "off_manifold": float(L.off[m][:, pips].mean()),
             })
     df = pd.DataFrame(rows)
-    df.to_csv(cc.SCRATCH / "c11_pip_ladder.csv", index=False)
+    df.to_csv(pl.SCRATCH / "c11_pip_ladder.csv", index=False)
     print(df.to_string(index=False), flush=True)
 
 
