@@ -1964,23 +1964,21 @@ def run_note(run) -> str:
     return f"{run.parent}'s kept epoch at a tenth of the rate"
 
 
-def run_lineage() -> None:
-    """Every gen-2 run as a bar over its epochs, with the checkpoints probed on it.
+def lineage_marker(name: str, role: str, width: int | None) -> dict:
+    """``plot`` keywords for a probed checkpoint on a run's bar: its usual marker, darker."""
+    base = NO_COPIES_GRAY if width is None else WIDTH_COLOUR[width]
+    style = checkpoint_marker(name, 8.5)
+    style.update(color=darker(base, 0.25), mec=darker(base, 0.25), mew=1.6)
+    if role == "last":
+        style["mfc"] = "white"
+    else:
+        style.pop("mfc", None)
+    return style
 
-    An A run resumes its arm after the arm's last epoch; a B run starts from its A run's
-    kept epoch at a tenth of the learning rate. Run B256 never went below the checkpoint it
-    started from, so it keeps run A256's epoch 53, and ``B256 best`` is its own lowest
-    epoch, 55, probed but not kept.
-    """
-    runs = csv("runs.csv").set_index("run")
-    ck = csv("checkpoints.csv")
-    rows = [(r.width, r.name, run_note(r)) for r in sorted(RUN_LIST, key=lambda r: r.width)
-            if r.name in runs.index]
-    positions = grouped_positions([width for width, _, _ in rows], 0.6)
-    ys = {run: yy for (_, run, _), yy in zip(rows, positions)}
-    y = positions[-1] + 1
-    fig, ax = plt.subplots(figsize=(10.5, 7.2))
-    height = 0.36
+
+def draw_run_bars(ax, runs: pd.DataFrame, rows: list, ys: dict[str, float],
+                  height: float) -> None:
+    """A bar over each run's epochs, named at its left, an arrow from the epoch it resumes."""
     for width, run, note in rows:
         r, yy = runs.loc[run], ys[run]
         first, last = int(r.first_epoch), int(r.last_epoch)
@@ -2003,25 +2001,18 @@ def run_lineage() -> None:
                                         shrinkB=0, mutation_scale=10,
                                         connectionstyle="arc3,rad=0.3"), zorder=4)
 
-    def marker(name: str, role: str, width: int | None) -> dict:
-        base = NO_COPIES_GRAY if width is None else WIDTH_COLOUR[width]
-        style = checkpoint_marker(name, 8.5)
-        style.update(color=darker(base, 0.25), mec=darker(base, 0.25), mew=1.6)
-        if role == "last":
-            style["mfc"] = "white"
-        else:
-            style.pop("mfc", None)
-        return style
 
-    # The probed checkpoints, labelled with the names every other chart uses; an arm's
-    # checkpoint is its row's name, so it is labelled by its epoch alone.
+def draw_probed_checkpoints(ax, runs: pd.DataFrame, ck: pd.DataFrame, ys: dict[str, float],
+                            height: float) -> None:
+    """The probed checkpoints on their runs' bars, labelled with the names every other chart
+    uses; an arm's checkpoint is its row's name, so it is labelled by its epoch alone."""
     names = {"B256 best": "B256 best, not kept"}
     for _, c in ck.iterrows():
         yy = ys.get(c.run)
         if c.checkpoint == "A256 last" or yy is None:
             continue
         width = None if runs.loc[c.run].lethality_copies == 0 else int(c.e_width)
-        ax.plot(c.epoch, yy, zorder=5, **marker(c.checkpoint, c.role, width))
+        ax.plot(c.epoch, yy, zorder=5, **lineage_marker(c.checkpoint, c.role, width))
         label = (f"epoch {c.epoch}" if c.checkpoint == c.run
                  else names.get(c.checkpoint, short(c.checkpoint)))
         below = c.checkpoint == "B256 best"  # clear of the kept epoch's label beside it
@@ -2031,10 +2022,31 @@ def run_lineage() -> None:
                     va="top" if below else "bottom", fontsize=7.8, color=INK, zorder=6)
     if "B256" in ys and "A256 best" in set(ck.checkpoint):
         kept = int(ck[ck.checkpoint == "A256 best"].epoch.iloc[0])
-        ax.plot(kept, ys["B256"], zorder=5, **marker("B256 kept", "best", 256))
+        ax.plot(kept, ys["B256"], zorder=5, **lineage_marker("B256 kept", "best", 256))
         ax.annotate(f"kept: A256's epoch {kept}", (kept, ys["B256"]), xytext=(-8, 0),
                     textcoords="offset points", ha="right", va="center", fontsize=7.8,
                     color=INK)
+
+
+def run_lineage() -> None:
+    """Every gen-2 run as a bar over its epochs, with the checkpoints probed on it.
+
+    An A run resumes its arm after the arm's last epoch; a B run starts from its A run's
+    kept epoch at a tenth of the learning rate. Run B256 never went below the checkpoint it
+    started from, so it keeps run A256's epoch 53, and ``B256 best`` is its own lowest
+    epoch, 55, probed but not kept.
+    """
+    runs = csv("runs.csv").set_index("run")
+    ck = csv("checkpoints.csv")
+    rows = [(r.width, r.name, run_note(r)) for r in sorted(RUN_LIST, key=lambda r: r.width)
+            if r.name in runs.index]
+    positions = grouped_positions([width for width, _, _ in rows], 0.6)
+    ys = {run: yy for (_, run, _), yy in zip(rows, positions)}
+    y = positions[-1] + 1
+    fig, ax = plt.subplots(figsize=(10.5, 7.2))
+    height = 0.36
+    draw_run_bars(ax, runs, rows, ys, height)
+    draw_probed_checkpoints(ax, runs, ck, ys, height)
     for width, members in width_groups([w for w, _, _ in rows], positions):
         ax.text(-23.5, np.mean(members), f"e width {width}", rotation=90, ha="center",
                 va="center", fontsize=9.5, fontweight="bold", color=WIDTH_COLOUR[width])
@@ -2051,11 +2063,11 @@ def run_lineage() -> None:
                      label="earlier inputs"),
                Patch(facecolor=shade(NO_COPIES_GRAY, 0.5), edgecolor=NO_COPIES_GRAY,
                      label="no lethality copies"),
-               Line2D([], [], label="arm", **marker("e64-lethality", "best", None)),
-               Line2D([], [], label="A run", **marker("A64 best", "best", None)),
-               Line2D([], [], label="B run", **marker("B64 best", "best", None)),
+               Line2D([], [], label="arm", **lineage_marker("e64-lethality", "best", None)),
+               Line2D([], [], label="A run", **lineage_marker("A64 best", "best", None)),
+               Line2D([], [], label="B run", **lineage_marker("B64 best", "best", None)),
                Line2D([], [], label="kept epoch: filled; last epoch: hollow",
-                      **marker("B64 last", "last", None)),
+                      **lineage_marker("B64 last", "last", None)),
                Line2D([], [], color=INK, lw=1, label="starts from")]
     ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.36, -0.09), ncol=7,
               fontsize=8, handlelength=1.5, columnspacing=1.1)
