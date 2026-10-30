@@ -549,10 +549,11 @@ def qualifying_observations(
         return []
     found: list[tuple[DamageStepKeyword, CombatParticipant]] = []
     wanted = {row.keyword for row in rows}
+    keywords_of = _memoized(resolver.keywords_of)
     for entity in record.state.entities:
         if entity.combat is None:
             continue
-        carried = resolver.keywords_of(entity) & wanted
+        carried = keywords_of(entity) & wanted
         if not carried:
             continue
         participant = combat_participant(record.state, entity)
@@ -562,6 +563,24 @@ def qualifying_observations(
         for row in rows:
             if row.keyword not in carried:
                 continue
-            if row.qualifies(participant, resolver.keywords_of):
+            if row.qualifies(participant, keywords_of):
                 found.append((row, participant))
     return found
+
+
+def _memoized(keywords_of: KeywordsOf) -> KeywordsOf:
+    """``keywords_of`` read once per entity of one record.
+
+    Every row's predicates ask for the carrier's and its opponents' keywords
+    again, about twenty times a carrier. Keyed by the entity object, which the
+    record keeps alive for as long as the memo lives.
+    """
+    memo: dict[int, set[str]] = {}
+
+    def memoized(entity: EntityState) -> set[str]:
+        found = memo.get(id(entity))
+        if found is None:
+            found = memo[id(entity)] = keywords_of(entity)
+        return found
+
+    return memoized
