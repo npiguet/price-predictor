@@ -162,6 +162,11 @@ def perturb_script(
     return None
 
 
+def source_scripts(forge_cards_path: Path) -> list[Path]:
+    """Every Forge source script under ``forge_cards_path``, in path order."""
+    return sorted(Path(forge_cards_path).rglob("*.txt"))
+
+
 def generate_variants(
     forge_cards_path: Path,
     output_path: Path,
@@ -169,20 +174,23 @@ def generate_variants(
     held_out: frozenset[str],
     limit: int,
     seed: int = RANDOM_SEED,
+    sources: list[Path] | None = None,
 ) -> list[GeneratedVariant]:
     """Write perturbed scripts into the variant tree.
 
     No variant is generated from a held-out card (FR-057): its changed text
     would not be held out, and generation is the only point where the rule
     can be enforced. Names are folded first, since a script's ``Name:`` is
-    printed case and the holdout is lowercase.
+    printed case and the holdout is lowercase. ``sources`` is
+    :func:`source_scripts` of ``forge_cards_path`` when the caller already
+    listed them: the walk is over all of Forge.
     """
     held_out = frozenset(fold_card_name(name) for name in held_out)
     rng = random.Random(seed)
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    sources = sorted(Path(forge_cards_path).rglob("*.txt"))
+    sources = list(source_scripts(forge_cards_path) if sources is None else sources)
     rng.shuffle(sources)
 
     generated: list[GeneratedVariant] = []
@@ -239,23 +247,23 @@ def _collect(config: CollectVariantsConfig) -> int:
             "scripts, not the converted ones.", config.forge_cards_path,
         )
         raise CollectorAbort
-    budget = _size_budget(config)
-    variants = _generate(config, budget)
+    sources = source_scripts(config.forge_cards_path)
+    budget = _size_budget(config, len(sources))
+    variants = _generate(config, budget, sources)
     _write_sidecars(config.variant_scripts)
     variants = _keep_unheld(config, _keep_loadable(variants, config.variant_scripts))
     return _play_and_check_growth(config, variants, budget)
 
 
-def _size_budget(config: CollectVariantsConfig) -> int:
+def _size_budget(config: CollectVariantsConfig, scripts: int) -> int:
     """How many variant scripts this run may generate; aborts, saying why,
     when none."""
     from effects.infrastructure.shard_io import count_records
 
-    source_scripts = sum(1 for _ in config.forge_cards_path.rglob("*.txt"))
     source = config.volume_source()
     existing = count_records(
         source,
-        ceiling=volume_ceiling(source_scripts, config.variant_volume),
+        ceiling=volume_ceiling(scripts, config.variant_volume),
     )
     budget = variant_budget(existing, config.variant_volume)
     if budget <= 0:
@@ -269,11 +277,13 @@ def _size_budget(config: CollectVariantsConfig) -> int:
     return budget
 
 
-def _generate(config: CollectVariantsConfig, budget: int) -> list[GeneratedVariant]:
+def _generate(
+    config: CollectVariantsConfig, budget: int, sources: list[Path],
+) -> list[GeneratedVariant]:
     held_out = config.deck_holdout.exclusions()
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
-        held_out=held_out, limit=budget, seed=config.seed,
+        held_out=held_out, limit=budget, seed=config.seed, sources=sources,
     )
     logger.info(
         "Generated %d variant scripts into %s (%d cards held out with their "

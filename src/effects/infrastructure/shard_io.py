@@ -122,6 +122,11 @@ def _bucket_of(line: str, *, seed: int, count: int) -> int:
     return record_hash(_game_of_line(line), seed=seed) % count
 
 
+#: Between a group line's shard index and its record: no digit, so the first
+#: one on the line is always this.
+_INDEX_SEPARATOR = ":"
+
+
 def _group_path(scratch: Path, group: int) -> Path:
     return scratch / f"{group:05d}.gz"
 
@@ -132,6 +137,8 @@ def _deal_into_buckets(
     """Deal every line into the group of its shard's index; return the indices.
 
     A group keeps the parts' order, so each shuffle sees a fixed input order.
+    Each group line carries its shard's index ahead of the record (``index:``),
+    so the split that follows does not hash the line a second time.
     """
     groups = min(count, _GROUPS)
     filled: set[int] = set()
@@ -145,8 +152,7 @@ def _deal_into_buckets(
                 index = _bucket_of(line, seed=seed, count=count)
                 filled.add(index)
                 group = handles[index % groups]
-                group.write(line)
-                group.write("\n")
+                group.write(f"{index}{_INDEX_SEPARATOR}{line}\n")
     finally:
         for handle in handles:
             handle.close()
@@ -156,14 +162,16 @@ def _deal_into_buckets(
 def _write_shuffled_buckets(
     scratch: Path, names: dict[int, Path], *, seed: int, count: int,
 ) -> None:
-    """Split each group into its shards, shuffle each under ``seed``, write it.
+    """Split each group into its shards by the index each line carries,
+    shuffle each under ``seed``, write it.
 
     A group is held whole, which is about ``count / _GROUPS`` shards' lines.
     """
     for group in range(min(count, _GROUPS)):
         buckets: dict[int, list[str]] = defaultdict(list)
-        for line in iter_shard_lines(_group_path(scratch, group)):
-            buckets[_bucket_of(line, seed=seed, count=count)].append(line)
+        for tagged in iter_shard_lines(_group_path(scratch, group)):
+            index, _, line = tagged.partition(_INDEX_SEPARATOR)
+            buckets[int(index)].append(line)
         for index, lines in buckets.items():
             random.Random(f"{seed}:{index}").shuffle(lines)
             with gzip.open(names[index], "wt", encoding="utf-8") as handle:
