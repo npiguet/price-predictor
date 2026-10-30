@@ -7,10 +7,10 @@ keys to ability texts and decides the split and the plan.
 
 from __future__ import annotations
 
-import dataclasses
 import logging
 import shutil
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -23,6 +23,8 @@ from effects.application.corpus_report import (
     report_write_pass,
 )
 from effects.application.corpus_survey import (
+    GameTally,
+    RarityTally,
     ReadConfig,
     Survey,
     SurveyConfig,
@@ -38,6 +40,7 @@ from effects.domain.corpus_plan import (
     GameStrata,
     Keys,
     SelectionPlan,
+    TrainingSupply,
     admit_card_disjoint,
     members_of,
     plan_selection,
@@ -316,20 +319,9 @@ def decide(
     surface: Surface,
     config: BuildCorpusConfig,
 ) -> Decisions:
-    """Fold keys to texts, split the games, and plan every record's copies.
-
-    ``survey.totals.supply`` must already be legality-resolved, as
-    :func:`_survey` leaves it.
-    """
+    """Fold keys to texts, split the games, and plan every record's copies."""
     totals = survey.totals
-    if totals.supply.heap_cap != config.heap_cap:
-        raise ValueError(
-            f"the survey kept {totals.supply.heap_cap} hashes per cell and key, "
-            f"but config.text_cap {config.text_cap} keeps {config.heap_cap}. "
-            "decide() must be run against the Survey that this same "
-            "--text-cap produced, or the copy plans it writes would disagree "
-            "with what the manifest is about to record."
-        )
+    _refuse_another_heap_cap(totals.supply, config)
 
     from effects.application.ability_text import text_for_key
 
@@ -337,18 +329,59 @@ def decide(
         # The trainer's own key-to-text join, so the rarity table keys match.
         return text_for_key(key, sidecars, surface)
 
+    key_text, text_games = _fold_keys_to_texts(totals.rarity, text_of)
+    _refuse_keyword_misfires(key_text, sidecars, config.keyword_definitions)
+    strata = _split_games(totals.games, config)
+    return Decisions(
+        selection=plan_selection(
+            members_of(totals.supply, key_text), mix=config.mix(),
+            ceiling=config.training_records, text_cap=config.text_cap,
+            reuse_cap=config.reuse_cap,
+        ),
+        strata=strata,
+        keyword_threshold_games=frozenset(
+            game for game in strata.game_disjoint
+            if config.routing.under_keyword_threshold(game)
+        ),
+        rarity={text: len(games) for text, games in text_games.items()},
+        key_text=key_text,
+        mode_counts=dict(sorted(totals.mode_counts.items())),
+    )
+
+
+def _refuse_another_heap_cap(supply: TrainingSupply, config: BuildCorpusConfig) -> None:
+    if supply.heap_cap != config.heap_cap:
+        raise ValueError(
+            f"the survey kept {supply.heap_cap} hashes per cell and key, "
+            f"but config.text_cap {config.text_cap} keeps {config.heap_cap}. "
+            "decide() must be run against the Survey that this same "
+            "--text-cap produced, or the copy plans it writes would disagree "
+            "with what the manifest is about to record."
+        )
+
+
+def _fold_keys_to_texts(
+    rarity: RarityTally, text_of: Callable[[ProvenanceKey], str | None],
+) -> tuple[dict[Keys, str], dict[str, set[int]]]:
+    """``acting keys -> ability text``, and each text's games, over every key
+    tuple the survey saw; keys with no text are left out."""
     key_text: dict[Keys, str] = {}
     text_games: dict[str, set[int]] = {}
-    for keys in totals.rarity.key_records:
+    for keys in rarity.key_records:
         text = first_text(keys, text_of)
         if text is None:
             # A runtime-only trait or an unconverted script: no text to cap
             # against, so its records are sampled with the cell's keyless ones.
             continue
         key_text[keys] = text
-        text_games.setdefault(text, set()).update(totals.rarity.key_games.get(keys, ()))
+        text_games.setdefault(text, set()).update(rarity.key_games.get(keys, ()))
+    return key_text, text_games
 
-    misfires = _keyword_misfires(key_text, sidecars, config.keyword_definitions)
+
+def _refuse_keyword_misfires(
+    key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
+) -> None:
+    misfires = _keyword_misfires(key_text, sidecars, definitions)
     if misfires:
         raise BuildCorpusError(
             f"{len(misfires)} non-keyword line(s) would expand as a keyword by "
@@ -357,27 +390,18 @@ def decide(
             "Keyword. First: " + "; ".join(misfires[:5])
         )
 
-    held_out = frozenset(totals.games.held_out)
-    game_disjoint = frozenset(totals.games.game_disjoint) - held_out
-    card_disjoint = admit_card_disjoint(
-        held_out, totals.games.held_out_text_games,
-        cap=config.card_disjoint_text_cap, seed=config.seed,
-    )
-    members = members_of(totals.supply, key_text)
-    return Decisions(
-        selection=plan_selection(
-            members, mix=config.mix(), ceiling=config.training_records,
-            text_cap=config.text_cap, reuse_cap=config.reuse_cap,
+
+def _split_games(games: GameTally, config: BuildCorpusConfig) -> GameStrata:
+    """The validation strata from the survey's routing, the card-disjoint one
+    capped per held-out text."""
+    held_out = frozenset(games.held_out)
+    return GameStrata(
+        card_disjoint=admit_card_disjoint(
+            held_out, games.held_out_text_games,
+            cap=config.card_disjoint_text_cap, seed=config.seed,
         ),
-        strata=GameStrata(
-            card_disjoint=card_disjoint, game_disjoint=game_disjoint, held_out=held_out,
-        ),
-        keyword_threshold_games=frozenset(
-            game for game in game_disjoint if config.routing.under_keyword_threshold(game)
-        ),
-        rarity={text: len(games) for text, games in text_games.items()},
-        key_text=key_text,
-        mode_counts=dict(sorted(totals.mode_counts.items())),
+        game_disjoint=frozenset(games.game_disjoint) - held_out,
+        held_out=held_out,
     )
 
 
@@ -506,7 +530,7 @@ def _refuse_mixed_generations(records_dir: Path) -> None:
 
 
 def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
-    """The parallel survey, its supply's legality cells folded into families."""
+    """The parallel survey, logged."""
     survey = run_survey(
         config.records_dir,
         config=SurveyConfig(
@@ -528,9 +552,7 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
         sum(supply.keyed.values()) + sum(supply.keyless.values()),
         sum(totals.held_out_text_dropped.values()),
     )
-    return dataclasses.replace(survey, totals=dataclasses.replace(
-        totals, supply=supply.resolved(totals.mode_counts),
-    ))
+    return survey
 
 
 def _decide_or_refuse(

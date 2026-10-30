@@ -217,7 +217,8 @@ class Survey:
     what only the fold can see."""
 
     #: Its ``shard`` is blank; ``supply`` counts training-bound records only,
-    #: its legality cells resolved by the build.
+    #: its legality cells folded into their families, which only the whole
+    #: corpus's mode counts can decide (:func:`merge_surveys`).
     totals: ShardSurvey
     shards: tuple[SourceShard, ...]
     #: Per top-level source directory (FR-149): held-out games in a depleted
@@ -360,7 +361,8 @@ class _ShardSurveyor:
 
 
 def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
-    """Combine shard surveys into one corpus-wide picture."""
+    """Combine shard surveys into one corpus-wide picture, the supply's
+    legality cells folded once every shard's mode counts are in."""
     total = ShardSurvey(shard=SourceShard(name="", size=0), supply=TrainingSupply(heap_cap))
     shards: list[SourceShard] = []
     games_by_source: dict[str, set[str]] = defaultdict(set)
@@ -374,6 +376,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         source = part.shard.source
         games_by_source[source] |= part.games.games
         held_by_source[source] |= part.games.held_out
+    total.supply = total.supply.resolved(total.mode_counts)
 
     return Survey(
         totals=total,
