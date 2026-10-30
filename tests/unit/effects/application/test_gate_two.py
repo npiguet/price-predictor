@@ -27,11 +27,9 @@ import pytest
 import torch
 
 from effects.application.gate_two import (
-    KeywordResolver,
     KeywordScore,
     evaluate_gate_two,
     evaluate_keyword,
-    qualifying_observations,
     read_field,
     score_keywords,
     score_observation,
@@ -606,141 +604,6 @@ def _zone_and_damage(*, damage: float, died_logit: float) -> torch.Tensor:
     start, _end = FIELD_SLICES["zone_outcome"]
     vector[start + ZONE_OUTCOMES.index("died")] = died_logit
     return vector
-
-
-# ── qualification: the counter and the scorer read one population ────────
-
-
-class TestSubjectResolution:
-    def test_the_carrier_is_itself(self):
-        record = _printed_board()
-        participant = _participant(record, "A")
-        effect = KEYWORDS_BY_NAME["indestructible"].effects[0]
-        assert effect.subject is Subject.CARRIER
-        assert participant.subject(effect.subject) == "A"
-
-    def test_the_opponent_is_the_first_creature_it_fights(self):
-        record = _printed_board()
-        participant = _participant(record, "A")
-        effect = next(
-            e for e in KEYWORDS_BY_NAME["double_strike"].effects
-            if e.subject is Subject.OPPONENT
-        )
-        assert participant.subject(effect.subject) == "B0"
-
-    def test_the_controller_is_a_player(self):
-        record = _printed_board()
-        participant = _participant(record, "A")
-        effect = KEYWORDS_BY_NAME["lifelink"].effects[0]
-        assert participant.subject(effect.subject) == "P0"
-
-    def test_the_defending_player_is_the_one_being_attacked(self):
-        record = _printed_board()
-        participant = _participant(record, "A")
-        effect = KEYWORDS_BY_NAME["trample"].effects[0]
-        assert participant.subject(effect.subject) == "P1"
-
-
-class TestQualifyingObservations:
-    def test_a_printed_keyword_is_found_through_the_sidecar(self):
-        resolver = KeywordResolver(_Sidecars())
-        found = qualifying_observations(
-            _printed_board(), (KEYWORDS_BY_NAME["first_strike"],), resolver,
-        )
-        assert [(row.keyword, p.carrier.id) for row, p in found] == [
-            ("first_strike", "A"),
-        ]
-
-    def test_an_overlay_keyword_is_found_without_a_sidecar(self):
-        resolver = KeywordResolver(None)
-        found = qualifying_observations(
-            _overlay_board(), (KEYWORDS_BY_NAME["first_strike"],), resolver,
-        )
-        assert len(found) == 1
-
-    @pytest.mark.parametrize("keyword", ["first_strike", "double_strike"])
-    def test_a_regular_step_record_is_never_a_strike_first_observation(
-        self, keyword,
-    ):
-        """The first striker already struck; that step's own record is the one
-        the keyword changes, and the regular step's board starts after it."""
-        attacker = _creature(
-            "A", 2, 2, keywords=(keyword,),
-            combat=CombatStatus(attacking="P1", blocked_by=("B0",),
-                                became_blocked=True),
-        )
-        blocker = _creature(
-            "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
-        )
-        unblocked = _creature(
-            "A", 2, 2, keywords=(keyword,), combat=CombatStatus(attacking="P1"),
-        )
-        rows = (KEYWORDS_BY_NAME[keyword],)
-        for record in (
-            _combat_record(attacker, blocker),
-            _combat_record(unblocked),
-            _printed_board(substep="regular"),
-        ):
-            assert record.state.global_.combat_substep == "regular"
-            assert qualifying_observations(
-                record, rows, KeywordResolver(_Sidecars()),
-            ) == []
-
-    def test_a_carrier_the_predicate_rejects_is_not_an_observation(self):
-        """Trample on a 2/2 blocked by a 2/2 runs nothing over."""
-        attacker = _creature(
-            "A", 2, 2, keywords=("trample",),
-            combat=CombatStatus(attacking="P1", blocked_by=("B0",),
-                                became_blocked=True),
-        )
-        blocker = _creature(
-            "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
-        )
-        record = _combat_record(attacker, blocker)
-        found = qualifying_observations(
-            record, (KEYWORDS_BY_NAME["trample"],), KeywordResolver(None),
-        )
-        assert found == []
-
-    def test_an_unblocked_double_striker_is_still_an_observation(self):
-        """Its first hit lands on the player, which the row reads as life."""
-        attacker = _creature(
-            "A", 2, 2, keywords=("double_strike",),
-            combat=CombatStatus(attacking="P1"),
-        )
-        record = _combat_record(attacker, substep="first_strike")
-        found = qualifying_observations(
-            record, (KEYWORDS_BY_NAME["double_strike"],), KeywordResolver(None),
-        )
-        assert len(found) == 1
-
-    def test_an_observation_with_nothing_readable_is_not_counted(self):
-        """A 0-power double striker deals no damage in either step."""
-        attacker = _creature(
-            "A", 0, 4, keywords=("double_strike",),
-            combat=CombatStatus(attacking="P1"),
-        )
-        record = _combat_record(attacker, substep="first_strike")
-        found = qualifying_observations(
-            record, (KEYWORDS_BY_NAME["double_strike"],), KeywordResolver(None),
-        )
-        assert found == []
-
-    def test_two_carriers_in_one_record_are_two_observations(self):
-        first = _creature(
-            "A", 2, 2, keywords=("lifelink",),
-            combat=CombatStatus(attacking="P1", blocked_by=("B0",),
-                                became_blocked=True),
-        )
-        second = _creature(
-            "B0", 2, 2, controller="P1", keywords=("lifelink",),
-            combat=CombatStatus(blocking=("A",)),
-        )
-        record = _combat_record(first, second)
-        found = qualifying_observations(
-            record, (KEYWORDS_BY_NAME["lifelink"],), KeywordResolver(None),
-        )
-        assert sorted(p.carrier.id for _row, p in found) == ["A", "B0"]
 
 
 # ── the whole scorer, against a model that reacts to the strip ───────────

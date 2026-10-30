@@ -27,10 +27,13 @@ import pytest
 from effects.domain.damage_step_keywords import (
     KEYWORDS_BY_NAME,
     CombatParticipant,
+    KeywordResolver,
     Subject,
     combat_participant,
+    qualifying_observations,
 )
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, SidecarLine
+from effects.domain.records import RecordKind
 from effects.domain.state_snapshot import (
     CombatStatus,
     EntityState,
@@ -40,7 +43,12 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     StateSnapshot,
 )
-from tests.unit.effects.builders import fresh_interpreter_env, make_entity, make_snapshot
+from tests.unit.effects.builders import (
+    fresh_interpreter_env,
+    make_entity,
+    make_record,
+    make_snapshot,
+)
 
 _WHITE_KNIGHT = ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "static", 0)
 
@@ -710,6 +718,79 @@ class TestTheTableIsTheSingleSource:
         assert isinstance(participant, CombatParticipant)
         with pytest.raises(dataclasses.FrozenInstanceError):
             participant.defending_player = "P0"
+
+
+# ── who is observed: a record's carriers, through both keyword channels ──
+
+
+class TestSubjectResolution:
+    """Where each effect's subject lands on one blocked attack."""
+
+    @pytest.mark.parametrize(("subject", "expected"), [
+        (Subject.CARRIER, "A"),
+        (Subject.OPPONENT, "B0"),
+        (Subject.CONTROLLER, "P0"),
+        (Subject.DEFENDING_PLAYER, "P1"),
+    ])
+    def test_a_blocked_attackers_subjects(self, subject, expected):
+        state, carrier = _attacker_and_blockers()
+        assert combat_participant(state, carrier).subject(subject) == expected
+
+
+#: White Knight's printed first strike, as its sidecar line spells it.
+_WHITE_KNIGHT_LINE = SidecarLine(
+    line_index=0, line_kind="static", provenance=(_WHITE_KNIGHT,),
+    script_text="First Strike",
+)
+
+
+class _WhiteKnightSidecar:
+    """A sidecar lookup that answers for White Knight's first-strike line alone."""
+
+    def line_or_none(self, key):
+        return _WHITE_KNIGHT_LINE if key == _WHITE_KNIGHT else None
+
+
+def _combat_record(state: StateSnapshot):
+    return make_record(RecordKind.COMBAT, state=state)
+
+
+class TestQualifyingObservations:
+    """``qualifying_observations``: every carrier of a combat record the gate
+    can observe, its keywords read from the overlay and the sidecar alike."""
+
+    _FIRST_STRIKE = (KEYWORDS_BY_NAME["first_strike"],)
+
+    def test_a_printed_keyword_is_found_through_the_sidecar(self):
+        carrier = _creature(
+            "A", 2, 2, printed=(_WHITE_KNIGHT,),
+            combat=CombatStatus(attacking=_PLAYER_DEFENDER),
+        )
+        record = _combat_record(_board(carrier, substep="first_strike"))
+        found = qualifying_observations(
+            record, self._FIRST_STRIKE, KeywordResolver(_WhiteKnightSidecar()),
+        )
+        assert [(row.keyword, p.carrier.id) for row, p in found] == [
+            ("first_strike", "A"),
+        ]
+
+    def test_an_overlay_keyword_is_found_without_a_sidecar(self):
+        state, _carrier = _unblocked_attacker(
+            keywords=("first_strike",), substep="first_strike",
+        )
+        found = qualifying_observations(
+            _combat_record(state), self._FIRST_STRIKE, KeywordResolver(None),
+        )
+        assert len(found) == 1
+
+    def test_two_carriers_in_one_record_are_two_observations(self):
+        state, _carrier = _attacker_and_blockers(
+            attacker_keywords=("lifelink",), blocker_keywords=("lifelink",),
+        )
+        found = qualifying_observations(
+            _combat_record(state), (KEYWORDS_BY_NAME["lifelink"],), KeywordResolver(None),
+        )
+        assert sorted(p.carrier.id for _row, p in found) == ["A", "B0"]
 
 
 def test_the_keyword_predicate_module_does_not_import_torch():
