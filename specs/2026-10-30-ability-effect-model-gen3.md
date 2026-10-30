@@ -810,6 +810,7 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
   sweep's error as one minus its ratio to the error of a constant prediction.
 - A rule test is scored as an AUC: how well the model's prediction of the rule's outcome
   ranks the test records where the outcome happens above those where it does not.
+  Records matching a variant of polarity `other` are not rule-test records.
 - The rule tests' component is the mean over rules, each rule counting equally.
 - The stratum score is the mean of the four rescaled components, each counting equally.
 - The control score is the card-disjoint stratum score weighted by `--stratum-weight`,

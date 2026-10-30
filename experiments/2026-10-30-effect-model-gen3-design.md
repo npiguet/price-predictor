@@ -594,8 +594,10 @@ already one of them.
 
 **The collector runs the rule's detector on the board at each phase boundary, the moment
 interventional forks already use.** When the board meets the rule's precondition, it forks, applies
-the operation and plays the fork on. The budgets gen-2 puts on forks still apply: a score check
-against the live game before any change, and a cap on forks per real resolution.
+the operation and plays the fork on. The score check gen-2 makes before any change still applies.
+Gen-2's cap of two forks per real resolution does not fit, because a directed fork is not tied to
+a resolution. Directed forks take a budget of their own instead, two per game like the other fork
+kinds.
 
 **A puzzle needs the scenario's decisions written as an action list as well**: cast, activate,
 target, pay, attack, block, assign damage, pass. Whether a collecting worker can load a puzzle has
@@ -750,15 +752,17 @@ output effectively trained on, which makes them harder to compare.
 
 ### A rare wording of a common effect needs examples of its own, and field weighting cannot see it
 
-**Three parts of gen-3 could supply the activated pings [Background](#a-rare-wording-of-a-common-effect-gets-few-examples-and-field-weighting-cannot-see-it) finds short.**
+**Gen-3 supplies the activated pings [Background](#a-rare-wording-of-a-common-effect-gets-few-examples-and-field-weighting-cannot-see-it) finds short with a coverage round aimed at the wording.**
+The round plays cards with an activated "any target" damage ability, so their records gain creature
+targets beyond the ones the AI chooses. It is the only one of three candidates that adds records
+Forge played.
 
-- **Per-rule rebalancing, with cells that cross a rule with the kind of ability exercising it.**
-  Rule 115, targets, crossed with activated abilities would give these pings a quota of their own.
-- **Retargeting copies.** A copy that hands the ping to another creature on the board, and labels
-  the new target's damage and death by the rule, would show the gate new boards from the same
-  records.
-- **Collection aimed at the wording.** A coverage round over cards with an activated "any target"
-  damage ability would add creature targets beyond what the AI's own choices supply.
+- **Per-rule rebalancing with cells that cross a rule with the kind of ability exercising it is not
+  taken.** Rule 115, targets, crossed with activated abilities would give these pings a quota of
+  their own, but the quota repeats the same 45 boards.
+- **Retargeting copies are not taken.** A copy that hands the ping to another creature on the board
+  would show the gate new boards, but its damage and death would be labelled by the rule rather
+  than played by Forge.
 
 **The measure is gen-2's toughness sweep.** Its activated damage records should give the same gate
 read with "any target" and with "target creature". Probes that pick training records should also
@@ -775,27 +779,33 @@ follows the balance training aims for rather than how often a situation happens 
 answers the disagreement [Background](#the-validation-loss-is-too-noisy-to-stop-on-and-it-disagrees-with-the-probes-about-which-epoch-is-best)
 shows.
 
-**Stopping reads a smoothed score.** Two forms are common:
-
-- **A moving mean of the last three epochs' scores.** Patience counts epochs without a new best
-  mean. The kept checkpoint is the middle epoch of the best window.
-- **An exponential moving average of the weights.** Training keeps a running average of the
-  parameters, each step moving it a small fraction toward the current weights, and validation scores
-  the average. The average is itself less noisy than any single epoch's weights and is usually a
-  slightly better model, so it is both what stopping reads and what the run keeps. `resume.pt` would
-  have to carry it.
+**Stopping reads the score of an exponential moving average of the weights.** Training keeps a
+running average of the parameters, each step moving it a small fraction toward the current weights,
+and validation scores the average. The average is less noisy than any single epoch's weights. It
+is also usually a slightly better model, so it is both what stopping reads and what the run keeps.
+The average spans about one epoch of steps and starts once the learning-rate warmup ends, so the
+random initial weights never enter it. `resume.pt` carries it.
 
 **Every output field counts equally where a loss enters the score.** Each field is scored by its
-explained deviance on the card-disjoint stratum, and the score reads the mean over the fields. Two
-details need deciding:
+explained deviance, and the score reads the mean over the fields.
 
-- **Fields with almost nothing to learn.** A field whose constant prediction already has a tiny
-  loss, such as `poison_delta`, has an explained deviance that swings widely on a few records. Such
-  fields need a floor on their constant-prediction loss to enter the mean, or a weight that grows
-  with it.
-- **What a point is worth.** An equal mean rewards a weak field going from 20% to 30% as much as
-  life going from 80% to 90%. That is the intent, but it lets a weak field's noise steer stopping,
-  which makes the smoothing more necessary, not less.
+- **A field with almost nothing to learn is left out of the mean.** A field whose constant
+  prediction already has a tiny loss, such as `poison_delta`, has an explained deviance that swings
+  widely on a few records. A field enters the mean only when its constant-prediction loss reaches a
+  floor. The floor is read off gen-2's 256-wide continuation runs: it is the largest
+  constant-prediction loss among the fields whose explained deviance moves by more than 5 points
+  from one epoch to the next.
+- **An equal mean rewards a weak field going from 20% to 30% as much as life going from 80% to
+  90%.** That is the intent, but it lets a weak field's noise steer stopping, which makes the
+  smoothing more necessary, not less.
+
+**The score's components are rescaled before they are averaged.** The knowledge probes are mostly
+AUC, where 0.5 is chance. Some are R², the field mean is an explained deviance, and the grids
+measure an error. Each component is rescaled so that 0 is no better than its baseline and 1 is
+perfect. The knowledge probes, the grids, the rule tests and the field mean then count equally.
+Within the rule tests, each rule counts equally. A rule test is scored as an AUC: how well the
+predicted outcome ranks the records where it happens above those where it does not. A scenario's third-branch variants have no such pair, so their
+records stay out of the rule tests.
 
 Gen-4's adaptive sampling would compute the same per-field scores on training records
 ([gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)).
@@ -807,17 +817,24 @@ noise. Selecting and reporting on the same records would still flatter the chose
 probe set and the rule tests are split in two. One half picks the checkpoint, and the other half
 reports it. With the sets enlarged, each half can be as large as gen-2's whole set.
 
-**Each validation stratum judges the part it represents.** The in-game head predicts outcomes for
-cards that already exist, so its score reads the game-disjoint stratum. The embedding `e` serves
-deckbuilding on new sets and hypothetical cards, so its score reads the card-disjoint stratum,
-where gate 1 also lives. A run keeping one checkpoint for both weighs the two scores explicitly.
+**Only the encoder leaves training, so a run keeps one checkpoint, chosen on both validation
+strata.** The game-playing agent reads `e` and nothing else. The trunk and heads exist to train the
+encoder and to score it. They read the `e` of their own epoch's encoder, so the parts of a
+checkpoint cannot come from different epochs. The two strata measure the encoder from two sides.
+The card-disjoint stratum asks how well `e` describes texts it never trained on, which a new set
+brings. The game-disjoint stratum asks how well it describes known cards in situations it never
+trained on, which is most of what the agent sees. The control score weighs the two evenly by
+default.
 
-**Two other designs are not taken:**
+**Three other designs are not taken:**
 
+- **A moving mean of the last three epochs' scores.** Patience would count epochs without a new
+  best mean, and the kept checkpoint would be the middle epoch of the best window. It smooths the
+  reading but keeps one epoch's weights, with their noise.
 - **Stopping on discrimination with calibration fitted afterwards.** It would score each field by
   AUC or rank correlation and fit one temperature per field after training. It changes the measure
   without measuring the questions that matter more directly than the probes do. Calibration stays
-  a reported number, because the in-game head's probabilities are used as probabilities.
+  a reported number.
 - **A fixed schedule that keeps the last epoch.** It would end every run with a tenth of the
   learning rate and keep the last epoch, as gen-2's runs B64 and B128 suggest works. It avoids a
   poor measure instead of replacing it with a better one.
@@ -832,9 +849,10 @@ noise is amplified. Per-rule rebalancing does not make the division unnecessary:
 equally represented, a yes-or-no field on every card and a life-change amount still sit on
 different scales.
 
-**Amounts get a distribution wider than Poisson.** A negative binomial, or a distribution over bins
-of the amount, fits life and damage swings better. The constant prediction the division uses is
-then computed with the same distribution, so the two changes combine.
+**Amounts are scored by a negative binomial, which allows more variance than its mean.** It adds
+one dispersion parameter per field to the Poisson head it replaces. The constant prediction the
+division uses is computed with the same distribution, so the two changes combine. A distribution
+over bins of the amount is not taken: it needs a bin layout and an output per bin.
 
 **Rule-labelled copies fill the gaps the real data leaves.** Gen-2's lethality copies redraw the
 amount and the toughness of a qualifying damage spell and label the death by the rule. Where the
@@ -1158,6 +1176,37 @@ Further subsets cover casting speed under the same edits and a split-second spel
 Gen-2 has no such columns, so its baseline is `can_play` and its outcome predictions under the same
 edits.
 
+### Legality is an output of its own, and the affected gate learns only what an action changed
+
+**The affected gate answers whether an action changed an entity, and legality answers whether the
+entity could be chosen.** The two come apart in both directions. Destroy all creatures affects every
+creature on the board and targets none. Destroy target creature makes every creature a legal
+target except an opponent's creature with hexproof, and affects nothing until a target is picked. Gen-2 raises the gate on a
+decision record's legal targets, so the gate learns legality on decision records and effects
+everywhere else.
+
+**`target_legal` is trained on every entity of a decision record, independently of the gate.** It
+is 1 for each card or player in the candidate's `legal_targets` and 0 for every other entity in the
+record. A decision record holds one candidate, so the label is defined for each entity. A candidate
+with no targeting clause leaves the field unsupervised. The verdict computed from the rules alone
+has to list every legal target, because every entity missing from the list becomes a negative.
+
+**Playability records no longer train the gate.** A decision record observes no effect, so it says
+nothing about whether an entity is affected. Setting the gate to 0 there would teach that Shock
+affects nothing, against every Shock resolution record.
+
+**Combat legality follows the same rule.** `attacker_legal` and `blocker_legal` train on their own
+records, 1 for a legal creature and 0 for a forbidden one, and the gate is not raised. The
+target-legality probe reads `target_legal` instead of the gate.
+
+**A spell with several targeting clauses labels the union of their legal targets.** "Target
+creature and target player" marks every legal creature and every legal player. The label cannot
+say which clause an entity is legal for. Recording targets per clause would change the decision
+payload, and gen-3 leaves it out.
+
+**Dropping `target_legal` is not taken.** The gate already ranks legal targets above other
+entities on decision records, but it would keep meaning two things depending on the record kind.
+
 ### A combat record's snapshot should be taken before the damage step deals any damage
 
 **The snapshot is taken at the start of the damage step.** The damage-step probe forks already copy
@@ -1179,8 +1228,8 @@ fragment turns out not to carry the quality.
 
 **The rare qualities need built examples, or the flags carry nothing the model learned.** Rule
 702.16 says what protection does: damage from a source with the quality is prevented, and the
-creature cannot be enchanted or equipped, blocked or targeted by such a source. Three sources could
-supply the examples, and per-rule rebalancing decides how many each quality gets:
+creature cannot be enchanted or equipped, blocked or targeted by such a source. Gen-3 draws the
+examples from three sources, and per-rule rebalancing decides how many each quality gets:
 
 - **Rule-labelled copies.** A copy of a real record grants a creature a protection quality and
   relabels the four outcomes by the rule, as the lethality copies relabel a death: the damage
@@ -1760,8 +1809,9 @@ loss trains.
 **`target_legal` now has nothing to learn from.** A decision payload lists a spell's legal targets
 and never its illegal ones, so with presence the field sees only positives and its floor is
 undefined. Target legality is learned through the affected gate, which a decision record raises
-exactly on its legal targets, and the probe ladder already reads it there. Gen-3 either drops the
-field or has the collector record the entities a target restriction excluded.
+exactly on its legal targets, and the probe ladder already reads it there. Gen-3 instead trains
+`target_legal` on every entity of a decision record and stops raising the gate there
+([legality](#legality-is-an-output-of-its-own-and-the-affected-gate-learns-only-what-an-action-changed)).
 
 **A trigger record supervises only whether the trigger fired.** It produces no per-entity targets.
 The triggering event stays in its input as the pending-event overlay.
