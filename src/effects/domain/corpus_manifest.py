@@ -8,6 +8,7 @@ can refuse a dataset rebuilt since (FR-147).
 from __future__ import annotations
 
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields
+from pathlib import Path
 from typing import Any, NamedTuple
 
 from effects.domain.ability_tokenizer import Surface
@@ -279,6 +280,17 @@ class CorpusManifest:
         """The rule the held-out texts were chosen by; stored as three fields,
         the form every manifest so far was written in."""
         return HoldoutRule(self.holdout_permille, self.holdout_max_carriers, self.holdout_unit)
+
+    def variant_scripts_or(self, given: Path | None) -> Path | None:
+        """The variant-script tree a run over this dataset reads: ``given``,
+        else the one the build resolved keys against, else None.
+
+        Training and evaluation both take it, since a run reading no tree sees
+        every variant ability the build kept as no text.
+        """
+        if given is not None:
+            return Path(given)
+        return Path(self.variant_scripts) if self.variant_scripts else None
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)

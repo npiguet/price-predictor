@@ -249,7 +249,9 @@ class RunReporter:
             "is a token keyed to the wrong tree — it is the token's own "
             "cast-spell key, which maps to no text either way, while "
             "its ability lines are keyed under tokenscripts/ and do "
-            "resolve; a variant-scripts/ key needs --variant-scripts.",
+            "resolve; a variant-scripts/ key is a variant the tree this "
+            "run read has no sidecar for, so the tree is not the one the "
+            "corpus was built against.",
             len(unresolved),
             sum(unresolved.values()),
             ", ".join(f"{name} ({hits})" for name, hits in unresolved.most_common(3)),

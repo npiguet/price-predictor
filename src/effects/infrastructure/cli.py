@@ -791,7 +791,9 @@ def _train_effect_model_parser(subparsers) -> None:
     )
     _add_cards_folder(parser)
     _add_holdout_unit(parser, default=None)
-    _add_variant_scripts(parser)
+    _add_variant_scripts(parser, without=(
+        "the tree the corpus's manifest records is read, if any"
+    ))
     _add_variant(parser)
     add_config_flags(parser, TrainEffectModelConfig)
 

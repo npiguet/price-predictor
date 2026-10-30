@@ -7,6 +7,7 @@ on, as well as by the cards that carry them.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -132,6 +133,37 @@ def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, s
     assert (facts.holdout.permille, facts.holdout.max_carriers) == (20, 8)
     assert facts.gate_one_records == 4096
     assert facts.digest == manifest.digest()
+
+
+# ── the variant-script tree ──────────────────────────────────────────────
+
+
+def test_an_unset_variant_tree_is_the_one_the_corpus_was_built_against(
+    corpus, config, started, caplog,
+):
+    """Evaluation takes it from the manifest; a training run that did not
+    would read every variant ability the build kept as no text."""
+    corpus.save(_manifest(variant_scripts="output/effects/variant-scripts"))
+    with caplog.at_level(logging.INFO):
+        assert run(config) == 0
+    assert started[-1].config.variant_scripts == Path("output/effects/variant-scripts")
+    assert "the corpus manifest's" in caplog.text
+
+
+def test_a_named_variant_tree_wins_over_the_manifests(corpus, config, started, caplog):
+    corpus.save(_manifest(variant_scripts="output/effects/variant-scripts"))
+    config.variant_scripts = Path("elsewhere")
+    with caplog.at_level(logging.INFO):
+        assert run(config) == 0
+    assert started[-1].config.variant_scripts == Path("elsewhere")
+    assert "elsewhere (--variant-scripts)" in caplog.text
+
+
+def test_no_variant_tree_is_read_when_neither_names_one(config, started, caplog):
+    with caplog.at_level(logging.INFO):
+        assert run(config) == 0
+    assert started[-1].config.variant_scripts is None
+    assert "No variant-script tree" in caplog.text
 
 
 # ── encoder size and sidecar roots (FR-061, FR-062, FR-063b) ─────────────

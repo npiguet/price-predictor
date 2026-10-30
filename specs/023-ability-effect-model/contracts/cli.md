@@ -281,7 +281,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 |---|---|
 | `--corpus` | **required** — a curated dataset built by `build-corpus`, and the trainer's only input: its manifest carries the split, both validation strata, the rarity table and the holdout, and a `--vocab-path` whose encoding surface is not the manifest's is refused |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
-| `--variant-scripts` | none (`output/effects/variant-scripts/`) |
+| `--variant-scripts` | the tree the corpus manifest records |
 | `--vocab-path` | `models/effects/vocab.txt` |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` |
 | `--model-output` | `models/effects/effect-model/` for `--variant full`, `models/effects/effect-model/{variant}/` otherwise |

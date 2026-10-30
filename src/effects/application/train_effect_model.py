@@ -11,12 +11,13 @@ import logging
 import random
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
+from effects.domain.corpus_manifest import CorpusManifest
 from effects.domain.effect_head_layout import active_fields
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
@@ -452,6 +453,27 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
         )
 
 
+def with_variant_scripts(
+    config: TrainEffectModelConfig, manifest: CorpusManifest,
+) -> TrainEffectModelConfig:
+    """``config`` reading the variant-script tree ``--variant-scripts`` names,
+    else the one the corpus was built against, as evaluation does; logged,
+    because a run reading none trains every variant ability as no text."""
+    tree = manifest.variant_scripts_or(config.variant_scripts)
+    if tree is None:
+        logger.info(
+            "No variant-script tree: neither --variant-scripts nor the corpus "
+            "manifest names one."
+        )
+    else:
+        source = (
+            "--variant-scripts" if config.variant_scripts is not None
+            else "the corpus manifest's"
+        )
+        logger.info("Variant scripts: %s (%s).", tree, source)
+    return replace(config, variant_scripts=tree)
+
+
 def run(config: TrainEffectModelConfig) -> int:
     """Train the encoder and effect head jointly. Returns an exit code.
 
@@ -466,6 +488,7 @@ def run(config: TrainEffectModelConfig) -> int:
         return 1
     store = CorpusStore(Path(config.corpus))
     manifest = store.load()
+    config = with_variant_scripts(config, manifest)
     require_matching_surface(
         manifest_surface=manifest.surface, vocab_path=Path(config.vocab_path),
         corpus=config.corpus,

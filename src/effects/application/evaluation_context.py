@@ -147,11 +147,11 @@ def resolve_corpus_path(
 def with_corpus_defaults(
     config: EvaluateEffectModelConfig, manifest: CorpusManifest,
 ) -> EvaluateEffectModelConfig:
-    """``config`` with an unset variant-script tree taken from the manifest;
-    without it every variant ability reads as no text."""
-    if config.variant_scripts is not None or not manifest.variant_scripts:
-        return config
-    return replace(config, variant_scripts=Path(manifest.variant_scripts))
+    """``config`` with an unset variant-script tree taken from the manifest
+    (:meth:`CorpusManifest.variant_scripts_or`)."""
+    return replace(
+        config, variant_scripts=manifest.variant_scripts_or(config.variant_scripts),
+    )
 
 
 def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
