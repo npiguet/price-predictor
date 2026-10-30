@@ -25,6 +25,7 @@ CPU only.  Outputs ``output/encoder-probes/l_mediation_table.pkl``.
 from __future__ import annotations
 
 import argparse
+import bisect
 import pickle
 import sys
 import time
@@ -45,6 +46,9 @@ DEFAULT_TABLE = OUT / "card_table.pkl"  # written by p0b_card_table.py
 N_LEN_BUCKETS = 5
 LEN_BUCKET_LABELS = ["0-4", "5-6", "7-8", "9-11", "12+"]
 TOT_BUCKET_LABELS = ["0-10", "11-13", "14-16", "17-20", "21+"]
+# The lowest count of every bucket after the first, for one side and for both.
+LEN_BUCKET_STARTS = [5, 7, 9, 12]
+TOT_BUCKET_STARTS = [11, 14, 17, 21]
 
 WIN, LOSS = 0, 1
 IN_DECK, PLAYED = 0, 1
@@ -61,28 +65,32 @@ HP = H + 2
 N_STRATA = HP + 2
 
 
-def len_bucket(n: int) -> int:
-    if n <= 4:
-        return 0
-    if n <= 6:
-        return 1
-    if n <= 8:
-        return 2
-    if n <= 11:
-        return 3
-    return 4
+def column(outcome: str, kind: str, prefix: str = "", suffix: str = "", when: str = "") -> str:
+    """A counter column of the table: ``outcome`` wins/losses, ``kind``
+    played/in_deck, in the stratum ``prefix``/``suffix`` name."""
+    return f"{prefix}{outcome}_{when}{kind}{suffix}"
 
 
-def tot_bucket(n: int) -> int:
-    if n <= 10:
-        return 0
-    if n <= 13:
-        return 1
-    if n <= 16:
-        return 2
-    if n <= 20:
-        return 3
-    return 4
+def stratum_scores(df: pd.DataFrame, prefix: str = "", suffix: str = "", when: str = ""):
+    """``(n_in_deck, score, played_rate)`` of one stratum's four counters, where
+    score = (played and won − played and lost) / in-deck observations."""
+    def col(outcome: str, kind: str) -> pd.Series:
+        return df[column(outcome, kind, prefix, suffix, when)]
+
+    n = col("wins", "in_deck") + col("losses", "in_deck")
+    return (n, (col("wins", "played") - col("losses", "played")) / n,
+            (col("wins", "played") + col("losses", "played")) / n)
+
+
+def draw_score(df: pd.DataFrame, prefix: str = "", when: str = "") -> pd.Series:
+    """The score in games the side did not start: a stratum's all-games
+    counters minus its on-the-play ones."""
+    def drawn(outcome: str, kind: str) -> pd.Series:
+        return (df[column(outcome, kind, prefix, when=when)]
+                - df[column(outcome, kind, prefix, "_play")])
+
+    return ((drawn("wins", "played") - drawn("losses", "played"))
+            / (drawn("wins", "in_deck") + drawn("losses", "in_deck")))
 
 
 def main() -> None:
@@ -195,8 +203,9 @@ def main() -> None:
 
         # game-length strata: the owning side's played count (gl), the
         # opponent's (og) and both sides' together (tg)
-        bw, bl = len_bucket(len(iwp)), len_bucket(len(ilp))
-        bt = tot_bucket(len(iwp) + len(ilp))
+        bw = bisect.bisect_right(LEN_BUCKET_STARTS, len(iwp))
+        bl = bisect.bisect_right(LEN_BUCKET_STARTS, len(ilp))
+        bt = bisect.bisect_right(TOT_BUCKET_STARTS, len(iwp) + len(ilp))
         tally(WIN, GL + bw)
         tally(LOSS, GL + bl)
         tally(WIN, OG + bl)
@@ -246,10 +255,9 @@ def main() -> None:
 
     def counts(s: int, prefix: str = "", suffix: str = "", when: str = "") -> dict:
         n = slice(0, n_cards)
-        return {f"{prefix}wins_{when}played{suffix}": C[s, WIN, PLAYED, n],
-                f"{prefix}wins_{when}in_deck{suffix}": C[s, WIN, IN_DECK, n],
-                f"{prefix}losses_{when}played{suffix}": C[s, LOSS, PLAYED, n],
-                f"{prefix}losses_{when}in_deck{suffix}": C[s, LOSS, IN_DECK, n]}
+        return {column(outcome, kind, prefix, suffix, when): C[s, o, k, n]
+                for outcome, o in (("wins", WIN), ("losses", LOSS))
+                for kind, k in (("played", PLAYED), ("in_deck", IN_DECK))}
 
     cols = {"card_name": all_names, **counts(ALL, when="when_"),
             **counts(PLAY, suffix="_play"), **counts(FB, "fb_"), **counts(FF, "ff_")}
@@ -260,7 +268,8 @@ def main() -> None:
     df = pd.DataFrame(cols)
 
     # derived mediation quantities
-    n_in = df.wins_when_in_deck + df.losses_when_in_deck
+    n_in, score_overall, played_rate = stratum_scores(df, when="when_")
+    n_play, score_play, _ = stratum_scores(df, suffix="_play")
     df["n_in_deck"] = n_in
     df["n_played"] = df.wins_when_played + df.losses_when_played
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -269,17 +278,12 @@ def main() -> None:
         df["b"] = df.losses_when_played / df.losses_when_in_deck
         df["m"] = (df.a + df.b) / 2.0
         df["d"] = df.a - df.b
-        df["played_rate"] = df.n_played / n_in
-        df["score_overall"] = (df.wins_when_played - df.losses_when_played) / n_in
-        n_play = df.wins_in_deck_play + df.losses_in_deck_play
+        df["played_rate"] = played_rate
+        df["score_overall"] = score_overall
         df["n_in_deck_play"] = n_play
-        df["score_play"] = (df.wins_played_play - df.losses_played_play) / n_play
-        n_draw = n_in - n_play
-        df["n_in_deck_draw"] = n_draw
-        df["score_draw"] = (
-            (df.wins_when_played - df.wins_played_play)
-            - (df.losses_when_played - df.losses_played_play)
-        ) / n_draw
+        df["score_play"] = score_play
+        df["n_in_deck_draw"] = n_in - n_play
+        df["score_draw"] = draw_score(df, when="when_")
         pp = df.wins_when_played / df.n_played
         pd_ = (df.wins_when_in_deck - df.wins_when_played) / (n_in - df.n_played)
         df["p_play"] = pp

@@ -1,10 +1,8 @@
 """Derived statistics for the R1/R2 report.
 
-Three things the per-probe scripts could not compute in place:
+Two things the per-probe scripts could not compute in place:
 
 * R1a's survival ratios (degraded val R² as a fraction of the control's).
-* R1b's manifold-gated recompute (the wide table carries a NaN column
-  from the sibling family, which defeats a naive all-columns gate).
 * R1c's *paired null-adjusted* flip effect — the placebo families are not
   mean-zero, so the honest statistic is ``mean(Δflip − Δnull)`` over the
   cards carrying both.
@@ -24,7 +22,6 @@ import probe_lib as pl  # noqa: E402
 from _lib.stats import bootstrap_ci  # noqa: E402
 
 SD = pl.SD["score_play"]
-GATE = pl.MANIFOLD_GATE
 
 
 def r1a() -> None:
@@ -51,24 +48,6 @@ def r1a() -> None:
     print("\n=== R1a fidelity-probe prediction shift\n",
           s[s["head"].isin(["score_play", "played_rate", "cast_lift"])]
           .round(4).to_string(index=False))
-
-
-def r1b() -> None:
-    w = pd.read_csv(pl.SCRATCH / "r1b_wide.csv")
-    A = w[w["family"] == "single"]
-    cols = ["manifold_dist__i_original", "manifold_dist__ii_deleted",
-            "manifold_dist__iii_grant_spell", "manifold_dist__iv_negated_static"]
-    keep = (A[cols] <= GATE).all(axis=1)
-    print(f"\n=== R1b family A: {len(A)} single-line fliers, "
-          f"{int(keep.sum())} with every variant on-manifold")
-    for tag, sub in (("all", A), ("on_manifold", A[keep])):
-        dt = (sub["score_play__i_original"] - sub["score_play__ii_deleted"]).to_numpy()
-        dg = (sub["score_play__iii_grant_spell"] - sub["score_play__ii_deleted"]).to_numpy()
-        dn = (sub["score_play__iv_negated_static"] - sub["score_play__ii_deleted"]).to_numpy()
-        print(f"  {tag:12s} n={len(sub):3d}  true={dt.mean()/SD:+.3f} SD  "
-              f"grant={dg.mean()/SD:+.3f} SD  negated={dn.mean()/SD:+.3f} SD  "
-              f"index_grant={dg.mean()/dt.mean():+.3f}  "
-              f"index_neg={dn.mean()/dt.mean():+.3f}")
 
 
 def r1c() -> None:
@@ -110,5 +89,4 @@ def r1c() -> None:
 
 if __name__ == "__main__":
     r1a()
-    r1b()
     r1c()

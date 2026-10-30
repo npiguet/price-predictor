@@ -39,7 +39,7 @@ import argparse
 import csv
 import json
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -47,16 +47,21 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _lib.corpora import card_column
-from _lib.stats import ols
+from _lib.stats import ols, spearman
 from draft_corpus_common import ColourResolver
-from draft_probes.probe_lib import CARD_VALUES, CARDS, CORPUS, OUT, WUBRG, iter_corpus_records
+from draft_probes.probe_lib import (
+    CARD_VALUES,
+    CARDS,
+    CORPUS,
+    OUT,
+    WUBRG,
+    deck_colour_shares,
+    iter_corpus_records,
+    wg_ur,
+)
 
 P1P1 = OUT / "d2_p1p1_values.csv"
 COLOURS = WUBRG
-
-
-def wg_ur(beta: np.ndarray) -> float:
-    return (beta[0] + beta[4]) / 2 - (beta[1] + beta[3]) / 2
 
 
 def main() -> None:
@@ -77,26 +82,14 @@ def main() -> None:
         for seat in rec.seats:
             if seat.deck_score is None or not seat.deck:
                 continue                  # failed build: no deck, no reward
-            acc: Counter[str] = Counter()
-            n = nq = nv = 0
-            q = v = 0.0
-            for name in seat.deck:
-                ids = colours(name)
-                if ids:                   # basics and other colourless: no lane
-                    n += 1
-                    for c in ids:
-                        acc[c] += 1.0 / len(ids)
-                if name in quality:
-                    q += quality[name]
-                    nq += 1
-                if name in swap:
-                    v += swap[name]
-                    nv += 1
-            if min(n, nq, nv) < 10:
+            frac, n = deck_colour_shares(seat.deck, colours)
+            qs = [quality[name] for name in seat.deck if name in quality]
+            vs = [swap[name] for name in seat.deck if name in swap]
+            if min(n, len(qs), len(vs)) < 10:
                 continue
             pods[rec.draft_id].append({
                 "agent": seat.agent, "score": float(seat.deck_score),
-                "frac": [acc[c] / n for c in COLOURS], "q": q / nq, "v": v / nv,
+                "frac": frac.tolist(), "q": sum(qs) / len(qs), "v": sum(vs) / len(vs),
             })
 
     # The reward is pod-relative by leave-one-out, so centre each seat on the
@@ -167,7 +160,7 @@ def main() -> None:
 
     # Does the reward's colour ordering match the policy's opening ranking? The
     # P1P1 scalars come from d2; gen-1 is the control that never saw the reward.
-    ordering = {}
+    ordering, p1p1_means = {}, {}
     if P1P1.exists():
         p1 = list(csv.DictReader(P1P1.open(encoding="utf-8")))
         beta = np.array(fits["colour only"]["beta"])
@@ -185,16 +178,17 @@ def main() -> None:
                         if r["colours"] and c in r["colours"] and r[key]]
                 per.append(float(np.mean(vals)) if vals else float("nan"))
             per = np.array(per)
+            p1p1_means[gen] = per.tolist()
             ordering[gen] = [COLOURS[i] for i in np.argsort(-per)]
-            rank_corr = np.corrcoef(np.argsort(np.argsort(-per)),
-                                    np.argsort(np.argsort(-beta)))[0, 1]
+            rank_corr = spearman(per, beta)
             print(f"  {gen:12s} " + " > ".join(ordering[gen])
                   + f"    (rank corr with reward {rank_corr:+.2f})")
 
     (OUT / "d10_rewardcolour.json").write_text(
         json.dumps({"n_seats": len(rows), "reward_sd": float(y.std()),
                     "fits": fits, "per_agent": per_agent,
-                    "colour_order": ordering}, indent=2), encoding="utf-8")
+                    "colour_order": ordering, "p1p1_colour_mean": p1p1_means},
+                   indent=2), encoding="utf-8")
     print(f"\nwrote {OUT / 'd10_rewardcolour.json'}")
 
 

@@ -18,18 +18,16 @@ Outputs ``output/encoder-probes/r2a_*.csv`` + ``r2ab_summary.json``.
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from price_predictor.application.ridge_probes import _r2 as wr2
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
+from probe_lib import _r2 as wr2  # noqa: E402
 
 HEADS = ("score_play", "score_draw", "played_rate", "cast_lift")
 SEED = 2024
@@ -57,7 +55,7 @@ def resid_sd(y, pred, w):
 
 
 def main() -> None:
-    join = pl.load_frame(features=False, text=True)
+    join = pl.load_frame(text=True)
     emb = pl.load_embedding_matrix(list(join["name"]), join)
 
     is_train = (join["split"] == "train").to_numpy()
@@ -84,9 +82,7 @@ def main() -> None:
                      "n_val": int(is_val.sum()), "deciles": list(map(float, edges[1:-1]))}
 
     for head in HEADS:
-        y = pd.to_numeric(join[f"shrunk_{head}"], errors="coerce").to_numpy(float)
-        w = join[f"w_{head}"].to_numpy(float)
-        have = np.isfinite(y) & (w > 0)
+        y, w, have = pl.label(join, head)
 
         fit = half & have
         alpha, _ = pl._choose_alpha(emb[fit], y[fit], w[fit])
@@ -144,23 +140,19 @@ def main() -> None:
     dec = pd.DataFrame(rows)
     dec.to_csv(pl.SCRATCH / "r2a_decile_r2.csv", index=False)
 
-    # ── R2b: are the equivalence classes representative? ────────────────
+    # R2b: are the equivalence classes representative?
     classes = pl.equivalence_classes(join)
     member_names = {n for c in classes for n in c["names"]}
 
     def card_stats(text: str) -> dict:
         lines = cc.lines(text)
-        cost = next((ln for ln in lines if ln.startswith("mana cost:")), "")
-        mv = 0.0
-        for sym in re.findall(r"\{([^}]*)\}", cost):
-            mv += int(sym) if sym.isdigit() else (0 if sym.upper() == "X" else 1)
         types = next((ln for ln in lines if ln.startswith("types:")), "")
-        ab = [ln for ln in lines if ln.startswith(cc.ABILITY_PREFIXES)]
-        return {"mv": mv, "n_lines": len(lines), "n_ability_lines": len(ab),
+        return {"n_lines": len(lines), "n_ability_lines": len(cc.ability_lines(text)),
                 "is_creature": "creature" in types, "is_land": "land" in types,
                 "is_instant_sorcery": ("instant" in types or "sorcery" in types)}
 
     stats = pd.DataFrame([card_stats(t) for t in join["text"]])
+    stats.insert(0, "mv", pl.num(join, "mv"))
     stats["name"] = join["name"].to_numpy()
     stats["n_in_deck"] = n_in_deck
     stats["rarity"] = join["first_rarity"].to_numpy()

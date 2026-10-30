@@ -54,10 +54,18 @@ import json
 import random
 import statistics as st
 import time
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
-from draft_corpus_common import load_labeler_and_scorer, read_prefix_scores, read_records
+from _lib.markdown import banner
+from draft_corpus_common import (
+    DEFAULT_CARDS_PATH,
+    iter_prefix_records,
+    load_labeler_and_scorer,
+    prefix_curves,
+    read_prefix_scores,
+    read_records,
+)
 
 DECK = 23           # NONLAND_DECK_SIZE: at and above this the builder must choose
 AGENTS = ("forge-full", "gen1", "gen3", "gen4")
@@ -75,17 +83,9 @@ def load_raw(path: Path, want: str = "greedy") -> set[tuple[str, int, int]]:
     methods: set[str] = set()
     if not path.exists():
         return done
-    with path.open(encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                r = json.loads(line)
-            except json.JSONDecodeError:
-                continue        # a torn final line from an interrupted run
-            done.add((r["draft_id"], r["seat"], r["n_picks"]))
-            methods.add(r.get("build_method", "picker"))
+    for r in iter_prefix_records(path):
+        done.add((r["draft_id"], r["seat"], r["n_picks"]))
+        methods.add(r.get("build_method", "picker"))
     if len(methods) > 1:
         raise SystemExit(f"{path} mixes builders {sorted(methods)}; scores are not comparable")
     if methods and want not in methods:
@@ -165,18 +165,7 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
 
 def report(raw_paths: list[Path], title: str, cap: int | None) -> None:
     rows, agent_of = read_prefix_scores(raw_paths)
-
-    level: dict = defaultdict(list)
-    delta: dict = defaultdict(list)
-    for key, by_t in rows.items():
-        a = agent_of[key]
-        for t, score in by_t.items():
-            if score is None:
-                continue
-            level[(a, t)].append(score)
-            prev = by_t.get(t - 1)
-            if prev is not None:
-                delta[(a, t)].append(score - prev)
+    level, delta = prefix_curves(rows, agent_of)
 
     present = [a for a in AGENTS if any(level[(a, t)] for t in range(1, 200))]
     refs = [a for a in present if a != "gen4"]
@@ -199,9 +188,7 @@ def report(raw_paths: list[Path], title: str, cap: int | None) -> None:
             mark = "   <- pool reaches deck size" if t == DECK else ""
             print(f"{t:>6}{row}{mark}")
 
-    print("")
-    print("=" * 78)
-    print(f"{title}   {len(rows)} seats over {len(raw_paths)} corpora")
+    banner(f"{title}   {len(rows)} seats over {len(raw_paths)} corpora")
     print("")
     print("level = score of the deck the builder makes from the first t picks.")
     print("added = level(t) - level(t-1), the same seat against itself.")
@@ -272,7 +259,7 @@ def main() -> None:
                          "the corpus's deck_score, which for every online-trained corpus is "
                          "greedy. GenerateDraftDataConfig defaults to picker, so leaving this "
                          "unset silently measures a different pipeline.")
-    ap.add_argument("--cards-path", type=Path, default=Path("output/cardsfolder-512"))
+    ap.add_argument("--cards-path", type=Path, default=DEFAULT_CARDS_PATH)
     ap.add_argument("--scorer", type=Path, default=Path(
         "models/sealed/scorer/512-best_l6_h4_s4_ff2176_mlp512_lr1e-05_mwlog.pt"))
     ap.add_argument("--picker", type=Path, default=Path(

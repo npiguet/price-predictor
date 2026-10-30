@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -35,6 +36,8 @@ from effect_knowledge_probes import (
 )
 from effect_knowledge_probes.board_edits import BoardEdit
 
+from effects.domain.effect_head_input import MAGNITUDE_CAP
+
 _ROOT = Path(__file__).resolve().parents[3]
 _FIXTURES = _ROOT / "tests" / "fixtures" / "effects"
 
@@ -54,6 +57,36 @@ def sidecars():
         _FIXTURES / "gen1-sidecars" / "cardsfolder",
         _FIXTURES / "gen1-sidecars" / "tokenscripts",
     ])
+
+
+def _join_triggers(records):
+    join = labels.TriggerJoin()
+    for record in records:
+        join.observe(record)
+    return join.result()
+
+
+@pytest.fixture(scope="module")
+def acting(sidecars):
+    return run._acting_text_function(sidecars, "script")
+
+
+@pytest.fixture(scope="module")
+def items_by_record(records, sidecars, acting) -> dict[str, list]:
+    """Every fixture record's board items by record id, triggers joined as a freeze joins them."""
+    join = _join_triggers(records)
+    return {r.record_id: labels.record_items(r, sidecars, join, acting) for r in records}
+
+
+def _select_sweep_records(records, sidecars) -> dict:
+    selector = sweeps.SweepSelector(sidecars)
+    for record in records:
+        selector.observe(record)
+    return selector.result()
+
+
+#: The rule's deaths over a power x toughness grid: lethal where power reaches toughness.
+LETHAL_STEP = np.array([[float(p >= t) for t in range(1, 9)] for p in range(1, 9)])
 
 
 def _fixture_lines(tree: str):
@@ -77,20 +110,18 @@ def _line(tree: str, *needles: str):
 
 
 class TestShare:
-    def test_it_is_the_vector_s_part_of_the_gap(self):
-        assert ladder.share(0.5, 0.7, 0.9) == pytest.approx(0.5)
-
-    def test_it_is_not_reported_under_the_minimum_gap(self):
-        assert ladder.share(0.60, 0.70, 0.60 + ladder.MIN_GAP - 1e-6) is None
-
-    def test_it_is_reported_at_the_minimum_gap(self):
-        assert ladder.share(0.60, 0.61, 0.60 + ladder.MIN_GAP + 1e-9) is not None
-
-    def test_a_share_above_one_is_kept(self):
-        assert ladder.share(0.5, 0.95, 0.8) > 1.0
-
-    def test_an_undefined_rung_gives_no_share(self):
-        assert ladder.share(float("nan"), 0.7, 0.9) is None
+    @pytest.mark.parametrize("rungs, expected", [
+        pytest.param((0.5, 0.7, 0.9), 0.5, id="the vector's part of the gap"),
+        pytest.param((0.60, 0.70, 0.60 + ladder.MIN_GAP - 1e-6), None,
+                     id="not reported under the minimum gap"),
+        pytest.param((0.60, 0.61, 0.60 + ladder.MIN_GAP + 1e-9), 0.01 / (ladder.MIN_GAP + 1e-9),
+                     id="reported at the minimum gap"),
+        pytest.param((0.5, 0.95, 0.8), 1.5, id="above one is kept"),
+        pytest.param((float("nan"), 0.7, 0.9), None, id="an undefined rung gives none"),
+    ])
+    def test_the_share(self, rungs, expected):
+        value = ladder.share(*rungs)
+        assert value == (None if expected is None else pytest.approx(expected))
 
     def test_the_bootstrap_interval_brackets_the_estimate(self):
         rng = np.random.default_rng(0)
@@ -161,15 +192,13 @@ class TestFolds:
         again = ladder.fold_assignment(list(reversed(groups)))[::-1]
         assert first.tolist() == again.tolist()
 
-    def test_pooled_items_are_grouped_by_card(self, records, sidecars):
-        acting = run._acting_text_function(sidecars, "script")
-        join = labels.join_triggers(records)
+    def test_pooled_items_are_grouped_by_card(self, records, items_by_record):
         by_record = {r.record_id: r for r in records}
-        for record in records:
-            for item in labels.record_items(record, sidecars, join, acting):
+        for record_id, items in items_by_record.items():
+            for item in items:
                 if item.entity is None:
                     continue
-                entity = by_record[item.record_id].state.entity(item.entity)
+                entity = by_record[record_id].state.entity(item.entity)
                 assert item.group == labels.card_of(entity)
 
     def test_the_width_control_is_one_vector_per_text(self):
@@ -310,13 +339,9 @@ class TestLineLabels:
     ])
     def test_an_amount_is_capped_where_the_model_s_targets_are(
             self, script, line_kind, api, target, sign):
-        from effects.domain.effect_head_input import MAGNITUDE_CAP
-
         assert labels.line_labels(script, line_kind, api)[target] == sign * MAGNITUDE_CAP
 
     def test_damage_per_mana_is_read_off_the_capped_damage(self):
-        from effects.domain.effect_head_input import MAGNITUDE_CAP
-
         found = labels.line_labels(
             "AB$ DealDamage | Cost$ 2 R T | NumDmg$ 100 | ValidTgts$ Any", "activated",
             "DealDamage")
@@ -324,8 +349,6 @@ class TestLineLabels:
         assert found["damage_per_mana"] == pytest.approx(MAGNITUDE_CAP / 3)
 
     def test_every_amount_label_is_within_the_cap_and_no_flag_moves(self):
-        from effects.domain.effect_head_input import MAGNITUDE_CAP
-
         for line in _fixture_lines("gen1-sidecars"):
             found = labels.line_labels(line.script_text, line.line_kind,
                                        line.script_api_type)
@@ -340,57 +363,50 @@ class TestLineLabels:
 
 
 class TestRecordLabels:
-    def _items(self, records, sidecars):
-        acting = run._acting_text_function(sidecars, "script")
-        join = labels.join_triggers(records)
+    @pytest.fixture(scope="class")
+    def items(self, records, items_by_record):
+        """``(record, item)`` for every board item of the fixture records."""
         by_id = {r.record_id: r for r in records}
-        out = []
-        for record in records:
-            out += [(by_id[i.record_id], i)
-                    for i in labels.record_items(record, sidecars, join, acting)]
-        return out
+        return [(by_id[i.record_id], i) for found in items_by_record.values() for i in found]
 
-    def test_every_item_names_a_known_target_and_a_finite_label(self, records, sidecars):
-        items = self._items(records, sidecars)
+    def test_every_item_names_a_known_target_and_a_finite_label(self, items):
         assert items
         for _, item in items:
             assert item.target in labels.TARGETS_BY_NAME
             assert np.isfinite(item.label)
 
-    def test_a_blocker_label_follows_the_legal_blockers(self, records, sidecars):
-        blocks = [(r, i) for r, i in self._items(records, sidecars) if i.target == "may_block"]
+    def test_a_blocker_label_follows_the_legal_blockers(self, items):
+        blocks = [(r, i) for r, i in items if i.target == "may_block"]
         assert blocks
         assert any(i.label == 0.0 for _, i in blocks)
         for record, item in blocks:
             assert item.label == float(item.entity in record.payload.legal_blockers)
             assert item.partner_entity == record.payload.anchor_attacker
 
-    def test_a_decision_yields_its_affordable_verdict(self, records, sidecars):
-        decisions = [(r, i) for r, i in self._items(records, sidecars)
+    def test_a_decision_yields_its_affordable_verdict(self, items):
+        decisions = [(r, i) for r, i in items
                      if i.target == "affordable"]
         assert decisions
         for record, item in decisions:
             assert item.label == float(record.payload.candidates[0].affordable)
 
-    def test_a_trigger_yields_whether_it_fired(self, records, sidecars):
-        fires = [(r, i) for r, i in self._items(records, sidecars) if i.target == "fires"]
+    def test_a_trigger_yields_whether_it_fired(self, items):
+        fires = [(r, i) for r, i in items if i.target == "fires"]
         assert {i.label for _, i in fires} == {0.0, 1.0}
         for record, item in fires:
             assert item.label == float(record.payload.fired)
 
-    def test_affected_items_cover_the_battlefield_of_an_effect_half(self, records, sidecars):
+    def test_affected_items_cover_the_battlefield_of_an_effect_half(self, items):
         from effects.domain.effect_targets import derive_targets
 
-        affected = [(r, i) for r, i in self._items(records, sidecars) if i.target == "affected"]
+        affected = [(r, i) for r, i in items if i.target == "affected"]
         assert affected
         for record, item in affected:
             entry = derive_targets(record).get(item.entity)
             assert item.label == float(bool(entry and entry.affected))
 
-    def test_damage_taken_is_capped_where_the_model_s_targets_are(self, records, sidecars):
-        from dataclasses import replace
-
-        from effects.domain.effect_head_input import MAGNITUDE_CAP
+    def test_damage_taken_is_capped_where_the_model_s_targets_are(self, records, sidecars,
+                                                                  acting):
         from effects.domain.event_schema import Event, EventType
         from effects.domain.records import Moment
 
@@ -404,9 +420,7 @@ class TestRecordLabels:
                       params={"amount": 9999, "combat": False})
         huge = replace(record, payload=replace(record.payload,
                                                events=(*record.payload.events, event)))
-        acting = run._acting_text_function(sidecars, "script")
-        found = [i for i in labels.record_items(huge, sidecars, labels.join_triggers([huge]),
-                                                acting)
+        found = [i for i in labels.record_items(huge, sidecars, _join_triggers([huge]), acting)
                  if i.target == "damage_taken" and i.entity == creature.id]
         assert [i.label for i in found] == [MAGNITUDE_CAP]
 
@@ -417,8 +431,6 @@ class TestRecordLabels:
         The map is what the collector writes: Forge's produced-mana string as a
         count per colour letter, ``{"C": 2}`` for a Sol Ring's ``2``.
         """
-        from dataclasses import replace
-
         from effects.domain.event_schema import Event, EventType
         from effects.domain.records import ResolutionPayload
 
@@ -439,8 +451,6 @@ class TestRecordLabels:
             self._producing(records, {"G": 1}, {"G": 1}, {"U": 3})) == 5.0
 
     def test_observed_mana_is_capped_where_the_model_s_targets_are(self, records):
-        from effects.domain.effect_head_input import MAGNITUDE_CAP
-
         produced = self._producing(records, *({"G": 1},) * (int(MAGNITUDE_CAP) + 10))
         assert labels.mana_observed(produced) == MAGNITUDE_CAP
 
@@ -450,7 +460,7 @@ class TestRecordLabels:
         assert labels.mana_observed(self._producing(records, {}, {"B": 1})) == 1.0
 
     def test_the_join_finds_causes_in_the_same_game(self, records):
-        result = labels.join_triggers(records)
+        result = _join_triggers(records)
         by_id = {r.record_id: r for r in records}
         assert 0.0 <= result.join_rate <= 1.0 or np.isnan(result.join_rate)
         for record_id, key in result.cause.items():
@@ -513,15 +523,17 @@ class TestSweepEditor:
             assert len(ids) == len(set(ids))
             assert _differences(record, edited) <= {"entities"}
 
-    def test_damage_edits_only_the_amount(self):
+    def test_an_amount_edit_changes_only_the_amount(self):
         text = "NumDmg$ 3 | SP$ DealDamage | ValidTgts$ Creature [SEG] SV1: DB$ Draw"
-        assert sweeps.set_damage_amount(text, 7) == text.replace("NumDmg$ 3", "NumDmg$ 7")
+        assert sweeps.set_amount(text, "NumDmg", 7) == text.replace("NumDmg$ 3", "NumDmg$ 7")
+        text = "SP$ Draw | NumCards$ 2 | ValidTgts$ Player"
+        assert sweeps.set_amount(text, "NumCards", 5) == text.replace("$ 2", "$ 5")
 
     def test_cost_pips_read_generic_and_coloured_mana(self):
         assert sweeps.cost_pips("{2}{G}") == ["1", "1", "G"]
 
     def test_sweep_records_are_chosen_from_real_records(self, records, sidecars):
-        chosen = sweeps.select_sweep_records(records, sidecars)
+        chosen = _select_sweep_records(records, sidecars)
         assert set(chosen) == {"toughness", "affordability", "board_size", "damage"}
         assert chosen["affordability"]
         ids = {r.record_id for r in records}
@@ -587,8 +599,6 @@ class TestAffordabilityEdit:
         assert board(4) == ({"U": 3, "B": 1}, False)
 
     def test_every_other_land_of_the_player_is_tapped(self, records):
-        from dataclasses import replace
-
         record = _decision(records, "{1}{U}")
         actor = record.actor_player
         building = next(e for e in _lands(record, actor) if e.name == "TCRI Building")
@@ -600,8 +610,6 @@ class TestAffordabilityEdit:
         assert [e.name for e in _lands(edited, actor) if not e.tapped] == ["Island"]
 
     def test_a_fresh_land_is_the_basic_the_collector_writes(self, records):
-        from dataclasses import replace
-
         swamp = next(e for r in records for e in r.state.entities if e.name == "Swamp")
         fresh = sweeps.basic_land("B", "P9~land0", "P9")
         assert fresh == replace(swamp, id="P9~land0", controller="P9", zone="battlefield",
@@ -616,8 +624,6 @@ class TestAffordabilityEdit:
         assert sweeps.land_payable(cost) is payable
 
     def test_an_untapped_mana_creature_keeps_a_record_out(self, records, sidecars):
-        from dataclasses import replace
-
         record = _decision(records, "{2}{U}")
         assert sweeps.affordability_ready(record, sidecars)
         nurturer = next(e for r in records for e in r.state.entities
@@ -634,8 +640,6 @@ class TestAffordabilityEdit:
 
     def test_a_candidate_on_the_player_s_own_land_keeps_a_record_out(self, records,
                                                                       sidecars):
-        from dataclasses import replace
-
         record = _decision(records, "{2}{U}")
         swamp = _lands(record, record.actor_player)[0]
         candidate = replace(record.payload.candidates[0], ability=(swamp.printed[1],))
@@ -663,22 +667,7 @@ def _probe_set(corpus_digest: str):
     ).sealed()
 
 
-
 class TestDigest:
-    def test_it_is_stable_across_key_order(self):
-        a = {"items": [1, 2], "games": {"x": ["g1"]}, "corpus_digest": "c"}
-        b = {"corpus_digest": "c", "games": {"x": ["g1"]}, "items": [1, 2]}
-        assert probe_set.canonical_digest(a) == probe_set.canonical_digest(b)
-
-    def test_it_excludes_itself(self):
-        payload = {"items": [1]}
-        payload["digest"] = probe_set.canonical_digest(payload)
-        assert probe_set.canonical_digest(payload) == payload["digest"]
-
-    def test_it_changes_with_a_label(self):
-        digest = probe_set.canonical_digest
-        assert digest({"items": [1]}) != digest({"items": [2]})
-
     def test_a_probing_run_refuses_a_set_frozen_for_another_corpus(self, tmp_path):
         frozen = _probe_set(corpus_digest="aaa")
         path = tmp_path / "set.json"
@@ -704,22 +693,6 @@ class TestDigest:
     def test_a_probing_run_refuses_without_a_set(self, tmp_path):
         with pytest.raises(SystemExit, match="--freeze-probe-set"):
             probe_set.load_probe_set(tmp_path / "missing.json", "aaa")
-
-    def test_the_set_follows_the_reports_dir_by_default(self):
-        args = run.parse_args(["--checkpoint", "c.pt", "--reports-dir", "arm/reports"])
-        assert run.probe_set_location(args, "abcdef0123456789") == Path(
-            "arm/reports/knowledge-probes-set-abcdef012345.json",
-        )
-
-    def test_a_probe_set_dir_keeps_the_set_shared_across_arms(self):
-        args = run.parse_args([
-            "--checkpoint", "c.pt", "--reports-dir", "arm/reports",
-            "--probe-set-dir", "shared",
-        ])
-        assert run.probe_set_location(args, "abcdef0123456789") == Path(
-            "shared/knowledge-probes-set-abcdef012345.json",
-        )
-
 
 # ── compare ─────────────────────────────────────────────────────────────
 
@@ -941,13 +914,8 @@ class TestExtraction:
             ], records, checkpoint=checkpoint,
                 vocab_path=vocab if vocab.exists() else None)
 
-    def test_every_rung_has_one_width_per_target(self, probe_model, records, sidecars):
-        acting = run._acting_text_function(sidecars, "script")
-        join = labels.join_triggers(records)
-        items: dict[str, list] = {}
-        for record in records:
-            for item in labels.record_items(record, sidecars, join, acting):
-                items.setdefault(record.record_id, []).append(item)
+    def test_every_rung_has_one_width_per_target(self, probe_model, records, items_by_record):
+        items = {rid: found for rid, found in items_by_record.items() if found}
         chosen = [r for r in records if r.record_id in items]
         act_hidden: dict = {}
         extracted = ladder.extract_features(probe_model, chosen, items, batch_size=8,
@@ -971,7 +939,7 @@ class TestExtraction:
 
     def test_a_toughness_sweep_reads_one_prediction_per_value(self, probe_model, records,
                                                              sidecars):
-        chosen = sweeps.select_sweep_records(records, sidecars)
+        chosen = _select_sweep_records(records, sidecars)
         if not chosen["toughness"]:
             pytest.skip("no damage record in the fixture")
         row = chosen["toughness"][0]
@@ -981,12 +949,9 @@ class TestExtraction:
         assert all(0.0 <= p["prediction"] <= 1.0 for p in curve)
 
     def test_the_per_layer_view_reads_every_trunk_layer(self, probe_model, records,
-                                                        sidecars):
-        acting = run._acting_text_function(sidecars, "script")
-        join = labels.join_triggers(records)
-        record = next(r for r in records
-                      if labels.record_items(r, sidecars, join, acting))
-        items = {record.record_id: labels.record_items(record, sidecars, join, acting)}
+                                                        items_by_record):
+        record = next(r for r in records if items_by_record[r.record_id])
+        items = {record.record_id: items_by_record[record.record_id]}
         extracted = ladder.extract_features(probe_model, [record], items, per_layer=True)
         depth = len(probe_model.model.trunk.layers)
         assert all(len(item.layers) == depth for item in extracted)
@@ -1082,8 +1047,6 @@ class TestRung3ReadsTheRightOutput:
 
 def _one_on_one(records):
     """A fixture combat turned into one attacker blocked by one blocker."""
-    from dataclasses import replace
-
     from effects.domain.records import RecordKind
 
     record = next(r for r in records if r.kind is RecordKind.COMBAT
@@ -1182,8 +1145,7 @@ class TestCombatGrid:
         record, attacker, blocker = _one_on_one(records)
         rows, rule = combat_grid.grid_records(record, attacker, blocker, "blocker", "none")
         assert len(rows) == 8 and all(len(row) == 8 for row in rows)
-        assert np.array_equal(rule, np.array([[float(p >= t) for t in range(1, 9)]
-                                              for p in range(1, 9)]))
+        assert np.array_equal(rule, LETHAL_STEP)
         assert rows[2][5].state.entity(attacker).pt.total[0] == 3
         assert rows[2][5].state.entity(blocker).pt.total[1] == 6
         _, rule = combat_grid.grid_records(
@@ -1195,11 +1157,10 @@ class TestCombatGrid:
 
     def test_a_first_striker_is_read_in_the_first_strike_step(self, records):
         record, attacker, blocker = _one_on_one(records)
-        step = np.array([[float(p >= t) for t in range(1, 9)] for p in range(1, 9)])
         rows, rule = combat_grid.grid_records(
             record, attacker, blocker, "blocker", "attacker-first-strike")
         assert rows[0][0].state.global_.combat_substep == "first_strike"
-        assert np.array_equal(rule, step)
+        assert np.array_equal(rule, LETHAL_STEP)
         _, rule = combat_grid.grid_records(
             record, attacker, blocker, "attacker", "attacker-first-strike")
         assert rule.max() == 0.0
@@ -1208,7 +1169,7 @@ class TestCombatGrid:
         assert rule.max() == 0.0
         _, rule = combat_grid.grid_records(
             record, attacker, blocker, "attacker", "blocker-first-strike")
-        assert np.array_equal(rule, step)
+        assert np.array_equal(rule, LETHAL_STEP)
 
     def test_a_double_strikers_second_hit_lands_on_the_first(self, records):
         record, attacker, blocker = _one_on_one(records)
@@ -1250,16 +1211,13 @@ class TestCombatGrid:
         assert combat_grid.single_block(earlier, _keywords) is None
         rows, rule = combat_grid.grid_records(marked, attacker, blocker, "attacker", "none")
         assert all(cell.state.entity(blocker).damage == 0 for row in rows for cell in row)
-        assert np.array_equal(rule, np.array([[float(p >= t) for t in range(1, 9)]
-                                              for p in range(1, 9)]))
+        assert np.array_equal(rule, LETHAL_STEP)
 
 
 # ── the evasion grid ────────────────────────────────────────────────────
 
 def _block_pair(records):
     """A fixture block-legality record made to qualify: a red attacker, a green blocker."""
-    from dataclasses import replace
-
     from effects.domain.records import PlayabilityBlockersPayload
 
     record = next(r for r in records if isinstance(r.payload, PlayabilityBlockersPayload)
@@ -1318,8 +1276,6 @@ class TestEvasionGrid:
         assert rule is True
 
     def test_qualification(self, records):
-        from dataclasses import replace
-
         record, attacker, blocker = _block_pair(records)
         assert evasion_grid.qualifying_pair(record, _keywords) == (attacker, blocker)
         assert evasion_grid.qualifying_pair(replace(record, fork=True), _keywords) is None
@@ -1330,11 +1286,7 @@ class TestEvasionGrid:
 
 
 class TestTargetRestrictions:
-    def test_the_restriction_is_read_from_the_first_segment(self):
-        text = "SP$ Destroy | ValidTgts$ Creature.nonLegendary | TgtPrompt$ x [SEG] SV1 | " \
-               "ValidTgts$ Player"
-        assert target_restrictions.restriction_of(text) == "Creature.nonLegendary"
-        assert target_restrictions.restriction_of("SP$ Draw | NumCards$ 2") is None
+    def test_numbers_are_masked(self):
         assert target_restrictions.masked("Creature.powerLE2") == "Creature.powerLE#"
 
     @pytest.mark.parametrize("restriction, expected", [
@@ -1371,12 +1323,9 @@ class TestTargetRestrictions:
         assert "creature" not in lost.state.entity(entity.id).types
 
 
-
-
-
 class TestColourPips:
     def test_the_cost_parses_into_coloured_pips_and_generic(self):
-        assert colour_pips.parse_cost("{2}{R}{W/U}") == ([("R",), ("W", "U")], 2)
+        assert sweeps.parse_cost("{2}{R}{W/U}") == ([("R",), ("W", "U")], 2)
         assert colour_pips.shape([("U",)]) == "one pip"
         assert colour_pips.shape([("U",), ("U",)]) == "repeated pip"
         assert colour_pips.shape([("W",), ("U",)]) == "several colours"
@@ -1392,13 +1341,13 @@ class TestColourPips:
         ("{W/U}{W/U}", ["W", "G"], False),
     ])
     def test_the_rule_matches_pips_to_lands(self, cost, lands, expected):
-        assert colour_pips.payable(*colour_pips.parse_cost(cost), lands) is expected
+        assert colour_pips.payable(*sweeps.parse_cost(cost), lands) is expected
 
     @pytest.mark.parametrize("cost", ["{2}{R}", "{U}{U}", "{1}{U}{U}", "{W}{U}", "{W/U}",
                                       "{G}"])
     def test_configurations_keep_their_rule_answers(self, cost):
         configs = colour_pips.configurations(cost)
-        coloured, generic = colour_pips.parse_cost(cost)
+        coloured, generic = sweeps.parse_cost(cost)
         total = len(coloured) + generic
         assert configs["exact"] == (configs["exact"][0], True)
         assert configs["surplus"][1] is True
@@ -1429,13 +1378,7 @@ class TestZoneEffects:
         assert zone_effects.chain_apis(text) == {"Destroy", "Draw"}
         assert zone_effects.chain_apis(None) == set()
 
-    def test_set_amount(self):
-        text = "SP$ Draw | NumCards$ 2 | ValidTgts$ Player"
-        assert zone_effects.set_amount(text, 5) == "SP$ Draw | NumCards$ 5 | ValidTgts$ Player"
-
     def test_retargeting_moves_only_the_player_target(self, records):
-        from dataclasses import replace
-
         record = next(r for r in records if len(r.state.players) == 2)
         one, two = (p.id for p in record.state.players)
         aimed = replace(record, state=replace(record.state, refs=replace(
@@ -1521,38 +1464,6 @@ class TestProbeContext:
             context.load_probe_set(tmp_path)
 
 
-class TestPredict:
-    def test_it_reads_the_batch_the_batcher_builds(self):
-        """``build`` returns inputs, surfaces and encoded texts, not a pair."""
-        from effects.application.surface_batching import Materialized
-
-        seen = {}
-
-        class Model:
-            def __call__(self, inputs):
-                seen["inputs"] = inputs
-                return "hidden"
-
-            def per_entity(self, hidden):
-                return f"per-entity of {hidden}"
-
-            def verdict(self, hidden):
-                return f"verdict of {hidden}"
-
-        batcher = SimpleNamespace(build=lambda records, encoder: Materialized(
-            inputs={"x": 1}, surfaces=["s0", "s1"], encoded=None,
-        ))
-        probe_model = SimpleNamespace(batcher=batcher, encoder=None, model=Model())
-
-        rows = common.predict(probe_model, ["r0", "r1"], lambda o, v, s, r: (o, v, s, r))
-
-        assert seen == {"inputs": {"x": 1}}
-        assert rows == [
-            ("per-entity of hidden", "verdict of hidden", "s0", 0),
-            ("per-entity of hidden", "verdict of hidden", "s1", 1),
-        ]
-
-
 # ── the line ladder's held-out split ────────────────────────────────────
 
 
@@ -1560,11 +1471,12 @@ class TestLineSplit:
     """Every game naming a held-out card is kept out of training, so a text is
     untrained exactly when every card printing it is held out."""
 
-    def test_a_trained_text_printed_on_a_held_out_card_is_trained(self):
-        assert run.line_split({"Shock", "Lightning Strike"}, {"Shock"}) == "trained"
-
-    def test_a_text_every_carrier_of_which_is_held_out_is_held_out(self):
-        assert run.line_split({"Shock", "Spark"}, {"Shock", "Spark", "Bolt"}) == "held-out"
-
-    def test_a_text_on_no_held_out_card_is_trained(self):
-        assert run.line_split({"Lightning Strike"}, {"Shock"}) == "trained"
+    @pytest.mark.parametrize("carriers, held_out, expected", [
+        pytest.param({"Shock", "Lightning Strike"}, {"Shock"}, "trained",
+                     id="also printed on a trained card"),
+        pytest.param({"Shock", "Spark"}, {"Shock", "Spark", "Bolt"}, "held-out",
+                     id="every carrier held out"),
+        pytest.param({"Lightning Strike"}, {"Shock"}, "trained", id="no carrier held out"),
+    ])
+    def test_the_split(self, carriers, held_out, expected):
+        assert run.line_split(carriers, held_out) == expected

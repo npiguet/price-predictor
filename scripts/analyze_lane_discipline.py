@@ -58,16 +58,19 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from draft_corpus_common import (
+    DEFAULT_CARDS_PATH,
     ColourResolver,
+    Decision,
+    Lane,
     mana_base_width,
     parse_drafts_arg,
     read_records,
     score_play,
+    seat_decisions,
 )
 
 from draft.application.draft_training_common import leave_one_out_rewards
 
-DEFAULT_CARDS_PATH = Path("output/cardsfolder-512")
 AGENTS = ("forge-full", "gen1", "gen4")
 # Gap buckets on shrunk_score_play: best off-lane card minus best on-lane card.
 BUCKETS = [(-9.0, -0.05, "much worse"), (-0.05, -0.01, "worse"),
@@ -121,7 +124,6 @@ class Walk:
 
     def _seat(self, record, geo, i, seat, reward) -> None:
         a = seat.agent
-        pool = geo.drafted_pool(record, i)
         deck = Counter(seat.deck)
         counts: Counter = Counter()
         self.seats[a] += 1
@@ -129,41 +131,35 @@ class Walk:
         self.width[a].append(width)
         played_forced = 0
 
-        for t, card in enumerate(pool, 1):
-            pack = (t - 1) // geo.pack_size + 1
-            pick = (t - 1) % geo.pack_size + 1
+        for decision in seat_decisions(record, geo, i):
+            card = decision.taken
             in_deck = deck[card] > 0
             if in_deck:
                 deck[card] -= 1
-            lane = running_lane(counts, self.args.min_pool, self.args.min_second)
-            cs = self.colours(card)
-            if lane is not None:
-                self._pick(record, geo, i, a, pack, pick, card, cs, lane, in_deck)
-                if cs and not cs <= lane:
-                    legal = geo.legal_actions(record, i, pack, pick)
-                    if not self._has_on_lane(legal[1:], lane):
-                        played_forced += in_deck
-                        if width == 2:
-                            c = self.conv2[a]
-                            c[0] += in_deck
-                            c[1] += 1
-            for c2 in cs:
+            lane_colours = running_lane(counts, self.args.min_pool, self.args.min_second)
+            if lane_colours is not None:
+                lane = Lane(frozenset(lane_colours), self.colours)
+                self._pick(a, decision, lane, in_deck)
+                if lane.off(card) and not self._has_on_lane(decision.legal[1:], lane):
+                    played_forced += in_deck
+                    if width == 2:
+                        c = self.conv2[a]
+                        c[0] += in_deck
+                        c[1] += 1
+            for c2 in self.colours(card):
                 counts[c2] += 1
 
         if reward is not None:
             self.by_forced[a][min(played_forced, 2)].append(reward)
 
-    def _has_on_lane(self, cards, lane) -> bool:
-        return any((c := self.colours(x)) and c <= lane and x in self.scores for x in cards)
+    def _has_on_lane(self, cards, lane: Lane) -> bool:
+        return any(lane.on(x) and x in self.scores for x in cards)
 
-    def _pick(self, record, geo, i, a, pack, pick, card, cs, lane, in_deck) -> None:
-        legal = geo.legal_actions(record, i, pack, pick)
-        on, off = [], []
-        for x in legal:
-            xc = self.colours(x)
-            if not xc or x not in self.scores:
-                continue
-            (on if xc <= lane else off).append(x)
+    def _pick(self, a, decision: Decision, lane: Lane, in_deck) -> None:
+        card, legal, pack, pick = decision.taken, decision.legal, decision.pack, decision.pick
+        scored_legal = [x for x in legal if x in self.scores]
+        on = [x for x in scored_legal if lane.on(x)]
+        off = [x for x in scored_legal if lane.off(x)]
 
         # 1. scope: does this pick offer a colour choice at all?
         kind = ("both available" if on and off else
@@ -171,7 +167,7 @@ class Walk:
                 "no off-lane card" if on else "nothing scored")
         self.scope[a][kind] += 1
 
-        broke = bool(cs) and not cs <= lane
+        broke = lane.off(card)
 
         # 2. the gap reports need both kinds on offer, and a pack still worth choosing from
         if on and off and pick <= GAP_PICK_CAP:
@@ -192,7 +188,7 @@ class Walk:
                     c[1] += 1
 
         # 3-5. every pick with a lane, classified on-lane / chosen / forced
-        if not cs:
+        if not self.colours(card):
             return
         if not broke:
             k = "on lane"
@@ -200,7 +196,7 @@ class Walk:
             k = "chosen" if self._has_on_lane(legal[1:], lane) else "forced"
             if card in self.scores:
                 self.qual[(a, k)].append(self.scores[card])
-                scored = [self.scores[x] for x in legal if x in self.scores]
+                scored = [self.scores[x] for x in scored_legal]
                 if len(scored) >= 2:
                     bc = self.best[(a, k)]
                     bc[0] += self.scores[card] >= max(scored)

@@ -130,14 +130,6 @@ def collect(records: Iterable, sidecars, *, per_subset: int = RECORDS_PER_SUBSET
     return chosen
 
 
-def stratum_records(directory, *, shards: int = SHARDS_PER_STRATUM):
-    """The records of the first ``shards`` shards under ``directory``, in path order."""
-    from effects.infrastructure.shard_io import iter_shards, read_shard
-
-    for shard in iter_shards(directory)[:shards]:
-        yield from read_shard(shard)
-
-
 def run(probe_model, chosen: Mapping[str, Mapping[str, list]], stats) -> dict:
     """``{subset: {"n": {stratum: n}, "ablation": ...}}``, both strata pooled."""
     from effect_knowledge_probes import ablation
@@ -158,8 +150,7 @@ def table(result: Mapping[str, dict]) -> str:
 
     from _lib.markdown import md_table
 
-    def fmt(value) -> str:
-        return "" if value is None or isnan(value) else f"{value:.3f}"
+    from effect_knowledge_probes.common import fmt
 
     def shown(values) -> bool:
         """A row is worth a line when some subset measured more than rounding."""

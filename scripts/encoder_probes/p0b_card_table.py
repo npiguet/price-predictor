@@ -21,12 +21,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import probe_lib as pl  # noqa: E402
 from _lib.paths import OUTPUT, SEALED_TRAINING_DATA  # noqa: E402
 
-CARDS = OUTPUT / "cardsfolder-512"
 WIN_RATES = SEALED_TRAINING_DATA / "matches-bo1" / "cards-win-rates.txt"
 OUT = OUTPUT / "encoder-probes"
 
@@ -237,11 +235,13 @@ def parse_card(text: str) -> dict:
 
 def main() -> None:
     labels = pd.read_csv(WIN_RATES, sep=";", dtype={"card_name": str})
-    loc = ConvertedCardLocator(CARDS)
+    # The join table's own name index, not ConvertedCardLocator, whose
+    # prefix search mis-joins a handful of names (see probe_lib).
+    exact, aggressive = pl.build_name_index()
     rows = []
     miss = 0
     for name in labels["card_name"]:
-        p = loc.text_path(name)
+        p, _ = pl.resolve_card_file(name, exact, aggressive)
         if p is None:
             miss += 1
             rows.append(None)

@@ -48,21 +48,24 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sys
 import unicodedata
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
-FORGE = Path(__file__).resolve().parents[2].parent / "forge"  # sibling checkout
-CARDSFOLDER = FORGE / "forge-gui" / "res" / "cardsfolder"
-RANKINGS_DIR = FORGE / "forge-gui" / "res" / "draft" / "rankings"
-SCRATCH = Path(__file__).resolve().parents[2] / "output" / "scorer-probes"
-SCRATCH.mkdir(parents=True, exist_ok=True)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.paths import FORGE_RES, OUTPUT
+
+CARDSFOLDER = FORGE_RES / "cardsfolder"
+RANKINGS_DIR = FORGE_RES / "draft" / "rankings"
+# Not probe_lib.SCRATCH: importing probe_lib would load torch for a text scan.
+SCRATCH = OUTPUT / "scorer-probes"
 DEFAULT_OUT = SCRATCH / "forge_hints.csv"
 
 REMOVE_KINDS = ("All", "Random", "NonCommander")
 
-
-# ------------------------------------------------------------------ utilities
 
 def strip_accents(s: str) -> str:
     """ASCII-fold, matching ``StringUtils.stripAccents`` in ReadDraftRankings."""
@@ -98,8 +101,6 @@ def parse_mana_cost(cost: str) -> float | None:
             total += 1
     return total
 
-
-# -------------------------------------------------------------- card scripts
 
 def scan_card_scripts(limit: int | None = None) -> tuple[list[dict], Counter]:
     """Parse every card script; one record per script file."""
@@ -156,19 +157,24 @@ def scan_card_scripts(limit: int | None = None) -> tuple[list[dict], Counter]:
     return records, stats
 
 
-# ---------------------------------------------------------- draft rankings
+@dataclass(frozen=True)
+class RankingEntry:
+    """One line of a set's human pick order."""
 
-def read_rankings() -> tuple[dict[str, list[float]], Counter]:
-    """``rank_key -> [normalized rank per set]`` from ``res/draft/rankings/*.rnk``.
+    edition: str
+    name: str
+    rank: int
+    rarity: str
+
+
+def read_ranking_entries() -> tuple[list[RankingEntry], Counter]:
+    """Every entry of ``res/draft/rankings/*.rnk``.
 
     Mirrors ``ReadDraftRankings.readFile``: '//' comments skipped, parsing stops
-    at the first blank line, fields are ``#rank|Name|Rarity|Set``, and each
-    set's normalizer is the largest rank seen for that set.
+    at the first blank line, fields are ``#rank|Name|Rarity|Set``.
     """
     stats: Counter = Counter()
-    raw: list[tuple[str, str, int]] = []       # (edition, name_key, rank)
-    set_sizes: dict[str, int] = {}
-
+    entries: list[RankingEntry] = []
     files = sorted(RANKINGS_DIR.glob("*.rnk"))
     stats["rnk_files"] = len(files)
     for path in files:
@@ -188,24 +194,33 @@ def read_rankings() -> tuple[dict[str, list[float]], Counter]:
                 except ValueError:
                     stats["bad_rank"] += 1
                     continue
-                edition = parts[3].strip()
-                key = rank_key(parts[1].strip())
-                raw.append((edition, key, rank))
-                set_sizes[edition] = max(set_sizes.get(edition, 0), rank)
+                entries.append(RankingEntry(parts[3].strip(), parts[1].strip(), rank,
+                                            parts[2].strip()))
+    return entries, stats
 
+
+def edition_sizes(entries: list[RankingEntry]) -> dict[str, int]:
+    """Each set's normalizer, as Forge takes it: the largest rank listed for it."""
+    sizes: dict[str, int] = {}
+    for e in entries:
+        sizes[e.edition] = max(sizes.get(e.edition, 0), e.rank)
+    return sizes
+
+
+def read_rankings() -> tuple[dict[str, list[float]], Counter]:
+    """``rank_key -> [normalized rank per set]``: Forge's ``rank / set size``,
+    in (0, 1] with lower better."""
+    entries, stats = read_ranking_entries()
+    sizes = edition_sizes(entries)
     by_name: dict[str, list[float]] = defaultdict(list)
-    for edition, key, rank in raw:
-        size = set_sizes.get(edition, 0)
-        if size <= 0:
-            continue
-        by_name[key].append(rank / size)
-    stats["ranking_entries"] = len(raw)
-    stats["ranking_editions"] = len(set_sizes)
+    for e in entries:
+        if sizes[e.edition] > 0:
+            by_name[rank_key(e.name)].append(e.rank / sizes[e.edition])
+    stats["ranking_entries"] = len(entries)
+    stats["ranking_editions"] = len(sizes)
     stats["ranking_distinct_names"] = len(by_name)
     return dict(by_name), stats
 
-
-# ------------------------------------------------------------------- assembly
 
 def build_rows(records: list[dict], ranks: dict[str, list[float]]) -> tuple[list[dict], Counter]:
     stats: Counter = Counter()
@@ -255,6 +270,7 @@ def main() -> None:
     limit = args.limit if args.limit is not None else (2000 if args.smoke else None)
     out = args.out or (SCRATCH / "forge_hints_smoke.csv" if args.smoke
                        else DEFAULT_OUT)
+    out.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"cardsfolder : {CARDSFOLDER}")
     print(f"rankings    : {RANKINGS_DIR}")

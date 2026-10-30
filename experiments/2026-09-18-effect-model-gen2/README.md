@@ -15,7 +15,7 @@ python scripts/effect_gen2_report/make_diagrams.py  # the six diagrams, which re
 
 Both drawing scripts also take function names on the command line and then redraw only those charts or diagrams, as in `make_charts.py ping_deaths`.
 
-`build_data.py` reads the run directories under `models/effects/runs/`, which are not in the repository. A run that does not exist yet is skipped, so re-running it as the sweep continues adds the new runs. Figures that exist only in the records' text are kept in `scripts/effect_gen2_report/transcribed.py`, each block naming where it was measured.
+`build_data.py` reads the run directories under `models/effects/runs/`, which are not in the repository. A run that does not exist yet is skipped, so re-running it as the sweep continues adds the new runs. Figures that exist only in the records' text are entered by hand in the CSVs themselves, and the Data table below marks them transcribed. When `build_data.py` rewrites a CSV that mixes computed and hand-entered rows, it keeps every hand-entered row the run directories do not produce.
 
 ## Names
 

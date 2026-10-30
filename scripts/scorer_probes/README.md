@@ -13,7 +13,7 @@ Run from this directory with the repo venv:
 `..\..\.venv\Scripts\python.exe <script>`. Most scripts accept `--smoke`
 (tiny CPU run). External inputs: the Y: corpus files (`probe_lib.YDATA`),
 `output/cardsfolder-512/`, `models/sealed/scorer/512-…_mwlog.pt`, and for
-`forge_hints.py` / `human_rank_probe.py` / `cardtool.py` a sibling Forge
+`forge_hints.py` / `human_rank_probe.py` a sibling Forge
 checkout at `../forge`.
 
 ## Script → document section
@@ -22,8 +22,7 @@ checkout at `../forge`.
 |---|---|---|
 | `probe_lib.py` | shared harness (checkpoint load, batched scoring, corpus readers, card features, win-rate labels) | — |
 | `t0_landscape.py` | "Three quarters of the score range…"; builder means; inputs to T7-A | `t0_decks.csv` |
-| `t5_ablation.py` | "The card-text embedding carries the signal…" (ablation table, bag-of-text) | `t5_ablation.json` |
-| `t5b_det_groups.py` | per-group ablation of the 32 deterministic features (paired stats, both post-cutoff corpora) — "Inside the deterministic features…" | `t5b_results.json` |
+| `t5_ablation.py` | "The card-text embedding carries the signal…" (ablation table, bag-of-text); with `--groups`, the per-group ablation of the 32 deterministic features (paired stats, both post-cutoff corpora) — "Inside the deterministic features…" | `t5_ablation.json`; `t5_groups.json` |
 | `t5c_label_weights.py` | how heavily the scorer weights each label axis: regression on the T2 card values + text-direction perturbation — "The scorer pulls hardest…" (needs t2's CSV and the PCA) | `t5c_results.json` |
 | `make_text_pca.py` | PC1/top-k variance shares; label regression naming the leading axes (PC1 = played-rate, PC2 = winnability); input for t6 P1 | `text_pca_512.npz` |
 | `t6_mechanism.py` | "The pooling layer is a plain average…", "Two numbers per card…", OOD envelope | `t6_report.md`, `t6_results.json` |
@@ -37,7 +36,7 @@ checkout at `../forge`.
 | `post_hoc_slices.py` | prose numbers with no t-script: within-set correlations, set offsets, dynamic range, nonbasic-land counts, gen4-512 color distribution, card-class slices (tricks/counterspells/planeswalkers/vehicles/X/hybrid), text-length null, on/off-color add decomposition, multi-face slice, splash economics + 5-color census, forge-best add robustness | stdout |
 | `make_figures.py` | renders the document's figures (calibration, ablation, PC-truncation, PC-label meanings, label weights, det groups, builder scores, shape ladders, color economics, land adds, card values, synergy dose, noncreature mix, noncreature colors) from the staged outputs | `experiments/images/2026-08-27-scorer-*.png/.svg` |
 | `label_probe.py` → `rarity_probe.py` / `human_rank_probe.py` | label-level numbers ("0.57 sd above human pick order", power-vs-toughness, rarity gradient) — run in that order (`labels_joined.csv` feeds the other two) | `labels_joined.csv`, stdout |
-| `synergy_pairs.json` + `verify.py` (+ `cardtool.py`, `dump.py`) | the curated 60-triple synergy dataset used by t4, with its validator and browsing helpers | — |
+| `synergy_pairs.json` | the curated 60-triple synergy dataset used by t4 | — |
 
 ## Order for a from-scratch rerun
 
@@ -45,7 +44,7 @@ checkout at `../forge`.
 2. `make_text_pca.py` (t6 P1 reads the npz)
 3. `forge_hints.py` (t7-D2 reads its CSV)
 4. `t1_meansum.py`, `t2_marginal_values.py` → `t2_analyze.py`, `t3_ladders.py`,
-   `t4_synergy.py`, `t5_ablation.py`, `t5b_det_groups.py`, `t6_mechanism.py`, `t7_artifacts.py`,
+   `t4_synergy.py`, `t5_ablation.py`, `t5_ablation.py --groups`, `t6_mechanism.py`, `t7_artifacts.py`,
    `t8_noncreature_mix.py` — any order
 5. `post_hoc_slices.py`; label-level: `label_probe.py` → `rarity_probe.py`,
    `human_rank_probe.py`

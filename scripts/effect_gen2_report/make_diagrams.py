@@ -10,15 +10,15 @@ arrow and label is fixed here, from the two records and the code under
 
 from __future__ import annotations
 
-import sys
 from functools import partial
 
 import chart_style
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from chart_style import WIDTH_COLOUR
+from chart_style import WIDTH_COLOUR, draw_requested
 from chart_style import shade as tint
+from lineage import WIDTHS
 from matplotlib.patches import Circle, Ellipse, FancyArrowPatch, FancyBboxPatch
 
 plt.rcParams.update({
@@ -101,6 +101,17 @@ def tag(ax, x, y, label, colour, *, size=8.5, ha="left", z=7):
                              fc=tint(colour, 0.12), ec="none"))
 
 
+def titled_box(ax, x, y, w, h, title, body, *, pad=0.22, title_gap=0.35, body_gap=0.7,
+               title_size=9.6, body_size=8.1, linespacing=1.28, fc=WHITE, ec=RULE, lw=1.0,
+               radius=0.18):
+    """A box with a bold title ``title_gap`` below its top edge and a soft body ``body_gap``
+    below it, both ``pad`` in from the left."""
+    box(ax, x, y, w, h, fc=fc, ec=ec, lw=lw, radius=radius)
+    text(ax, x + pad, y + h - title_gap, title, size=title_size, weight="bold", ha="left")
+    text(ax, x + pad, y + h - body_gap, body, size=body_size, colour=SOFT, ha="left",
+         va="top", linespacing=linespacing)
+
+
 # ── 1. the model, and where each probe reads it ─────────────────────────
 
 
@@ -117,7 +128,7 @@ def _slot(ax, x, y, w, h, label, body=None, *, fc=PANEL, ec=STRUCT, lw=1.0):
 
 def _width_bars(ax, x, y, step=0.3, unit=0.0115):
     """Three bars, one per width of ``e``, each as long as its width."""
-    for i, width in enumerate((64, 128, 256)):
+    for i, width in enumerate(WIDTHS):
         yy = y - i * step
         ax.add_patch(FancyBboxPatch((x, yy), width * unit, 0.17,
                                     boxstyle="round,pad=0,rounding_size=0.06",
@@ -126,12 +137,16 @@ def _width_bars(ax, x, y, step=0.3, unit=0.0115):
              ha="left")
 
 
-def model_and_probes() -> None:
-    W, H = 24.2, 16.3
-    fig, ax = canvas(W, H, scale=0.56, bottom=1.45)
-    dashed = (0, (4, 2.5))
+#: The trunk's input slots: the bottom edge and the height of the row.
+SLOT_Y, SLOT_H = 7.95, 1.9
+#: The colour of the arrows that carry each line's e into the trunk.
+E_FEED = tint(STRUCT, 0.6)
+DASHED = (0, (4, 2.5))
 
-    # ── top row: script → tokenizer → encoder → e ──
+
+def _encoder_row(ax) -> tuple[float, float, float, float]:
+    """Script → tokenizer → encoder → e, the training-only parts beside it; returns the
+    noise box's ``(x, width, y, height)``."""
     ty = 14.3
     box(ax, 0.3, ty - 0.95, 5.0, 1.9, fc=PANEL, ec="none")
     text(ax, 2.8, ty + 0.55, "an ability's Forge script", size=10.3, weight="bold")
@@ -164,7 +179,7 @@ def model_and_probes() -> None:
     arrow(ax, (13.2, ty), (13.95, ty))
 
     # The MLM head reads the encoder's token outputs, not e.
-    box(ax, 9.6, 11.15, 3.6, 1.15, ec=TRAIN_ONLY, ls=dashed, lw=1.1)
+    box(ax, 9.6, 11.15, 3.6, 1.15, ec=TRAIN_ONLY, ls=DASHED, lw=1.1)
     text(ax, 11.4, 11.95, "MLM head", size=9.2, weight="bold")
     text(ax, 11.4, 11.5, "masked words, from the\nencoder's token outputs", size=7.9,
          colour=SOFT, linespacing=1.2)
@@ -172,14 +187,14 @@ def model_and_probes() -> None:
 
     # Noise sits on the way from e to everything that reads it in training.
     nx, nw, ny, nh = 14.1, 3.6, 11.15, 1.15
-    box(ax, nx, ny, nw, nh, ec=TRAIN_ONLY, ls=dashed, lw=1.1)
+    box(ax, nx, ny, nw, nh, ec=TRAIN_ONLY, ls=DASHED, lw=1.1)
     text(ax, nx + nw / 2, ny + 0.8, "+ Gaussian noise", size=9.2, weight="bold")
     text(ax, nx + nw / 2, ny + 0.36, "covariance r²Σ of e itself", size=7.9,
          colour=SOFT)
     arrow(ax, (ex + 1.0, ty - 0.82), (ex + 1.0, ny + nh), colour=SOFT)
 
     hx, hw, hy, hh = 18.55, 5.35, 10.75, 1.95
-    box(ax, hx, hy, hw, hh, ec=TRAIN_ONLY, ls=dashed, lw=1.1)
+    box(ax, hx, hy, hw, hh, ec=TRAIN_ONLY, ls=DASHED, lw=1.1)
     text(ax, hx + 0.22, hy + hh - 0.33, "heads that read e alone", size=9.2,
          weight="bold", ha="left")
     for i, (name, what) in enumerate([
@@ -192,9 +207,13 @@ def model_and_probes() -> None:
         text(ax, hx + 1.75, yy, what, size=8.1, ha="left", colour=SOFT)
     arrow(ax, (nx + nw, ny + nh / 2), (hx, ny + nh / 2), colour=TRAIN_ONLY)
     tag(ax, hx + hw, hy + hh + 0.32, "dashed: training only", TRAIN_ONLY, ha="right")
+    return nx, nw, ny, nh
 
-    # ── middle row: the trunk's input slots ──
-    sy, sh = 7.95, 1.9
+
+def _trunk_input(ax) -> list[tuple[float, float]]:
+    """The slots the trunk reads, and the blocks of objects; returns the ``(x, width)`` of
+    each ability slot of the object block."""
+    sy, sh = SLOT_Y, SLOT_H
     text(ax, 0.3, 11.35, "trunk input: one token per slot", size=10.3,
          weight="bold", ha="left")
     badge(ax, 0.3, sy + sh, "0")
@@ -227,29 +246,33 @@ def model_and_probes() -> None:
     text(ax, gx, sy - 0.18, "never in a block: the\nmodel sees a static,\ntrigger or "
          "replacement\nonly through what it\nhas done to the board", size=8.0,
          colour=DEFECT, ha="left", va="top", linespacing=1.27)
+    return e_slots
 
-    # The e bus: from the noise, down to [ACT] and into every ability slot.
+
+def _e_bus(ax, noise: tuple, e_slots: list[tuple[float, float]]) -> None:
+    """The e bus: from the noise, down to [ACT] and into every ability slot."""
+    nx, nw, ny, _ = noise
     bus_y = 10.55
-    feed = tint(STRUCT, 0.6)
-    ax.plot([nx + nw / 2, nx + nw / 2, 3.72], [ny, bus_y, bus_y], color=feed, lw=1.3,
+    ax.plot([nx + nw / 2, nx + nw / 2, 3.72], [ny, bus_y, bus_y], color=E_FEED, lw=1.3,
             zorder=3, solid_joinstyle="round")
     for x in (3.72, *(x + w / 2 for x, w in e_slots)):
-        arrow(ax, (x, bus_y), (x, sy + sh), colour=feed, lw=1.3, head=8, shrink=0)
+        arrow(ax, (x, bus_y), (x, SLOT_Y + SLOT_H), colour=E_FEED, lw=1.3, head=8, shrink=0)
     text(ax, 4.0, bus_y + 0.22, "each line's e: the acting line's into [ACT], each "
          "object's own lines into its block", size=8.1, colour=MUTED, ha="left", style="italic")
 
-    # ── the trunk ──
+
+def _trunk_and_heads(ax) -> None:
+    """The trunk under the slots, and the output heads under the trunk."""
     tr_y, tr_h = 4.75, 1.15
     box(ax, 0.3, tr_y, 13.25, tr_h, fc=tint(STRUCT, 0.10), ec=STRUCT, lw=1.3)
     text(ax, 6.93, tr_y + tr_h / 2, "trunk: transformer, 6 layers, width 256 — "
          "every slot attends to every other", size=10.2, weight="bold")
     for x in (1.3, 3.72, 6.1, 8.15):
-        arrow(ax, (x, sy), (x, tr_y + tr_h), colour=feed, lw=1.1, head=7, shrink=1)
-    arrow(ax, (12.4, sy - 1.45), (12.4, tr_y + tr_h), colour=feed, lw=1.1, head=7,
+        arrow(ax, (x, SLOT_Y), (x, tr_y + tr_h), colour=E_FEED, lw=1.1, head=7, shrink=1)
+    arrow(ax, (12.4, SLOT_Y - 1.45), (12.4, tr_y + tr_h), colour=E_FEED, lw=1.1, head=7,
           shrink=1)
     badge(ax, 13.55, tr_y + tr_h / 2, "2")
 
-    # ── output heads ──
     oy, oh = 1.55, 2.4
     heads = [
         (0.3, 3.55, "created-objects head", "at [GLOBAL]: the tokens\nand cards the "
@@ -261,15 +284,14 @@ def model_and_probes() -> None:
          "drawn; a legal target, may\nattack, may block"),
     ]
     for x, w, title, body in heads:
-        box(ax, x, oy, w, oh, ec=STRUCT, lw=1.1)
-        text(ax, x + 0.22, oy + oh - 0.35, title, size=9.6, weight="bold", ha="left")
-        text(ax, x + 0.22, oy + oh - 0.7, body, size=8.1, colour=SOFT, ha="left",
-             va="top", linespacing=1.28)
+        titled_box(ax, x, oy, w, oh, title, body, ec=STRUCT, lw=1.1)
         arrow(ax, (x + w / 2, tr_y), (x + w / 2, oy + oh), colour=STRUCT, lw=1.1, head=8,
               shrink=1)
     badge(ax, 13.55, oy + oh, "3")
 
-    # ── side panel: the ladder and the ablation ──
+
+def _read_out_ladder(ax) -> None:
+    """The side panel: the read-out ladder and the ablation."""
     px, py, pw, ph = 17.1, 1.55, 6.8, 8.95
     box(ax, px, py, pw, ph, fc=PANEL, ec="none")
     text(ax, px + 0.3, py + ph - 0.45, "Read-out ladder", size=11, weight="bold",
@@ -317,6 +339,15 @@ def model_and_probes() -> None:
         text(ax, xx + 0.15, yy, name, size=8.4, colour=SOFT, ha="left")
         yy -= 0.42
 
+
+def model_and_probes() -> None:
+    W, H = 24.2, 16.3
+    fig, ax = canvas(W, H, scale=0.56, bottom=1.45)
+    noise = _encoder_row(ax)
+    e_slots = _trunk_input(ax)
+    _e_bus(ax, noise, e_slots)
+    _trunk_and_heads(ax)
+    _read_out_ladder(ax)
     save(fig, "diagram-model-and-probes")
 
 
@@ -333,12 +364,12 @@ def _game_tile(ax, x, y, dest: str | None, *, w=0.62, h=0.44):
                             zorder=4))
 
 
-def validation_strata() -> None:
-    W, H = 22.0, 12.4
-    fig, ax = canvas(W, H, scale=0.56, bottom=0.2)
-    STRATUM = {"card": PROBE, "game": ABLATE, "train": STRUCT}
+#: The destination of a whole game, by stratum.
+STRATUM = {"card": PROBE, "game": ABLATE, "train": STRUCT}
 
-    # ── the corpus: whole games ──
+
+def _corpus_grid(ax) -> None:
+    """The corpus as one tile per game, each outlined by the stratum it goes to."""
     text(ax, 0.3, 11.95, "the corpus, one tile per game", size=10.5, weight="bold",
          ha="left")
     text(ax, 0.3, 11.5, "each dot a record; a rose dot names a held-out card",
@@ -355,7 +386,9 @@ def validation_strata() -> None:
          "played\nwithout any held-out card, and a separate\ncollection plays them.",
          size=8.3, colour=SOFT, ha="left", va="top", linespacing=1.3)
 
-    # ── the two questions, asked of a whole game ──
+
+def _stratum_questions(ax) -> tuple[tuple, tuple]:
+    """The two questions asked of a whole game; returns each one's ``(x, y, w, h)``."""
     def question(x, y, w, h, body):
         box(ax, x, y, w, h, fc=PANEL, ec=STRUCT, lw=1.1, radius=0.3)
         text(ax, x + w / 2, y + h / 2, body, size=9.0, linespacing=1.3)
@@ -370,9 +403,11 @@ def validation_strata() -> None:
           colour=SOFT)
     text(ax, q1[0] + q1[2] / 2 + 0.15, q1[1] - 0.6, "no", size=8.6, colour=MUTED,
          ha="left", weight="bold")
+    return q1, q2
 
-    # ── the three destinations ──
-    dx, dw = 11.6, 5.1
+
+def _stratum_destinations(ax, dx: float, dw: float, q1: tuple, q2: tuple) -> None:
+    """The three destinations, the column of which is at ``dx``, each reached from a question."""
     dests = [
         ("card", 9.25, 2.05, "card-disjoint stratum",
          "games holding a held-out card, whose\nability texts the model never "
@@ -384,13 +419,12 @@ def validation_strata() -> None:
     ]
     for key, y, dh, title, body in dests:
         colour = STRATUM[key]
-        box(ax, dx, y, dw, dh, fc=tint(colour, 0.08), ec=colour, lw=1.4)
+        titled_box(ax, dx, y, dw, dh, title, body, pad=0.4, title_gap=0.4, body_gap=0.8,
+                   title_size=10.3, body_size=8.4, linespacing=1.3, fc=tint(colour, 0.08),
+                   ec=colour, lw=1.4)
         ax.add_patch(FancyBboxPatch((dx, y), 0.16, dh,
                                     boxstyle="round,pad=0,rounding_size=0.08",
                                     fc=colour, ec="none", zorder=4))
-        text(ax, dx + 0.4, y + dh - 0.4, title, size=10.3, weight="bold", ha="left")
-        text(ax, dx + 0.4, y + dh - 0.8, body, size=8.4, colour=SOFT, ha="left",
-             va="top", linespacing=1.3)
     arrow(ax, (q1[0] + q1[2], q1[1] + q1[3] / 2), (dx, 9.25 + 2.05 / 2),
           colour=STRATUM["card"], lw=1.5)
     text(ax, (q1[0] + q1[2] + dx) / 2, q1[1] + q1[3] / 2 + 0.25, "yes", size=8.6,
@@ -404,7 +438,9 @@ def validation_strata() -> None:
     text(ax, q2[0] + q2[2] / 2 - 0.15, q2[1] - 0.5, "no", size=8.6, colour=MUTED,
          weight="bold", ha="right")
 
-    # ── what the two validation strata feed ──
+
+def _validation_outputs(ax, dx: float, dw: float) -> None:
+    """What the two validation strata feed."""
     ox, ow, oh = 17.55, 4.25, 2.55
     top, bottom = 9.25 + 2.05, 5.85
     ax.plot([dx + dw + 0.1, dx + dw + 0.3, dx + dw + 0.3, dx + dw + 0.1],
@@ -421,12 +457,12 @@ def validation_strata() -> None:
     for y, title, body in outs:
         arrow(ax, (dx + dw + 0.3, (top + bottom) / 2), (ox, y + oh / 2), colour=SOFT,
               rad=0.0)
-        box(ax, ox, y, ow, oh, fc=WHITE, ec=SOFT, lw=1.1)
-        text(ax, ox + 0.25, y + oh - 0.35, title, size=9.8, weight="bold", ha="left")
-        text(ax, ox + 0.25, y + oh - 0.72, body, size=8.3, colour=SOFT, ha="left",
-             va="top", linespacing=1.3)
+        titled_box(ax, ox, y, ow, oh, title, body, pad=0.25, body_gap=0.72, title_size=9.8,
+                   body_size=8.3, linespacing=1.3, ec=SOFT, lw=1.1)
 
-    # ── the vocabulary, as a table ──
+
+def _strata_table(ax) -> None:
+    """The vocabulary, as a table: what each stratum tests."""
     tx, ty = 0.3, 0.45
     box(ax, tx, ty - 0.25, 10.0, 2.25, fc=PANEL, ec="none")
     cols = [("the game in training?", 5.4), ("its ability texts in training?", 8.35)]
@@ -447,6 +483,16 @@ def validation_strata() -> None:
          "would leak into it", size=8.2, colour=MUTED, ha="left", va="top",
          style="italic", linespacing=1.3)
 
+
+def validation_strata() -> None:
+    W, H = 22.0, 12.4
+    fig, ax = canvas(W, H, scale=0.56, bottom=0.2)
+    dx, dw = 11.6, 5.1
+    _corpus_grid(ax)
+    q1, q2 = _stratum_questions(ax)
+    _stratum_destinations(ax, dx, dw, q1, q2)
+    _validation_outputs(ax, dx, dw)
+    _strata_table(ax)
     save(fig, "diagram-validation-strata")
 
 
@@ -461,10 +507,15 @@ def _hatch_box(ax, x, y, w, h, colour):
     ax.add_patch(patch)
 
 
-def combat_step() -> None:
-    W, H = 24.4, 14.0
-    fig, ax = canvas(W, H, scale=0.56, bottom=-0.05)
-    x0 = 3.7
+#: The geometry of a combat step's two lanes: the first-strike lane's and the regular
+#: lane's bottom edge, a lane's height, where the step begins, the first damage event, the
+#: lanes' right end.
+FIRST_Y, REGULAR_Y, LANE_H = 9.45, 5.6, 1.75
+STEP_X0, FIRST_DAMAGE, END_X = 3.7, 6.85, 19.9
+
+
+def _damage_lanes(ax) -> None:
+    """One lane per damage step, each stage of the step a box along it."""
     # Each stage of a damage step: (x, width, title, detail).
     stages = [
         (4.0, 2.55, "damage\nassigned", "who deals how\nmuch to whom"),
@@ -474,12 +525,7 @@ def combat_step() -> None:
          "e.g. \"draw\na card\", the monarch's change"),
         (17.35, 2.55, "step ends", "Forge clears the\nassignment table"),
     ]
-    end_x = 19.9
-    fy, ry = 9.45, 5.6
-    lanes = [("first-strike\ndamage step", fy), ("regular\ndamage step", ry)]
-    lane_h = 1.75
-    first_damage = 6.85
-
+    lanes = [("first-strike\ndamage step", FIRST_Y), ("regular\ndamage step", REGULAR_Y)]
     text(ax, 0.3, 13.45, "One combat: a first-strike step, then a regular step",
          size=11.5, weight="bold", ha="left")
     text(ax, 0.3, 12.95, "the first-strike step happens only when an attacking or "
@@ -488,32 +534,33 @@ def combat_step() -> None:
          size=8.6, colour=MUTED, ha="left")
 
     for name, y in lanes:
-        box(ax, 0.3, y - 0.15, end_x - 0.3 + 0.2, lane_h + 0.3, fc=PANEL, ec="none",
+        box(ax, 0.3, y - 0.15, END_X - 0.3 + 0.2, LANE_H + 0.3, fc=PANEL, ec="none",
             radius=0.25, z=1)
-        text(ax, 0.6, y + lane_h / 2, name, size=10, weight="bold", ha="left",
+        text(ax, 0.6, y + LANE_H / 2, name, size=10, weight="bold", ha="left",
              linespacing=1.2)
         for sx, sw, title, detail in stages:
-            box(ax, sx, y + 0.12, sw, lane_h - 0.24, fc=WHITE, ec=RULE, lw=0.9,
-                radius=0.14)
-            text(ax, sx + 0.18, y + lane_h - 0.42, title.replace("\n", " "), size=8.9,
-                 weight="bold", ha="left")
-            text(ax, sx + 0.18, y + lane_h - 0.72, detail, size=7.8, colour=SOFT,
-                 ha="left", va="top", linespacing=1.2)
+            titled_box(ax, sx, y + 0.12, sw, LANE_H - 0.24, title.replace("\n", " "), detail,
+                       pad=0.18, title_gap=0.3, body_gap=0.6, title_size=8.9, body_size=7.8,
+                       linespacing=1.2, ec=RULE, lw=0.9, radius=0.14)
         for (sx, sw, *_), (nx, *_) in zip(stages, stages[1:]):
-            arrow(ax, (sx + sw, y + lane_h / 2), (nx, y + lane_h / 2), colour=MUTED,
+            arrow(ax, (sx + sw, y + LANE_H / 2), (nx, y + LANE_H / 2), colour=MUTED,
                   lw=1.0, head=7, shrink=0.5)
         # The step begins: the phase event, where a probe fork copies the game.
-        ax.plot([x0, x0], [y - 0.05, y + lane_h + 0.05], color=SOFT, lw=1.6, zorder=4,
-                solid_capstyle="round")
-    arrow(ax, (1.2, fy - 0.2), (1.2, ry + lane_h + 0.2), colour=MUTED, lw=1.2, head=8)
-    text(ax, 1.4, (fy + ry + lane_h) / 2, "then", size=8.4, colour=MUTED, ha="left",
-         style="italic")
+        ax.plot([STEP_X0, STEP_X0], [y - 0.05, y + LANE_H + 0.05], color=SOFT, lw=1.6,
+                zorder=4, solid_capstyle="round")
+    arrow(ax, (1.2, FIRST_Y - 0.2), (1.2, REGULAR_Y + LANE_H + 0.2), colour=MUTED, lw=1.2,
+          head=8)
+    text(ax, 1.4, (FIRST_Y + REGULAR_Y + LANE_H) / 2, "then", size=8.4, colour=MUTED,
+         ha="left", style="italic")
 
-    # ── the gen-2 combat record of the regular step ──
-    top = ry + lane_h + 0.32
-    ax.plot([first_damage, first_damage, end_x, end_x], [top - 0.12, top, top, top - 0.12],
+
+def _record_extents(ax) -> None:
+    """Where the gen-2 combat records of both steps start and stop, and the snapshots."""
+    fy, ry = FIRST_Y, REGULAR_Y
+    top = ry + LANE_H + 0.32
+    ax.plot([FIRST_DAMAGE, FIRST_DAMAGE, END_X, END_X], [top - 0.12, top, top, top - 0.12],
             color=STRUCT, lw=2.0, zorder=5, solid_capstyle="round")
-    text(ax, first_damage + 0.1, top + 0.3, "gen-2 combat record: every event until "
+    text(ax, FIRST_DAMAGE + 0.1, top + 0.3, "gen-2 combat record: every event until "
          "the phase changes", size=8.7, weight="bold", ha="left", colour=STRUCT)
     # Gen-3 stops the record where the stack starts.
     ax.plot([12.55, 12.55], [ry - 0.3, top + 0.1], color=ABLATE, lw=1.6, zorder=6,
@@ -523,38 +570,42 @@ def combat_step() -> None:
 
     # Snapshots: gen-2 takes it at the first damage event; the gen-3 draft moves it.
     for y in (ry, fy):
-        ax.plot([first_damage, first_damage], [y - 0.1, y + lane_h + 0.1], color=STRUCT,
+        ax.plot([FIRST_DAMAGE, FIRST_DAMAGE], [y - 0.1, y + LANE_H + 0.1], color=STRUCT,
                 lw=2.0, zorder=6, solid_capstyle="round")
-    text(ax, first_damage + 0.42, ry - 0.42, "gen-2 snapshot, at the\nstep's first damage event",
-         size=7.9, colour=STRUCT, weight="bold", ha="left", va="top", linespacing=1.2)
-    ax.plot([x0 + 0.06, x0 + 0.06], [ry - 0.1, ry + lane_h + 0.1], color=ABLATE, lw=1.6,
-            zorder=6, ls=(0, (3, 2)))
-    text(ax, x0 + 0.06, ry - 0.3, "step begins; the gen-3\ndraft's snapshot",
+    text(ax, FIRST_DAMAGE + 0.42, ry - 0.42, "gen-2 snapshot, at the\nstep's first damage "
+         "event", size=7.9, colour=STRUCT, weight="bold", ha="left", va="top",
+         linespacing=1.2)
+    ax.plot([STEP_X0 + 0.06, STEP_X0 + 0.06], [ry - 0.1, ry + LANE_H + 0.1], color=ABLATE,
+            lw=1.6, zorder=6, ls=(0, (3, 2)))
+    text(ax, STEP_X0 + 0.06, ry - 0.3, "step begins; the gen-3\ndraft's snapshot",
          size=7.9, colour=ABLATE, weight="bold", ha="left", va="top", linespacing=1.2)
 
-    # ── the first-strike step: what reached a gen-2 record ──
-    _hatch_box(ax, 6.85, fy + 0.12, 5.4, lane_h - 0.24, DEFECT)
-    ftop = fy + lane_h + 0.32
-    ax.plot([first_damage, first_damage, end_x, end_x],
+    # The first-strike step: what reached a gen-2 record.
+    _hatch_box(ax, 6.85, fy + 0.12, 5.4, LANE_H - 0.24, DEFECT)
+    ftop = fy + LANE_H + 0.32
+    ax.plot([FIRST_DAMAGE, FIRST_DAMAGE, END_X, END_X],
             [ftop - 0.12, ftop, ftop, ftop - 0.12], color=DEFECT, lw=2.0, zorder=5,
             ls=(0, (4, 2)))
-    text(ax, first_damage + 0.1, ftop + 0.3, "gen-2: a record only when a player was "
+    text(ax, FIRST_DAMAGE + 0.1, ftop + 0.3, "gen-2: a record only when a player was "
          "hit, holding that damage alone; the hatched parts reached no record", size=8.7,
          weight="bold", ha="left", colour=DEFECT)
 
-    # ── defect badges, placed where each defect lives ──
-    badge(ax, 9.55, fy + lane_h + 0.05, "1", DEFECT)
-    badge(ax, 6.55, ry + lane_h - 0.05, "2", DEFECT)
-    badge(ax, first_damage + 0.35, ry + 0.2, "3", DEFECT)
-    badge(ax, 16.85, ry + lane_h - 0.05, "4", DEFECT)
-    badge(ax, first_damage + 0.17, ry - 0.62, "5", DEFECT, r=0.22, size=8.5)
+    # Defect badges, placed where each defect lives.
+    badge(ax, 9.55, fy + LANE_H + 0.05, "1", DEFECT)
+    badge(ax, 6.55, ry + LANE_H - 0.05, "2", DEFECT)
+    badge(ax, FIRST_DAMAGE + 0.35, ry + 0.2, "3", DEFECT)
+    badge(ax, 16.85, ry + LANE_H - 0.05, "4", DEFECT)
+    badge(ax, FIRST_DAMAGE + 0.17, ry - 0.62, "5", DEFECT, r=0.22, size=8.5)
 
-    # ── what the record holds ──
+
+def _record_contents(ax) -> None:
+    """What a combat record holds."""
+    fy, ry = FIRST_Y, REGULAR_Y
     cx, cw = 20.55, 3.65
-    box(ax, cx, ry - 0.15, cw, fy + lane_h + 0.15 - ry + 0.15, fc=WHITE, ec=STRUCT, lw=1.2)
-    text(ax, cx + 0.25, fy + lane_h - 0.25, "a combat record", size=10, weight="bold",
+    box(ax, cx, ry - 0.15, cw, fy + LANE_H + 0.15 - ry + 0.15, fc=WHITE, ec=STRUCT, lw=1.2)
+    text(ax, cx + 0.25, fy + LANE_H - 0.25, "a combat record", size=10, weight="bold",
          ha="left")
-    text(ax, cx + 0.25, fy + lane_h - 0.65, "one damage step", size=8.3, colour=MUTED,
+    text(ax, cx + 0.25, fy + LANE_H - 0.65, "one damage step", size=8.3, colour=MUTED,
          ha="left")
     items = [
         "the board snapshot",
@@ -563,7 +614,7 @@ def combat_step() -> None:
         "the step: first strike\nor regular",
         "the step's events",
     ]
-    yy = fy + lane_h - 1.2
+    yy = fy + LANE_H - 1.2
     for item in items:
         ax.add_patch(Circle((cx + 0.35, yy), 0.07, fc=STRUCT, ec="none", zorder=5))
         text(ax, cx + 0.6, yy + 0.15, item, size=8.4, colour=SOFT, ha="left", va="top",
@@ -573,7 +624,9 @@ def combat_step() -> None:
          "predicts what this step\nalone does to every\ncard and player.", size=8.3,
          colour=INK, ha="left", va="top", linespacing=1.25)
 
-    # ── the defect list ──
+
+def _defect_list(ax) -> None:
+    """The collector defects of the gen-2 corpus, each beside what gen-3 collects instead."""
     ly = 3.15
     text(ax, 0.3, ly + 0.35, "Collector defects in the gen-2 corpus", size=10,
          weight="bold", ha="left", colour=DEFECT)
@@ -601,6 +654,14 @@ def combat_step() -> None:
         text(ax, 11.3, yy, fix, size=8.3, colour=ABLATE, ha="left", va="center")
         yy -= 0.95 if "\n" in body else 0.55
 
+
+def combat_step() -> None:
+    W, H = 24.4, 14.0
+    fig, ax = canvas(W, H, scale=0.56, bottom=-0.05)
+    _damage_lanes(ax)
+    _record_extents(ax)
+    _record_contents(ax)
+    _defect_list(ax)
     save(fig, "diagram-combat-step")
 
 
@@ -696,15 +757,11 @@ def _seg_chip(ax, x, y):
     text(ax, x, y, "[SEG]", size=7.6, colour=WHITE, weight="bold", mono=True, z=7)
 
 
-def encoder_reads() -> None:
-    W, H = 24.0, 17.6
-    fig, ax = canvas(W, H, scale=0.56, bottom=2.4)
-    mono = Mono(fig, ax, 8.6)
-    small = Mono(fig, ax, 7.9)
-    root_fc, effect_fc = WHITE, tint(STRUCT, 0.07)
-    label = ABLATE
-
-    # ── the Forge script ──
+def _pridemate_script_and_encodings(ax, mono: Mono) -> tuple[float, float, float]:
+    """The Forge script of Ajani's Pridemate, then what gen-1 and gen-2 encode of it;
+    returns the x of the two columns and the lowest y the
+    chain drawn in the second reaches."""
+    root_fc, effect_fc, label = WHITE, tint(STRUCT, 0.07), ABLATE
     text(ax, 0.3, 17.1, "Ajani's Pridemate in Forge's script: a trigger line and the "
          "SVar its Execute$ names", size=10.5, weight="bold", ha="left")
     sw, sh = _segment(ax, mono, 0.3, 16.75, PRIDEMATE_SCRIPT, fc=PANEL, ec="none",
@@ -716,7 +773,6 @@ def encoder_reads() -> None:
          "names: the\neffect, which puts the counter", size=8.3, colour=SOFT, ha="left",
          va="center", linespacing=1.25)
 
-    # ── gen-1 and gen-2, side by side ──
     top = 16.75 - sh - 0.75
     gx1, gx2 = 0.3, 12.35
     text(ax, gx1, top, "gen-1 encodes the root line only", size=10.3, weight="bold",
@@ -752,10 +808,14 @@ def encoder_reads() -> None:
          "line, so a reference and the segment\nit names still match while the "
          "author's name for it is dropped.", size=8.2, colour=label, ha="left",
          va="top", linespacing=1.3)
+    return gx1, gx2, min(ghost_y - h_ghost, chip_y - 0.3 - h3 - 1.35)
 
-    # ── bottom insets: a sub-ability chain, and a charm's modes ──
-    iy = min(ghost_y - h_ghost, chip_y - 0.3 - h3 - 1.35) - 0.8
-    ax.plot([0.3, W - 0.3], [iy + 0.35, iy + 0.35], color=RULE, lw=1.0)
+
+def _inset_chain_and_charm(ax, small: Mono, gx1: float, gx2: float, iy: float,
+                           width: float) -> None:
+    """The bottom insets: a sub-ability chain, and a charm's modes."""
+    root_fc, effect_fc, label = WHITE, tint(STRUCT, 0.07), ABLATE
+    ax.plot([0.3, width - 0.3], [iy + 0.35, iy + 0.35], color=RULE, lw=1.0)
     text(ax, gx1, iy - 0.15, "A SubAbility$ adds a segment: Inspiring Overseer, gen-2",
          size=9.8, weight="bold", ha="left")
     yy = iy - 0.6
@@ -792,6 +852,14 @@ def encoder_reads() -> None:
          "line.",
          size=8.2, colour=label, ha="left", va="top", linespacing=1.3)
 
+
+def encoder_reads() -> None:
+    W, H = 24.0, 17.6
+    fig, ax = canvas(W, H, scale=0.56, bottom=2.4)
+    mono = Mono(fig, ax, 8.6)
+    small = Mono(fig, ax, 7.9)
+    gx1, gx2, lowest = _pridemate_script_and_encodings(ax, mono)
+    _inset_chain_and_charm(ax, small, gx1, gx2, lowest - 0.8, W)
     save(fig, "diagram-encoder-reads")
 
 
@@ -826,21 +894,20 @@ def noise_shapes() -> None:
     panels = [
         ("gen-1: a fixed noise", "0.05 per coordinate, whatever the\nspread. In gen-1's "
          "cache the noise\nis 0.40 long against vectors 53\nlong: under a hundredth",
-         dict(kind="fixed")),
+         "fixed"),
         ("each e normalized to\none length first", "the noise cannot be escaped, but\nlength "
-         "is lost and every consumer\nof the cache reads a new e", dict(kind="sphere")),
+         "is lost and every consumer\nof the cache reads a new e", "sphere"),
         ("one level, sized to\nthe average spread", "rescaling e changes nothing, but\nthe "
-         "long direction outruns the\nnoise and can carry a text key", dict(kind="iso")),
+         "long direction outruns the\nnoise and can carry a text key", "iso"),
         ("each coordinate sized\nto its own spread", "widening one axis no longer helps,\nbut "
-         "a diagonal direction still\noutruns the noise", dict(kind="axis")),
+         "a diagonal direction still\noutruns the noise", "axis"),
         ("the covariance of the\ne vectors (gen-2)", "the same noise-to-spread ratio\nalong "
-         "every direction: no\nreshaping of e escapes it", dict(kind="cov")),
+         "every direction: no\nreshaping of e escapes it", "cov"),
     ]
     fig, axes = plt.subplots(1, 5, figsize=(15.6, 4.9), dpi=150)
     fig.subplots_adjust(left=0.01, right=0.99, top=0.78, bottom=0.27, wspace=0.08)
     anchor = np.array([2.2, 1.25])  # one text's e, the vector the noise is drawn around
-    for ax, (title, body, spec) in zip(axes, panels):
-        kind = spec["kind"]
+    for ax, (title, body, kind) in zip(axes, panels):
         ax.set_aspect("equal")
         ax.set_xlim(-6.2, 6.2)
         ax.set_ylim(-4.6, 4.6)
@@ -954,7 +1021,7 @@ def design_changes() -> None:
         x = 0.3 + i * (col_w + gap)
         box(ax, x, top, col_w, 1.15, fc=STRUCT, ec=STRUCT, radius=0.22, z=3)
         text(ax, x + col_w / 2, top + 0.75, name, size=10.5, colour=WHITE, weight="bold")
-        text(ax, x + col_w / 2, top + 0.35, sub, size=8.2, colour=tint(WHITE, 1.0))
+        text(ax, x + col_w / 2, top + 0.35, sub, size=8.2, colour=WHITE)
         if i < len(DESIGN_STAGES) - 1:
             arrow(ax, (x + col_w, top + 0.575), (x + col_w + gap, top + 0.575),
                   colour=STRUCT, lw=1.6, shrink=0.5)
@@ -991,11 +1058,8 @@ def design_changes() -> None:
 
 def main() -> None:
     """Draw every diagram, or only the ones named on the command line."""
-    only = set(sys.argv[1:])
-    for diagram in (model_and_probes, validation_strata, combat_step, encoder_reads,
-                    noise_shapes, design_changes):
-        if not only or diagram.__name__ in only:
-            diagram()
+    draw_requested([model_and_probes, validation_strata, combat_step, encoder_reads,
+                    noise_shapes, design_changes])
 
 
 if __name__ == "__main__":

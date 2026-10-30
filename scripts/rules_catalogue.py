@@ -17,13 +17,11 @@ import json
 import re
 import sys
 from collections import Counter, defaultdict
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-RULES = ROOT / "rules"
-CARDSFOLDER = ROOT.parent / "forge" / "forge-gui" / "res" / "cardsfolder"
-if not CARDSFOLDER.exists():  # a worktree under .claude/worktrees/ sits three levels deeper
-    CARDSFOLDER = ROOT.parents[3] / "forge" / "forge-gui" / "res" / "cardsfolder"
+from _lib.paths import FORGE_RES, REPO
+
+RULES = REPO / "rules"
+CARDSFOLDER = FORGE_RES / "cardsfolder"
 
 SPLIT_SECTIONS = {"701", "702"}
 CATEGORIES = {"mechanical", "legality", "decision", "definitional", "out_of_scope"}

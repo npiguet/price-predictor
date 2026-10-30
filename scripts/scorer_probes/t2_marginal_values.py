@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import sys
 import time
 from collections import defaultdict
@@ -32,14 +31,18 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.paths import REPO
 from scorer_probes import probe_lib as pl
+from scorer_probes.probe_lib import Preset
+
+from price_predictor.domain.value_objects import WUBRG
+from sealed.domain import card_embedding_layout as layout
 
 OUT_DEFAULT = pl.SCRATCH / "t2_card_values.csv"
 
 KEEP_METHODS = ("forge-best", "forge-3sub", "forge-8sub", "gen3-256", "gen4-512", "gen5")
 CONTEXT_METHOD = "forge-best"
 
-WUBRG = ("W", "U", "B", "R", "G")
 PAIRS = [
     ("W", "U"), ("W", "B"), ("W", "R"), ("W", "G"),
     ("U", "B"), ("U", "R"), ("U", "G"),
@@ -54,37 +57,20 @@ LOO_GROUP = 128             # decks per scoring group (memory-bounded)
 SWAP_CHUNK = 2048           # swapped matrices built per scoring call
 
 
-# --------------------------------------------------------------------------
-# corpus collection (same pattern as t0_landscape.collect_decks)
-# --------------------------------------------------------------------------
-
 def collect_decks(per_method_cap: int, max_lines: int | None = None):
-    """Dedup by content, cap per method. Returns {method: [(set_code, deck)]}."""
-    seen: set[str] = set()
-    per_method: dict[str, list] = {m: [] for m in KEEP_METHODS}
-    for rel in pl.MATCH_FILES:
-        path = pl.YDATA / rel
-        if not path.exists():
-            print("missing:", path, flush=True)
-            continue
+    """Distinct decks of every kept method, capped per method. -> {method: [MatchDeck]}"""
+    per_method: dict[str, list[pl.MatchDeck]] = {m: [] for m in KEEP_METHODS}
+    for d in pl.sample_match_decks(pl.MATCH_PATHS, per_method_cap, lines=max_lines,
+                                   group=lambda d: d.method if d.method in per_method else None):
+        per_method[d.method].append(d)
         if all(len(v) >= per_method_cap for v in per_method.values()):
             break
-        for set_code, method_a, deck_a, method_b, deck_b in pl.iter_match_decks(path, max_lines):
-            for method, deck in ((method_a, deck_a), (method_b, deck_b)):
-                bucket = per_method.get(method)
-                if bucket is None or len(bucket) >= per_method_cap:
-                    continue
-                key = hashlib.md5(("|".join(sorted(deck)) + set_code).encode()).hexdigest()
-                if key in seen:
-                    continue
-                seen.add(key)
-                bucket.append((set_code, deck))
     print("collected:", {m: len(v) for m, v in per_method.items()}, flush=True)
     return per_method
 
 
 def round_robin(per_method: dict[str, list], total_cap: int):
-    """Interleave methods so the LOO sample is balanced. -> [(method, set, deck)]"""
+    """Interleave methods so the LOO sample is balanced. -> [MatchDeck]"""
     out = []
     i = 0
     while len(out) < total_cap:
@@ -92,8 +78,7 @@ def round_robin(per_method: dict[str, list], total_cap: int):
         for m in KEEP_METHODS:
             bucket = per_method.get(m, [])
             if i < len(bucket) and len(out) < total_cap:
-                set_code, deck = bucket[i]
-                out.append((m, set_code, deck))
+                out.append(bucket[i])
                 added = True
         if not added:
             break
@@ -101,46 +86,25 @@ def round_robin(per_method: dict[str, list], total_cap: int):
     return out
 
 
-# --------------------------------------------------------------------------
-# helpers on deck matrices
-# --------------------------------------------------------------------------
-
-def det_block(mat: np.ndarray) -> np.ndarray:
-    return mat[:, -pl.layout.FEATURE_COUNT:]
-
-
-def land_mask(mat: np.ndarray) -> np.ndarray:
-    return det_block(mat)[:, pl.layout.IS_LAND] > 0.5
-
-
 def deck_color_identity(mat: np.ndarray) -> frozenset:
     """Union of pip colours over the deck's spells (non-land rows)."""
-    det = det_block(mat)
-    spells = ~(det[:, pl.layout.IS_LAND] > 0.5)
+    spells = ~pl.land_mask(mat)
     if not spells.any():
         return frozenset()
-    pips = det[spells, pl.layout.COLOR_PIPS]
+    pips = mat[spells, -pl.FC:][:, layout.COLOR_PIPS]
     present = pips.sum(axis=0) > 0
     return frozenset(c for c, f in zip(WUBRG, present) if f)
 
 
-def card_colors(emb: np.ndarray) -> frozenset:
-    flags = emb[-pl.layout.FEATURE_COUNT:][pl.layout.COLOR_FLAGS]
-    return frozenset(c for c, f in zip(WUBRG, flags) if float(f) > 0.5)
-
-
 def build_deck_matrix(probe: pl.Probe, deck: list[str]):
     """(names, matrix) for the non-basic part of a deck, or None if unresolvable."""
-    names = [c for c in deck if c.lower() not in pl.BASIC_LAND_NAMES]
+    names = pl.nonbasic(deck)
     if not (MIN_DECK_CARDS <= len(names) <= MAX_DECK_CARDS):
         return None
-    rows = []
-    for n in names:
-        e = probe.embedding(n)
-        if e is None:
-            return None
-        rows.append(e)
-    return names, np.stack(rows).astype(np.float32)
+    try:
+        return names, probe.deck_matrix(names)
+    except KeyError:
+        return None
 
 
 def loo_deltas(probe: pl.Probe, mat: np.ndarray, rows: np.ndarray | None = None,
@@ -152,10 +116,6 @@ def loo_deltas(probe: pl.Probe, mat: np.ndarray, rows: np.ndarray | None = None,
     return float(s[0]), s[0] - s[1:]
 
 
-# --------------------------------------------------------------------------
-# stage 1: leave-one-out over realistic decks
-# --------------------------------------------------------------------------
-
 def stage1_loo(probe: pl.Probe, decks, batch: int):
     """-> {name: [sum_drel, sum_delta, count, sum_deck_score]}"""
     acc: dict[str, list] = defaultdict(lambda: [0.0, 0.0, 0, 0.0])
@@ -165,8 +125,8 @@ def stage1_loo(probe: pl.Probe, decks, batch: int):
     for start in range(0, len(decks), LOO_GROUP):
         group = decks[start:start + LOO_GROUP]
         prepared, mats = [], []
-        for _method, _set_code, deck in group:
-            built = build_deck_matrix(probe, deck)
+        for d in group:
+            built = build_deck_matrix(probe, d.cards)
             if built is None:
                 n_skip += 1
                 continue
@@ -204,19 +164,16 @@ def stage1_loo(probe: pl.Probe, decks, batch: int):
     return acc
 
 
-# --------------------------------------------------------------------------
-# stage 2: fixed contexts + swap-in values
-# --------------------------------------------------------------------------
-
 def pick_contexts(probe: pl.Probe, forge_best, per_pair: int, batch: int):
     """Choose per_pair context decks per colour pair, each from a different set."""
     buckets: dict[tuple, list] = {p: [] for p in PAIRS}
     used_sets: dict[tuple, set] = {p: set() for p in PAIRS}
     n_seen = 0
-    for set_code, deck in forge_best:
+    for d in forge_best:
         if all(len(v) >= per_pair for v in buckets.values()):
             break
-        built = build_deck_matrix(probe, deck)
+        set_code = d.set_code
+        built = build_deck_matrix(probe, d.cards)
         n_seen += 1
         if built is None:
             continue
@@ -236,7 +193,7 @@ def pick_contexts(probe: pl.Probe, forge_best, per_pair: int, batch: int):
     contexts = []
     for pair in PAIRS:
         for set_code, names, mat in buckets[pair]:
-            spells = np.flatnonzero(~land_mask(mat))
+            spells = np.flatnonzero(~pl.land_mask(mat))
             if len(spells) < 4:
                 continue
             base, deltas = loo_deltas(probe, mat, spells, batch)
@@ -277,12 +234,12 @@ def build_universe(probe: pl.Probe, wr: dict, min_obs: int, limit: int | None):
         if e is None:
             n_missing += 1
             continue
-        if float(e[-pl.layout.FEATURE_COUNT:][pl.layout.IS_LAND]) > 0.5:
+        if layout.is_land_embedding(e):
             n_land += 1
             continue
         names.append(name)
         embs.append(e.astype(np.float32))
-        colors.append(card_colors(e))
+        colors.append(layout.card_colors(e))
         if limit and len(names) >= limit:
             break
     print(f"universe: {len(names)} cards (min_obs={min_obs}; "
@@ -342,10 +299,6 @@ def stage2_swap(probe: pl.Probe, contexts, names, embs, colors, swap_cap: int, b
     return v_sum, v_cnt
 
 
-# --------------------------------------------------------------------------
-# metadata + output
-# --------------------------------------------------------------------------
-
 DET_KEYS = ["is_land", "pips_w", "pips_u", "pips_b", "pips_r", "pips_g",
             "generic", "mv", "colors", "power", "toughness", "produces_any"]
 DET_RENAME = {"is_land": "det_is_land", "power": "det_power", "toughness": "det_toughness"}
@@ -372,18 +325,19 @@ def load_rarity_map():
     try:
         from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
         metadata, _prices = build_metadata_map(
-            pl.REPO / "resources/AllPrintings.json",
-            pl.REPO / "resources/AllPricesToday.json",
+            REPO / "resources/AllPrintings.json",
+            REPO / "resources/AllPricesToday.json",
         )
         print(f"rarity metadata: {len(metadata)} names", flush=True)
         return metadata
-    except Exception as exc:  # missing files, schema change, OOM -- blanks are fine
+    # Missing files, a schema change, OOM: blank columns are fine.
+    except (OSError, KeyError, ValueError, MemoryError) as exc:
         print(f"rarity metadata unavailable ({type(exc).__name__}: {exc})", flush=True)
         return {}
 
 
-def num(v):
-    """CSV-safe scalar: bools -> 0/1, floats rounded, None -> ''."""
+def csv_cell(v):
+    """CSV-safe scalar: bools -> 0/1, floats rounded, None or non-finite -> ''."""
     if v is None:
         return ""
     if isinstance(v, (bool, np.bool_)):
@@ -412,16 +366,16 @@ def write_rows(out: Path, probe: pl.Probe, loo_acc, names, v_sum, v_cnt, wr, rar
         a = loo_acc.get(name)
         if a and a[2] > 0:
             row["n_loo_contexts"] = a[2]
-            row["v_loo_rel"] = num(a[0] / a[2])
-            row["v_loo_raw"] = num(a[1] / a[2])
-            row["mean_deck_score"] = num(a[3] / a[2])
+            row["v_loo_rel"] = csv_cell(a[0] / a[2])
+            row["v_loo_raw"] = csv_cell(a[1] / a[2])
+            row["mean_deck_score"] = csv_cell(a[3] / a[2])
         else:
             row["n_loo_contexts"] = 0
 
         i = swap_idx.get(name)
         if i is not None and v_cnt[i] > 0:
             row["n_swap_contexts"] = int(v_cnt[i])
-            row["v_swap"] = num(v_sum[i] / v_cnt[i])
+            row["v_swap"] = csv_cell(v_sum[i] / v_cnt[i])
         else:
             row["n_swap_contexts"] = 0
 
@@ -431,7 +385,7 @@ def write_rows(out: Path, probe: pl.Probe, loo_acc, names, v_sum, v_cnt, wr, rar
         else:
             det = pl.det_features(emb)
             for k in DET_KEYS:
-                row[DET_RENAME.get(k, k)] = num(det[k])
+                row[DET_RENAME.get(k, k)] = csv_cell(det[k])
 
         text = probe.locator.load_text(name)
         if text is None:
@@ -439,12 +393,12 @@ def write_rows(out: Path, probe: pl.Probe, loo_acc, names, v_sum, v_cnt, wr, rar
         else:
             feats = pl.card_features(text.text)
             for k in FEAT_KEYS:
-                row[k] = num(feats[k])
+                row[k] = csv_cell(feats[k])
 
         rec = wr.get(name)
         if rec:
             for k in LABEL_KEYS:
-                row[k] = num(rec.get(k))
+                row[k] = csv_cell(rec.get(k))
             w = rec.get("wins_when_in_deck") or 0.0
             ln = rec.get("losses_when_in_deck") or 0.0
             row["n_obs"] = int(w + ln)
@@ -465,32 +419,33 @@ def write_rows(out: Path, probe: pl.Probe, loo_acc, names, v_sum, v_cnt, wr, rar
           f"({n_no_emb} without embedding, {n_no_text} without card text)", flush=True)
 
 
-# --------------------------------------------------------------------------
+SIZES = {
+    "loo_decks": Preset(3500, 30),
+    "universe_limit": Preset(None, 200),
+    "contexts_per_pair": Preset(4, 1),
+    "device": Preset(None, "cpu"),
+    "batch": Preset(1024, 256),
+    "max_lines": Preset(None, 4000),
+}
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--loo-decks", type=int, default=3500)
+    ap.add_argument("--loo-decks", type=int, default=None)
     ap.add_argument("--swap-cap", type=int, default=8)
     ap.add_argument("--min-obs", type=int, default=30)
     ap.add_argument("--out", type=Path, default=OUT_DEFAULT)
-    ap.add_argument("--batch", type=int, default=1024)
+    ap.add_argument("--batch", type=int, default=None)
     ap.add_argument("--device", default=None)
-    ap.add_argument("--contexts-per-pair", type=int, default=4)
+    ap.add_argument("--contexts-per-pair", type=int, default=None)
     ap.add_argument("--universe-limit", type=int, default=None)
     ap.add_argument("--smoke", action="store_true",
                     help="tiny CPU run: 30 decks, 200 cards, 1 context per pair")
     args = ap.parse_args()
 
-    max_lines = None
-    if args.smoke:
-        args.loo_decks = 30
-        args.universe_limit = 200
-        args.contexts_per_pair = 1
-        args.device = args.device or "cpu"
-        args.batch = min(args.batch, 256)
-        max_lines = 4000
-        if args.out == OUT_DEFAULT:
-            args.out = pl.SCRATCH / "t2_card_values_smoke.csv"
+    pl.apply_presets(args, SIZES)
+    if args.smoke and args.out == OUT_DEFAULT:
+        args.out = pl.SCRATCH / "t2_card_values_smoke.csv"
 
     t_start = time.time()
     print(f"t2_marginal_values: loo_decks={args.loo_decks} swap_cap={args.swap_cap} "
@@ -502,7 +457,7 @@ def main():
     print(f"win-rate labels: {len(wr)} cards", flush=True)
 
     per_method_cap = max(args.loo_decks, 400)
-    per_method = collect_decks(per_method_cap, max_lines)
+    per_method = collect_decks(per_method_cap, args.max_lines)
     loo_decks = round_robin(per_method, args.loo_decks)
     print(f"LOO sample: {len(loo_decks)} decks", flush=True)
 

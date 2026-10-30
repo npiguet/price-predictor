@@ -11,7 +11,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -25,31 +24,24 @@ from _lib.stats import bootstrap_ci  # noqa: E402
 from c1_keywords import bootstrap_scales, fit_scale  # noqa: E402
 
 MAX_PER_TRIBE = 250
+TAPPED = "replacement: CARDNAME enters tapped."
 
 
 def main() -> None:
     j = pl.load_frame(text=True)
-    stripped = list(j["text"])
-    is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
+    C = cc.CardCorpus.of(j)
+    stripped = C.text
     rng = np.random.default_rng(13)
     out: dict = {}
     freq = pl.subtype_frequencies()
 
-    # ── (i) tribal pairwise matrix ──────────────────────────────────────
-    info = [cc.sole_tribe(s) if c else None for s, c in zip(stripped, is_crea)]
-    rows_all = np.array([i for i, v in enumerate(info) if v is not None])
-    tribe = np.array([info[i][1] for i in rows_all])
-
-    base: list[int] = []
-    for t in cc.TRIBES:
-        pool = rows_all[tribe == t]
-        if len(pool) < 15:
-            continue
-        take = pool if len(pool) <= MAX_PER_TRIBE else rng.choice(
-            pool, MAX_PER_TRIBE, replace=False)
-        base.extend(sorted(int(x) for x in take))
-    base = np.array(base)
-    own = np.array([info[r][1] for r in base])
+    # (i) tribal pairwise matrix
+    info = [cc.sole_tribe(s) if c else None for s, c in zip(stripped, C.is_creature)]
+    tribe = np.array([v[1] if v else "" for v in info])
+    base = np.concatenate([
+        cc.sample_rows(tribe == t, MAX_PER_TRIBE, rng)
+        for t in cc.TRIBES if (tribe == t).sum() >= 15])
+    own = tribe[base]
     present = [t for t in cc.TRIBES if (own == t).sum() >= 15]
     print(f"[C5] tribal base {len(base)} over {len(present)} tribes: {present}",
           flush=True)
@@ -60,8 +52,7 @@ def main() -> None:
         return cc.replace_in_line(stripped[r], i,
                                   "types: " + " ".join(new if w == old else w for w in words))
 
-    T = pl.score_texts([swap_tribe(r, t) for r in base for t in present])
-    T = T.reshape(len(base), len(present))
+    T = pl.score_arms(base, present, swap_tribe)
     groups = [np.flatnonzero(own == t) for t in present]
 
     prs = []
@@ -88,8 +79,7 @@ def main() -> None:
         "ci_hi": np.quantile(boot, 0.975, axis=0),
         "value_pr": [scale_pr[t] for t in present],
     }).sort_values("value_sp", ascending=False)
-    tri.to_csv(pl.SCRATCH / "c5_tribe_scale.csv", index=False)
-    print(tri.to_string(index=False), flush=True)
+    pl.write_table(tri, "c5_tribe_scale.csv")
     out["tribe_off_manifold"] = float(T.off.mean())
     out["tribe_spread_sd"] = float(tri["value_sp"].max() - tri["value_sp"].min())
 
@@ -104,67 +94,51 @@ def main() -> None:
                             "ci": list(bootstrap_ci(d, seed=7)),
                             "frac_neg": float((d < 0).mean())}
 
-    # ── (ii) type-line swaps ────────────────────────────────────────────
-    n_ab = np.array([len(cc.ability_lines(s)) for s in stripped])
+    # (ii) type-line swaps
     tr_rows = []
 
     def type_swap(mask, old_word, new_word, label):
-        sel = np.flatnonzero(mask)
-        if len(sel) == 0:
+        if not mask.any():
             return
-        if len(sel) > 400:
-            sel = np.sort(rng.choice(sel, 400, replace=False))
-        txt = []
-        for r in sel:
+
+        def swapped(r: int, edit: bool) -> str:
+            if not edit:
+                return stripped[r]
             i = cc.find_line(cc.lines(stripped[r]), "types:")
             words = cc.lines(stripped[r])[i][6:].split()
             if old_word == "creature" and new_word == "artifact creature":
                 new_words = ["artifact"] + words
             else:
                 new_words = [new_word if w == old_word else w for w in words]
-            txt += [stripped[r], cc.replace_in_line(stripped[r], i,
-                                                    "types: " + " ".join(new_words))]
-        S = pl.score_texts(txt).reshape(len(sel), 2)
-        tr_rows.append(pl.contrast_row(S.sp[:, 1] - S.sp[:, 0], S.pr[:, 1] - S.pr[:, 0],
-                                       S.off[:, 1], contrast=label))
+            return cc.replace_in_line(stripped[r], i, "types: " + " ".join(new_words))
 
-    def col(c):
-        return j[c].fillna(False).astype(bool).to_numpy()
+        S = pl.score_arms(cc.sample_rows(mask, 400, rng), [False, True], swapped)
+        tr_rows.extend(pl.contrasts(S, [label]))
 
-    is_art, is_ench = col("is_artifact"), col("is_enchantment")
-    type_swap(col("is_instant") & (n_ab == 1), "instant", "sorcery", "instant -> sorcery")
-    type_swap(col("is_sorcery") & (n_ab == 1), "sorcery", "instant", "sorcery -> instant")
-    type_swap(is_crea & ~is_art, "creature", "artifact creature",
+    is_art, is_ench = pl.flag(j, "is_artifact"), pl.flag(j, "is_enchantment")
+    one_line = C.n_abilities == 1
+    type_swap(pl.flag(j, "is_instant") & one_line, "instant", "sorcery", "instant -> sorcery")
+    type_swap(pl.flag(j, "is_sorcery") & one_line, "sorcery", "instant", "sorcery -> instant")
+    type_swap(C.is_creature & ~is_art, "creature", "artifact creature",
               "creature -> artifact creature")
-    type_swap(is_crea & ~is_art & ~is_ench, "creature", "enchantment creature",
+    type_swap(C.is_creature & ~is_art & ~is_ench, "creature", "enchantment creature",
               "creature -> enchantment creature")
-    tsw = pd.DataFrame(tr_rows)
-    tsw.to_csv(pl.SCRATCH / "c5_type_swaps.csv", index=False)
-    print(tsw.to_string(index=False), flush=True)
+    pl.write_table(tr_rows, "c5_type_swaps.csv")
 
-    # ── (iii) taplands ──────────────────────────────────────────────────
-    tapped = "replacement: CARDNAME enters tapped."
-    tap_i = np.array([next((i for i, ln in enumerate(cc.lines(s)) if ln == tapped), -1)
+    # (iii) taplands
+    tap_i = np.array([next((i for i, ln in enumerate(cc.lines(s)) if ln == TAPPED), -1)
                       for s in stripped])
-    sel = np.flatnonzero(col("is_land") & (tap_i >= 0))
+    sel = np.flatnonzero(pl.flag(j, "is_land") & (tap_i >= 0))
     print(f"[C5] taplands: {len(sel)}", flush=True)
-    txt = []
-    for r in sel:
-        txt += [stripped[r],
-                cc.replace_in_line(stripped[r], tap_i[r], "replacement: CARDNAME enters untapped."),
-                cc.drop_line(stripped[r], tap_i[r])]
-    L = pl.score_texts(txt).reshape(len(sel), 3)
-    lands = pd.DataFrame([
-        pl.contrast_row(L.sp[:, i] - L.sp[:, 0], L.pr[:, i] - L.pr[:, 0], L.off[:, i],
-                        contrast=lab)
-        for i, lab in enumerate(["tapped -> untapped (token sub)",
-                                 "delete the enters-tapped line"], start=1)])
-    lands.to_csv(pl.SCRATCH / "c5_taplands.csv", index=False)
-    print(lands.to_string(index=False), flush=True)
+    arms = [lambda r: stripped[r],
+            lambda r: cc.replace_in_line(stripped[r], tap_i[r],
+                                         "replacement: CARDNAME enters untapped."),
+            lambda r: cc.drop_line(stripped[r], tap_i[r])]
+    L = pl.score_arms(sel, arms, lambda r, arm: arm(r))
+    pl.write_table(pl.contrasts(L, ["tapped -> untapped (token sub)",
+                                    "delete the enters-tapped line"]), "c5_taplands.csv")
 
-    (pl.SCRATCH / "c5_summary.json").write_text(
-        json.dumps(out, indent=2, default=float), encoding="utf-8")
-    print(json.dumps(out, indent=2, default=float), flush=True)
+    pl.write_summary(out, "c5_summary.json")
 
 
 if __name__ == "__main__":

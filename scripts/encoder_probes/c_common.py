@@ -9,12 +9,20 @@ name-stripped text and re-joins them with ``\\n``, so a line index from
 Design rule inherited from R1/R2: positional placebos are large and negatively
 biased, token substitutions are clean. So every contrast is built as a
 *paired same-card difference between two arms with identical layout*.
+
+:class:`CardCorpus` holds the per-card fields the battery picks its base cards
+on, and :func:`sample_rows` caps a pick at a seeded random subset.
 """
 
 from __future__ import annotations
 
+import functools
 import re
+from dataclasses import dataclass
 from typing import Sequence
+
+import numpy as np
+import pandas as pd
 
 ABILITY_PREFIXES = ("static:", "spell[", "activated[", "triggered", "replacement")
 
@@ -157,3 +165,55 @@ def fmt_cost(k: int, pips: str) -> str:
     if k == 0:
         return pips if pips else "{0}"
     return f"{{{k}}}{pips}"
+
+
+@dataclass(frozen=True)
+class CardCorpus:
+    """The fields of every frame row the battery selects base cards on.
+
+    ``text`` is the name-stripped converted text (the frame's ``text``
+    column), ``cost`` its ``mana cost:`` value (empty without one), and the
+    statline and keyword count come from the card table, a missing keyword
+    count read as zero. The text-derived counts are computed on first use.
+    """
+
+    text: list[str]
+    is_creature: np.ndarray
+    power: np.ndarray
+    toughness: np.ndarray
+    kw_count: np.ndarray
+    cost: list[str]
+
+    @classmethod
+    def of(cls, frame: pd.DataFrame) -> CardCorpus:
+        text = list(frame["text"])
+        return cls(
+            text=text,
+            is_creature=frame["is_creature"].fillna(False).astype(bool).to_numpy(),
+            power=pd.to_numeric(frame["power"], errors="coerce").to_numpy(float),
+            toughness=pd.to_numeric(frame["toughness"], errors="coerce").to_numpy(float),
+            kw_count=pd.to_numeric(frame["kw_count"], errors="coerce").fillna(0).to_numpy(),
+            cost=[get_field(t, "mana cost:") or "" for t in text],
+        )
+
+    @functools.cached_property
+    def n_abilities(self) -> np.ndarray:
+        return np.array([len(ability_lines(t)) for t in self.text])
+
+    @functools.cached_property
+    def literal_pt(self) -> np.ndarray:
+        return np.array([has_literal_pt(t) for t in self.text])
+
+    @functools.cached_property
+    def parsed_cost(self) -> list[tuple[int, str] | None]:
+        """``(generic, pips)`` per card for a plain cost, else None."""
+        return [parse_cost(c) if c else None for c in self.cost]
+
+
+def sample_rows(mask: np.ndarray, cap: int, rng: np.random.Generator) -> np.ndarray:
+    """The rows ``mask`` selects, cut to a sorted random ``cap`` of them when
+    there are more; ``rng`` is drawn from only when the cut happens."""
+    rows = np.flatnonzero(mask)
+    if len(rows) > cap:
+        rows = np.sort(rng.choice(rows, cap, replace=False))
+    return rows

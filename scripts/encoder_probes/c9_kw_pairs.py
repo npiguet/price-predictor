@@ -38,20 +38,12 @@ SEED = 7
 
 
 def main() -> None:
-    j = pl.load_frame(text=True)
-    stripped = list(j["text"])
-    is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
-    power = pd.to_numeric(j["power"], errors="coerce").to_numpy(float)
-    tough = pd.to_numeric(j["toughness"], errors="coerce").to_numpy(float)
-    kw_count = pd.to_numeric(j["kw_count"], errors="coerce").fillna(0).to_numpy()
-    n_ab = np.array([len(cc.ability_lines(s)) for s in stripped])
-
-    base = np.flatnonzero(is_crea & np.isfinite(power) & np.isfinite(tough)
-                          & (kw_count == 0) & (n_ab <= 1)
-                          & (power + tough >= 3) & (power + tough <= 10))
-    rng = np.random.default_rng(SEED)
-    if len(base) > N_BASE:
-        base = np.sort(rng.choice(base, N_BASE, replace=False))
+    C = cc.CardCorpus.of(pl.load_frame(text=True))
+    power, tough = C.power, C.toughness
+    base = cc.sample_rows(C.is_creature & np.isfinite(power) & np.isfinite(tough)
+                          & (C.kw_count == 0) & (C.n_abilities <= 1)
+                          & (power + tough >= 3) & (power + tough <= 10),
+                          N_BASE, np.random.default_rng(SEED))
 
     pairs = [(a, b) for i, a in enumerate(KEYWORDS) for b in KEYWORDS[i + 1:]]
     # arms per base: control-control, (K, ctrl) and (ctrl, K) singles,
@@ -63,14 +55,10 @@ def main() -> None:
     arms += [(b, a) for a, b in pairs]
     idx = {arm: i for i, arm in enumerate(arms)}
 
-    texts = []
-    for r in base:
-        for k1, k2 in arms:
-            t = cc.add_line(stripped[r], f"static: {k1}")
-            texts.append(cc.add_line(t, f"static: {k2}"))
-    print(f"encoding {len(texts)} texts ({len(base)} bases x {len(arms)} arms)",
+    print(f"encoding {len(base) * len(arms)} texts ({len(base)} bases x {len(arms)} arms)",
           flush=True)
-    scored = pl.score_texts(texts).reshape(len(base), len(arms))
+    scored = pl.score_arms(base, arms, lambda r, kk: cc.add_line(
+        cc.add_line(C.text[r], f"static: {kk[0]}"), f"static: {kk[1]}"))
     P = scored.sp
 
     p00 = P[:, idx[(CONTROL, CONTROL)]]

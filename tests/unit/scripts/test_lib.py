@@ -3,10 +3,90 @@
 from __future__ import annotations
 
 import gzip
+import json
+from pathlib import Path
 
 import numpy as np
 import pytest
-from _lib import corpora, stats
+from _lib import corpora, jsonio, markdown, stats
+
+
+class TestOlsCluster:
+    def test_matches_the_cr1_sandwich_summed_cluster_by_cluster(self):
+        X, y, _ = _heteroscedastic()
+        clusters = np.arange(len(y)) % 17
+        fit = stats.ols_cluster(X, y, clusters)
+        bread = np.linalg.inv(X.T @ X)
+        resid = y - X @ fit.beta
+        meat = sum(np.outer(X[clusters == g].T @ resid[clusters == g],
+                            X[clusters == g].T @ resid[clusters == g]) for g in range(17))
+        n, k = X.shape
+        cov = bread @ meat @ bread * (17 / 16) * ((n - 1) / (n - k))
+        assert np.allclose(fit.se, np.sqrt(np.diag(cov)))
+
+    def test_cluster_mean_se_of_nothing_is_nan(self):
+        assert all(np.isnan(stats.cluster_mean_se([], [])))
+
+
+def test_oof_predict_never_fits_on_the_group_it_predicts():
+    # Each group's target is its own constant: a fit that saw the group would
+    # predict it exactly, one that did not predicts the other groups' mean.
+    groups = np.repeat(np.arange(5), 4)
+    X, y = np.zeros((20, 1)), groups.astype(float)
+    from sklearn.dummy import DummyRegressor
+
+    pred = stats.oof_predict(DummyRegressor(), X, y, groups)
+    assert np.allclose(pred, (y.sum() - 4 * y) / 16)
+
+
+def test_pairwise_correct_counts_a_tie_as_half():
+    assert stats.pairwise_correct([0.2, -0.1, 0.0]).tolist() == [1.0, 0.0, 0.5]
+
+
+class TestParticipationRatio:
+    """``(Σλ)² / Σλ²``."""
+
+    def test_an_even_spectrum_uses_every_dimension(self):
+        assert stats.participation_ratio(np.full(8, 0.125)) == pytest.approx(8.0)
+
+    def test_one_dominant_direction_uses_one(self):
+        assert stats.participation_ratio(
+            np.array([1.0, 0.0, 0.0]),
+        ) == pytest.approx(1.0)
+
+    def test_a_known_spectrum(self):
+        # (4 + 2 + 1 + 1)² / (16 + 4 + 1 + 1) = 64 / 22.
+        assert stats.participation_ratio(
+            np.array([4.0, 2.0, 1.0, 1.0]),
+        ) == pytest.approx(64 / 22)
+
+    def test_it_reads_the_same_from_shares_as_from_eigenvalues(self):
+        eigenvalues = np.array([5.0, 3.0, 2.0])
+        assert stats.participation_ratio(eigenvalues) == pytest.approx(
+            stats.participation_ratio(eigenvalues / eigenvalues.sum()),
+        )
+
+
+class TestJson:
+    def test_non_finite_floats_become_null_and_numpy_unwraps(self, tmp_path):
+        path = tmp_path / "out" / "r.json"
+        jsonio.write_json(path, {"a": np.float32(np.nan), 2: np.arange(2), "s": {"y", "x"},
+                                 "p": Path("q"), "b": np.bool_(True), "i": float("inf")})
+        assert json.loads(path.read_text(encoding="utf-8")) == {
+            "a": None, "2": [0, 1], "s": ["x", "y"], "p": "q", "b": True, "i": None}
+
+    def test_digits_round_every_float(self):
+        assert jsonio.plain([1.23456789, np.float64(2.0004)], digits=3) == [1.235, 2.0]
+
+
+class TestMarkdown:
+    def test_a_pipe_in_a_cell_is_escaped(self):
+        assert markdown.md_table(["a"], [["x | y"]]).splitlines()[-1] == "| x \\| y |"
+
+    @pytest.mark.parametrize("value, cell", [(None, "-"), (float("nan"), "nan"),
+                                             (0.123456, "0.1235"), ("n/a", "n/a")])
+    def test_num(self, value, cell):
+        assert markdown.num(value) == cell
 
 
 def _heteroscedastic(n: int = 300, seed: int = 0):

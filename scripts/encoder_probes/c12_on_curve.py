@@ -42,39 +42,30 @@ GENERIC = list(range(0, 10))
 
 def main() -> None:
     j = pl.load_frame(text=True)
-    stripped = list(j["text"])
-    is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
-    cost = [cc.get_field(s, "mana cost:") for s in stripped]
-    parsed = [cc.parse_cost(c) if c else None for c in cost]
-    lit_pt = np.array([cc.has_literal_pt(s) for s in stripped])
+    C = cc.CardCorpus.of(j)
+    stripped, parsed, power, tough = C.text, C.parsed_cost, C.power, C.toughness
+    literal_creature = C.is_creature & C.literal_pt
     strict_vanilla = np.array([
         len(ls := cc.lines(s)) == 3
         and all(any(ln.startswith(p) for ln in ls) for p in CORE)
-        for s in stripped]) & is_crea & lit_pt
-    loose = is_crea & lit_pt & np.array(
-        [len(cc.ability_lines(s)) == 0 for s in stripped])
+        for s in stripped]) & literal_creature
+    loose = literal_creature & (C.n_abilities == 0)
     print(f"{int(strict_vanilla.sum())} strict-vanilla creatures "
           f"({int((loose & ~strict_vanilla).sum())} looser no-ability cards "
           "excluded for text:/alternate cost:/additional cost: lines)",
           flush=True)
 
     # how many real strict-vanilla creatures occupy each (P, T, MV) cell
-    power = pd.to_numeric(j["power"], errors="coerce").to_numpy(float)
-    tough = pd.to_numeric(j["toughness"], errors="coerce").to_numpy(float)
+    mv = pl.num(j, "mv")
     n_real: Counter = Counter()
     for r in np.flatnonzero(strict_vanilla):
-        p = parsed[r]
-        if p is None or not np.isfinite(power[r]) or not np.isfinite(tough[r]):
+        if parsed[r] is None or not np.isfinite(power[r]) or not np.isfinite(tough[r]):
             continue
-        mv = p[0] + p[1].count("{")
-        n_real[(int(power[r]), int(tough[r]), int(mv))] += 1
+        n_real[(int(power[r]), int(tough[r]), int(mv[r]))] += 1
 
-    elig = np.flatnonzero(
-        strict_vanilla
-        & np.array([p is not None and p[1] != "" for p in parsed]))
-    rng = np.random.default_rng(SEED)
-    if len(elig) > N_BASES:
-        elig = np.sort(rng.choice(elig, N_BASES, replace=False))
+    elig = cc.sample_rows(strict_vanilla & np.array([p is not None and p[1] != ""
+                                                     for p in parsed]),
+                          N_BASES, np.random.default_rng(SEED))
     pip = [re.match(r"\{([WUBRG])\}", parsed[r][1]).group(1) for r in elig]
     print(f"{len(elig)} vanilla bases: {list(j.loc[elig, 'name'][:8])}",
           flush=True)

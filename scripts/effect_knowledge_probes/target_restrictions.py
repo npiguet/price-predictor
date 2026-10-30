@@ -40,27 +40,18 @@ if __package__ in (None, ""):
 
 from _lib.markdown import print_table  # noqa: E402
 
-from effect_knowledge_probes import common, record_walk  # noqa: E402
+from effect_knowledge_probes import common, readout, record_walk  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
+from effects.domain.script_text import root_param  # noqa: E402
 
 BASE_TYPES = {"Artifact": "artifact", "Creature": "creature", "Enchantment": "enchantment",
               "Land": "land", "Planeswalker": "planeswalker", "Battle": "battle"}
 COLOUR_QUALIFIERS = {"White", "Blue", "Black", "Red", "Green", "nonWhite", "nonBlue",
                      "nonBlack", "nonRed", "nonGreen", "Colorless", "nonColorless",
                      "MultiColor", "MonoColor"}
-_VALID_TGTS = re.compile(r"ValidTgts\$\s*([^|\[]+)")
 
 
 # ── the restriction ─────────────────────────────────────────────────────
-
-
-def restriction_of(script_text: str | None) -> str | None:
-    """The ``ValidTgts$`` value of a chain's first segment, or None."""
-    if not script_text:
-        return None
-    first = script_text.split("[SEG]", 1)[0]
-    match = _VALID_TGTS.search(first)
-    return match.group(1).strip() if match else None
 
 
 def masked(restriction: str) -> str:
@@ -139,7 +130,7 @@ def decision_items(record, sidecars):
     restriction = None
     for key in candidate.ability or ():
         line = sidecars.line_or_none(key)
-        restriction = restriction_of(line.script_text if line is not None else None)
+        restriction = root_param(line.script_text if line is not None else None, "ValidTgts")
         if restriction:
             break
     if not restriction:
@@ -147,19 +138,6 @@ def decision_items(record, sidecars):
     legal = set(candidate.legal_targets)
     items = [(e.id, e.id in legal) for e in record.state.entities if e.zone == "battlefield"]
     return (restriction, items) if items else None
-
-
-# ── reading the model ───────────────────────────────────────────────────
-
-
-def _gates(outputs, surface, row) -> dict[str, float]:
-    import torch
-
-    from effects.domain.effect_head_layout import GATE_INDEX
-
-    return {slot.entity_id: float(torch.sigmoid(outputs[row, index, GATE_INDEX]))
-            for index, slot in enumerate(surface.slots)
-            if slot.kind.name == "CARD" and slot.entity_id is not None}
 
 
 def main() -> None:
@@ -175,8 +153,8 @@ def main() -> None:
     probe_model = context.model([c[0] for c in chosen])
     common.heading(args, context, f"{len(chosen)} validation targeting decisions")
 
-    gates = common.predict_all(probe_model, [c[0] for c in chosen],
-                               lambda o, v, s, r: _gates(o, s, r))
+    gates_of = readout.at_every_card("affected")
+    gates = common.predict_all(probe_model, [c[0] for c in chosen], gates_of)
     by_family, by_restriction = defaultdict(lambda: ([], [])), defaultdict(lambda: ([], []))
     for (record, restriction, items), gate in zip(chosen, gates):
         for entity, legal in items:
@@ -212,8 +190,7 @@ def main() -> None:
             if legal:
                 flip_records.append(flipped(record, entity, flip))
                 flip_index.append((flip, entity, record))
-    after = common.predict_all(probe_model, flip_records,
-                               lambda o, v, s, r: _gates(o, s, r))
+    after = common.predict_all(probe_model, flip_records, gates_of)
     gate_of = {c[0].record_id: gate for c, gate in zip(chosen, gates)}
     before = [gate_of[r.record_id] for _, _, r in flip_index]
     for (flip, entity, _), b, a in zip(flip_index, before, after):

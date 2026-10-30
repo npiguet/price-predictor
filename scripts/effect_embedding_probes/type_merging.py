@@ -30,9 +30,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from _lib.stats import oof_predict, weighted_r2
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression, Ridge
-from sklearn.model_selection import GroupKFold
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 
@@ -53,24 +53,12 @@ AMOUNTS = ("amt_damage", "amt_counters", "amt_power", "amt_toughness",
            "amt_cards", "amt_life", "amt_tokens", "cost_mana")
 
 
-def oof_predict(model_factory, X, y, groups) -> np.ndarray:
-    pred = np.empty(len(y), dtype=object)
-    for train, test in GroupKFold(5).split(X, y, groups):
-        model = model_factory().fit(X[train], y[train])
-        pred[test] = model.predict(X[test])
-    return pred
-
-
 def within_r2(X, y, api, groups) -> float:
     ok = np.isfinite(y)
     frame = pd.DataFrame({"y": y[ok], "api": api[ok]})
     yr = (frame.y - frame.groupby("api").y.transform("mean")).to_numpy()
     Xr = group_means_residual(X[ok], pd.Series(api[ok]))
-    pred = np.zeros(len(yr))
-    for train, test in GroupKFold(5).split(Xr, yr, groups[ok]):
-        pred[test] = Ridge(alpha=10.0).fit(Xr[train], yr[train]).predict(Xr[test])
-    ss = float((yr ** 2).sum())
-    return 1.0 - float(((yr - pred) ** 2).sum()) / ss if ss else float("nan")
+    return weighted_r2(yr, oof_predict(Ridge(alpha=10.0), Xr, yr, groups[ok]))
 
 
 def main() -> None:
@@ -83,8 +71,8 @@ def main() -> None:
     groups = table["group"].to_numpy()
     X = StandardScaler().fit_transform(matrix(table, "e_full"))
     y = table["api_c"].to_numpy(object)
-    linear = oof_predict(lambda: LogisticRegression(max_iter=500), X, y, groups)
-    knn = oof_predict(lambda: KNeighborsClassifier(n_neighbors=20), X, y, groups)
+    linear = oof_predict(LogisticRegression(max_iter=500), X, y, groups)
+    knn = oof_predict(KNeighborsClassifier(n_neighbors=20), X, y, groups)
     counts = pd.Series(y).value_counts()
     confusion = pd.crosstab(pd.Series(y, name="true"), pd.Series(linear, name="pred"))
     pairs = []

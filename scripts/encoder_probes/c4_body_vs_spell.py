@@ -15,7 +15,6 @@ table plus the grounding feature flags.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -25,6 +24,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import probe_lib as pl  # noqa: E402
 from _lib.stats import bootstrap_ci  # noqa: E402
+from c7_labelside import with_predictions  # noqa: E402
 
 # (effect text, colour pip) — colour is held fixed across every arm.
 EFFECTS: list[tuple[str, str]] = [
@@ -120,8 +120,7 @@ def main() -> None:
         "effect_on_spell_vs_control", "instant_minus_sorcery",
     ]].mean().reset_index().sort_values(
         "body_premium_etb_minus_sorcery", ascending=False)
-    agg.to_csv(pl.SCRATCH / "c4_body_premium_agg.csv", index=False)
-    print(agg.to_string(index=False), flush=True)
+    pl.write_table(agg, "c4_body_premium_agg.csv")
 
     v = bp["body_premium_etb_minus_sorcery"].to_numpy()
     out["body_premium_mean_sd"] = float(v.mean())
@@ -136,7 +135,7 @@ def main() -> None:
     out["nearest_examples"] = m.sample(8, random_state=1)[
         ["kind", "effect", "dist", "nearest"]].to_dict("records")
 
-    # ── the mana-rock vs mana-dork case ─────────────────────────────────
+    # the mana-rock vs mana-dork case
     rock_shells = {
         "artifact rock {2}": "mana cost: {2}\ntypes: artifact\nactivated[1]: {T}: add {C}.",
         "artifact creature rock {2} 1/1": ("mana cost: {2}\ntypes: artifact creature construct\n"
@@ -155,26 +154,21 @@ def main() -> None:
                                  "activated[1]: {T}: add {C}."),
     }
     rocks = pl.score_texts(list(rock_shells.values()))
-    rock = pd.DataFrame({
+    pl.write_table(pd.DataFrame({
         "shell": list(rock_shells),
         "score_play_sd": rocks.sp,
         "played_rate_sd": rocks.pr,
         "dist": rocks.dist,
         "nearest": [keys[i] for i in rocks.nearest],
-    })
-    rock.to_csv(pl.SCRATCH / "c4_rock_dork.csv", index=False)
-    print(rock.to_string(index=False), flush=True)
+    }), "c4_rock_dork.csv")
 
-    # ── real-card class anchors, MV-matched ─────────────────────────────
-    names = j["name"].tolist()
-    E = pl.load_embedding_matrix(names, j)
-    P = pl.predict_sd(E)
-    j = j.copy()
-    j["pred_sp"] = P["score_play"].to_numpy()
-    j["pred_pr"] = P["played_rate"].to_numpy()
-    j["label_sp"] = pd.to_numeric(j["shrunk_score_play"], errors="coerce") / pl.SD["score_play"]
-    mv = pd.to_numeric(j["mv"], errors="coerce")
-    f = lambda c: j[c].fillna(False).astype(bool)  # noqa: E731
+    # real-card class anchors, MV-matched
+    j = with_predictions(j)
+    mv = pl.num(j, "mv")
+
+    def f(c: str) -> np.ndarray:
+        return pl.flag(j, c)
+
     classes = {
         "mana rock (noncreature artifact, add mana)":
             f("ph_add_mana") & f("is_artifact") & ~f("is_creature"),
@@ -182,14 +176,13 @@ def main() -> None:
         "ramp sorcery (search basic land)": f("ph_search_basic_land") & ~f("is_creature"),
         "token creature (creature that makes tokens)": f("ph_create_token") & f("is_creature"),
         "token spell (noncreature token maker)": f("ph_create_token") & ~f("is_creature"),
-        "vanilla-ish creature": f("is_creature") & (
-            pd.to_numeric(j["n_abilities"], errors="coerce").fillna(9) == 0),
+        "vanilla-ish creature": f("is_creature") & (pl.num(j, "n_abilities", 9) == 0),
         "all creatures": f("is_creature"),
         "all noncreature spells": f("is_instant") | f("is_sorcery"),
-        "corpus": pd.Series(True, index=j.index),
+        "corpus": np.ones(len(j), dtype=bool),
     }
     mv_lo, mv_hi = 1, 4
-    band = mv.between(mv_lo, mv_hi)
+    band = (mv >= mv_lo) & (mv <= mv_hi)
     crows = []
     for name, mask in classes.items():
         sub = j[mask & band]
@@ -199,14 +192,10 @@ def main() -> None:
                       "pred_sp": float(sub["pred_sp"].mean()),
                       "label_sp": float(sub["label_sp"].mean()),
                       "pred_pr": float(sub["pred_pr"].mean())})
-    anchors = pd.DataFrame(crows)
-    anchors.to_csv(pl.SCRATCH / "c4_class_anchors.csv", index=False)
     print(f"[anchors] MV {mv_lo}-{mv_hi}")
-    print(anchors.to_string(index=False), flush=True)
+    pl.write_table(crows, "c4_class_anchors.csv")
 
-    (pl.SCRATCH / "c4_summary.json").write_text(
-        json.dumps(out, indent=2, default=float), encoding="utf-8")
-    print(json.dumps(out, indent=2, default=float), flush=True)
+    pl.write_summary(out, "c4_summary.json")
 
 
 if __name__ == "__main__":

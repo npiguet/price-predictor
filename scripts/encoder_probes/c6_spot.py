@@ -58,71 +58,56 @@ def vs_base_and_control(S: pl.Scored, labels: list[str], label_key: str,
     return pd.DataFrame(rows)
 
 
-def write(tab: pd.DataFrame, name: str) -> None:
-    tab.to_csv(pl.SCRATCH / name, index=False)
-    print(tab.to_string(index=False), flush=True)
-
-
 def main() -> None:
     j = pl.load_frame(text=True)
-    stripped = list(j["text"])
-    is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
-    is_sp = j[["is_instant", "is_sorcery"]].fillna(0).astype(bool).any(axis=1).to_numpy()
-    n_ab = np.array([len(cc.ability_lines(s)) for s in stripped])
+    C = cc.CardCorpus.of(j)
+    stripped = C.text
+    is_sp = pl.flag(j, "is_instant") | pl.flag(j, "is_sorcery")
     rng = np.random.default_rng(21)
 
-    # ── (i) riders appended inside the spell line ───────────────────────
+    # (i) riders appended inside the spell line
     sl = np.array([cc.find_line(cc.lines(s), "spell[1]:") for s in stripped])
     ends_dot = np.array([sl[i] >= 0 and cc.lines(stripped[i])[sl[i]].rstrip().endswith(".")
                          for i in range(len(stripped))])
-    sel = np.flatnonzero(is_sp & (sl >= 0) & (n_ab == 1) & ends_dot)
-    if len(sel) > 500:
-        sel = np.sort(rng.choice(sel, 500, replace=False))
+    sel = cc.sample_rows(is_sp & (sl >= 0) & (C.n_abilities == 1) & ends_dot, 500, rng)
     print(f"[C6] rider base: {len(sel)}", flush=True)
-    texts = []
-    for r in sel:
+
+    def with_rider(r: int, rider: str | None) -> str:
+        if rider is None:
+            return stripped[r]
         base_line = cc.lines(stripped[r])[sl[r]].rstrip()
-        texts.append(stripped[r])
-        texts += [cc.replace_in_line(stripped[r], sl[r], f"{base_line} {rider}")
-                  for rider, _ in RIDERS]
-    S = pl.score_texts(texts).reshape(len(sel), 1 + len(RIDERS))
-    write(vs_base_and_control(S, [label for _, label in RIDERS], "rider",
-                              "vs_no_rider_sd", "vs_control_rider_sd"), "c6_riders.csv")
+        return cc.replace_in_line(stripped[r], sl[r], f"{base_line} {rider}")
 
-    # ── (iii) end-step trigger: drawback vs control vs upside ───────────
-    kw_count = pd.to_numeric(j["kw_count"], errors="coerce").fillna(0).to_numpy()
-    csel = np.flatnonzero(is_crea & (n_ab <= 1) & (kw_count <= 1))
-    if len(csel) > 500:
-        csel = np.sort(rng.choice(csel, 500, replace=False))
+    S = pl.score_arms(sel, [None] + [rider for rider, _ in RIDERS], with_rider)
+    pl.write_table(vs_base_and_control(S, [label for _, label in RIDERS], "rider",
+                                       "vs_no_rider_sd", "vs_control_rider_sd"),
+                   "c6_riders.csv")
+
+    # (iii) end-step trigger: drawback vs control vs upside
+    csel = cc.sample_rows(C.is_creature & (C.n_abilities <= 1) & (C.kw_count <= 1), 500, rng)
     print(f"[C6] end-step-trigger base: {len(csel)}", flush=True)
-    texts = []
-    for r in csel:
-        texts.append(stripped[r])
-        texts += [cc.add_line(stripped[r],
-                              f"triggered: at the beginning of your end step, {clause}")
-                  for clause, _ in END_TRIGGERS]
-    S = pl.score_texts(texts).reshape(len(csel), 1 + len(END_TRIGGERS))
-    write(vs_base_and_control(S, [label for _, label in END_TRIGGERS], "added_trigger",
-                              "vs_no_line_sd", "vs_control_line_sd"), "c6_end_triggers.csv")
+    S = pl.score_arms(csel, [None] + [clause for clause, _ in END_TRIGGERS],
+                      lambda r, clause: stripped[r] if clause is None else cc.add_line(
+                          stripped[r], f"triggered: at the beginning of your end step, {clause}"))
+    pl.write_table(vs_base_and_control(S, [label for _, label in END_TRIGGERS],
+                                       "added_trigger", "vs_no_line_sd", "vs_control_line_sd"),
+                   "c6_end_triggers.csv")
 
-    # ── (iv) dies -> enters on real death triggers ──────────────────────
+    # (iv) dies -> enters on real death triggers
     die_i = np.array([cc.find_line(cc.lines(s), "triggered: when CARDNAME dies,")
                       for s in stripped])
-    dsel = np.flatnonzero(is_crea & (die_i >= 0))
+    dsel = np.flatnonzero(C.is_creature & (die_i >= 0))
     print(f"[C6] death-trigger creatures: {len(dsel)}", flush=True)
-    texts = []
-    for r in dsel:
+
+    def retimed(r: int, when: str | None) -> str:
+        if when is None:
+            return stripped[r]
         line = cc.lines(stripped[r])[die_i[r]]
-        texts.append(stripped[r])
-        texts += [cc.replace_in_line(stripped[r], die_i[r],
-                                     line.replace("when CARDNAME dies,", f"when CARDNAME {w},", 1))
-                  for w in ("enters", "attacks")]
-    S = pl.score_texts(texts).reshape(len(dsel), 3)
-    write(pd.DataFrame([
-        pl.contrast_row(S.sp[:, i] - S.sp[:, 0], S.pr[:, i] - S.pr[:, 0], S.off[:, i],
-                        contrast=label)
-        for i, label in enumerate(["dies -> enters", "dies -> attacks"], start=1)]),
-        "c6_timing.csv")
+        return cc.replace_in_line(stripped[r], die_i[r], line.replace(
+            "when CARDNAME dies,", f"when CARDNAME {when},", 1))
+
+    S = pl.score_arms(dsel, [None, "enters", "attacks"], retimed)
+    pl.write_table(pl.contrasts(S, ["dies -> enters", "dies -> attacks"]), "c6_timing.csv")
 
 
 if __name__ == "__main__":

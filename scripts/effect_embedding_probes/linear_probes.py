@@ -49,12 +49,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from _lib.stats import oof_predict, weighted_r2
 from joblib import Parallel, delayed
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import GroupKFold
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 
@@ -64,6 +64,7 @@ from effect_embedding_probes.common import (  # noqa: E402
     BINARY_SCRIPT,
     CARD,
     NUMERIC_SCRIPT,
+    SCRIPT_CATS,
     add_probe_arguments,
     design,
     group_means_residual,
@@ -87,7 +88,6 @@ BINARY_CARD = [c for c in CARD if c not in ("card_cmc", "card_n_colours")]
 #: cannot carve out the API-type groups that a one-hot hands a ridge for free,
 #: while the effect head reading ``e`` is itself non-linear.
 NONLINEAR_SPACES = ("full", "taxonomy", "script features")
-SCRIPT_CATS = ["api_c", "line_kind", "mode_c", "target", "head_c", "keyword_c"]
 
 
 def standardize(X: np.ndarray) -> np.ndarray:
@@ -113,22 +113,17 @@ def spaces_for(table: pd.DataFrame, key_columns: list[str],
 
 
 def probe_binary(X, y, groups) -> float:
-    pred = np.zeros(len(y))
-    for train, test in GroupKFold(FOLDS).split(X, y, groups):
-        if len(np.unique(y[train])) < 2:
-            return float("nan")
-        model = LogisticRegression(C=1.0, max_iter=1000)
-        model.fit(X[train], y[train])
-        pred[test] = model.decision_function(X[test])
+    try:
+        pred = oof_predict(LogisticRegression(C=1.0, max_iter=1000), X, y, groups,
+                           folds=FOLDS, method="decision_function")
+    except ValueError:
+        # A training fold holding one class only: scikit-learn refuses to fit it.
+        return float("nan")
     return float(roc_auc_score(y, pred))
 
 
 def probe_multiclass(X, y, groups) -> float:
-    pred = np.empty(len(y), dtype=object)
-    for train, test in GroupKFold(FOLDS).split(X, y, groups):
-        model = LogisticRegression(C=1.0, max_iter=500)
-        model.fit(X[train], y[train])
-        pred[test] = model.predict(X[test])
+    pred = oof_predict(LogisticRegression(C=1.0, max_iter=500), X, y, groups, folds=FOLDS)
     return float((pred == y).mean())
 
 
@@ -136,30 +131,19 @@ def probe_numeric(X, y, groups, w=None) -> float:
     ok = np.isfinite(y)
     X, y, groups = X[ok], y[ok], groups[ok]
     w = np.ones(len(y)) if w is None else w[ok]
-    pred = np.zeros(len(y))
-    for train, test in GroupKFold(FOLDS).split(X, y, groups):
-        model = Ridge(alpha=10.0)
-        model.fit(X[train], y[train], sample_weight=w[train])
-        pred[test] = model.predict(X[test])
-    mean = np.average(y, weights=w)
-    ss_tot = float((w * (y - mean) ** 2).sum())
-    return 1.0 - float((w * (y - pred) ** 2).sum()) / ss_tot if ss_tot else float("nan")
+    pred = oof_predict(Ridge(alpha=10.0), X, y, groups, folds=FOLDS, weight=w)
+    return weighted_r2(y, pred, w)
 
 
 def probe_nonlinear(X, y, groups, w, method: str) -> float:
     """Out-of-fold weighted R² of a k-nearest-neighbour or boosted-tree fit."""
-    pred = np.zeros(len(y))
-    for train, test in GroupKFold(FOLDS).split(X, y, groups):
-        if method == "knn":
-            model = KNeighborsRegressor(n_neighbors=20)
-            model.fit(X[train], y[train])
-        else:
-            model = HistGradientBoostingRegressor(max_iter=200, random_state=0)
-            model.fit(X[train], y[train], sample_weight=w[train])
-        pred[test] = model.predict(X[test])
-    mean = np.average(y, weights=w)
-    ss_tot = float((w * (y - mean) ** 2).sum())
-    return 1.0 - float((w * (y - pred) ** 2).sum()) / ss_tot if ss_tot else float("nan")
+    if method == "knn":
+        # k-nearest-neighbour takes no sample weights: its fit is unweighted, only the score is.
+        pred = oof_predict(KNeighborsRegressor(n_neighbors=20), X, y, groups, folds=FOLDS)
+    else:
+        pred = oof_predict(HistGradientBoostingRegressor(max_iter=200, random_state=0),
+                           X, y, groups, folds=FOLDS, weight=w)
+    return weighted_r2(y, pred, w)
 
 
 def run_one(task, spaces, groups):

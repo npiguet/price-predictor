@@ -75,20 +75,14 @@ def fig_colour_chain() -> None:
     """Where each colour ranks at every step from Forge's games to the pick."""
     games = np.array(load("d11_winratecolour.json")
                      ["fits"]["+ Forge draft rank"]["beta"][:5])
-    reward = np.array(load("d10_rewardcolour.json")["fits"]["colour only"]["beta"][:5])
-    p1p1 = defaultdict(lambda: defaultdict(list))
-    for r in csv.DictReader((OUT / "d2_p1p1_values.csv").open(encoding="utf-8")):
-        for gen in ("gen1", "gen4"):
-            v = r.get(f"p1p1_{gen}")
-            if v and r["colours"]:
-                for c in r["colours"]:
-                    if c in PIE:
-                        p1p1[gen][c].append(float(v))
+    d10 = load("d10_rewardcolour.json")
+    reward = np.array(d10["fits"]["colour only"]["beta"][:5])
+    p1p1 = {gen: np.array(d10["p1p1_colour_mean"][gen]) for gen in ("gen1", "gen4")}
     series = [
         ("Forge's\nself-play games", games),
         ("the scorer's\nreward", reward),
-        ("gen-4's\nfirst pick", np.array([np.mean(p1p1["gen4"][c]) for c in WUBRG])),
-        ("gen-1's\nfirst pick", np.array([np.mean(p1p1["gen1"][c]) for c in WUBRG])),
+        ("gen-4's\nfirst pick", p1p1["gen4"]),
+        ("gen-1's\nfirst pick", p1p1["gen1"]),
     ]
     fig, ax = plt.subplots(figsize=(7.0, 4.2))
     xs = [0, 1, 2, 3.55]

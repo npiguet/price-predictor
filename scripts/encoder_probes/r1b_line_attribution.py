@@ -22,13 +22,10 @@ Outputs ``output/encoder-probes/r1b_*.csv`` + ``r1b_summary.json``.
 
 from __future__ import annotations
 
-import json
-import re
 import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
@@ -41,31 +38,10 @@ FLY_LINE = "static: flying"
 GATE = pl.MANIFOLD_GATE
 N_SAMPLE = 300
 SEED = 4242
-BATCH = 96
 SD_SCORE_PLAY = pl.SD["score_play"]
-
-
-def mana_value(lines: list[str]) -> float:
-    cost = next((ln[len("mana cost:"):].strip() for ln in lines
-                 if ln.startswith("mana cost:")), "")
-    total = 0.0
-    for sym in re.findall(r"\{([^}]*)\}", cost):
-        if sym.isdigit():
-            total += int(sym)
-        elif sym.upper() == "X":
-            continue
-        else:
-            total += 1
-    return total
-
-
-def power_toughness(lines: list[str]) -> tuple[float, float]:
-    pt = next((ln[len("power toughness:"):].strip() for ln in lines
-               if ln.startswith("power toughness:")), "")
-    m = re.match(r"(-?\d+)\s*/\s*(-?\d+)", pt)
-    if not m:
-        return (np.nan, np.nan)
-    return (float(m.group(1)), float(m.group(2)))
+# Family A's own variants: the wide table also carries family C's
+# ``ii_added`` column, NaN on every family-A row, which no gate may read.
+FAMILY_A_VARIANTS = ("i_original", "ii_deleted", "iii_grant_spell", "iv_negated_static")
 
 
 def drop_line(lines: list[str], target: str) -> list[str]:
@@ -81,7 +57,7 @@ def ratio_boot_ci(num: np.ndarray, den: np.ndarray, n: int = 4000, seed: int = 0
 
 
 def main() -> None:
-    join = pl.load_frame(features=False, text=True)
+    join = pl.load_frame(text=True)
 
     lines_by_idx = {i: cc.lines(t) for i, t in enumerate(join["text"])}
 
@@ -103,16 +79,20 @@ def main() -> None:
     rng = np.random.default_rng(SEED)
     multi_s = sorted(rng.choice(multi, min(N_SAMPLE, len(multi)), replace=False))
 
-    # matched non-fliers: greedy nearest on (mv, power, toughness)
-    feats = np.array([[mana_value(lines_by_idx[i]), *power_toughness(lines_by_idx[i])]
-                      for i in nonfly], dtype=float)
+    # matched non-fliers: greedy nearest on (mv, power, toughness); a statline
+    # that is not plain digits (*/*, X/X) has no position to match on
+    literal = np.array([cc.has_literal_pt(t) for t in join["text"]])
+    stats = np.column_stack([pl.num(join, "mv"),
+                             np.where(literal, pl.num(join, "power"), np.nan),
+                             np.where(literal, pl.num(join, "toughness"), np.nan)])
+    feats = stats[nonfly]
     ok = np.isfinite(feats).all(axis=1)
     pool_idx = np.array(nonfly)[ok]
     pool_feats = feats[ok]
     used = set()
     matched = []
     for i in multi_s:
-        f = np.array([mana_value(lines_by_idx[i]), *power_toughness(lines_by_idx[i])])
+        f = stats[i]
         if not np.isfinite(f).all():
             continue
         d = np.abs(pool_feats - f).sum(axis=1)
@@ -125,47 +105,31 @@ def main() -> None:
     print(f"single-line fliers {len(singles)} | multi-line fliers {len(multi)} "
           f"(sampled {len(multi_s)}) | matched non-fliers {len(matched)}", flush=True)
 
-    # ── build every variant text, encode once ───────────────────────────
-    specs: list[tuple[str, int, str, str]] = []  # (family, row_idx, variant, text)
-
+    # every variant text, encoded once
+    specs: list[pl.Variant] = []
     for i in singles:
         base = lines_by_idx[i]
         stripped = drop_line(base, FLY_LINE)
         specs += [
-            ("single", i, "i_original", "\n".join(base)),
-            ("single", i, "ii_deleted", "\n".join(stripped)),
-            ("single", i, "iii_grant_spell", "\n".join(stripped + [GRANT_LINE])),
-            ("single", i, "iv_negated_static", "\n".join(stripped + [NEGATED_LINE])),
+            pl.Variant("single", i, "i_original", "\n".join(base)),
+            pl.Variant("single", i, "ii_deleted", "\n".join(stripped)),
+            pl.Variant("single", i, "iii_grant_spell", "\n".join(stripped + [GRANT_LINE])),
+            pl.Variant("single", i, "iv_negated_static", "\n".join(stripped + [NEGATED_LINE])),
         ]
     for i in multi_s:
         base = lines_by_idx[i]
         specs += [
-            ("multi", i, "i_original", "\n".join(base)),
-            ("multi", i, "ii_deleted", "\n".join(drop_line(base, FLY_LINE))),
+            pl.Variant("multi", i, "i_original", "\n".join(base)),
+            pl.Variant("multi", i, "ii_deleted", "\n".join(drop_line(base, FLY_LINE))),
         ]
-    for i, j, _ in matched:
+    for _, j, _ in matched:
         base = lines_by_idx[j]
         specs += [
-            ("nonfly", j, "i_original", "\n".join(base)),
-            ("nonfly", j, "ii_added", "\n".join(base + [FLY_LINE])),
+            pl.Variant("nonfly", j, "i_original", "\n".join(base)),
+            pl.Variant("nonfly", j, "ii_added", "\n".join(base + [FLY_LINE])),
         ]
 
-    runner = pl.runner()
-    emb = runner.encode_texts([s[3] for s in specs], batch_size=BATCH)
-    print(f"encoded {len(specs)} variants on {runner.device}", flush=True)
-
-    pred = pl.predict_labels(emb, pl.fidelity_probes())
-    mdist, _ = pl.manifold_distance(emb, pl.reference_cloud()[1])
-
-    frame = pd.DataFrame({
-        "family": [s[0] for s in specs],
-        "row": [s[1] for s in specs],
-        "variant": [s[2] for s in specs],
-        "name": [join["name"].iloc[s[1]] for s in specs],
-        "score_play": pred["score_play"].to_numpy(),
-        "played_rate": pred["played_rate"].to_numpy(),
-        "manifold_dist": mdist,
-    })
+    frame = pl.score_variants(specs, join)
     frame.to_csv(pl.SCRATCH / "r1b_variants.csv", index=False)
 
     wide = frame.pivot_table(index=["family", "row", "name"], columns="variant",
@@ -178,12 +142,12 @@ def main() -> None:
                  "n_multi_sampled": len(multi_s), "n_matched": len(matched),
                  "label_sd_score_play": SD_SCORE_PLAY}
 
-    # ── family A: attribution index ─────────────────────────────────────
+    # family A: attribution index
     A = wide[wide["family"] == "single"].copy()
     for excl, tag in ((False, "all"), (True, "on_manifold")):
         sub = A
         if excl:
-            cols = [c for c in A.columns if c.startswith("manifold_dist__")]
+            cols = [f"manifold_dist__{v}" for v in FAMILY_A_VARIANTS]
             sub = A[(A[cols] <= GATE).all(axis=1)]
         if len(sub) < 5:
             continue
@@ -203,7 +167,7 @@ def main() -> None:
         rec["n_off_manifold_any"] = int(len(A) - len(sub)) if excl else None
         out[f"family_A_{tag}"] = rec
 
-    # ── family B / C: bidirectional ─────────────────────────────────────
+    # family B / C: bidirectional
     B = wide[wide["family"] == "multi"].copy()
     d_rem = (B["score_play__i_original"] - B["score_play__ii_deleted"]).to_numpy()
     lo, hi = bootstrap_ci(d_rem, seed=3)
@@ -224,9 +188,7 @@ def main() -> None:
     }
     out["bidirectional_ratio_add_over_remove"] = float(d_add.mean() / d_rem.mean())
 
-    with open(pl.SCRATCH / "r1b_summary.json", "w") as f:
-        json.dump(out, f, indent=2)
-    print(json.dumps(out, indent=2))
+    pl.write_summary(out, "r1b_summary.json")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ The probe battery behind
 encoder. Scripts load the production checkpoint and cached embeddings via
 `probe_lib.py` and write their outputs to `output/encoder-probes/`
 (gitignored). The session that produced the document left its exact outputs
-there (`p0_report.md`, `l_report.md`, `c_report.md`, plus the CSV/JSON/pickle
+there (`p0_report.md`, `l_report.md`, plus the CSV/JSON/pickle
 artifacts each script names); rerunning a script regenerates them.
 
 Run from the repo root with the repo venv:
@@ -23,17 +23,17 @@ and `resources/AllPrintings.json`.
 |---|---|---|
 | `probe_lib.py` | shared harness: checkpoint load + bit-exact re-encode, label↔text↔embedding join and the card-table-merged frame every probe analyses, seed-42 split reconstruction, fidelity/honest ridge probes, placebo edits, manifold gate, equivalence classes, read-off of edited texts in label-SD units | — |
 | `c_common.py` | converted-card text surgery and the keyword/tribe vocabularies the C battery edits | — |
-| `s_common.py` | CPU-only helpers of the `s_*` scripts: the frame plus both probe sets, the AI-hostile classes and their matched deficit, neighbour search, the nameable feature table | — |
+| `s_common.py` | CPU-only helpers of the `s_*` scripts: the `ProbeFrame` (frame, embeddings, both probe sets and their predictions), the AI-hostile classes and their matched deficit, neighbour search, the nameable feature table | — |
 | `p0_build.py` | builds/caches everything the harness serves; validation tables | `p0_report.md`, `join_table.pkl`, `probes_*.pkl`, `equivalence_classes.json` |
-| `p0b_card_table.py` | the per-card nameable-feature table (mana-cost breakdown, type/keyword/phrase flags, text-shape counts) joined to the labels; the feature source for `probe_lib.load_frame`, `l_analyze.py` and the nameable-feature comparison in `s_r18*.py` | `card_table.pkl` |
-| `l_mediation.py`, `l_analyze.py` | "The labels grade the builder…" — the w/m/d channel decomposition, forge-best mirror, game-length strata, set offsets, play/draw noise floor, cast_lift anatomy, blacklist channel | `l_mediation_table.pkl`, `l_report.md` |
+| `p0b_card_table.py` | the per-card nameable-feature table (mana-cost breakdown, type/keyword/phrase flags, text-shape counts) joined to the labels; the feature source for `probe_lib.load_frame`, `l_analyze.py` and the nameable-feature comparison in `s_r18.py` | `card_table.pkl` |
+| `l_mediation.py`, `l_analyze.py` | "The labels grade the builder…" — the w/m/d channel decomposition, forge-best mirror, game-length strata, set offsets, play/draw noise floor, cast_lift anatomy, blacklist channel | `l_mediation_table.pkl`, `l_report.md`, `l_channels.csv` |
 | `r1a_shuffle.py`, `r1b_line_attribution.py`, `r1c_scope_negation.py` | "What transfers is mostly a bag of words…" — shuffle battery, line-attribution index, scope/negation flips | `r1a_*.csv`/`.json`, `r1b_*.csv`, `r1b_summary.json`, `r1c_variants.csv`, `r1c_summary.json` |
 | `r2a_memorization.py`, `r2c_placebo_split.py` | "Half of the encoder's knowledge is memorized…" — half-probe design, equivalence-class bound, placebo brittleness | `r2a_decile_r2.csv`, `r2b_*.csv`, `r2ab_summary.json`, `r2c_*.csv`, `r2c_summary.json` |
-| `r1r2_derived.py` | derived R1/R2 statistics: shuffle survival ratios, the manifold-gated attribution index, the null-adjusted flip effect | `r1a_val_r2_table.csv`, `r1a_survival_table.csv`, `r1a_pred_shift_table.csv`, `r1c_null_adjusted.csv` |
+| `r1r2_derived.py` | derived R1/R2 statistics: shuffle survival ratios, the null-adjusted flip effect | `r1a_val_r2_table.csv`, `r1a_survival_table.csv`, `r1a_pred_shift_table.csv`, `r1c_null_adjusted.csv` |
 | `s_r3.py`, `s_r4.py`, `s_r5.py` | "Nine heads supervise about three real axes" | `s_r3.json`, `s_r4.json`, `s_r5.json` |
-| `s_r8*.py` | played_rate as the agency axis; the five orthogonal collapse-class directions | `s_r8.json`, `s_r8b.json`, `s_r8c.json` |
+| `s_r8.py` | played_rate as the agency axis; the five orthogonal collapse-class directions, their split-half reliability and the deficits' bootstrap SEs | `s_r8.json`, `s_r8b.json`, `s_r8c.json` |
 | `s_r17*.py` | "The encoder disagrees with its labels in the response…" — residual table, blacklist over-prediction, neighborhood smoothing (`s_r17b.py` with the embedding neighbourhood, `s_r17b.py --neighbours bow` with a bag-of-tokens one) | `s_r17.json`, `s_r17b.json`, `s_r17c.json`, `s_r17_*.pkl`/`.npy` |
-| `s_r18*.py` | the nameability curve; encoder vs the nameable feature table | `s_r18.json`, `s_r18_curve.pkl`, `s_r18b.json` |
+| `s_r18.py` | the nameability curve; encoder vs the nameable feature table on the encoder's own split | `s_r18.json`, `s_r18_curve.pkl`, `s_r18b.json` |
 | `c1_keywords.py`, `c1b_interactions.py` | the keyword ladder, flying×size, deathtouch+trample | `c1_*.csv`/`.json`, `c1b_*.csv`/`.json` |
 | `c8_kw_vanilla.py` | the label side of the keyword figure: keyword values vs vanilla creatures on one joint baseline (supersedes `c7_labelside.py`'s keyword family, whose keyword-count control benchmarked each keyword against the other keywords' flying-heavy mix), plus the per-keyword channel split | `c8_kw_vanilla.csv` |
 | `c9_kw_pairs.py` | the 120-pair keyword interaction matrix (layout-matched 2×2s with a fear control, both slot orders, double-centered); overturns c1b's deathtouch+trample bonus | `c9_kw_pairs.csv` |
@@ -46,7 +46,6 @@ and `resources/AllPrintings.json`.
 | `c4_body_vs_spell.py` | body premium, dork-vs-rock | `c4_*.csv`/`.json` |
 | `c5_types.py` | tribal-noun scale, type swaps, taplands | `c5_*.csv`/`.json` |
 | `c6_spot.py`, `c7_labelside.py` | riders/timing spot checks; the counterfactual-vs-correlational split | `c6_*.csv`, `c7_labelside.csv`/`.json` |
-| `c_report.py` | assembles the C-series artifacts into one report with the encoder-vs-label divergence columns | `c_report.md` |
 | `q1_blocks.py`, `q2_attention.py` | pool-query specialization (none) | `q1_*.csv`/`.json`/`.npy`, `q2_*.csv`/`.json` |
 | `q3_decode.py` | "The embedding is a card description first…" — decodability table, {X} as one pip, integer collapse | `q3_*.csv`/`.json` |
 | `q4_token_geometry.py` | the integer collapse is unordered tokens, not learned diminishing returns — number-line projections of the integer tokens plus the label utility curve by printed power | `q4_token_geometry.csv`, `q4_power_labels.csv` |
@@ -57,7 +56,7 @@ and `resources/AllPrintings.json`.
 1. `p0_build.py` (everything imports its caches), then `p0b_card_table.py` (the feature table the shared loader merges in)
 2. `l_mediation.py` → `l_analyze.py` (CPU; label side)
 3. `r1*` / `r2*` (GPU), then `r1r2_derived.py`; `s_*` (CPU; `s_r17.py` before `s_r17b.py`) — independent of each other
-4. `c1`–`c13` (GPU, except the label-side `c7`, `c8` and `c13`; `c1` before `c1b` and `c8`), `q1`–`q4`, then `c_report.py`
+4. `c1`–`c13` (GPU, except the label-side `c7`, `c8` and `c13`; `c1` before `c1b` and `c8`), `q1`–`q4`
 
 Probes and predictions are checkpoint-specific: repointing
 `probe_lib`'s checkpoint path and rerunning `p0_build.py --force` is the

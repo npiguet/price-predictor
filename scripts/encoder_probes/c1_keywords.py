@@ -18,7 +18,6 @@ the ranking.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -92,32 +91,19 @@ def bootstrap_scales(Ws: list[np.ndarray], groups: list[np.ndarray], labels: lis
 
 def main() -> None:
     rng = np.random.default_rng(SEED)
-    j = pl.load_frame(text=True)
-    stripped_all = list(j["text"])
-    is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
+    C = cc.CardCorpus.of(pl.load_frame(text=True))
 
-    hits = [keyword_statics(s) for s in stripped_all]
-    n_kw = np.array([len(h) for h in hits])
-    solo_idx = np.flatnonzero(is_crea & (n_kw == 1))
-    solo_kw = np.array([hits[i][0][1] for i in solo_idx])
-
-    base_rows: list[int] = []
-    for k in KEYWORDS:
-        pool = solo_idx[solo_kw == k]
-        if len(pool) == 0:
-            continue
-        take = pool if len(pool) <= MAX_PER_KW else rng.choice(
-            pool, MAX_PER_KW, replace=False)
-        base_rows.extend(sorted(int(x) for x in take))
-    base_rows = np.array(base_rows)
-    own = np.array([hits[i][0][1] for i in base_rows])
+    hits = [keyword_statics(s) for s in C.text]
+    solo_kw = np.array([h[0][1] if len(h) == 1 else "" for h in hits])
+    base_rows = np.concatenate([
+        cc.sample_rows(C.is_creature & (solo_kw == k), MAX_PER_KW, rng) for k in KEYWORDS])
+    own = solo_kw[base_rows]
     print(f"[A] base cards: {len(base_rows)}", flush=True)
 
-    texts = [cc.replace_in_line(stripped_all[r], hits[r][0][0], f"static: {k}")
-             for r in base_rows for k in KEYWORDS]
-    print(f"[A] encoding {len(texts)} texts", flush=True)
     nb, nk = len(base_rows), len(KEYWORDS)
-    A = pl.score_texts(texts).reshape(nb, nk)
+    print(f"[A] encoding {nb * nk} texts", flush=True)
+    A = pl.score_arms(base_rows, KEYWORDS, lambda r, k: cc.replace_in_line(
+        C.text[r], hits[r][0][0], f"static: {k}"))
     groups = [np.flatnonzero(own == k) for k in KEYWORDS]
 
     np.savez_compressed(pl.SCRATCH / "c1_pairwise_raw.npz",
@@ -170,11 +156,10 @@ def main() -> None:
         "pr_ci_lo": np.quantile(boot_pr, 0.025, axis=0),
         "pr_ci_hi": np.quantile(boot_pr, 0.975, axis=0),
     }).sort_values("value_sp", ascending=False)
-    scale_tab.to_csv(pl.SCRATCH / "c1_scale.csv", index=False)
-    print(scale_tab.to_string(index=False), flush=True)
+    pl.write_table(scale_tab, "c1_scale.csv")
 
-    # ── Design B: line deletion ─────────────────────────────────────────
-    D = pl.score_texts([cc.drop_line(stripped_all[r], hits[r][0][0]) for r in base_rows])
+    # Design B: line deletion
+    D = pl.score_texts([cc.drop_line(C.text[r], hits[r][0][0]) for r in base_rows])
     own_gi = np.array([KEYWORDS.index(k) for k in own])
     base_sp = A.sp[np.arange(nb), own_gi]
     base_pr = A.pr[np.arange(nb), own_gi]
@@ -188,12 +173,11 @@ def main() -> None:
             base_sp[sel] - D.sp[sel], base_pr[sel] - D.pr[sel], D.off[sel],
             key="premium_sp", pr_key="premium_pr", n_boot=1500, keyword=k))
     dele = pd.DataFrame(del_rows).sort_values("premium_sp", ascending=False)
-    dele.to_csv(pl.SCRATCH / "c1_delete.csv", index=False)
-    print(dele.to_string(index=False), flush=True)
+    pl.write_table(dele, "c1_delete.csv")
 
     rank_a = pd.Series([scale[k] for k in dele["keyword"]]).rank()
     summary = {
-        "n_base_A": int(nb), "n_arms_A": int(len(texts)),
+        "n_base_A": int(nb), "n_arms_A": int(nb * nk),
         "scale_fit_r2": fit_r2,
         "scale_fit_resid_sd": float(np.sqrt((wn * resid ** 2).sum() / wn.sum())),
         "antisymmetry_mean": float(asym.mean()),
@@ -206,9 +190,7 @@ def main() -> None:
         "scale_sp": {k: float(scale[k]) for k in KEYWORDS},
         "scale_pr": {k: float(scale_pr[k]) for k in KEYWORDS},
     }
-    (pl.SCRATCH / "c1_summary.json").write_text(
-        json.dumps(summary, indent=2), encoding="utf-8")
-    print(json.dumps(summary, indent=2), flush=True)
+    pl.write_summary(summary, "c1_summary.json")
 
 
 if __name__ == "__main__":

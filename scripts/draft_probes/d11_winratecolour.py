@@ -46,16 +46,21 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _lib.corpora import card_column, iter_matches, load_win_rates
-from _lib.stats import ols
+from _lib.stats import ols, spearman
 from draft_corpus_common import ColourResolver
-from draft_probes.probe_lib import BO1_DATA, CARDS, HINTS, OUT, WIN_RATES, WUBRG
+from draft_probes.probe_lib import (
+    BO1_DATA,
+    CARDS,
+    HINTS,
+    OUT,
+    WIN_RATES,
+    WUBRG,
+    deck_colour_shares,
+    wg_ur,
+)
 
 MATCHES = BO1_DATA / "match-outcomes-bo1-embedding.txt"
 COLOURS = WUBRG
-
-
-def wg_ur(beta: np.ndarray) -> float:
-    return (beta[0] + beta[4]) / 2 - (beta[1] + beta[3]) / 2
 
 
 def card_level(colours: ColourResolver) -> dict:
@@ -108,21 +113,13 @@ def main() -> None:
     results = {"card_level": card_level(colours)}
 
     def deck_vector(names: list[str]) -> tuple[np.ndarray, float, int] | None:
-        acc: Counter[str] = Counter()
-        n = nr = 0
-        r = 0.0
-        for nm in names:
-            ids = colours(nm)
-            if ids:                        # basics and artifacts carry no lane
-                n += 1
-                for c in ids:
-                    acc[c] += 1.0 / len(ids)
-            if nm in rank:
-                r += rank[nm]
-                nr += 1
-        if n < 10 or nr < 10:
+        """Colour shares, mean rank and coloured-card count; None for a deck
+        with under ten coloured or ten ranked cards."""
+        frac, n = deck_colour_shares(names, colours)
+        ranks = [rank[nm] for nm in names if nm in rank]
+        if n < 10 or len(ranks) < 10:
             return None
-        return np.array([acc[c] / n for c in COLOURS]), r / nr, n
+        return frac, sum(ranks) / len(ranks), n
 
     rows: list[tuple] = []
     kept = seen = 0
@@ -198,21 +195,16 @@ def main() -> None:
         blob = json.loads(d10.read_text(encoding="utf-8"))
         order["reward"] = blob["fits"]["colour only"]["beta"][:5]
 
-    def rho(a: list[float], b: list[float]) -> float:
-        ra = np.argsort(np.argsort(np.array(a)))
-        rb = np.argsort(np.argsort(np.array(b)))
-        return float(np.corrcoef(ra, rb)[0, 1])
-
     print("\n=== colour order at each step of the chain ===")
     ref = order["games (deck level)"]
     for label, v in order.items():
         seq = " > ".join(COLOURS[i] for i in np.argsort(-np.array(v)))
-        print(f"  {label:22s} {seq}    (rank corr with the games {rho(v, ref):+.2f})")
+        print(f"  {label:22s} {seq}    (rank corr with the games {spearman(v, ref):+.2f})")
     if "reward" in order:
         print("  the games and the reward agree on the top of the order and "
               "swap U and R at the bottom.")
     results["chain"] = {"values": order,
-                        "rho_with_games": {k: rho(v, ref)
+                        "rho_with_games": {k: spearman(v, ref)
                                            for k, v in order.items()}}
 
     (OUT / "d11_winratecolour.json").write_text(

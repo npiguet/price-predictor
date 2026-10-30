@@ -23,15 +23,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+from _lib.paths import REPO
 from _lib.stats import auc  # noqa: F401  (re-exported: the probes score with common.auc)
 
-from effects.domain import default_paths
-from effects.domain.ability_tokenizer import Surface
+# Re-exported: both probe batteries name a checkpoint's report directory and
+# read their default trees one way, so the two reports of one arm read alike.
+from effect_embedding_probes.common import (  # noqa: F401
+    DEFAULT_ABILITIES,
+    DEFAULT_CARDS_FOLDERS,
+    REPORTS,
+    card_facts,
+    checkpoint_label,
+)
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CARDS_FOLDERS = tuple(ROOT / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
-DEFAULT_ABILITIES = ROOT / default_paths.DEFAULT_ABILITIES_ROOT
-DEFAULT_REPORTS = ROOT / default_paths.DEFAULT_REPORTS_DIR
+from effects.domain.ability_tokenizer import Surface
 
 #: The two validation strata, as the corpus names its directories.
 STRATA: tuple[str, ...] = ("card-disjoint", "game-disjoint")
@@ -44,15 +49,6 @@ def stable_hash(value: str) -> int:
     keeps choosing it.
     """
     return zlib.crc32(value.encode("utf-8"))
-
-
-def checkpoint_stem(path: Path) -> str:
-    """The name a report directory carries for a checkpoint.
-
-    ``latest.pt`` says nothing about which run it is, so its directory names it.
-    """
-    path = Path(path)
-    return path.parent.name if path.stem == "latest" else path.stem
 
 
 # ── checkpoint, sidecars and cache ──────────────────────────────────────
@@ -145,16 +141,6 @@ def line_items(
                 for key in line.provenance:
                     text_by_key[key] = text
     return list(items.values())
-
-
-def card_types(converted_txt: Path) -> str:
-    """The first face's type line from a converted card, lowercased."""
-    if not converted_txt.exists():
-        return ""
-    for line in converted_txt.read_text(encoding="utf-8").splitlines():
-        if line.startswith("types: "):
-            return line[len("types: "):].lower()
-    return ""
 
 
 # ── records ─────────────────────────────────────────────────────────────
@@ -305,7 +291,7 @@ def rooted(path) -> Path:
     given them, from the repository root.
     """
     path = Path(path)
-    return path if path.is_absolute() else ROOT / path
+    return path if path.is_absolute() else REPO / path
 
 
 @dataclass

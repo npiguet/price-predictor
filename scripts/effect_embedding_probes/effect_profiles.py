@@ -103,6 +103,80 @@ def _side(subject: str, actor: str, entities: dict) -> str | None:
     return "own" if entity["controller"] == actor else "opp"
 
 
+def _zone_change(params: dict, entity: dict, side: str | None, is_creature: bool,
+                 present: set[str]) -> None:
+    origin = (params.get("from_zone") or entity.get("zone") or "").lower()
+    dest = (params.get("to_zone") or "").lower()
+    name = TRANSITIONS.get((origin, dest))
+    if name:
+        present.add(name)
+    if origin == "battlefield" and dest in ("graveyard", "exile") and is_creature:
+        present.add("creature_removed")
+        present.add(f"creature_removed_{side}" if side else "creature_removed")
+    if origin == "battlefield" and dest == "hand" and is_creature:
+        present.add("creature_bounced")
+
+
+def _fold_event(event: dict, actor: str | None, entities: dict, present: set[str],
+                sums: dict, sides: dict, subjects: set[str]) -> None:
+    """One resolution event's outcome kinds into ``present``, amounts into ``sums``."""
+    kind = event["type"]
+    present.add(kind)
+    params = event.get("params") or {}
+    for subject in event.get("subjects") or ():
+        subjects.add(subject)
+        subject_side = _side(subject, actor, entities)
+        if subject_side is not None:
+            sides[subject_side] += 1
+    subs = event.get("subjects") or ()
+    first = subs[0] if subs else ""
+    side = _side(first, actor, entities) if first else None
+    entity = entities.get(first, {})
+    is_creature = "creature" in (entity.get("types") or ())
+    if kind == "zone_change":
+        _zone_change(params, entity, side, is_creature, present)
+    elif kind == "destroyed" and is_creature:
+        present.add("creature_removed")
+        if side:
+            present.add(f"creature_removed_{side}")
+    elif kind == "life_change" and side:
+        sums[f"life_{side}"] += float(params.get("delta") or 0)
+    elif kind == "damage_dealt":
+        amount = float(params.get("amount") or 0)
+        target = "player" if first.startswith("P") else "permanent"
+        sums["damage_total"] += amount
+        sums[f"damage_to_{target}"] += amount
+        if side:
+            sums[f"damage_{side}"] += amount
+    elif kind in ("card_drawn", "card_discarded", "card_milled") and side:
+        sums[f"{kind}_{side}"] += float(params.get("count") or 1)
+    elif kind == "counter_change":
+        counter = str(params.get("counter_type") or "")
+        family = {"P1P1": "p1p1", "M1M1": "m1m1", "LOYALTY": "loyalty"}.get(
+            counter, "other")
+        delta = float(params.get("delta") or 0)
+        sums[f"counters_{family}"] += delta
+        if side and family == "p1p1":
+            sums[f"counters_p1p1_{side}"] += delta
+    elif kind == "pt_change":
+        power = float(params.get("power_delta") or 0)
+        sums["power_delta"] += power
+        sums["toughness_delta"] += float(params.get("toughness_delta") or 0)
+        if side:
+            sums[f"power_delta_{side}"] += power
+    elif kind == "token_created":
+        sums["tokens"] += float(params.get("count") or 1)
+        chars = params.get("characteristics") or {}
+        if "creature" in str(chars.get("types", "")).lower():
+            sums["creature_tokens"] += float(params.get("count") or 1)
+    elif kind == "mana_produced":
+        sums["mana"] += float(sum((params.get("mana_by_color") or {}).values()))
+    elif kind == "energy_change":
+        sums["energy"] += float(params.get("delta") or 0)
+    elif kind in ("keyword_change", "tapped", "untapped", "control_change") and side:
+        present.add(f"{kind}_{side}")
+
+
 def _resolution(acc: dict, record: dict) -> None:
     actor = record.get("actor_player")
     entities = {e["id"]: e for e in record["state"].get("entities", ())}
@@ -115,70 +189,7 @@ def _resolution(acc: dict, record: dict) -> None:
     subjects: set[str] = set()
     sums = defaultdict(float)
     for event in events:
-        kind = event["type"]
-        present.add(kind)
-        params = event.get("params") or {}
-        for subject in event.get("subjects") or ():
-            subjects.add(subject)
-            side = _side(subject, actor, entities)
-            if side is not None:
-                sides[side] += 1
-        subs = event.get("subjects") or ()
-        first = subs[0] if subs else ""
-        side = _side(first, actor, entities) if first else None
-        entity = entities.get(first, {})
-        is_creature = "creature" in (entity.get("types") or ())
-        if kind == "zone_change":
-            origin = (params.get("from_zone") or entity.get("zone") or "").lower()
-            dest = (params.get("to_zone") or "").lower()
-            name = TRANSITIONS.get((origin, dest))
-            if name:
-                present.add(name)
-            if origin == "battlefield" and dest in ("graveyard", "exile") and is_creature:
-                present.add("creature_removed")
-                present.add(f"creature_removed_{side}" if side else "creature_removed")
-            if origin == "battlefield" and dest == "hand" and is_creature:
-                present.add("creature_bounced")
-        elif kind == "destroyed" and is_creature:
-            present.add("creature_removed")
-            if side:
-                present.add(f"creature_removed_{side}")
-        elif kind == "life_change" and side:
-            sums[f"life_{side}"] += float(params.get("delta") or 0)
-        elif kind == "damage_dealt":
-            amount = float(params.get("amount") or 0)
-            target = "player" if first.startswith("P") else "permanent"
-            sums["damage_total"] += amount
-            sums[f"damage_to_{target}"] += amount
-            if side:
-                sums[f"damage_{side}"] += amount
-        elif kind in ("card_drawn", "card_discarded", "card_milled") and side:
-            sums[f"{kind}_{side}"] += float(params.get("count") or 1)
-        elif kind == "counter_change":
-            counter = str(params.get("counter_type") or "")
-            family = {"P1P1": "p1p1", "M1M1": "m1m1", "LOYALTY": "loyalty"}.get(
-                counter, "other")
-            delta = float(params.get("delta") or 0)
-            sums[f"counters_{family}"] += delta
-            if side and family == "p1p1":
-                sums[f"counters_p1p1_{side}"] += delta
-        elif kind == "pt_change":
-            power = float(params.get("power_delta") or 0)
-            sums["power_delta"] += power
-            sums["toughness_delta"] += float(params.get("toughness_delta") or 0)
-            if side:
-                sums[f"power_delta_{side}"] += power
-        elif kind == "token_created":
-            sums["tokens"] += float(params.get("count") or 1)
-            chars = params.get("characteristics") or {}
-            if "creature" in str(chars.get("types", "")).lower():
-                sums["creature_tokens"] += float(params.get("count") or 1)
-        elif kind == "mana_produced":
-            sums["mana"] += float(sum((params.get("mana_by_color") or {}).values()))
-        elif kind == "energy_change":
-            sums["energy"] += float(params.get("delta") or 0)
-        elif kind in ("keyword_change", "tapped", "untapped", "control_change") and side:
-            present.add(f"{kind}_{side}")
+        _fold_event(event, actor, entities, present, sums, sides, subjects)
     for name in present:
         acc[f"has_{name}"] += 1
     for name, value in sums.items():

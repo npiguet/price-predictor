@@ -1,9 +1,9 @@
 """T2 analysis: what card properties explain the scorer's marginal card value?
 
 Reads t2_card_values.csv (produced by t2_marginal_values.py) and prints a
-markdown report to stdout. Pure numpy/pandas -- OLS is done by hand via lstsq
-on standardized inputs so the coefficients are directly comparable and the
-t-stats come from the classic sigma^2 (X'X)^-1 formula.
+markdown report to stdout. OLS runs on standardized inputs so the coefficients
+are directly comparable; the t-stats come from the classic sigma^2 (X'X)^-1
+formula.
 """
 
 from __future__ import annotations
@@ -29,8 +29,6 @@ MV_BUCKETS = [("0-1", 0, 1), ("2", 2, 2), ("3", 3, 3), ("4", 4, 4),
               ("5", 5, 5), ("6+", 6, 99)]
 
 
-# ---------------------------------------------------------------- formatting
-
 def fmt(v, nd=4):
     if v is None:
         return "--"
@@ -42,8 +40,6 @@ def fmt(v, nd=4):
         return "--"
     return f"{f:+.{nd}f}" if abs(f) < 1e6 else f"{f:.3g}"
 
-
-# ---------------------------------------------------------------- statistics
 
 def pearson(x, y):
     return stats.pearson(x, y), len(stats.finite_pair(x, y)[0])
@@ -74,17 +70,10 @@ def ols_standardized(X, y, names):
         return None
     yz = (y - y.mean()) / ysd
 
-    A = np.column_stack([np.ones(n), Z])
-    beta, *_ = np.linalg.lstsq(A, yz, rcond=None)
-    resid = yz - A @ beta
-    dof = max(n - A.shape[1], 1)
-    s2 = float(resid @ resid) / dof
-    cov = np.linalg.pinv(A.T @ A) * s2
-    se = np.sqrt(np.clip(np.diag(cov), 0, None))
+    fit = stats.ols(np.column_stack([np.ones(n), Z]), yz)
     with np.errstate(divide="ignore", invalid="ignore"):
-        t = np.where(se > 0, beta / se, np.nan)
-    r2 = 1.0 - float(resid @ resid) / float(yz @ yz)
-    return {"names": ["const"] + kept, "beta": beta, "t": t, "r2": r2,
+        t = np.where(fit.se > 0, fit.beta / fit.se, np.nan)
+    return {"names": ["const"] + kept, "beta": fit.beta, "t": t, "r2": fit.r2,
             "n": n, "dropped": dropped, "y_sd": float(ysd)}
 
 
@@ -112,8 +101,6 @@ def group_stats(df, col, mask, label):
     se = s.std() / np.sqrt(len(s)) if len(s) > 1 else np.nan
     return [label, len(s), fmt(s.mean()), fmt(se)]
 
-
-# ---------------------------------------------------------------- data prep
 
 def prepare(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
@@ -176,8 +163,6 @@ def prepare(path: Path) -> pd.DataFrame:
           f"two-colour swap context) and are dropped._\n")
     return df
 
-
-# ---------------------------------------------------------------- sections
 
 CORR_VARS = [
     ("shrunk_score_play", "empirical score_play label"),

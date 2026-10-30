@@ -145,32 +145,21 @@ def family_slope(sub: pd.DataFrame, group_cols: list[str]) -> list[dict]:
     return rows
 
 
-def write(rows: list[dict], name: str) -> None:
-    tab = pd.DataFrame(rows)
-    tab.to_csv(pl.SCRATCH / name, index=False)
-    print(tab.to_string(index=False), flush=True)
-
-
 def main() -> None:
     j = pl.load_frame(text=True)
-    stripped = list(j["text"])
-    is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
+    C = cc.CardCorpus.of(j)
+    stripped, is_crea, parsed, n_abil = C.text, C.is_creature, C.parsed_cost, C.n_abilities
     types = [cc.get_field(s, "types:") or "" for s in stripped]
     is_spell = np.array([("instant" in t or "sorcery" in t) for t in types])
-    cost_field = [cc.get_field(s, "mana cost:") for s in stripped]
-    parsed = [cc.parse_cost(c) if c else None for c in cost_field]
     has_cost = np.array([p is not None for p in parsed])
-    n_abil = np.array([len(cc.ability_lines(s)) for s in stripped])
     rng = np.random.default_rng(SEED)
 
     def sample(mask: np.ndarray, cap: int, tag: str, label: str) -> np.ndarray:
-        idx = np.flatnonzero(mask)
-        if len(idx) > cap:
-            idx = np.sort(rng.choice(idx, cap, replace=False))
+        idx = cc.sample_rows(mask, cap, rng)
         print(f"[{tag}] {label}: {len(idx)} of {int(mask.sum())} eligible", flush=True)
         return idx
 
-    # ── (i) mana-cost sweep ─────────────────────────────────────────────
+    # (i) mana-cost sweep
     classes = {
         "vanilla creature": has_cost & is_crea & (n_abil == 0),
         "creature with text": has_cost & is_crea & (n_abil > 0),
@@ -183,10 +172,10 @@ def main() -> None:
                             for r in idx for k in SWEEP_K]).reshape(len(idx), len(SWEEP_K))
         curves += curve_rows(cls, SWEEP_K, S)
         deltas += delta_rows(cls, SWEEP_K, S, np.array([parsed[r][0] for r in idx]))
-    write(curves, "c10_cost_curves.csv")
-    write(deltas, "c10_cost_deltas.csv")
+    pl.write_table(curves, "c10_cost_curves.csv")
+    pl.write_table(deltas, "c10_cost_deltas.csv")
 
-    # ── (ii) activation-cost sweep on creatures ─────────────────────────
+    # (ii) activation-cost sweep on creatures
     act = [parse_activated(s) for s in stripped]
     act_cost = [parse_act_cost(a[1]) if a else None for a in act]
     is_mana_ability = np.array([bool(a) and "add {" in a[2] for a in act])
@@ -209,10 +198,10 @@ def main() -> None:
         S = pl.score_texts(texts).reshape(len(idx), len(ACT_K))
         curves += curve_rows(cls, ACT_K, S)
         deltas += delta_rows(cls, ACT_K, S, np.array([act_cost[r][0] for r in idx]))
-    write(curves, "c10_ability_curves.csv")
-    write(deltas, "c10_ability_deltas.csv")
+    pl.write_table(curves, "c10_ability_curves.csv")
+    pl.write_table(deltas, "c10_ability_deltas.csv")
 
-    # ── (iii) the {T} contrasts ─────────────────────────────────────────
+    # (iii) the {T} contrasts
     tap_rows = []
     specs = [
         ("drop {T} from mana+{T} cost", groups["activation mana + {T}"]
@@ -235,9 +224,9 @@ def main() -> None:
         for head, M in (("score_play", S.sp), ("played_rate", S.pr)):
             tap_rows.append(pl.contrast_row(M[:, 1] - M[:, 0], off=S.off,
                                             contrast=label, head=head))
-    write(tap_rows, "c10_tap_contrasts.csv")
+    pl.write_table(tap_rows, "c10_tap_contrasts.csv")
 
-    # ── (iv) label-side same-text families ──────────────────────────────
+    # (iv) label-side same-text families
     key = ["\n".join(ln for ln in cc.lines(s) if not ln.startswith("mana cost:"))
            for s in stripped]
     fam = pd.DataFrame({
@@ -258,7 +247,7 @@ def main() -> None:
             ("noncreature families", fam[~fam["is_crea"]], ["key"]),
             ("same pips, generic differs", fam, ["key", "pips"])):
         fam_rows += [{"families": label, **row} for row in family_slope(sub, gcols)]
-    write(fam_rows, "c10_label_families.csv")
+    pl.write_table(fam_rows, "c10_label_families.csv")
 
 
 if __name__ == "__main__":

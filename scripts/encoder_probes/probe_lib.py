@@ -54,6 +54,7 @@ from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from sealed.infrastructure.encoder_store import SealedEncoderStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from _lib.jsonio import plain, write_json  # noqa: E402
 from _lib.paths import REPO, SEALED_TRAINING_DATA  # noqa: E402
 from _lib.stats import bootstrap_ci  # noqa: E402
 from c_common import ABILITY_PREFIXES, subtypes  # noqa: E402
@@ -74,10 +75,10 @@ CARD_TABLE = SCRATCH / "card_table.pkl"  # written by p0b_card_table.py
 
 TEXT_DIM = 512          # pooled text vector; the cached .npz is 512 + 32 features
 
-# Label SDs the counterfactual read-offs are quoted in, and the real-card p95
-# nearest-neighbour cosine distance (p0_report) beyond which an edit is
-# off-manifold.
-SD = {"score_play": 0.06181, "played_rate": 0.1247}
+# Label SDs every probe quotes effects in (one shared figure for the five
+# color_lift heads), and the real-card p95 nearest-neighbour cosine distance
+# (p0_report) beyond which an edit is off-manifold.
+SD = {"score_play": 0.06181, "played_rate": 0.1247, "color_lift": 0.024}
 MANIFOLD_GATE = 0.35325
 
 
@@ -418,6 +419,35 @@ def load_frame(*, features: bool = True, text: bool = False) -> pd.DataFrame:
         frame["text"] = [ConvertedCardText(read_text(p)).without_name_line()
                          for p in frame["txt_path"]]
     return frame
+
+
+def num(frame: pd.DataFrame, col: str, fill: float | None = None) -> np.ndarray:
+    """A frame column as floats: unparseable cells NaN, or ``fill`` when given."""
+    v = pd.to_numeric(frame[col], errors="coerce")
+    return (v if fill is None else v.fillna(fill)).to_numpy(float)
+
+
+def flag(frame: pd.DataFrame, col: str) -> np.ndarray:
+    """A yes/no frame column as bools, a missing cell read as no."""
+    return frame[col].fillna(False).astype(bool).to_numpy()
+
+
+@dataclass(frozen=True)
+class Label:
+    """One head's shrunk label, its sample weight, and the rows carrying both."""
+
+    y: np.ndarray
+    w: np.ndarray
+    have: np.ndarray
+
+    def __iter__(self):
+        return iter((self.y, self.w, self.have))
+
+
+def label(frame: pd.DataFrame, head: str) -> Label:
+    y = num(frame, f"shrunk_{head}")
+    w = num(frame, f"w_{head}")
+    return Label(y, w, np.isfinite(y) & (w > 0))
 
 
 # ── embeddings ──────────────────────────────────────────────────────────
@@ -942,6 +972,41 @@ def score_texts(texts: Sequence[str]) -> Scored:
                   dist, nearest)
 
 
+@dataclass(frozen=True)
+class Variant:
+    """One edited text of a frame card: ``family`` groups the edits, ``row`` is
+    the card's frame row and ``variant`` names the edit."""
+
+    family: str
+    row: int
+    variant: str
+    text: str
+
+
+def score_variants(variants: Sequence[Variant], frame: pd.DataFrame, *,
+                   distance: bool = True) -> pd.DataFrame:
+    """Encode the variants in one batched pass and read the fidelity probes off them.
+
+    One row per variant: ``family``, ``row``, ``variant``, the card's ``name``,
+    ``score_play`` and ``played_rate`` in label units, and with ``distance``
+    the ``manifold_dist`` of the edited embedding.
+    """
+    emb = runner().encode_texts([v.text for v in variants], batch_size=96)
+    print(f"encoded {len(variants)} variants on {runner().device}", flush=True)
+    pred = predict_labels(emb, fidelity_probes())
+    rows = [v.row for v in variants]
+    out = pd.DataFrame({
+        "family": [v.family for v in variants], "row": rows,
+        "variant": [v.variant for v in variants],
+        "name": frame["name"].iloc[rows].to_numpy(),
+        "score_play": pred["score_play"].to_numpy(),
+        "played_rate": pred["played_rate"].to_numpy(),
+    })
+    if distance:
+        out["manifold_dist"] = manifold_distance(emb, reference_cloud()[1])[0]
+    return out
+
+
 def mean_ci(delta: np.ndarray, key: str = "mean_sd", n_boot: int = 4000) -> dict:
     """``{key: mean, ci_lo, ci_hi}`` of a paired per-card difference."""
     lo, hi = bootstrap_ci(delta, n_boot=n_boot, seed=7)
@@ -963,3 +1028,36 @@ def contrast_row(delta: np.ndarray, pr_delta: np.ndarray | None = None,
     if off is not None:
         row["off_manifold"] = float(np.mean(off))
     return row
+
+
+def score_arms(bases: Sequence[int], arms: Sequence, edit) -> Scored:
+    """Every base card under every arm, read in one batch: ``edit(base, arm)``
+    gives a text, and the result is shaped ``(len(bases), len(arms))``."""
+    return score_texts([edit(b, a) for b in bases for a in arms]).reshape(
+        len(bases), len(arms))
+
+
+def contrasts(S: Scored, labels: Sequence, *, cols: Sequence[int] | None = None,
+              ref: int = 0, field: str = "contrast", **options) -> list[dict]:
+    """One :func:`contrast_row` per arm column against the ``ref`` column.
+
+    ``cols`` defaults to the columns after the first, one per label; each row
+    names its arm under ``field``, after any extra lead columns in ``options``.
+    """
+    cols = range(1, len(labels) + 1) if cols is None else cols
+    return [contrast_row(S.sp[:, c] - S.sp[:, ref], S.pr[:, c] - S.pr[:, ref],
+                         S.off[:, c], **options, **{field: label})
+            for c, label in zip(cols, labels)]
+
+
+def write_table(tab: pd.DataFrame | Sequence[dict], name: str) -> None:
+    """Write a result table to ``SCRATCH/name`` and print it."""
+    tab = pd.DataFrame(tab)
+    tab.to_csv(SCRATCH / name, index=False)
+    print(tab.to_string(index=False), flush=True)
+
+
+def write_summary(summary: dict, name: str, *, indent: int = 2) -> None:
+    """Write a summary JSON to ``SCRATCH/name`` and print it."""
+    write_json(SCRATCH / name, summary, indent=indent)
+    print(json.dumps(plain(summary), indent=indent), flush=True)

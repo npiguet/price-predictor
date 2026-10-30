@@ -25,7 +25,7 @@ if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from _lib.markdown import md_table  # noqa: E402
+from _lib.markdown import md_table, utf8_console  # noqa: E402
 
 from effect_knowledge_probes.common import fmt  # noqa: E402
 from effect_knowledge_probes.scorecard import Scorecard  # noqa: E402
@@ -136,9 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(text, encoding="utf-8")
     else:
-        # The table holds "−"; a redirected stdout on Windows is cp1252.
-        if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(encoding="utf-8")
+        utf8_console()
         sys.stdout.write(text)
     return 0
 

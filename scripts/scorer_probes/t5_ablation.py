@@ -23,13 +23,23 @@ distinct card.
 Eval corpus: matches-b07/match-outcomes-gen5-vs-gen4-forge.txt, which postdates
 the gen-4 scorer's training cutoff, so it is genuinely held out.
 
+``--groups`` asks instead which of the 32 deterministic features the scorer
+reads: each condition erases one feature group's slots to their corpus means
+and keeps everything else. Two variance reductions make the small per-group
+effects resolvable. Both post-cutoff corpora are scored (gen5-vs-gen4-forge
+and gen4-vs-forge-best-gen3, ~21.5K matches -- the second was generated
+2026-05-19..21, after the scorer's 2026-05-18 training run), and significance
+comes from the paired per-match difference against the full model
+(condition-correct minus full-correct), whose standard error is set by the
+prediction flip rate rather than the base accuracy. Writes ``t5_groups.json``
+(consumed by ``make_figures.py``).
+
 Read-only w.r.t. the repo and the Y: drive.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -39,19 +49,40 @@ from scipy.stats import pearsonr, spearmanr
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.jsonio import write_json
+from _lib.markdown import banner, print_table
+from _lib.markdown import num as fmt
+from _lib.stats import coin_flip_band, pairwise_correct
 from scorer_probes import probe_lib as pl
 from scorer_probes.probe_lib import DeckBank
 
+from sealed.domain import card_embedding_layout as layout
+
 MATCH_FILE = pl.YDATA / "matches-b07" / "match-outcomes-gen5-vs-gen4-forge.txt"
+POST_CUTOFF_FILES = [
+    MATCH_FILE,
+    pl.YDATA / "matches-b07" / "match-outcomes-gen4-vs-forge-best-gen3.txt",
+]
 DEFAULT_OUT = pl.SCRATCH / "t5_ablation.json"
+GROUPS_OUT = pl.SCRATCH / "t5_groups.json"
 SEED = 42
 BATCH = 1024
 
 CONDITIONS = ["full", "text_mean", "text_shuffle", "det_mean", "both_mean"]
 PAIR_TABLE_CONDITIONS = ["full", "text_mean", "det_mean"]
 
+# --groups conditions: label -> indices within the trailing deterministic block
+GROUPS = {
+    "is_land": [layout.IS_LAND],
+    "mana cost (pips+generic+X+MV)": list(range(layout.COLOR_PIPS.start, layout.MANA_VALUE + 1)),
+    "color pips only": list(range(layout.COLOR_PIPS.start, layout.COLORLESS_PIP + 1)),
+    "mana value only": [layout.MANA_VALUE],
+    "color flags": list(range(layout.COLOR_FLAGS.start, layout.IS_COLORLESS + 1)),
+    "mana production": list(range(layout.PRODUCES_COLORS.start, layout.MANA_PRODUCED + 1)),
+    "power/toughness/loyalty": [layout.POWER, layout.TOUGHNESS, layout.LOYALTY],
+    f"all {layout.FEATURE_COUNT}": list(range(layout.FEATURE_COUNT)),
+}
 
-# ------------------------------------------------------------------ conditions
 
 def corpus_means(reg: DeckBank, used: set[int], text_dim: int):
     """Raw-space mean vector over distinct cards of the used decks."""
@@ -64,6 +95,10 @@ def apply_condition(mat: np.ndarray, cond: str, idx: int, text_dim: int,
                     mean_text: np.ndarray, mean_det: np.ndarray) -> np.ndarray:
     """Transform one deck's raw card matrix in place (mat is already a copy)."""
     if cond == "full":
+        return mat
+    if cond in GROUPS:
+        idx = GROUPS[cond]
+        mat[:, [text_dim + i for i in idx]] = mean_det[idx]
         return mat
     if cond in ("text_mean", "both_mean"):
         mat[:, :text_dim] = mean_text
@@ -84,20 +119,16 @@ def score_condition(probe: pl.Probe, reg: DeckBank, order: list[int],
         mat, cond, i, text_dim, mean_text, mean_det))
 
 
-# --------------------------------------------------------------------- metrics
-
-def _cmp(diff: np.ndarray) -> np.ndarray:
-    """Tie-aware correctness: 1.0 for >0, 0.0 for <0, 0.5 for exact ties."""
-    return np.where(diff > 0, 1.0, np.where(diff < 0, 0.0, 0.5))
-
-
 def condition_metrics(scores: np.ndarray, full: np.ndarray,
                       win_idx: np.ndarray, lose_idx: np.ndarray,
                       pairs: list[str]) -> dict:
     diff = scores[win_idx] - scores[lose_idx]
-    correct = _cmp(diff)
+    correct = pairwise_correct(diff)
     full_diff = full[win_idx] - full[lose_idx]
-    agree = _cmp(diff * full_diff)  # same sign as full's ranking
+    agree = pairwise_correct(diff * full_diff)  # same sign as full's ranking
+    # paired against the full model: its SE is set by the flip rate alone
+    paired = correct - pairwise_correct(full_diff)
+    paired_se = float(paired.std(ddof=1) / np.sqrt(len(paired))) if len(paired) > 1 else 0.0
 
     per_pair = {}
     by_pair: dict[str, list[int]] = defaultdict(list)
@@ -116,6 +147,10 @@ def condition_metrics(scores: np.ndarray, full: np.ndarray,
         "mean_abs_score_shift": float(np.abs(scores - full).mean()),
         "score_mean": float(scores.mean()),
         "score_std": float(scores.std()),
+        "d_acc": float(paired.mean()),
+        "paired_se": paired_se,
+        "z": float(paired.mean() / paired_se) if paired_se > 0 else 0.0,
+        "flip_rate": float((paired != 0).mean()),
         "per_pair": per_pair,
     }
     if np.std(scores) > 0 and np.std(full) > 0:
@@ -127,19 +162,8 @@ def condition_metrics(scores: np.ndarray, full: np.ndarray,
     return m
 
 
-# ----------------------------------------------------------------- report
-
-def fmt(x: float, nd: int = 4) -> str:
-    return "nan" if x != x else f"{x:.{nd}f}"
-
-
-def print_report(res: dict) -> None:
-    meta, cond = res["meta"], res["conditions"]
-
-    print("\n" + "=" * 78)
-    print("T5 ABLATION SUMMARY")
-    print("=" * 78)
-    print(f"eval file        : {meta['match_file']}")
+def print_meta(meta: dict) -> None:
+    print(f"eval files       : {', '.join(meta['match_files'])}")
     print(f"matches parsed   : {meta['matches_parsed']} "
           f"(undecided dropped {meta['matches_undecided']}, "
           f"no-embedding dropped {meta['matches_dropped_missing']})")
@@ -151,28 +175,40 @@ def print_report(res: dict) -> None:
     print(f"d_model={meta['d_model']}  text_dim={meta['text_dim']}  "
           f"det_dim={meta['det_dim']}  device={meta['device']}")
 
+
+def print_groups_report(res: dict) -> None:
+    banner("T5 DETERMINISTIC-GROUP ERASURES")
+    print_meta(res["meta"])
+    cond = res["conditions"]
+    print(f"\nfull model acc = {cond['full']['acc']:.4f}  "
+          f"(n={cond['full']['n_matches']})\n")
+    print_table(["group erased", "features", "d-acc", "paired SE", "z", "flip%",
+                 "spearman vs full"],
+                [[g, len(GROUPS[g]), f"{m['d_acc']:+.4f}", f"{m['paired_se']:.4f}",
+                  f"{m['z']:+.1f}", f"{100 * m['flip_rate']:.2f}", fmt(m["spearman_vs_full"], 3)]
+                 for g, m in ((g, cond[g]) for g in GROUPS)])
+
+
+def print_report(res: dict) -> None:
+    meta, cond = res["meta"], res["conditions"]
+
+    banner("T5 ABLATION SUMMARY")
+    print_meta(meta)
+
     print("\n### Condition summary\n")
-    hdr = ("| condition | acc | acc(strict) | tie% | pearson vs full | "
-           "spearman vs full | rank-agree w/ full | mean abs shift |")
-    print(hdr)
-    print("|---|---|---|---|---|---|---|---|")
-    for c in CONDITIONS:
-        m = cond[c]
-        print(f"| {c} | {fmt(m['acc'])} | {fmt(m['acc_strict'])} | "
-              f"{100 * m['tie_rate']:.1f}% | {fmt(m['pearson_vs_full'])} | "
-              f"{fmt(m['spearman_vs_full'])} | {fmt(m['rank_agree_with_full'])} | "
-              f"{fmt(m['mean_abs_score_shift'], 3)} |")
+    print_table(["condition", "acc", "acc(strict)", "tie%", "pearson vs full",
+                 "spearman vs full", "rank-agree w/ full", "mean abs shift"],
+                [[c, fmt(m["acc"]), fmt(m["acc_strict"]), f"{100 * m['tie_rate']:.1f}%",
+                  fmt(m["pearson_vs_full"]), fmt(m["spearman_vs_full"]),
+                  fmt(m["rank_agree_with_full"]), fmt(m["mean_abs_score_shift"], 3)]
+                 for c, m in ((c, cond[c]) for c in CONDITIONS)])
 
     print("\n### Accuracy by method pair\n")
-    pairs = sorted(cond["full"]["per_pair"],
-                   key=lambda p: -cond["full"]["per_pair"][p]["n"])
-    print("| pair | n | " + " | ".join(PAIR_TABLE_CONDITIONS) + " |")
-    print("|---|---|" + "---|" * len(PAIR_TABLE_CONDITIONS))
-    for p in pairs:
-        n = cond["full"]["per_pair"][p]["n"]
-        cells = " | ".join(fmt(cond[c]["per_pair"][p]["acc"], 3)
-                           for c in PAIR_TABLE_CONDITIONS)
-        print(f"| {p} | {n} | {cells} |")
+    full_pairs = cond["full"]["per_pair"]
+    print_table(["pair", "n"] + PAIR_TABLE_CONDITIONS,
+                [[p, full_pairs[p]["n"]]
+                 + [fmt(cond[c]["per_pair"][p]["acc"], 3) for c in PAIR_TABLE_CONDITIONS]
+                 for p in sorted(full_pairs, key=lambda p: -full_pairs[p]["n"])])
 
     a = {c: cond[c]["acc"] for c in CONDITIONS}
     print("\n### Interpretation\n")
@@ -189,10 +225,8 @@ def print_report(res: dict) -> None:
     print(f"acc(both_mean)                     = {fmt(a['both_mean'])}"
           "   <- deck-size-only floor")
 
-    # 2 standard errors of a coin-flip accuracy at this sample size: differences
-    # smaller than this are not distinguishable from noise.
     n = cond["full"]["n_matches"]
-    band = 2 * (0.25 / max(n, 1)) ** 0.5
+    band = coin_flip_band(n)
     print(f"\n(noise band: +/-{band:.4f} = 2 SE at n={n})")
 
     ts, fu = a["text_shuffle"], a["full"]
@@ -233,14 +267,38 @@ def print_report(res: dict) -> None:
           + f"; full score std = {fmt(cond['full']['score_std'], 3)}.")
 
 
-# ------------------------------------------------------------------------ main
+def load_matches(bank: DeckBank, files: list[Path], limit: int | None):
+    """``(matches, counts)``: per kept match ``(win_idx, lose_idx, pair_label)``
+    into ``bank``, and the parse/drop tallies over ``files``."""
+    counts: Counter = Counter()
+    pair_counts: Counter = Counter()
+    matches = []
+    for path in files:
+        rows, undecided, malformed = pl.decided_matches(path, limit)
+        counts.update(parsed=len(rows), undecided=undecided, malformed=malformed)
+        print(f"{path.name}: {len(rows)} decided matches "
+              f"({undecided} undecided, {malformed} malformed)")
+        for m, winner in rows:
+            ia, ib = bank.add(m.deck_a.cards), bank.add(m.deck_b.cards)
+            if ia is None or ib is None:
+                counts["dropped"] += 1
+                continue
+            pair = " vs ".join(sorted((m.method_a, m.method_b)))
+            pair_counts[pair] += 1
+            win, lose = (ia, ib) if winner == "A" else (ib, ia)
+            matches.append((win, lose, pair))
+    return matches, counts, pair_counts
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--limit", type=int, default=None,
                     help="max matches to parse (default: all)")
-    ap.add_argument("--out", type=Path, default=DEFAULT_OUT,
-                    help="JSON output path")
+    ap.add_argument("--out", type=Path, default=None,
+                    help=f"JSON output path (default {DEFAULT_OUT.name}, "
+                         f"{GROUPS_OUT.name} with --groups)")
+    ap.add_argument("--groups", action="store_true",
+                    help="erase deterministic-feature groups over both post-cutoff corpora")
     ap.add_argument("--smoke", action="store_true",
                     help="CPU, 200 matches (unless --limit given)")
     ap.add_argument("--batch", type=int, default=BATCH)
@@ -248,6 +306,9 @@ def main() -> None:
 
     device = "cpu" if args.smoke else None
     limit = args.limit if args.limit is not None else (200 if args.smoke else None)
+    files = POST_CUTOFF_FILES if args.groups else [MATCH_FILE]
+    conditions = ["full", *GROUPS] if args.groups else CONDITIONS
+    out = args.out or (GROUPS_OUT if args.groups else DEFAULT_OUT)
 
     print(f"loading scorer (device={device or 'auto'}) ...")
     probe = pl.Probe(device=device)
@@ -255,27 +316,11 @@ def main() -> None:
     print(f"d_model={probe.d_model}  text[0:{text_dim}]  "
           f"det[{text_dim}:{probe.d_model}]  device={probe.device}")
 
-    rows, undecided, malformed = pl.decided_matches(MATCH_FILE, limit)
-    print(f"parsed {len(rows)} decided matches "
-          f"({undecided} undecided, {malformed} malformed)")
-
     # Decks are canonicalized to sorted order, which both dedups more and makes
     # the text_shuffle permutation reproducible.
     reg = DeckBank(probe.embedding)
-    matches = []           # (win_idx, lose_idx, pair_label)
-    dropped = 0
-    pair_counts: Counter = Counter()
-    for m, winner in rows:
-        m_a, m_b = m.method_a, m.method_b
-        ia, ib = reg.add(m.deck_a.cards), reg.add(m.deck_b.cards)
-        if ia is None or ib is None:
-            dropped += 1
-            continue
-        pair = " vs ".join(sorted((m_a, m_b)))
-        pair_counts[pair] += 1
-        win, lose = (ia, ib) if winner == "A" else (ib, ia)
-        matches.append((win, lose, pair))
-    print(f"kept {len(matches)} matches ({dropped} dropped for missing "
+    matches, counts, pair_counts = load_matches(reg, files, limit)
+    print(f"kept {len(matches)} matches ({counts['dropped']} dropped for missing "
           f"embeddings); {len(reg.keys)} distinct decks; "
           f"{len(reg.emb)} distinct cards; {len(reg.missing)} cards unembeddable")
     if not matches:
@@ -298,18 +343,18 @@ def main() -> None:
           f"|det|={np.linalg.norm(mean_det):.3f})")
 
     scores: dict[str, np.ndarray] = {}
-    for cond in CONDITIONS:
+    for cond in conditions:
         print(f"scoring {len(order)} decks under condition {cond!r} ...")
         scores[cond] = score_condition(probe, reg, order, cond, text_dim,
                                        mean_text, mean_det, args.batch)
 
     res = {
         "meta": {
-            "match_file": str(MATCH_FILE),
-            "matches_parsed": len(rows),
-            "matches_undecided": undecided,
-            "matches_malformed": malformed,
-            "matches_dropped_missing": dropped,
+            "match_files": [str(p) for p in files],
+            "matches_parsed": counts["parsed"],
+            "matches_undecided": counts["undecided"],
+            "matches_malformed": counts["malformed"],
+            "matches_dropped_missing": counts["dropped"],
             "matches_scored": len(matches),
             "deck_instances": 2 * len(matches),
             "distinct_decks": len(order),
@@ -325,19 +370,18 @@ def main() -> None:
             "limit": limit,
             "checkpoint": str(pl.SCORER_CKPT),
             "pair_counts": dict(pair_counts),
+            "group_features": {g: len(GROUPS[g]) for g in conditions if g in GROUPS},
         },
         "conditions": {
             c: condition_metrics(scores[c], scores["full"],
                                  win_idx, lose_idx, pairs)
-            for c in CONDITIONS
+            for c in conditions
         },
     }
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(res, f, indent=2)
-    print(f"\nwrote {args.out}")
+    write_json(out, res)
+    print(f"\nwrote {out}")
 
-    print_report(res)
+    (print_groups_report if args.groups else print_report)(res)
 
 
 if __name__ == "__main__":

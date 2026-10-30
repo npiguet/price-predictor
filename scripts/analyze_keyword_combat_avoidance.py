@@ -44,6 +44,8 @@ import argparse
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from _lib.markdown import md_table
+
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.records import PlayabilitySubkind, RecordKind
 from effects.infrastructure.shard_io import read_records
@@ -220,10 +222,9 @@ def run(directories: list[Path]) -> Tally:
 
 
 def _table(title, rows, outcome) -> str:
-    lines = [f"\n{title}", f"| class | n | {outcome} |", "|---|---:|---:|"]
-    for name, c in sorted(rows.items(), key=lambda kv: -kv[1][outcome] / max(kv[1]["n"], 1)):
-        lines.append(f"| {name} | {c['n']} | {c[outcome] / c['n']:.1%} |")
-    return "\n".join(lines)
+    ranked = sorted(rows.items(), key=lambda kv: -kv[1][outcome] / max(kv[1]["n"], 1))
+    body = [(name, c["n"], f"{c[outcome] / c['n']:.1%}") for name, c in ranked]
+    return f"\n{title}\n" + md_table(["class", "n", outcome], body, align="lrr")
 
 
 def main() -> None:

@@ -36,7 +36,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SHARED_REPORTS = ROOT / "output" / "effects" / "reports"
 EMBEDDING_PROBES = (
-    "build_texts", "effect_profiles", "pca_directions", "lexical_probes",
+    "build_texts", "effect_profiles", "pca_directions",
     "linear_probes", "type_merging", "neighbours", "keyword_expansion",
 )
 STEPS = ("train", "encode", "evaluate", "embedding-probes", "knowledge-probes")

@@ -37,15 +37,9 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _lib.markdown import print_table  # noqa: E402
+from _lib.stats import spearman  # noqa: E402
 
 from effect_knowledge_probes import common, labels, ladder  # noqa: E402
-
-
-def _spearman(y, prediction) -> float:
-    from scipy.stats import spearmanr
-
-    ok = np.isfinite(y) & np.isfinite(prediction)
-    return float(spearmanr(y[ok], prediction[ok]).statistic) if ok.sum() > 2 else float("nan")
 
 
 def recalibrated(prediction, y, folds, kind) -> np.ndarray:
@@ -99,7 +93,7 @@ def check(data, records, games, kind) -> list[tuple[str, dict]]:
         if kind == "binary":
             row["within records"] = within_record_auc(y, prediction, records)
         else:
-            row["Spearman"] = _spearman(y, prediction)
+            row["Spearman"] = spearman(y, prediction)
         rows.append((name, row))
     return rows
 
@@ -108,7 +102,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("checkpoint", type=Path)
     parser.add_argument("--targets", default="damage_taken,may_block,dies")
-    parser.add_argument("--probe-set-dir", type=Path, default=common.DEFAULT_REPORTS,
+    parser.add_argument("--probe-set-dir", type=Path, default=common.REPORTS,
                         help="where the corpus's frozen probe set is")
     args = parser.parse_args()
     context = common.probe_context(args.checkpoint)
@@ -130,7 +124,7 @@ def main() -> None:
         print(f"{stratum}: {len(records_by_stratum[stratum])} records", flush=True)
     every = [r for rows in records_by_stratum.values() for r in rows]
     probe_model = context.model(every)
-    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch})", flush=True)
+    common.heading(args, context, f"{len(every)} probe-set records")
 
     for stratum, records in records_by_stratum.items():
         game_of = {r.record_id: r.game_id for r in records}

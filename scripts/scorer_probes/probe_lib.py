@@ -12,24 +12,30 @@ and Y: drive.
 from __future__ import annotations
 
 import random
+import re
 from collections import Counter
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Hashable, Iterable, Iterator
+from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
 from _lib import corpora
 from _lib.paths import MODELS, OUTPUT, SEALED_TRAINING_DATA
 
+from price_predictor.domain.value_objects import WUBRG
 from sealed.domain import card_embedding_layout as layout
+from sealed.domain.deck import Deck
 from sealed.domain.scorer_model import SetTransformerScorer
 from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
     ConvertedCardLocator,
 )
+from sealed.infrastructure.delimited import parse_pipe_list
 from sealed.infrastructure.match_data_loader import MatchOutcome, parse_match_outcome
-from sealed.infrastructure.pool_file_reader import parse_generated_decks, parse_pools
+from sealed.infrastructure.pool_file_reader import GeneratedDeck, SealedPool
 from sealed.infrastructure.scorer_store import ScorerStore
 
 SCORER_CKPT = MODELS / "sealed/scorer/512-best_l6_h4_s4_ff2176_mlp512_lr1e-05_mwlog.pt"
@@ -40,7 +46,6 @@ DATA_DIR = Path(__file__).resolve().parent
 SCRATCH = OUTPUT / "scorer-probes"  # generated artifacts (gitignored)
 SCRATCH.mkdir(parents=True, exist_ok=True)
 
-WUBRG = "WUBRG"
 FC = layout.FEATURE_COUNT
 
 # The Bo7 self-play corpora, oldest first, relative to ``YDATA``.
@@ -53,6 +58,7 @@ MATCH_FILES = [
     "matches-b07/match-outcomes-gen4-vs-forge-best-gen3.txt",
     "matches-b07/match-outcomes-gen5-vs-gen4-forge.txt",
 ]
+MATCH_PATHS = [YDATA / rel for rel in MATCH_FILES]
 
 
 def is_basic(name: str) -> bool:
@@ -61,6 +67,28 @@ def is_basic(name: str) -> bool:
 
 def nonbasic(deck: Iterable[str]) -> list[str]:
     return [c for c in deck if not is_basic(c)]
+
+
+def land_mask(mat):
+    """Per row of a stacked (..., d_model) embedding array or tensor, whether
+    its deterministic block flags a land."""
+    return mat[..., -FC + layout.IS_LAND] > 0.5
+
+
+@dataclass(frozen=True)
+class Preset:
+    """A run-size knob's full-run value and the tiny value ``--smoke`` uses."""
+
+    full: Any
+    smoke: Any
+
+
+def apply_presets(args, presets: dict[str, Preset]) -> None:
+    """Fill every ``args.<name>`` left at None (or never declared) from its
+    preset, picked by ``args.smoke``: an explicit flag always wins."""
+    for name, preset in presets.items():
+        if getattr(args, name, None) is None:
+            setattr(args, name, preset.smoke if args.smoke else preset.full)
 
 
 class Probe:
@@ -74,8 +102,6 @@ class Probe:
         self.model.to(self.device).eval()
         self.locator = ConvertedCardLocator(CARDS_PATH)
         self.d_model = ck.config.d_model
-
-    # ---------- embedding lookup ----------
 
     def embedding(self, name: str) -> np.ndarray | None:
         """Embedding for a card name; None for basics/missing."""
@@ -94,7 +120,12 @@ class Probe:
             rows.append(e)
         return np.stack(rows).astype(np.float32)
 
-    # ---------- scoring ----------
+    def deck_matrix_or_none(self, deck: Iterable[str]) -> np.ndarray | None:
+        """``deck_matrix``, or None when a nonbasic card has no embedding."""
+        try:
+            return self.deck_matrix(list(deck))
+        except KeyError:
+            return None
 
     @torch.no_grad()
     def score_matrices(self, mats: list[np.ndarray], batch_size: int = 512,
@@ -206,16 +237,32 @@ class DeckBank:
         return float(self.scores[i])
 
 
-# ---------- corpora ----------
+def _head(path: Path, parse: Callable[[str], Any], limit: int | None) -> list:
+    """``parse`` of each of the first ``limit`` (all when falsy) non-blank lines,
+    read lazily: the corpora run to hundreds of MB and some callers want a head."""
+    with open(path, encoding="utf-8") as handle:
+        return [parse(line) for line in islice(filter(None, map(str.strip, handle)),
+                                               limit or None)]
 
-def read_pools(path: Path, limit: int | None = None) -> list:
-    """The first ``limit`` (all when falsy) ``SealedPool``s of a pools file."""
-    return parse_pools(path)[:limit or None]
+
+def _pool(line: str) -> SealedPool:
+    set_code, _, names = line.partition(";")
+    return SealedPool(set_code, parse_pipe_list(names))
 
 
-def read_generated_decks(path: Path, limit: int | None = None) -> list:
-    """The first ``limit`` (all when falsy) ``GeneratedDeck``s of a generated-decks file."""
-    return parse_generated_decks(path)[:limit or None]
+def _generated_deck(line: str) -> GeneratedDeck:
+    label, set_code, names = line.split(";", 2)
+    return GeneratedDeck(label=label, set_code=set_code, deck=Deck.of(parse_pipe_list(names)))
+
+
+def read_pools(path: Path, limit: int | None = None) -> list[SealedPool]:
+    """The first ``limit`` (all when falsy) pools of a pools file."""
+    return _head(path, _pool, limit)
+
+
+def read_generated_decks(path: Path, limit: int | None = None) -> list[GeneratedDeck]:
+    """The first ``limit`` (all when falsy) decks of a generated-decks file."""
+    return _head(path, _generated_deck, limit)
 
 
 def decided_matches(path: Path, limit: int | None = None):
@@ -244,13 +291,82 @@ def decided_matches(path: Path, limit: int | None = None):
     return rows, undecided, malformed
 
 
-def iter_match_decks(path: Path, limit: int | None = None):
-    """``(set_code, method_A, deck_A, method_B, deck_B)`` per match line."""
-    for m in islice(corpora.iter_matches(path), limit or None):
-        yield m.set_code, m.method_a, list(m.deck_a.cards), m.method_b, list(m.deck_b.cards)
+@dataclass(frozen=True)
+class MatchDeck:
+    """One side of a match line: the deck a builder method built for a set."""
+
+    method: str
+    set_code: str
+    cards: tuple[str, ...]
+    line: int  # 0-based line of its match file
+
+    @property
+    def key(self) -> tuple[str, ...]:
+        """The sorted nonbasic multiset: what ``DeckBank`` scores the deck by."""
+        return tuple(sorted(nonbasic(self.cards)))
 
 
-# ---------- per-card metadata ----------
+def sample_match_decks(files: Iterable[Path], cap: int | Callable[[Hashable], int] | None = None,
+                       *, group: Callable[[MatchDeck], Hashable | None] = lambda d: d.method,
+                       make: Callable[[MatchDeck], Any] | None = None, sides: str = "AB",
+                       lines: int | None = None) -> Iterator:
+    """The distinct decks of match files, in file order, at most ``cap`` per group.
+
+    Two decks are the same when their ``MatchDeck.key`` is: the scorer never
+    sees basics, so builds differing only in their basics count once.
+    ``group(deck)`` names the cap a deck counts towards, or None to skip it;
+    ``cap`` is one number for every group or a ``cap(group)`` callable.
+    ``make(deck)`` turns a deck into what is yielded, or None to reject it: a
+    rejected deck counts towards no cap and is not offered again. ``sides``
+    picks the match sides read, ``lines`` the head of each file read (all
+    when falsy). A missing file is reported and skipped.
+    """
+    seen: set[tuple[str, ...]] = set()
+    taken: Counter = Counter()
+    for path in files:
+        if not path.exists():
+            print("missing:", path, flush=True)
+            continue
+        for line, m in enumerate(islice(corpora.iter_matches(path), lines or None)):
+            for side in sides:
+                method, deck = (m.method_a, m.deck_a) if side == "A" else (m.method_b, m.deck_b)
+                d = MatchDeck(method, m.set_code, tuple(deck.cards), line)
+                g = group(d)
+                if g is None or (cap is not None
+                                 and taken[g] >= (cap(g) if callable(cap) else cap)):
+                    continue
+                if d.key in seen:
+                    continue
+                seen.add(d.key)
+                out = d if make is None else make(d)
+                if out is None:
+                    continue
+                taken[g] += 1
+                yield out
+
+
+_CLASS_TRICK = re.compile(r"gets? \+\d+/\+\d+ until end of turn")
+_CLASS_TOKENS = re.compile(r"create.{0,60}token")
+
+
+def card_classes(text: str) -> dict:
+    """The card classes the T2 card-value slices cut on, from converted card
+    text ("" for a card without one)."""
+    txt = text.lower()
+    types = re.search(r"types:.*", txt)
+    types = types.group(0) if types else ""
+    cost = re.search(r"mana cost:.*", txt)
+    cost = cost.group(0) if cost else ""
+    return {
+        "is_trick": bool("instant" in types and _CLASS_TRICK.search(txt)),
+        "is_counter": "counter target" in txt and "spell" in txt,
+        "is_pw": "planeswalker" in types,
+        "is_vehicle": "vehicle" in types,
+        "makes_tokens": bool(_CLASS_TOKENS.search(txt)),
+        "x_cost": "{x}" in cost,
+        "hyb": "/" in cost,
+        "tok_len": len(txt.split()),
+    }
 
 EVASION_KEYWORDS = ("flying", "menace", "fear", "intimidate", "shadow",
                     "horsemanship", "skulk", "unblockable", "can't be blocked")
@@ -275,7 +391,8 @@ def card_features(text: str) -> dict:
                 return ln.split(":", 1)[1].strip()
         return None
 
-    types = (line_val("types") or "").split()
+    type_line = line_val("types") or ""
+    types = type_line.split()
     pt = line_val("power toughness")
     power = tough = None
     if pt and "/" in pt:
@@ -294,6 +411,7 @@ def card_features(text: str) -> dict:
 
     is_creature = "creature" in types
     return {
+        "type_line": type_line,
         "is_creature": is_creature,
         "is_land": "land" in types,
         "is_instant": "instant" in types,
@@ -402,6 +520,8 @@ class CardBook:
             "is_multiface": " // " in name or any(
                 ln.strip() == "ALTERNATE" for ln in text.text.splitlines()
             ),
+            "type_line": feats["type_line"],
+            "mana_cost": (mana_cost or "").lower(),
             "q": q,
         }
         if self.q_fallback is not None:

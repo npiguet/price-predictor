@@ -68,9 +68,11 @@ from scipy import stats
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.jsonio import write_json
+from _lib.markdown import print_table
 from _lib.stats import mean_se
 from scorer_probes import probe_lib as pl
-from scorer_probes.probe_lib import WUBRG, CardBook, DeckBank, iter_match_decks
+from scorer_probes.probe_lib import WUBRG, CardBook, DeckBank, Preset
 
 SEED = 42
 
@@ -78,6 +80,7 @@ PAIRS_JSON = pl.DATA_DIR / "synergy_pairs.json"
 OUT_JSON = pl.SCRATCH / "t4_results.json"
 
 PREFERRED_METHODS = ("forge-best", "forge-3sub", "gen4-512", "gen4-256")
+RUNGS = (-2, -1, 1, 2, 3)  # P-C removal-count steps away from the deck as built
 
 # loose removal regex, applied to the whole converted text (P-C, creatures)
 REMOVAL_TEXT_RE = re.compile(
@@ -115,10 +118,6 @@ def mechanism_family(mech: str) -> str:
     return "other"
 
 
-# --------------------------------------------------------------------------
-# small stats helpers
-# --------------------------------------------------------------------------
-
 def summarize(xs) -> dict:
     """mean / SE / n / t / two-sided p of a one-sample (paired) mean."""
     m, se, n = mean_se(xs)
@@ -127,34 +126,15 @@ def summarize(xs) -> dict:
     return {"mean": m, "se": se, "n": n, "t": t, "p": p}
 
 
-def fmt(s: dict) -> str:
+def summary_cell(s: dict) -> str:
+    """A ``summarize`` result as one table cell."""
     return (f"{s['mean']:+.4f} +/- {s['se']:.4f}  (n={s['n']:>3}, "
             f"t={s['t']:+.2f}, p={s['p']:.3g})")
 
 
-def jsonify(obj):
-    if isinstance(obj, dict):
-        return {str(k): jsonify(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [jsonify(v) for v in obj]
-    if isinstance(obj, (np.floating, float)):
-        f = float(obj)
-        return None if not np.isfinite(f) else round(f, 6)
-    if isinstance(obj, (np.integer, int)):
-        return int(obj)
-    if isinstance(obj, (np.bool_, bool)):
-        return bool(obj)
-    if isinstance(obj, (set, frozenset)):
-        return sorted(str(v) for v in obj)
-    if isinstance(obj, Path):
-        return str(obj)
-    return obj
+def mean_pm(s: dict) -> str:
+    return f"{s['mean']:+.4f} +/- {s['se']:.4f}"
 
-
-# --------------------------------------------------------------------------
-# per-card facts (same shape as t3_ladders.CardBook; kept local by design --
-# the task forbids adding a shared module to the scratchpad)
-# --------------------------------------------------------------------------
 
 class SynergyBook(CardBook):
     """``CardBook`` plus the removal classification probe C counts."""
@@ -171,13 +151,9 @@ class SynergyBook(CardBook):
         return info
 
 
-# --------------------------------------------------------------------------
-# corpus: context decks per set
-# --------------------------------------------------------------------------
-
 def make_deck_record(book: CardBook, set_code: str, method: str,
                      names: list[str], did: int) -> dict | None:
-    nonbasic = [c for c in names if c.lower() not in pl.BASIC_LAND_NAMES]
+    nonbasic = pl.nonbasic(names)
     infos = [book.get(c) for c in nonbasic]
     if any(i is None for i in infos):
         return None
@@ -209,40 +185,25 @@ def make_deck_record(book: CardBook, set_code: str, method: str,
 def collect_context_decks(book: CardBook, sets_needed: set[str],
                           cap_pref: int, cap_other: int) -> dict[str, list[dict]]:
     """Distinct decks of the wanted sets, capped per (set, preferred?)."""
-    seen: set[tuple] = set()
-    per: Counter = Counter()
     out: dict[str, list[dict]] = defaultdict(list)
-    stats_ = Counter()
-    did = 0
-    for rel in pl.MATCH_FILES:
-        path = pl.YDATA / rel
-        if not path.exists():
-            print("  missing corpus:", path)
-            continue
-        for set_code, method_a, deck_a, method_b, deck_b in iter_match_decks(path):
-            if set_code not in sets_needed:
-                continue
-            for method, names in ((method_a, deck_a), (method_b, deck_b)):
-                pref = method in PREFERRED_METHODS
-                cap = cap_pref if pref else cap_other
-                if per[(set_code, pref)] >= cap:
-                    continue
-                key = (set_code, tuple(sorted(names)))
-                if key in seen:
-                    continue
-                seen.add(key)
-                rec = make_deck_record(book, set_code, method, names, did)
-                if rec is None:
-                    stats_["unresolvable"] += 1
-                    continue
-                did += 1
-                per[(set_code, pref)] += 1
-                out[set_code].append(rec)
-                stats_["kept"] += 1
-        print(f"  scanned {rel}: kept {stats_['kept']} decks", flush=True)
+    kept = unresolvable = 0
+
+    def make(d: pl.MatchDeck) -> dict | None:
+        nonlocal unresolvable
+        rec = make_deck_record(book, d.set_code, d.method, d.cards, kept)
+        unresolvable += rec is None
+        return rec
+
+    def group(d: pl.MatchDeck):
+        return (d.set_code, d.method in PREFERRED_METHODS) if d.set_code in sets_needed else None
+
+    for rec in pl.sample_match_decks(pl.MATCH_PATHS, lambda g: cap_pref if g[1] else cap_other,
+                                     group=group, make=make):
+        out[rec["set"]].append(rec)
+        kept += 1
     for s in out:
         out[s].sort(key=lambda d: (not d["preferred"], d["did"]))
-    print(f"  context decks: {stats_['kept']} kept, {stats_['unresolvable']} "
+    print(f"  context decks: {kept} kept, {unresolvable} "
           f"unresolvable, over {len(out)} sets", flush=True)
     return out
 
@@ -265,10 +226,6 @@ def swapped(names: tuple, repl: dict[int, str]) -> tuple:
         lst[i] = n
     return tuple(lst)
 
-
-# --------------------------------------------------------------------------
-# P-A: dose-response Delta-Delta
-# --------------------------------------------------------------------------
 
 def prepare_entries(raw: list[dict], book: CardBook) -> tuple[list[dict], list[dict]]:
     """Resolve entries, drop the ones with LAND enablers (Guildgates)."""
@@ -404,69 +361,72 @@ def probe_a(entries: list[dict], decks_by_set: dict[str, list[dict]],
     return cells, skipped
 
 
+def cell_row(c: dict, bank: DeckBank) -> dict:
+    """One entry-context cell's dose curve and double differences."""
+    kmax = c["kmax"]
+    m_pay, m_ctl, d = {}, {}, {}
+    for k, keys in c["dose"].items():
+        b = bank.score(keys["base"])
+        m_pay[k] = bank.score(keys["pay"]) - b
+        m_ctl[k] = bank.score(keys["ctl"]) - b
+        d[k] = m_pay[k] - m_ctl[k]
+    ks = sorted(d)
+    row = {
+        "entry": c["entry"], "payoff": c["payoff"], "set": c["set"],
+        "family": c["family"], "strength": c["strength"], "ctx": c["ctx"],
+        "method": c["method"], "kmax": kmax,
+        "preferred_ctx": c["preferred_ctx"], "n_available": c["n_available"],
+        "enab_oncolor": c["enab_oncolor"], "ctl_oncolor": c["ctl_oncolor"],
+        "m_pay": {k: m_pay[k] for k in ks},
+        "m_ctl": {k: m_ctl[k] for k in ks},
+        "d0": d[0], "d_max": d[kmax],
+        "ddose": d[kmax] - d[0],
+        "pay_dose": m_pay[kmax] - m_pay[0],
+        "ctl_dose": m_ctl[kmax] - m_ctl[0],
+        "slope": float(np.polyfit(ks, [d[k] for k in ks], 1)[0]) if len(ks) > 1
+                 else float("nan"),
+    }
+    if c["mis"]:
+        b = bank.score(c["mis"]["base"])
+        mp = bank.score(c["mis"]["pay"]) - b
+        mc = bank.score(c["mis"]["ctl"]) - b
+        row["mis_d"] = mp - mc
+        row["mis_ddose"] = (mp - mc) - d[0]
+        row["mis_pay_dose"] = mp - m_pay[0]
+        row["mis_family"] = c["mis_meta"]["family"]
+        row["mis_same_set"] = c["mis_meta"]["same_set"]
+    return row
+
+
+def entry_row(e: dict, ei: int, rows: list[dict]) -> dict:
+    """An entry's cells pooled: per-field means with their SE and count."""
+    agg = {"entry": ei, "payoff": e["payoff"], "control": e["control"],
+           "set": e["set"], "family": e["family"], "strength": e["strength"],
+           "mechanism": e["mechanism"], "n_ctx": len(rows),
+           "kmax": rows[0]["kmax"],
+           "n_available_ctx": rows[0]["n_available"],
+           "n_preferred_ctx": sum(r["preferred_ctx"] for r in rows),
+           "n_enab_oncolor": sum(r["enab_oncolor"] for r in rows),
+           "n_ctl_oncolor": sum(r["ctl_oncolor"] for r in rows),
+           "mis_family": next((r["mis_family"] for r in rows
+                               if "mis_family" in r), None),
+           "n_mis_same_set": sum(1 for r in rows if r.get("mis_same_set"))}
+    for fld in ("ddose", "slope", "d0", "d_max", "pay_dose", "ctl_dose",
+                "mis_ddose", "mis_pay_dose"):
+        m, se, n = mean_se([r.get(fld) for r in rows])
+        agg[fld], agg[fld + "_se"], agg[fld + "_n"] = m, se, n
+    agg["matched_minus_mismatched"], _, _ = mean_se(
+        [r["ddose"] - r["mis_ddose"] for r in rows if "mis_ddose" in r])
+    return agg
+
+
 def analyze_a(cells: list[dict], bank: DeckBank, entries: list[dict],
               skipped: list[dict]) -> dict:
-    per_cell = []
-    for c in cells:
-        kmax = c["kmax"]
-        m_pay, m_ctl, d = {}, {}, {}
-        for k, keys in c["dose"].items():
-            b = bank.score(keys["base"])
-            m_pay[k] = bank.score(keys["pay"]) - b
-            m_ctl[k] = bank.score(keys["ctl"]) - b
-            d[k] = m_pay[k] - m_ctl[k]
-        ks = sorted(d)
-        row = {
-            "entry": c["entry"], "payoff": c["payoff"], "set": c["set"],
-            "family": c["family"], "strength": c["strength"], "ctx": c["ctx"],
-            "method": c["method"], "kmax": kmax,
-            "preferred_ctx": c["preferred_ctx"], "n_available": c["n_available"],
-            "enab_oncolor": c["enab_oncolor"], "ctl_oncolor": c["ctl_oncolor"],
-            "m_pay": {k: m_pay[k] for k in ks},
-            "m_ctl": {k: m_ctl[k] for k in ks},
-            "d0": d[0], "d_max": d[kmax],
-            "ddose": d[kmax] - d[0],
-            "pay_dose": m_pay[kmax] - m_pay[0],
-            "ctl_dose": m_ctl[kmax] - m_ctl[0],
-            "slope": float(np.polyfit(ks, [d[k] for k in ks], 1)[0]) if len(ks) > 1
-                     else float("nan"),
-        }
-        if c["mis"]:
-            b = bank.score(c["mis"]["base"])
-            mp = bank.score(c["mis"]["pay"]) - b
-            mc = bank.score(c["mis"]["ctl"]) - b
-            row["mis_d"] = mp - mc
-            row["mis_ddose"] = (mp - mc) - d[0]
-            row["mis_pay_dose"] = mp - m_pay[0]
-            row["mis_family"] = c["mis_meta"]["family"]
-            row["mis_same_set"] = c["mis_meta"]["same_set"]
-        per_cell.append(row)
-
+    per_cell = [cell_row(c, bank) for c in cells]
     by_entry: dict[int, list[dict]] = defaultdict(list)
     for r in per_cell:
         by_entry[r["entry"]].append(r)
-
-    per_entry = []
-    for ei, rows in sorted(by_entry.items()):
-        e = entries[ei]
-        agg = {"entry": ei, "payoff": e["payoff"], "control": e["control"],
-               "set": e["set"], "family": e["family"], "strength": e["strength"],
-               "mechanism": e["mechanism"], "n_ctx": len(rows),
-               "kmax": rows[0]["kmax"],
-               "n_available_ctx": rows[0]["n_available"],
-               "n_preferred_ctx": sum(r["preferred_ctx"] for r in rows),
-               "n_enab_oncolor": sum(r["enab_oncolor"] for r in rows),
-               "n_ctl_oncolor": sum(r["ctl_oncolor"] for r in rows),
-               "mis_family": next((r["mis_family"] for r in rows
-                                   if "mis_family" in r), None),
-               "n_mis_same_set": sum(1 for r in rows if r.get("mis_same_set"))}
-        for fld in ("ddose", "slope", "d0", "d_max", "pay_dose", "ctl_dose",
-                    "mis_ddose", "mis_pay_dose"):
-            m, se, n = mean_se([r.get(fld) for r in rows])
-            agg[fld], agg[fld + "_se"], agg[fld + "_n"] = m, se, n
-        agg["matched_minus_mismatched"], _, _ = mean_se(
-            [r["ddose"] - r["mis_ddose"] for r in rows if "mis_ddose" in r])
-        per_entry.append(agg)
+    per_entry = [entry_row(entries[ei], ei, rows) for ei, rows in sorted(by_entry.items())]
 
     def col(rows, fld):
         return [r[fld] for r in rows if r.get(fld) is not None and np.isfinite(r.get(fld, np.nan))]
@@ -539,10 +499,6 @@ def analyze_a(cells: list[dict], bank: DeckBank, entries: list[dict],
     }
     return res
 
-
-# --------------------------------------------------------------------------
-# P-B: duplicates ladder
-# --------------------------------------------------------------------------
 
 def pick_b_cards(pools: dict[str, Counter], book: CardBook,
                  n_cards: int) -> list[dict]:
@@ -657,10 +613,6 @@ def analyze_b(units: list[dict], bank: DeckBank) -> dict:
     return res
 
 
-# --------------------------------------------------------------------------
-# P-C: removal-share ladder
-# --------------------------------------------------------------------------
-
 def q_match(out_q: float, pool: list[str], used: set[str], book: CardBook) -> str | None:
     best, bd = None, None
     for n in pool:
@@ -771,7 +723,7 @@ def analyze_c(units: list[dict], bank: DeckBank, book: CardBook) -> dict:
            "removal_share": summarize([r["base_removal"] / r["n_spells"]
                                        for r in rows]),
            "per_deck": rows}
-    for r in (-2, -1, 1, 2, 3):
+    for r in RUNGS:
         d = [row["rung_delta"][r] for row in rows if r in row["rung_delta"]]
         net = [row["net"][r] for row in rows if r in row["net"]]
         real = [row["rung_removal"][r] for row in rows if r in row["rung_removal"]]
@@ -798,14 +750,10 @@ def analyze_c(units: list[dict], bank: DeckBank, book: CardBook) -> dict:
             continue
         by_base[b] = {"n": len(sel),
                       "net": {r: summarize([s["net"][r] for s in sel if r in s["net"]])
-                              for r in (-2, -1, 1, 2, 3)}}
+                              for r in RUNGS}}
     res["by_base_removal"] = by_base
     return res
 
-
-# --------------------------------------------------------------------------
-# printed markdown report
-# --------------------------------------------------------------------------
 
 def report_a(res: dict) -> None:
     print("\n## P-A -- dose-response Delta-Delta (payoff vs control, "
@@ -822,42 +770,44 @@ def report_a(res: dict) -> None:
         for s in res["skipped_entries"]:
             print(f"  - {s['payoff']} ({s['set']}): {s['reason']}")
     o = res["overall"]
-    print("\n| statistic (mean over entries) | value |")
-    print("|---|---|")
-    print(f"| Delta-dose = d(kmax) - d(0) | {fmt(o['ddose'])} |")
-    print(f"| slope of d(k) over k | {fmt(o['slope'])} |")
-    print(f"| d(0) = m_pay(0) - m_ctl(0) (standalone gap) | {fmt(o['d0_raw_quality_gap'])} |")
-    print(f"| d(kmax) | {fmt(o['d_max'])} |")
-    print(f"| payoff dose m_pay(kmax) - m_pay(0) | {fmt(o['payoff_dose'])} |")
-    print(f"| control dose m_ctl(kmax) - m_ctl(0) | {fmt(o['control_dose'])} |")
-    print(f"| Delta-dose (cell level, unpooled) | {fmt(res['cell_level']['ddose'])} |")
+    print()
+    print_table(["statistic (mean over entries)", "value"], [
+        ["Delta-dose = d(kmax) - d(0)", summary_cell(o["ddose"])],
+        ["slope of d(k) over k", summary_cell(o["slope"])],
+        ["d(0) = m_pay(0) - m_ctl(0) (standalone gap)", summary_cell(o["d0_raw_quality_gap"])],
+        ["d(kmax)", summary_cell(o["d_max"])],
+        ["payoff dose m_pay(kmax) - m_pay(0)", summary_cell(o["payoff_dose"])],
+        ["control dose m_ctl(kmax) - m_ctl(0)", summary_cell(o["control_dose"])],
+        ["Delta-dose (cell level, unpooled)", summary_cell(res["cell_level"]["ddose"])],
+    ])
 
-    print("\n| dose k | m_pay(k) | m_ctl(k) | d(k) |")
-    print("|---|---|---|---|")
-    for k, row in sorted(res["dose_curve"].items(), key=lambda kv: int(kv[0])):
-        print(f"| {k} | {row['m_pay']['mean']:+.4f} +/- {row['m_pay']['se']:.4f} "
-              f"| {row['m_ctl']['mean']:+.4f} +/- {row['m_ctl']['se']:.4f} "
-              f"| {row['d']['mean']:+.4f} +/- {row['d']['se']:.4f} (n={row['d']['n']}) |")
+    print()
+    print_table(["dose k", "m_pay(k)", "m_ctl(k)", "d(k)"], [
+        [k, mean_pm(row["m_pay"]), mean_pm(row["m_ctl"]),
+         f"{mean_pm(row['d'])} (n={row['d']['n']})"]
+        for k, row in sorted(res["dose_curve"].items(), key=lambda kv: int(kv[0]))])
 
-    print("\n| split | Delta-dose | d(0) |")
-    print("|---|---|---|")
-    for st, row in res["by_strength"].items():
-        print(f"| strength={st} | {fmt(row['ddose'])} | {row['d0']['mean']:+.4f} |")
-    for fam, row in sorted(res["by_family"].items(),
-                           key=lambda kv: -kv[1]["ddose"]["mean"]):
-        print(f"| family={fam} ({row['n_entries']}) | {fmt(row['ddose'])} "
-              f"| {row['d0']['mean']:+.4f} |")
+    print()
+    split_rows = [[f"strength={st}", summary_cell(row["ddose"]), f"{row['d0']['mean']:+.4f}"]
+                  for st, row in res["by_strength"].items()]
+    split_rows += [[f"family={fam} ({row['n_entries']})", summary_cell(row["ddose"]),
+                    f"{row['d0']['mean']:+.4f}"]
+                   for fam, row in sorted(res["by_family"].items(),
+                                          key=lambda kv: -kv[1]["ddose"]["mean"])]
+    print_table(["split", "Delta-dose", "d(0)"], split_rows)
 
     m = res["mismatched"]
     print("\n### matched vs MISMATCHED enablers (the leakage control)\n")
     print(f"entries with a mismatched arm: {m['n_entries']}")
-    print("| arm | Delta-dose | payoff dose |")
-    print("|---|---|---|")
-    print(f"| matched enablers | {fmt(m['matched_ddose'])} | {fmt(m['matched_payoff_dose'])} |")
-    print(f"| mismatched enablers | {fmt(m['mismatched_ddose'])} | "
-          f"{fmt(m['mismatched_payoff_dose'])} |")
-    print(f"| paired difference | {fmt(m['paired_diff'])} | {fmt(m['payoff_dose_paired_diff'])} |")
-    print(f"| paired diff (cell level) | {fmt(m['cell_level_paired_diff'])} | |")
+    print_table(["arm", "Delta-dose", "payoff dose"], [
+        ["matched enablers", summary_cell(m["matched_ddose"]),
+         summary_cell(m["matched_payoff_dose"])],
+        ["mismatched enablers", summary_cell(m["mismatched_ddose"]),
+         summary_cell(m["mismatched_payoff_dose"])],
+        ["paired difference", summary_cell(m["paired_diff"]),
+         summary_cell(m["payoff_dose_paired_diff"])],
+        ["paired diff (cell level)", summary_cell(m["cell_level_paired_diff"]), ""],
+    ])
     print("  [matched ~ mismatched => generic deck-quality / color drift, "
           "not synergy]")
     print("  [the 'payoff dose' column alone is NOT a synergy measure: it moves "
@@ -865,32 +815,26 @@ def report_a(res: dict) -> None:
           "column (payoff minus its same-set control in the same slot) is.]")
 
     top = sorted(res["per_entry"], key=lambda r: -r["ddose"])
-    print("\n| top-5 entries by Delta-dose | set | family | Delta-dose +/- SE | n |")
-    print("|---|---|---|---|---|")
-    for r in top[:5]:
-        print(f"| {r['payoff']} | {r['set']} | {r['family']} | "
-              f"{r['ddose']:+.4f} +/- {r['ddose_se']:.4f} | {r['n_ctx']} |")
-    print("\n| bottom-5 entries | set | family | Delta-dose +/- SE | n |")
-    print("|---|---|---|---|---|")
-    for r in top[-5:]:
-        print(f"| {r['payoff']} | {r['set']} | {r['family']} | "
-              f"{r['ddose']:+.4f} +/- {r['ddose_se']:.4f} | {r['n_ctx']} |")
+    for title, rows in (("top-5 entries by Delta-dose", top[:5]), ("bottom-5 entries", top[-5:])):
+        print()
+        print_table([title, "set", "family", "Delta-dose +/- SE", "n"], [
+            [r["payoff"], r["set"], r["family"], f"{r['ddose']:+.4f} +/- {r['ddose_se']:.4f}",
+             r["n_ctx"]] for r in rows])
 
 
 def report_b(res: dict) -> None:
     print("\n## P-B -- duplicates ladder (k copies of A vs k marginal-matched "
           "distinct cards)\n")
     print(f"units (card x context): {res['n_units']}  distinct cards: {res['n_cards']}")
-    print(f"single-swap matching error |dX - dA|: {fmt(res['match_err'])}")
-    print("\n| k | copy marginal | distinct marginal | copy - distinct |")
-    print("|---|---|---|---|")
-    for k in (1, 2, 3):
-        row = res["by_k"][k]
-        print(f"| {k} | {fmt(row['copy'])} | {fmt(row['distinct'])} | "
-              f"{fmt(row['copy_minus_distinct'])} |")
+    print(f"single-swap matching error |dX - dA|: {summary_cell(res['match_err'])}")
+    print()
+    rows = [[k, summary_cell(row["copy"]), summary_cell(row["distinct"]),
+             summary_cell(row["copy_minus_distinct"])]
+            for k, row in ((k, res["by_k"][k]) for k in (1, 2, 3))]
     t = res["totals"]
-    print(f"| total (k=3) | {fmt(t['copy'])} | {fmt(t['distinct'])} | "
-          f"{fmt(t['copy_minus_distinct'])} |")
+    rows.append(["total (k=3)", summary_cell(t["copy"]), summary_cell(t["distinct"]),
+                 summary_cell(t["copy_minus_distinct"])])
+    print_table(["k", "copy marginal", "distinct marginal", "copy - distinct"], rows)
     print("  [k=1 is matched by construction; flat copy marginals across k=2,3 "
           "and copy ~ distinct => no duplicate penalty/bonus]")
 
@@ -900,29 +844,25 @@ def report_c(res: dict) -> None:
     print(f"decks: {res['n_decks']}  base removal count: "
           f"{res['base_removal']['mean']:.2f} +/- {res['base_removal']['se']:.2f} "
           f"(share {res['removal_share']['mean']:.3f})")
-    print("\n| rung r | realized removal | delta vs base | net of neutral swap |")
-    print("|---|---|---|---|")
-    for r in (-2, -1, 1, 2, 3):
-        if r not in res["by_rung"]:
-            continue
-        row = res["by_rung"][r]
-        print(f"| {r:+d} | {row['realized_removal']['mean']:.2f} "
-              f"({row['realized_minus_base']['mean']:+.2f}) | "
-              f"{fmt(row['delta'])} | {fmt(row['net_of_neutral'])} |")
-    print("\n| neutral swaps | delta vs base |")
-    print("|---|---|")
-    for n, row in sorted(res["neutral"].items(), key=lambda kv: int(kv[0])):
-        print(f"| {n} | {fmt(row)} |")
+    print()
+    print_table(["rung r", "realized removal", "delta vs base", "net of neutral swap"], [
+        [f"{r:+d}", f"{row['realized_removal']['mean']:.2f} "
+                    f"({row['realized_minus_base']['mean']:+.2f})",
+         summary_cell(row["delta"]), summary_cell(row["net_of_neutral"])]
+        for r, row in ((r, res["by_rung"][r]) for r in RUNGS if r in res["by_rung"])])
+    print()
+    print_table(["neutral swaps", "delta vs base"],
+                [[n, summary_cell(row)]
+                 for n, row in sorted(res["neutral"].items(), key=lambda kv: int(kv[0]))])
     if res["by_base_removal"]:
-        print("\n| base removal | n | net(-2) | net(-1) | net(+1) | net(+2) | net(+3) |")
-        print("|---|---|---|---|---|---|---|")
-        for b, row in sorted(res["by_base_removal"].items(), key=lambda kv: int(kv[0])):
-            cells = []
-            for r in (-2, -1, 1, 2, 3):
-                s = row["net"].get(r) or {}
-                cells.append(f"{s.get('mean', float('nan')):+.3f}"
-                             if s.get("n") else "-")
-            print(f"| {b} | {row['n']} | " + " | ".join(cells) + " |")
+        def net_cell(s: dict | None) -> str:
+            s = s or {}
+            return f"{s.get('mean', float('nan')):+.3f}" if s.get("n") else "-"
+
+        print()
+        print_table(["base removal", "n"] + [f"net({r:+d})" for r in RUNGS], [
+            [b, row["n"]] + [net_cell(row["net"].get(r)) for r in RUNGS]
+            for b, row in sorted(res["by_base_removal"].items(), key=lambda kv: int(kv[0]))])
     print("  [net > 0 on one side and < 0 on the other => interior optimum; "
           "all net ~ 0 => the scorer has no removal-share opinion]")
     print("  [net(r>0): removal vs q-matched non-removal INTO the same slots; "
@@ -930,9 +870,18 @@ def report_c(res: dict) -> None:
           "non-removal spell]")
 
 
-# --------------------------------------------------------------------------
-# main
-# --------------------------------------------------------------------------
+SIZES = {
+    "entries": Preset(0, 6),
+    "contexts": Preset(8, 2),
+    "b_cards": Preset(30, 4),
+    "b_contexts": Preset(4, 2),
+    "c_decks": Preset(150, 20),
+    "cap_pref": Preset(220, 40),
+    "cap_other": Preset(90, 20),
+    "device": Preset(None, "cpu"),
+    "batch": Preset(1024, 128),
+}
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -950,22 +899,17 @@ def main() -> None:
     ap.add_argument("--cap-pref", type=int, default=None,
                     help="context decks per set from preferred methods")
     ap.add_argument("--cap-other", type=int, default=None)
-    ap.add_argument("--batch", type=int, default=1024)
+    ap.add_argument("--batch", type=int, default=None)
     ap.add_argument("--device", default=None)
     ap.add_argument("--out", type=Path, default=OUT_JSON)
     args = ap.parse_args()
 
+    pl.apply_presets(args, SIZES)
     smoke = args.smoke
     sections = set(args.only.upper())
-    n_entries = args.entries if args.entries is not None else (6 if smoke else 0)
-    n_ctx = args.contexts if args.contexts is not None else (2 if smoke else 8)
-    b_cards = args.b_cards if args.b_cards is not None else (4 if smoke else 30)
-    b_ctx = args.b_contexts if args.b_contexts is not None else (2 if smoke else 4)
-    c_decks = args.c_decks if args.c_decks is not None else (20 if smoke else 150)
-    cap_pref = args.cap_pref if args.cap_pref is not None else (40 if smoke else 220)
-    cap_other = args.cap_other if args.cap_other is not None else (20 if smoke else 90)
-    device = args.device or ("cpu" if smoke else None)
-    batch = 128 if smoke else args.batch
+    n_entries, n_ctx = args.entries, args.contexts
+    b_cards, b_ctx, c_decks = args.b_cards, args.b_contexts, args.c_decks
+    cap_pref, cap_other, batch = args.cap_pref, args.cap_other, args.batch
 
     t_start = time.time()
     rng = random.Random(SEED)
@@ -973,10 +917,10 @@ def main() -> None:
 
     print(f"t4_synergy: smoke={smoke} sections={''.join(sorted(sections))} "
           f"seed={SEED} entries={n_entries or 'all'} contexts={n_ctx}")
-    probe = pl.Probe(device=device)
+    probe = pl.Probe(device=args.device)
     print(f"device={probe.device} d_model={probe.d_model}", flush=True)
     book = SynergyBook(probe, pl.load_win_rates(), q_fallback="median")
-    print(f"label fallback (corpus median shrunk_score_play): {book.q_median:+.5f}")
+    print(f"label fallback (corpus median shrunk_score_play): {book.q_fallback:+.5f}")
 
     entries, dropped = prepare_entries(raw, book)
     print(f"entries: {len(raw)} in file, {len(entries)} usable, "
@@ -1048,8 +992,7 @@ def main() -> None:
 
     results["meta"]["n_distinct_decks_scored"] = len(bank.keys)
     results["meta"]["runtime_s"] = round(time.time() - t_start, 1)
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(jsonify(results), f, indent=2)
+    write_json(args.out, results, digits=6)
     print(f"\nwrote {args.out}  ({len(bank.keys)} decks scored, "
           f"{time.time() - t_start:.1f}s)")
 

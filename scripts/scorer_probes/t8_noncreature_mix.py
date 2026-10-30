@@ -49,12 +49,10 @@ DECKS = pl.YDATA / "decks" / "generated-decks-gen4-512.txt"
 OUT_CSV = pl.SCRATCH / "t8_noncreature_mix.csv"
 OUT_MD = pl.SCRATCH / "t8_report.md"
 
-# ---------------------------------------------------------------------------
-# archetype classification
-# ---------------------------------------------------------------------------
-# Applied to noncreature nonland cards only, first match wins. Ordering matters:
-# a pump aura that also pacifies is removal, an instant that draws and deals
-# damage is removal. The families group the detail rows for the color tables.
+# Archetype classification, applied to noncreature nonland cards only, first
+# match wins. Ordering matters: a pump aura that also pacifies is removal, an
+# instant that draws and deals damage is removal. The families group the
+# detail rows for the color tables.
 
 DETAIL_TO_FAMILY = {
     "sweeper": "removal",
@@ -174,13 +172,9 @@ def classify(text: str, types: str, mana_cost: str) -> str:
     return "other"
 
 
-# ---------------------------------------------------------------------------
-# card facts
-# ---------------------------------------------------------------------------
-
 class Book(CardBook):
     """Card facts as this probe reads them: colours from the cost pips, kind from
-    the type line, and the noncreature archetype."""
+    the (front face's) type line, and the noncreature archetype."""
 
     def __init__(self, probe: pl.Probe, win_rates: dict):
         super().__init__(probe, win_rates, colors_from="pips")
@@ -190,12 +184,7 @@ class Book(CardBook):
         if info is None:
             return None
         raw = info["text"].lower()
-        types = mana_cost = ""
-        for ln in raw.splitlines():
-            if ln.startswith("types:"):
-                types = ln.split(":", 1)[1].strip()
-            elif ln.startswith("mana cost:"):
-                mana_cost = ln.split(":", 1)[1].strip()
+        types, mana_cost = info["type_line"], info["mana_cost"]
         body = "\n".join(ln for ln in raw.splitlines()
                          if not ln.startswith(("name:", "mana cost:", "types:")))
         is_creature = "creature" in types
@@ -209,10 +198,6 @@ class Book(CardBook):
         )
         return info
 
-
-# ---------------------------------------------------------------------------
-# corpus pass
-# ---------------------------------------------------------------------------
 
 def collect(book: Book, limit: int | None):
     """One row per (deck, eligible noncreature pool card): taken or not."""
@@ -232,7 +217,7 @@ def collect(book: Book, limit: int | None):
         if pset != dset:
             raise SystemExit(f"line {i}: pool set {pset} != deck set {dset}")
 
-        deck_counts = Counter(c for c in deck if c.lower() not in pl.BASIC_LAND_NAMES)
+        deck_counts = Counter(pl.nonbasic(deck))
         deck_colors: set[str] = set()
         n_creature = n_noncreature = 0
         for name, k in deck_counts.items():
@@ -275,10 +260,6 @@ def collect(book: Book, limit: int | None):
     return rows, slots, slots_by_color, deck_shape, creatures
 
 
-# ---------------------------------------------------------------------------
-# quality-controlled expectation
-# ---------------------------------------------------------------------------
-
 def add_expected(rows):
     """Expected take rate per card from (label quintile x MV bucket x mono/multi).
 
@@ -305,10 +286,6 @@ def add_expected(rows):
         r["expected"] = r["avail"] * num[s] / den[s]
     return rows
 
-
-# ---------------------------------------------------------------------------
-# reporting
-# ---------------------------------------------------------------------------
 
 def table(rows, key, order=None, min_avail=200):
     agg = defaultdict(lambda: [0, 0, 0.0])
@@ -359,7 +336,7 @@ def by_label_rank(rows, depth=6):
     return "\n".join(lines)
 
 
-def fmt(out, slots=None, total_slots=None):
+def archetype_table(out, slots=None, total_slots=None):
     lines = ["| archetype | available | taken | take rate | lift | share of slots |",
              "|---|---|---|---|---|---|"]
     for k, av, tk, rate, lift in out:
@@ -416,9 +393,9 @@ def main():
           f"({creatures[1]}/{creatures[0]}), noncreature spells "
           f"{100 * nc_tk / nc_av:.1f}% ({nc_tk}/{nc_av}).\n",
           "## By family\n",
-          fmt(table(rows, "family"), fam_slots, total_slots),
+          archetype_table(table(rows, "family"), fam_slots, total_slots),
           "\n## By archetype\n",
-          fmt(table(rows, "detail"), slots, total_slots),
+          archetype_table(table(rows, "detail"), slots, total_slots),
           "\n## Removal's edge by depth (does the preference front-load?)\n",
           by_label_rank(rows)]
 
@@ -433,7 +410,7 @@ def main():
         for d, k in cs.items():
             cfam[DETAIL_TO_FAMILY[d]] += k
         md.append(f"\n### {col} (n={len(sub)} choices, {sum(cs.values())} slots filled)\n")
-        md.append(fmt(table(sub, "family", min_avail=100), cfam, sum(cs.values())))
+        md.append(archetype_table(table(sub, "family", min_avail=100), cfam, sum(cs.values())))
 
     OUT_MD.write_text("\n".join(md), encoding="utf-8")
     print("\n".join(md))

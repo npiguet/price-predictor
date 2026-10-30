@@ -42,6 +42,7 @@ from draft_probes.probe_lib import (
     CARDS,
     CORPUS,
     OUT,
+    PACK_SIZE,
     TYPE_POOL,
     WUBRG,
     CardTable,
@@ -51,12 +52,13 @@ from draft_probes.probe_lib import (
     transplant_pool,
 )
 
-# Absolute pick index across the draft -> (pack, pick), pack size 15.
+# Absolute pick indices across the draft.
 CLOCKS = [3, 8, 16, 23, 31, 38, 43]
 
 
 def clock_to_pp(t: int) -> tuple[int, int]:
-    return (t - 1) // 15 + 1, (t - 1) % 15 + 1
+    """An absolute pick index as ``(pack, pick)``."""
+    return (t - 1) // PACK_SIZE + 1, (t - 1) % PACK_SIZE + 1
 
 
 def main() -> None:

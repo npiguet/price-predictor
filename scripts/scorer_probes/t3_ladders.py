@@ -32,6 +32,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.markdown import banner
 from _lib.stats import mean_se
 from scorer_probes import probe_lib as pl
 from scorer_probes.probe_lib import (
@@ -48,10 +49,6 @@ POOLS = pl.YDATA / "pools" / "pools-gen4-256.txt"
 DECKS = pl.YDATA / "decks" / "generated-decks-gen4-256.txt"
 SEED = 42
 
-
-# --------------------------------------------------------------------------
-# context sampling
-# --------------------------------------------------------------------------
 
 def ef_eligible(ctx: dict, book: CardBook) -> tuple[bool, bool]:
     """(ladder-E eligible, ladder-F eligible) for this context."""
@@ -102,10 +99,6 @@ def sample_contexts(book: CardBook, n_ctx: int, n_ef: int, scan_cap: int,
           f"{skipped} unresolvable", flush=True)
     return base, extra
 
-
-# --------------------------------------------------------------------------
-# swap machinery
-# --------------------------------------------------------------------------
 
 def pool_cards(ctx: dict, book: CardBook, pred) -> list[str]:
     """Remaining-pool names WITH multiplicity, non-hybrid, matching pred."""
@@ -207,10 +200,6 @@ def rx_pips_of(book, deck, color):
     idx = WUBRG.index(color)
     return float(deck_pips(book, deck)[idx])
 
-
-# --------------------------------------------------------------------------
-# ladders: each returns [(rung, realized_x, deck_names), ...] or [] to drop
-# --------------------------------------------------------------------------
 
 def ladder_A(ctx, book, rng):
     """H1: add a whole new color, k spells at a time."""
@@ -489,10 +478,6 @@ LADDERS = [
 ]
 
 
-# --------------------------------------------------------------------------
-# reporting
-# --------------------------------------------------------------------------
-
 def rung_table(rows: list[dict], rx_label: str) -> None:
     rungs = sorted({r["rung"] for r in rows})
     n_ctx = len({r["context_id"] for r in rows})
@@ -528,12 +513,9 @@ def report(all_rows: list[dict], attempted: dict, kept: dict) -> None:
 
     for name, _fn, rx_label in LADDERS:
         rows = by_ladder.get(name, [])
-        print()
-        print("=" * 78)
-        print(f"LADDER {name}   (attempted {attempted.get(name, 0)} contexts, "
-              f"kept {kept.get(name, 0)}, attrition "
-              f"{1 - kept.get(name, 0) / max(1, attempted.get(name, 0)):.1%})")
-        print("=" * 78)
+        banner(f"LADDER {name}   (attempted {attempted.get(name, 0)} contexts, "
+               f"kept {kept.get(name, 0)}, attrition "
+               f"{1 - kept.get(name, 0) / max(1, attempted.get(name, 0)):.1%})")
         if not rows:
             print("  no usable contexts")
             continue
@@ -588,10 +570,6 @@ def report(all_rows: list[dict], attempted: dict, kept: dict) -> None:
                   f"{m:>+.4f} +/- {se:.4f}  t={m / se if se else float('nan'):+.2f}")
             print("     [>0 = the fixer land makes the splash less bad (they cooperate)]")
 
-
-# --------------------------------------------------------------------------
-# main
-# --------------------------------------------------------------------------
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)

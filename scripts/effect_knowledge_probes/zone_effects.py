@@ -51,8 +51,9 @@ if __package__ in (None, ""):
 
 from _lib.markdown import print_table  # noqa: E402
 
-from effect_knowledge_probes import common, record_walk  # noqa: E402
+from effect_knowledge_probes import common, record_walk, sweeps  # noqa: E402
 from effect_knowledge_probes.common import auc  # noqa: E402
+from effects.domain.script_text import api_of, params, segments  # noqa: E402
 
 ZONE_APIS = frozenset({
     "Draw", "Discard", "Mill", "ChangeZone", "ChangeZoneAll", "Dig",
@@ -62,7 +63,6 @@ ZONE_APIS = frozenset({
 COUNT_FIELDS = {"Draw": "cards_drawn", "Discard": "cards_discarded", "Mill": "cards_milled"}
 AMOUNTS = tuple(range(1, 7))
 ORIGIN_ZONES = ("battlefield", "graveyard", "hand", "exile", "stack", "library")
-_API_RE = re.compile(r"(?:SP|AB|DB)\$\s*(\w+)")
 _NUMCARDS_RE = re.compile(r"(NumCards\$\s*)(\d+)")
 
 
@@ -71,12 +71,7 @@ _NUMCARDS_RE = re.compile(r"(NumCards\$\s*)(\d+)")
 
 def chain_apis(script_text: str | None) -> set[str]:
     """Every API a chain's segments name, ``SP$``, ``AB$`` and ``DB$`` alike."""
-    return set(_API_RE.findall(script_text or ""))
-
-
-def set_amount(text: str, amount: int) -> str:
-    """The acting text with its literal ``NumCards$`` set to ``amount``."""
-    return _NUMCARDS_RE.sub(lambda m: f"{m.group(1)}{amount}", text)
+    return {api_of(params(segment)) for segment in segments(script_text or "")} - {None}
 
 
 def player_targets(record) -> list[str]:
@@ -249,7 +244,7 @@ def report_amounts(chosen, probe_model, per_sweep: int) -> None:
                 continue
             curve = []
             for amount in AMOUNTS:
-                with batcher.reading_as(key, set_amount(original, amount)):
+                with batcher.reading_as(key, sweeps.set_amount(original, "NumCards", amount)):
                     reading = common.predict(probe_model, [record],
                                              lambda o, v, s, r: _read(o, s, r))[0]
                 curve.append(reading["players"].get(player, {}).get(field, float("nan")))

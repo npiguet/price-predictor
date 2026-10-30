@@ -65,16 +65,20 @@ from collections import defaultdict
 from pathlib import Path
 
 from _lib.corpora import load_win_rates
+from _lib.markdown import banner
 from _lib.stats import spearman
 from draft_corpus_common import (
+    DEFAULT_CARDS_PATH,
     WUBRG,
     ColourResolver,
     parse_drafts_arg,
     read_records,
+    seat_decisions,
     top_two_colours,
 )
 
 AXES = ["score_play", "score_draw", "played_rate", "cast_lift"]
+ALL_AXES = AXES + ["color_lift"]
 
 
 def load_winrates(path: Path, min_obs: int) -> dict:
@@ -92,68 +96,58 @@ def percentile(values: list, taken: float) -> float:
     return (below + (equal - 1) / 2.0) / (len(values) - 1)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--drafts", action="append", required=True)
-    ap.add_argument("--cards-path", default="output/cardsfolder-512")
-    ap.add_argument("--winrates", required=True)
-    ap.add_argument("--min-obs", type=int, default=20)
-    ap.add_argument("--min-choices", type=int, default=5)
-    args = ap.parse_args()
+def axis_value(wr: dict, axis: str, lane: list[str]):
+    """``card -> value`` on one axis; ``color_lift`` averages over the seat's lane."""
+    if axis != "color_lift":
+        return lambda card: (wr.get(card) or {}).get(axis)
 
-    wr = load_winrates(Path(args.winrates), args.min_obs)
-    colours = ColourResolver(Path(args.cards_path))
-    print(f"win-rate labels: {len(wr)} cards with >= {args.min_obs} in-deck observations")
+    def value(card):
+        row = wr.get(card)
+        if not row:
+            return None
+        vs = [row[f"cl_{c}"] for c in lane if f"cl_{c}" in row]
+        return sum(vs) / len(vs) if vs else None
 
-    axes = AXES + ["color_lift"]
-    for spec in args.drafts:
-        label, path = parse_drafts_arg(spec)
-        acc: dict = defaultdict(lambda: defaultdict(lambda: [0.0, 0, 0]))
-        for record, geom in read_records(path):
-            for seat_i, seat in enumerate(record.seats):
-                pool = geom.drafted_pool(record, seat_i)
-                lane = sorted(top_two_colours(pool, colours))
-                for pack in range(1, geom.packs + 1):
-                    for pick in range(1, geom.pack_size + 1):
-                        taken = geom.taken_card(record, seat_i, pack, pick)
-                        avail = geom.legal_actions(record, seat_i, pack, pick)
-                        for axis in axes:
-                            if axis == "color_lift":
-                                def val(card, lane=lane):
-                                    row = wr.get(card)
-                                    if not row:
-                                        return None
-                                    vs = [row[f"cl_{c}"] for c in lane
-                                          if f"cl_{c}" in row]
-                                    return sum(vs) / len(vs) if vs else None
-                            else:
-                                def val(card, axis=axis):
-                                    return (wr.get(card) or {}).get(axis)
-                            tv = val(taken)
-                            if tv is None:
-                                continue
-                            vs = [v for v in (val(c) for c in avail) if v is not None]
-                            if len(vs) < args.min_choices:
-                                continue
-                            cell = acc[seat.agent][axis]
-                            cell[0] += percentile(vs, tv)
-                            cell[1] += 1 if tv >= max(vs) else 0
-                            cell[2] += 1
+    return value
 
-        print("=" * 78)
-        print(label)
-        print(f"     {'agent':14s} {'axis':12s} {'align':>7s} {'top1':>7s} {'picks':>9s}")
-        for agent in sorted(acc):
-            for axis in axes:
-                s, top1, n = acc[agent][axis]
-                if not n:
-                    continue
-                print(f"     {agent:14s} {axis:12s} {s/n:7.3f} {top1/n*100:6.1f}% {n:9d}")
-        print()
 
-    print("=" * 78)
-    print("pairwise Spearman between axes, over the labelled card population")
-    names = AXES + ["cl_W", "cl_U", "cl_B", "cl_R", "cl_G"]
+def alignment(path: Path, wr: dict, colours: ColourResolver, min_choices: int) -> dict:
+    """agent -> axis -> ``[sum of percentiles, top-1 count, decisions]``."""
+    acc: dict = defaultdict(lambda: defaultdict(lambda: [0.0, 0, 0]))
+    for record, geom in read_records(path):
+        for seat_i, seat in enumerate(record.seats):
+            lane = sorted(top_two_colours(geom.drafted_pool(record, seat_i), colours))
+            values = {axis: axis_value(wr, axis, lane) for axis in ALL_AXES}
+            for decision in seat_decisions(record, geom, seat_i):
+                for axis, val in values.items():
+                    tv = val(decision.taken)
+                    if tv is None:
+                        continue
+                    vs = [v for v in map(val, decision.legal) if v is not None]
+                    if len(vs) < min_choices:
+                        continue
+                    cell = acc[seat.agent][axis]
+                    cell[0] += percentile(vs, tv)
+                    cell[1] += 1 if tv >= max(vs) else 0
+                    cell[2] += 1
+    return acc
+
+
+def report_alignment(label: str, acc: dict) -> None:
+    banner(label)
+    print(f"     {'agent':14s} {'axis':12s} {'align':>7s} {'top1':>7s} {'picks':>9s}")
+    for agent in sorted(acc):
+        for axis in ALL_AXES:
+            s, top1, n = acc[agent][axis]
+            if not n:
+                continue
+            print(f"     {agent:14s} {axis:12s} {s/n:7.3f} {top1/n*100:6.1f}% {n:9d}")
+    print()
+
+
+def report_axis_correlations(wr: dict) -> None:
+    banner("pairwise Spearman between axes, over the labelled card population")
+    names = AXES + [f"cl_{c}" for c in WUBRG]
     print(f"     {'':12s}" + "".join(f"{a[:11]:>12s}" for a in names))
     for a in names:
         row = f"     {a:12s}"
@@ -162,6 +156,25 @@ def main() -> None:
             rho = spearman(*zip(*pairs)) if len(pairs) > 100 else float("nan")
             row += f"{rho:12.2f}"
         print(row)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--drafts", action="append", required=True)
+    ap.add_argument("--cards-path", type=Path, default=DEFAULT_CARDS_PATH)
+    ap.add_argument("--winrates", required=True)
+    ap.add_argument("--min-obs", type=int, default=20)
+    ap.add_argument("--min-choices", type=int, default=5)
+    args = ap.parse_args()
+
+    wr = load_winrates(Path(args.winrates), args.min_obs)
+    colours = ColourResolver(args.cards_path)
+    print(f"win-rate labels: {len(wr)} cards with >= {args.min_obs} in-deck observations")
+
+    for spec in args.drafts:
+        label, path = parse_drafts_arg(spec)
+        report_alignment(label, alignment(path, wr, colours, args.min_choices))
+    report_axis_correlations(wr)
 
 
 if __name__ == "__main__":
