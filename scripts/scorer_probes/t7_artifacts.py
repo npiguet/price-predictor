@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -49,9 +48,14 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from _lib.stats import auc, pearson, spearman
+from _lib.jsonio import write_json
+from _lib.markdown import banner, print_table
+from _lib.markdown import num as fmt
+from _lib.stats import auc, ols, pairwise_correct, pearson, spearman
 from scorer_probes import probe_lib as pl
-from scorer_probes.probe_lib import DeckBank, score_streaming
+from scorer_probes.probe_lib import DeckBank, Preset, score_streaming
+
+from sealed.domain import card_embedding_layout as layout
 
 SEED = 42
 
@@ -75,8 +79,6 @@ FP_FEATURES = ["n_cards", "n_colors", "n_creatures", "avg_mv",
                "primary_pip_share", "n_nonbasic_lands"]
 
 
-# ============================================================ small numerics
-
 def sigmoid(z: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-np.clip(z, -60, 60)))
 
@@ -87,7 +89,10 @@ def logistic_irls(X: np.ndarray, y: np.ndarray, lam: float = 1e-3,
 
     ``X`` must already carry an intercept column at index 0; the intercept is
     left unpenalized. Penalty is ``0.5 * lam * ||w[1:]||^2`` on the summed
-    negative log-likelihood.
+    negative log-likelihood. Kept over sklearn's ``LogisticRegression(C=1/lam)``,
+    the same objective, because the specified fingerprint fit is linearly
+    separable: its optimum sits at very large weights, which Newton steps reach
+    and lbfgs's default tolerance stops short of, moving the reported coefficients.
     """
     n, d = X.shape
     w = np.zeros(d)
@@ -107,44 +112,9 @@ def logistic_irls(X: np.ndarray, y: np.ndarray, lam: float = 1e-3,
 
 def resid(y: np.ndarray, controls: np.ndarray) -> np.ndarray:
     """OLS residual of y on [1, controls...]."""
-    A = np.column_stack([np.ones(len(y))] + [c for c in controls.T]) \
-        if controls.ndim == 2 else np.column_stack([np.ones(len(y)), controls])
-    beta, *_ = np.linalg.lstsq(A, y, rcond=None)
-    return y - A @ beta
+    A = np.column_stack([np.ones(len(y)), controls])
+    return y - A @ ols(A, y).beta
 
-
-def jsonify(o):
-    if isinstance(o, dict):
-        return {str(k): jsonify(v) for k, v in o.items()}
-    if isinstance(o, (list, tuple)):
-        return [jsonify(v) for v in o]
-    if isinstance(o, (bool, np.bool_)):
-        return bool(o)
-    if isinstance(o, (np.floating, float)):
-        f = float(o)
-        return None if f != f else f
-    if isinstance(o, (np.integer, int)):
-        return int(o)
-    if isinstance(o, np.ndarray):
-        return jsonify(o.tolist())
-    return o
-
-
-def fmt(x, nd: int = 4) -> str:
-    try:
-        x = float(x)
-    except (TypeError, ValueError):
-        return str(x)
-    return "nan" if x != x else f"{x:.{nd}f}"
-
-
-def header(title: str) -> None:
-    print("\n" + "=" * 78)
-    print(title)
-    print("=" * 78)
-
-
-# ====================================================== shared deck plumbing
 
 def score_name_lists(probe: pl.Probe, bank: DeckBank, lists: list[list[str]],
                      chunk: int = 256) -> np.ndarray:
@@ -177,7 +147,7 @@ def load_aligned_pairs(bank: DeckBank, n_decks: int,
             continue
         deck = decks[idx].cards
 
-        nonbasic = [c for c in deck if c.lower() not in pl.BASIC_LAND_NAMES]
+        nonbasic = pl.nonbasic(deck)
         pool_cnt = Counter(pool)
         deck_cnt = Counter(nonbasic)
         if any(deck_cnt[k] > pool_cnt.get(k, 0) for k in deck_cnt):
@@ -189,8 +159,7 @@ def load_aligned_pairs(bank: DeckBank, n_decks: int,
 
         lands, spells = [], []
         for c in nonbasic:
-            det = pl.det_features(bank.emb[c])
-            (lands if det["is_land"] > 0.5 else spells).append(c)
+            (lands if layout.is_land_embedding(bank.emb[c]) else spells).append(c)
         if len(spells) < 4:
             stats["too_few_spells"] += 1
             continue
@@ -198,19 +167,19 @@ def load_aligned_pairs(bank: DeckBank, n_decks: int,
         unused = []
         for card, k in pool_cnt.items():
             extra = k - deck_cnt.get(card, 0)
-            if extra <= 0 or card.lower() in pl.BASIC_LAND_NAMES:
+            if extra <= 0 or pl.is_basic(card):
                 continue
             if not bank.card_ok(card):
                 stats["pool_card_no_embedding"] += 1
                 continue
-            if pl.det_features(bank.emb[card])["is_land"] > 0.5:
+            if layout.is_land_embedding(bank.emb[card]):
                 continue                       # only nonland cards may move
             unused.extend([card] * extra)
         if not unused:
             stats["no_unused_spell"] += 1
             continue
 
-        mvs = [float(pl.det_features(bank.emb[c])["mv"]) for c in spells]
+        mvs = [float(bank.emb[c][-pl.FC + layout.MANA_VALUE]) for c in spells]
         out.append({
             "line": int(idx),
             "set": pset,
@@ -224,8 +193,6 @@ def load_aligned_pairs(bank: DeckBank, n_decks: int,
     stats["pairs_used"] = len(out)
     return out, stats
 
-
-# ================================================================= probe A
 
 def load_t0(limit: int | None = None) -> list[dict]:
     """t0_decks.csv rows; a seeded random subsample when limited.
@@ -242,23 +209,17 @@ def load_t0(limit: int | None = None) -> list[dict]:
     return rows
 
 
-def probe_a(rows: list[dict]) -> dict:
-    header("A -- BUILDER FINGERPRINT (H-fingerprint)")
-
-    # ---- deck-size signature, all methods
-    per_method: dict[str, dict] = {}
+def method_sizes(rows: list[dict]) -> dict[str, dict]:
+    """Per builder method, the nonbasic card and spell count signature."""
     by_method: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         by_method[r["method"]].append(r)
-    print("\n### Nonbasic card / spell counts by builder method\n")
-    print("| method | n | n_cards mean | n_cards mode | share n_cards<=22 | "
-          "n_spells mean | n_spells mode | share n_spells<=22 |")
-    print("|---|---|---|---|---|---|---|---|")
+    per_method: dict[str, dict] = {}
     for m in sorted(by_method):
         sub = by_method[m]
         nc = np.array([int(r["n_cards"]) for r in sub])
         ns = np.array([int(r["n_spells"]) for r in sub])
-        rec = {
+        per_method[m] = {
             "n": len(sub),
             "n_cards_mean": float(nc.mean()),
             "n_cards_mode": int(Counter(nc.tolist()).most_common(1)[0][0]),
@@ -269,15 +230,75 @@ def probe_a(rows: list[dict]) -> dict:
             "n_spells_hist": {int(k): int(v) for k, v in
                               sorted(Counter(ns.tolist()).items())[:40]},
         }
-        per_method[m] = rec
-        print(f"| {m} | {rec['n']} | {rec['n_cards_mean']:.2f} | "
-              f"{rec['n_cards_mode']} | {100 * rec['share_cards_le22']:.1f}% | "
-              f"{rec['n_spells_mean']:.2f} | {rec['n_spells_mode']} | "
-              f"{100 * rec['share_spells_le22']:.1f}% |")
+    print("\n### Nonbasic card / spell counts by builder method\n")
+    print_table(["method", "n", "n_cards mean", "n_cards mode", "share n_cards<=22",
+                 "n_spells mean", "n_spells mode", "share n_spells<=22"],
+                [[m, r["n"], f"{r['n_cards_mean']:.2f}", r["n_cards_mode"],
+                  f"{100 * r['share_cards_le22']:.1f}%", f"{r['n_spells_mean']:.2f}",
+                  r["n_spells_mode"], f"{100 * r['share_spells_le22']:.1f}%"]
+                 for m, r in per_method.items()])
     print("\n(n_cards counts NONBASIC cards only, so basics are excluded from "
           "both columns; n_spells strips nonbasic lands too.)")
+    return per_method
 
-    # ---- fingerprint classifier on the two families
+
+def print_partials(header: str, subject: str, raw: float, partial1: float, partial2: float,
+                   spearman_raw: float | None = None) -> None:
+    """The score's raw and partial correlations with a builder-family measure."""
+    rows = [[f"{subject}, raw", fmt(raw)]]
+    if spearman_raw is not None:
+        rows.append([f"{subject}, spearman", fmt(spearman_raw)])
+    rows += [[f"{subject}, partial | mean_score_play", fmt(partial1)],
+             [f"{subject}, partial | mean_score_play + n_creatures + n_colors", fmt(partial2)]]
+    print_table([header, "pearson"], rows)
+
+
+def fit_fingerprint(keep: list[dict], y: np.ndarray, score: np.ndarray, msp: np.ndarray,
+                    controls: np.ndarray, feats: list[str], tag: str) -> dict:
+    """Recover the builder family from ``feats`` and correlate the score with it."""
+    Xr = np.array([[float(r[c]) for c in feats] for r in keep])
+    mu, sd = Xr.mean(0), Xr.std(0)
+    sd[sd == 0] = 1.0
+    X = np.column_stack([np.ones(len(Xr)), (Xr - mu) / sd])
+    w = logistic_irls(X, y, lam=1e-3)
+    p_gen = sigmoid(X @ w)
+    auc_gen = auc(y, p_gen)
+    sep = float(np.mean((p_gen > 0.01) & (p_gen < 0.99)))
+
+    print(f"\n### Fingerprint classifier [{tag}]  (y=1 is the gen family)\n")
+    print(f"rows: {len(keep)}  gen={int(y.sum())}  "
+          f"forge={int((1 - y).sum())}")
+    print(f"features: {', '.join(feats)} (standardized, L2 lambda=1e-3)")
+    print(f"AUC(P_hat(gen) vs family) = {fmt(auc_gen)}   "
+          f"accuracy@0.5 = {fmt(((p_gen > 0.5) == (y > 0.5)).mean())}   "
+          f"share of P_hat strictly inside (0.01, 0.99) = {fmt(sep, 3)}")
+    print()
+    print_table(["feature", "standardized coef"],
+                [[f, f"{c:+.4f}"] for f, c in zip(["(intercept)"] + feats, w)])
+
+    r_raw = pearson(score, p_gen)
+    rs_raw = spearman(score, p_gen)
+    r1 = pearson(resid(score, msp), resid(p_gen, msp))
+    r2 = pearson(resid(score, controls), resid(p_gen, controls))
+    print()
+    print_partials("relation", "score vs P_hat(gen)", r_raw, r1, r2, spearman_raw=rs_raw)
+    return {
+        "features": feats, "auc_gen": auc_gen,
+        "acc_at_half": float(((p_gen > 0.5) == (y > 0.5)).mean()),
+        "share_unsaturated": sep,
+        "coef_standardized": dict(zip(["intercept"] + feats, w.tolist())),
+        "feature_mean": dict(zip(feats, mu.tolist())),
+        "feature_std": dict(zip(feats, sd.tolist())),
+        "pearson_score_phat": r_raw, "spearman_score_phat": rs_raw,
+        "partial_corr_ctrl_msp": r1,
+        "partial_corr_ctrl_msp_creat_colors": r2,
+    }
+
+
+def probe_a(rows: list[dict]) -> dict:
+    banner("A -- BUILDER FINGERPRINT (H-fingerprint)")
+    per_method = method_sizes(rows)
+
     used = [r for r in rows
             if r["method"] in FORGE_FAMILY or r["method"] in GEN_FAMILY]
     cols = FP_FEATURES + ["score", "mean_score_play"]
@@ -295,63 +316,14 @@ def probe_a(rows: list[dict]) -> dict:
         return {"per_method": per_method, "n_rows": len(keep)}
 
     y = np.array([1.0 if r["method"] in GEN_FAMILY else 0.0 for r in keep])
-    score = np.array([float(r["score"]) for r in keep])
-    msp = np.array([float(r["mean_score_play"]) for r in keep])
-    n_creat = np.array([float(r["n_creatures"]) for r in keep])
-    n_col = np.array([float(r["n_colors"]) for r in keep])
-
+    score, msp, n_creat, n_col = (np.array([float(r[c]) for r in keep]) for c in
+                                  ("score", "mean_score_play", "n_creatures", "n_colors"))
     C2 = np.column_stack([msp, n_creat, n_col])
     r_score_msp = pearson(score, msp)
 
-    def fit(feats: list[str], tag: str) -> dict:
-        Xr = np.array([[float(r[c]) for c in feats] for r in keep])
-        mu, sd = Xr.mean(0), Xr.std(0)
-        sd[sd == 0] = 1.0
-        X = np.column_stack([np.ones(len(Xr)), (Xr - mu) / sd])
-        w = logistic_irls(X, y, lam=1e-3)
-        p_gen = sigmoid(X @ w)
-        auc_gen = auc(y, p_gen)
-        sep = float(np.mean((p_gen > 0.01) & (p_gen < 0.99)))
-
-        print(f"\n### Fingerprint classifier [{tag}]  (y=1 is the gen family)\n")
-        print(f"rows: {len(keep)}  gen={int(y.sum())}  "
-              f"forge={int((1 - y).sum())}")
-        print(f"features: {', '.join(feats)} (standardized, L2 lambda=1e-3)")
-        print(f"AUC(P_hat(gen) vs family) = {fmt(auc_gen)}   "
-              f"accuracy@0.5 = {fmt(((p_gen > 0.5) == (y > 0.5)).mean())}   "
-              f"share of P_hat strictly inside (0.01, 0.99) = {fmt(sep, 3)}")
-        print("\n| feature | standardized coef |")
-        print("|---|---|")
-        print(f"| (intercept) | {w[0]:+.4f} |")
-        for f_, c_ in zip(feats, w[1:]):
-            print(f"| {f_} | {c_:+.4f} |")
-
-        r_raw = pearson(score, p_gen)
-        rs_raw = spearman(score, p_gen)
-        r1 = pearson(resid(score, msp), resid(p_gen, msp))
-        r2 = pearson(resid(score, C2), resid(p_gen, C2))
-        print("\n| relation | pearson |")
-        print("|---|---|")
-        print(f"| score vs P_hat(gen), raw | {fmt(r_raw)} |")
-        print(f"| score vs P_hat(gen), spearman | {fmt(rs_raw)} |")
-        print(f"| score vs P_hat(gen), partial \\| mean_score_play | {fmt(r1)} |")
-        print("| score vs P_hat(gen), partial \\| mean_score_play + "
-              f"n_creatures + n_colors | {fmt(r2)} |")
-        return {
-            "features": feats, "auc_gen": auc_gen,
-            "acc_at_half": float(((p_gen > 0.5) == (y > 0.5)).mean()),
-            "share_unsaturated": sep,
-            "coef_standardized": dict(zip(["intercept"] + feats, w.tolist())),
-            "feature_mean": dict(zip(feats, mu.tolist())),
-            "feature_std": dict(zip(feats, sd.tolist())),
-            "pearson_score_phat": r_raw, "spearman_score_phat": rs_raw,
-            "partial_corr_ctrl_msp": r1,
-            "partial_corr_ctrl_msp_creat_colors": r2,
-        }
-
     print("\n### Score vs recovered builder identity")
     print(f"\nreference: pearson(score, mean_score_play) = {fmt(r_score_msp)}")
-    main_fit = fit(FP_FEATURES, "specified 6 features")
+    main_fit = fit_fingerprint(keep, y, score, msp, C2, FP_FEATURES, "specified 6 features")
 
     # The two size features encode n_spells (= n_cards - n_nonbasic_lands),
     # which is exactly 23 for every gen deck and never 23 for a Forge deck, so
@@ -360,18 +332,15 @@ def probe_a(rows: list[dict]) -> dict:
     # and whether the score still tracks them -- once that giveaway is gone.
     shape_feats = [f for f in FP_FEATURES
                    if f not in ("n_cards", "n_nonbasic_lands")]
-    shape_fit = fit(shape_feats, "size-free control")
+    shape_fit = fit_fingerprint(keep, y, score, msp, C2, shape_feats, "size-free control")
 
     # Direct reference: correlation with the true family label.
     r_lab = pearson(score, y)
     r_lab1 = pearson(resid(score, msp), resid(y, msp))
     r_lab2 = pearson(resid(score, C2), resid(y, C2))
-    print("\n| relation (true family label, not P_hat) | pearson |")
-    print("|---|---|")
-    print(f"| score vs is_gen_family, raw | {fmt(r_lab)} |")
-    print(f"| score vs is_gen_family, partial \\| mean_score_play | {fmt(r_lab1)} |")
-    print("| score vs is_gen_family, partial \\| mean_score_play + "
-          f"n_creatures + n_colors | {fmt(r_lab2)} |")
+    print()
+    print_partials("relation (true family label, not P_hat)", "score vs is_gen_family",
+                   r_lab, r_lab1, r_lab2)
 
     if main_fit["share_unsaturated"] < 0.05:
         print("\nNOTE: the specified feature set separates the two families "
@@ -402,11 +371,9 @@ def probe_a(rows: list[dict]) -> dict:
     }
 
 
-# ================================================================= probe B
-
 def probe_b(probe: pl.Probe, bank: DeckBank, pairs: list[dict],
             chunk: int) -> dict:
-    header("B -- LAND-COUNT OPINION (H-landcount)")
+    banner("B -- LAND-COUNT OPINION (H-landcount)")
     if not pairs:
         print("no usable pairs")
         return {}
@@ -451,33 +418,24 @@ def probe_b(probe: pl.Probe, bank: DeckBank, pairs: list[dict],
     labels = ["22 spells", "23 spells (as built)", "24 spells"]
 
     print("\n### Which spell count does the scorer prefer?\n")
-    print("| variant | share preferred | n |")
-    print("|---|---|---|")
-    for k, lb in enumerate(labels):
-        print(f"| {lb} | {100 * (pref == k).mean():.1f}% | "
-              f"{int((pref == k).sum())} |")
+    print_table(["variant", "share preferred", "n"],
+                [[lb, f"{100 * (pref == k).mean():.1f}%", int((pref == k).sum())]
+                 for k, lb in enumerate(labels)])
 
     print("\n### Score deltas vs the as-built 23-spell deck\n")
-    print("| change | mean dScore | median | std | share > 0 |")
-    print("|---|---|---|---|---|")
     rows = [("drop worst-label spell -> 22", d22),
             ("add best-label spell   -> 24", d24),
             ("drop RANDOM spell      -> 22 (control)", d22r),
             ("add RANDOM spell       -> 24 (control)", d24r)]
-    for name, d in rows:
-        print(f"| {name} | {d.mean():+.4f} | {np.median(d):+.4f} | "
-              f"{d.std():.4f} | {100 * (d > 0).mean():.1f}% |")
+    print_table(["change", "mean dScore", "median", "std", "share > 0"],
+                [[name, f"{d.mean():+.4f}", f"{np.median(d):+.4f}", f"{d.std():.4f}",
+                  f"{100 * (d > 0).mean():.1f}%"] for name, d in rows])
 
-    # ---- curve conditioning
     mv = np.array([r["avg_spell_mv"] for r in pairs])
     nb = min(5, max(2, len(pairs) // 8))
     edges = np.unique(np.quantile(mv, np.linspace(0, 1, nb + 1)))
     bin_idx = np.clip(np.digitize(mv, edges[1:-1]), 0, len(edges) - 2)
     bins = []
-    print("\n### Delta by deck curve (avg nonland MV bins)\n")
-    print("| MV bin | n | mean MV | mean d(24-23) | mean d(22-23) | "
-          "mean d(24r-23) | pref 22/23/24 |")
-    print("|---|---|---|---|---|---|---|")
     for b in range(len(edges) - 1):
         sel = bin_idx == b
         if not sel.any():
@@ -493,20 +451,21 @@ def probe_b(probe: pl.Probe, bank: DeckBank, pairs: list[dict],
             "pref_shares": p,
         }
         bins.append(rec)
-        print(f"| [{edges[b]:.2f}, {edges[b + 1]:.2f}] | {rec['n']} | "
-              f"{rec['mean_mv']:.2f} | {rec['mean_d24']:+.4f} | "
-              f"{rec['mean_d22']:+.4f} | {rec['mean_d24_rand']:+.4f} | "
-              f"{100 * p[0]:.0f}/{100 * p[1]:.0f}/{100 * p[2]:.0f} |")
+    print("\n### Delta by deck curve (avg nonland MV bins)\n")
+    print_table(["MV bin", "n", "mean MV", "mean d(24-23)", "mean d(22-23)",
+                 "mean d(24r-23)", "pref 22/23/24"],
+                [[f"[{r['lo']:.2f}, {r['hi']:.2f}]", r["n"], f"{r['mean_mv']:.2f}",
+                  f"{r['mean_d24']:+.4f}", f"{r['mean_d22']:+.4f}", f"{r['mean_d24_rand']:+.4f}",
+                  "/".join(f"{100 * x:.0f}" for x in r["pref_shares"])] for r in bins])
 
     print("\n### Count effect vs card-quality effect\n")
     print("The random-card variants change the spell COUNT without choosing a "
           "good/bad card,\nso they isolate the scorer's raw count preference; "
           "the residual is what picking\nthe worst/best card by empirical "
           "label buys.\n")
-    print("| step | count effect (random card) | quality effect (greedy - random) |")
-    print("|---|---|---|")
-    print(f"| 23 -> 22 | {d22r.mean():+.4f} | {(d22 - d22r).mean():+.4f} |")
-    print(f"| 23 -> 24 | {d24r.mean():+.4f} | {(d24 - d24r).mean():+.4f} |")
+    print_table(["step", "count effect (random card)", "quality effect (greedy - random)"],
+                [["23 -> 22", f"{d22r.mean():+.4f}", f"{(d22 - d22r).mean():+.4f}"],
+                 ["23 -> 24", f"{d24r.mean():+.4f}", f"{(d24 - d24r).mean():+.4f}"]])
 
     slope = pearson(mv, d24)
     print(f"\npearson(avg nonland MV, d(24-23)) = {fmt(slope)}  "
@@ -539,21 +498,13 @@ def probe_b(probe: pl.Probe, bank: DeckBank, pairs: list[dict],
     }
 
 
-# ================================================================= probe C
-
-def probe_c(probe: pl.Probe, bank: DeckBank, limit: int | None,
-            chunk: int, min_n: int = 30) -> dict:
-    header("C -- PER-SET BLIND SPOTS + SCORE CALIBRATION (H-perset)")
-    raw, undecided, malformed = pl.decided_matches(MATCH_FILE, limit)
-    print(f"parsed {len(raw)} decided matches "
-          f"({undecided} undecided, {malformed} malformed) from "
-          f"{MATCH_FILE.name}")
-
+def oriented_matches(bank: DeckBank, raw: list) -> tuple[list[tuple], int, int]:
+    """``(recs, dropped, flipped)``: per kept match ``(set, pair, ia, ib, a_won)``
+    with its sides coin-flipped."""
     rng = np.random.default_rng([SEED, 2])
     recs, dropped, flipped = [], 0, 0
     for m, winner in raw:
-        set_code, m_a, deck_a, m_b, deck_b = (m.set_code, m.method_a, m.deck_a.cards,
-                                              m.method_b, m.deck_b.cards)
+        m_a, deck_a, m_b, deck_b = m.method_a, m.deck_a.cards, m.method_b, m.deck_b.cards
         # Side A is systematically the newer builder in this corpus; a seeded
         # coin flip makes the calibration table symmetric around delta=0.
         if rng.random() < 0.5:
@@ -564,27 +515,15 @@ def probe_c(probe: pl.Probe, bank: DeckBank, limit: int | None,
         if ia is None or ib is None:
             dropped += 1
             continue
-        recs.append((set_code, " vs ".join(sorted((m_a, m_b))), ia, ib,
+        recs.append((m.set_code, " vs ".join(sorted((m_a, m_b))), ia, ib,
                      1.0 if winner == "A" else 0.0))
-    print(f"kept {len(recs)} matches ({dropped} dropped for missing "
-          f"embeddings, {flipped} orientation-flipped); "
-          f"{len(bank.keys)} distinct decks, "
-          f"{len(bank.emb) + len(bank.missing)} cards cached")
-    if not recs:
-        return {}
+    return recs, dropped, flipped
 
-    print(f"scoring {len(bank.keys)} distinct decks ...")
-    s = bank.score_all(probe, list(range(len(bank.keys))), chunk)
-    delta = np.array([s[ia] - s[ib] for _, _, ia, ib, _ in recs])
-    y = np.array([w for _, _, _, _, w in recs])
-    sets = [r[0] for r in recs]
-    pairs = [r[1] for r in recs]
-    correct = np.where(delta > 0, y, np.where(delta < 0, 1 - y, 0.5))
 
-    print(f"\noverall pairwise accuracy = {fmt(correct.mean())} "
-          f"(n={len(correct)}, ties {100 * (delta == 0).mean():.1f}%)")
-
-    # ---- per set
+def per_set_accuracy(correct: np.ndarray, delta: np.ndarray, sets: list[str],
+                     min_n: int) -> tuple[dict, dict, list[str], dict]:
+    """``(per_set, eligible, order, spread)``: accuracy by set, the sets with
+    ``min_n`` matches worst first, and how far their spread exceeds sampling noise."""
     by_set: dict[str, list[int]] = defaultdict(list)
     for i, sc in enumerate(sets):
         by_set[sc].append(i)
@@ -595,15 +534,13 @@ def probe_c(probe: pl.Probe, bank: DeckBank, limit: int | None,
     order = sorted(elig, key=lambda k: elig[k]["acc"])
     print(f"\n### Accuracy by set (n >= {min_n}; {len(elig)} of "
           f"{len(per_set)} sets qualify)\n")
-    print("| rank | worst set | n | acc | | best set | n | acc |")
-    print("|---|---|---|---|---|---|---|---|")
-    for i in range(min(8, len(order))):
-        lo = order[i]
-        hi = order[-(i + 1)] if len(order) > i else None
-        left = f"| {i + 1} | {lo} | {elig[lo]['n']} | {fmt(elig[lo]['acc'], 3)} |"
-        right = (f" | {hi} | {elig[hi]['n']} | {fmt(elig[hi]['acc'], 3)} |"
-                 if hi else " | | | |")
-        print(left + right)
+
+    def side(name: str | None) -> list:
+        return [name, elig[name]["n"], fmt(elig[name]["acc"], 3)] if name else ["", "", ""]
+
+    print_table(["rank", "worst set", "n", "acc", "", "best set", "n", "acc"],
+                [[i + 1] + side(order[i]) + [""] + side(order[-(i + 1)])
+                 for i in range(min(8, len(order)))])
     spread = {}
     if elig:
         accs = np.array([v["acc"] for v in elig.values()])
@@ -626,27 +563,11 @@ def probe_c(probe: pl.Probe, bank: DeckBank, limit: int | None,
               f"{2 * np.sqrt(0.25 / min_n):.3f} at 2 SE, so the worst/best "
               "lists above are\nmostly noise unless the excess sd is "
               "comparable to the observed sd.")
+    return per_set, elig, order, spread
 
-    # ---- method-pair x set cells
-    by_cell: dict[tuple, list[int]] = defaultdict(list)
-    for i, (sc, pr) in enumerate(zip(sets, pairs)):
-        by_cell[(pr, sc)].append(i)
-    cells = sorted(by_cell.items(), key=lambda kv: -len(kv[1]))[:12]
-    per_cell = []
-    print("\n### Largest method-pair x set cells\n")
-    print("| method pair | set | n | acc |")
-    print("|---|---|---|---|")
-    for (pr, sc), ix in cells:
-        acc = float(correct[ix].mean())
-        per_cell.append({"pair": pr, "set": sc, "n": len(ix), "acc": acc})
-        print(f"| {pr} | {sc} | {len(ix)} | {fmt(acc, 3)} |")
 
-    per_pair = {}
-    for pr in sorted(set(pairs)):
-        ix = [i for i, p in enumerate(pairs) if p == pr]
-        per_pair[pr] = {"n": len(ix), "acc": float(correct[ix].mean())}
-
-    # ---- calibration
+def calibration(delta: np.ndarray, y: np.ndarray) -> tuple[list[dict], dict]:
+    """Decile table of score margin vs empirical win rate, and the Platt fit."""
     a, b = logistic_irls(np.column_stack([np.ones(len(delta)), delta]), y,
                          lam=1e-6)
     p_fit = sigmoid(a + b * delta)
@@ -655,24 +576,22 @@ def probe_c(probe: pl.Probe, bank: DeckBank, limit: int | None,
     edges = np.unique(np.quantile(delta, np.linspace(0, 1, nb + 1)))
     bidx = np.clip(np.digitize(delta, edges[1:-1]), 0, len(edges) - 2)
     calib = []
-    print("\n### Score margin -> win probability (deciles of "
-          "delta = s(A) - s(B))\n")
-    print("| bin | delta range | n | mean delta | empirical P(A wins) | "
-          "fitted sigmoid(a+b*delta) | raw sigmoid(delta) |")
-    print("|---|---|---|---|---|---|---|")
     for k in range(len(edges) - 1):
         sel = bidx == k
         if not sel.any():
             continue
-        rec = {"bin": k + 1, "lo": float(edges[k]), "hi": float(edges[k + 1]),
-               "n": int(sel.sum()), "mean_delta": float(delta[sel].mean()),
-               "emp_p": float(y[sel].mean()),
-               "fit_p": float(p_fit[sel].mean()),
-               "raw_sigmoid_p": float(p_raw[sel].mean())}
-        calib.append(rec)
-        print(f"| {k + 1} | [{edges[k]:+.2f}, {edges[k + 1]:+.2f}] | "
-              f"{rec['n']} | {rec['mean_delta']:+.3f} | {rec['emp_p']:.3f} | "
-              f"{rec['fit_p']:.3f} | {rec['raw_sigmoid_p']:.3f} |")
+        calib.append({"bin": k + 1, "lo": float(edges[k]), "hi": float(edges[k + 1]),
+                      "n": int(sel.sum()), "mean_delta": float(delta[sel].mean()),
+                      "emp_p": float(y[sel].mean()),
+                      "fit_p": float(p_fit[sel].mean()),
+                      "raw_sigmoid_p": float(p_raw[sel].mean())})
+    print("\n### Score margin -> win probability (deciles of "
+          "delta = s(A) - s(B))\n")
+    print_table(["bin", "delta range", "n", "mean delta", "empirical P(A wins)",
+                 "fitted sigmoid(a+b*delta)", "raw sigmoid(delta)"],
+                [[r["bin"], f"[{r['lo']:+.2f}, {r['hi']:+.2f}]", r["n"],
+                  f"{r['mean_delta']:+.3f}", f"{r['emp_p']:.3f}", f"{r['fit_p']:.3f}",
+                  f"{r['raw_sigmoid_p']:.3f}"] for r in calib])
 
     eps = 1e-12
     ll = float(np.mean(y * np.log(p_fit + eps) + (1 - y) * np.log(1 - p_fit + eps)))
@@ -684,7 +603,54 @@ def probe_c(probe: pl.Probe, bank: DeckBank, limit: int | None,
           f"  coin flip {0.6931:.4f}")
     print(f"brier          fitted {np.mean((p_fit - y) ** 2):.4f}   "
           f"raw {np.mean((p_raw - y) ** 2):.4f}")
+    return calib, {"intercept": float(a), "slope": float(b),
+                   "logloss_fitted": -ll, "logloss_raw_sigmoid": -ll_raw,
+                   "brier_fitted": float(np.mean((p_fit - y) ** 2)),
+                   "brier_raw": float(np.mean((p_raw - y) ** 2))}
 
+
+def probe_c(probe: pl.Probe, bank: DeckBank, limit: int | None,
+            chunk: int, min_n: int = 30) -> dict:
+    banner("C -- PER-SET BLIND SPOTS + SCORE CALIBRATION (H-perset)")
+    raw, undecided, malformed = pl.decided_matches(MATCH_FILE, limit)
+    print(f"parsed {len(raw)} decided matches "
+          f"({undecided} undecided, {malformed} malformed) from "
+          f"{MATCH_FILE.name}")
+    recs, dropped, flipped = oriented_matches(bank, raw)
+    print(f"kept {len(recs)} matches ({dropped} dropped for missing "
+          f"embeddings, {flipped} orientation-flipped); "
+          f"{len(bank.keys)} distinct decks, "
+          f"{len(bank.emb) + len(bank.missing)} cards cached")
+    if not recs:
+        return {}
+
+    print(f"scoring {len(bank.keys)} distinct decks ...")
+    s = bank.score_all(probe, list(range(len(bank.keys))), chunk)
+    delta = np.array([s[ia] - s[ib] for _, _, ia, ib, _ in recs])
+    y = np.array([w for _, _, _, _, w in recs])
+    sets = [r[0] for r in recs]
+    pairs = [r[1] for r in recs]
+    correct = pairwise_correct(np.where(y > 0.5, delta, -delta))
+
+    print(f"\noverall pairwise accuracy = {fmt(correct.mean())} "
+          f"(n={len(correct)}, ties {100 * (delta == 0).mean():.1f}%)")
+    per_set, elig, order, spread = per_set_accuracy(correct, delta, sets, min_n)
+
+    by_cell: dict[tuple, list[int]] = defaultdict(list)
+    for i, (sc, pr) in enumerate(zip(sets, pairs)):
+        by_cell[(pr, sc)].append(i)
+    per_cell = [{"pair": pr, "set": sc, "n": len(ix), "acc": float(correct[ix].mean())}
+                for (pr, sc), ix in sorted(by_cell.items(), key=lambda kv: -len(kv[1]))[:12]]
+    print("\n### Largest method-pair x set cells\n")
+    print_table(["method pair", "set", "n", "acc"],
+                [[c["pair"], c["set"], c["n"], fmt(c["acc"], 3)] for c in per_cell])
+
+    per_pair = {}
+    for pr in sorted(set(pairs)):
+        ix = [i for i, p in enumerate(pairs) if p == pr]
+        per_pair[pr] = {"n": len(ix), "acc": float(correct[ix].mean())}
+
+    calib, platt = calibration(delta, y)
     return {
         "match_file": str(MATCH_FILE),
         "n_matches": len(recs), "n_dropped": dropped,
@@ -699,19 +665,14 @@ def probe_c(probe: pl.Probe, bank: DeckBank, limit: int | None,
         "per_pair": per_pair,
         "biggest_cells": per_cell,
         "calibration": calib,
-        "platt": {"intercept": float(a), "slope": float(b),
-                  "logloss_fitted": -ll, "logloss_raw_sigmoid": -ll_raw,
-                  "brier_fitted": float(np.mean((p_fit - y) ** 2)),
-                  "brier_raw": float(np.mean((p_raw - y) ** 2))},
+        "platt": platt,
         "delta_std": float(delta.std()),
     }
 
 
-# ================================================================= probe D
-
 def probe_d_swaps(probes: dict[str, pl.Probe], bank: DeckBank, pairs: list[dict],
                   n_swaps: int, chunk: int) -> dict:
-    header("D1 -- SIBLING-CHECKPOINT AGREEMENT (H-swap-resolution)")
+    banner("D1 -- SIBLING-CHECKPOINT AGREEMENT (H-swap-resolution)")
     if not pairs:
         print("no usable decks")
         return {}
@@ -745,21 +706,13 @@ def probe_d_swaps(probes: dict[str, pl.Probe], bank: DeckBank, pairs: list[dict]
                            for d in per_deck]) for n, s in scores.items()}
 
     print("\n### Per-model swap-delta scale\n")
-    print("| model | base score mean | base sd | mean |dScore| per swap | "
-          "share of swaps improving |")
-    print("|---|---|---|---|---|")
-    for n in names:
-        d = deltas[n]
-        print(f"| {n} | {base_scores[n].mean():+.3f} | "
-              f"{base_scores[n].std():.3f} | {np.abs(d).mean():.4f} | "
-              f"{100 * (d > 0).mean():.1f}% |")
+    print_table(["model", "base score mean", "base sd", "mean |dScore| per swap",
+                 "share of swaps improving"],
+                [[n, f"{base_scores[n].mean():+.3f}", f"{base_scores[n].std():.3f}",
+                  f"{np.abs(deltas[n]).mean():.4f}", f"{100 * (deltas[n] > 0).mean():.1f}%"]
+                 for n in names])
 
     out_pairs = []
-    print("\n### Between-model agreement\n")
-    print("| model pair | deck-level spearman (base scores) | "
-          "mean per-deck swap spearman | median | share rho<0 | "
-          "delta sign agreement | top-1 swap agreement |")
-    print("|---|---|---|---|---|---|---|")
     for i in range(len(names)):
         for j in range(i + 1, len(names)):
             a, b = names[i], names[j]
@@ -779,11 +732,15 @@ def probe_d_swaps(probes: dict[str, pl.Probe], bank: DeckBank, pairs: list[dict]
                    "delta_sign_agreement": sign,
                    "top1_swap_agreement": top1}
             out_pairs.append(rec)
-            print(f"| {a} vs {b} | {fmt(deck_rho, 3)} | "
-                  f"{fmt(rec['swap_spearman_mean'], 3)} | "
-                  f"{fmt(rec['swap_spearman_median'], 3)} | "
-                  f"{100 * rec['swap_spearman_share_negative']:.0f}% | "
-                  f"{fmt(sign, 3)} | {fmt(top1, 3)} |")
+    print("\n### Between-model agreement\n")
+    print_table(["model pair", "deck-level spearman (base scores)",
+                 "mean per-deck swap spearman", "median", "share rho<0",
+                 "delta sign agreement", "top-1 swap agreement"],
+                [[r["pair"], fmt(r["deck_spearman"], 3), fmt(r["swap_spearman_mean"], 3),
+                  fmt(r["swap_spearman_median"], 3),
+                  f"{100 * r['swap_spearman_share_negative']:.0f}%",
+                  fmt(r["delta_sign_agreement"], 3), fmt(r["top1_swap_agreement"], 3)]
+                 for r in out_pairs])
     print(f"\nchance level for top-1 swap agreement = "
           f"{1.0 / max(n_swaps, 1):.3f}; for sign agreement ~0.5 when the "
           "improve-rate is balanced.")
@@ -812,7 +769,7 @@ def load_hints() -> dict[str, dict]:
 
 
 def probe_d_joins(wr: dict[str, dict]) -> dict:
-    header("D2 -- FORGE ANNOTATIONS vs WIN-RATE LABELS")
+    banner("D2 -- FORGE ANNOTATIONS vs WIN-RATE LABELS")
     hints = load_hints()
     if not hints:
         print(f"missing {HINTS_CSV} -- run forge_hints.py first")
@@ -823,10 +780,7 @@ def probe_d_joins(wr: dict[str, dict]) -> dict:
     out: dict = {"n_hints": len(hints), "n_win_rates": len(wr),
                  "n_overlap": len(set(hints) & set(wr))}
 
-    # ---- borrowed human taste: draft rank vs empirical label
     print("\n### Borrowed human taste: Forge draft rank vs win-rate labels\n")
-    print("| label | n | spearman(draft_rank, label) | spearman(best rank, label) |")
-    print("|---|---|---|---|")
     taste = {}
     for lab in ("shrunk_score_play", "shrunk_played_rate", "shrunk_cast_lift"):
         xs, xb, ys = [], [], []
@@ -844,13 +798,14 @@ def probe_d_joins(wr: dict[str, dict]) -> dict:
         rho_b = spearman(xb, ys)
         taste[lab] = {"n": len(xs), "spearman_mean_rank": rho,
                       "spearman_best_rank": rho_b}
-        print(f"| {lab} | {len(xs)} | {fmt(rho)} | {fmt(rho_b)} |")
+    print_table(["label", "n", "spearman(draft_rank, label)", "spearman(best rank, label)"],
+                [[lab, t["n"], fmt(t["spearman_mean_rank"]), fmt(t["spearman_best_rank"])]
+                 for lab, t in taste.items()])
     print("\ndraft_rank is normalized position in a set's human pick order, so "
           "LOWER is better;\na negative spearman therefore means human taste "
           "and the empirical labels agree.")
     out["draft_rank_vs_labels"] = taste
 
-    # ---- blacklist inheritance: AI:RemoveDeck cards vs matched controls
     print("\n### Blacklist inheritance: AI:RemoveDeck cards vs matched "
           "controls\n")
     black = {}
@@ -909,13 +864,12 @@ def probe_d_joins(wr: dict[str, dict]) -> dict:
     if black:
         lab = "shrunk_played_rate"
         if lab in black:
-            print("\n| MV bucket | creature | n removed | mean removed | "
-                  "n control | mean control |")
-            print("|---|---|---|---|---|---|")
-            for c in black[lab]["cells"]:
-                print(f"| {c['mv_bucket']} | {c['is_creature']} | "
-                      f"{c['n_removed']} | {c['mean_removed']:+.4f} | "
-                      f"{c['n_control']} | {c['mean_control']:+.4f} |")
+            print()
+            print_table(["MV bucket", "creature", "n removed", "mean removed", "n control",
+                         "mean control"],
+                        [[c["mv_bucket"], c["is_creature"], c["n_removed"],
+                          f"{c['mean_removed']:+.4f}", c["n_control"],
+                          f"{c['mean_control']:+.4f}"] for c in black[lab]["cells"]])
         print("\nA negative matched diff on shrunk_played_rate is the direct "
               "footprint of Forge's\nhand-written blacklist in the corpus: "
               "those cards were rarely put in decks, so the\nlabels -- and any "
@@ -924,7 +878,15 @@ def probe_d_joins(wr: dict[str, dict]) -> dict:
     return out
 
 
-# ==================================================================== main
+SIZES = {
+    "b_decks": Preset(800, 12),
+    "d_decks": Preset(300, 8),
+    "d_swaps": Preset(20, 4),
+    "c_limit": Preset(None, 300),
+    "a_rows": Preset(None, 4000),
+    "chunk": Preset(256, 32),
+}
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -939,18 +901,15 @@ def main() -> None:
     ap.add_argument("--d-decks", type=int, default=None)
     ap.add_argument("--d-swaps", type=int, default=None)
     ap.add_argument("--a-rows", type=int, default=None)
-    ap.add_argument("--chunk", type=int, default=256)
+    ap.add_argument("--chunk", type=int, default=None)
     args = ap.parse_args()
 
+    pl.apply_presets(args, SIZES)
     smoke = args.smoke
-    b_decks = args.b_decks if args.b_decks is not None else (12 if smoke else 800)
-    d_decks = args.d_decks if args.d_decks is not None else (8 if smoke else 300)
-    d_swaps = args.d_swaps if args.d_swaps is not None else (4 if smoke else 20)
-    c_limit = args.c_limit if args.c_limit is not None else (300 if smoke else None)
-    a_rows = args.a_rows if args.a_rows is not None else (4000 if smoke else None)
+    b_decks, d_decks, d_swaps = args.b_decks, args.d_decks, args.d_swaps
+    c_limit, chunk = args.c_limit, args.chunk
     sections = set(args.only.upper())
     device = "cpu" if smoke else None
-    chunk = 32 if smoke else args.chunk
 
     print(f"t7_artifacts: sections={''.join(sorted(sections))} "
           f"smoke={smoke} seed={SEED}")
@@ -964,7 +923,7 @@ def main() -> None:
     }}
 
     if "A" in sections:
-        results["A_builder_fingerprint"] = probe_a(load_t0(a_rows))
+        results["A_builder_fingerprint"] = probe_a(load_t0(args.a_rows))
 
     need_probe = bool({"B", "C", "D"} & sections)
     probe = bank = None
@@ -1017,9 +976,7 @@ def main() -> None:
             probes, bank, pairs[:d_decks], d_swaps, chunk)
         results["D_forge_annotation_joins"] = probe_d_joins(wr)
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(jsonify(results), f, indent=2)
+    write_json(args.out, results)
     print(f"\nwrote {args.out}")
 
 
