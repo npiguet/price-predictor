@@ -52,14 +52,14 @@ from effects.application.corpus_validation.payload_checks import (
     Triggers,
 )
 from effects.application.corpus_validation.presence import FieldPresence
+from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord
-from effects.infrastructure.sidecar_io import SidecarCache
 
 
 def validate_corpus(
     records: Iterable[EffectRecord],
     thresholds: Thresholds | None = None,
-    sidecars: SidecarCache | None = None,
+    sidecars: SidecarLookup | None = None,
     presence: FieldPresence | None = None,
 ) -> Findings:
     """Every invariant, measured over one pass of ``records``.
@@ -82,7 +82,7 @@ def validate_corpus(
     return findings
 
 
-def _checks(sidecars: SidecarCache | None) -> tuple[Check, ...]:
+def _checks(sidecars: SidecarLookup | None) -> tuple[Check, ...]:
     """Every invariant, in the order the report prints them."""
     record_ids = RecordIds()
     return (

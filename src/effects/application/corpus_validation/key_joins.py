@@ -14,12 +14,11 @@ from effects.application.corpus_validation.findings import (
     keep_example,
     share_of,
 )
-from effects.domain.provenance import KeyResolution, ProvenanceKey
+from effects.domain.provenance import KeyResolution, ProvenanceKey, SidecarLookup
 from effects.domain.records import (
     EffectRecord,
     key_sites,
 )
-from effects.infrastructure.sidecar_io import SidecarCache, UnconfiguredTree
 
 
 class JoinOutcome(Enum):
@@ -41,20 +40,18 @@ class _Join(NamedTuple):
     why: str = ""
 
 
-def _join_result(sidecars: SidecarCache, key: ProvenanceKey) -> _Join:
+def _join_result(sidecars: SidecarLookup, key: ProvenanceKey) -> _Join:
     """How ``key`` joins.
 
     ``resolution_of`` rather than ``row_for``, which answers ``None`` both to a
     dropped line (a join) and to a key outside every range (not one).
     """
     try:
-        sidecars.path_for(key.script_file)
-    except UnconfiguredTree:
-        return _Join(JoinOutcome.UNCHECKED)
-    try:
         resolution = sidecars.resolution_of(key)
     except KeyError as exc:
         return _Join(JoinOutcome.UNJOINABLE, f"{key.label}: {exc}")
+    if resolution is KeyResolution.UNCONFIGURED_TREE:
+        return _Join(JoinOutcome.UNCHECKED)
     if resolution is KeyResolution.UNCONVERTED:
         return _Join(
             JoinOutcome.UNJOINABLE, f"{key.script_file}: no sidecar beside the converted card",
@@ -85,7 +82,7 @@ class KeyJoins:
     of its face there, so the keyword finding names that count too.
     """
 
-    def __init__(self, sidecars: SidecarCache | None) -> None:
+    def __init__(self, sidecars: SidecarLookup | None) -> None:
         self.sidecars = sidecars
         #: Every distinct printed-line key the window named, joined once.
         self.keys: set[ProvenanceKey] = set()

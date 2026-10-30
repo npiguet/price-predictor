@@ -183,6 +183,18 @@ class TestSidecarCache:
         with pytest.raises(KeyError, match="no converted root configured"):
             cache.get("variant-scripts/whatever.txt")
 
+    def test_the_join_reports_an_unconfigured_tree_apart_from_an_unconverted_script(
+        self, tmp_path,
+    ):
+        """``validate-corpus`` leaves the first unchecked and fails the second."""
+        from effects.domain.provenance import KeyResolution, ProvenanceKey
+
+        cache = self._write_trees(tmp_path)
+        variant = ProvenanceKey("variant-scripts/whatever.txt", 0, "spell", 0)
+        unconverted = ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "spell", 0)
+        assert cache.resolution_of(variant) is KeyResolution.UNCONFIGURED_TREE
+        assert cache.resolution_of(unconverted) is KeyResolution.UNCONVERTED
+
     def test_a_script_that_was_never_converted_raises_key_error(self, tmp_path):
         """A token entity's key names a card the converted corpus does not hold.
 

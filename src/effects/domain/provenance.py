@@ -39,14 +39,17 @@ class KeyResolution(StrEnum):
     ``DROPPED`` has no text by design (Forge's implicit permanent spell, most
     often); ``RUNTIME_ONLY`` has text the join cannot reach
     (:meth:`ProvenanceSidecar.is_runtime_only`); ``UNCONVERTED`` is a script no
-    sidecar describes. A key inside a declared range and in neither list is not
-    a value: it raises.
+    sidecar describes; ``UNCONFIGURED_TREE`` names a source tree the run was
+    given no root for (a variant key without ``--variant-scripts``), so whether
+    it joins is unknown. A key inside a declared range and in neither list is
+    not a value: it raises.
     """
 
     LINE = "line"
     DROPPED = "dropped"
     RUNTIME_ONLY = "runtime-only"
     UNCONVERTED = "unconverted"
+    UNCONFIGURED_TREE = "unconfigured-tree"
 
 
 @dataclass(frozen=True, slots=True)

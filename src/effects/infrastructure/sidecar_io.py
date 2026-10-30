@@ -418,12 +418,13 @@ class SidecarCache:
         return line.prose_in(rendered)
 
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
-        """The join's answer for a key, with the two no-sidecar cases folded in.
-
-        An unconverted script and an unconfigured tree are both
-        ``UNCONVERTED``; a mismatch inside an existing sidecar still raises.
+        """The join's answer for a key, with the two no-sidecar cases folded in
+        as values: ``UNCONVERTED`` and ``UNCONFIGURED_TREE``. A mismatch inside
+        an existing sidecar still raises.
         """
         try:
             return self.get(key.script_file).resolution_of(key)
-        except (UnconvertedScript, UnconfiguredTree):
+        except UnconfiguredTree:
+            return KeyResolution.UNCONFIGURED_TREE
+        except UnconvertedScript:
             return KeyResolution.UNCONVERTED
