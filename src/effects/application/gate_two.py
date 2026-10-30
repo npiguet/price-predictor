@@ -122,13 +122,12 @@ def read_field(
     raises: a row naming one is a table bug.
     """
     reading = HeadReading(vector)
-    match spec.type:
-        case FieldType.COUNT | FieldType.SIGNED_DELTA:
-            return float(reading.expected(spec.name))
-        case FieldType.CATEGORICAL:
-            if category is None:
-                raise ValueError(f"gate 2 reads a class of {spec.name}, and names none")
-            return float(reading.p_class(spec.name, category))
+    if spec.type.has_magnitude:
+        return float(reading.expected(spec.name))
+    if spec.type is FieldType.CATEGORICAL:
+        if category is None:
+            raise ValueError(f"gate 2 reads a class of {spec.name}, and names none")
+        return float(reading.p_class(spec.name, category))
     raise ValueError(
         f"gate 2 cannot read {spec.name}: no rule for a {spec.type} field"
     )

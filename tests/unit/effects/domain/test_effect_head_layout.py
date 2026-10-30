@@ -89,10 +89,9 @@ class TestFieldActivation:
 
 
 class TestFieldSpec:
-    def test_an_unknown_field_type_is_rejected_by_width(self):
-        spec = FieldSpec("bogus", "not-a-type", FieldScope.PLAYER)  # type: ignore[arg-type]
+    def test_an_unknown_field_type_is_rejected(self):
         with pytest.raises(ValueError, match="unhandled field type"):
-            _ = spec.width
+            FieldSpec("bogus", "not-a-type", FieldScope.PLAYER)  # type: ignore[arg-type]
 
 
 class TestValueHeadLayout:
@@ -102,10 +101,11 @@ class TestValueHeadLayout:
             AT_LEAST_STEPS,
             VALUE_SLICES,
             VALUE_WIDTH,
+            FieldType,
         )
-        from effects.domain.value_targets import VALUE_TARGETS, ValueKind
+        from effects.domain.value_targets import VALUE_TARGETS
 
-        amounts = {n for n, kind in VALUE_TARGETS if kind is not ValueKind.BINARY}
+        amounts = {n for n, kind in VALUE_TARGETS if kind is not FieldType.BINARY}
         assert set(AT_LEAST_SLICES) == amounts
         # The earlier blocks are a prefix: the at-least blocks follow them all.
         first = min(start for start, _ in AT_LEAST_SLICES.values())

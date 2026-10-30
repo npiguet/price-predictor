@@ -197,7 +197,7 @@ class TestLosses:
     def test_the_count_loss_is_nonnegative_at_its_optimum(self):
         """`full=True` adds the Stirling term, so a perfect prediction scores ~0
         instead of k - k ln k, which is -306 for a target of 88 (FR-081)."""
-        from effects.domain.effect_losses import _poisson
+        from effects.domain.field_kinds import poisson as _poisson
         target = torch.tensor([88.0, 3.0, 1.0])
         loss = _poisson(torch.log(target), target)
         assert loss.item() >= 0.0

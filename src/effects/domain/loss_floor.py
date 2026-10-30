@@ -11,50 +11,20 @@ from collections.abc import Mapping, Sequence
 
 import torch
 
+from effects.domain.effect_head_input import MAGNITUDE_CAP
 from effects.domain.effect_head_layout import (
-    DIRECTIONS,
     FIELD_SLICES,
     GATE_INDEX,
     PER_ENTITY_WIDTH,
-    SIGNED_DIRECTIONS,
-    SIGNED_MAGNITUDE,
     FieldSpec,
     FieldType,
 )
-from effects.domain.effect_losses import (
-    LossParts,
-    capped,
-    counted,
-    delta_direction,
-    per_entity_loss,
-)
+from effects.domain.effect_losses import LossParts, per_entity_loss
 from effects.domain.entity_field_targets import EntityTargetBatch
+from effects.domain.field_kinds import FIELD_KINDS
 
 #: A guard on dividing by a floor, not the degenerate-field detector.
 FLOOR_EPSILON = 1e-9
-
-#: Rates are clamped away from zero and one before a log, or an outcome the
-#: sample never showed would make the floor nan.
-_RATE_FLOOR = 1e-6
-
-
-def _mean(values: torch.Tensor) -> torch.Tensor:
-    """The mean, or zero where nothing was selected."""
-    if values.numel() == 0:
-        return torch.zeros(())
-    return values.mean()
-
-
-def _logit(rate: torch.Tensor) -> torch.Tensor:
-    """The logit a BCE-with-logits loss reads back as ``rate``."""
-    rate = rate.clamp(_RATE_FLOOR, 1.0 - _RATE_FLOOR)
-    return torch.log(rate / (1.0 - rate))
-
-
-def _log_frequencies(counts: torch.Tensor) -> torch.Tensor:
-    """Log class frequencies, which cross-entropy reads back as frequencies."""
-    return torch.log((counts / counts.sum()).clamp(min=_RATE_FLOOR))
-
 
 def _supervised(
     batches: Sequence[EntityTargetBatch], name: str,
@@ -91,39 +61,20 @@ def constant_predictor_outputs(
     if supervised is None:
         supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
     vector = torch.zeros(PER_ENTITY_WIDTH)
+    # The gate is one binary column over every real entity.
     real = [batch.gate[batch.real] for batch in batches]
-    vector[GATE_INDEX] = _logit(_mean(torch.cat(real or [torch.zeros(0)])))
+    vector[GATE_INDEX] = FIELD_KINDS[FieldType.BINARY].best_constant(
+        torch.cat(real or [torch.zeros(0)]), arity=1, cap=MAGNITUDE_CAP,
+    )
 
     for spec in fields:
         target = supervised[spec.name]
         if target is None:
             continue
         start, end = FIELD_SLICES[spec.name]
-        match spec.type:
-            case FieldType.BINARY:
-                vector[start:end] = _logit(_mean(target))
-            case FieldType.MULTI_BINARY:
-                vector[start:end] = _logit(target.mean(dim=0))
-            case FieldType.COUNT:
-                vector[start:end] = torch.log(
-                    _mean(counted(target)).clamp(min=_RATE_FLOOR)
-                )
-            case FieldType.SIGNED_DELTA:
-                target = capped(target)
-                direction = delta_direction(target).reshape(-1)
-                columns = vector[start:end]
-                columns[SIGNED_DIRECTIONS] = _log_frequencies(
-                    torch.bincount(direction, minlength=len(DIRECTIONS)).float()
-                )
-                columns[SIGNED_MAGNITUDE] = torch.log(
-                    _mean(target.abs()).clamp(min=_RATE_FLOOR)
-                )
-            case FieldType.CATEGORICAL:
-                vector[start:end] = _log_frequencies(
-                    torch.bincount(
-                        target.long().reshape(-1), minlength=spec.arity,
-                    ).float()
-                )
+        vector[start:end] = FIELD_KINDS[spec.type].best_constant(
+            target, arity=spec.arity, cap=MAGNITUDE_CAP,
+        )
     return vector
 
 

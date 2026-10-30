@@ -21,7 +21,6 @@ from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, HeadFi
 from effects.domain.effect_losses import magnitude_target
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.head_decoding import (
-    MAGNITUDE_TYPES,
     expected_magnitude,
     field_outputs,
 )
@@ -134,7 +133,7 @@ class MarginAccumulator:
 
     def __init__(self, fields) -> None:
         self._magnitude_specs = [
-            spec for spec in fields if spec.type in MAGNITUDE_TYPES
+            spec for spec in fields if spec.type.has_magnitude
         ]
         self._gate_pred: list[np.ndarray] = []
         self._gate_true: list[np.ndarray] = []

@@ -18,37 +18,31 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from enum import StrEnum
 from functools import lru_cache
 
+from effects.domain.field_types import FieldType
 from effects.domain.script_text import api_of, params, segments
 from effects.domain.state_snapshot import COLORS
 from price_predictor.domain.value_objects import ManaCost
 
-
-class ValueKind(StrEnum):
-    COUNT = "count"
-    SIGNED = "signed"
-    BINARY = "binary"
-
-
-#: ``(target, kind)`` in the head's output order: append, never reorder.
-VALUE_TARGETS: tuple[tuple[str, ValueKind], ...] = (
-    ("damage", ValueKind.COUNT),
-    ("power_change", ValueKind.SIGNED),
-    ("toughness_change", ValueKind.SIGNED),
-    ("counters_placed", ValueKind.COUNT),
-    ("counters_removed", ValueKind.COUNT),
-    ("cards_drawn", ValueKind.COUNT),
-    ("mana_w", ValueKind.COUNT),
-    ("mana_u", ValueKind.COUNT),
-    ("mana_b", ValueKind.COUNT),
-    ("mana_r", ValueKind.COUNT),
-    ("mana_g", ValueKind.COUNT),
-    ("mana_c", ValueKind.COUNT),
-    ("mana_generic", ValueKind.COUNT),
-    ("cost_taps", ValueKind.BINARY),
-    ("cost_sacrifices", ValueKind.BINARY),
+#: ``(target, type)`` in the head's output order: append, never reorder. Each
+#: target is predicted and scored as a per-entity field of its type is.
+VALUE_TARGETS: tuple[tuple[str, FieldType], ...] = (
+    ("damage", FieldType.COUNT),
+    ("power_change", FieldType.SIGNED_DELTA),
+    ("toughness_change", FieldType.SIGNED_DELTA),
+    ("counters_placed", FieldType.COUNT),
+    ("counters_removed", FieldType.COUNT),
+    ("cards_drawn", FieldType.COUNT),
+    ("mana_w", FieldType.COUNT),
+    ("mana_u", FieldType.COUNT),
+    ("mana_b", FieldType.COUNT),
+    ("mana_r", FieldType.COUNT),
+    ("mana_g", FieldType.COUNT),
+    ("mana_c", FieldType.COUNT),
+    ("mana_generic", FieldType.COUNT),
+    ("cost_taps", FieldType.BINARY),
+    ("cost_sacrifices", FieldType.BINARY),
 )
 VALUE_TARGET_NAMES: tuple[str, ...] = tuple(name for name, _ in VALUE_TARGETS)
 
