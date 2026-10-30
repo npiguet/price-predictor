@@ -23,7 +23,7 @@ from effects.application.text_staging import (
     TextStager,
     encode_by_length,
 )
-from effects.domain.ability_encoder import AbilityEncoder, EncodedLine
+from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks, baseline_masks
 from effects.domain.effect_head_input import (
@@ -434,13 +434,14 @@ class SurfaceBatcher:
         return staged.rows, self.materializer.encode(staged, encoder)
 
     def draw_mlm_mask(
-        self, prepared: list[EncodedLine], mask_prob: float,
+        self, inputs: dict[str, torch.Tensor] | None, mask_prob: float,
     ) -> MaskedTokens | None:
-        """Which of ``prepared``'s tokens the MLM pass masks, from this step's
-        generator after the build's own draws (``MlmMasker.draw``)."""
+        """Which of a batch's collated encoder ``inputs`` the MLM pass masks,
+        from this step's generator after the build's own draws
+        (``MlmMasker.draw``)."""
         tokenizer = self.stager.tokenizer
         return MlmMasker(tokenizer.pad_id, tokenizer.mask_id).draw(
-            prepared, mask_prob, self.rng,
+            inputs, mask_prob, self.rng,
         )
 
     def keyword_of_key(self, key) -> str | None:

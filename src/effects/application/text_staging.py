@@ -218,7 +218,7 @@ class MaskedTokens:
 
 @dataclass(frozen=True)
 class MlmMasker:
-    """The MLM pass: a second encoder forward over a batch's prepared lines,
+    """The MLM pass: a second encoder forward over a batch's encoder inputs,
     so the effect head keeps reading the unmasked ``e``. The mask is drawn on
     the host, so the device never has to report which positions it picked."""
 
@@ -226,13 +226,20 @@ class MlmMasker:
     mask_id: int
 
     def draw(
-        self, prepared: list[EncodedLine], mask_prob: float, rng: random.Random,
+        self, inputs: dict[str, torch.Tensor] | None, mask_prob: float,
+        rng: random.Random,
     ) -> MaskedTokens | None:
-        """Which tokens the pass masks, or None when it masks none. Draws from
-        ``rng`` after the build's own draws."""
-        if not prepared or mask_prob <= 0.0:
+        """Which of ``inputs``' tokens the pass masks, or None when it masks
+        none or there are no inputs. Draws from ``rng`` after the build's own
+        draws.
+
+        ``inputs`` are the batch's collated encoder inputs, the main pass's
+        own: every tensor this replaces is a new one in a copy of the dict,
+        so the main pass still reads them unmasked.
+        """
+        if inputs is None or mask_prob <= 0.0:
             return None
-        batch = collate_lines(prepared, self.pad_id)
+        batch = dict(inputs)
         ids = batch["token_ids"]
         generator = torch.Generator().manual_seed(rng.getrandbits(63))
         picks = (torch.rand(ids.shape, generator=generator) < mask_prob)

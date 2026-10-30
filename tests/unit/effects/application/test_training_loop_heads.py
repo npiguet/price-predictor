@@ -90,7 +90,7 @@ class _Batcher:
             surfaces=[], inputs=None,
         )
 
-    def draw_mlm_mask(self, prepared, mask_prob):
+    def draw_mlm_mask(self, inputs, mask_prob):
         self.mlm_calls += 1
         return SimpleNamespace(rows=len(self.encoded.texts))
 

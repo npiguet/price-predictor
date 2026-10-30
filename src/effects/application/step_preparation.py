@@ -387,7 +387,7 @@ class StepPreparer:
             targets[Head.API] = self._api_batch(texts, batch.texts)
         if Head.MLM in heads:
             targets[Head.MLM] = batcher.draw_mlm_mask(
-                batch.staged.prepared, self.config.mlm_mask_prob,
+                batch.staged.encoder_inputs, self.config.mlm_mask_prob,
             )
         return targets
 

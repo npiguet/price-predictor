@@ -391,8 +391,14 @@ def _mlm_batcher() -> SurfaceBatcher:
     return make_batcher(tokenizer=_MaskTokens(), sidecars=_Sidecars())
 
 
+def _mlm_inputs(lines) -> dict:
+    from effects.domain.ability_encoder import collate_lines
+
+    return collate_lines(lines, _MaskTokens.pad_id)
+
+
 def _mlm_pass(batcher, lines, mask_prob):
-    masked = batcher.draw_mlm_mask(lines, mask_prob)
+    masked = batcher.draw_mlm_mask(_mlm_inputs(lines), mask_prob)
     if masked is None:
         return None
     return MlmMasker.forward(_EchoEncoder(), masked, torch.device("cpu"))
@@ -415,7 +421,7 @@ def test_the_mlm_pass_masks_nothing_at_probability_zero():
 
 def test_a_masked_number_carries_no_value():
     """The number embedding would otherwise hand the masked token's value back."""
-    masked = _mlm_batcher().draw_mlm_mask(_mlm_lines([6, 4], number=3.0), 0.5)
+    masked = _mlm_batcher().draw_mlm_mask(_mlm_inputs(_mlm_lines([6, 4], number=3.0)), 0.5)
     picks = masked.inputs["token_ids"] == _MaskTokens.mask_id
     assert picks.any()
     assert torch.all(masked.inputs["numbers"][picks] == 0.0)
