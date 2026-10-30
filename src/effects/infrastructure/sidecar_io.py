@@ -10,7 +10,7 @@ import errno
 import json
 import logging
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -318,14 +318,6 @@ class SidecarCache:
         #: ``script_file -> times asked`` for keys :meth:`line_or_none` read as
         #: no line although the sidecar exists and does not describe them.
         self.undescribed: dict[str, int] = {}
-
-    @classmethod
-    def from_folders(
-        cls, folders: Iterable[Path], variant_scripts: Path | None = None,
-    ) -> SidecarCache:
-        """A cache over ``--cards-folder`` values, each keyed by the tree its
-        name ends in (FR-063b), plus the variant tree where one is given."""
-        return cls(sidecar_roots(folders, variant_scripts))
 
     def path_for(self, script_file: str) -> Path:
         tree, relative = split_script_file(script_file)

@@ -64,15 +64,6 @@ BATCH_RECORDS = 32
 BATCH_OBSERVATIONS = BATCH_RECORDS // 2
 
 
-def build_sidecars(config) -> SidecarCache:
-    """The sidecar roots ``--cards-folder`` names (FR-063b), each keyed by the
-    tree its name ends in, so ``output/gen1-cardsfolder`` serves
-    ``cardsfolder/`` keys."""
-    return SidecarCache.from_folders(
-        config.cards_folders, getattr(config, "variant_scripts", None),
-    )
-
-
 @dataclass(frozen=True, slots=True)
 class Runnable:
     """One checkpoint, ready to run over one set of records."""
@@ -161,11 +152,11 @@ class LoadedModel:
 
 
 def load_model(
-    config, checkpoint, *, vocab_path: Path, keyword_path: Path,
-    sidecars: SidecarCache | None = None,
+    checkpoint, *, vocab_path: Path, keyword_path: Path, sidecars: SidecarCache,
 ) -> LoadedModel:
-    """``checkpoint``'s weights on the device, with its tokenizer;
-    ``sidecars`` lets several loads share one cache."""
+    """``checkpoint``'s weights on the device, with its tokenizer, joining
+    keys through ``sidecars``, which several loads may share
+    (:meth:`SourceTrees.sidecar_cache`)."""
     device = default_device()
     encoder, model = load_weights(checkpoint, device)
     return LoadedModel(
@@ -176,16 +167,18 @@ def load_model(
         identity_table=_identity_table(checkpoint, device),
         surface=surface_of(vocab_path),
         device=device,
-        sidecars=sidecars if sidecars is not None else build_sidecars(config),
+        sidecars=sidecars,
     )
 
 
 def load_runnable(
-    config, checkpoint, *, vocab_path: Path, keyword_path: Path, records,
+    checkpoint, *, vocab_path: Path, keyword_path: Path, sidecars: SidecarCache,
+    records,
 ) -> Runnable:
     """One checkpoint, loaded and ready to run over ``records``."""
     return load_model(
-        config, checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
+        checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
+        sidecars=sidecars,
     ).runnable(records)
 
 

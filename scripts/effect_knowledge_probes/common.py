@@ -21,7 +21,6 @@ import zlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 
@@ -68,9 +67,9 @@ def load_checkpoint(path: Path):
 
 
 def sidecar_cache(cards_folders: Iterable[Path], variant_scripts: Path | None = None):
-    from effects.infrastructure.sidecar_io import SidecarCache
+    from effects.infrastructure.converted_trees import SourceTrees
 
-    return SidecarCache.from_folders(cards_folders, variant_scripts)
+    return SourceTrees.of(cards_folders, variant_scripts).sidecar_cache()
 
 
 def sidecar_paths(cards_folders: Iterable[Path]) -> list[Path]:
@@ -245,11 +244,9 @@ def load_probe_model(
     vocab, keywords = verified_inference_paths(
         checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
     )
-    config = SimpleNamespace(
-        cards_folders=list(cards_folders), variant_scripts=variant_scripts,
-    )
     runnable = load_runnable(
-        config, checkpoint, vocab_path=vocab, keyword_path=keywords, records=records,
+        checkpoint, vocab_path=vocab, keyword_path=keywords,
+        sidecars=sidecar_cache(cards_folders, variant_scripts), records=records,
     )
     return ProbeModel(
         checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,

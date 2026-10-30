@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from effects.application.model_loading import LoadedModel, Runnable
     from effects.domain.corpus_manifest import CorpusManifest
     from effects.domain.split_provenance import SplitProvenance
+    from effects.infrastructure.converted_trees import SourceTrees
     from effects.infrastructure.effect_model_store import EffectCheckpoint
     from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -53,16 +54,14 @@ class EvaluationContext:
     def sidecars(self) -> SidecarCache:
         """The run's one sidecar cache, which every loaded checkpoint shares."""
         if self._sidecars is None:
-            from effects.application.model_loading import build_sidecars
-
-            self._sidecars = build_sidecars(self.config)
+            self._sidecars = self.config.source_trees.sidecar_cache()
         return self._sidecars
 
     def _load(self, checkpoint) -> LoadedModel:
         from effects.application.model_loading import load_model
 
         return load_model(
-            self.config, checkpoint,
+            checkpoint,
             vocab_path=self.vocab_path, keyword_path=self.keyword_path,
             sidecars=self.sidecars,
         )
@@ -88,6 +87,13 @@ class EvaluateEffectModelConfig:
     win_rates: Path = field(
         default_factory=lambda: Path(default_paths.DEFAULT_WIN_RATES),
     )
+
+    @property
+    def source_trees(self) -> SourceTrees:
+        """``--cards-folder`` and ``--variant-scripts`` as one value."""
+        from effects.infrastructure.converted_trees import SourceTrees
+
+        return SourceTrees.of(self.cards_folders, self.variant_scripts)
 
 
 def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:

@@ -894,7 +894,7 @@ class TestHeldOutTextUnit:
     def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
         """A sidecar cache per shard re-read every sidecar the shard named."""
         from effects.application import collect_coverage
-        from effects.infrastructure import sidecar_io
+        from effects.infrastructure import converted_trees, sidecar_io
 
         reads: list[Path] = []
         real_read = sidecar_io.read_sidecar
@@ -904,7 +904,7 @@ class TestHeldOutTextUnit:
             return real_read(path)
 
         monkeypatch.setattr(sidecar_io, "read_sidecar", counting_read)
-        collect_coverage._sidecars.cache_clear()
+        converted_trees._process_sidecars.cache_clear()
         roots = {
             "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
             "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
@@ -913,7 +913,7 @@ class TestHeldOutTextUnit:
         first = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
         read_by_one = len(reads)
         second = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
-        collect_coverage._sidecars.cache_clear()
+        converted_trees._process_sidecars.cache_clear()
 
         assert read_by_one > 0
         assert len(reads) == read_by_one

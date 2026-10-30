@@ -51,7 +51,7 @@ from effects.domain.split import HeldOutCards, HoldoutRule
 from effects.domain.strata import OUTPUT_STRATA
 
 if TYPE_CHECKING:
-    from effects.infrastructure.converted_trees import ConvertedTrees
+    from effects.infrastructure.converted_trees import ConvertedTrees, SourceTrees
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -198,6 +198,13 @@ class BuildCorpusConfig:
 
     def mix(self) -> dict[str, float]:
         return dict(self.class_mix or DEFAULT_KIND_MIX)
+
+    @property
+    def source_trees(self) -> SourceTrees:
+        """``--cards-folder`` and ``--variant-scripts`` as one value."""
+        from effects.infrastructure.converted_trees import SourceTrees
+
+        return SourceTrees.of(self.cards_folders, self.variant_scripts)
 
     @property
     def heap_cap(self) -> int:
@@ -350,13 +357,14 @@ def build(config: BuildCorpusConfig) -> int:
     if config.verify:
         return _verify(config, store)
 
-    trees = _converted_trees(config)
+    roots = config.source_trees.root_paths()
+    trees = _converted_trees(config, roots)
     held_out = _select_holdout(config, trees)
     surface = surface_of(config.vocab_path)
     _log_holdout(config, held_out, surface)
     _refuse_mixed_generations(Path(config.records_dir))
     read = ReadConfig(
-        records_dir=str(config.records_dir), sidecar_roots=trees.root_paths,
+        records_dir=str(config.records_dir), sidecar_roots=roots,
         max_events=config.max_events, held_out=held_out, seed=config.seed,
     )
     survey = _survey(config, read)
@@ -421,11 +429,17 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
     return 0
 
 
-def _converted_trees(config: BuildCorpusConfig) -> ConvertedTrees:
-    """The converted trees, the variant tree among them when one is named."""
-    from effects.infrastructure.converted_trees import ConvertedTrees
+def _converted_trees(config: BuildCorpusConfig, roots: dict[str, str]) -> ConvertedTrees:
+    """The converted trees, the variant tree among them when one is named.
 
-    return ConvertedTrees.from_folders(config.cards_folders, config.variant_scripts)
+    Read through this process's own cache over ``roots``, the one every
+    :class:`WorkerContext` here reads too: the holdout, the fold of keys to
+    texts, the validation samples and an in-process pass share one cache
+    rather than each reading every sidecar again.
+    """
+    from effects.infrastructure.converted_trees import process_sidecars
+
+    return config.source_trees.converted(sidecars=process_sidecars(roots))
 
 
 def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOutCards:

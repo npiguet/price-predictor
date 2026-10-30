@@ -334,9 +334,7 @@ def _keep_unheld(
     config: CollectVariantsConfig, variants: list[GeneratedVariant],
 ) -> list[GeneratedVariant]:
     """:func:`drop_held_out_variants` under the holdout ``build-corpus`` chooses."""
-    from effects.infrastructure.converted_trees import ConvertedTrees
-
-    trees = ConvertedTrees.from_folders(config.cards_folders)
+    trees = config.source_trees.converted()
     if trees.cards_folder is None or not trees.cards_folder.is_dir():
         logger.warning(
             "No converted card tree among %s, so no variant is checked against "

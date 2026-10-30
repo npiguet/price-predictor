@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 
 import torch
 
@@ -45,7 +44,7 @@ from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY, SlotKind
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_model import EffectModel, EffectModelConfig
-from effects.infrastructure.sidecar_io import script_vocabularies, sidecar_roots
+from effects.infrastructure.sidecar_io import script_vocabularies
 
 logger = logging.getLogger(__name__)
 
@@ -104,10 +103,7 @@ def api_vocabularies(config: TrainEffectModelConfig) -> tuple[list[str], list[st
     since the read is every sidecar of every tree."""
     if config.api_weight <= 0.0:
         return [], []
-    folders = list(config.cards_folders)
-    if config.variant_scripts:
-        folders.append(Path(config.variant_scripts))
-    return script_vocabularies(folders)
+    return script_vocabularies(config.source_trees.folders())
 
 
 def preparer_settings(spec: RunSpec, *, widths: dict[SlotKind, int]) -> PreparerSettings:
@@ -213,7 +209,7 @@ def build_run(
 def _identity_table(config: TrainEffectModelConfig, device: torch.device) -> IdentityTable:
     """The identity baseline's table, one row per text the sidecars hold."""
     texts = known_texts(
-        sidecar_roots(config.cards_folders, config.variant_scripts),
+        config.source_trees.sidecar_roots(),
         surface_of(config.vocab_path),
     )
     logger.info("Identity table over %d ability texts.", len(texts))

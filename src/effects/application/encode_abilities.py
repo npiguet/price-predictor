@@ -13,6 +13,7 @@ from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
 from effects.domain.baselines import Baseline, taxonomy_matrix
 from effects.domain.provenance import ProvenanceSidecar
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
+from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.effect_model_store import (
     InferenceCheckpoint,
     load_for_inference,
@@ -34,6 +35,11 @@ class EncodeAbilitiesConfig:
     keyword_definitions: Path | None = None
     output_root: Path = field(default_factory=lambda: DEFAULT_CACHE_ROOT)
     clean: bool = False
+
+    @property
+    def source_trees(self) -> SourceTrees:
+        """``--cards-folder`` and ``--variant-scripts`` as one value."""
+        return SourceTrees.of(self.cards_folders, self.variant_scripts)
 
     def resolved_checkpoint(self) -> Path:
         """The checkpoint this variant reads, so a baseline is never encoded
@@ -63,9 +69,7 @@ def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
     e_dim = loaded.checkpoint.encoder_config.e_dim
     provenance = loaded.checkpoint.provenance
 
-    folders = [Path(f) for f in config.cards_folders]
-    if config.variant_scripts:
-        folders.append(Path(config.variant_scripts))
+    folders = config.source_trees.folders()
     # A relative default resolved from another directory names nothing, and
     # skipping it would write a cache missing whole trees and report success.
     missing = [str(f) for f in folders if not f.is_dir()]

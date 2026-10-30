@@ -22,6 +22,7 @@ from effects.domain.split import HoldoutRule
 if TYPE_CHECKING:
     from effects.domain.coverage import DeckCandidate
     from effects.infrastructure.collector_connector import CollectorSupervisor
+    from effects.infrastructure.converted_trees import SourceTrees
 
 DEFAULT_RECORDS_DIR = Path(default_paths.DEFAULT_RECORDS_DIR)
 #: Java worker processes, for both collectors.
@@ -53,6 +54,14 @@ class CollectorConfig:
     #: credits a game to a held-out text by it. Given the flags
     #: ``build-corpus`` is, so the three agree.
     holdout: HoldoutRule = HoldoutRule()
+
+    @property
+    def source_trees(self) -> SourceTrees:
+        """The converted trees the decks and the holdout read: ``--cards-folder``
+        alone, since a collector's own variant tree is one it writes."""
+        from effects.infrastructure.converted_trees import SourceTrees
+
+        return SourceTrees.of(self.cards_folders)
 
     def holdout_source(self) -> HoldoutSource:
         return HoldoutSource(

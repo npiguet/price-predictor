@@ -254,7 +254,6 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
     import shutil
     from pathlib import Path
 
-    from effects.application.model_loading import build_sidecars
     from effects.domain.provenance import ProvenanceKey
     from tests.unit.effects.builders import make_preparer
 
@@ -265,7 +264,7 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
     config = TrainEffectModelConfig(corpus=str(tmp_path), cards_folders=(kept,))
 
     trainer = make_preparer(tmp_path, cards_folders=(kept,)).sidecars
-    for sidecars in (trainer, build_sidecars(config)):
+    for sidecars in (trainer, config.source_trees.sidecar_cache()):
         assert sidecars.path_for(key.script_file).parent.parent == kept
         sidecars.resolution_of(key)  # neither raises nor reports no tree
 

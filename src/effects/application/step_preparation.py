@@ -57,7 +57,6 @@ from effects.domain.split import (
 )
 from effects.domain.surface_collation import entity_target_tensors
 from effects.domain.value_targets import value_targets
-from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 
 #: Rarity-bucket label for a record with no acting text (combat, legality).
@@ -241,9 +240,7 @@ class StepPreparer:
         self.tokenizer = load_tokenizer(
             self.config.vocab_path, self.config.keyword_definitions,
         )
-        self.sidecars = SidecarCache.from_folders(
-            self.config.cards_folders, self.config.variant_scripts,
-        )
+        self.sidecars = self.config.source_trees.sidecar_cache()
         #: One memoised join for the run, not per step.
         self.resolver = KeyResolver(self.sidecars, self.surface)
         self._keywords = KeywordResolver(self.sidecars)

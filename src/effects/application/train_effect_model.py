@@ -22,7 +22,7 @@ from effects.domain.effect_head_layout import active_fields
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.text_holdout import HoldoutUnit, normalize_script_text
-from effects.infrastructure.converted_trees import ConvertedTrees
+from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
 
@@ -218,6 +218,11 @@ class TrainEffectModelConfig:
             raise ValueError(
                 f"--encoder-layers must be at least 1, got {self.encoder_layers}."
             )
+
+    @property
+    def source_trees(self) -> SourceTrees:
+        """``--cards-folder`` and ``--variant-scripts`` as one value."""
+        return SourceTrees.of(self.cards_folders, self.variant_scripts)
 
     def resolved_model_output(self) -> Path:
         from effects.infrastructure.effect_model_store import model_output_for
@@ -428,7 +433,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
             "the corpus's; rebuild it with build-corpus --holdout-unit "
             f"{config.holdout_unit}, or drop the flag."
         )
-    trees = ConvertedTrees.from_folders(config.cards_folders)
+    trees = SourceTrees.of(config.cards_folders).converted()
     cards_folder = trees.cards_folder
     if cards_folder is None or not cards_folder.is_dir():
         raise HoldoutMismatchError(

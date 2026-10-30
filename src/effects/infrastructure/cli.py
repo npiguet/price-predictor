@@ -769,10 +769,10 @@ def _sidecars_for_validation(args: argparse.Namespace):
     a corpus that does not join, when this machine merely has no tree to join
     against, and the keyword-join check reports None as "not checked".
     """
-    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+    from effects.infrastructure.converted_trees import SourceTrees
 
-    roots = sidecar_roots(path for path in args.cards_folders if path.is_dir())
-    return SidecarCache(roots) if roots else None
+    trees = SourceTrees.of(path for path in args.cards_folders if path.is_dir())
+    return trees.sidecar_cache() if trees.cards_folders else None
 
 
 # ── train-effect-model ──────────────────────────────────────────────────

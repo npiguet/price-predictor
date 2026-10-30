@@ -70,7 +70,9 @@ class ReadConfig:
 class WorkerContext:
     """One process's read side: its config, sidecar cache, resolver and memo,
     built lazily and kept for the context's life, so a process reads each
-    sidecar once rather than once per shard."""
+    sidecar once rather than once per shard. The cache is the process's own
+    (:func:`~effects.infrastructure.converted_trees.process_sidecars`), so every
+    context over the same roots in one process shares it."""
 
     def __init__(self, read: ReadConfig) -> None:
         self.read = read
@@ -81,11 +83,9 @@ class WorkerContext:
     @property
     def sidecars(self) -> SidecarCache:
         if self._sidecars is None:
-            from effects.infrastructure.sidecar_io import SidecarCache
+            from effects.infrastructure.converted_trees import process_sidecars
 
-            self._sidecars = SidecarCache({
-                name: Path(root) for name, root in self.read.sidecar_roots.items()
-            })
+            self._sidecars = process_sidecars(self.read.sidecar_roots)
         return self._sidecars
 
     @property

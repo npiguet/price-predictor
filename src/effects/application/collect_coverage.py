@@ -14,7 +14,7 @@ import random
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
-from functools import lru_cache, partial
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -51,7 +51,6 @@ if TYPE_CHECKING:
     from effects.domain.split import HeldOutCards
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.converted_trees import ConvertedTrees
-    from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
 
@@ -88,23 +87,16 @@ class CollectCoverageConfig(CollectorConfig):
         ),
     })
 
-    def converted_trees(self) -> ConvertedTrees:
-        """The trees ``--cards-folder`` names. Deck candidates and the coverage
-        unit come from the card tree alone (FR-046, FR-048): a token script
-        could never be satisfied or retired."""
-        from effects.infrastructure.converted_trees import ConvertedTrees
 
-        return ConvertedTrees.from_folders(self.cards_folders)
-
-    def no_converted_cards(self) -> str:
-        """The error for a run whose card tree holds no converted card."""
-        where = self.converted_trees().cards_folder or ", ".join(
-            str(folder) for folder in self.cards_folders
-        )
-        return (
-            f"No converted cards under {where}. Run 'python -m price_predictor "
-            "convert' first."
-        )
+def no_converted_cards(trees: ConvertedTrees) -> str:
+    """The error for a run whose card tree holds no converted card. Deck
+    candidates and the coverage unit come from the card tree alone (FR-046,
+    FR-048): a token script could never be satisfied or retired."""
+    where = trees.cards_folder or ", ".join(str(folder) for folder in trees.roots.values())
+    return (
+        f"No converted cards under {where}. Run 'python -m price_predictor "
+        "convert' first."
+    )
 
 
 def count_shard(shard: Path) -> Counter[str]:
@@ -393,10 +385,10 @@ def run(config: CollectCoverageConfig) -> int:
     if config.only_cards is not None:
         return run_text_coverage(config)
 
-    trees = config.converted_trees()
+    trees = config.source_trees.converted()
     converted = trees.converted_cards
     if not converted:
-        logger.error("%s", config.no_converted_cards())
+        logger.error("%s", no_converted_cards(trees))
         return 1
 
     held_out = config.holdout_source().exclusions()
@@ -468,12 +460,14 @@ def count_text_shard(
     Counted as build-corpus counts a held-out text's games (FR-053): from the
     resolution records its refusal rule keeps, through
     :meth:`HeldOutCards.text_acted_through`. Top-level so a process pool can
-    pickle it; each process resolves keys through its own :func:`_sidecars`,
-    because a sidecar cache does not pickle.
+    pickle it; each process resolves keys through its own
+    :func:`~effects.infrastructure.converted_trees.process_sidecars`, because a
+    sidecar cache does not pickle.
     """
+    from effects.infrastructure.converted_trees import process_sidecars
     from effects.infrastructure.shard_io import iter_shard_matching
 
-    sidecars = _sidecars(tuple(sorted(roots.items())))
+    sidecars = process_sidecars(roots)
     games: dict[str, set[str]] = defaultdict(set)
     for record in iter_shard_matching(shard, kinds={RecordKind.RESOLUTION.value}):
         if record_refusal(record, sidecars.resolution_of) is not None:
@@ -482,15 +476,6 @@ def count_text_shard(
         if text is not None:
             games[text].add(record.game_id)
     return dict(games)
-
-
-@lru_cache(maxsize=1)
-def _sidecars(roots: tuple[tuple[str, str], ...]) -> SidecarCache:
-    """The process's sidecar cache for ``roots``, kept across the shards it
-    counts, which name largely the same cards."""
-    from effects.infrastructure.sidecar_io import SidecarCache
-
-    return SidecarCache({tree: Path(root) for tree, root in roots})
 
 
 class TextCoverageCounter(_ShardCounter):
@@ -628,10 +613,10 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
 
     from effects.domain.card_names import fold_card_name
 
-    trees = config.converted_trees()
+    trees = config.source_trees.converted()
     converted = trees.converted_cards
     if not converted:
-        logger.error("%s", config.no_converted_cards())
+        logger.error("%s", no_converted_cards(trees))
         return 1
     listed = read_name_list(config.only_cards)
     listed_files = {
@@ -658,7 +643,9 @@ def run_text_coverage(config: CollectCoverageConfig) -> int:
     coverage = _text_coverage(carriers, verdicts)
     floor = config.min_text_games
     records_dir = Path(config.effect_records)
-    counter = TextCoverageCounter(trees.root_paths, trees.holdout(config.holdout))
+    counter = TextCoverageCounter(
+        config.source_trees.root_paths(), trees.holdout(config.holdout),
+    )
     counter.update(coverage, records_dir)
     logger.info(
         "Held-out round: %d text(s) on %d card(s); %d already at %d games; %d "
