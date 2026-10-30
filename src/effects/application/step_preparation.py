@@ -23,7 +23,7 @@ from effects.application.surface_batching import (
     SurfaceBatcher,
     SurfaceSpec,
 )
-from effects.application.text_staging import MaskedTokens, TextStager, pinned
+from effects.application.text_staging import MaskedTokens, TextStager
 from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     ValidationGameInTrainingError,
@@ -58,6 +58,7 @@ from effects.domain.split import (
 from effects.domain.surface_collation import entity_target_tensors
 from effects.domain.value_targets import value_targets
 from effects.infrastructure.tokenizer_loading import load_tokenizer
+from effects.infrastructure.torch_device import pinned
 
 #: Rarity-bucket label for a record with no acting text (combat, legality).
 NO_TEXT_BUCKET = "no-text"
@@ -105,12 +106,7 @@ class DeviceStep:
 
     def pin(self) -> None:
         self.batch.pin()
-        targets = self.targets
-        self.targets = replace(
-            targets,
-            fields=replace(targets.fields, values=pinned(dict(targets.fields.values))),
-            index=targets.index.pin_memory(),
-        )
+        self.targets = self.targets.pinned()
         self.heads.pin()
 
 

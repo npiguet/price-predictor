@@ -24,6 +24,7 @@ from effects.domain.ability_encoder import (
 from effects.domain.ability_tokenizer import AbilityTokenizer, Surface, withheld_keyword_tokens
 from effects.domain.baselines import BaselineMasks
 from effects.domain.provenance import SidecarLine
+from effects.infrastructure.torch_device import pinned
 
 #: Texts per length-sorted encoder pass. Padded to the batch's longest instead,
 #: one 512-token chain makes every line cost 512 positions and the saved
@@ -78,18 +79,6 @@ def encode_by_length(
     for (rows, width), tokens in zip(chunks, outputs):
         full[rows.to(device, non_blocking=True), :width] = tokens
     return vectors, full
-
-
-def pinned(value):
-    """``value`` with every tensor in it copied to page-locked host memory, so
-    a ``non_blocking`` copy does not hold the host."""
-    if isinstance(value, torch.Tensor):
-        return value.pin_memory()
-    if isinstance(value, dict):
-        return {key: pinned(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return type(value)(pinned(item) for item in value)
-    return value
 
 
 # ── the encoder's inputs ────────────────────────────────────────────────
