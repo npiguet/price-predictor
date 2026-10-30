@@ -41,6 +41,7 @@ from effects.domain.head_decoding import HeadReading
 from effects.domain.records import EffectRecord
 
 if TYPE_CHECKING:
+    from effects.application.evaluation_context import EvaluationContext
     from effects.application.model_loading import Runnable
 
 logger = logging.getLogger(__name__)
@@ -68,9 +69,10 @@ class FieldAgreement(NamedTuple):
     scored: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class KeywordScore:
-    """One keyword's population and how much of it agreed.
+    """One keyword's population and how much of it agreed, tallied while the
+    pass reads.
 
     ``qualifying`` counts distinct records (FR-119's 200 is a count of
     combats); ``observations`` counts (record, carrier) perturbations, since
@@ -83,19 +85,15 @@ class KeywordScore:
     #: ``effect label -> (agreeing, scored)``.
     per_field: dict[str, FieldAgreement] = field(default_factory=dict)
     observations: int = 0
-
-
-@dataclass(slots=True)
-class _Tally:
-    """One keyword's running counts while the pass is still reading."""
-
-    records: set[str] = field(default_factory=set)
-    observations: int = 0
-    agreeing: int = 0
-    per_field: dict[str, FieldAgreement] = field(default_factory=dict)
+    #: The record ids ``qualifying`` has counted, so a record observed once
+    #: per carrier counts once.
+    counted: set[str] = field(default_factory=set, init=False, repr=False, compare=False)
 
     def add(self, record_id: str, agreed: bool, per_effect: dict[str, bool]) -> None:
-        self.records.add(record_id)
+        """Fold in one observation of record ``record_id``."""
+        if record_id not in self.counted:
+            self.counted.add(record_id)
+            self.qualifying += 1
         self.observations += 1
         self.agreeing += 1 if agreed else 0
         for label, ok in per_effect.items():
@@ -103,11 +101,6 @@ class _Tally:
             self.per_field[label] = FieldAgreement(
                 agreeing + (1 if ok else 0), scored + 1,
             )
-
-    def score(self) -> KeywordScore:
-        return KeywordScore(
-            len(self.records), self.agreeing, self.per_field, self.observations,
-        )
 
 
 def read_field(
@@ -178,18 +171,18 @@ def score_keywords(
     ``records`` is consumed as a stream; only a chunk's worth is ever held.
     """
     resolver = runnable.keyword_resolver()
-    tallies = {row.keyword: _Tally() for row in rows}
+    scores = {row.keyword: KeywordScore() for row in rows}
     progress = _Progress()
     active = frozenset(spec.name for spec in runnable.fields)
 
     observations = _qualifying(records, rows, resolver, progress)
     for chunk in runnable.inference_chunks(observations, BATCH_OBSERVATIONS):
         _score_chunk(
-            chunk, runnable, tallies,
+            chunk, runnable, scores,
             active=active, keywords_of=resolver.keywords_of,
         )
     progress.log()
-    return {keyword: tally.score() for keyword, tally in tallies.items()}
+    return scores
 
 
 @dataclass(slots=True)
@@ -228,10 +221,10 @@ def _qualifying(
 
 
 def _score_chunk(
-    chunk: list[Observation], runnable: Runnable, tallies: dict[str, _Tally], *,
+    chunk: list[Observation], runnable: Runnable, scores: dict[str, KeywordScore], *,
     active: frozenset[str], keywords_of: KeywordsOf,
 ) -> None:
-    """Run one chunk of observations, paired, and fold it into ``tallies``."""
+    """Run one chunk of observations, paired, and fold it into ``scores``."""
     built = [observation.record for observation in chunk] * 2
     strips = [None] * len(chunk) + [
         {observation.participant.carrier.id: frozenset({observation.row.keyword})}
@@ -247,7 +240,7 @@ def _score_chunk(
             _subject_vectors(surfaces[twin], outputs[twin], row, participant),
             active=active, keywords_of=keywords_of,
         )
-        tallies[row.keyword].add(record.record_id, agreed, per_effect)
+        scores[row.keyword].add(record.record_id, agreed, per_effect)
 
 
 def _subject_vectors(
@@ -351,12 +344,33 @@ def gate_two_records(provenance, *, corpus_path: Path) -> Iterator:
     )
 
 
+class GateTwoOutcome(NamedTuple):
+    """Gate 2's report line and the per-keyword verdicts it summarizes."""
+
+    check: CheckResult
+    verdicts: list[KeywordVerdict]
+
+
 def run_gate_two(
+    context: EvaluationContext,
+    rows: tuple[DamageStepKeyword, ...] = DAMAGE_STEP_KEYWORDS,
+) -> GateTwoOutcome:
+    """Score the checkpoint's game-disjoint combats, route each keyword, and
+    report the routing (FR-119 – FR-122)."""
+    logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
+    verdicts = keyword_verdicts(
+        gate_two_records(context.main.provenance, corpus_path=context.corpus_path),
+        context.main_runnable, rows,
+    )
+    return GateTwoOutcome(evaluate_gate_two(verdicts), verdicts)
+
+
+def keyword_verdicts(
     records: Iterable,
     load: Callable[[list], Runnable],
     rows: tuple[DamageStepKeyword, ...] = DAMAGE_STEP_KEYWORDS,
 ) -> list[KeywordVerdict]:
-    """Score the eight keywords and route each one (FR-119 – FR-122).
+    """Score the eight keywords over ``records`` and route each one.
 
     ``load`` turns a few records into the checkpoint ready to run, its batcher
     measured from them. Nothing is loaded when there is no combat record:

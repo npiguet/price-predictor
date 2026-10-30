@@ -827,34 +827,63 @@ class TestEvaluatorWiring:
         return _runnable()
 
     def test_it_scores_the_game_disjoint_combat_records(self):
-        from effects.application.gate_two import run_gate_two
+        from effects.application.gate_two import keyword_verdicts
 
-        verdicts = run_gate_two([_printed_board(game="gd-1")], self._load)
+        verdicts = keyword_verdicts([_printed_board(game="gd-1")], self._load)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert first_strike.qualifying_records == 1
         assert first_strike.direction_agreement == 1.0
 
     def test_the_reason_lists_agreement_per_field(self):
-        from effects.application.gate_two import run_gate_two
+        from effects.application.gate_two import keyword_verdicts
 
-        verdicts = run_gate_two([_printed_board(game="gd-1")], self._load)
+        verdicts = keyword_verdicts([_printed_board(game="gd-1")], self._load)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert "damage_taken 100%" in first_strike.reason
         assert "zone_outcome/died 100%" in first_strike.reason
 
     def test_no_game_disjoint_combat_record_leaves_every_keyword_at_zero(self):
-        from effects.application.gate_two import run_gate_two
+        from effects.application.gate_two import keyword_verdicts
 
         def _never(_records):
             raise AssertionError("no records: the model must not be loaded")
 
-        verdicts = run_gate_two([], _never)
+        verdicts = keyword_verdicts([], _never)
 
         assert len(verdicts) == 8
         assert all(v.qualifying_records == 0 for v in verdicts)
         assert all("under-sampled" in v.reason for v in verdicts)
+
+    def test_the_gate_reads_its_own_records_off_the_context(self, tmp_path):
+        """Like gate 1, gate 2 is handed the evaluation context and nothing
+        else: it reads the checkpoint's game-disjoint games itself."""
+        from types import SimpleNamespace
+
+        from effects.application.gate_two import run_gate_two
+        from effects.domain.split_provenance import SplitProvenance
+        from effects.infrastructure.corpus_store import CorpusStore
+        from effects.infrastructure.shard_io import write_shard
+
+        corpus = tmp_path / "corpus"
+        write_shard(
+            CorpusStore(corpus).game_disjoint_dir / "shard-00001.jsonl.gz",
+            [_printed_board(game="gd-1"), _printed_board(game="gd-2")],
+        )
+        context = SimpleNamespace(
+            main=SimpleNamespace(provenance=SplitProvenance(game_disjoint_games=("gd-1",))),
+            corpus_path=corpus, main_runnable=self._load,
+        )
+
+        outcome = run_gate_two(context)
+
+        first_strike = next(v for v in outcome.verdicts if v.keyword == "first_strike")
+        assert first_strike.qualifying_records == 1
+        assert outcome.check.status is CheckStatus.REPORTED
+        assert outcome.check.values == {
+            v.keyword: v.direction_agreement for v in outcome.verdicts
+        }
 
 
 # ── who is counted (FR-119, FR-120) ──────────────────────────────────────

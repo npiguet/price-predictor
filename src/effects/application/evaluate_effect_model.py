@@ -17,7 +17,7 @@ from effects.application.evaluation_context import (
     load_context,
 )
 from effects.application.gate_one import run_gate_one
-from effects.application.gate_two import evaluate_gate_two, gate_two_records, run_gate_two
+from effects.application.gate_two import run_gate_two
 from effects.application.geometry_checks import (
     NEIGHBOUR_QUERIES,
     cached_vectors,
@@ -117,12 +117,9 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     report.add(run_gate_three(cached, config.abilities_root))
     report.add(_gate_one(context, variants))
 
-    logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
-    report.keyword_verdicts = run_gate_two(
-        gate_two_records(context.main.provenance, corpus_path=context.corpus_path),
-        context.main_runnable,
-    )
-    report.add(evaluate_gate_two(report.keyword_verdicts))
+    gate_two = run_gate_two(context)
+    report.keyword_verdicts = gate_two.verdicts
+    report.add(gate_two.check)
 
     logger.info("breakdowns: scoring both validation strata")
     report.extend(run_breakdowns(context))

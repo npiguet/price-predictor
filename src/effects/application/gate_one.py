@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable
-from functools import partial
 
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
@@ -116,14 +115,9 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
         )
     logger.info("gate 1: %d records in the unique-text stratum", len(stratum))
 
-    scores = {}
-    loaders = {
-        "model": context.main_runnable,
-        "identity": partial(context.runnable_of, identity),
-    }
-    for name, load in loaders.items():
-        scores[name] = measure(stratum, load(stratum))
-    return evaluate_gate_one(scores["model"], scores["identity"])
+    model = measure(stratum, context.main_runnable(stratum))
+    baseline = measure(stratum, context.runnable_of(identity, stratum))
+    return evaluate_gate_one(model, baseline)
 
 
 def _relative_reduction(baseline: float, value: float) -> float:
