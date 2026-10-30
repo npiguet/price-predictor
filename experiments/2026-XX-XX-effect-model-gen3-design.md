@@ -320,10 +320,15 @@ first striker is predicted to die as often as a creature without the keyword.
 record is open is discarded, and nothing records that it happened. A state-based death was lost
 this way for a whole gen-1 corpus before anyone noticed.
 
-**A death can be written into a trigger that it happened before.** A dies-trigger put on the stack
-during the state-based check that follows a resolution ends the open effect half. A death in the
-next pass of the same check then lands in the trigger's bracket. It is written into the trigger's
-effect half when the trigger resolves, although the death came first.
+**A death in a later pass of a state-based check can be written into a trigger's record instead of
+the resolution's.** Gen-2 holds a resolution's effect half open until the next action begins, so
+that the deaths of the state-based check after it join the half. A trigger reaching the stack counts
+as such an action. Forge's check runs in passes, and it puts each dies-trigger on the stack at the
+end of the pass whose death set it off. That trigger closes the resolution's effect half, and a
+death in the next pass lands in the trigger's bracket instead. For example, a Lightning Bolt kills a
+lord while a Blood Artist is on the battlefield. Blood Artist's trigger reaches the stack after the
+first pass. The damaged Goblins that only the lord's +1/+1 kept alive die in the second pass. Their
+deaths are written into the trigger's effect half when it resolves, although they came before it.
 
 **The first-strike damage step lost everything but its damage to players.** The collector decided
 that an event was combat damage by checking that the phase name contains `COMBAT_DAMAGE`. Forge
@@ -453,7 +458,8 @@ the plan rests on them:
 4. **Checkpoints judged by probes and rule scenarios**, with every output field on one scale in the
    loss.
 5. **Collection that records what decides each rule**: every line of a permanent, which rules check
-   a verdict failed, whose turn it is, combat as it starts, and gen-2's collector defects closed.
+   a verdict failed, whose turn it is, combat as it starts, each action's state-based deaths in the
+   action's own record, and gen-2's collector defects closed.
 
 The subsections below take these in order, then two options still open. Each points to its outcome
 in [Result](#result) where one exists. The catalogue, the mapping of rules to inputs and outputs,
@@ -1012,6 +1018,35 @@ supply the examples, and per-rule rebalancing decides how many each quality gets
 Gen-2's evasion grid becomes the measure: its protection rows extend to the other qualities, from a
 creature type to everything.
 
+### A record holds an action and the whole state-based check that follows it
+
+**State-based actions have no record of their own.** What a state-based check does is written into
+the record of the action that left the board in that state. Shock deals 2 damage to a Grizzly
+Bears, and the Bears' death is part of Shock's effect half. The same holds for a creature shrunk to
+0 toughness, a token ceasing to exist, the loser of the legend rule and an Aura falling off. The
+model then learns rule 704.5g as what Shock does to a creature with 2 toughness, which is the
+question the effect model answers. Gen-2 already files most of these deaths this way. A combat
+damage step's record holds its own deaths too, because it stays open until the step ends.
+
+**The held effect half takes every death until Forge's state-based check is over, whatever reaches
+the stack between its passes.** Gen-2 took the next action to mean that the check was over. A
+dies-trigger put on the stack between two passes is such an action, and it comes before the check's
+last pass ([Background](#collection-can-lose-or-misplace-events-without-leaving-a-trace)). Forge freezes the
+game's view tracker for the whole check, every pass included. The collector already reads that
+freeze to tell a state-based death from a cost paid for the next spell. In gen-3, a trigger that
+reaches the stack while the tracker is frozen opens its own bracket without closing the held half.
+Every death in the check's later passes joins the held half, and the half is written at the first
+action after the check ends.
+
+**The trigger keeps its own record.** Its bracket holds what it does when it resolves, and none of
+the deaths of the check that put it on the stack. A death filed this way stays marked as no
+clause's doing, as in gen-2, so a creature a destroy clause killed and a creature that died of
+lethal damage stay distinct in the record.
+
+**A state-based death with no held resolution and no open damage step still reaches no record.**
+Such a death follows a change made outside any resolution, combat or land played. The count of
+discarded events in the next subsection shows how often it happens.
+
 ### Collection counts what it drops, and gen-2's collector defects are closed before the first game
 
 **Every discarded event is counted.** Gen-3 counts each event that arrives while no record is open,
@@ -1024,10 +1059,8 @@ deleted instead of expanded, and the review's defects in the corpus build, targe
 each fixed on master. [Result](#gen-2s-defects-are-fixed-on-master-before-gen-3s-first-collection)
 lists the fixes.
 
-**Four smaller gaps are closed in the same pass:**
+**Three smaller gaps are closed in the same pass:**
 
-- **A death goes to the record it belongs to**, not to a dies-trigger put on the stack earlier in
-  the same state-based check.
 - **A probe fork's damage events carry their source**, recovered from the payload's
   `assignment_choices`.
 - **Abilities reached through Flashback or a clone's copy are keyed.** The plays they record are
