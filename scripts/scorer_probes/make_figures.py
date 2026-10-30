@@ -282,15 +282,16 @@ def fig_label_weights():
 
 
 def fig_det_groups():
-    data = json.load(open(OUT / "t5b_results.json"))
-    rows = data["groups"]
+    data = json.load(open(OUT / "t5_groups.json"))
+    n_features = data["meta"]["group_features"]
+    rows = [{"group": g, **m} for g, m in data["conditions"].items() if g in n_features]
     subset_of_cost = {"color pips only", "mana value only"}
     rows = sorted(rows, key=lambda r: r["d_acc"])
 
     labels, vals, errs, cols = [], [], [], []
     for r in rows:
         name = r["group"]
-        label = f"{name}  [{r['n_features']}]"
+        label = f"{name}  [{n_features[name]}]"
         if name in subset_of_cost:
             label = "   └ " + label
         labels.append(label)
