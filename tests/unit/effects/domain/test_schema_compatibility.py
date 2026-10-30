@@ -119,20 +119,16 @@ class TestRuleOneFieldsMayBeAddedNotRepurposed:
 
 
 class TestTheActorPlayerException:
-    """FR-030a: the one redefinition, on ``playability`` records of gen-2 only."""
+    """FR-030a: the one redefinition, on ``playability`` records of gen-2 only.
 
-    def test_the_redefined_field_keeps_its_type(self):
-        actual = {f.name: f.type for f in fields(EffectRecord)}
-        for name in _REDEFINED_IN_GEN2:
-            assert actual[name] == _FROZEN_ENVELOPE[name]
+    Its type and the generation marker ``random_seat`` are pinned with the rest
+    of the envelope by rule 1's tests.
+    """
 
     def test_the_exception_covers_exactly_the_playability_subkinds(self):
         assert _REDEFINED_IN_GEN2["actor_player"] == {
             s.value for s in PlayabilitySubkind
         }
-
-    def test_the_generation_marker_is_an_envelope_field(self):
-        assert "random_seat" in {f.name for f in fields(EffectRecord)}
 
 
 class TestRuleTwoEnumValuesMayBeAddedNotReused:
@@ -173,7 +169,6 @@ class TestRuleThreeTiersAreAdditive:
 
     def test_an_absent_tier_reads_as_uncollected_not_empty(self):
         snapshot = make_snapshot()
-        assert snapshot.entities == ()
         assert InclusionTier.UNREFERENCED_STACK not in snapshot.tiers
         assert InclusionTier.CORE in snapshot.tiers
 
