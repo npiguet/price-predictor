@@ -12,9 +12,9 @@ from typing import Protocol
 
 import torch
 
+from effects.application.mlm_masking import MaskedTokens, MlmMasker
 from effects.application.step_preparation import DeviceStep, HeadTargets
 from effects.application.surface_batching import EncodedBatch, Materializer
-from effects.application.text_staging import MaskedTokens, MlmMasker
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.aux_heads import (

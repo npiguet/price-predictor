@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 import torch
 
+from effects.application.mlm_masking import MlmMasker
 from effects.application.surface_batching import NoiseState, SurfaceBatcher
-from effects.application.text_staging import MlmMasker
 from effects.domain.baselines import BaselineMasks
 from effects.domain.effect_head_input import ACT_SLOT, SlotKind
 from effects.domain.provenance import ProvenanceKey, SidecarLine

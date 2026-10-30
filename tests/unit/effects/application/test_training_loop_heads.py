@@ -15,11 +15,12 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from effects.application.mlm_masking import MlmMasker
 from effects.application.run_context import build_run, training_settings
 from effects.application.step_loss import StepLoss
 from effects.application.step_preparation import NO_TEXT_BUCKET, training_heads
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
-from effects.application.text_staging import MlmMasker, StagedTexts
+from effects.application.text_staging import StagedTexts
 from effects.application.train_effect_model import (
     CorpusFacts,
     RunSpec,

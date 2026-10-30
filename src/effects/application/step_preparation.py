@@ -17,12 +17,13 @@ from typing import NamedTuple
 import torch
 
 from effects.application.ability_text import KeyResolver
+from effects.application.mlm_masking import MaskedTokens
 from effects.application.surface_batching import (
     PreparedBatch,
     SurfaceBatcher,
     SurfaceSpec,
 )
-from effects.application.text_staging import MaskedTokens, TextStager
+from effects.application.text_staging import TextStager
 from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     ValidationGameInTrainingError,

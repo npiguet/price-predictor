@@ -16,13 +16,8 @@ from typing import NamedTuple
 import torch
 
 from effects.application.ability_text import KeyResolver
-from effects.application.text_staging import (
-    MaskedTokens,
-    MlmMasker,
-    StagedTexts,
-    TextStager,
-    encode_by_length,
-)
+from effects.application.mlm_masking import MaskedTokens, MlmMasker
+from effects.application.text_staging import StagedTexts, TextStager, encode_by_length
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks, baseline_masks
