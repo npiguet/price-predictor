@@ -241,6 +241,10 @@ class AbilityTokenizer:
         self._tokenize_cache: dict[
             tuple[str, tuple[RoleSpan, ...]], tuple[Token, ...]
         ] = {}
+        #: ``(display name, details or None for a bare token) -> tokens``,
+        #: before the role is applied: the batcher expands the same keywords
+        #: every batch.
+        self._expansion_cache: dict[tuple[str, str | None], tuple[Token, ...]] = {}
 
     # ── ids ─────────────────────────────────────────────────────────────
 
@@ -515,25 +519,37 @@ class AbilityTokenizer:
         form = keyword_token(line.name)
         if not (unknown or form in forced or rng.random() < probability):
             return list(tokens)
-        text = self.keywords.line_text(line.name, line.details)
-        return self._as_expansion(text, role=tokens[0].role, keyword=form)
+        return self._as_expansion(line.name, line.details, role=tokens[0].role)
 
     def _expansion(self, token: Token) -> list[Token]:
         name = self.keywords.name_of_token(token.text)
         if name is None:
             raise ValueError(f"{token.text!r} names no keyword definition")
-        text = self.keywords.bare_text(name)
-        return self._as_expansion(text, role=token.role, keyword=token.text)
+        return self._as_expansion(name, None, role=token.role)
 
     def _as_expansion(
-        self, text: str, *, role: Role | None, keyword: str,
+        self, name: str, details: str | None, *, role: Role | None,
     ) -> list[Token]:
-        expanded = self._merge_multi_word(self._split_with_offsets(text))
-        return [
-            replace(part, start=None, end=None, role=role,
-                    expanded_from=keyword)
-            for part in expanded
-        ]
+        """The tokens keyword ``name`` expands to: filled with ``details`` on a
+        keyword line, its placeholders removed for a bare token (None)."""
+        key = (name, details)
+        expanded = self._expansion_cache.get(key)
+        if expanded is None:
+            text = (
+                self.keywords.bare_text(name) if details is None
+                else self.keywords.line_text(name, details)
+            )
+            keyword = keyword_token(name)
+            expanded = tuple(
+                replace(part, start=None, end=None, expanded_from=keyword)
+                for part in self._merge_multi_word(self._split_with_offsets(text))
+            )
+            if len(self._expansion_cache) >= self._TOKENIZE_CACHE_CAP:
+                self._expansion_cache.clear()
+            self._expansion_cache[key] = expanded
+        if role is None:
+            return list(expanded)
+        return [replace(part, role=role) for part in expanded]
 
 
 def camel_parts(word: str) -> list[tuple[int, int]]:

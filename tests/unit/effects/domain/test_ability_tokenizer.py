@@ -9,6 +9,7 @@ vocabulary has never seen.
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -349,6 +350,32 @@ class TestTokenizeCache:
         assert [t.text for t in tokenizer.tokenize("draw a card")] == [
             t.text for t in first
         ]
+
+    def test_an_expansion_is_split_once_and_takes_each_callers_role(
+        self, tokenizer, monkeypatch,
+    ):
+        calls: list[str] = []
+        original = AbilityTokenizer._split_with_offsets
+
+        def counting(self, text):
+            calls.append(text)
+            return original(self, text)
+
+        monkeypatch.setattr(AbilityTokenizer, "_split_with_offsets", counting)
+        flying = tokenizer.tokenize("flying")
+        spanned = tokenizer.tokenize("flying", (RoleSpan(0, 6, "effect"),))
+        calls.clear()
+
+        plain = tokenizer.expand_keywords(flying, probability=1.0)
+        roled = tokenizer.expand_keywords(spanned, probability=1.0)
+        again = tokenizer.expand_keywords(flying, probability=1.0)
+
+        assert len(calls) == 1
+        assert again == plain
+        assert {t.role for t in plain} == {None}
+        assert {t.role for t in roled} == {"effect"}
+        assert [replace(t, role=None) for t in roled] == plain
+        assert {t.expanded_from for t in plain} == {"flying"}
 
 
 class TestTokenShape:
