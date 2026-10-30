@@ -10,7 +10,7 @@ controller still to choose. Nothing has run.
 ## Background
 
 Gen-4 is the fourth generation of the ability effect model. It follows gen-3, described in
-[`2026-XX-XX-effect-model-gen3-design.md`](2026-XX-XX-effect-model-gen3-design.md) and called the
+[`2026-10-30-effect-model-gen3-design.md`](2026-10-30-effect-model-gen3-design.md) and called the
 gen-3 record below. Gen-3 rebalances its training by rule of the game when its corpus is built, and
 leaves training that reacts to a weak field to gen-4.
 
@@ -20,7 +20,7 @@ leaves training that reacts to a weak field to gen-4.
 them.** Each output field is scored by its explained deviance: the share of the loss of the best
 constant prediction that the model removes, where 0% is no better than always guessing the field's
 average. The table reads gen-2's first arm, which predicts 46 output fields per entity
-([gen-3 record](2026-XX-XX-effect-model-gen3-design.md#some-output-fields-stay-weak-while-the-others-improve)).
+([gen-3 record](2026-10-30-effect-model-gen3-design.md#some-output-fields-stay-weak-while-the-others-improve)).
 
 | field | loss of the constant prediction | epoch 3 | epoch 4 |
 |---|---:|---:|---:|

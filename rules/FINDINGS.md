@@ -2,7 +2,7 @@
 
 Implementation notes drawn from the catalogue, written for whoever implements gen-3's rule
 coverage. The conclusions and recommendations are in the gen-3 design record,
-`experiments/2026-XX-XX-effect-model-gen3-design.md`, in its Result. This
+`experiments/2026-10-30-effect-model-gen3-design.md`, in its Result. This
 file holds the detail behind them: which rules need which new record fields, why rules were skipped,
 what the scenario writers suspect about Forge, and what kinds of errors the verifier fixed.
 
