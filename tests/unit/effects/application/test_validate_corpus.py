@@ -21,7 +21,7 @@ import pytest
 
 from effects.application.corpus_validation.findings import Finding, Findings, Thresholds
 from effects.application.corpus_validation.presence import FieldPresence
-from effects.application.validate_corpus import validate_corpus
+from effects.application.validate_corpus import validate_corpus, validate_directory
 from effects.domain.event_schema import (
     AttributionKind,
     Event,
@@ -51,7 +51,7 @@ from effects.domain.state_snapshot import (
     InclusionTier,
     StateSnapshot,
 )
-from effects.infrastructure.shard_io import read_window
+from effects.infrastructure.shard_io import NoShardsError, read_window
 from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.builders import (
     RawShardWriter,
@@ -358,6 +358,27 @@ class TestRecordIdCollision:
             writer.write(_resolution("run.0-L2.0", game_id="run.0-L2.0"))
         assert _named(validate_corpus(read_window(tmp_path)), "record_id").ok
 
+
+
+class TestValidateDirectory:
+    """The command's whole pass: the shards listed once, then read."""
+
+    def test_a_directory_without_shards_is_refused(self, tmp_path):
+        with pytest.raises(NoShardsError, match="no shards under"):
+            validate_directory(tmp_path)
+
+    def test_it_reports_the_shards_it_read_and_their_findings(self, tmp_path):
+        with RawShardWriter(tmp_path, "run", 0, "L1") as writer:
+            for record in _healthy():
+                writer.write(record)
+        with RawShardWriter(tmp_path / "deeper", "run", 1, "L1") as writer:
+            writer.write(_resolution("run.1-L1.0", game_id="run.1-L1.0"))
+
+        report = validate_directory(tmp_path)
+
+        assert report.shards == 2
+        assert _named(report.findings, "record_id is unique").ok
+        assert _named(report.findings, "gen-2 envelope")
 
 class TestGameIdNamesOneGame:
     def test_a_backward_turn_jump_inside_one_game_id_fails(self):
@@ -706,9 +727,10 @@ class TestTheCli:
         assert "[FAIL] record_id is unique across the run's shards" in out
         assert "invariants broken" in out
 
-    def test_an_empty_directory_exits_non_zero(self, tmp_path, capsys):
+    def test_an_empty_directory_exits_non_zero(self, tmp_path, caplog):
+        """Refused through exits_with, as every command's refusal is."""
         assert self._run(tmp_path) == 1
-        assert "no shards" in capsys.readouterr().out
+        assert "no shards" in caplog.text
 
     def test_the_new_thresholds_are_the_contracts(self):
         """Pinned here because a default that drifts changes what a corpus means."""
@@ -988,7 +1010,7 @@ class TestKeywordKeysJoinTheirSidecar:
         # The sidecar declares keyword ordinals 0 and 2; the collector's key
         # says 1, which is inside what the face declared and names no line.
         sidecars = _write_bears_sidecar(tmp_path, (0, 2))
-        findings = validate_corpus([*_healthy(), self._record(1)], None, sidecars)
+        findings = validate_corpus([*_healthy(), self._record(1)], sidecars=sidecars)
         finding = _named(findings, "keyword provenance keys")
         assert not finding.ok, finding.measured
         assert "1/1 keyword keys fail to join" in finding.measured
@@ -996,7 +1018,7 @@ class TestKeywordKeysJoinTheirSidecar:
 
     def test_a_key_the_sidecar_declares_joins(self, tmp_path):
         sidecars = _write_bears_sidecar(tmp_path, (0, 2))
-        findings = validate_corpus([*_healthy(), self._record(2)], None, sidecars)
+        findings = validate_corpus([*_healthy(), self._record(2)], sidecars=sidecars)
         finding = _named(findings, "keyword provenance keys")
         assert finding.ok, finding.detail
         assert "0/1 keyword keys fail to join" in finding.measured
@@ -1006,7 +1028,7 @@ class TestKeywordKeysJoinTheirSidecar:
     ):
         """Level up and bestow append traits no card script declares."""
         sidecars = _write_bears_sidecar(tmp_path, (0, 1))
-        findings = validate_corpus([*_healthy(), self._record(7)], None, sidecars)
+        findings = validate_corpus([*_healthy(), self._record(7)], sidecars=sidecars)
         assert _named(findings, "keyword provenance keys").ok
 
     def test_a_key_outside_every_declared_range_is_counted_not_joined(
@@ -1014,7 +1036,7 @@ class TestKeywordKeysJoinTheirSidecar:
     ):
         """It resolves to no line, so reporting it as a join hides it."""
         sidecars = _write_bears_sidecar(tmp_path, (0, 1))
-        findings = validate_corpus([*_healthy(), self._record(7)], None, sidecars)
+        findings = validate_corpus([*_healthy(), self._record(7)], sidecars=sidecars)
         keyword = _named(findings, "keyword provenance keys")
         outside = _named(findings, "outside every declared range")
         assert "1 outside every declared range" in keyword.measured
@@ -1032,7 +1054,7 @@ class TestKeywordKeysJoinTheirSidecar:
         either. The run stays green and the count says how much of it did.
         """
         sidecars = _write_bears_sidecar(tmp_path, (), spell_indices=(0,))
-        findings = validate_corpus([*_healthy(), self._record(0)], None, sidecars)
+        findings = validate_corpus([*_healthy(), self._record(0)], sidecars=sidecars)
         keyword = _named(findings, "keyword provenance keys")
         assert keyword.ok, keyword.measured
         assert "0/1 keyword keys fail to join" in keyword.measured
@@ -1048,7 +1070,7 @@ class TestKeywordKeysJoinTheirSidecar:
         """
         dropped = ProvenanceKey(_BEARS, 0, "keyword", 1)
         sidecars = _write_bears_sidecar(tmp_path, (0, 2), dropped=(dropped,))
-        findings = validate_corpus([*_healthy(), self._record(1)], None, sidecars)
+        findings = validate_corpus([*_healthy(), self._record(1)], sidecars=sidecars)
         keyword = _named(findings, "keyword provenance keys")
         assert keyword.ok, keyword.measured
         assert "0/1 keyword keys fail to join" in keyword.measured
@@ -1065,7 +1087,7 @@ class TestKeywordKeysJoinTheirSidecar:
             "run.0-L1.901",
             ability=(ProvenanceKey("cardsfolder/x/nowhere.txt", 0, "keyword", 0),),
         )
-        findings = validate_corpus([*_healthy(), orphan], None, sidecars)
+        findings = validate_corpus([*_healthy(), orphan], sidecars=sidecars)
         assert not _named(findings, "keyword provenance keys").ok
         assert _named(findings, "outside every declared range").measured.startswith("0/")
 
@@ -1078,7 +1100,7 @@ class TestKeywordKeysJoinTheirSidecar:
             ability=(ProvenanceKey("cardsfolder/x/nowhere.txt", 0, "keyword", 0),),
         )
         finding = _named(
-            validate_corpus([*_healthy(), orphan], None, sidecars),
+            validate_corpus([*_healthy(), orphan], sidecars=sidecars),
             "keyword provenance keys",
         )
         assert not finding.ok
@@ -1101,7 +1123,7 @@ class TestKeywordKeysJoinTheirSidecar:
             ),
         )
         finding = _named(
-            validate_corpus([*_healthy(), variant], None, sidecars),
+            validate_corpus([*_healthy(), variant], sidecars=sidecars),
             "keyword provenance keys",
         )
         assert finding.ok, finding.detail
@@ -1129,7 +1151,7 @@ class TestKeywordKeysJoinTheirSidecar:
                 writer.write(record)
             writer.write(self._record(1))
         finding = _named(
-            validate_corpus(read_window(shards), None, sidecars),
+            validate_corpus(read_window(shards), sidecars=sidecars),
             "keyword provenance keys",
         )
         assert not finding.ok, finding.measured
@@ -1812,7 +1834,7 @@ class TestNonKeywordKeysAreWatchedNotJudged:
         # one shape that is a mismatch rather than a runtime-attached trait.
         sidecars = _write_bears_sidecar(tmp_path, (0,), spell_indices=(0, 2))
         findings = validate_corpus(
-            [*_healthy(), self._spell_record(1)], None, sidecars,
+            [*_healthy(), self._spell_record(1)], sidecars=sidecars,
         )
         finding = _named(findings, "non-keyword provenance keys")
         assert finding.watched and finding.ok
@@ -1829,7 +1851,7 @@ class TestNonKeywordKeysAreWatchedNotJudged:
         assert "over all" not in finding.measured
 
     def test_both_findings_say_so_when_no_tree_was_readable(self):
-        findings = validate_corpus(_healthy(), None, None)
+        findings = validate_corpus(_healthy(), sidecars=None)
         for fragment in ("keyword provenance keys", "non-keyword provenance keys"):
             finding = _named(findings, fragment)
             assert finding.watched and finding.ok

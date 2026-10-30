@@ -625,25 +625,18 @@ def _field_coverage_parser(subparsers) -> None:
     )
 
 
-def _require_shards(root: Path) -> list[Path] | None:
-    """The shards under ``root``; None, having said so, where there are none."""
-    from effects.infrastructure.shard_io import iter_shards
-
-    shards = iter_shards(root)
-    if not shards:
-        print(f"no shards under {root}")
-        return None
-    return shards
+#: Every reader's "nothing to read"; named, as its module is not imported here.
+_NO_SHARDS = "effects.infrastructure.shard_io.NoShardsError"
 
 
+@exits_with({_NO_SHARDS: 1})
 def run_field_coverage(args: argparse.Namespace) -> int:
     from effects.application.field_coverage import field_coverage, report_lines
-    from effects.infrastructure.shard_io import read_records
+    from effects.infrastructure.shard_io import read_shard, require_shards
 
     root = args.effect_records
-    if _require_shards(root) is None:
-        return 1
-    coverage = field_coverage(read_records(root))
+    shards = require_shards(root)
+    coverage = field_coverage(record for shard in shards for record in read_shard(shard))
     if not coverage:
         print(f"no records under {root}")
         return 1
@@ -677,25 +670,20 @@ def _validate_corpus_parser(subparsers) -> None:
     _add_cards_folder(parser)
 
 
+@exits_with({_NO_SHARDS: 1})
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
-    from effects.application.corpus_validation.presence import FieldPresence
-    from effects.application.validate_corpus import validate_corpus
-    from effects.infrastructure.shard_io import read_window
+    from effects.application.validate_corpus import validate_directory
 
     root = args.effect_records
-    shards = _require_shards(root)
-    if shards is None:
-        return 1
-
-    presence = FieldPresence()
-    findings = validate_corpus(
-        read_window(root, args.limit, presence.observe), config_from_args(Thresholds, args),
-        _sidecars_for_validation(args), presence,
+    report = validate_directory(
+        root, limit=args.limit, thresholds=config_from_args(Thresholds, args),
+        sidecars=_sidecars_for_validation(args),
     )
+    findings = report.findings
     window = f" (first {args.limit} records)" if args.limit else ""
-    print(f"{len(shards)} shards under {root}{window}\n")
+    print(f"{report.shards} shards under {root}{window}\n")
     for finding in findings:
         print("\n".join(finding.lines()))
     print("\n" + "\n".join(findings.summary()))

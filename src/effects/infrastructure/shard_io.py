@@ -221,16 +221,18 @@ def iter_record_dicts(path: Path) -> Iterator[dict]:
 def read_window(
     directory: Path, limit: int = 0,
     observe: Callable[[str, dict], None] | None = None,
+    *, shards: Sequence[Path] | None = None,
 ) -> Iterator[EffectRecord]:
     """The first ``limit`` records under ``directory``; 0 reads all of them.
 
     ``observe``, when given, sees each record's raw dict, with its shard's
     path relative to ``directory``, before it is parsed: a parsed record
-    cannot say whether a field was on the wire.
+    cannot say whether a field was on the wire. ``shards`` is the directory's
+    listing when the caller already holds it.
     """
     root = Path(directory)
     seen = 0
-    for shard in iter_shards(root):
+    for shard in iter_shards(root) if shards is None else shards:
         name = shard.relative_to(root).as_posix()
         for data in iter_record_dicts(shard):
             if observe is not None:
@@ -265,6 +267,19 @@ def iter_shards(directory: Path) -> list[Path]:
     return sorted(
         path for pattern in SHARD_GLOBS for path in directory.rglob(pattern)
     )
+
+
+class NoShardsError(ValueError):
+    """A reader was pointed at a directory holding no shard."""
+
+
+def require_shards(directory: Path) -> list[Path]:
+    """:func:`iter_shards`, refusing an empty listing: for a command whose
+    whole job is reading the directory, where nothing to read is a mistake."""
+    shards = iter_shards(directory)
+    if not shards:
+        raise NoShardsError(f"no shards under {directory}")
+    return shards
 
 
 def read_records(directory: Path) -> Iterator[EffectRecord]:
