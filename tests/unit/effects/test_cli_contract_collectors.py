@@ -180,7 +180,7 @@ class TestTheRandomSeatOnTheCollectors:
         ("collect-variants", "effects.application.collect_variants.run"),
     ])
     def test_a_share_without_a_probability_starts_no_worker(
-        self, command, module, capsys,
+        self, command, module, caplog,
     ):
         from unittest.mock import patch
 
@@ -196,7 +196,8 @@ class TestTheRandomSeatOnTheCollectors:
         with patch(module) as collect:
             assert runner(parse(command, "--random-seat-share", "0.5")) == 1
         collect.assert_not_called()
-        assert "--random-seat-probability" in capsys.readouterr().out
+        assert f"{command}: " in caplog.text
+        assert "--random-seat-probability" in caplog.text
 
 
 class TestOneHoldoutSource:
@@ -205,7 +206,7 @@ class TestOneHoldoutSource:
         ("collect-variants", "effects.application.collect_variants.run"),
     ])
     def test_two_holdout_sources_are_refused_before_any_worker(
-        self, command, module, capsys,
+        self, command, module, caplog,
     ):
         """``--split-from`` beside ``--exclude-cards`` names one holdout twice;
         both collectors say so as a message, never a traceback."""
@@ -225,7 +226,7 @@ class TestOneHoldoutSource:
                 command, "--split-from", "latest.pt", "--exclude-cards", "h.txt",
             )) == 1
         collect.assert_not_called()
-        assert "one source of held-out cards" in capsys.readouterr().out
+        assert "one source of held-out cards" in caplog.text
 
 
 class TestCollectVariantsHoldoutRule:

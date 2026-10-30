@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import importlib
 import logging
 import sys
 import typing
@@ -443,8 +444,9 @@ def collection_caps(args: argparse.Namespace) -> CollectionCaps:
 def collector_config(
     config_type: type[_Config], args: argparse.Namespace, **overrides: Any,
 ) -> _Config:
-    """A collector's config, with its corpus location and holdout resolved;
-    raises ValueError on a contradictory holdout, before any worker starts."""
+    """A collector's config, with its corpus location, deck holdout and
+    holdout rule resolved; raises ValueError on a contradictory holdout,
+    before any worker starts."""
     effect_records, deck_holdout = collection_target(
         effect_records=args.effect_records,
         exclude_cards=args.exclude_cards,
@@ -455,45 +457,48 @@ def collector_config(
     return config_from_args(
         config_type, args,
         effect_records=effect_records, deck_holdout=deck_holdout,
-        caps=collection_caps(args),
+        caps=collection_caps(args), holdout=holdout_rule(args),
         **overrides,
     )
 
 
-def _run_collector(
-    args: argparse.Namespace, command: str, config_type: type,
-    collect: Callable[[Any], int], **overrides: Any,
-) -> int:
-    """Refuse a bad flag combination as a message before any worker starts."""
-    error = random_seat_error(args)
-    if error is None:
+class CollectorRefusal(ValueError):
+    """A collector's flags contradict each other: refused, naming the command,
+    before any worker starts."""
+
+
+def _collector_runner(command: str, config_type: type, module: str) -> Callable:
+    """The ``run_*`` of one collector: its config, refused as a message on a
+    bad flag combination, then ``module.run`` over it.
+
+    ``module`` is imported when the command runs, as every other ``run_*``
+    imports its application module, so ``--help`` never pays for it. A
+    ValueError out of the collection itself is not a refusal and keeps its
+    traceback.
+    """
+
+    @exits_with({CollectorRefusal: 1})
+    def run(args: argparse.Namespace) -> int:
+        error = random_seat_error(args)
+        if error is not None:
+            raise CollectorRefusal(f"{command}: {error}")
         try:
-            config = collector_config(config_type, args, **overrides)
+            config = collector_config(config_type, args)
         except ValueError as exc:
-            error = str(exc)
-    if error is not None:
-        print(f"{command}: {error}")
-        return 1
-    print(announce_probe_state(args.probe_keywords, args.probes_per_game))
-    return collect(config)
+            raise CollectorRefusal(f"{command}: {exc}") from exc
+        print(announce_probe_state(args.probe_keywords, args.probes_per_game))
+        return importlib.import_module(module).run(config)
+
+    run.__name__ = run.__qualname__ = f"run_{command.replace('-', '_')}"
+    return run
 
 
-def run_collect_coverage(args: argparse.Namespace) -> int:
-    from effects.application.collect_coverage import run as collect
-
-    return _run_collector(
-        args, "collect-coverage", CollectCoverageConfig, collect,
-        holdout=holdout_rule(args),
-    )
-
-
-def run_collect_variants(args: argparse.Namespace) -> int:
-    from effects.application.collect_variants import run as collect
-
-    return _run_collector(
-        args, "collect-variants", CollectVariantsConfig, collect,
-        holdout=holdout_rule(args),
-    )
+run_collect_coverage = _collector_runner(
+    "collect-coverage", CollectCoverageConfig, "effects.application.collect_coverage",
+)
+run_collect_variants = _collector_runner(
+    "collect-variants", CollectVariantsConfig, "effects.application.collect_variants",
+)
 
 
 # ── build-corpus ────────────────────────────────────────────────────────
