@@ -214,34 +214,42 @@ def generate_variants(
     return generated
 
 
+class CollectorAbort(Exception):
+    """A step found nothing to go on with and has logged why; the run exits
+    with ``code``."""
+
+    def __init__(self, code: int = 1) -> None:
+        super().__init__(code)
+        self.code = code
+
+
 def run(config: CollectVariantsConfig) -> int:
     """Generate variants, then play them through the records-only worker."""
+    try:
+        return _collect(config)
+    except CollectorAbort as abort:
+        return abort.code
+
+
+def _collect(config: CollectVariantsConfig) -> int:
+    """:func:`run`'s steps, each raising :class:`CollectorAbort` once there
+    is nothing left to play."""
     if not config.forge_cards_path.is_dir():
         logger.error(
             "No Forge card scripts at %s. This command reads the *source* "
             "scripts, not the converted ones.", config.forge_cards_path,
         )
-        return 1
+        raise CollectorAbort
     budget = _size_budget(config)
-    if budget <= 0:
-        return 1
     variants = _generate(config, budget)
-    if not variants:
-        return 1
-    code = _write_sidecars(config.variant_scripts)
-    if code != 0:
-        return code
-    variants = _keep_loadable(variants, config.variant_scripts)
-    if not variants:
-        return 1
-    variants = _keep_unheld(config, variants)
-    if not variants:
-        return 1
+    _write_sidecars(config.variant_scripts)
+    variants = _keep_unheld(config, _keep_loadable(variants, config.variant_scripts))
     return _play_and_check_growth(config, variants, budget)
 
 
 def _size_budget(config: CollectVariantsConfig) -> int:
-    """How many variant scripts this run may generate; says why when none."""
+    """How many variant scripts this run may generate; aborts, saying why,
+    when none."""
     from effects.infrastructure.shard_io import count_records
 
     source_scripts = sum(1 for _ in config.forge_cards_path.rglob("*.txt"))
@@ -258,6 +266,7 @@ def _size_budget(config: CollectVariantsConfig) -> int:
             "the corpus when variants are written to a directory of their own.",
             source, existing, config.variant_volume, budget,
         )
+        raise CollectorAbort
     return budget
 
 
@@ -272,28 +281,31 @@ def _generate(config: CollectVariantsConfig, budget: int) -> list[GeneratedVaria
         "sources)",
         len(variants), config.variant_scripts, len(held_out),
     )
+    for variant in variants:
+        logger.info("  %s, from %s: %s", variant.name, variant.source_card, variant.perturbation)
     if not variants:
         logger.error("No script had a perturbable parameter")
+        raise CollectorAbort
     return variants
 
 
-def _write_sidecars(variant_scripts: Path) -> int:
+def _write_sidecars(variant_scripts: Path) -> None:
     """Write every variant's sidecar before the first game: a variant without
-    one produces records nothing can join."""
+    one produces records nothing can join. Aborts with the worker's code."""
     code = write_variant_sidecars(variant_scripts)
     if code != 0:
         logger.error(
             "VariantSidecarMain exited %d; variant records would have no "
             "sidecar to join against", code,
         )
-    return code
+        raise CollectorAbort(code)
 
 
 def _keep_loadable(
     variants: list[GeneratedVariant], variant_scripts: Path,
 ) -> list[GeneratedVariant]:
     """The variants Forge loaded, per the sidecar pass's list, saying how many
-    it rejected."""
+    it rejected; aborts when it loaded none."""
     deckable = loadable_variants(variants, variant_scripts)
     rejected = len(variants) - len(deckable)
     if rejected:
@@ -309,6 +321,7 @@ def _keep_loadable(
             "Forge loaded none of the %d perturbed scripts, so there is "
             "nothing to deck.", len(variants),
         )
+        raise CollectorAbort
     return deckable
 
 
@@ -345,7 +358,8 @@ def drop_held_out_variants(
 def _keep_unheld(
     config: CollectVariantsConfig, variants: list[GeneratedVariant],
 ) -> list[GeneratedVariant]:
-    """:func:`drop_held_out_variants` under the holdout ``build-corpus`` chooses."""
+    """:func:`drop_held_out_variants` under the holdout ``build-corpus``
+    chooses; aborts when it drops every variant."""
     trees = config.source_trees.converted()
     if trees.cards_folder is None or not trees.cards_folder.is_dir():
         logger.warning(
@@ -364,6 +378,7 @@ def _keep_unheld(
         )
     if not kept:
         logger.error("Every variant printed a held-out text; there is nothing to deck.")
+        raise CollectorAbort
     return kept
 
 
