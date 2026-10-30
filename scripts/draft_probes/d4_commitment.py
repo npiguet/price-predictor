@@ -35,32 +35,21 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from draft_corpus_common import ColourResolver  # noqa: E402
-from probe_lib import (  # noqa: E402
+from draft_corpus_common import ColourResolver
+from draft_probes.probe_lib import (
+    CARDS,
+    CORPUS,
+    OUT,
     TYPE_POOL,
+    WUBRG,
     CardTable,
-    PolicyRunner,
     iter_corpus_states,
-    load_agent,
+    iter_runners,
+    pool_colour_fraction,
     transplant_pool,
 )
-
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-G4 = REPO / "models/draft/agent/gen4"
-CORPUS = G4 / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl"
-CARDS = REPO / "output" / "cardsfolder-512"
-
-MODELS = {
-    "gen1": REPO / "models/draft/agent/gen1/l6_lr3e-4_decay_20260604_080249.pt",
-    "gen3": REPO / "models/draft/agent/gen3/temperature-on-all-agents"
-                   "/lr1e-5_t2_20260805_221050.pt",
-    "gen4": G4 / "lr1e-5_t2all_decay0.3.pt",
-    "gen4b": G4 / "lr1e-5_t2all_nodecay.pt",
-}
 
 # Absolute pick index across the draft -> (pack, pick), pack size 15.
 CLOCKS = [3, 8, 16, 23, 31, 38, 43]
@@ -96,18 +85,7 @@ def main() -> None:
     colour_of_row = [colours(n) for n in table.names]
 
     def pool_fraction(state) -> dict[str, float]:
-        sel = state.type_idx == TYPE_POOL
-        rows = state.card_idx[sel]
-        if rows.size == 0:
-            return {c: 0.0 for c in "WUBRG"}
-        acc = {c: 0.0 for c in "WUBRG"}
-        for r in rows:
-            ids = colour_of_row[r]
-            if not ids:
-                continue
-            for c in ids:
-                acc[c] += 1.0 / len(ids)
-        return {c: acc[c] / rows.size for c in "WUBRG"}
+        return dict(zip(WUBRG, pool_colour_fraction(state, colour_of_row).tolist()))
 
     # Build the (receiver, donor) work list once; every model sees the same one.
     work: list[tuple] = []          # (clock, receiver, donor_state, frac)
@@ -135,12 +113,7 @@ def main() -> None:
         return donor_map[id(sample)]
 
     results = {}
-    for gen, ckpt in MODELS.items():
-        if not ckpt.exists():
-            print(f"skip {gen}")
-            continue
-        model, _ = load_agent(ckpt)
-        runner = PolicyRunner(model, table, batch_size=args.batch)
+    for gen, runner in iter_runners(table, args.batch):
         logits = runner.logits(samples, transplant_pool(donor_of))
 
         # Per (state, card): the card's own-colour arm, and a placebo arm using
@@ -167,7 +140,7 @@ def main() -> None:
                 key = (recv.draft_id, recv.seat, id(recv), j)
                 f = sum(frac[c] for c in ids) / len(ids)
                 obs[t][key].append((f, float(centred[j])))
-                off = [c for c in "WUBRG" if c not in ids]
+                off = [c for c in WUBRG if c not in ids]
                 if off:
                     fp = sum(frac[c] for c in off) / len(off)
                     plc[t][key].append((fp, float(centred[j])))

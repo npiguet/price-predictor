@@ -32,63 +32,30 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from probe_lib import (  # noqa: E402
+from _lib.stats import js_distance, softmax
+from draft_probes.probe_lib import (
+    CORPUS,
+    MODELS,
+    OUT,
     TYPE_PACK,
     TYPE_PASSED,
     TYPE_POOL,
     TYPE_TAKEN,
     CardTable,
     PickSample,
-    PolicyRunner,
+    argmaxes,
     iter_corpus_states,
-    load_agent,
+    iter_runners,
     mean_substitute,
+    replay_fidelity,
     retype,
     set_context,
+    zero_recency,
 )
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-G4 = REPO / "models/draft/agent/gen4"
-CORPUS = G4 / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl"
-
-MODELS = {
-    "gen1": REPO / "models/draft/agent/gen1/l6_lr3e-4_decay_20260604_080249.pt",
-    "gen3": REPO / "models/draft/agent/gen3/temperature-on-all-agents"
-                   "/lr1e-5_t2_20260805_221050.pt",
-    "gen4": G4 / "lr1e-5_t2all_decay0.3.pt",
-    "gen4b": G4 / "lr1e-5_t2all_nodecay.pt",
-}
-
-
-def softmax(x: np.ndarray) -> np.ndarray:
-    e = np.exp(x - x.max())
-    return e / e.sum()
-
-
-def js(p: np.ndarray, q: np.ndarray) -> float:
-    m = 0.5 * (p + q)
-    def kl(a, b):
-        s = a > 0
-        return float(np.sum(a[s] * np.log(a[s] / b[s])))
-    return float(np.sqrt(max(0.0, 0.5 * kl(p, m) + 0.5 * kl(q, m))))
-
-
-def zero_recency_of(*types: int):
-    """Zero recency on selected blocks only, leaving the rest intact."""
-    sel_types = set(types)
-
-    def apply(sample: PickSample):
-        st = sample.state
-        sel = np.isin(st.type_idx, list(sel_types))
-        pa, pi = st.packs_ago.copy(), st.pick_ago.copy()
-        pa[sel] = 0
-        pi[sel] = 0
-        return replace(st, packs_ago=pa, pick_ago=pi)
-
-    return apply
+BLOCKS = {"POOL": TYPE_POOL, "PASSED": TYPE_PASSED, "TAKEN": TYPE_TAKEN}
 
 
 def placebo(k: int, mean_row: int, seed: int):
@@ -131,12 +98,8 @@ def main() -> None:
         pool_row[id(s)] = table.add_vector(vec, "<pool-mean>")
 
     block_size = {
-        "POOL": np.array([int((s.state.type_idx == TYPE_POOL).sum())
-                          for s in samples]),
-        "PASSED": np.array([int((s.state.type_idx == TYPE_PASSED).sum())
-                            for s in samples]),
-        "TAKEN": np.array([int((s.state.type_idx == TYPE_TAKEN).sum())
-                           for s in samples]),
+        name: np.array([int((s.state.type_idx == tt).sum()) for s in samples])
+        for name, tt in BLOCKS.items()
     }
     pack_no = np.array([s.state.pack_number for s in samples])
     pick_no = np.array([s.state.pick_number for s in samples])
@@ -154,11 +117,11 @@ def main() -> None:
         ("ownership (POOL->TAKEN)", retype(TYPE_POOL, TYPE_TAKEN)),
         ("fate (TAKEN->PASSED)", retype(TYPE_TAKEN, TYPE_PASSED)),
         ("fate (PASSED->TAKEN)", retype(TYPE_PASSED, TYPE_TAKEN)),
-        ("recency: PACK", zero_recency_of(TYPE_PACK)),
-        ("recency: POOL", zero_recency_of(TYPE_POOL)),
-        ("recency: PASSED+TAKEN", zero_recency_of(TYPE_PASSED, TYPE_TAKEN)),
+        ("recency: PACK", zero_recency(TYPE_PACK)),
+        ("recency: POOL", zero_recency(TYPE_POOL)),
+        ("recency: PASSED+TAKEN", zero_recency(TYPE_PASSED, TYPE_TAKEN)),
         ("recency: all",
-         zero_recency_of(TYPE_PACK, TYPE_POOL, TYPE_PASSED, TYPE_TAKEN)),
+         zero_recency(TYPE_PACK, TYPE_POOL, TYPE_PASSED, TYPE_TAKEN)),
         ("pack_number -> 1", set_context(pack_number=1)),
         ("pick_number -> 1", set_context(pick_number=1)),
         ("pick_number -> 15", set_context(pick_number=15)),
@@ -168,25 +131,18 @@ def main() -> None:
         arms.append((f"placebo k={k}", placebo(k, mean_row, seed=100 + k)))
 
     results = {}
-    for gen, ckpt in MODELS.items():
-        if not ckpt.exists():
-            print(f"skip {gen}: {ckpt} missing")
-            continue
-        model, _ = load_agent(ckpt)
-        runner = PolicyRunner(model, table, batch_size=args.batch)
+    for gen, runner in iter_runners(table, args.batch):
         base = runner.logits(samples)
         base_p = [softmax(ln) for ln in base]
-        base_arg = np.array([int(np.argmax(ln)) for ln in base])
-        fidelity = float(np.mean([
-            int(np.argmax(ln) == s.target)
-            for s, ln in zip(samples, base) if s.target >= 0]))
+        base_arg = argmaxes(base)
+        fidelity = replay_fidelity(samples, base)
 
         rows = []
         for name, interv in arms:
             alt = runner.logits(samples, interv)
             flip = np.array([int(np.argmax(a) != b)
                              for a, b in zip(alt, base_arg)])
-            dist = np.array([js(p, softmax(a)) for p, a in zip(base_p, alt)])
+            dist = np.array([js_distance(p, softmax(a)) for p, a in zip(base_p, alt)])
             row = {
                 "arm": name,
                 "flip": float(flip.mean()),
@@ -201,7 +157,7 @@ def main() -> None:
                     block_size[name.split()[0]].mean())
             rows.append(row)
         results[gen] = {
-            "checkpoint": str(ckpt),
+            "checkpoint": str(MODELS[gen]),
             "n_states": len(samples),
             "replay_fidelity": fidelity,
             "arms": rows,
@@ -217,6 +173,7 @@ def main() -> None:
     meta = {
         "corpus": str(CORPUS),
         "seat_label": args.seat_label,
+        "limit_drafts": args.limit_drafts,
         "mean_block_size": {k: float(v.mean()) for k, v in block_size.items()},
         "placebo_ks": placebo_ks,
     }

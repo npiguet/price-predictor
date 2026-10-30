@@ -22,7 +22,7 @@ checkout at `../forge`.
 |---|---|---|
 | `probe_lib.py` | shared harness (checkpoint load, batched scoring, corpus readers, card features, win-rate labels) | — |
 | `t0_landscape.py` | "Three quarters of the score range…"; builder means; inputs to T7-A | `t0_decks.csv` |
-| `t5_ablation.py` | "The card-text embedding carries the signal…" (ablation table, bag-of-text) | `t5_results.json` |
+| `t5_ablation.py` | "The card-text embedding carries the signal…" (ablation table, bag-of-text) | `t5_ablation.json` |
 | `t5b_det_groups.py` | per-group ablation of the 32 deterministic features (paired stats, both post-cutoff corpora) — "Inside the deterministic features…" | `t5b_results.json` |
 | `t5c_label_weights.py` | how heavily the scorer weights each label axis: regression on the T2 card values + text-direction perturbation — "The scorer pulls hardest…" (needs t2's CSV and the PCA) | `t5c_results.json` |
 | `make_text_pca.py` | PC1/top-k variance shares; label regression naming the leading axes (PC1 = played-rate, PC2 = winnability); input for t6 P1 | `text_pca_512.npz` |

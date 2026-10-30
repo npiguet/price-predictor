@@ -24,10 +24,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import probe_lib as pl  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-TEXT_DIM = 512
+from scorer_probes import probe_lib as pl
+
 N_DECKS = 300
 OUT_JSON = pl.SCRATCH / "t5c_results.json"
 MATCH_FILE = pl.YDATA / "matches-b07" / "match-outcomes-gen5-vs-gen4-forge.txt"
@@ -60,6 +60,7 @@ def assoc_regression():
 
 def main():
     probe = pl.Probe()
+    text_dim = probe.d_model - pl.FC
     assoc = assoc_regression()
 
     # --- labeled text vectors ---
@@ -75,7 +76,7 @@ def main():
         e = loc.load_embedding(name)
         if e is None:
             continue
-        X_rows.append(e[:TEXT_DIM])
+        X_rows.append(e[:text_dim])
         Y_rows.append(vals)
     X = np.array(X_rows, dtype=np.float64)
     Y = np.array(Y_rows)
@@ -88,7 +89,7 @@ def main():
     Xs = (X - mu) / sd
     steps, probe_r2 = {}, {}
     lam = 10.0
-    G = Xs.T @ Xs + lam * np.eye(TEXT_DIM)
+    G = Xs.T @ Xs + lam * np.eye(text_dim)
     for j, nm in enumerate(axis_names):
         y = (Y[:, j] - Y[:, j].mean()) / Y[:, j].std()
         w = np.linalg.solve(G, Xs.T @ y)
@@ -109,24 +110,19 @@ def main():
 
     # --- held-out context decks ---
     decks, seen = [], set()
-    with open(MATCH_FILE, encoding="utf-8") as f:
-        for line in f:
-            p = line.rstrip("\n").split(";")
-            if len(p) < 10:
-                continue
-            names = [c for c in p[5].split("|")
-                     if c.lower() not in pl.BASIC_LAND_NAMES]
-            key = "|".join(sorted(names))
-            if key in seen:
-                continue
-            try:
-                m = probe.deck_matrix(names)
-            except KeyError:
-                continue
-            seen.add(key)
-            decks.append(m)
-            if len(decks) >= N_DECKS:
-                break
+    for _set, _ma, deck_a, _mb, _db in pl.iter_match_decks(MATCH_FILE):
+        names = pl.nonbasic(deck_a)
+        key = "|".join(sorted(names))
+        if key in seen:
+            continue
+        try:
+            m = probe.deck_matrix(names)
+        except KeyError:
+            continue
+        seen.add(key)
+        decks.append(m)
+        if len(decks) >= N_DECKS:
+            break
     print(f"{len(decks)} context decks", flush=True)
 
     # --- central-difference sensitivity ---
@@ -139,7 +135,7 @@ def main():
                 for ci in range(m.shape[0]):
                     for sign in (+1.0, -1.0):
                         mm = m.copy()
-                        mm[ci, :TEXT_DIM] += sign * delta
+                        mm[ci, :text_dim] += sign * delta
                         mats.append(mm.astype(np.float32))
                         index.append((di, ci, sign))
             s = probe.score_matrices(mats)

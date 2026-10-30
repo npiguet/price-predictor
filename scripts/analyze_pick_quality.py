@@ -56,33 +56,13 @@ from draft_corpus_common import (
     ColourResolver,
     parse_drafts_arg,
     read_records,
-    seat_pool,
+    score_play,
     top_two_colours,
 )
 
 DEFAULT_CARDS_PATH = Path("output/cardsfolder-512")
 DEFAULT_WINRATES = Path("output/sealed/cards-win-rates.txt")
 QUALITY_COLUMN = "shrunk_score_play"
-
-
-def load_winrate_quality(path: Path, column: str = QUALITY_COLUMN) -> dict[str, float]:
-    """card name -> ``shrunk_score_play``; blank cells (no signal) are skipped."""
-    quality: dict[str, float] = {}
-    with path.open(encoding="utf-8") as handle:
-        header = handle.readline().rstrip("\r\n").split(";")
-        try:
-            index = header.index(column)
-        except ValueError as exc:
-            raise SystemExit(f"{path} has no '{column}' column") from exc
-        for line in handle:
-            fields = line.rstrip("\r\n").split(";")
-            if len(fields) <= index or not fields[index]:
-                continue
-            try:
-                quality[fields[0]] = float(fields[index])
-            except ValueError:
-                continue
-    return quality
 
 
 def build_pickrate_quality(
@@ -126,7 +106,7 @@ def analyze(
         for index, seat in enumerate(record.seats):
             if agents is not None and seat.agent not in agents:
                 continue
-            top2 = top_two_colours(seat_pool(record, geometry, index), colours)
+            top2 = top_two_colours(geometry.drafted_pool(record, index), colours)
             for pack in range(1, geometry.packs + 1):
                 for pick in range(1, geometry.pack_size + 1):
                     legal = geometry.legal_actions(record, index, pack, pick)
@@ -203,7 +183,7 @@ def main() -> None:
                 f"{args.winrates} not found — pass --winrates PATH, or use "
                 f"--quality pickrate to derive a scale from the corpus itself"
             )
-        quality = load_winrate_quality(args.winrates)
+        quality = score_play(args.winrates)
         values = sorted(quality.values())
         print(
             f"quality: {QUALITY_COLUMN} for {len(quality)} cards "

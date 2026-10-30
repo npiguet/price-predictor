@@ -56,13 +56,13 @@ import argparse
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from _lib.stats import mean_se
 from draft_corpus_common import (
     ColourResolver,
     effective_colour_count,
     mana_base_width,
     parse_drafts_arg,
     read_records,
-    seat_pool,
     top_two_colours,
 )
 
@@ -74,16 +74,6 @@ LEAN_COLOURS = frozenset("GBW")
 
 def _pct(numerator: int, denominator: int) -> str:
     return f"{100 * numerator / denominator:5.1f}%" if denominator else "    -"
-
-
-def _mean_se(values: list[float]) -> tuple[float, float]:
-    """Sample mean and its standard error; ``(nan, nan)`` below two samples."""
-    n = len(values)
-    if n < 2:
-        return float("nan"), float("nan")
-    mean = sum(values) / n
-    variance = sum((v - mean) ** 2 for v in values) / (n - 1)
-    return mean, (variance / n) ** 0.5
 
 
 def analyze(
@@ -112,7 +102,7 @@ def analyze(
             if agents is not None and seat.agent not in agents:
                 continue
             seats_seen[seat.agent] += 1
-            pool = seat_pool(record, geometry, index)
+            pool = geometry.drafted_pool(record, index)
             top2 = top_two_colours(pool, colours)
 
             if seat.deck:
@@ -254,7 +244,7 @@ def analyze(
     print(f"     lean towards {''.join(sorted(LEAN_COLOURS))}: mean(taken - available)")
     print(f"     {'agent':<12} {'diff':>9} {'se':>7} {'z':>7} {'picks':>8}")
     for agent in reported:
-        mean, se = _mean_se(lean_diff[agent])
+        mean, se, _ = mean_se(lean_diff[agent])
         if se != se:  # nan — too few off-lane picks to say anything
             continue
         z = mean / se if se else float("nan")

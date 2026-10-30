@@ -31,101 +31,30 @@ Usage
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from draft_corpus_common import ColourResolver  # noqa: E402
-from probe_lib import (  # noqa: E402
+from _lib.corpora import card_column
+from draft_corpus_common import ColourResolver, score_play
+from draft_probes.probe_lib import (
+    CARDS,
+    CORPUS,
+    HINTS,
+    MODELS,
+    OUT,
+    WIN_RATES,
     CardTable,
     PolicyRunner,
+    deck_lane,
     iter_corpus_records,
     iter_corpus_states,
     load_agent,
 )
-
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-G4 = REPO / "models/draft/agent/gen4"
-CORPUS = G4 / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl"
-CARDS = REPO / "output" / "cardsfolder-512"
-HINTS = REPO / "output" / "scorer-probes" / "forge_hints.csv"
-WIN_RATES = Path(
-    r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1"
-    r"\cards-win-rates.txt"
-)
-
-MODELS = {
-    "gen1": REPO / "models/draft/agent/gen1/l6_lr3e-4_decay_20260604_080249.pt",
-    "gen3": REPO / "models/draft/agent/gen3/temperature-on-all-agents"
-                   "/lr1e-5_t2_20260805_221050.pt",
-    "gen4": G4 / "lr1e-5_t2all_decay0.3.pt",
-    # A second gen-4 run from the same base and the same hyper-parameters. The
-    # gap between two siblings is the noise floor: a gen-4 − gen-1 residual no
-    # larger than it is training-run variation, not learning.
-    "gen4b": G4 / "lr1e-5_t2all_nodecay.pt",
-}
-BASIC = {"Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"}
-
-
-def load_draft_rank() -> dict[str, float]:
-    """Forge's bundled human pick order, lower = picked earlier."""
-    out: dict[str, float] = {}
-    if not HINTS.exists():
-        return out
-    with HINTS.open("r", encoding="utf-8", errors="replace", newline="") as fh:
-        for row in csv.DictReader(fh):
-            key = next((k for k in row if k.lower() == "draft_rank"), None)
-            name = next((k for k in row if k.lower() in ("card_name", "name")), None)
-            if key is None or name is None:
-                return out
-            try:
-                out[row[name]] = float(row[key])
-            except (TypeError, ValueError):
-                continue
-    return out
-
-
-def load_score_play() -> dict[str, float]:
-    out: dict[str, float] = {}
-    if not WIN_RATES.exists():
-        return out
-    with WIN_RATES.open("r", encoding="utf-8", errors="replace") as fh:
-        header = fh.readline().rstrip("\n").split(";")
-        try:
-            i_name = header.index("card_name")
-            i_val = header.index("shrunk_score_play")
-        except ValueError:
-            return out
-        for line in fh:
-            parts = line.rstrip("\n").split(";")
-            if len(parts) <= i_val or not parts[i_val]:
-                continue
-            try:
-                out[parts[i_name]] = float(parts[i_val])
-            except ValueError:
-                continue
-    return out
-
-
-def seat_colours(deck: list[str], colours: ColourResolver) -> frozenset:
-    """The seat's top-2 colours by pip weight in its built deck."""
-    acc: dict[str, float] = defaultdict(float)
-    for name in deck:
-        if name in BASIC:
-            continue
-        ids = colours(name)
-        for c in ids:
-            acc[c] += 1.0 / len(ids)
-    top = sorted(acc.items(), key=lambda kv: -kv[1])[:2]
-    return frozenset(c for c, _ in top)
 
 
 def main() -> None:
@@ -137,15 +66,15 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     table = CardTable()
     colours = ColourResolver(CARDS)
-    rank = load_draft_rank()
-    play = load_score_play()
+    rank = card_column(HINTS, "draft_rank")  # Forge's human pick order, lower = earlier
+    play = score_play(WIN_RATES) if WIN_RATES.exists() else {}
     print(f"graders: draft_rank {len(rank)} cards, shrunk_score_play {len(play)}")
 
     lanes: dict[tuple[str, int], frozenset] = {}
     for rec in iter_corpus_records(CORPUS, args.limit_drafts):
         for i, seat in enumerate(rec.seats):
             if seat.deck:
-                lanes[(rec.draft_id, i)] = seat_colours(seat.deck, colours)
+                lanes[(rec.draft_id, i)] = deck_lane(seat.deck, colours)
 
     samples = list(iter_corpus_states(
         CORPUS, table, labels=["gen4"], limit_drafts=args.limit_drafts))

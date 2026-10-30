@@ -6,6 +6,8 @@ import statistics
 from datetime import datetime
 from pathlib import Path
 
+from _lib.corpora import iter_matches
+
 PATH = Path("output/sealed/match-outcomes.txt")
 CHUNK_SIZE = 100  # matches per trend bucket
 
@@ -18,24 +20,13 @@ def main() -> None:
     timestamps: list[datetime] = []
     durations: list[int] = []
     games_lengths: list[int] = []
-
-    with open(PATH, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split(";")
-            if len(parts) != 10:
-                continue
-            try:
-                ts = datetime.fromisoformat(parts[0].replace("Z", "+00:00"))
-                games = parts[7]
-                d = int(parts[9])
-            except (ValueError, IndexError):
-                continue
-            timestamps.append(ts)
-            durations.append(d)
-            games_lengths.append(len(games))
+    for match in iter_matches(PATH):
+        try:
+            timestamps.append(datetime.fromisoformat(match.timestamp.replace("Z", "+00:00")))
+        except ValueError:
+            continue
+        durations.append(match.duration_s)
+        games_lengths.append(len(match.games))
 
     n = len(durations)
     if n == 0:

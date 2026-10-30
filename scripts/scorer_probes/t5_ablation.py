@@ -29,14 +29,18 @@ Read-only w.r.t. the repo and the Y: drive.
 from __future__ import annotations
 
 import argparse
-import gzip
 import json
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
-import probe_lib as pl
 from scipy.stats import pearsonr, spearmanr
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scorer_probes import probe_lib as pl
+from scorer_probes.probe_lib import DeckBank
 
 MATCH_FILE = pl.YDATA / "matches-b07" / "match-outcomes-gen5-vs-gen4-forge.txt"
 DEFAULT_OUT = pl.SCRATCH / "t5_ablation.json"
@@ -47,93 +51,11 @@ CONDITIONS = ["full", "text_mean", "text_shuffle", "det_mean", "both_mean"]
 PAIR_TABLE_CONDITIONS = ["full", "text_mean", "det_mean"]
 
 
-# ---------------------------------------------------------------- match corpus
-
-def _open(path: Path):
-    return gzip.open(path, "rt", encoding="utf-8") if path.suffix == ".gz" \
-        else open(path, "rt", encoding="utf-8")
-
-
-def parse_matches(path: Path, limit: int | None = None):
-    """Yield (method_A, deck_A, method_B, deck_B, winner) per match line.
-
-    Winner = the side with more game wins in the 'games' field (index 7, a
-    string like "ABAAA"). Lines with an equal count (or an empty field) carry
-    no decidable winner and are dropped.
-    """
-    rows, undecided, malformed = [], 0, 0
-    with _open(path) as f:
-        for line in f:
-            p = line.rstrip("\n").split(";")
-            if len(p) < 10:
-                malformed += 1
-                continue
-            a, b = p[7].count("A"), p[7].count("B")
-            if a == b:
-                undecided += 1
-                continue
-            rows.append((p[3], p[5].split("|"), p[4], p[6].split("|"),
-                         "A" if a > b else "B"))
-            if limit and len(rows) >= limit:
-                break
-    return rows, undecided, malformed
-
-
-# ------------------------------------------------------------- deck collection
-
-class DeckRegistry:
-    """Distinct decks (by nonbasic-card multiset), with embedding validity.
-
-    The scorer is permutation-invariant over the card set, so decks are
-    canonicalized to sorted order before hashing; that both dedups more and
-    makes the text_shuffle permutation reproducible.
-    """
-
-    def __init__(self, probe: pl.Probe):
-        self.probe = probe
-        self.index: dict[tuple[str, ...], int] = {}
-        self.decks: list[list[str]] = []
-        self.emb: dict[str, np.ndarray] = {}
-        self.missing: set[str] = set()
-
-    def _card_ok(self, name: str) -> bool:
-        if name in self.emb:
-            return True
-        if name in self.missing:
-            return False
-        e = self.probe.embedding(name)
-        if e is None:
-            self.missing.add(name)
-            return False
-        self.emb[name] = e.astype(np.float32)
-        return True
-
-    def add(self, deck: list[str]) -> int | None:
-        """Register a deck; None if it has an unembeddable nonbasic card."""
-        nonbasic = tuple(sorted(c for c in deck
-                                if c.lower() not in pl.BASIC_LAND_NAMES))
-        if not nonbasic:
-            return None
-        hit = self.index.get(nonbasic)
-        if hit is not None:
-            return hit
-        if not all(self._card_ok(c) for c in nonbasic):
-            return None
-        idx = len(self.decks)
-        self.index[nonbasic] = idx
-        self.decks.append(list(nonbasic))
-        return idx
-
-    def matrix(self, idx: int) -> np.ndarray:
-        """Fresh (n_cards, d_model) float32 matrix for a distinct deck."""
-        return np.stack([self.emb[c] for c in self.decks[idx]])
-
-
 # ------------------------------------------------------------------ conditions
 
-def corpus_means(reg: DeckRegistry, used: set[int], text_dim: int):
+def corpus_means(reg: DeckBank, used: set[int], text_dim: int):
     """Raw-space mean vector over distinct cards of the used decks."""
-    names = {c for i in used for c in reg.decks[i]}
+    names = {c for i in used for c in reg.keys[i]}
     mean = np.stack([reg.emb[n] for n in sorted(names)]).mean(axis=0)
     return mean[:text_dim].copy(), mean[text_dim:].copy(), len(names)
 
@@ -154,17 +76,12 @@ def apply_condition(mat: np.ndarray, cond: str, idx: int, text_dim: int,
     return mat
 
 
-def score_condition(probe: pl.Probe, reg: DeckRegistry, order: list[int],
+def score_condition(probe: pl.Probe, reg: DeckBank, order: list[int],
                     cond: str, text_dim: int, mean_text, mean_det,
                     batch: int = BATCH) -> np.ndarray:
     """Score every distinct deck under one condition (built batch by batch)."""
-    out = np.empty(len(order), dtype=np.float64)
-    for lo in range(0, len(order), batch):
-        chunk = order[lo:lo + batch]
-        mats = [apply_condition(reg.matrix(i), cond, i, text_dim,
-                                mean_text, mean_det) for i in chunk]
-        out[lo:lo + len(chunk)] = probe.score_matrices(mats, batch_size=batch)
-    return out
+    return reg.score_all(probe, order, batch, transform=lambda mat, i: apply_condition(
+        mat, cond, i, text_dim, mean_text, mean_det))
 
 
 # --------------------------------------------------------------------- metrics
@@ -338,16 +255,19 @@ def main() -> None:
     print(f"d_model={probe.d_model}  text[0:{text_dim}]  "
           f"det[{text_dim}:{probe.d_model}]  device={probe.device}")
 
-    rows, undecided, malformed = parse_matches(MATCH_FILE, limit)
+    rows, undecided, malformed = pl.decided_matches(MATCH_FILE, limit)
     print(f"parsed {len(rows)} decided matches "
           f"({undecided} undecided, {malformed} malformed)")
 
-    reg = DeckRegistry(probe)
+    # Decks are canonicalized to sorted order, which both dedups more and makes
+    # the text_shuffle permutation reproducible.
+    reg = DeckBank(probe.embedding)
     matches = []           # (win_idx, lose_idx, pair_label)
     dropped = 0
     pair_counts: Counter = Counter()
-    for m_a, deck_a, m_b, deck_b, winner in rows:
-        ia, ib = reg.add(deck_a), reg.add(deck_b)
+    for m, winner in rows:
+        m_a, m_b = m.method_a, m.method_b
+        ia, ib = reg.add(m.deck_a.cards), reg.add(m.deck_b.cards)
         if ia is None or ib is None:
             dropped += 1
             continue
@@ -356,7 +276,7 @@ def main() -> None:
         win, lose = (ia, ib) if winner == "A" else (ib, ia)
         matches.append((win, lose, pair))
     print(f"kept {len(matches)} matches ({dropped} dropped for missing "
-          f"embeddings); {len(reg.decks)} distinct decks; "
+          f"embeddings); {len(reg.keys)} distinct decks; "
           f"{len(reg.emb)} distinct cards; {len(reg.missing)} cards unembeddable")
     if not matches:
         raise SystemExit("no usable matches")

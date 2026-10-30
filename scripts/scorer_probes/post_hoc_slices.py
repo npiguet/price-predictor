@@ -14,13 +14,18 @@ Sections (``--section all`` default):
 """
 
 import argparse
-import gzip
+import json
 import re
+import sys
 from collections import Counter, defaultdict
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import probe_lib as pl
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scorer_probes import probe_lib as pl
 
 OUT = pl.SCRATCH
 
@@ -72,7 +77,7 @@ def _colors_of_deck(cards, loc, cache):
             continue
         if c not in cache:
             e = loc.load_embedding(c)
-            cache[c] = None if e is None else (e[-32:][1:6] > 0)
+            cache[c] = None if e is None else (e[-pl.FC:][pl.layout.COLOR_PIPS] > 0)
         v = cache[c]
         if v is not None:
             for i, colour in enumerate("WUBRG"):
@@ -101,8 +106,8 @@ def sec_decks():
                   "generated-decks-gen5.txt"]:
         counts: Counter = Counter()
         tot = 0
-        for _lbl, _sc, cards in pl.read_generated_decks(pl.YDATA / "decks" / fname, limit=3000):
-            nb = sum(1 for c in cards
+        for deck in pl.read_generated_decks(pl.YDATA / "decks" / fname, limit=3000):
+            nb = sum(1 for c in deck.cards
                      if c.lower() not in pl.BASIC_LAND_NAMES and is_nonbasic_land(c))
             counts[nb] += 1
             tot += 1
@@ -113,8 +118,8 @@ def sec_decks():
     cnt: Counter = Counter()
     snow = wastes = tot = 0
     per_set = defaultdict(list)
-    for _lbl, sc, cards in pl.read_generated_decks(
-            pl.YDATA / "decks" / "generated-decks-gen4-512.txt"):
+    for deck in pl.read_generated_decks(pl.YDATA / "decks" / "generated-decks-gen4-512.txt"):
+        sc, cards = deck.set_code, deck.cards
         tot += 1
         if any("snow-covered" in c.lower() for c in cards):
             snow += 1
@@ -225,15 +230,11 @@ def sec_addrobust():
     probe = pl.Probe()
     wr = pl.load_win_rates()
     decks_by_set: dict = {}
-    with gzip.open(pl.YDATA / "matches-b07" / "match-outcomes-gen0.txt.gz",
-                   "rt", encoding="utf-8") as f:
-        for line in f:
-            p = line.rstrip("\n").split(";")
-            if len(p) < 10:
-                continue
-            for mi, di in ((3, 5), (4, 6)):
-                if p[mi] == "forge-best":
-                    decks_by_set.setdefault(p[2], []).append(p[di].split("|"))
+    match_file = pl.YDATA / "matches-b07" / "match-outcomes-gen0.txt.gz"
+    for set_code, method_a, deck_a, method_b, deck_b in pl.iter_match_decks(match_file):
+        for method, deck in ((method_a, deck_a), (method_b, deck_b)):
+            if method == "forge-best":
+                decks_by_set.setdefault(set_code, []).append(deck)
     base_mats, adds = [], []
     for s in [s for s, v in decks_by_set.items() if len(v) >= 6][:50]:
         v = decks_by_set[s]
@@ -248,7 +249,7 @@ def sec_addrobust():
                 if c.lower() in pl.BASIC_LAND_NAMES or c in deck:
                     continue
                 e = probe.embedding(c)
-                if e is None or e[-32:][0] > 0.5:
+                if e is None or e[-pl.FC:][pl.layout.IS_LAND] > 0.5:
                     continue
                 q = (wr.get(c) or {}).get("shrunk_score_play")
                 if q is not None:
@@ -296,7 +297,7 @@ def sec_colors():
     def pips(name):
         if name not in pip_cache:
             e = loc.load_embedding(name)
-            pip_cache[name] = None if e is None else e[-32:][1:6]
+            pip_cache[name] = None if e is None else e[-pl.FC:][pl.layout.COLOR_PIPS]
         return pip_cache[name]
 
     census: Counter = Counter()
@@ -304,9 +305,9 @@ def sec_colors():
     sets4: Counter = Counter()
     gold5 = []
     grp = defaultdict(lambda: {"main": [], "splash": [], "n_splash": []})
-    for _lbl, sc, cards in pl.read_generated_decks(
-            pl.YDATA / "decks" / "generated-decks-gen4-512.txt"):
-        nonbasic = [c for c in cards if c.lower() not in pl.BASIC_LAND_NAMES]
+    for deck in pl.read_generated_decks(pl.YDATA / "decks" / "generated-decks-gen4-512.txt"):
+        sc = deck.set_code
+        nonbasic = pl.nonbasic(deck.cards)
         tot = np.zeros(5)
         percard = {}
         ok = True
@@ -364,7 +365,6 @@ def sec_colors():
         print(f"mean multicolor-card share in 5-color decks: "
               f"{100 * np.mean(gold5):.0f}%")
     print("4-color decks, top sets:", dict(sets4.most_common(8)))
-    import json
     (OUT / "post_hoc_colors.json").write_text(json.dumps(
         {"census": dict(sorted(census.items())), "by_colors": rows,
          "sets5": dict(sets5.most_common()),

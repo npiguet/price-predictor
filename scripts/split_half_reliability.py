@@ -37,41 +37,25 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from _lib.stats import pearson
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from sealed.application.train_encoder import (  # noqa: E402
+from sealed.application.train_encoder import (
     _ALL_HEAD_NAMES,
     _COLOR_LIFT_OFFSET,
     _aggregate,
     _build_label_map,
     _label_value,
 )
-from sealed.infrastructure.cards_played_reader import (  # noqa: E402
-    CardsPlayedRow,
-    iter_rows,
-)
-from sealed.infrastructure.converted_card_locator import (  # noqa: E402
-    ConvertedCardLocator,
-)
+from sealed.infrastructure.cards_played_reader import CardsPlayedRow, iter_rows
+from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
 DEFAULT_CARDS_PLAYED = Path("output/sealed/cards-played.txt")
 DEFAULT_CARDS_FOLDER = Path("output/cardsfolder/")
 
 
-def _pearson(xs: list[float], ys: list[float]) -> float | None:
-    if len(xs) < 2:
-        return None
-    x = np.asarray(xs, dtype=np.float64)
-    y = np.asarray(ys, dtype=np.float64)
-    if x.std() == 0.0 or y.std() == 0.0:
-        return None
-    return float(np.corrcoef(x, y)[0, 1])
-
-
-def _spearman_brown(r_half: float | None) -> float | None:
-    if r_half is None or 1.0 + r_half == 0.0:
-        return None
+def _spearman_brown(r_half: float) -> float:
+    if not np.isfinite(r_half) or 1.0 + r_half == 0.0:
+        return float("nan")
     return 2.0 * r_half / (1.0 + r_half)
 
 
@@ -145,10 +129,10 @@ def main() -> int:
                 continue
             xs.append(float(va))
             ys.append(float(vb))
-        r = _pearson(xs, ys)
+        r = pearson(xs, ys, min_n=2)
         rf = _spearman_brown(r)
-        r_s = f"{r:+.3f}" if r is not None else "--"
-        rf_s = f"{rf:+.3f}" if rf is not None else "--"
+        r_s = f"{r:+.3f}" if np.isfinite(r) else "--"
+        rf_s = f"{rf:+.3f}" if np.isfinite(rf) else "--"
         print(f"{name:<16}{len(xs):>10}{r_s:>10}{rf_s:>14}")
 
     print(

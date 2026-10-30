@@ -5,7 +5,8 @@ picks from a ``drafts.jsonl`` corpus through a frozen draft-agent checkpoint and
 reads the policy logits, optionally after **intervening** on the state (erasing a
 token block, rewriting the CONTEXT numbers, transplanting another seat's POOL).
 
-Three pieces:
+Three pieces, plus the inputs every probe shares (corpus, checkpoints, graders)
+and the small colour and logit helpers several of them use:
 
 - :class:`CardTable` — one shared ``name -> row`` embedding table over the
   corpus, built lazily from the ``.npz`` cache, plus the reverse ``row -> name``
@@ -15,67 +16,66 @@ Three pieces:
 - :class:`PolicyRunner` — batched forward passes returning per-PACK logits, with
   an optional per-sample :class:`Intervention`.
 
-The state walk is :func:`draft.application.draft_pick_states.iter_seat_pick_states`,
-the same one both trainers use, so a replayed state is bit-identical to the one
-the policy saw when it made the pick.
+States come from :func:`draft.domain.draft_state.build_state`, the oracle the
+live tracker is pinned to, so a replayed state is the one the deployed policy saw
+(see :func:`iter_corpus_states`).
 """
 
 from __future__ import annotations
 
-import json
-import sys
+import csv
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, replace
+from itertools import islice
 from pathlib import Path
 
 import numpy as np
+from _lib.paths import MODELS as MODEL_DIR
+from _lib.paths import OUTPUT, SEALED_TRAINING_DATA
+from draft_corpus_common import ColourResolver
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from draft.application.draft_pick_states import (  # noqa: E402
-    RawPickState,
-)
-from draft.domain.draft_geometry import DraftGeometry, DraftRecord  # noqa: E402
-from draft.domain.draft_state import (  # noqa: E402
+from draft.application.draft_pick_states import RawPickState
+from draft.domain.draft_geometry import DraftGeometry, DraftRecord
+from draft.domain.draft_state import (  # the probes import the token types from here
     NUM_TYPES,
     TYPE_PACK,
-    TYPE_PASSED,
+    TYPE_PASSED,  # noqa: F401
     TYPE_POOL,
-    TYPE_TAKEN,
+    TYPE_TAKEN,  # noqa: F401
+    build_state,
 )
-from draft.infrastructure.draft_record_io import record_from_dict  # noqa: E402
-from sealed.infrastructure.converted_card_locator import (  # noqa: E402
-    ConvertedCardLocator,
-)
+from draft.infrastructure.draft_record_io import read_records
+from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
-DEFAULT_CARDS_PATH = Path("output/cardsfolder-512")
+OUT = OUTPUT / "draft-probes"
+SCORER_OUT = OUTPUT / "scorer-probes"
+CARDS = OUTPUT / "cardsfolder-512"
+HINTS = SCORER_OUT / "forge_hints.csv"
+CARD_VALUES = SCORER_OUT / "t2_card_values.csv"
+BO1_DATA = SEALED_TRAINING_DATA / "matches-bo1"
+WIN_RATES = BO1_DATA / "cards-win-rates.txt"
 
-__all__ = [
-    "TYPE_PACK",
-    "TYPE_PASSED",
-    "TYPE_POOL",
-    "TYPE_TAKEN",
-    "CardTable",
-    "Intervention",
-    "PickSample",
-    "PolicyRunner",
-    "collapse_block",
-    "drop_types",
-    "mean_substitute",
-    "retype",
-    "transplant_pool",
-    "iter_corpus_records",
-    "iter_corpus_states",
-    "load_agent",
-    "set_context",
-    "zero_recency",
-]
+AGENTS = MODEL_DIR / "draft" / "agent"
+G4 = AGENTS / "gen4"
+CORPUS = G4 / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl"
+MODELS = {
+    "gen1": AGENTS / "gen1" / "l6_lr3e-4_decay_20260604_080249.pt",
+    "gen3": AGENTS / "gen3" / "temperature-on-all-agents" / "lr1e-5_t2_20260805_221050.pt",
+    "gen4": G4 / "lr1e-5_t2all_decay0.3.pt",
+    # A second gen-4 run from the same base and the same hyper-parameters. The
+    # gap between two siblings is the noise floor: a gen-4 − gen-1 residual no
+    # larger than it is training-run variation, not learning.
+    "gen4b": G4 / "lr1e-5_t2all_nodecay.pt",
+}
+
+WUBRG = "WUBRG"
+BASIC = frozenset({"Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"})
 
 
 class CardTable:
     """Lazy ``name -> row`` embedding table shared by every state in a run."""
 
-    def __init__(self, cards_path: Path = DEFAULT_CARDS_PATH) -> None:
+    def __init__(self, cards_path: Path = CARDS) -> None:
         self._locator = ConvertedCardLocator(cards_path)
         self._rows: list[np.ndarray] = []
         self.names: list[str] = []
@@ -113,9 +113,6 @@ class CardTable:
     def matrix(self) -> np.ndarray:
         return np.stack(self._rows).astype(np.float32)
 
-    def name(self, row: int) -> str:
-        return self.names[row]
-
 
 @dataclass(slots=True)
 class PickSample:
@@ -130,11 +127,6 @@ class PickSample:
     taken_name: str
 
     @property
-    def pack_rows(self) -> np.ndarray:
-        """Absolute token indices of the PACK block."""
-        return np.flatnonzero(self.state.type_idx == TYPE_PACK)
-
-    @property
     def target(self) -> int:
         """Index into ``pack_names`` of the card actually taken, or -1."""
         try:
@@ -143,24 +135,9 @@ class PickSample:
             return -1
 
 
-def iter_corpus_records(
-    path: Path, limit: int | None = None,
-) -> Iterator[DraftRecord]:
-    """Stream ``drafts.jsonl``, tolerating a trailing partial line."""
-    n = 0
-    with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                continue  # trailing partial write
-            yield record_from_dict(payload)
-            n += 1
-            if limit is not None and n >= limit:
-                return
+def iter_corpus_records(path: Path = CORPUS, limit: int | None = None) -> Iterator[DraftRecord]:
+    """The first ``limit`` records of a ``drafts.jsonl`` (all when None)."""
+    return islice(read_records(path), limit)
 
 
 def _sample_from_state(
@@ -229,8 +206,6 @@ def iter_corpus_states(
     the moment it left the pack instead of recomputing it — the two disagree only
     when a card name recurs in a later pack.
     """
-    from draft.domain.draft_state import build_state
-
     wanted = set(labels) if labels is not None else None
     for record in iter_corpus_records(path, limit_drafts):
         geo = DraftGeometry.from_record(record)
@@ -258,29 +233,6 @@ def iter_corpus_states(
 
 Intervention = Callable[[PickSample], RawPickState]
 """Rewrites one sample's state before the forward pass. Must not mutate in place."""
-
-
-def drop_types(*types: int) -> Intervention:
-    """Erase whole token blocks (the PACK block is never droppable)."""
-    drop = set(types)
-    if TYPE_PACK in drop:
-        raise ValueError("cannot drop the PACK block: it holds the actions")
-
-    def apply(sample: PickSample) -> RawPickState:
-        st = sample.state
-        keep = ~np.isin(st.type_idx, list(drop))
-        return replace(
-            st,
-            card_idx=st.card_idx[keep],
-            type_idx=st.type_idx[keep],
-            packs_ago=st.packs_ago[keep],
-            pick_ago=st.pick_ago[keep],
-            action_position=int(np.flatnonzero(keep).tolist().index(
-                st.action_position
-            )) if st.action_position >= 0 and keep[st.action_position] else -1,
-        )
-
-    return apply
 
 
 def transplant_pool(donor_of: Callable[[PickSample], RawPickState]) -> Intervention:
@@ -356,46 +308,6 @@ def mean_substitute(
     return apply
 
 
-def collapse_block(
-    token_type: int, mean_row: int | Callable[[PickSample], int],
-) -> Intervention:
-    """Replace a whole block with ONE token carrying a summary vector.
-
-    Under a mean-pooling trunk a block reaches the PACK logits only through its
-    average, so collapsing it to a single token holding that average should
-    barely matter if the average is all the model reads. Pass a constant row for
-    a blank (corpus-mean) collapse, or a per-sample callable for the block's own
-    mean — the difference between "the model ignores my pool" and "the model
-    reads only my pool's average".
-    """
-    getter = mean_row if callable(mean_row) else (lambda _s: mean_row)
-
-    def apply(sample: PickSample) -> RawPickState:
-        st = sample.state
-        sel = st.type_idx == token_type
-        if not sel.any():
-            return st
-        first = int(np.flatnonzero(sel)[0])
-        keep = ~sel
-        keep[first] = True
-        idx = st.card_idx.copy()
-        idx[first] = getter(sample)
-        pos = np.flatnonzero(keep).tolist()
-        return replace(
-            st,
-            card_idx=idx[keep],
-            type_idx=st.type_idx[keep],
-            packs_ago=st.packs_ago[keep],
-            pick_ago=st.pick_ago[keep],
-            action_position=(
-                pos.index(st.action_position)
-                if st.action_position >= 0 and keep[st.action_position] else -1
-            ),
-        )
-
-    return apply
-
-
 def set_context(pack_number: int | None = None,
                 pick_number: int | None = None) -> Intervention:
     """Rewrite the CONTEXT token's pack/pick index, leaving the cards alone."""
@@ -411,16 +323,17 @@ def set_context(pack_number: int | None = None,
     return apply
 
 
-def zero_recency() -> Intervention:
-    """Set every card's ``packs_ago`` / ``pick_ago`` to 0 (all cards look fresh)."""
+def zero_recency(*types: int) -> Intervention:
+    """Set ``packs_ago`` / ``pick_ago`` to 0 on the given blocks (all cards look fresh)."""
+    selected = list(types)
 
     def apply(sample: PickSample) -> RawPickState:
         st = sample.state
-        return replace(
-            st,
-            packs_ago=np.zeros_like(st.packs_ago),
-            pick_ago=np.zeros_like(st.pick_ago),
-        )
+        sel = np.isin(st.type_idx, selected)
+        packs_ago, pick_ago = st.packs_ago.copy(), st.pick_ago.copy()
+        packs_ago[sel] = 0
+        pick_ago[sel] = 0
+        return replace(st, packs_ago=packs_ago, pick_ago=pick_ago)
 
     return apply
 
@@ -557,3 +470,69 @@ class PolicyRunner:
         for sab in model.sab_layers:
             x = sab(x, attn_padding_mask=pad)
         return x[:, 0, :].float().cpu().numpy()
+
+
+def iter_runners(table: CardTable, batch_size: int, models: dict[str, Path] = MODELS):
+    """``(name, runner)`` per checkpoint on disk, one model resident at a time."""
+    for name, ckpt in models.items():
+        if not ckpt.exists():
+            print(f"skip {name}: {ckpt} missing")
+            continue
+        model, _ = load_agent(ckpt)
+        yield name, PolicyRunner(model, table, batch_size=batch_size)
+        del model
+
+
+def argmaxes(logits: Sequence[np.ndarray]) -> np.ndarray:
+    return np.array([int(np.argmax(ln)) for ln in logits])
+
+
+def centred(logits: Sequence[np.ndarray]) -> list[np.ndarray]:
+    """Subtract each state's own mean: the only behavioural part of a logit."""
+    return [ln - ln.mean() for ln in logits]
+
+
+def replay_fidelity(samples: Sequence[PickSample], logits: Sequence[np.ndarray]) -> float:
+    """Share of recorded picks the policy's argmax reproduces."""
+    return float(np.mean([int(np.argmax(ln) == s.target)
+                          for s, ln in zip(samples, logits) if s.target >= 0]))
+
+
+def colour_weights(ids: frozenset) -> list[tuple[str, float]]:
+    """A card's share of each colour, a gold card split evenly; ``C`` if colourless."""
+    return [(c, 1.0 / len(ids)) for c in ids] if ids else [("C", 1.0)]
+
+
+def deck_lane(deck: Sequence[str], colours: ColourResolver) -> frozenset:
+    """A built deck's top two colours by colour weight, basics excluded.
+
+    A tie keeps the colour met first in deck order, unlike
+    ``draft_corpus_common.top_two_colours``, which breaks ties by letter.
+    """
+    acc: dict[str, float] = {}
+    for name in deck:
+        if name in BASIC:
+            continue
+        ids = colours(name)
+        for c in ids:
+            acc[c] = acc.get(c, 0.0) + 1.0 / len(ids)
+    return frozenset(c for c, _ in sorted(acc.items(), key=lambda kv: -kv[1])[:2])
+
+
+def pool_colour_fraction(state: RawPickState, colour_of_row: Sequence[frozenset]) -> np.ndarray:
+    """The POOL block's WUBRG colour weight per pool card (colourless cards count
+    in the denominator only); zeros for an empty pool."""
+    rows = state.card_idx[state.type_idx == TYPE_POOL]
+    frac = np.zeros(len(WUBRG))
+    for r in rows:
+        ids = colour_of_row[r]
+        for c in ids:
+            frac[WUBRG.index(c)] += 1.0 / len(ids)
+    return frac / rows.size if rows.size else frac
+
+
+def write_csv(path: Path, rows: Sequence[dict]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)

@@ -16,7 +16,9 @@ the same pool in all three files.
 
 This deliberately reuses the real use-case build methods
 (``BuildDecksUseCase`` / ``PickDecksUseCase``) so the decks match exactly what
-the CLI commands would produce.
+the CLI commands would produce. Those per-deck methods are private: the use
+cases expose only whole-file ``execute``, which cannot share one scorer across
+the three methods or keep the outputs pool-aligned.
 
 Example:
     python scripts/compare_deck_builders.py \
@@ -37,13 +39,14 @@ from pathlib import Path
 import torch
 
 from sealed.application.build_decks import BuildDecksConfig, BuildDecksUseCase
+from sealed.application.deck_assembly import load_pool_embeddings
 from sealed.application.evaluate_scorer import format_decks_for_display, score_decks
 from sealed.application.pick_decks import PickDecksUseCase
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 from sealed.infrastructure.evaluation_connector import EvaluationConnector
 from sealed.infrastructure.pool_connector import PoolConnector
-from sealed.infrastructure.pool_file_reader import parse_pools
+from sealed.infrastructure.pool_file_reader import SealedPool, parse_pools
 
 
 def _log(msg: str) -> None:
@@ -81,7 +84,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
-def _load_pools(args: argparse.Namespace) -> tuple[Path, list[tuple[str, list[str]]]]:
+def _load_pools(args: argparse.Namespace) -> tuple[Path, list[SealedPool]]:
     if args.pools_path is not None:
         _log(f"Using existing pools: {args.pools_path}")
         return args.pools_path, parse_pools(args.pools_path)
@@ -94,24 +97,20 @@ def _load_pools(args: argparse.Namespace) -> tuple[Path, list[tuple[str, list[st
 
 
 def _keep_buildable(
-    raw_pools: list[tuple[str, list[str]]], locator: ConvertedCardLocator,
-) -> list[tuple[str, list[str]]]:
+    raw_pools: list[SealedPool], locator: ConvertedCardLocator,
+) -> list[list[str]]:
     """Keep only pools with >=23 embeddable cards.
 
     The scorer and picker builders skip pools below that threshold, so
     pre-filtering keeps all three output files line-aligned (Deck N is the
     same pool in each).
     """
-    kept: list[tuple[str, list[str]]] = []
-    for set_code, names in raw_pools:
-        n_embeddable = sum(1 for nm in names if locator.load_embedding(nm) is not None)
-        if n_embeddable >= NONLAND_DECK_SIZE:
-            kept.append((set_code, names))
-    return kept
+    return [pool.cards for pool in raw_pools
+            if len(load_pool_embeddings(pool.cards, locator)[1]) >= NONLAND_DECK_SIZE]
 
 
 def _build_builder_decks(
-    kept: list[tuple[str, list[str]]],
+    kept: list[list[str]],
     builder: BuildDecksUseCase,
     scorer,
     locator: ConvertedCardLocator,
@@ -119,16 +118,16 @@ def _build_builder_decks(
 ) -> list[list[str]]:
     decks: list[list[str]] = []
     step = max(1, len(kept) // 20)
-    for i, (_set, names) in enumerate(kept, 1):
+    for i, names in enumerate(kept, 1):
         deck = builder._build_one_deck(scorer, names, locator, config)
-        decks.append(deck if deck is not None else [])
+        decks.append(list(deck.cards) if deck is not None else [])
         if i % step == 0 or i == len(kept):
             _log(f"  deck-builder {i}/{len(kept)}")
     return decks
 
 
 def _build_picker_decks(
-    kept: list[tuple[str, list[str]]],
+    kept: list[list[str]],
     picker_uc: PickDecksUseCase,
     picker,
     picker_dim: int,
@@ -140,12 +139,13 @@ def _build_picker_decks(
     decks: list[list[str]] = []
     step = max(1, len(kept) // 20)
     width_checked = False
-    for i, (_set, names) in enumerate(kept, 1):
-        embs, valid = picker_uc._load_pool(names, locator)
-        if not width_checked and embs:
-            picker_uc._check_width(picker_dim, embs[0].shape[0], picker_checkpoint, cards_path)
+    for i, names in enumerate(kept, 1):
+        embs, valid = load_pool_embeddings(names, locator)
+        if not width_checked:
+            picker_uc._check_width(picker_dim, embs[valid[0]].shape[0], picker_checkpoint,
+                                   cards_path)
             width_checked = True
-        decks.append(picker_uc._build_one_deck(picker, embs, valid, locator, device))
+        decks.append(list(picker_uc._build_one_deck(picker, embs, valid, locator, device).cards))
         if i % step == 0 or i == len(kept):
             _log(f"  deck-picker {i}/{len(kept)}")
     return decks
@@ -168,7 +168,6 @@ def main(argv: list[str]) -> int:
     if not kept:
         _log("No usable pools; aborting.")
         return 1
-    pool_name_lists = [names for _, names in kept]
 
     # One teacher scorer instance both builds the deck-builder decks and scores
     # every method's decks, so the score headers are directly comparable.
@@ -184,7 +183,7 @@ def main(argv: list[str]) -> int:
     )
 
     _log("Building forge-best decks (Forge JVM)...")
-    forge_decks = EvaluationConnector().build_forge_decks(pool_name_lists)
+    forge_decks = EvaluationConnector().build_forge_decks(kept)
     if len(forge_decks) != len(kept):
         _log(f"  WARNING: forge returned {len(forge_decks)} decks for "
              f"{len(kept)} pools; forge-best.txt may not be pool-aligned.")

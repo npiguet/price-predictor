@@ -44,31 +44,21 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from draft_corpus_common import ColourResolver  # noqa: E402
-from probe_lib import (  # noqa: E402
+from draft_corpus_common import ColourResolver
+from draft_probes.probe_lib import (
+    CARDS,
+    CORPUS,
+    MODELS,
+    OUT,
     TYPE_POOL,
     CardTable,
     PolicyRunner,
     iter_corpus_states,
+    iter_runners,
     load_agent,
 )
-
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-G4 = REPO / "models/draft/agent/gen4"
-CORPUS = G4 / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl"
-CARDS = REPO / "output" / "cardsfolder-512"
-
-MODELS = {
-    "gen1": REPO / "models/draft/agent/gen1/l6_lr3e-4_decay_20260604_080249.pt",
-    "gen3": REPO / "models/draft/agent/gen3/temperature-on-all-agents"
-                   "/lr1e-5_t2_20260805_221050.pt",
-    "gen4": G4 / "lr1e-5_t2all_decay0.3.pt",
-    "gen4b": G4 / "lr1e-5_t2all_nodecay.pt",
-}
 
 
 def write_slots(slots: list[int], row: int):
@@ -147,12 +137,7 @@ def main() -> None:
           f"median base-logit gap {np.median([j['gap'] for j in jobs]):.3f}")
 
     results = {}
-    for gen, ckpt in MODELS.items():
-        if not ckpt.exists():
-            print(f"skip {gen}")
-            continue
-        model, _ = load_agent(ckpt)
-        runner = PolicyRunner(model, table, batch_size=args.batch)
+    for gen, runner in iter_runners(table, args.batch):
         per_dose = {}
         for dose in range(1, args.max_dose + 1):
             arm_x, arm_y = [], []
@@ -230,7 +215,6 @@ def main() -> None:
             print("  one copy, by how close the control card sits to it: "
                   + ", ".join(f"cos {r['cos_lo']:.2f}-{r['cos_hi']:.2f}: "
                               f"{r['mean']:+.4f}" for r in sim))
-        del model
 
     (OUT / "d8_duplicates.json").write_text(
         json.dumps({"n_states": len(jobs), "models": results}, indent=2),

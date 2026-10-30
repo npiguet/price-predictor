@@ -15,7 +15,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-SCRATCH = Path(__file__).resolve().parents[2] / "output" / "scorer-probes"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib import stats
+from _lib.markdown import md_table
+from _lib.paths import OUTPUT
+
+SCRATCH = OUTPUT / "scorer-probes"
 DEFAULT_CSV = SCRATCH / "t2_card_values.csv"
 
 RARITIES = ["common", "uncommon", "rare", "mythic"]
@@ -37,39 +43,14 @@ def fmt(v, nd=4):
     return f"{f:+.{nd}f}" if abs(f) < 1e6 else f"{f:.3g}"
 
 
-def md_table(headers, rows):
-    out = ["| " + " | ".join(str(h) for h in headers) + " |",
-           "|" + "|".join(["---"] * len(headers)) + "|"]
-    for r in rows:
-        out.append("| " + " | ".join(str(c) for c in r) + " |")
-    return "\n".join(out)
-
-
 # ---------------------------------------------------------------- statistics
 
-def _pair(x, y):
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    m = np.isfinite(x) & np.isfinite(y)
-    return x[m], y[m]
-
-
 def pearson(x, y):
-    x, y = _pair(x, y)
-    if len(x) < 3 or x.std() == 0 or y.std() == 0:
-        return np.nan, len(x)
-    return float(np.corrcoef(x, y)[0, 1]), len(x)
+    return stats.pearson(x, y), len(stats.finite_pair(x, y)[0])
 
 
 def spearman(x, y):
-    x, y = _pair(x, y)
-    if len(x) < 3:
-        return np.nan, len(x)
-    rx = pd.Series(x).rank().to_numpy()
-    ry = pd.Series(y).rank().to_numpy()
-    if rx.std() == 0 or ry.std() == 0:
-        return np.nan, len(x)
-    return float(np.corrcoef(rx, ry)[0, 1]), len(x)
+    return stats.spearman(x, y), len(stats.finite_pair(x, y)[0])
 
 
 def ols_standardized(X, y, names):

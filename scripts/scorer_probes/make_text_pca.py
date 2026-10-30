@@ -1,4 +1,5 @@
-"""PCA of the text block ([0:512]) of every card embedding in cardsfolder-512.
+"""PCA of the text block (all but the trailing deterministic features) of every
+card embedding in cardsfolder-512.
 
 Writes ``text_pca_512.npz`` (keys: mean, components, explained) into
 ``output/scorer-probes/`` — the input ``t6_mechanism.py`` P1 needs — and prints
@@ -11,32 +12,31 @@ winnability axis).
 """
 
 import glob
+import json
 import sys
 import time
 from pathlib import Path
 
 import numpy as np
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "scorer-probes"
-OUT.mkdir(parents=True, exist_ok=True)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _lib.stats import ols, participation_ratio
+from scorer_probes import probe_lib as pl
+
+OUT = pl.SCRATCH
 
 t = time.time()
-files = glob.glob(str(REPO / "output" / "cardsfolder-512" / "*" / "*.npz"))
+files = glob.glob(str(pl.CARDS_PATH / "*" / "*.npz"))
 print(len(files), "npz files")
-X = np.empty((len(files), 512), dtype=np.float32)
-for i, f in enumerate(files):
-    with np.load(f) as z:
-        X[i] = z["embedding"][:512]
+X = np.stack([np.load(f)["embedding"][:-pl.FC] for f in files]).astype(np.float32)
 print(f"loaded in {time.time() - t:.0f}s")
 
 mu = X.mean(0)
 U, S, Vt = np.linalg.svd(X - mu, full_matrices=False)
 var = S ** 2
 share = var / var.sum()
-pr = (var.sum() ** 2) / ((var ** 2).sum())
+pr = participation_ratio(var)
 print("PC1 share: %.1f%%, top2: %.1f%%, top8: %.1f%%, top32: %.1f%%"
       % (100 * share[0], 100 * share[:2].sum(), 100 * share[:8].sum(), 100 * share[:32].sum()))
 print("effective rank (participation ratio): %.1f" % pr)
@@ -48,8 +48,6 @@ np.savez_compressed(OUT / "text_pca_512.npz", mean=mu, components=Vt, explained=
 print("saved", OUT / "text_pca_512.npz")
 
 # --- what the leading axes mean: regress the encoder labels on top-k PCs ---
-import probe_lib as pl  # noqa: E402
-
 wr = pl.load_win_rates()
 loc = pl.ConvertedCardLocator(pl.CARDS_PATH)
 stems = {Path(f).stem: i for i, f in enumerate(files)}
@@ -71,9 +69,7 @@ print(f"\nlabel regression on top-k PCs ({len(keep)} labeled cards)")
 
 
 def r2(k, y):
-    A = np.column_stack([np.ones(len(y)), P[:, :k]])
-    b, *_ = np.linalg.lstsq(A, y, rcond=None)
-    return 1 - (y - A @ b).var() / y.var()
+    return ols(np.column_stack([np.ones(len(y)), P[:, :k]]), y).r2
 
 
 ks = [1, 2, 4, 8, 32]
@@ -92,8 +88,6 @@ for pc in (0, 1):
     pc_corr[f"PC{pc + 1}"] = dict(zip(MAIN, cors))
     print(f"PC{pc + 1} corr: " + ", ".join(
         f"{lab.removeprefix('shrunk_')} {c:+.2f}" for lab, c in zip(MAIN, cors)))
-
-import json  # noqa: E402
 
 (OUT / "text_pc_labels.json").write_text(json.dumps(
     {"ks": ks, "n_cards": len(keep), "r2": table, "pc_corr": pc_corr}, indent=1),

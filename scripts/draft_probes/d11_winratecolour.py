@@ -36,7 +36,6 @@ Usage
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from collections import Counter
@@ -44,39 +43,19 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from draft_corpus_common import ColourResolver  # noqa: E402
+from _lib.corpora import card_column, iter_matches, load_win_rates
+from _lib.stats import ols
+from draft_corpus_common import ColourResolver
+from draft_probes.probe_lib import BO1_DATA, CARDS, HINTS, OUT, WIN_RATES, WUBRG
 
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-CARDS = REPO / "output" / "cardsfolder-512"
-HINTS = REPO / "output" / "scorer-probes" / "forge_hints.csv"
-DATA = Path(r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1")
-MATCHES = DATA / "match-outcomes-bo1-embedding.txt"
-WINRATES = DATA / "cards-win-rates.txt"
-
-COLOURS = "WUBRG"
+MATCHES = BO1_DATA / "match-outcomes-bo1-embedding.txt"
+COLOURS = WUBRG
 
 
 def wg_ur(beta: np.ndarray) -> float:
     return (beta[0] + beta[4]) / 2 - (beta[1] + beta[3]) / 2
-
-
-def ols(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
-    """Least squares with a rank-deficient colour block.
-
-    The five colour shares of a deck sum to one, so their differences sum to
-    zero and the design is one short of full rank. `lstsq` returns the
-    minimum-norm solution, which centres the five colour coefficients on zero
-    and makes each one a deviation from the average colour. The `WG - UR`
-    contrast is orthogonal to the null direction and is identified regardless.
-    """
-    beta, _, rank, _ = np.linalg.lstsq(X, y, rcond=None)
-    resid = y - X @ beta
-    cov = float(resid @ resid) / (len(y) - rank) * np.linalg.pinv(X.T @ X)
-    return beta, np.sqrt(np.abs(np.diag(cov))), float(rank)
 
 
 def card_level(colours: ColourResolver) -> dict:
@@ -85,23 +64,16 @@ def card_level(colours: ColourResolver) -> dict:
     wins: Counter[str] = Counter()
     losses: Counter[str] = Counter()
     n_cards = 0
-    with WINRATES.open("r", encoding="utf-8", errors="replace", newline="") as fh:
-        for row in csv.DictReader(fh, delimiter=";"):
-            ids = colours(row["card_name"])
-            if not ids:
-                continue
-            try:
-                w = float(row["wins_when_in_deck"])
-                lo = float(row["losses_when_in_deck"])
-            except (TypeError, ValueError):
-                continue
-            if w + lo < 50:
-                continue
-            n_cards += 1
-            for c in ids:
-                per[c].append(w / (w + lo))
-                wins[c] += w / len(ids)
-                losses[c] += lo / len(ids)
+    for name, row in load_win_rates(WIN_RATES, min_in_deck=50).items():
+        ids = colours(name)
+        if not ids:
+            continue
+        w, lo = row["wins_when_in_deck"], row["losses_when_in_deck"]
+        n_cards += 1
+        for c in ids:
+            per[c].append(w / (w + lo))
+            wins[c] += w / len(ids)
+            losses[c] += lo / len(ids)
     out = {
         "n_cards": n_cards,
         "mean_card_win_rate": {c: float(np.mean(per[c])) if per[c] else None
@@ -130,14 +102,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     colours = ColourResolver(CARDS)
 
-    rank: dict[str, float] = {}
-    if HINTS.exists():
-        with HINTS.open("r", encoding="utf-8", errors="replace", newline="") as fh:
-            for row in csv.DictReader(fh):
-                try:                       # lower is picked earlier, so negate
-                    rank[row["name"]] = -float(row["draft_rank"])
-                except (TypeError, ValueError, KeyError):
-                    continue
+    rank = card_column(HINTS, "draft_rank", -1.0)  # lower is picked earlier, so negate
     print(f"exogenous card grader: {len(rank)} names with a Forge draft rank")
 
     results = {"card_level": card_level(colours)}
@@ -161,23 +126,20 @@ def main() -> None:
 
     rows: list[tuple] = []
     kept = seen = 0
-    with MATCHES.open("r", encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            seen += 1
-            if seen % args.stride:
-                continue
-            f = line.rstrip("\n").split(";")
-            if len(f) < 10:
-                continue                   # tolerated trailing partial line
-            a = deck_vector(f[5].split("|"))
-            b = deck_vector(f[6].split("|"))
-            if a is None or b is None or not f[7]:
-                continue
-            rows.append((f[2], f[3], f[4], a[0] - b[0], a[1] - b[1],
-                         1.0 if f[7][0] == "A" else 0.0))
-            kept += 1
-            if args.max_matches and kept >= args.max_matches:
-                break
+    for m in iter_matches(MATCHES):
+        seen += 1
+        if seen % args.stride:
+            continue
+        a = deck_vector(m.deck_a.cards)
+        b = deck_vector(m.deck_b.cards)
+        if a is None or b is None or not m.games:
+            continue
+        # Bo1: the first game is the match.
+        rows.append((m.set_code, m.method_a, m.method_b, a[0] - b[0], a[1] - b[1],
+                     1.0 if m.games[0] == "A" else 0.0))
+        kept += 1
+        if args.max_matches and kept >= args.max_matches:
+            break
     print(f"\n{kept} games kept out of {seen} scanned "
           f"({len(colours.unresolved)} card names unresolved)")
 
@@ -213,7 +175,8 @@ def main() -> None:
          list(COLOURS) + ["rank"]),
     ):
         yy = y[sel] if not isinstance(sel, slice) else y
-        beta, se, rk = ols(X, yy)
+        fit = ols(X, yy)
+        beta, se = fit.beta, fit.se
         fits[label] = {"beta": beta[:5].tolist(), "se": se[:5].tolist(),
                        "wg_ur": wg_ur(beta), "n": int(len(yy)),
                        "rank_col": float(beta[-1]) if "rank" in names else None}

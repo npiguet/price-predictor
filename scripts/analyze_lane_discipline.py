@@ -62,8 +62,10 @@ from draft_corpus_common import (
     mana_base_width,
     parse_drafts_arg,
     read_records,
-    seat_pool,
+    score_play,
 )
+
+from draft.application.draft_training_common import leave_one_out_rewards
 
 DEFAULT_CARDS_PATH = Path("output/cardsfolder-512")
 AGENTS = ("forge-full", "gen1", "gen4")
@@ -71,30 +73,6 @@ AGENTS = ("forge-full", "gen1", "gen4")
 BUCKETS = [(-9.0, -0.05, "much worse"), (-0.05, -0.01, "worse"),
            (-0.01, 0.01, "level"), (0.01, 0.05, "better"), (0.05, 9.0, "much better")]
 GAP_PICK_CAP = 10   # the last third of a pack is leftovers; the gap means little there
-
-
-def load_scores(path: Path, min_obs: int) -> dict[str, float]:
-    """card -> ``shrunk_score_play``, for cards with enough in-deck observations."""
-    out: dict[str, float] = {}
-    with path.open(encoding="utf-8") as handle:
-        header = handle.readline().rstrip("\r\n").split(";")
-        need = ["card_name", "shrunk_score_play", "wins_when_in_deck", "losses_when_in_deck"]
-        missing = [n for n in need if n not in header]
-        if missing:
-            raise SystemExit(f"{path} has no column(s): {', '.join(missing)}")
-        ix = {n: header.index(n) for n in need}
-        for line in handle:
-            f = line.rstrip("\r\n").split(";")
-            if len(f) != len(header) or not f[ix["shrunk_score_play"]]:
-                continue
-            try:
-                seen = (int(f[ix["wins_when_in_deck"]]) + int(f[ix["losses_when_in_deck"]]))
-                if seen < min_obs:
-                    continue
-                out[f[ix["card_name"]]] = float(f[ix["shrunk_score_play"]])
-            except ValueError:
-                continue
-    return out
 
 
 def running_lane(counts: Counter, min_pool: int, min_second: int) -> set[str] | None:
@@ -135,13 +113,15 @@ class Walk:
     def run(self, paths) -> None:
         for path in paths:
             for record, geo in read_records(path):
-                scores = [s.deck_score for s in record.seats]
+                rewards = leave_one_out_rewards(record)
+                # A seat whose pod has no other scored seat has no baseline.
+                scored = sum(s.deck_score is not None for s in record.seats)
                 for i, seat in enumerate(record.seats):
-                    self._seat(record, geo, i, seat, scores)
+                    self._seat(record, geo, i, seat, rewards[i] if scored > 1 else None)
 
-    def _seat(self, record, geo, i, seat, scores) -> None:
+    def _seat(self, record, geo, i, seat, reward) -> None:
         a = seat.agent
-        pool = seat_pool(record, geo, i)
+        pool = geo.drafted_pool(record, i)
         deck = Counter(seat.deck)
         counts: Counter = Counter()
         self.seats[a] += 1
@@ -170,10 +150,8 @@ class Walk:
             for c2 in cs:
                 counts[c2] += 1
 
-        others = [s for j, s in enumerate(scores) if j != i and s is not None]
-        if seat.deck_score is not None and others:
-            self.by_forced[a][min(played_forced, 2)].append(
-                seat.deck_score - st.fmean(others))
+        if reward is not None:
+            self.by_forced[a][min(played_forced, 2)].append(reward)
 
     def _has_on_lane(self, cards, lane) -> bool:
         return any((c := self.colours(x)) and c <= lane and x in self.scores for x in cards)
@@ -320,7 +298,7 @@ def main() -> None:
     ap.add_argument("--report", choices=sorted(REPORTS), action="append")
     args = ap.parse_args()
 
-    scores = load_scores(args.winrates, args.min_obs)
+    scores = score_play(args.winrates, args.min_obs)
     print(f"{len(scores)} cards scored with >= {args.min_obs} in-deck observations")
     colours = ColourResolver(args.cards_path)
     walk = Walk(colours, scores, args)

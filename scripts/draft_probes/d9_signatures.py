@@ -36,7 +36,6 @@ Usage
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from collections import defaultdict
@@ -44,76 +43,42 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from draft_corpus_common import ColourResolver  # noqa: E402
-from probe_lib import (  # noqa: E402
+from _lib.corpora import card_column
+from _lib.stats import spearman
+from draft_corpus_common import ColourResolver
+from draft_probes.probe_lib import (
+    CARD_VALUES,
+    CARDS,
+    CORPUS,
+    G4,
+    HINTS,
+    MODELS,
+    OUT,
     TYPE_POOL,
     TYPE_TAKEN,
     CardTable,
-    PolicyRunner,
+    argmaxes,
+    centred,
     iter_corpus_states,
-    load_agent,
+    iter_runners,
     mean_substitute,
 )
-
-REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "output" / "draft-probes"
-G4 = REPO / "models/draft/agent/gen4"
-CORPUS = G4 / "lr1e-5_t2all_decay0.3-yardstick-v-forge-drafts.jsonl"
-CARDS = REPO / "output" / "cardsfolder-512"
-HINTS = REPO / "output" / "scorer-probes" / "forge_hints.csv"
-VSWAP = REPO / "output" / "scorer-probes" / "t2_card_values.csv"
 
 # checkpoint -> (yardstick margin over gen-1, cumulative learner picks).
 # Margins and per-generation pick counts are from
 # experiments/2026-08-09-draft-agent-gen4-online-grpo.md; gen-3's ~110k picks are
 # the shared warm start every gen-4 candidate inherits.
 SUBJECTS = {
-    "gen1": (REPO / "models/draft/agent/gen1/l6_lr3e-4_decay_20260604_080249.pt",
-             0.000, 0),
-    "gen3": (REPO / "models/draft/agent/gen3/temperature-on-all-agents"
-                    "/lr1e-5_t2_20260805_221050.pt", 0.824, 110_000),
+    "gen1": (MODELS["gen1"], 0.000, 0),
+    "gen3": (MODELS["gen3"], 0.824, 110_000),
     "t3all": (G4 / "lr1e-5_t3all_decay0.3.pt", 1.152, 185_000),
     "t3learner": (G4 / "lr1e-5_t3learner_t2field_decay0.3.pt", 1.276, 200_000),
-    "t2nodecay": (G4 / "lr1e-5_t2all_nodecay.pt", 1.328, 205_000),
-    "t2decay": (G4 / "lr1e-5_t2all_decay0.3.pt", 1.380, 515_000),
+    "t2nodecay": (MODELS["gen4b"], 1.328, 205_000),
+    "t2decay": (MODELS["gen4"], 1.380, 515_000),
 }
 WG, UR = frozenset("WG"), frozenset("UR")
-
-
-def ranks(x: np.ndarray) -> np.ndarray:
-    order = np.argsort(x)
-    r = np.empty(x.size, dtype=float)
-    r[order] = np.arange(x.size, dtype=float)
-    return r
-
-
-def spearman(a: np.ndarray, b: np.ndarray) -> float:
-    ra, rb = ranks(a), ranks(b)
-    ra -= ra.mean()
-    rb -= rb.mean()
-    den = float(np.sqrt((ra * ra).sum() * (rb * rb).sum()))
-    return float((ra * rb).sum() / den) if den > 0 else float("nan")
-
-
-def load_csv_column(path: Path, key: str, sign: float) -> dict[str, float]:
-    out: dict[str, float] = {}
-    if not path.exists():
-        return out
-    with path.open("r", encoding="utf-8", errors="replace", newline="") as fh:
-        rd = csv.DictReader(fh)
-        name_col = next((c for c in rd.fieldnames or []
-                         if c.lower() in ("name", "card_name", "card")), None)
-        if name_col is None or key not in (rd.fieldnames or []):
-            return out
-        for row in rd:
-            try:
-                out[row[name_col]] = sign * float(row[key])
-            except (TypeError, ValueError):
-                continue
-    return out
 
 
 def main() -> None:
@@ -129,8 +94,8 @@ def main() -> None:
     colours = ColourResolver(CARDS)
     # Forge's draft rank is "lower is picked earlier", so flip it to make every
     # grader point the same way.
-    human = load_csv_column(HINTS, "draft_rank", -1.0)
-    vswap = load_csv_column(VSWAP, "v_swap", 1.0)
+    human = card_column(HINTS, "draft_rank", -1.0)
+    vswap = card_column(CARD_VALUES, "v_swap")
     print(f"graders: human {len(human)}, v_swap {len(vswap)}")
 
     p1p1 = list(iter_corpus_states(CORPUS, table, clocks=[(1, 1)],
@@ -142,17 +107,12 @@ def main() -> None:
     mean_row = table.add_vector(table.matrix().mean(0), "<corpus-mean>")
 
     rows = []
-    for name, (ckpt, margin, picks) in SUBJECTS.items():
-        if not ckpt.exists():
-            print(f"skip {name}: {ckpt} missing")
-            continue
-        model, _ = load_agent(ckpt)
-        runner = PolicyRunner(model, table, batch_size=args.batch)
-
+    checkpoints = {name: ckpt for name, (ckpt, _, _) in SUBJECTS.items()}
+    for name, runner in iter_runners(table, args.batch, checkpoints):
+        _, margin, picks = SUBJECTS[name]
         # Context-free card scalar: centre each booster, then average per card.
         acc: dict[str, list[float]] = defaultdict(list)
-        for s, lg in zip(p1p1, runner.logits(p1p1)):
-            c = lg - lg.mean()
+        for s, c in zip(p1p1, centred(runner.logits(p1p1))):
             for nm, v in zip(s.pack_names, c):
                 acc[nm].append(float(v))
         scalar = {k: float(np.mean(v)) for k, v in acc.items()
@@ -174,7 +134,7 @@ def main() -> None:
                 continue
             hit += int(int(np.argmax(sc)) == int(np.argmax(lg)))
             tot += 1
-        base_arg = np.array([int(np.argmax(ln)) for ln in base])
+        base_arg = argmaxes(base)
 
         def flip(interv) -> float:
             alt = runner.logits(states, interv)
@@ -195,7 +155,6 @@ def main() -> None:
             "n_cards": len(scalar),
         })
         print(f"  {name}: {rows[-1]}")
-        del model
 
     metrics = ["p1p1_sd", "colour_lean", "rho_human", "rho_vswap",
                "context_free", "pool_flip", "taken_flip"]

@@ -53,15 +53,11 @@ import argparse
 import json
 import random
 import statistics as st
-import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from draft_corpus_common import read_records, seat_pool  # noqa: E402
+from draft_corpus_common import load_labeler_and_scorer, read_prefix_scores, read_records
 
 DECK = 23           # NONLAND_DECK_SIZE: at and above this the builder must choose
 AGENTS = ("forge-full", "gen1", "gen3", "gen4")
@@ -99,30 +95,6 @@ def load_raw(path: Path, want: str = "greedy") -> set[tuple[str, int, int]]:
     return done
 
 
-def make_models(args):
-    """The picker-based labeler for full pools, and the bare scorer for short ones."""
-    import torch
-
-    from draft.application.generate_draft_data import GenerateDraftDataConfig, build_labeler
-    from sealed.domain.scorer_model import SetTransformerScorer
-    from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
-    from sealed.infrastructure.scorer_store import ScorerStore
-
-    locator = ConvertedCardLocator(args.cards_path)
-    cfg = GenerateDraftDataConfig(
-        n_drafts=0, agent_mix=[], scorer_checkpoint=args.scorer,
-        picker_checkpoint=args.picker, cards_path=args.cards_path,
-        build_method=args.build_method,     # never leave this defaulted -- see --build-method
-    )
-    labeler = build_labeler(cfg, locator=locator)
-    ckpt = ScorerStore().load_checkpoint(args.scorer)
-    scorer = SetTransformerScorer(ckpt.config)
-    scorer.load_state_dict(ckpt.model_state_dict)
-    scorer.eval()
-    scorer.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    return labeler, scorer, locator
-
-
 def build_missing(corpus: Path, raw_path: Path, args) -> None:
     from sealed.application.evaluate_scorer import score_decks
 
@@ -130,7 +102,7 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
     early, late = [], []
     for record, geo in read_records(corpus):
         for i, seat in enumerate(record.seats):
-            pool = seat_pool(record, geo, i)
+            pool = geo.drafted_pool(record, i)
             for t in range(1, len(pool) + 1):
                 if (record.draft_id, i, t) in done:
                     continue
@@ -154,7 +126,8 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
     # does not recover the corpora's exact values, only the same distribution.
     random.seed(args.seed)
 
-    labeler, scorer, locator = make_models(args)
+    labeler, scorer, locator = load_labeler_and_scorer(
+        args.cards_path, args.scorer, args.picker, args.build_method)
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     with raw_path.open("a", encoding="utf-8") as out:
         def flush(chunk, scores):
@@ -191,23 +164,7 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
 
 
 def report(raw_paths: list[Path], title: str, cap: int | None) -> None:
-    from collections import Counter
-
-    rows: dict = defaultdict(dict)
-    agent_of: dict = {}
-    for raw_path in raw_paths:
-        with raw_path.open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    r = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                key = (r["draft_id"], r["seat"])
-                rows[key][r["n_picks"]] = r["deck_score"]
-                agent_of[key] = r["agent"]
+    rows, agent_of = read_prefix_scores(raw_paths)
 
     level: dict = defaultdict(list)
     delta: dict = defaultdict(list)

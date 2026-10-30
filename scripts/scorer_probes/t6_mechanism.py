@@ -56,13 +56,17 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 import time
 from pathlib import Path
 
 import numpy as np
-import probe_lib as pl
 import torch
 from scipy.stats import pearsonr, spearmanr
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scorer_probes import probe_lib as pl
 
 MATCH_FILE = pl.YDATA / "matches-b07" / "match-outcomes-gen5-vs-gen4-forge.txt"
 PCA_PATH = pl.SCRATCH / "text_pca_512.npz"
@@ -199,67 +203,14 @@ class DeckPool:
         return [emb[self.rows[i]] for i in which]
 
 
-def parse_matches(path: Path, limit: int):
-    """(deck_A, deck_B, winner) for the first ``limit`` decidable match lines.
-
-    Winner = the side with more of its letters in field 7, the per-game winner
-    string (e.g. "AABBABA" -> A wins 4-3). Same convention as t5_ablation.
-    """
-    rows, undecided, malformed = [], 0, 0
-    if limit <= 0:
-        return rows, undecided, malformed
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            p = line.rstrip("\n").split(";")
-            if len(p) < 10:
-                malformed += 1
-                continue
-            a, b = p[7].count("A"), p[7].count("B")
-            if a == b:
-                undecided += 1
-                continue
-            rows.append((p[5].split("|"), p[6].split("|"), "A" if a > b else "B"))
-            if len(rows) >= limit:
-                break
-    return rows, undecided, malformed
-
-
-# ------------------------------------------------------------------- batching
-
-def pad_batch(mats: list[np.ndarray], d_model: int):
-    """(cards, mask) padded tensors for a list of (n_cards, d_model) matrices."""
-    n = len(mats)
-    mx = max(m.shape[0] for m in mats)
-    cards = torch.zeros(n, mx, d_model)
-    mask = torch.zeros(n, mx, dtype=torch.bool)
-    for i, m in enumerate(mats):
-        cards[i, : m.shape[0]] = torch.from_numpy(np.ascontiguousarray(m))
-        mask[i, : m.shape[0]] = True
-    return cards, mask
-
-
-@torch.no_grad()
 def score_mats(ctx, mats: list[np.ndarray], per_batch=None) -> np.ndarray:
     """Score decks given as raw (n_cards, d_model) matrices.
 
-    Replicates ``probe_lib.Probe.score_matrices`` batching, but calls the model
-    directly so forward hooks / patches installed by the caller see every batch.
     ``per_batch(cards, mask)`` is invoked after each batch with the *raw*
     (pre-normalization) padded inputs, so hook consumers can align their
     captures with the batch.
     """
-    if not mats:
-        return np.zeros(0, dtype=np.float64)
-    out = np.empty(len(mats), dtype=np.float64)
-    for lo in range(0, len(mats), ctx.batch):
-        chunk = mats[lo:lo + ctx.batch]
-        cards, mask = pad_batch(chunk, ctx.d_model)
-        cards, mask = cards.to(ctx.device), mask.to(ctx.device)
-        s = ctx.model(cards, mask)
-        out[lo:lo + len(chunk)] = s.squeeze(-1).float().cpu().numpy()
-        if per_batch is not None:
-            per_batch(cards, mask)
-    return out
+    return ctx.probe.score_matrices(mats, ctx.batch, on_batch=per_batch)
 
 
 class Ctx:
@@ -287,7 +238,7 @@ def build_sample(ctx, n_decks: int) -> tuple[list[int], int, int]:
     Returns (deck indices into ``ctx.pool``, match lines read, decks dropped).
     """
     sample, seen_lines, dropped = [], 0, 0
-    for _set, _ma, deck_a, _mb, _db in pl.read_match_decks(MATCH_FILE, limit=SAMPLE_LINES):
+    for _set, _ma, deck_a, _mb, _db in pl.iter_match_decks(MATCH_FILE, limit=SAMPLE_LINES):
         seen_lines += 1
         before = len(ctx.pool.rows)
         idx = ctx.pool.add(deck_a)
@@ -913,10 +864,10 @@ def main() -> None:
     matches: list[tuple[int, int]] = []
     m_meta = {}
     if "p1" in want:
-        rows, undecided, malformed = parse_matches(MATCH_FILE, args.matches)
+        rows, undecided, malformed = pl.decided_matches(MATCH_FILE, args.matches)
         m_dropped = 0
-        for deck_a, deck_b, winner in rows:
-            ia, ib = ctx.pool.add(deck_a), ctx.pool.add(deck_b)
+        for m, winner in rows:
+            ia, ib = ctx.pool.add(m.deck_a.cards), ctx.pool.add(m.deck_b.cards)
             if ia is None or ib is None:
                 m_dropped += 1
                 continue

@@ -23,164 +23,37 @@ from __future__ import annotations
 import argparse
 import csv
 import random
-from collections import Counter
+import sys
+from pathlib import Path
 
 import numpy as np
-import probe_lib as pl
 from scipy import stats
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.stats import mean_se
+from scorer_probes import probe_lib as pl
+from scorer_probes.probe_lib import CardBook, context_queue, resolve_context, score_streaming
 
 OUT = pl.SCRATCH / "t1_add_deltas.csv"
 POOLS = pl.YDATA / "pools" / "pools-gen4-256.txt"
 DECKS = pl.YDATA / "decks" / "generated-decks-gen4-256.txt"
-
-WUBRG = "WUBRG"
-FC = pl.layout.FEATURE_COUNT
 SEED = 42
 
 
-# --------------------------------------------------------------------------
-# shared card-fact section (duplicated in t3_ladders.py by design: the task
-# forbids adding a third module to the scratchpad)
-# --------------------------------------------------------------------------
-
-class CardBook:
-    """Memoized per-name card facts: embedding + classification + label."""
-
-    def __init__(self, probe: pl.Probe, win_rates: dict):
-        self.probe = probe
-        self.wr = win_rates
-        self._cache: dict[str, dict | None] = {}
-
-    def get(self, name: str) -> dict | None:
-        """None means 'unusable' (basic land, missing .npz, or missing .txt)."""
-        if name in self._cache:
-            return self._cache[name]
-        info = self._build(name)
-        self._cache[name] = info
-        return info
-
-    def _build(self, name: str) -> dict | None:
-        if name.lower() in pl.BASIC_LAND_NAMES:
-            return None
-        emb = self.probe.embedding(name)
-        if emb is None:
-            return None
-        text = self.probe.locator.load_text(name)
-        if text is None:
-            return None
-        d = emb[-FC:]
-        mana_cost = text.mana_cost_line()
-        feats = pl.card_features(text.text)
-        return {
-            "name": name,
-            "emb": np.ascontiguousarray(emb, dtype=np.float32),
-            "is_land": float(d[pl.layout.IS_LAND]) > 0.5,
-            "mv": float(d[pl.layout.MANA_VALUE]),
-            "pips": np.asarray(d[pl.layout.COLOR_PIPS], dtype=np.float64),
-            "colors": frozenset(
-                c for c, f in zip(WUBRG, d[pl.layout.COLOR_FLAGS]) if float(f) > 0.5
-            ),
-            "produces": frozenset(
-                c for c, f in zip(WUBRG, d[pl.layout.PRODUCES_COLORS]) if float(f) > 0.5
-            ),
-            # '/' in the mana cost line == hybrid or phyrexian; those contaminate
-            # pip counting, so every probe excludes them as swap candidates.
-            "hybrid": bool(mana_cost and "/" in mana_cost),
-            "is_creature": bool(feats["is_creature"]),
-            # split / adventure / transform / meld: the converted text marks the
-            # second face with a bare 'ALTERNATE' line ('alternate cost:' is a
-            # different thing -- madness and friends -- and must not match).
-            "is_multiface": " // " in name or any(
-                ln.strip() == "ALTERNATE" for ln in text.text.splitlines()
-            ),
-            "q": (self.wr.get(name) or {}).get("shrunk_score_play"),
-        }
-
-
-def main_colors(book: CardBook, deck: list[str], k: int = 2) -> tuple[str, ...]:
-    """The deck's top-k pip colors (only colors actually present)."""
-    pips = np.zeros(5)
-    for n in deck:
-        info = book.get(n)
-        if info is not None:
-            pips += info["pips"]
-    order = np.argsort(-pips)
-    return tuple(WUBRG[i] for i in order[:k] if pips[i] > 0)
-
-
-def score_streaming(probe: pl.Probe, n: int, build, batch_size: int = 1024,
-                    label: str = "") -> np.ndarray:
-    """Score n decks whose matrices are materialized one batch at a time.
-
-    Deviation from 'build all matrices first': 400 x 41 stacked 27x544 float32
-    matrices is ~1 GB resident. Materializing per batch is numerically identical
-    and keeps the footprint at a few MB.
-    """
-    out = np.empty(n, dtype=np.float64)
-    for lo in range(0, n, batch_size):
-        hi = min(n, lo + batch_size)
-        out[lo:hi] = probe.score_matrices([build(i) for i in range(lo, hi)],
-                                          batch_size=batch_size)
-        print(f"  {label} scored {hi}/{n}", flush=True)
-    return out
-
-
-# --------------------------------------------------------------------------
-# context sampling
-# --------------------------------------------------------------------------
-
 def sample_contexts(book: CardBook, n_ctx: int, rng: random.Random) -> list[dict]:
     """(pool, deck) pairs spread over distinct sets, fully resolvable."""
-    pools = list(pl.read_pools(POOLS))
-    decks = list(pl.read_generated_decks(DECKS))
-    if len(pools) != len(decks):
-        raise SystemExit(f"corpus misalignment: {len(pools)} pools vs {len(decks)} decks")
-
-    by_set: dict[str, list[int]] = {}
-    for i, ((set_code, _pool), (_lab, deck_set, _deck)) in enumerate(zip(pools, decks)):
-        if set_code != deck_set:
-            continue
-        by_set.setdefault(set_code, []).append(i)
-    for v in by_set.values():
-        rng.shuffle(v)
-    set_order = sorted(by_set)
-    rng.shuffle(set_order)
-
-    # round-robin over sets so the sample spreads instead of clumping
-    queue: list[int] = []
-    depth = 0
-    while True:
-        added = False
-        for s in set_order:
-            if depth < len(by_set[s]):
-                queue.append(by_set[s][depth])
-                added = True
-        if not added:
-            break
-        depth += 1
-
+    pools, decks, queue = context_queue(POOLS, DECKS, rng)
     out: list[dict] = []
     skipped = 0
     for idx in queue:
         if len(out) >= n_ctx:
             break
-        set_code, pool = pools[idx]
-        deck = decks[idx][2]
-        nonbasic = [c for c in deck if c.lower() not in pl.BASIC_LAND_NAMES]
-        if any(book.get(n) is None for n in pool) or any(book.get(n) is None for n in nonbasic):
+        ctx = resolve_context(book, pools, decks, idx)
+        if ctx is None:
             skipped += 1
-            continue
-        avail = Counter(pool) - Counter(nonbasic)
-        if not avail:
-            skipped += 1
-            continue
-        out.append({
-            "cid": idx,
-            "set_code": set_code,
-            "deck": nonbasic,
-            "avail": avail,
-            "main": main_colors(book, nonbasic),
-        })
+        else:
+            out.append(ctx)
     print(f"sampled {len(out)} contexts over {len({c['set_code'] for c in out})} sets "
           f"({skipped} skipped as unresolvable)", flush=True)
     return out
@@ -189,14 +62,6 @@ def sample_contexts(book: CardBook, n_ctx: int, rng: random.Random) -> list[dict
 # --------------------------------------------------------------------------
 # reporting helpers
 # --------------------------------------------------------------------------
-
-def mean_se(x) -> tuple[float, float, int]:
-    a = np.asarray([v for v in x if np.isfinite(v)], dtype=np.float64)
-    if a.size == 0:
-        return float("nan"), float("nan"), 0
-    se = a.std(ddof=1) / np.sqrt(a.size) if a.size > 1 else float("nan")
-    return float(a.mean()), float(se), int(a.size)
-
 
 def report_fit(tag: str, x, y) -> None:
     x = np.asarray(x, dtype=np.float64)
