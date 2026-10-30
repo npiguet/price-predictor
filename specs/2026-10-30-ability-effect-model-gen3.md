@@ -24,8 +24,6 @@ Generations
 | gen-2 | the arms of the gen-2 sweep, trained under the gen-2 spec |
 | gen-3 | this feature: a corpus collected from scratch under a new record schema, balanced rule by rule, and a model with a relation-aware trunk |
 
-Placeholders still to decide are marked `TO DECIDE`.
-
 # 1. What it does
 
 Gen-3 indexes the effect-record corpus by the rules of the game and balances training rule
@@ -769,6 +767,10 @@ get examples from three sources, in amounts per-rule rebalancing sets:
 
 - Each output field's loss is divided by the loss of its constant prediction on the same
   records, with that denominator clamped below at `--deviance-floor`.
+- The default floor is measured once, from the per-field explained deviance gen-2's
+  256-wide continuation runs logged over their last five epochs. It is the largest
+  constant-prediction loss among the fields whose explained deviance moves by more than 5
+  points between consecutive epochs.
 - The constant prediction is computed under the same distribution as the field's own
   loss.
 
@@ -779,10 +781,13 @@ spec's Poisson. Gate 1's deviance margin reads the negative binomial deviance.
 
 ## 13.4 Averaged weights
 
-- Training keeps an exponential moving average of the weights, with decay `--ema-decay`.
+- Training keeps an exponential moving average of the weights, spanning `--ema-epochs`
+  epochs: each step moves the average toward the current weights by
+  1 / (`--steps-per-epoch` × `--ema-epochs`).
+- The average starts from the weights at the end of the learning-rate warmup.
 - Validation, stopping and the saved checkpoints use the averaged weights.
 - `resume.pt` carries the averaged weights.
-- A resume refuses a change to `--rule-mask`, `--deviance-floor`, `--ema-decay`,
+- A resume refuses a change to `--rule-mask`, `--deviance-floor`, `--ema-epochs`,
   `--stratum-weight` or `--relation-values`.
 
 # 14. Checkpoint selection and evaluation
@@ -796,11 +801,17 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
   epoch from forward passes only, over that stratum's records. Its components:
   - the model-level knowledge probes;
   - the damage-by-toughness sweep and the combat grids;
-  - the rule tests (§ 14.4), averaged per rule;
+  - the rule tests (§ 14.4);
   - the mean of every output field's explained deviance, each field counting equally. A
     field whose constant-prediction loss is below `--deviance-floor` is left out of the
     mean.
-- `TO DECIDE`: how the components combine into one stratum score.
+- Each component is rescaled so that 0 is no better than its baseline and 1 is perfect:
+  an AUC as 2 × AUC − 1, an R² and an explained deviance as they are, and a grid's or
+  sweep's error as one minus its ratio to the error of a constant prediction.
+- A rule test is scored as an AUC: how well the model's prediction of the rule's outcome
+  ranks the test records where the outcome happens above those where it does not.
+- The rule tests' component is the mean over rules, each rule counting equally.
+- The stratum score is the mean of the four rescaled components, each counting equally.
 - The control score is the card-disjoint stratum score weighted by `--stratum-weight`,
   plus the game-disjoint stratum score weighted by one minus it.
 - A run keeps one best checkpoint, the epoch with the best control score. Encoder, trunk
@@ -859,15 +870,15 @@ python -m effects rule-counts
 python -m sealed match-outcomes
     [--count-dropped-events]             off; counts events arriving with no open record
     [--directed-fork-rules LIST]         default none; rule ids whose directed forks run
-    [--directed-forks-per-game N]        default TO DECIDE
+    [--directed-forks-per-game N]        default 2
 
 python -m effects collect-coverage
     [--wording-cards PATH]               cards for the "any target" coverage round (§ 8.11)
 
 python -m effects train-effect-model
     [--rule-mask hard|soft]              default hard
-    [--deviance-floor F]                 default TO DECIDE
-    [--ema-decay D]                      default TO DECIDE
+    [--deviance-floor F]                 default measured from gen-2 (§ 13.2)
+    [--ema-epochs E]                     default 1; span of the averaged weights
     [--relation-values on|off]           default on
     [--stratum-weight W]                 default 0.5; card-disjoint share of the control score
     [--patience N]                       default 5; epochs without a new best control score
@@ -913,7 +924,7 @@ Printed output
 | `manifest.json` | by `build-corpus` | adds per-rule counts (§ 5.2), per-rule budgets (§ 12.1), one-sided conditions (§ 12.2), and the closed subtype and keyword lists (§ 11.2, § 11.3) |
 | `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts over a records set (§ 5.2) |
 | frozen rule tests | with the knowledge-probe set | the rule tests' records and their selection and reporting halves, with a content digest |
-| checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-decay`, `--stratum-weight` and `--relation-values` |
+| checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight` and `--relation-values` |
 | `resume.pt` | every epoch | adds the averaged weights |
 | knowledge-probe scorecards | per checkpoint | add the probes of § 14.5 and the rule tests, per half |
 
