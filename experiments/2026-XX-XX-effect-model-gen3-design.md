@@ -651,8 +651,8 @@ Rivals of Ixalan.
   city's blessing and rad counters, and per-turn counts the "this turn" conditions read: cards
   drawn, life gained and lost, permanents put into a graveyard.
 - **Each permanent** gains its designations as a set (renowned, suspected, goaded, and so on), the
-  creature it is paired with, a battle's protector, the X it was cast with, the values it chose,
-  and the objects exiled with it.
+  X it was cast with and the values it chose. The creature it is paired with, a battle's protector
+  and the objects exiled with it are relations between slots.
 - **Each card** gains its subtypes, its face, whether it is a copy, its mana cost, and its printed
   loyalty and defense.
 
@@ -921,15 +921,30 @@ on, and reads the card's own lines as its own.
 | attached to | the snapshot's `attached_to` |
 | blocks, attacks | the combat status's `blocking` and `blocked_by`, and the attack target |
 | targets, source of | the acting ability's targets and source, and each stack object's targets |
-| affects, as a static | a new snapshot field listing, for each static line on the board, the entities it changes |
+| affects, as a static | a new snapshot field listing, for each static line on the board and each floating effect in the command zone, the entities it changes |
 | controls, owns | the controller, and the planned `owner` field |
 | has the same name | the names in the snapshot |
 | exiled with | the planned field of objects exiled with a card |
+| paired with, protects, merged with | the planned fields for a soulbond pair, a battle's protector and a mutated permanent |
 
-**The bits and counts that already describe a link stay as features.** Attention takes weighted
-averages, so it cannot count a creature's blockers reliably, and menace turns on that count. The
-target and source bits stay as the plain answer for the acting ability, and the controller bit as
-the plain answer to whether a card is the acting player's.
+**Each gen-2 feature that describes a link gains its relation, and keeps its own value where the
+relation cannot carry it.** A relation names the partner but carries no number. Attention takes
+weighted averages, so it cannot count partners reliably, and menace turns on the number of
+blockers. A bit about the acting ability or the acting player stays as the plain answer to the
+question the record asks.
+
+| gen-2 feature | relation | the feature |
+|---|---|---|
+| card is attacking | attacks, to the player, planeswalker or battle attacked | kept |
+| card is blocking | blocks | kept |
+| attacker became blocked | blocks | kept: it stays set after every blocker has left, when no relation is left |
+| number of blockers | blocks | kept: attention cannot count |
+| card is attached | attached to | replaced: the relation says the same and names the partner |
+| card or player is a target of the acting ability | targets, from `[ACT]` | kept |
+| card is the acting ability's source | source of | kept |
+| controller is the acting player | controls, from each player slot | kept |
+| stack object's number of targets, divided amounts and up-to counts | targets, from the stack object | kept: a relation carries no number |
+| charm-mode flag | mode of | kept: it marks a mode line among the card's lines |
 
 **How the collector lists what each static affects on every snapshot has to be established.** The
 `continuous` collector already computes it, one static at a time, by recomputing the board without
