@@ -1,57 +1,12 @@
-"""A loaded checkpoint is run on the input layout it trained on (FR-063c).
+"""A checkpoint's weights load strictly, less only the training-only heads.
 
-The layout changes what the model's input vectors mean and how wide they are,
-so a checkpoint has to be fed the one it learned: gen-1, and gen-2 arms trained
-before the layout was recorded, record none and read the earlier layout.
+Which input layout a loaded checkpoint is fed is ``InputLayout.of``'s, tested
+with the layout in ``domain/test_effect_head_input.py``.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
-
-import pytest
-
-from effects.domain.effect_head_input import (
-    EARLIER_LAYOUT,
-    INPUT_LAYOUT,
-    THERMOMETER_STEPS,
-    InputLayout,
-    SlotKind,
-    feature_widths,
-)
-from effects.domain.recorded_version import UnknownRecordedVersion
-from tests.unit.effects.domain.test_effect_head_input import _record
-
-
-def test_a_checkpoint_recording_no_layout_reads_the_earlier_one():
-    assert InputLayout.of({}) is EARLIER_LAYOUT
-    assert InputLayout.of(None) is EARLIER_LAYOUT
-
-
-def test_a_checkpoint_recording_the_layout_reads_it():
-    assert InputLayout.of({"input_layout": "gen-2"}) is INPUT_LAYOUT
-
-
-def test_a_layout_this_code_does_not_know_is_refused():
-    with pytest.raises(UnknownRecordedVersion, match="gen-3"):
-        InputLayout.of({"input_layout": "gen-3"})
-
-
-def test_a_run_records_its_layout_under_the_value_checkpoints_on_disk_hold():
-    assert INPUT_LAYOUT.name == "gen-2"
-    assert EARLIER_LAYOUT.name is None
-
-
-def test_the_widths_follow_the_layout():
-    records = [_record()]
-    earlier = feature_widths(records, layout=EARLIER_LAYOUT)
-    gen2 = feature_widths(records, layout=INPUT_LAYOUT)
-    assert gen2[SlotKind.GLOBAL] == earlier[SlotKind.GLOBAL]
-    assert gen2[SlotKind.PLAYER] == earlier[SlotKind.PLAYER] + THERMOMETER_STEPS
-    assert gen2[SlotKind.CARD] == earlier[SlotKind.CARD] + 3 * THERMOMETER_STEPS + 1
-
-
-# ── loading the weights ──────────────────────────────────────────────────
 
 
 def _checkpoint(drop=()):

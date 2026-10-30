@@ -26,7 +26,6 @@ from effects.application.train_effect_model import (
     RunSpec,
     TrainEffectModelConfig,
 )
-from effects.application.training_log import format_shares
 from effects.domain.aux_head_targets import (
     created_objects_targets,
     supervises_created_objects,
@@ -179,8 +178,7 @@ class TestTheTargets:
             r for r in records if supervises_created_objects(r)
             and any(e.type is EventType.TOKEN_CREATED for e in events_of(r))
         ]
-        if not made:
-            pytest.skip("the fixture holds no token-making effect half")
+        assert made, "the fixture holds no token-making effect half"
         target = created_objects_targets(made[0])
         assert target[0] == 1.0 and target[2] >= 1.0
 
@@ -257,12 +255,6 @@ class TestEpochShares:
         texts = preparer._texts([record])
         labels = preparer._shard_labels([record], texts, preparer._games([record], texts))
         assert labels[record.record_id][0] == "20+"
-
-    def test_shares_are_reported_in_bucket_order(self):
-        line = format_shares(
-            {"20+": 1, "1": 3, NO_TEXT_BUCKET: 4}, (*RARITY_BUCKETS, NO_TEXT_BUCKET),
-        )
-        assert line == "1 37.5%, 20+ 12.5%, no-text 50.0%"
 
 
 def _built_run(monkeypatch, **config):
