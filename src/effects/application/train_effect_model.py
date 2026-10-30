@@ -243,6 +243,26 @@ class TrainEffectModelConfig:
 SWEEP_FLAGS: tuple[str, ...] = (
     "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob", "api_weight",
 )
+#: Flags the training settings record only when set, so a run without one
+#: resumes against the settings it always had.
+RECORDED_WHEN_SET: tuple[str, ...] = ("lethality_copies",)
+#: Every flag the checkpoint's training settings record, which a resume
+#: compares there as recorded rather than off the config: ``seed`` as the
+#: value the run drew, and :data:`RECORDED_WHEN_SET` only when set.
+RECORDED_IN_TRAINING_SETTINGS: frozenset[str] = frozenset({
+    "seed", *RECORDED_WHEN_SET, *SWEEP_FLAGS,
+})
+
+
+def recorded_flags(config: TrainEffectModelConfig, *, seed: int) -> dict:
+    """:data:`RECORDED_IN_TRAINING_SETTINGS` as the training settings write
+    them, in the order they always have (FR-063): ``seed`` is the one the run
+    drew, which ``config`` may not hold."""
+    return {
+        **{name: getattr(config, name) for name in RECORDED_WHEN_SET if getattr(config, name)},
+        "seed": seed,
+        **{name: getattr(config, name) for name in SWEEP_FLAGS},
+    }
 
 
 @dataclass(frozen=True)

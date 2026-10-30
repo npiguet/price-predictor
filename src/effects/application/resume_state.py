@@ -14,7 +14,11 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from effects.application.train_effect_model import SWEEP_FLAGS, RunSpec, TrainEffectModelConfig
+from effects.application.train_effect_model import (
+    RECORDED_IN_TRAINING_SETTINGS,
+    RunSpec,
+    TrainEffectModelConfig,
+)
 from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
     RESUME_NAME,
@@ -37,12 +41,6 @@ RESUME_MAY_CHANGE: frozenset[str] = frozenset({
     "epochs", "patience", "lr_scale", "save_every_epoch", "model_output",
     "prefetch_workers", "resume", "corpus", "cards_folders", "variant_scripts",
     "holdout_unit", "vocab_path", "keyword_definitions",
-})
-#: Flags the checkpoint's training settings record, and the resume file
-#: compares there as recorded: ``seed`` as the value the run drew, and
-#: ``lethality_copies`` only when set.
-RECORDED_IN_TRAINING_SETTINGS: frozenset[str] = frozenset({
-    "seed", "lethality_copies", *SWEEP_FLAGS,
 })
 
 

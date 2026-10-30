@@ -26,12 +26,12 @@ from effects.application.surface_batching import (
 )
 from effects.application.train_effect_model import (
     LEARNING_RATE,
-    SWEEP_FLAGS,
     WEIGHT_DECAY,
     EarlyStopper,
     RunSpec,
     TrainEffectModelConfig,
     fields_for_epoch,
+    recorded_flags,
     warmup_steps,
 )
 from effects.domain.ability_encoder import (
@@ -124,18 +124,10 @@ def preparer_settings(spec: RunSpec, *, widths: dict[SlotKind, int]) -> Preparer
 
 
 def training_settings(spec: RunSpec, *, api_types, param_keys) -> dict:
-    """The flags a sweep arm differs by, the seed, and the script-API
-    vocabularies (FR-063). ``lethality_copies`` is written only when set, so a
-    run without copies resumes against the settings it always had."""
-    config = spec.config
-    copies = (
-        {"lethality_copies": config.lethality_copies}
-        if config.lethality_copies else {}
-    )
+    """The recorded flags (``recorded_flags``), the script-API vocabularies,
+    and the tokenizer rules and input layout the run trained under (FR-063)."""
     return {
-        **copies,
-        "seed": spec.seed,
-        **{name: getattr(config, name) for name in SWEEP_FLAGS},
+        **recorded_flags(spec.config, seed=spec.seed),
         "api_types": list(api_types),
         "param_keys": list(param_keys),
         TOKENIZER_RULES_KEY: TOKENIZER_RULES,

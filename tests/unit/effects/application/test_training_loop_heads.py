@@ -315,6 +315,22 @@ class TestTheBatchersTheLoopBuilds:
         # checkpoint recorded, and one recording none reads the earlier layout.
         assert settings["input_layout"] == "gen-2"
 
+    def test_the_recorded_settings_keep_their_keys_and_order(self):
+        """A checkpoint's ``training_settings`` is part of its bytes, and
+        ``lethality_copies`` appears only when set."""
+        def keys(**flags):
+            return list(training_settings(
+                RunSpec(TrainEffectModelConfig(corpus="unused", **flags), CorpusFacts(), seed=7),
+                api_types=[], param_keys=[],
+            ))
+
+        rest = [
+            "seed", "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob",
+            "api_weight", "api_types", "param_keys", "tokenizer_rules", "input_layout",
+        ]
+        assert keys() == rest
+        assert keys(lethality_copies=2) == ["lethality_copies", *rest]
+
     def test_the_checkpoint_records_the_seed_the_run_drew(self, monkeypatch):
         """A run with no --seed is reproducible only through the one it drew."""
         run = _built_run(monkeypatch)
