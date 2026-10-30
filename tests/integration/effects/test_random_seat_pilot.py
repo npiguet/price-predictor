@@ -81,7 +81,7 @@ def _read(records_dir: Path) -> list[tuple[list[dict], list]]:
     """Every shard's raw JSON lines and parsed records, in write order."""
     shards = []
     for shard in iter_shards(records_dir):
-        raw = [json.loads(line) for line in iter_shard_lines(shard) if line.strip()]
+        raw = [json.loads(line) for line in iter_shard_lines(shard)]
         shards.append((raw, [record_from_dict(item) for item in raw]))
     return shards
 

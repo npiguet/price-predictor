@@ -159,10 +159,7 @@ def repair_shard(path: Path, keywords_of, *, write: bool) -> Counter:
 
     counts: Counter = Counter()
     lines: list[str] = []
-    for line in iter_shard_lines(path):
-        text = line.rstrip("\n")
-        if not text.strip():
-            continue
+    for text in iter_shard_lines(path):
         raw = parse_record_line(text)
         outcome, record = repair(raw, keywords_of)
         counts[outcome] += is_first_strike_step(raw)

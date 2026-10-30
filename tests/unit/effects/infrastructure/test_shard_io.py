@@ -7,6 +7,7 @@ found whatever its spelling.
 
 from __future__ import annotations
 
+import gzip
 import json
 from pathlib import Path
 
@@ -53,8 +54,6 @@ class TestCompressedShards:
 
     def _write_members(self, path, blocks: list[list[str]]) -> None:
         """One gzip member per block, concatenated, as the Java writer does."""
-        import gzip
-
         with path.open("wb") as handle:
             for block in blocks:
                 handle.write(gzip.compress(
@@ -88,8 +87,6 @@ class TestCompressedShards:
         assert [r.record_id for r in read_shard(path)] == ["run.0.1"]
 
     def test_a_half_written_line_inside_a_member_is_skipped(self, tmp_path):
-        import gzip
-
         path = tmp_path / "run.0.jsonl.gz"
         body = self._line("run.0.1") + "\n" + self._line("run.0.2")[:20]
         path.write_bytes(gzip.compress(body.encode("utf-8")))
@@ -169,6 +166,18 @@ class TestCompressedShards:
         line = format_record_line(_record())
         path.write_text(f"{line}\n\n{line}\n", encoding="utf-8")
         assert len(list(read_shard(path))) == 2
+        assert count_records(tmp_path) == 2
+
+    def test_both_spellings_yield_lines_of_one_shape(self, tmp_path):
+        """Stripped of the newline and blank-free, whichever spelling: a writer
+        copying lines back adds the newline itself."""
+        line = format_record_line(_record())
+        body = f"{line}\n\n{line}\n"
+        plain = tmp_path / "a.jsonl"
+        plain.write_text(body, encoding="utf-8")
+        packed = tmp_path / "b.jsonl.gz"
+        packed.write_bytes(gzip.compress(body.encode("utf-8")))
+        assert list(iter_shard_lines(plain)) == list(iter_shard_lines(packed)) == [line, line]
 
 
 class TestShardsInSubdirectories:
@@ -252,8 +261,6 @@ class TestShardGeneration:
     """FR-033: a shard's generation by its first record; mixed sets refused (T069)."""
 
     def _gen2_shard(self, path: Path) -> Path:
-        import gzip
-
         with gzip.open(path, "wt", encoding="utf-8") as out:
             for line in iter_shard_lines(_GEN1_FIXTURE):
                 data = json.loads(line)

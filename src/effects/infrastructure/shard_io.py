@@ -111,6 +111,7 @@ def _copy_parts_unshuffled(parts: list[Path], out_dir: Path, prefix: str) -> lis
         with gzip.open(path, "wt", encoding="utf-8") as handle:
             for line in iter_shard_lines(part):
                 handle.write(line)
+                handle.write("\n")
         written.append(path)
     return written
 
@@ -140,11 +141,11 @@ def _deal_into_buckets(
     try:
         for part in parts:
             for line in iter_shard_lines(part):
-                if not line.strip():
-                    continue
                 index = _bucket_of(line, seed=seed, count=count)
                 filled.add(index)
-                handles[index % groups].write(line)
+                group = handles[index % groups]
+                group.write(line)
+                group.write("\n")
     finally:
         for handle in handles:
             handle.close()
@@ -160,13 +161,14 @@ def _write_shuffled_buckets(
     """
     for group in range(min(count, _GROUPS)):
         buckets: dict[int, list[str]] = defaultdict(list)
-        with gzip.open(_group_path(scratch, group), "rt", encoding="utf-8") as handle:
-            for line in handle:
-                buckets[_bucket_of(line, seed=seed, count=count)].append(line)
+        for line in iter_shard_lines(_group_path(scratch, group)):
+            buckets[_bucket_of(line, seed=seed, count=count)].append(line)
         for index, lines in buckets.items():
             random.Random(f"{seed}:{index}").shuffle(lines)
             with gzip.open(names[index], "wt", encoding="utf-8") as handle:
-                handle.writelines(lines)
+                for line in lines:
+                    handle.write(line)
+                    handle.write("\n")
 
 
 def _game_of_line(line: str) -> str:
@@ -174,7 +176,7 @@ def _game_of_line(line: str) -> str:
     head = peek_envelope(line)
     if head is not None:
         return head.game_id
-    return parse_record_line(line.strip())["game_id"]
+    return parse_record_line(line)["game_id"]
 
 
 #: Both shard spellings: plain `.jsonl` predates compression.
@@ -182,22 +184,27 @@ SHARD_GLOBS: tuple[str, ...] = ("*.jsonl.gz", "*.jsonl")
 
 
 def iter_shard_lines(path: Path) -> Iterator[str]:
-    """Every complete line of a shard, compressed or not.
+    """Every complete, non-blank line of a shard, its terminator stripped.
 
-    A truncated final gzip member, or a trailing partial line, ends the
-    stream.
+    One shape for both spellings, so a caller that writes lines back adds the
+    newline itself whichever spelling it read. Blank lines are skipped: every
+    reader ignores them, and a copy that kept them would be the one place
+    they survived. A truncated final gzip member, or a trailing partial line,
+    ends the stream.
     """
     path = Path(path)
     if path.suffix != ".gz":
-        yield from iter_complete_lines(path)
+        for line in iter_complete_lines(path):
+            if line.strip():
+                yield line
         return
 
     try:
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             for line in handle:
                 # A line without its newline can only be a member cut short.
-                if line.endswith("\n"):
-                    yield line
+                if line.endswith("\n") and line.strip():
+                    yield line[:-1]
     except (EOFError, gzip.BadGzipFile, zlib.error):
         return
 
@@ -205,13 +212,10 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
 def iter_record_dicts(path: Path) -> Iterator[dict]:
     """Every complete record of one shard, as the dict its line parses to.
 
-    For a caller that needs the raw JSON, such as a generation check. Blank
-    lines are skipped.
+    For a caller that needs the raw JSON, such as a generation check.
     """
     for line in iter_shard_lines(Path(path)):
-        stripped = line.strip()
-        if stripped:
-            yield parse_record_line(stripped)
+        yield parse_record_line(line)
 
 
 def read_window(
@@ -330,10 +334,7 @@ def iter_shard_matching(
         head = peek_envelope(line)
         if head is not None and not _wanted(head.game_id, head.kind, game_ids, kinds):
             continue
-        stripped = line.strip()
-        if not stripped:
-            continue
-        record = record_from_dict(parse_record_line(stripped))
+        record = record_from_dict(parse_record_line(line))
         if head is None and not _wanted(record.game_id, record.kind.value, game_ids, kinds):
             continue
         yield record
@@ -362,10 +363,11 @@ def count_records(directory: Path, *, ceiling: int = 0) -> int:
 
 
 def count_shard_records(shard: Path) -> int:
-    """Complete records in one shard, counted as :func:`count_records` does."""
+    """Complete records in one shard, counted as :func:`count_records` does:
+    blank lines are not records, in either spelling."""
     if shard.suffix == ".gz":
-        return sum(1 for line in iter_shard_lines(shard) if line.strip())
-    return count_complete_lines(shard)
+        return sum(1 for _ in iter_shard_lines(shard))
+    return count_complete_lines(shard, skip_blank=True)
 
 
 # ── shard generation (FR-033) ───────────────────────────────────────────

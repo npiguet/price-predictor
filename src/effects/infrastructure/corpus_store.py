@@ -155,10 +155,7 @@ def training_acting_keys(directory: Path) -> set[tuple]:
                 if head.record_id in read:
                     continue
                 read.add(head.record_id)
-            stripped = line.strip()
-            if not stripped:
-                continue
-            keys = acting_keys(record_from_dict(parse_record_line(stripped)))
+            keys = acting_keys(record_from_dict(parse_record_line(line)))
             if keys:
                 acting.add(keys)
         if done % 50 == 0:
