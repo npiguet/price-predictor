@@ -411,7 +411,7 @@ def _collect_coverage_parser(subparsers) -> None:
     _add_holdout_flags(parser)
     add_config_flags(parser, CollectCoverageConfig, only=(
         "min_text_games", "target_records", "no_progress_rounds",
-        "decks_per_round", "workers",
+        "decks_per_round", "workers", "seed",
     ))
     add_cap_flags(parser)
 

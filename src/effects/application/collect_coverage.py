@@ -61,9 +61,6 @@ DEFAULT_NO_PROGRESS_ROUNDS = 3
 #: existing corpus, and silence that long looks like a hang.
 PROGRESS_EVERY_SHARDS = 10
 
-#: Seeds the per-round deck sampler so which cards fill a round is reproducible.
-RANDOM_SEED = 42
-
 
 @dataclass
 class CollectCoverageConfig(CollectorConfig):
@@ -282,7 +279,7 @@ def play_rounds(
 ) -> bool:
     """Play rounds until every awaited unit is done. True when Ctrl-C ended them."""
     decks_file = Path(config.effect_records) / "coverage-decks.txt"
-    rng = random.Random(RANDOM_SEED)
+    rng = random.Random(config.seed)
     round_number = 0
     while not is_complete(rounds.awaited, rounds.target):
         round_number += 1

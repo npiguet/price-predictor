@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.collector_common import (
+    RANDOM_SEED,
     CollectorConfig,
     build_coverage_decks,
     collector_supervisor,
@@ -37,7 +38,6 @@ logger = logging.getLogger(__name__)
 
 #: Cap on variant records as a fraction of the real records already present.
 DEFAULT_VARIANT_VOLUME = 0.2
-RANDOM_SEED = 42
 
 
 @dataclass
@@ -53,6 +53,8 @@ class CollectVariantsConfig(CollectorConfig):
     #: The real records ``--variant-volume`` is measured against; defaults to
     #: the destination, which caps a run writing to its own directory at zero.
     corpus_records: Path | None = None
+    #: The base field, with the help a variant round needs: it seeds the
+    #: perturbation as well as the decks.
     seed: int = field(default=RANDOM_SEED, metadata={
         "help": (
             "Seeds the perturbation and the deck build; a repeat run with the "
@@ -60,6 +62,7 @@ class CollectVariantsConfig(CollectorConfig):
             "(default: %(default)s)"
         ),
     })
+
     def volume_source(self) -> Path:
         """The directory the volume cap counts records in."""
         return self.corpus_records or self.effect_records

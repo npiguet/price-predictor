@@ -28,6 +28,9 @@ if TYPE_CHECKING:
 DEFAULT_WORKERS = 12
 DEFAULT_DECKS_PER_ROUND = 500
 
+#: Seeds both collectors' deck draws, and the variant collector's perturbations.
+RANDOM_SEED = 42
+
 #: A 40-card limited deck: 23 nonlands plus basics.
 NONLANDS_PER_DECK = 23
 
@@ -78,6 +81,12 @@ class CollectorConfig:
         "help": "Parallel Java worker processes (default: %(default)s)",
     })
     caps: CollectionCaps = CollectionCaps()
+    seed: int = field(default=RANDOM_SEED, metadata={
+        "help": (
+            "Seeds the per-round deck draw, so which cards fill a round is "
+            "reproducible (default: %(default)s)"
+        ),
+    })
     #: The holdout ``build-corpus`` chooses, over ``cards_folders``: a variant
     #: printing a held-out text is dropped under it, and the held-out round
     #: credits a game to a held-out text by it. Given the flags

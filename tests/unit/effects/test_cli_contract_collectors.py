@@ -51,6 +51,7 @@ class TestCollectCoverage:
         assert args.target_records == 50
         assert args.decks_per_round == 500
         assert args.no_progress_rounds == 3
+        assert args.seed == 42
         assert args.split_from is None
         assert args.cards_folders == (Path("output/cardsfolder"), Path("output/tokenscripts"))
 

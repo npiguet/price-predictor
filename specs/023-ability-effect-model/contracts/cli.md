@@ -60,6 +60,7 @@ Adding the flag must not change `match-outcomes.txt` or `cards-played.txt` in fo
 | `--target-records` | 50 | per-card satisfaction goal |
 | `--decks-per-round` | 500 | decks played as matches per round |
 | `--no-progress-rounds` | 3 | consecutive rounds without a new qualifying record before a card retires |
+| `--seed` | 42 | seeds the per-round deck draw, so which cards fill a round is reproducible |
 | cap/budget flags | see below | |
 
 Behaviour the flags do not convey:
