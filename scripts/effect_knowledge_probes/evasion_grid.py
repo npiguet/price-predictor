@@ -24,7 +24,6 @@ and measure what the missing colour costs.
 """
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -33,6 +32,8 @@ import numpy as np
 if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, record_walk  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
@@ -161,15 +162,6 @@ def qualifying_pair(record, keywords_of) -> tuple[str, str] | None:
     return None
 
 
-def qualifying_records(directories, count: int, shards: int, keywords_of):
-    """The first ``count`` qualifying ``(record, attacker, blocker)`` triples, one per game."""
-    def choose(record):
-        pair = qualifying_pair(record, keywords_of)
-        return None if pair is None else (record, *pair)
-
-    return record_walk.qualifying(directories, choose, count, per_game=1, shards=shards)
-
-
 # ── reading the model ───────────────────────────────────────────────────
 
 
@@ -192,19 +184,14 @@ def label(name: str | None) -> str:
 def main() -> None:
     from effects.domain.damage_step_keywords import KeywordResolver
 
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("checkpoint", type=Path)
-    parser.add_argument("--records", type=int, default=40)
-    parser.add_argument("--shards", type=int, default=200)
-    args = parser.parse_args()
-
-    context = common.probe_context(args.checkpoint)
+    args, context = common.grid_run(__doc__, records=40)
     resolver = KeywordResolver(context.sidecars())
-    triples = qualifying_records(
-        context.validation_dirs(), args.records, args.shards, resolver.keywords_of)
+    triples = record_walk.qualifying(
+        context.validation_dirs(),
+        record_walk.with_record(lambda r: qualifying_pair(r, resolver.keywords_of)),
+        args.records, shards=args.shards)
     probe_model = context.model([r for r, _, _ in triples])
-    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), "
-          f"{len(triples)} validation attacker-blocker pairs", flush=True)
+    common.heading(args, context, f"{len(triples)} validation attacker-blocker pairs")
 
     grid = np.zeros((len(ATTACKER_KEYWORDS), len(BLOCKER_TRAITS)))
     rule = np.zeros_like(grid)
@@ -219,32 +206,26 @@ def main() -> None:
             rule[i, j] = float(np.mean([c[1] for c in cells]))
             per_row[row][0].extend(c[1] for c in cells)
             per_row[row][1].extend(predictions)
-    header = "| attacker keyword \\ blocker | " + " | ".join(
-        label(t) for t in BLOCKER_TRAITS) + " |"
     for title, values in (("predicted may block", grid), ("rule may block", rule)):
         print(f"\n{title}: error against the rule {np.abs(grid - rule).mean():.3f}")
-        print(header)
-        print("|---|" + "---:|" * len(BLOCKER_TRAITS))
-        for i, row in enumerate(ATTACKER_KEYWORDS):
-            print(f"| {label(row)} | " + " | ".join(f"{values[i, j]:.2f}"
-                                                   for j in range(len(BLOCKER_TRAITS))) + " |",
-                  flush=True)
+        print_table(["attacker keyword \\ blocker", *map(label, BLOCKER_TRAITS)],
+                    [[label(row), *(f"{v:.2f}" for v in cells)]
+                     for row, cells in zip(ATTACKER_KEYWORDS, values)],
+                    "l" + "r" * len(BLOCKER_TRAITS))
     # The absolute level of `blocker_legal` sits low even on legal blocks, so the
     # ranking within a row says more: does the model put the blocks the rule allows
     # above the ones it forbids?
-    auc = common.auc
     every = ([], [])
-    print("\nranking within each attacker row, cells and records pooled")
-    print("| attacker keyword | allowed, mean | forbidden, mean | AUC |")
-    print("|---|---:|---:|---:|")
+    rows = []
     for row, (allowed, scores) in per_row.items():
         allowed, scores = np.asarray(allowed, bool), np.asarray(scores, float)
         every[0].extend(allowed)
         every[1].extend(scores)
-        print(f"| {label(row)} | {common.fmt_mean(scores[allowed], 2)} | "
-              f"{common.fmt_mean(scores[~allowed], 2)} | "
-              f"{auc(allowed, scores):.3f} |")
-    print(f"| all rows | | | {auc(*every):.3f} |", flush=True)
+        rows.append([label(row), common.fmt_mean(scores[allowed], 2),
+                     common.fmt_mean(scores[~allowed], 2), f"{common.auc(allowed, scores):.3f}"])
+    print("\nranking within each attacker row, cells and records pooled")
+    print_table(["attacker keyword", "allowed, mean", "forbidden, mean", "AUC"], rows, "lrrr")
+    print(f"| all rows | | | {common.auc(*every):.3f} |", flush=True)
 
 
 if __name__ == "__main__":

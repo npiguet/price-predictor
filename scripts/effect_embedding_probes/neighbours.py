@@ -31,9 +31,11 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import (  # noqa: E402
+from _lib.markdown import md_table
+
+from effect_embedding_probes.common import (  # noqa: E402
     SEED,
     ProbePaths,
     add_probe_arguments,
@@ -45,7 +47,6 @@ from common import (  # noqa: E402
     to_markdown,
     write_markdown,
 )
-
 from effects.infrastructure.sidecar_io import encoded_lines, read_sidecar  # noqa: E402
 
 CARDS = ("lightning bolt", "llanowar elves", "giant growth", "wrath of god",
@@ -91,13 +92,11 @@ def main() -> None:
             lines.append(f"API {table.api.iloc[i]}, prose: {table.prose.iloc[i][:100]}\n")
             sims = U @ U[i]
             sims[i] = -np.inf
-            lines.append("| cosine | card | API | prose |")
-            lines.append("|---:|---|---|---|")
-            for j in np.argsort(sims)[::-1][:8]:
-                prose = (table.prose.iloc[j] or table.text.iloc[j])[:100]
-                lines.append(f"| {sims[j]:.3f} | {table.card.iloc[j]} | "
-                             f"{table.api.iloc[j]} | {prose.replace('|', '/')} |")
-            lines.append("")
+            lines += [md_table(
+                ["cosine", "card", "API", "prose"],
+                [[f"{sims[j]:.3f}", table.card.iloc[j], table.api.iloc[j],
+                  (table.prose.iloc[j] or table.text.iloc[j])[:100].replace("|", "/")]
+                 for j in np.argsort(sims)[::-1][:8]], "rlll"), ""]
     (paths.out / "neighbours.md").write_text("\n".join(lines), encoding="utf-8")
 
     spaces = {
@@ -125,12 +124,10 @@ def main() -> None:
            "", "Normalized mutual information between the cluster labels and "
            "each category.", ""]
     out.append(to_markdown(nmi))
-    out += ["", "## Full-space clusters", "",
-            "| cluster | texts | top API types (share) | texts nearest the centre |",
-            "|---:|---:|---|---|"]
+    out += ["", "## Full-space clusters", ""]
     label = labels["full"]
-    sizes = pd.Series(label).value_counts()
-    for c in sizes.index:
+    rows = []
+    for c in pd.Series(label).value_counts().index:
         members = np.flatnonzero(label == c)
         apis = table.api.iloc[members].value_counts(normalize=True).head(3)
         dist = np.linalg.norm(full[members] - centres[c], axis=1)
@@ -139,7 +136,9 @@ def main() -> None:
             (table.prose.iloc[i] or table.text.iloc[i])[:70].replace("|", "/")
             for i in near)
         api_text = ", ".join(f"{a} {s:.0%}" for a, s in apis.items())
-        out.append(f"| {c} | {len(members)} | {api_text} | {examples} |")
+        rows.append([c, len(members), api_text, examples])
+    out.append(md_table(["cluster", "texts", "top API types (share)",
+                         "texts nearest the centre"], rows, "rrll"))
     (paths.out / "clusters.md").write_text("\n".join(out) + "\n", encoding="utf-8")
     write_markdown(nmi, paths.out / "clusters_nmi.md", "Cluster / category agreement")
     print(nmi.to_string(index=False))

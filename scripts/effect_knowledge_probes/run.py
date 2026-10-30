@@ -43,6 +43,8 @@ if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.markdown import md_table  # noqa: E402
+
 from effect_knowledge_probes import (  # noqa: E402
     ablation,
     common,
@@ -145,9 +147,10 @@ def _acting_text_function(sidecars, surface: Surface):
 
 
 def _game_shards(args, context: common.ProbeContext, stratum: str) -> list[Path]:
-    if args.records_dir is not None:
-        return common.shards_of(args.records_dir)
-    return common.shards_of(context.stratum_dir(stratum))
+    from effects.infrastructure.shard_io import iter_shards
+
+    return iter_shards(args.records_dir if args.records_dir is not None
+                       else context.stratum_dir(stratum))
 
 
 class ObservedOutcomes:
@@ -373,7 +376,7 @@ def line_split(carriers: set[str], held_out_cards: set[str]) -> str:
 
 
 def line_ladder(probe_set: ProbeSet, probe_model, cache, targets, act_hidden,
-                held_out_cards, mlp_options, bootstrap) -> dict:
+                held_out_cards) -> dict:
     """The short ladder for every line target: ``e``, its width control, ``[ACT]``.
 
     ``cache`` is ``(items, text_by_key)`` from ``common.line_items`` over the
@@ -412,8 +415,7 @@ def line_ladder(probe_set: ProbeSet, probe_model, cache, targets, act_hidden,
                           "1w": np.stack([ladder.width_vector(t, e_dim) for t in texts])},
                 weight=np.array([r[3] for r in chosen], dtype=np.float64),
             )
-            result = ladder.run_ladder(data, rungs=("1", "1w"), mlp_options=mlp_options,
-                                       bootstrap=bootstrap)
+            result = ladder.run_ladder(data, rungs=("1", "1w"))
             acted = [i for i, t in enumerate(texts) if t in act_mean]
             if len(acted) >= 20:
                 subset = ladder.LadderInput(
@@ -422,8 +424,7 @@ def line_ladder(probe_set: ProbeSet, probe_model, cache, targets, act_hidden,
                               "2": np.stack([act_mean[texts[i]] for i in acted])},
                     weight=data.weight[acted],
                 )
-                sub = ladder.run_ladder(subset, rungs=("1", "2"), mlp_options=mlp_options,
-                                        bootstrap=bootstrap)
+                sub = ladder.run_ladder(subset, rungs=("1", "2"))
                 result["rungs"]["2"] = sub["rungs"]["2"]
                 result["rungs"]["1-acting"] = sub["rungs"]["1"]
                 result["n_acting"] = sub["n"]
@@ -432,7 +433,7 @@ def line_ladder(probe_set: ProbeSet, probe_model, cache, targets, act_hidden,
     return results
 
 
-def pair_ladder(probe_set: ProbeSet, probe_model, cache, mlp_options, bootstrap) -> dict:
+def pair_ladder(probe_set: ProbeSet, probe_model, cache) -> dict:
     """Interaction pairs: a trigger line with its cause, read from both ``e``."""
     from effects.domain.provenance import ProvenanceKey
 
@@ -462,8 +463,7 @@ def pair_ladder(probe_set: ProbeSet, probe_model, cache, mlp_options, bootstrap)
                             for a, b, _ in rows]),
         },
     )
-    result = ladder.run_ladder(data, rungs=("1", "1w"), mlp_options=mlp_options,
-                               bootstrap=bootstrap)
+    result = ladder.run_ladder(data, rungs=("1", "1w"))
     result["grouping"] = grouping
     return {"scope": "pair", "kind": "binary", "strata": {"all": result}}
 
@@ -566,11 +566,8 @@ def _read_probe_records(args, context: common.ProbeContext, probe_set: ProbeSet,
     by_stratum: dict[str, list] = {}
     for stratum, game_ids in probe_set.games.items():
         progress(f"reading {len(game_ids)} {stratum} probe games")
-        by_stratum[stratum] = [
-            record for _, record in common.read_games(
-                context.source_shards(probe_set.sources.get(stratum, [])),
-                set(game_ids), wanted[stratum] | sweep_ids)
-        ]
+        by_stratum[stratum] = context.probe_records(probe_set, stratum,
+                                                    wanted[stratum] | sweep_ids)
         progress(f"  {len(by_stratum[stratum])} records")
     if not any(by_stratum.values()):
         raise SystemExit("no probe records were found in the probe set's sources")
@@ -598,7 +595,7 @@ def _board_subsets(args, context: common.ProbeContext) -> dict[str, dict[str, li
 
 
 def _board_ladder(args, scorecard: Scorecard, probe_model, records: ProbeRecords,
-                  kinds: dict[str, str], mlp_options, bootstrap) -> dict[str, list]:
+                  kinds: dict[str, str]) -> dict[str, list]:
     """Every board-dependent target's ladder, per stratum; returns ``[ACT]`` by text.
 
     The trunk's ``[ACT]`` output is gathered from the same forward pass, by
@@ -618,8 +615,7 @@ def _board_ladder(args, scorecard: Scorecard, probe_model, records: ProbeRecords
             progress(f"{stratum}: ladder {position}/{len(inputs)} {name} (n={len(data.y)})")
             spec = labels.TARGETS_BY_NAME[name]
             entry = scorecard.target(spec.family, name, scope=spec.scope, kind=spec.kind)
-            entry["strata"][stratum] = ladder.run_ladder(
-                data, mlp_options=mlp_options, bootstrap=bootstrap)
+            entry["strata"][stratum] = ladder.run_ladder(data)
             if data.layers:
                 entry["strata"][stratum]["per_layer"] = entry["strata"][stratum].pop(
                     "per_layer", [])
@@ -699,8 +695,6 @@ def probe(args, context: common.ProbeContext, probe_set: ProbeSet) -> Scorecard:
     progress(f"loading {args.checkpoint}")
     probe_model = context.model(
         every, vocab_path=args.vocab_path, keyword_path=args.keyword_definitions)
-    mlp_options = {}
-    bootstrap = ladder.BOOTSTRAP_RESAMPLES
 
     scorecard = Scorecard(
         checkpoint=str(args.checkpoint), probe_set_digest=probe_set.digest,
@@ -710,8 +704,7 @@ def probe(args, context: common.ProbeContext, probe_set: ProbeSet) -> Scorecard:
         join_rate=probe_set.join_rate,
         families={family: {"targets": {}} for family in sorted(families)},
     )
-    act_hidden = _board_ladder(args, scorecard, probe_model, records, kinds,
-                               mlp_options, bootstrap)
+    act_hidden = _board_ladder(args, scorecard, probe_model, records, kinds)
 
     progress("line-level probes over the ability cache")
     text_by_key: dict = {}
@@ -719,11 +712,11 @@ def probe(args, context: common.ProbeContext, probe_set: ProbeSet) -> Scorecard:
                                text_by_key=text_by_key), text_by_key)
     held_out_cards = set(context.checkpoint.provenance.held_out_cards)
     for name, entry in line_ladder(probe_set, probe_model, cache, targets, act_hidden,
-                                   held_out_cards, mlp_options, bootstrap).items():
+                                   held_out_cards).items():
         scorecard.put(labels.TARGETS_BY_NAME[name].family, name, entry)
     if "interactions" in families:
         scorecard.put(labels.TARGETS_BY_NAME["fires_pair"].family, "fires_pair",
-                      pair_ladder(probe_set, probe_model, cache, mlp_options, bootstrap))
+                      pair_ladder(probe_set, probe_model, cache))
 
     if not args.no_sweeps:
         progress("board sweeps")
@@ -745,27 +738,24 @@ def write_tables(out_dir: Path, scorecard: Scorecard) -> None:
     fmt = common.fmt
     out_dir.mkdir(parents=True, exist_ok=True)
     for family, body in scorecard.families.items():
-        lines = [f"# {family}", "", "## Rungs", "",
-                 "| target | stratum | n | rung | linear | mlp | model |",
-                 "|---|---|---:|---|---:|---:|---:|"]
-        shares = []
+        rungs, shares = [], []
         for target, entry in sorted(body["targets"].items()):
             for stratum, result in sorted(entry["strata"].items()):
-                for rung, scores in result["rungs"].items():
-                    lines.append(
-                        f"| {target} | {stratum} | {result['n']} | {rung} | "
-                        f"{fmt(scores.get('linear'))} | {fmt(scores.get('mlp'))} | "
-                        f"{fmt(scores.get('model'))} |")
+                rungs += [[target, stratum, result["n"], rung, fmt(scores.get("linear")),
+                           fmt(scores.get("mlp")), fmt(scores.get("model"))]
+                          for rung, scores in result["rungs"].items()]
                 for probe_type, value in (result.get("share") or {}).items():
                     if value:
                         ci = value.get("ci") or [None, None]
-                        shares.append(f"| {target} | {stratum} | {probe_type} | "
-                                      f"{fmt(value['value'])} | {fmt(ci[0])} | "
-                                      f"{fmt(ci[1])} |")
+                        shares.append([target, stratum, probe_type, fmt(value["value"]),
+                                       fmt(ci[0]), fmt(ci[1])])
+        lines = [f"# {family}", "", "## Rungs", "",
+                 md_table(["target", "stratum", "n", "rung", "linear", "mlp", "model"], rungs,
+                          "llrlrrr")]
         if shares:
             lines += ["", "## Share of the gap closed by e", "",
-                      "| target | stratum | probe | share | 95% low | 95% high |",
-                      "|---|---|---|---:|---:|---:|", *shares]
+                      md_table(["target", "stratum", "probe", "share", "95% low", "95% high"],
+                               shares, "lllrrr")]
         (out_dir / f"{family}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if scorecard.sweeps:
         lines = ["# Board sweeps", ""]
@@ -773,19 +763,18 @@ def write_tables(out_dir: Path, scorecard: Scorecard) -> None:
             if "unavailable" in body:
                 lines += [f"## {name}", "", f"Not run: {body['unavailable']}.", ""]
                 continue
-            lines += [f"## {name}", "", "| value | mean prediction | n |", "|---:|---:|---:|"]
-            lines += [f"| {p['value']} | {fmt(p['prediction'])} | {p['n']} |"
-                      for p in body["mean"]]
-            lines.append("")
+            lines += [f"## {name}", "",
+                      md_table(["value", "mean prediction", "n"],
+                               [[p["value"], fmt(p["prediction"]), p["n"]]
+                                for p in body["mean"]], "rrr"), ""]
         (out_dir / "sweeps.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if scorecard.ablation:
         header = [f"{r} {s}" for r in ablation.REPLACEMENTS for s in ablation.SCOPES]
+        rows = [[name, fmt(body["base_loss"]),
+                 *(fmt(body[r][s]) for r in ablation.REPLACEMENTS for s in ablation.SCOPES)]
+                for name, body in sorted(scorecard.ablation.items())]
         lines = ["# Ablation: loss increase per field", "",
-                 "| field | base | " + " | ".join(header) + " |",
-                 "|---|---:|" + "---:|" * len(header)]
-        for name, body in sorted(scorecard.ablation.items()):
-            cells = [fmt(body[r][s]) for r in ablation.REPLACEMENTS for s in ablation.SCOPES]
-            lines.append(f"| {name} | {fmt(body['base_loss'])} | " + " | ".join(cells) + " |")
+                 md_table(["field", "base", *header], rows, "lr" + "r" * len(header))]
         (out_dir / "ablation.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if scorecard.board_abilities:
         (out_dir / "board-abilities.md").write_text(

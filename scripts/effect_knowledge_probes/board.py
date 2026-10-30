@@ -156,6 +156,8 @@ def table(result: Mapping[str, dict]) -> str:
     """Per field, each subset's loss and the cost of noise in the card slots."""
     from math import isnan
 
+    from _lib.markdown import md_table
+
     def fmt(value) -> str:
         return "" if value is None or isnan(value) else f"{value:.3f}"
 
@@ -169,19 +171,16 @@ def table(result: Mapping[str, dict]) -> str:
              "Records per subset: " + ", ".join(
                  f"{name} {sum(result[name]['n'].values())}" for name in SUBSETS
                  if name in result) + ".", "",
-             "## Loss per field", "",
-             "| field | " + " | ".join(present) + " |",
-             "|---|" + "---:|" * len(present)]
-    for field in fields:
-        values = [result[name]["ablation"].get(field, {}).get("base_loss") for name in present]
-        if shown(values):
-            lines.append(f"| {field} | " + " | ".join(fmt(v) for v in values) + " |")
-    lines += ["", "## Loss increase with noise in the card slots", "",
-              "| field | " + " | ".join(present) + " |",
-              "|---|" + "---:|" * len(present)]
-    for field in fields:
-        values = [result[name]["ablation"].get(field, {}).get("noise", {}).get("cards")
-                  for name in present]
-        if shown(values):
-            lines.append(f"| {field} | " + " | ".join(fmt(v) for v in values) + " |")
+             "## Loss per field", ""]
+
+    def per_field(value_of) -> str:
+        rows = [[field, *(value_of(result[name]["ablation"].get(field, {}))
+                          for name in present)] for field in fields]
+        return md_table(["field", *present],
+                        [[row[0], *map(fmt, row[1:])] for row in rows if shown(row[1:])],
+                        "l" + "r" * len(present))
+
+    lines += [per_field(lambda entry: entry.get("base_loss")),
+              "", "## Loss increase with noise in the card slots", "",
+              per_field(lambda entry: entry.get("noise", {}).get("cards"))]
     return "\n".join(lines) + "\n"

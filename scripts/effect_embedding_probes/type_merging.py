@@ -36,9 +36,9 @@ from sklearn.model_selection import GroupKFold
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import (  # noqa: E402
+from effect_embedding_probes.common import (  # noqa: E402
     add_probe_arguments,
     group_means_residual,
     has_taxonomy,

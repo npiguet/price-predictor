@@ -257,19 +257,27 @@ def read_jsonl(path):
     return out
 
 
-def load_triage(unit):
-    p = RULES / "triage" / f"{unit}.jsonl"
-    return read_jsonl(p) if p.exists() else None
+#: Each per-unit file a unit may have, by its directory under rules/.
+UNIT_FILES = {"triage": ".jsonl", "scenarios": ".json", "heads": ".jsonl"}
 
 
-def load_scenarios(unit):
-    p = RULES / "scenarios" / f"{unit}.json"
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+def load_unit(kind, unit):
+    """A unit's triage, scenarios or heads file, parsed; None while it is not written."""
+    p = RULES / kind / f"{unit}{UNIT_FILES[kind]}"
+    if not p.exists():
+        return None
+    return read_jsonl(p) if p.suffix == ".jsonl" else json.loads(p.read_text(encoding="utf-8"))
 
 
-def load_heads(unit):
-    p = RULES / "heads" / f"{unit}.jsonl"
-    return read_jsonl(p) if p.exists() else None
+def requirement_closure(entries, ids):
+    """``ids`` and every entry they require, directly or through another."""
+    out, todo = set(ids), list(ids)
+    while todo:
+        for req in entries[todo.pop()].get("requires", ()):
+            if req not in out:
+                out.add(req)
+                todo.append(req)
+    return out
 
 
 def needs_scenario(triage_row):
@@ -282,7 +290,7 @@ def wanted_rules(triage):
     return {r["id"] for r in triage if needs_scenario(r)}
 
 
-def validate_heads(unit, rows, triage):
+def validate_heads(rows, triage):
     errs = []
     seen = [r.get("id") for r in rows]
     for rid in sorted(wanted_rules(triage) - set(seen), key=rule_sort_key):
@@ -333,7 +341,7 @@ def gen3_ids():
     return _GEN3_IDS
 
 
-def validate_triage(unit, rows, rule_ids):
+def validate_triage(rows, rule_ids):
     errs = []
     seen = [r.get("id") for r in rows]
     missing = sorted(set(rule_ids) - set(seen), key=rule_sort_key)
@@ -353,7 +361,7 @@ def validate_triage(unit, rows, rule_ids):
     return errs
 
 
-def validate_scenarios(unit, doc, triage, all_rule_ids, names):
+def validate_scenarios(doc, triage, all_rule_ids, names):
     errs, warns = [], []
     scen = doc.get("scenarios", [])
     covered = {rid for s in scen for rid in s.get("rules", [])}
@@ -394,26 +402,26 @@ def cmd_validate(args):
     for unit in units:
         errs, warns = [], []
         try:
-            tri = load_triage(unit)
+            tri = load_unit("triage", unit)
         except ValueError as e:
             tri, errs = None, [str(e)]
         if tri is not None:
-            errs += validate_triage(unit, tri, ids_by_unit[unit])
+            errs += validate_triage(tri, ids_by_unit[unit])
         try:
-            doc = load_scenarios(unit)
+            doc = load_unit("scenarios", unit)
         except json.JSONDecodeError as e:
             doc, errs = None, errs + [f"scenarios json: {e}"]
         if doc is not None and tri is not None:
             known = names if names is not None else _AnyName()
-            e2, w2 = validate_scenarios(unit, doc, tri, all_ids, known)
+            e2, w2 = validate_scenarios(doc, tri, all_ids, known)
             errs += e2
             warns += w2
         if args.heads and tri is not None and wanted_rules(tri):
             try:
-                heads = load_heads(unit)
+                heads = load_unit("heads", unit)
             except ValueError as e:
                 heads, errs = None, errs + [str(e)]
-            errs += ["no heads file"] if heads is None else validate_heads(unit, heads, tri)
+            errs += ["no heads file"] if heads is None else validate_heads(heads, tri)
         for e in errs:
             print(f"ERROR {unit}: {e}")
         if args.warnings:
@@ -498,13 +506,9 @@ def gen3_line(row, entries, lookup, overrides):
             else:
                 outs.add(target)
     # An entry's requires come with it: floating effects are read through every line.
-    todo = list(ins | outs)
-    while todo:
-        for req in entries[todo.pop()].get("requires", ()):
-            if req not in ins | outs:
-                is_output = req.startswith(("out.", "planned.timing", "planned.failed"))
-                (outs if is_output else ins).add(req)
-                todo.append(req)
+    for req in requirement_closure(entries, ins | outs) - (ins | outs):
+        is_output = req.startswith(("out.", "planned.timing", "planned.failed"))
+        (outs if is_output else ins).add(req)
     fixes = {i for i in ins | outs if i.startswith("fix.")}
     ins -= fixes
     outs -= fixes
@@ -534,22 +538,14 @@ def cmd_gen3_fields(_args):
     if n_unmapped:
         print(f"{n_unmapped} unmapped names")
         sys.exit(1)
-    write_gen3_summary(reg, all_rows)
+    write_gen3_summary(reg, entries, all_rows)
 
 
-def write_gen3_summary(reg, rows):
+def write_gen3_summary(reg, entries, rows):
     """rules/GEN3-FIELDS.md: each canonical field, with the rules it serves."""
-    sections = ("inputs", "outputs", "extensions", "planned", "fixes")
-    entries = {e["id"]: e for k in sections for e in reg[k]}
 
     def closure(i):
-        out, todo = {i}, [i]
-        while todo:
-            for req in entries[todo.pop()].get("requires", ()):
-                if req not in out:
-                    out.add(req)
-                    todo.append(req)
-        return out
+        return requirement_closure(entries, {i})
 
     serves, alone = Counter(), Counter()
     for r in rows:
@@ -617,8 +613,8 @@ def cmd_status(_args):
     rows = []
     n_tri = n_scen = n_pairs = 0
     for unit in sorted(counts, key=unit_sort_key):
-        tri = load_triage(unit)
-        doc = load_scenarios(unit)
+        tri = load_unit("triage", unit)
+        doc = load_unit("scenarios", unit)
         cats = Counter(r["category"] for r in tri) if tri else Counter()
         cat_total.update(cats)
         want = sum(1 for r in tri if needs_scenario(r)) if tri else 0

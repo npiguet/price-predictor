@@ -27,7 +27,6 @@ the model's mean predicted legality before and after.
 """
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from collections import defaultdict
@@ -38,6 +37,8 @@ import numpy as np
 if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, record_walk  # noqa: E402
 from effect_knowledge_probes.board_edits import BoardEdit  # noqa: E402
@@ -148,15 +149,6 @@ def decision_items(record, sidecars):
     return (restriction, items) if items else None
 
 
-def qualifying_records(directories, count: int, shards: int, per_game: int, sidecars):
-    def choose(record):
-        found = decision_items(record, sidecars)
-        return None if found is None else (record, *found)
-
-    return record_walk.qualifying(
-        directories, choose, count, per_game=per_game, shards=shards)
-
-
 # ── reading the model ───────────────────────────────────────────────────
 
 
@@ -171,21 +163,17 @@ def _gates(outputs, surface, row) -> dict[str, float]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("checkpoint", type=Path)
-    parser.add_argument("--records", type=int, default=1500)
-    parser.add_argument("--shards", type=int, default=200)
-    parser.add_argument("--per-game", type=int, default=3)
-    parser.add_argument("--min-each", type=int, default=15,
-                        help="items of each label a restriction row needs")
-    args = parser.parse_args()
-
-    context = common.probe_context(args.checkpoint)
-    chosen = qualifying_records(context.validation_dirs(), args.records, args.shards,
-                                args.per_game, context.sidecars())
+    args, context = common.grid_run(
+        __doc__, records=1500, per_game=3,
+        options=lambda parser: parser.add_argument(
+            "--min-each", type=int, default=15,
+            help="items of each label a restriction row needs"))
+    sidecars = context.sidecars()
+    chosen = record_walk.qualifying(
+        context.validation_dirs(), record_walk.with_record(lambda r: decision_items(r, sidecars)),
+        args.records, per_game=args.per_game, shards=args.shards)
     probe_model = context.model([c[0] for c in chosen])
-    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), {len(chosen)} validation "
-          f"targeting decisions", flush=True)
+    common.heading(args, context, f"{len(chosen)} validation targeting decisions")
 
     gates = common.predict_all(probe_model, [c[0] for c in chosen],
                                lambda o, v, s, r: _gates(o, s, r))
@@ -199,22 +187,20 @@ def main() -> None:
                 table[key][0].append(legal)
                 table[key][1].append(gate[entity])
 
+    def largest_first(table):
+        return sorted(table.items(), key=lambda kv: -len(kv[1][0]))
+
     print("\nby family")
-    print("| family | items | legal | AUC |")
-    print("|---|---:|---:|---:|")
-    for key, (labels, scores) in sorted(by_family.items(), key=lambda kv: -len(kv[1][0])):
-        print(f"| {key} | {len(labels)} | {sum(labels)} | "
-              f"{common.auc(labels, scores):.3f} |")
+    print_table(["family", "items", "legal", "AUC"],
+                [[key, len(labels), sum(labels), f"{common.auc(labels, scores):.3f}"]
+                 for key, (labels, scores) in largest_first(by_family)], "lrrr")
 
     print("\nby restriction")
-    print("| restriction | family | items | legal | AUC |")
-    print("|---|---|---:|---:|---:|")
-    for key, (labels, scores) in sorted(by_restriction.items(), key=lambda kv: -len(kv[1][0])):
-        positives = sum(labels)
-        if positives < args.min_each or len(labels) - positives < args.min_each:
-            continue
-        print(f"| `{key}` | {family(key)} | {len(labels)} | {positives} | "
-              f"{common.auc(labels, scores):.3f} |")
+    print_table(["restriction", "family", "items", "legal", "AUC"],
+                [[f"`{key}`", family(key), len(labels), sum(labels),
+                  f"{common.auc(labels, scores):.3f}"]
+                 for key, (labels, scores) in largest_first(by_restriction)
+                 if args.min_each <= sum(labels) <= len(labels) - args.min_each], "llrrr")
 
     flips = defaultdict(lambda: ([], []))
     flip_records, flip_index = [], []
@@ -236,10 +222,9 @@ def main() -> None:
             flips[flip][1].append(a[entity])
     print("\ncounterfactual flips: a legal target changed so the restriction fails "
           "(rule: legal -> illegal)")
-    print("| flip | targets | predicted legal before | after |")
-    print("|---|---:|---:|---:|")
-    for flip, (b, a) in sorted(flips.items(), key=lambda kv: -len(kv[1][0])):
-        print(f"| {flip} | {len(b)} | {np.mean(b):.3f} | {np.mean(a):.3f} |", flush=True)
+    print_table(["flip", "targets", "predicted legal before", "after"],
+                [[flip, len(b), f"{np.mean(b):.3f}", f"{np.mean(a):.3f}"]
+                 for flip, (b, a) in largest_first(flips)], "lrrr")
 
 
 if __name__ == "__main__":

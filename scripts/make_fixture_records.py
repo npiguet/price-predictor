@@ -27,7 +27,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from effects.infrastructure.record_codec import record_from_dict
-from effects.infrastructure.shard_io import SHARD_GLOBS, iter_shard_lines
+from effects.infrastructure.shard_io import iter_shard_lines, iter_shards
 
 _KEY_FIELDS = {"script_file", "face", "trait_kind", "index_within_kind"}
 
@@ -120,13 +120,6 @@ def _categories(sidecars: _Sidecars) -> dict[str, Callable[[dict], bool]]:
     }
 
 
-def _shards(records_dir: Path) -> list[Path]:
-    found: set[Path] = set()
-    for pattern in SHARD_GLOBS:
-        found.update(records_dir.rglob(pattern))
-    return sorted(found)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--records-dir", type=Path, default=Path("output/effects/records"))
@@ -149,7 +142,7 @@ def main() -> int:
     wanted_mirrors: set[str] = set()
     extras: dict[str, dict] = {}
 
-    shards = _shards(args.records_dir)
+    shards = iter_shards(args.records_dir)
     # Interleave the collection runs rather than reading one run's shards first,
     # so a category only another run reaches (probes, variants) is found early.
     shards = shards[::7] + [s for i, s in enumerate(shards) if i % 7]

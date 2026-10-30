@@ -25,6 +25,8 @@ if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.markdown import md_table  # noqa: E402
+
 from effect_knowledge_probes.common import fmt  # noqa: E402
 from effect_knowledge_probes.scorecard import Scorecard  # noqa: E402
 
@@ -107,16 +109,12 @@ def render(cards: list[Scorecard]) -> str:
         header = ["target", "stratum", "rung"] + [
             f"{name} {probe_type}" for name in names for probe_type in (*PROBE_TYPES, "model")
         ]
-        lines.append("| " + " | ".join(header) + " |")
-        lines.append("|" + "|".join(["---"] * 3 + ["---:"] * (len(header) - 3)) + "|")
-        for (target, stratum, rung), values in sorted(tables[family].items()):
-            row = [target, stratum, rung] + [
-                fmt(values.get((column, probe_type)))
-                for column in range(len(cards))
-                for probe_type in (*PROBE_TYPES, "model")
-            ]
-            lines.append("| " + " | ".join(row) + " |")
-        lines.append("")
+        rows = [[target, stratum, rung] + [
+                    fmt(values.get((column, probe_type)))
+                    for column in range(len(cards))
+                    for probe_type in (*PROBE_TYPES, "model")]
+                for (target, stratum, rung), values in sorted(tables[family].items())]
+        lines += [md_table(header, rows, "lll" + "r" * (len(header) - 3)), ""]
     lines += ["## Ranking on rung 1 − rung 1w", ""]
     for probe_type, ranked in ranking(cards).items():
         lines.append(f"- {probe_type}: " + ", ".join(

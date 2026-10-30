@@ -48,8 +48,6 @@ Usage
 from __future__ import annotations
 
 import argparse
-import re
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import matplotlib
@@ -58,6 +56,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 from matplotlib.ticker import MultipleLocator  # noqa: E402
+
+from effects.application.training_log import EpochSummary, parse_epoch_summaries  # noqa: E402
 
 # Palette: first three slots of the validated reference categorical order
 # (references/palette.md in the dataviz skill), light-surface hex values.
@@ -73,15 +73,9 @@ VARIANTS = (
     ("taxonomy", "taxonomy baseline", AQUA),
     ("state-only", "state-only baseline", MUTED),
 )
-STRATA = (("train", "train", BLUE), ("cd", "card-disjoint", ORANGE), ("gd", "game-disjoint", AQUA))
+STRATA = (("train", "train", BLUE), ("card_disjoint", "card-disjoint", ORANGE),
+          ("game_disjoint", "game-disjoint", AQUA))
 CURRICULUM_EPOCH = 2.5  # sparse fields turn on at the first step of epoch 3
-
-EPOCH_RE = re.compile(
-    r"epoch (\d+) \| train ([\d.]+) \| card-disjoint ([\d.]+) \| "
-    r"game-disjoint ([\d.]+) \| gate F1 ([\d.]+) \| zone acc ([\d.]+) \| "
-    r"deviance ([\d.]+)"
-)
-FIELD_RE = re.compile(r"(\w+) ([\d.]+) \(([-\d]+%|n/a)\)")
 
 # The ten fields with the largest constant-predictor floor at the full
 # model's best epoch (floor recovered as loss / (1 - pct/100)), i.e. the
@@ -100,47 +94,8 @@ TOP_FIELDS = (
 )
 
 
-@dataclass
-class Epoch:
-    epoch: int
-    train: float
-    cd: float
-    gd: float
-    f1: float
-    zone: float
-    dev: float
-    fields: dict = field(default_factory=dict)  # name -> (loss, pct or None)
-
-
-def parse_log(path: Path) -> list[Epoch]:
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    rows = []
-    for i, line in enumerate(lines):
-        m = EPOCH_RE.search(line)
-        if not m:
-            continue
-        nxt = lines[i + 1] if i + 1 < len(lines) else ""
-        fields = {}
-        if nxt.strip().startswith("fields:"):
-            for name, loss, pct in FIELD_RE.findall(nxt):
-                fields[name] = (float(loss), None if pct == "n/a" else int(pct[:-1]))
-        rows.append(
-            Epoch(
-                epoch=int(m[1]),
-                train=float(m[2]),
-                cd=float(m[3]),
-                gd=float(m[4]),
-                f1=float(m[5]),
-                zone=float(m[6]),
-                dev=float(m[7]),
-                fields=fields,
-            )
-        )
-    return rows
-
-
-def best_epoch(rows: list[Epoch]) -> Epoch:
-    return min(rows, key=lambda r: r.cd)
+def best_epoch(rows: list[EpochSummary]) -> EpochSummary:
+    return min(rows, key=lambda r: r.card_disjoint)
 
 
 def style_axis(ax) -> None:
@@ -152,7 +107,7 @@ def style_axis(ax) -> None:
     ax.set_axisbelow(True)
 
 
-def chart_losses(runs: dict[str, list[Epoch]], out_stub: Path) -> None:
+def chart_losses(runs: dict[str, list[EpochSummary]], out_stub: Path) -> None:
     """Chart 1: train / card-disjoint / game-disjoint loss, one panel per variant."""
     fig, axes = plt.subplots(
         1, len(VARIANTS), figsize=(15.2, 4.4), sharey=True, facecolor=BG,
@@ -163,9 +118,9 @@ def chart_losses(runs: dict[str, list[Epoch]], out_stub: Path) -> None:
         for rows in runs.values()
         for r in rows
         if r.epoch >= 2
-        for s in ("train", "cd", "gd")
-    ] + [r.cd for rows in runs.values() for r in rows if r.epoch == 1] + [
-        r.gd for rows in runs.values() for r in rows if r.epoch == 1
+        for s in ("train", "card_disjoint", "game_disjoint")
+    ] + [r.card_disjoint for rows in runs.values() for r in rows if r.epoch == 1] + [
+        r.game_disjoint for rows in runs.values() for r in rows if r.epoch == 1
     ]
     y_lo, y_hi = min(all_vals) - 0.25, max(all_vals) + 0.4
 
@@ -238,7 +193,7 @@ def chart_losses(runs: dict[str, list[Epoch]], out_stub: Path) -> None:
     _save(fig, out_stub)
 
 
-def chart_per_field(full_rows: list[Epoch], out_stub: Path) -> None:
+def chart_per_field(full_rows: list[EpochSummary], out_stub: Path) -> None:
     """Chart 2: explained-% per epoch, full model, one panel per field."""
     fig, axes = plt.subplots(2, 5, figsize=(15.5, 6.6), sharey=True, facecolor=BG)
     fig.subplots_adjust(top=0.80, bottom=0.09, left=0.035, right=0.965, hspace=0.45, wspace=0.12)
@@ -262,7 +217,7 @@ def chart_per_field(full_rows: list[Epoch], out_stub: Path) -> None:
         final = ys[-1] if ys else None
         if final is not None:
             ax.annotate(
-                f"{final}%",
+                f"{final:g}%",
                 xy=(xs[-1], final),
                 xytext=(2, 2),
                 textcoords="offset points",
@@ -294,7 +249,7 @@ def chart_per_field(full_rows: list[Epoch], out_stub: Path) -> None:
     _save(fig, out_stub)
 
 
-def chart_paired(full_best: Epoch, identity_best: Epoch, out_stub: Path) -> None:
+def chart_paired(full_best: EpochSummary, identity_best: EpochSummary, out_stub: Path) -> None:
     """Chart 3: explained-% at each run's best epoch, full vs identity, paired bars."""
     fig, ax = plt.subplots(figsize=(9.5, 5.6), facecolor=BG)
     fig.subplots_adjust(top=0.78, bottom=0.16, left=0.16, right=0.93)
@@ -316,7 +271,7 @@ def chart_paired(full_best: Epoch, identity_best: Epoch, out_stub: Path) -> None
         ax.text(
             fv + 1,
             v + h / 2 + (0.03 if tied else 0),
-            f"{fv}%",
+            f"{fv:g}%",
             va="center",
             fontsize=8.5,
             color=INK2,
@@ -324,7 +279,7 @@ def chart_paired(full_best: Epoch, identity_best: Epoch, out_stub: Path) -> None
         ax.text(
             iv + 1,
             v - h / 2 - (0.03 if tied else 0),
-            f"{iv}%",
+            f"{iv:g}%",
             va="center",
             fontsize=8.5,
             color=INK2,
@@ -391,7 +346,8 @@ def main() -> None:
     runs = {}
     for key, _title, _color in VARIANTS:
         log = args.runs_dir / f"{args.prefix}-{key}" / "train.log"
-        runs[key] = parse_log(log)
+        runs[key] = parse_epoch_summaries(log.read_text(encoding="utf-8", errors="replace")
+                                          .splitlines())
 
     full_rows = runs["full-textless-corpus"]
     identity_rows = runs["identity"]

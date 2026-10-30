@@ -37,12 +37,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.linear_model import Ridge
-from sklearn.model_selection import GroupKFold
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import (  # noqa: E402
+from _lib.stats import ridge_cv_r2  # noqa: E402
+
+from effect_embedding_probes.common import (  # noqa: E402
     add_probe_arguments,
     load_texts,
     matrix,
@@ -74,16 +74,6 @@ def split_text(text: str) -> tuple[str, str]:
     return " ".join(script), " ".join(description)
 
 
-def cv_r2(X, Y, groups) -> np.ndarray:
-    pred = np.zeros_like(Y)
-    for train, test in GroupKFold(5).split(X, Y, groups):
-        model = Ridge(alpha=3.0, solver="sparse_cg").fit(X[train], Y[train])
-        pred[test] = model.predict(X[test])
-    ss_res = ((Y - pred) ** 2).sum(axis=0)
-    ss_tot = ((Y - Y.mean(axis=0)) ** 2).sum(axis=0)
-    return np.append(1 - ss_res / ss_tot, 1 - ss_res.sum() / ss_tot.sum())
-
-
 def main() -> None:
     parser = add_probe_arguments(
         argparse.ArgumentParser(description=__doc__.splitlines()[0]),
@@ -106,7 +96,7 @@ def main() -> None:
         vectorizer = CountVectorizer(token_pattern=TOKEN, lowercase=True,
                                      binary=True, min_df=5)
         X = vectorizer.fit_transform(docs.fillna("")).astype(np.float64)
-        r2 = cv_r2(X, Y, groups)
+        r2 = ridge_cv_r2(X, Y, groups, alpha=3.0, solver="sparse_cg")
         row = {"word view": name, "vocabulary": X.shape[1]}
         for k in range(N_PCS):
             row[f"PC{k + 1}"] = r2[k]

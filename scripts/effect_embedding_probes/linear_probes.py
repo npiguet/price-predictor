@@ -58,9 +58,9 @@ from sklearn.model_selection import GroupKFold
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import (  # noqa: E402
+from effect_embedding_probes.common import (  # noqa: E402
     BINARY_SCRIPT,
     CARD,
     NUMERIC_SCRIPT,
@@ -70,6 +70,7 @@ from common import (  # noqa: E402
     has_taxonomy,
     matrix,
     prepared,
+    profile_weight,
     resolve_paths,
     winsorized,
     write_markdown,
@@ -208,28 +209,13 @@ def script_tasks(table: pd.DataFrame, key_columns: list[str]) -> list:
     return tasks
 
 
-def weight_for(table: pd.DataFrame, column: str) -> np.ndarray:
-    if column.startswith(("p_cost", "mean_cost")):
-        n = table["cost_n"]
-    elif column.startswith("mean_cont"):
-        n = table["cont_n"]
-    elif column.startswith("p_trigger"):
-        n = table["n_trigger"]
-    elif column.startswith("kind_share"):
-        n = table["n_records"]
-    else:
-        n = table["res_n"]
-    n = n.fillna(0).to_numpy(float)
-    return n / (n + 5.0)
-
-
 def profile_tasks(table: pd.DataFrame) -> list:
     tasks = []
     for column in table.columns:
         if not column.startswith(("p_", "mean_", "share_opp", "kind_share_")):
             continue
         y = table[column].to_numpy(float)
-        w = weight_for(table, column)
+        w = profile_weight(table, column)
         w = np.where(np.isfinite(y), w, 0.0)
         have = w > 0
         if have.sum() < 1000:

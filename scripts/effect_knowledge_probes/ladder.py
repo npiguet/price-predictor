@@ -49,10 +49,7 @@ MLP_EPOCHS = 30
 BOOTSTRAP_RESAMPLES = 1000
 CI_LEVEL = 0.95
 
-BOARD_RUNGS: tuple[str, ...] = ("0", "1", "1w", "1o", "2", "3")
 PROBED_RUNGS: tuple[str, ...] = ("0", "1", "1w", "1o", "2")
-#: A line property's short ladder: ``e``, its width control, ``[ACT]``.
-LINE_RUNGS: tuple[str, ...] = ("1", "1w", "2")
 PROBE_TYPES: tuple[str, ...] = ("linear", "mlp")
 
 

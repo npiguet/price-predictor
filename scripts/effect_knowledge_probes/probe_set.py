@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 
 
@@ -97,16 +97,11 @@ class FrozenRecordItem:
     group: str = ""
 
     def to_json(self) -> dict:
-        return {
-            "record_id": self.record_id, "stratum": self.stratum,
-            "family": self.family, "target": self.target, "label": self.label,
-            "entity": self.entity, "partner": self.partner,
-            "partner_entity": self.partner_entity, "group": self.group,
-        }
+        return asdict(self)
 
     @classmethod
     def from_json(cls, data: dict) -> FrozenRecordItem:
-        return cls(**{name: data[name] for name in _RECORD_ITEM_FIELDS})
+        return cls(**{f.name: data[f.name] for f in fields(cls)})
 
     def record_item(self):
         """The item as ``labels.RecordItem``, its partner a provenance key again."""
@@ -119,12 +114,6 @@ class FrozenRecordItem:
             entity=self.entity, partner=partner, partner_entity=self.partner_entity,
             group=self.group,
         )
-
-
-_RECORD_ITEM_FIELDS = (
-    "record_id", "stratum", "family", "target", "label", "entity", "partner",
-    "partner_entity", "group",
-)
 
 
 @dataclass
@@ -151,30 +140,21 @@ class ProbeSet:
 
     def to_json(self) -> dict:
         """The set as it is written; ``digest`` only once it has one."""
-        out = {
-            "corpus": self.corpus, "corpus_digest": self.corpus_digest,
-            "surface": self.surface, "games": self.games, "sources": self.sources,
-            "items": [item.to_json() for item in self.items],
-            "pairs": self.pairs,
-            "record_items": [item.to_json() for item in self.record_items],
-            "sweeps": self.sweeps, "join_rate": self.join_rate, "join": self.join,
-            "settings": self.settings,
-        }
-        if self.digest:
-            out["digest"] = self.digest
+        out = {f.name: getattr(self, f.name) for f in fields(self)}
+        out["items"] = [item.to_json() for item in self.items]
+        out["record_items"] = [item.to_json() for item in self.record_items]
+        if not self.digest:
+            del out["digest"]
         return out
 
     @classmethod
     def from_json(cls, data: dict) -> ProbeSet:
-        return cls(
-            corpus=data["corpus"], corpus_digest=data["corpus_digest"],
-            surface=data["surface"], games=data["games"], sources=data["sources"],
-            items=[FrozenLineItem.from_json(item) for item in data["items"]],
-            pairs=data["pairs"],
-            record_items=[FrozenRecordItem.from_json(item) for item in data["record_items"]],
-            sweeps=data["sweeps"], join_rate=data["join_rate"], join=data["join"],
-            settings=data["settings"], digest=data.get("digest", ""),
-        )
+        plain = {f.name: data[f.name] for f in fields(cls) if f.name != "digest"}
+        return cls(**{
+            **plain, "digest": data.get("digest", ""),
+            "items": [FrozenLineItem.from_json(item) for item in data["items"]],
+            "record_items": [FrozenRecordItem.from_json(item) for item in data["record_items"]],
+        })
 
     def sealed(self) -> ProbeSet:
         """The set with its digest computed over everything else."""

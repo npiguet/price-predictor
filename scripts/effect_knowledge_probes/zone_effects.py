@@ -37,7 +37,6 @@ from) and reports four things:
 """
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from collections import defaultdict
@@ -49,6 +48,8 @@ import numpy as np
 if __package__ in (None, ""):
     # Run by path: put scripts/ on the path so the suite imports as a package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from _lib.markdown import print_table  # noqa: E402
 
 from effect_knowledge_probes import common, record_walk  # noqa: E402
 from effect_knowledge_probes.common import auc  # noqa: E402
@@ -109,12 +110,6 @@ def chosen_record(record, sidecars):
     return record, apis, text, derive_targets(record)
 
 
-def qualifying_records(directories, count: int, shards: int, per_game: int, sidecars):
-    return record_walk.qualifying(
-        directories, lambda record: chosen_record(record, sidecars), count,
-        per_game=per_game, shards=shards)
-
-
 # ── reading the model ───────────────────────────────────────────────────
 
 
@@ -147,11 +142,7 @@ def predict_all(probe_model, records) -> list[dict]:
 
 
 def report_counts(chosen, readings) -> None:
-    print("\ncard counts at each player: every player slot of every chosen record")
-    print("| field | player items | affected | AUC | records naming the API | "
-          "one player affected | more predicted for that player | actual, mean | "
-          "predicted, mean |")
-    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    table = []
     for api, field in COUNT_FIELDS.items():
         labels, scores = [], []
         naming = single = right = 0
@@ -178,10 +169,13 @@ def report_counts(chosen, readings) -> None:
                 actual.append(counts[hit[0]])
                 predicted.append(reading["players"][hit[0]][field])
         share = f"{right / single:.2f}" if single else "n/a"
-        print(f"| {field} | {len(labels)} | {sum(labels)} | {auc(labels, scores):.3f} | "
-              f"{naming} | {single} | {share} | {common.fmt_mean(actual, 2)} | "
-              f"{common.fmt_mean(predicted, 2)} |",
-              flush=True)
+        table.append([field, len(labels), sum(labels), f"{auc(labels, scores):.3f}", naming,
+                      single, share, common.fmt_mean(actual, 2),
+                      common.fmt_mean(predicted, 2)])
+    print("\ncard counts at each player: every player slot of every chosen record")
+    print_table(["field", "player items", "affected", "AUC", "records naming the API",
+                 "one player affected", "more predicted for that player", "actual, mean",
+                 "predicted, mean"], table, "l" + "r" * 8)
 
 
 def report_zones(chosen, readings) -> None:
@@ -213,25 +207,23 @@ def report_zones(chosen, readings) -> None:
 
     print("\nwhether a card moves, by the zone it starts in: every card slot of every "
           "chosen record")
-    print("| zone before | cards | moved | AUC |")
-    print("|---|---:|---:|---:|")
-    for zone in ORIGIN_ZONES:
-        if zone in moved:
-            labels, scores = moved[zone]
-            print(f"| {zone} | {len(labels)} | {sum(labels)} | {auc(labels, scores):.3f} |")
+    print_table(["zone before", "cards", "moved", "AUC"],
+                [[zone, len(moved[zone][0]), sum(moved[zone][0]), f"{auc(*moved[zone]):.3f}"]
+                 for zone in ORIGIN_ZONES if zone in moved], "lrrr")
 
     print("\nwhere a moved card goes, by the zone it starts in")
-    print("| zone before | outcome | cards | P(outcome), mean | top outcome other than "
-          "stayed is right | most often predicted instead |")
-    print("|---|---|---:|---:|---:|---|")
     order = {z: i for i, z in enumerate(ORIGIN_ZONES)}
+    table = []
     for (zone, outcome), row in sorted(rows.items(),
                                        key=lambda kv: (order.get(kv[0][0], 99),
                                                        -len(kv[1]["right"]))):
         instead = max(row["instead"].items(), key=lambda kv: kv[1])[0] \
             if row["instead"] else ""
-        print(f"| {zone} | {outcome} | {len(row['right'])} | {common.fmt_mean(row['right'], 2)} | "
-              f"{common.fmt_mean(row['top'], 2)} | {instead} |", flush=True)
+        table.append([zone, outcome, len(row["right"]), common.fmt_mean(row["right"], 2),
+                      common.fmt_mean(row["top"], 2), instead])
+    print_table(["zone before", "outcome", "cards", "P(outcome), mean",
+                 "top outcome other than stayed is right", "most often predicted instead"],
+                table, "llrrrl")
 
 
 def _affected_player(record, targets, field):
@@ -241,11 +233,8 @@ def _affected_player(record, targets, field):
 
 
 def report_amounts(chosen, probe_model, per_sweep: int) -> None:
-    print("\nthe amount: NumCards$ set to each value, predicted count at the affected "
-          "player, mean over records")
-    print("| API | records | " + " | ".join(str(a) for a in AMOUNTS) + " |")
-    print("|---|---:|" + "---:|" * len(AMOUNTS))
     batcher = probe_model.batcher
+    table = []
     for api, field in COUNT_FIELDS.items():
         rows = []
         for record, apis, text, targets in chosen:
@@ -267,20 +256,15 @@ def report_amounts(chosen, probe_model, per_sweep: int) -> None:
             rows.append(curve)
             if len(rows) >= per_sweep:
                 break
-        if rows:
-            means = np.nanmean(np.asarray(rows), axis=0)
-            print(f"| {api} | {len(rows)} | " + " | ".join(f"{m:.2f}" for m in means)
-                  + " |", flush=True)
-        else:
-            print(f"| {api} | 0 |" + " n/a |" * len(AMOUNTS), flush=True)
+        means = np.nanmean(np.asarray(rows), axis=0) if rows else [None] * len(AMOUNTS)
+        table.append([api, len(rows), *("n/a" if m is None else f"{m:.2f}" for m in means)])
+    print("\nthe amount: NumCards$ set to each value, predicted count at the affected "
+          "player, mean over records")
+    print_table(["API", "records", *AMOUNTS], table, "lr" + "r" * len(AMOUNTS))
 
 
 def report_who(chosen, readings, probe_model) -> None:
-    print("\nwho: the player target handed to the other player (rule: the count moves "
-          "with it)")
-    print("| API | records | targeted player, before | after | other player, before | "
-          "after |")
-    print("|---|---:|---:|---:|---:|---:|")
+    table = []
     for api, field in COUNT_FIELDS.items():
         edited, index = [], []
         for (record, apis, _, targets), reading in zip(chosen, readings):
@@ -294,7 +278,7 @@ def report_who(chosen, readings, probe_model) -> None:
             edited.append(retargeted(record, player, other))
             index.append((reading, player, other))
         if not edited:
-            print(f"| {api} | 0 | n/a | n/a | n/a | n/a |", flush=True)
+            table.append([api, 0, "n/a", "n/a", "n/a", "n/a"])
             continue
         after = predict_all(probe_model, edited)
         cells = defaultdict(list)
@@ -303,25 +287,25 @@ def report_who(chosen, readings, probe_model) -> None:
             cells["ta"].append(reading["players"][player][field])
             cells["ob"].append(before["players"][other][field])
             cells["oa"].append(reading["players"][other][field])
-        means = " | ".join(common.fmt_mean(cells[k], 2) for k in ("tb", "ta", "ob", "oa"))
-        print(f"| {api} | {len(edited)} | {means} |", flush=True)
+        table.append([api, len(edited),
+                      *(common.fmt_mean(cells[k], 2) for k in ("tb", "ta", "ob", "oa"))])
+    print("\nwho: the player target handed to the other player (rule: the count moves "
+          "with it)")
+    print_table(["API", "records", "targeted player, before", "after", "other player, before",
+                 "after"], table, "lrrrrr")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("checkpoint", type=Path)
-    parser.add_argument("--records", type=int, default=2000)
-    parser.add_argument("--shards", type=int, default=200)
-    parser.add_argument("--per-game", type=int, default=3)
-    parser.add_argument("--per-sweep", type=int, default=40)
-    args = parser.parse_args()
-
-    context = common.probe_context(args.checkpoint)
-    chosen = qualifying_records(context.validation_dirs(), args.records, args.shards,
-                                args.per_game, context.sidecars())
+    args, context = common.grid_run(
+        __doc__, records=2000, per_game=3,
+        options=lambda parser: parser.add_argument("--per-sweep", type=int, default=40))
+    sidecars = context.sidecars()
+    chosen = record_walk.qualifying(
+        context.validation_dirs(), lambda record: chosen_record(record, sidecars),
+        args.records, per_game=args.per_game, shards=args.shards)
     probe_model = context.model([c[0] for c in chosen])
-    print(f"{args.checkpoint.parent.name} ({context.checkpoint.epoch}), {len(chosen)} validation "
-          f"resolutions naming a zone-moving API", flush=True)
+    common.heading(args, context,
+                   f"{len(chosen)} validation resolutions naming a zone-moving API")
 
     readings = predict_all(probe_model, [c[0] for c in chosen])
     report_counts(chosen, readings)

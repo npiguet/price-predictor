@@ -2,21 +2,10 @@
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
 
-_SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "effect_sweep_arm.py"
-
-
-def _load():
-    spec = importlib.util.spec_from_file_location("effect_sweep_arm", _SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-arm = _load()
+import effect_sweep_arm as arm
 
 
 def _plan(argv):

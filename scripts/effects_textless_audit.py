@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import collections
-import glob
 import itertools
 import random
 import sys
@@ -22,7 +21,7 @@ from pathlib import Path
 
 from effects.domain.provenance import KeyResolution
 from effects.domain.records import RecordKind
-from effects.infrastructure.shard_io import read_shard
+from effects.infrastructure.shard_io import iter_shards, read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 
 
@@ -42,7 +41,7 @@ def main() -> int:
     sidecars = SidecarCache(roots)
 
     training = args.corpus / "training"
-    files = sorted(glob.glob(str(training / "shard-*.jsonl.gz")))
+    files = iter_shards(training)
     if not files:
         # Zero shards print zero of everything, which reads exactly like a
         # clean corpus. A wrong --corpus is the likeliest reason to see it,
