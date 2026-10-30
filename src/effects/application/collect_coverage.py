@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import logging
 import random
+from abc import ABC, abstractmethod
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, ClassVar
 
 from effects.application.collector_common import (
     CollectorConfig,
@@ -215,46 +216,48 @@ def non_deck_names(texts: Mapping[str, str]) -> set[str]:
     return {name for name, text in texts.items() if not is_deckable(text)}
 
 
-class CoverageRounds(Protocol):
-    """What the round loop needs from one kind of coverage unit: the card run
-    and the held-out round differ in what a unit is, how its cards are weighted
-    and which units have to finish."""
+@dataclass(kw_only=True)
+class CoverageRounds(ABC):
+    """What the round loop needs from one kind of coverage unit, and what both
+    kinds hold: the units, the consult's verdicts, the counter that reads each
+    round's shards into the units, and the cards a deck can be drawn from. The
+    card run and the held-out round differ in what a unit is, how its cards
+    are weighted and which units have to finish."""
+
+    coverage: dict[str, CoverageUnit]
+    verdicts: Mapping[str, ConsultVerdict]
+    counter: CoverageCounter | TextCoverageCounter
+    records_dir: Path
+    target: int
+    candidates: dict[str, DeckCandidate]
+    #: Logged when the weighted cards yield no deck at all.
+    no_decks: ClassVar[str]
 
     @property
-    def units(self) -> Mapping[str, CoverageUnit]: ...
+    def units(self) -> dict[str, CoverageUnit]:
+        return self.coverage
 
     @property
+    @abstractmethod
     def awaited(self) -> Mapping[str, CoverageUnit]:
         """The units whose completion ends the run: every card, but only the
         held-out texts some castable card carries (FR-037)."""
-        ...
 
-    @property
-    def target(self) -> int: ...
-
-    @property
-    def candidates(self) -> Mapping[str, DeckCandidate]: ...
-
-    @property
-    def no_decks(self) -> str:
-        """Logged when the weighted cards yield no deck at all."""
-        ...
-
+    @abstractmethod
     def weights(self) -> dict[str, float]:
         """The next round's per-card deck weights, the consult applied."""
-        ...
 
+    @abstractmethod
     def units_decked(self, cards: set[str]) -> set[str]:
         """The units a round attempted, from the cards its decks held."""
-        ...
 
     def count_new_shards(self) -> int:
         """Count the shards the last round wrote into ``units``; how many."""
-        ...
+        return self.counter.update(self.coverage, self.records_dir)
 
+    @abstractmethod
     def report(self) -> str:
         """What the rounds could not reach, printed however they ended."""
-        ...
 
 
 def round_summary(
@@ -331,33 +334,12 @@ def _play_to_completion(
 
 
 @dataclass(kw_only=True)
-class _RoundsBase:
-    """What both kinds of round hold: the units, the consult's verdicts, the
-    counter that reads each round's shards into the units, and the cards a
-    deck can be drawn from."""
-
-    coverage: dict[str, CoverageUnit]
-    verdicts: Mapping[str, ConsultVerdict]
-    counter: CoverageCounter | TextCoverageCounter
-    records_dir: Path
-    target: int
-    candidates: dict[str, DeckCandidate]
-
-    @property
-    def units(self) -> dict[str, CoverageUnit]:
-        return self.coverage
-
-    def count_new_shards(self) -> int:
-        return self.counter.update(self.coverage, self.records_dir)
-
-
-@dataclass(kw_only=True)
-class CardRounds(_RoundsBase):
+class CardRounds(CoverageRounds):
     """The card run's rounds: every deckable card a unit, and every one awaited."""
 
     coverage: dict[str, CardCoverage]
     counter: CoverageCounter
-    no_decks: str = "No card with a weight has converted text; nothing to deck."
+    no_decks: ClassVar[str] = "No card with a weight has converted text; nothing to deck."
 
     @property
     def awaited(self) -> dict[str, CardCoverage]:
@@ -543,7 +525,7 @@ def held_out_round_caps(caps: CollectionCaps) -> CollectionCaps:
 
 
 @dataclass(kw_only=True)
-class TextRounds(_RoundsBase):
+class TextRounds(CoverageRounds):
     """The held-out round's rounds: each held-out text a unit, awaited only
     when some castable card carries it."""
 
@@ -551,11 +533,12 @@ class TextRounds(_RoundsBase):
     #: ``held-out text -> the deckable listed cards carrying it``.
     carriers: Mapping[str, frozenset[str]]
     counter: TextCoverageCounter
-    no_decks: str = "No unfinished held-out text has a card with converted text."
-    awaited: dict[str, TextCoverage] = field(init=False)
+    no_decks: ClassVar[str] = "No unfinished held-out text has a card with converted text."
 
-    def __post_init__(self) -> None:
-        self.awaited = awaited_texts(self.coverage)
+    @cached_property
+    def awaited(self) -> dict[str, TextCoverage]:
+        # Fixed for the run: castability comes from the consult, once.
+        return awaited_texts(self.coverage)
 
     def weights(self) -> dict[str, float]:
         return rank_by_consult(
