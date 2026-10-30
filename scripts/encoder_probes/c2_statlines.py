@@ -12,7 +12,6 @@ the clean, mean-zero null family (~0.09 SD).
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -24,6 +23,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
 from _lib.stats import bootstrap_ci  # noqa: E402
+
+PIP_SWAPS = (
+    ("{1}{W}", ["{W}{W}", "{2}"]),
+    ("{1}{U}", ["{U}{U}", "{2}"]),
+    ("{1}{B}", ["{B}{B}", "{2}"]),
+    ("{1}{R}", ["{R}{R}", "{2}"]),
+    ("{1}{G}", ["{G}{G}", "{2}"]),
+    ("{2}{W}", ["{1}{W}{W}", "{3}"]),
+    ("{2}{R}", ["{1}{R}{R}", "{3}"]),
+)
 
 
 def sweep_table(col: str, values: list, S: pl.Scored) -> pd.DataFrame:
@@ -41,34 +50,22 @@ def sweep_table(col: str, values: list, S: pl.Scored) -> pd.DataFrame:
     return tab
 
 
-def write(tab: pd.DataFrame, name: str) -> None:
-    tab.to_csv(pl.SCRATCH / name, index=False)
-    print(tab.to_string(index=False), flush=True)
-
-
 def main() -> None:
     j = pl.load_frame(text=True)
-    stripped = list(j["text"])
-    is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
-    power = pd.to_numeric(j["power"], errors="coerce").to_numpy(float)
-    tough = pd.to_numeric(j["toughness"], errors="coerce").to_numpy(float)
-    cost = [cc.get_field(s, "mana cost:") or "" for s in stripped]
+    C = cc.CardCorpus.of(j)
+    power, tough, cost = C.power, C.toughness, np.array(C.cost)
     rng = np.random.default_rng(5)
     out: dict = {}
-    lit_pt = np.array([cc.has_literal_pt(s) for s in stripped])
 
-    # ── (i) P vs T at fixed total ───────────────────────────────────────
+    def costed(r: int, new_cost: str | None) -> str:
+        return C.text[r] if new_cost is None else cc.set_cost(C.text[r], new_cost)
+
+    # (i) P vs T at fixed total
     tot = power + tough
-    elig = np.flatnonzero(is_crea & lit_pt & np.isfinite(tot) &
-                          (tot >= 4) & (tot <= 8) & (power >= 1) & (tough >= 2))
-    if len(elig) > 900:
-        elig = np.sort(rng.choice(elig, 900, replace=False))
-    texts = []
-    for r in elig:
-        p, t = int(power[r]), int(tough[r])
-        texts += [stripped[r], cc.set_pt(stripped[r], p + 1, t - 1),
-                  cc.set_pt(stripped[r], p - 1, t + 1)]
-    A = pl.score_texts(texts).reshape(len(elig), 3)
+    elig = cc.sample_rows(C.is_creature & C.literal_pt & np.isfinite(tot) & (tot >= 4)
+                          & (tot <= 8) & (power >= 1) & (tough >= 2), 900, rng)
+    A = pl.score_arms(elig, [(0, 0), (1, -1), (-1, 1)], lambda r, d: C.text[r] if d == (0, 0)
+                      else cc.set_pt(C.text[r], int(power[r]) + d[0], int(tough[r]) + d[1]))
 
     def pt_contrasts(M: np.ndarray) -> dict[str, np.ndarray]:
         # arm 1 is +2 in P-T, arm 2 is -2; the gradient is per point of P-T
@@ -76,9 +73,8 @@ def main() -> None:
                 "P-1/T+1 vs base (-2 in P-T)": M[:, 2] - M[:, 0],
                 "gradient per point of P-T": (M[:, 1] - M[:, 2]) / 4.0}
 
-    asym = pd.DataFrame([pl.contrast_row(v, contrast=name)
-                         for name, v in pt_contrasts(A.sp).items()])
-    write(asym, "c2_pt_asymmetry.csv")
+    pl.write_table([pl.contrast_row(v, contrast=name)
+                    for name, v in pt_contrasts(A.sp).items()], "c2_pt_asymmetry.csv")
     pr = list(pt_contrasts(A.pr).values())
     out["pt_asymmetry_pr"] = {"up": float(pr[0].mean()), "down": float(pr[1].mean()),
                               "gradient_per_point": float(pr[2].mean())}
@@ -94,91 +90,55 @@ def main() -> None:
             continue
         br.append({"P+T": f"{lo_}-{hi_}" if lo_ != hi_ else str(lo_),
                    "n": int(m.sum()), **pl.mean_ci(grad[m], "gradient_per_point")})
-    write(pd.DataFrame(br), "c2_pt_by_size.csv")
+    pl.write_table(br, "c2_pt_by_size.csv")
 
-    # ── fixed bodies for the sweeps ─────────────────────────────────────
-    bodies = np.flatnonzero(is_crea & lit_pt &
-                            np.array([len(cc.ability_lines(s)) == 0 for s in stripped]) &
-                            np.array([bool(re.fullmatch(r"(\{\d\})?(\{[WUBRG]\})*", c))
-                                      for c in cost]))
-    if len(bodies) > 40:
-        bodies = np.sort(rng.choice(bodies, 40, replace=False))
+    # the fixed vanilla bodies the two sweeps share
+    bodies = cc.sample_rows(C.is_creature & C.literal_pt & (C.n_abilities == 0)
+                            & np.array([bool(re.fullmatch(r"(\{\d\})?(\{[WUBRG]\})*", c))
+                                        for c in cost]), 40, rng)
     print(f"[sweeps] {len(bodies)} vanilla bodies: "
           f"{list(j.loc[bodies, 'name'][:8])}", flush=True)
 
-    # ── (ii) N/N sweep ──────────────────────────────────────────────────
+    # (ii) N/N sweep
     Ns = list(range(0, 13))
-    S = pl.score_texts([cc.set_pt(stripped[r], n, n) for r in bodies for n in Ns])
-    S = S.reshape(len(bodies), len(Ns))
-    write(sweep_table("N", Ns, S), "c2_nn_sweep.csv")
+    S = pl.score_arms(bodies, Ns, lambda r, n: cc.set_pt(C.text[r], n, n))
+    pl.write_table(sweep_table("N", Ns, S), "c2_nn_sweep.csv")
     out["nn_monotone_breaks"] = [
         int(n) for n, d in zip(Ns[1:], np.diff(S.sp.mean(axis=0))) if d < 0]
 
-    # ── (iii) generic-cost sweep on the same bodies ─────────────────────
+    # (iii) generic-cost sweep on the same bodies
     Cs = [f"{{{k}}}" for k in range(0, 10)]
-    S = pl.score_texts([cc.set_cost(stripped[r], c) for r in bodies for c in Cs])
-    write(sweep_table("cost", Cs, S.reshape(len(bodies), len(Cs))), "c2_mv_sweep.csv")
+    pl.write_table(sweep_table("cost", Cs, pl.score_arms(bodies, Cs, costed)),
+                   "c2_mv_sweep.csv")
 
-    # ── (iii.b) the {X} question ────────────────────────────────────────
+    # (iii.b) the {X} question: X rewritten to a fixed generic, or deleted
     has_x = np.array(["{X}" in c for c in cost])
-    xr = np.flatnonzero(has_x & ~is_crea)
-    if len(xr) > 250:
-        xr = np.sort(rng.choice(xr, 250, replace=False))
-    texts = []
-    for r in xr:
-        c = cost[r]
-        texts += [stripped[r],
-                  cc.set_cost(stripped[r], c.replace("{X}", "{3}", 1)),
-                  cc.set_cost(stripped[r], c.replace("{X}", "", 1) or "{0}"),
-                  cc.set_cost(stripped[r], c.replace("{X}", "{1}", 1)),
-                  cc.set_cost(stripped[r], c.replace("{X}", "{6}", 1))]
-    X = pl.score_texts(texts).reshape(len(xr), 5)
-    xrows = [pl.contrast_row(X.sp[:, col] - X.sp[:, 0], X.pr[:, col] - X.pr[:, 0],
-                             X.off[:, col], contrast=name)
-             for name, col in (("{X} -> {1}", 3), ("{X} -> {3}", 1),
-                               ("{X} -> {6}", 4), ("{X} deleted", 2))]
+    xr = cc.sample_rows(has_x & ~C.is_creature, 250, rng)
+    X = pl.score_arms(xr, [None, "{3}", "", "{1}", "{6}"], lambda r, rep: costed(
+        r, None if rep is None else cost[r].replace("{X}", rep, 1) or "{0}"))
+    xrows = pl.contrasts(X, ["{X} -> {1}", "{X} -> {3}", "{X} -> {6}", "{X} deleted"],
+                         cols=[3, 1, 4, 2])
 
     # reverse: a generic pip -> {X} on non-X spells
-    plain = np.flatnonzero(~has_x & ~is_crea &
-                           np.array([bool(re.match(r"^\{[1-9]\}", c)) for c in cost]))
-    if len(plain) > 250:
-        plain = np.sort(rng.choice(plain, 250, replace=False))
-    texts = []
-    for r in plain:
-        texts += [stripped[r], cc.set_cost(stripped[r], re.sub(r"^\{[1-9]\}", "{X}", cost[r]))]
-    X2 = pl.score_texts(texts).reshape(len(plain), 2)
-    xrows.append(pl.contrast_row(X2.sp[:, 1] - X2.sp[:, 0], X2.pr[:, 1] - X2.pr[:, 0],
-                                 X2.off[:, 1], contrast="generic pip -> {X} (non-X spells)"))
-    write(pd.DataFrame(xrows), "c2_x_cost.csv")
+    plain = cc.sample_rows(~has_x & ~C.is_creature
+                           & np.array([bool(re.match(r"^\{[1-9]\}", c)) for c in cost]),
+                           250, rng)
+    X2 = pl.score_arms(plain, [False, True], lambda r, to_x: costed(
+        r, re.sub(r"^\{[1-9]\}", "{X}", cost[r]) if to_x else None))
+    xrows += pl.contrasts(X2, ["generic pip -> {X} (non-X spells)"])
+    pl.write_table(xrows, "c2_x_cost.csv")
 
-    # ── (iv) pip substitutions ──────────────────────────────────────────
+    # (iv) pip substitutions
     pip_rows = []
-    for base_cost, arms in (
-        ("{1}{W}", ["{W}{W}", "{2}"]),
-        ("{1}{U}", ["{U}{U}", "{2}"]),
-        ("{1}{B}", ["{B}{B}", "{2}"]),
-        ("{1}{R}", ["{R}{R}", "{2}"]),
-        ("{1}{G}", ["{G}{G}", "{2}"]),
-        ("{2}{W}", ["{1}{W}{W}", "{3}"]),
-        ("{2}{R}", ["{1}{R}{R}", "{3}"]),
-    ):
-        sel = np.flatnonzero(np.array(cost) == base_cost)
-        if len(sel) < 30:
+    for base_cost, arms in PIP_SWAPS:
+        mask = cost == base_cost
+        if mask.sum() < 30:
             continue
-        if len(sel) > 400:
-            sel = np.sort(rng.choice(sel, 400, replace=False))
-        texts = []
-        for r in sel:
-            texts += [stripped[r]] + [cc.set_cost(stripped[r], a) for a in arms]
-        P = pl.score_texts(texts).reshape(len(sel), 1 + len(arms))
-        pip_rows += [pl.contrast_row(P.sp[:, ai] - P.sp[:, 0], P.pr[:, ai] - P.pr[:, 0],
-                                     P.off[:, ai], base=base_cost, arm=a)
-                     for ai, a in enumerate(arms, start=1)]
-    write(pd.DataFrame(pip_rows), "c2_pips.csv")
+        P = pl.score_arms(cc.sample_rows(mask, 400, rng), [None, *arms], costed)
+        pip_rows += pl.contrasts(P, arms, field="arm", base=base_cost)
+    pl.write_table(pip_rows, "c2_pips.csv")
 
-    (pl.SCRATCH / "c2_summary.json").write_text(
-        json.dumps(out, indent=2), encoding="utf-8")
-    print(json.dumps(out, indent=2), flush=True)
+    pl.write_summary(out, "c2_summary.json")
 
 
 if __name__ == "__main__":

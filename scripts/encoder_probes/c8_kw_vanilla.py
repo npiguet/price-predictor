@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
 import probe_lib as pl  # noqa: E402
 from _lib.stats import wls  # noqa: E402
-from c7_labelside import effect  # noqa: E402
+from c7_labelside import effect, mv_controls  # noqa: E402
 
 SD = pl.SD["score_play"]
 W_BAR, M_BAR = 0.4654, 0.3169  # corpus means from l_report §a
@@ -39,33 +39,25 @@ KW = cc.KEYWORD_FLAGS
 
 def main() -> None:
     j = pl.load_frame()
-    j["label_sp"] = pd.to_numeric(j["shrunk_score_play"], errors="coerce") / SD
+    j["label_sp"] = pl.num(j, "shrunk_score_play") / SD
     med = pd.read_pickle(pl.SCRATCH / "l_mediation_table.pkl")
     mc = med["cards"][["card_name", "w", "m", "d"]].rename(
         columns={"w": "ch_w", "m": "ch_m", "d": "ch_d"})
     j = j.merge(mc, on="card_name", how="left")
 
-    crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
-    power = pd.to_numeric(j["power"], errors="coerce").to_numpy(float)
-    tough = pd.to_numeric(j["toughness"], errors="coerce").to_numpy(float)
-    sub = j[crea & np.isfinite(power) & np.isfinite(tough)].reset_index(drop=True)
-    kwn = pd.to_numeric(sub["kw_count"], errors="coerce").fillna(0).to_numpy(float)
-
-    def ctrls(df: pd.DataFrame) -> list[np.ndarray]:
-        mv = pd.to_numeric(df["mv"], errors="coerce").fillna(0).to_numpy(float)
-        p = pd.to_numeric(df["power"], errors="coerce").to_numpy(float)
-        t = pd.to_numeric(df["toughness"], errors="coerce").to_numpy(float)
-        return [mv, mv ** 2, p, t]
+    power, tough = pl.num(j, "power"), pl.num(j, "toughness")
+    sub = j[pl.flag(j, "is_creature") & np.isfinite(power) & np.isfinite(tough)].reset_index(
+        drop=True)
+    kwn = pl.num(sub, "kw_count", 0)
 
     # joint fit: solo carriers of the 16 keywords + vanilla creatures
-    any16 = np.column_stack(
-        [sub[c].fillna(False).astype(bool) for c in KW.values()]).any(axis=1)
+    any16 = np.column_stack([pl.flag(sub, c) for c in KW.values()]).any(axis=1)
     keep = (kwn == 0) | ((kwn == 1) & any16)
     dfk = sub[keep].reset_index(drop=True)
     X = np.column_stack(
         [np.ones(len(dfk))]
-        + [dfk[c].fillna(False).astype(float).to_numpy() for c in KW.values()]
-        + ctrls(dfk))
+        + [pl.flag(dfk, c).astype(float) for c in KW.values()]
+        + mv_controls(dfk, statline=True))
     y = dfk["label_sp"].to_numpy(float)
     w = dfk["w_score_play"].to_numpy(float)
     ok = np.isfinite(y) & np.isfinite(X).all(axis=1) & (w > 0)
@@ -76,17 +68,15 @@ def main() -> None:
 
     edit = pd.read_csv(pl.SCRATCH / "c1_scale.csv").set_index("keyword")
     rows = []
-    dkwn = pd.to_numeric(dfk["kw_count"], errors="coerce").fillna(0).to_numpy(float)
+    dkwn = pl.num(dfk, "kw_count", 0)
     for kw, col in KW.items():
-        flag_all = dfk[col].fillna(False).astype(bool).to_numpy()
         # channels vs vanilla only: this keyword's carriers + keywordless creatures
-        dfg = dfk[(dkwn == 0) | flag_all].reset_index(drop=True)
-        flag = dfg[col].fillna(False).astype(bool).to_numpy()
-        chan = {c: effect(dfg, flag, c, ctrls(dfg))["beta"]
+        dfg = dfk[(dkwn == 0) | pl.flag(dfk, col)].reset_index(drop=True)
+        chan = {c: effect(dfg, pl.flag(dfg, col), c, mv_controls(dfg, statline=True))["beta"]
                 for c in ("ch_w", "ch_m", "ch_d")}
         rows.append({
             "keyword": kw,
-            "n_solo": int(sub[(kwn == 1)][col].fillna(False).astype(bool).sum()),
+            "n_solo": int(pl.flag(sub[kwn == 1], col).sum()),
             "label_vs_vanilla": vals[kw], "se": errs[kw],
             "label_zero_mean": vals[kw] - mean_v,
             "edit_zero_mean": float(edit.loc[kw, "value_sp"]),

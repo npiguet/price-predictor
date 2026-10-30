@@ -19,7 +19,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
@@ -39,18 +38,14 @@ def arms(g: int, color: str) -> list[str]:
 
 
 def main() -> None:
-    j = pl.load_frame(text=True)
-    stripped = list(j["text"])
-    is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
-    types = [cc.get_field(s, "types:") or "" for s in stripped]
+    C = cc.CardCorpus.of(pl.load_frame(text=True))
+    is_crea, parsed = C.is_creature, C.parsed_cost
+    types = [cc.get_field(s, "types:") or "" for s in C.text]
     is_spell = np.array([("instant" in t or "sorcery" in t) for t in types])
-    n_abil = np.array([len(cc.ability_lines(s)) for s in stripped])
-    cost = [cc.get_field(s, "mana cost:") for s in stripped]
-    parsed = [cc.parse_cost(c) if c else None for c in cost]
     single_pip = np.array([
         p is not None and p[1].count("{") == 1 and 2 <= p[0] <= 6
         for p in parsed])
-    card_class = np.where(is_crea & (n_abil == 0), "vanilla creature",
+    card_class = np.where(is_crea & (C.n_abilities == 0), "vanilla creature",
                           np.where(is_crea, "creature with text",
                                    np.where(is_spell, "noncreature spell",
                                             "other permanent")))
@@ -58,18 +53,16 @@ def main() -> None:
 
     picked: list[np.ndarray] = []
     for cname in CLASSES:
-        idx = np.flatnonzero(single_pip & (card_class == cname))
-        if len(idx) > CAP:
-            idx = np.sort(rng.choice(idx, CAP, replace=False))
+        idx = cc.sample_rows(single_pip & (card_class == cname), CAP, rng)
         print(f"[{cname}] {len(idx)} base cards", flush=True)
         picked.append(idx)
     idx_all = np.concatenate(picked)
     cls = card_class[idx_all]
     color = np.array([parsed[r][1][1] for r in idx_all])
 
-    L = pl.score_texts([cc.set_cost(stripped[r], a)
-                        for r in idx_all
-                        for a in arms(parsed[r][0], parsed[r][1][1])]).reshape(len(idx_all), 4)
+    # the four intensity arms differ per card, so the arm index picks from its own list
+    L = pl.score_arms(idx_all, range(4), lambda r, k: cc.set_cost(
+        C.text[r], arms(parsed[r][0], parsed[r][1][1])[k]))
 
     groups = [(c, "all", cls == c) for c in CLASSES]
     groups += [("all", m, color == m) for m in "WUBRG"]
@@ -85,9 +78,7 @@ def main() -> None:
                 "d_played_rate_sd": float(dp.mean()), **head_ci(dp, "dp_ci_lo", "dp_ci_hi"),
                 "off_manifold": float(L.off[m][:, pips].mean()),
             })
-    df = pd.DataFrame(rows)
-    df.to_csv(pl.SCRATCH / "c11_pip_ladder.csv", index=False)
-    print(df.to_string(index=False), flush=True)
+    pl.write_table(rows, "c11_pip_ladder.csv")
 
 
 if __name__ == "__main__":

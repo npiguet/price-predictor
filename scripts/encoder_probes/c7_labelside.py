@@ -13,7 +13,6 @@ correlational and counterfactual readings of the same encoder differ".
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -44,19 +43,10 @@ PHRASES = {
 }
 
 
-def num(df: pd.DataFrame, col: str, fill: float | None = None) -> np.ndarray:
-    v = pd.to_numeric(df[col], errors="coerce")
-    return (v if fill is None else v.fillna(fill)).to_numpy(float)
-
-
-def flag(df: pd.DataFrame, col: str) -> np.ndarray:
-    return df[col].fillna(False).astype(bool).to_numpy()
-
-
 def effect(df: pd.DataFrame, is_feature: np.ndarray, ycol: str,
            controls: list[np.ndarray], wcol: str = "w_score_play") -> dict:
     """WLS coefficient (HC0 SE) of ``is_feature`` on ``ycol`` over ``controls``."""
-    y = num(df, ycol)
+    y = pl.num(df, ycol)
     w = df[wcol].to_numpy(float)
     X = np.column_stack([np.ones(len(df)), is_feature.astype(float)] + controls)
     ok = np.isfinite(y) & np.isfinite(X).all(axis=1) & (w > 0)
@@ -68,11 +58,16 @@ def effect(df: pd.DataFrame, is_feature: np.ndarray, ycol: str,
 
 def mv_controls(df: pd.DataFrame, statline: bool = False) -> list[np.ndarray]:
     """MV and MV²; with ``statline``, power and toughness too (missing read as 0)."""
-    mv = num(df, "mv", 0)
+    mv = pl.num(df, "mv", 0)
     out = [mv, mv ** 2]
     if statline:
-        out += [num(df, "power", 0), num(df, "toughness", 0)]
+        out += [pl.num(df, "power", 0), pl.num(df, "toughness", 0)]
     return out
+
+
+def spell_controls(df: pd.DataFrame) -> list[np.ndarray]:
+    """MV, MV² and instant-vs-sorcery: the controls of a fit over spells."""
+    return mv_controls(df) + [pl.flag(df, "is_instant").astype(float)]
 
 
 def with_predictions(j: pd.DataFrame) -> pd.DataFrame:
@@ -80,8 +75,8 @@ def with_predictions(j: pd.DataFrame) -> pd.DataFrame:
     P = pl.predict_sd(pl.load_embedding_matrix(j["name"].tolist(), j))
     j["pred_sp"] = P["score_play"].to_numpy()
     j["pred_pr"] = P["played_rate"].to_numpy()
-    j["label_sp"] = num(j, "shrunk_score_play") / pl.SD["score_play"]
-    j["label_pr"] = num(j, "shrunk_played_rate") / pl.SD["played_rate"]
+    j["label_sp"] = pl.num(j, "shrunk_score_play") / pl.SD["score_play"]
+    j["label_pr"] = pl.num(j, "shrunk_played_rate") / pl.SD["played_rate"]
     return j
 
 
@@ -97,53 +92,51 @@ def feature_row(family: str, feature: str, df: pd.DataFrame, is_feature: np.ndar
 
 def main() -> None:
     j = with_predictions(pl.load_frame(text=True))
-    crea = flag(j, "is_creature")
-    power, tough = num(j, "power"), num(j, "toughness")
+    crea = pl.flag(j, "is_creature")
+    power, tough = pl.num(j, "power"), pl.num(j, "toughness")
     rows = []
 
-    # ── keywords, within creatures with a literal statline ─────────────
+    # keywords, within creatures with a literal statline
     sub = j[crea & np.isfinite(power) & np.isfinite(tough)].reset_index(drop=True)
-    smv = num(sub, "mv", 0)
-    sp_, st_ = num(sub, "power"), num(sub, "toughness")
-    nkw = num(sub, "kw_count", 0)
+    smv = pl.num(sub, "mv", 0)
+    sp_, st_ = pl.num(sub, "power"), pl.num(sub, "toughness")
+    nkw = pl.num(sub, "kw_count", 0)
     ctrl = [smv, smv ** 2, sp_, st_, nkw]
     for kw, col in cc.KEYWORD_FLAGS.items():
-        rows.append(feature_row("keyword", kw, sub, flag(sub, col), ctrl, with_pr=True))
+        rows.append(feature_row("keyword", kw, sub, pl.flag(sub, col), ctrl, with_pr=True))
 
-    # ── spell-effect phrases, within noncreature spells ────────────────
-    spells = j[flag(j, "is_instant") | flag(j, "is_sorcery")].reset_index(drop=True)
-    pctrl = mv_controls(spells) + [spells["is_instant"].fillna(False).astype(float).to_numpy()]
+    # spell-effect phrases, within noncreature spells
+    spells = j[pl.flag(j, "is_instant") | pl.flag(j, "is_sorcery")].reset_index(drop=True)
+    pctrl = spell_controls(spells)
     for label, col in PHRASES.items():
         if col in spells.columns:
-            rows.append(feature_row("spell effect", label, spells, flag(spells, col), pctrl,
+            rows.append(feature_row("spell effect", label, spells, pl.flag(spells, col), pctrl,
                                     with_pr=True))
 
-    # ── tribes, within creatures, statline + MV controlled ─────────────
+    # tribes, within creatures, statline + MV controlled
     tribe = np.array([(cc.sole_tribe(t) or (None, None))[1] for t in sub["text"]])
     for t in cc.TRIBES:
         is_t = tribe == t
         if is_t.sum() >= 15:
             rows.append(feature_row("tribe", t, sub, is_t, ctrl, with_pr=False))
 
-    # ── type lines ─────────────────────────────────────────────────────
+    # type lines
     creatures = j[crea].reset_index(drop=True)
     for label, col in (("artifact creature (vs creature)", "is_artifact"),
                        ("enchantment creature (vs creature)", "is_enchantment")):
-        rows.append(feature_row("type", label, creatures, flag(creatures, col),
+        rows.append(feature_row("type", label, creatures, pl.flag(creatures, col),
                                 mv_controls(creatures, statline=True), with_pr=False))
     rows.append(feature_row("type", "instant (vs sorcery)", spells,
-                            flag(spells, "is_instant"), mv_controls(spells), with_pr=False))
+                            pl.flag(spells, "is_instant"), mv_controls(spells), with_pr=False))
 
-    tab = pd.DataFrame(rows)
-    tab.to_csv(pl.SCRATCH / "c7_labelside.csv", index=False)
     pd.set_option("display.width", 250)
-    print(tab.to_string(index=False), flush=True)
+    pl.write_table(rows, "c7_labelside.csv")
 
-    # ── the P-T asymmetry, label side ──────────────────────────────────
+    # the P-T asymmetry, label side
     out = {}
     tot = sp_ + st_
     for ycol in ("label_sp", "pred_sp"):
-        y = num(sub, ycol)
+        y = pl.num(sub, ycol)
         w = sub["w_score_play"].to_numpy(float)
         X = np.column_stack([np.ones(len(sub)), sp_ - st_, tot, smv, smv ** 2, nkw])
         m = np.isfinite(tot) & np.isfinite(y) & (w > 0) & (tot >= 4) & (tot <= 8)
@@ -151,8 +144,8 @@ def main() -> None:
         out[f"pt_gradient_{ycol}"] = {"beta_per_point_of_P_minus_T": float(fit.beta[1]),
                                       "se": float(fit.se[1]), "n": int(m.sum())}
     # taplands, label side
-    lands = j[flag(j, "is_land")].reset_index(drop=True)
-    tapped = flag(lands, "ph_enters_tapped")
+    lands = j[pl.flag(j, "is_land")].reset_index(drop=True)
+    tapped = pl.flag(lands, "ph_enters_tapped")
     for ycol in ("label_sp", "pred_sp"):
         out[f"tapland_{ycol}"] = effect(lands, tapped, ycol, [np.zeros(len(lands))])
     # dies vs etb triggers and the sacrifice-self drawback, label side
@@ -160,11 +153,9 @@ def main() -> None:
     for name, col in (("dies_trigger", "ph_dies_trigger"), ("etb_trigger", "ph_etb"),
                       ("sacrifice_self", "ph_sacrifice_self")):
         for ycol in ("label_sp", "pred_sp"):
-            out[f"{name}_{ycol}"] = effect(creatures, flag(creatures, col), ycol, c2)
+            out[f"{name}_{ycol}"] = effect(creatures, pl.flag(creatures, col), ycol, c2)
 
-    (pl.SCRATCH / "c7_labelside.json").write_text(
-        json.dumps(out, indent=2, default=float), encoding="utf-8")
-    print(json.dumps(out, indent=2, default=float), flush=True)
+    pl.write_summary(out, "c7_labelside.json")
 
 
 if __name__ == "__main__":

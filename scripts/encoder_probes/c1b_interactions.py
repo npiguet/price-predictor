@@ -18,12 +18,10 @@ All three designs are layout-matched:
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import c_common as cc  # noqa: E402
@@ -44,17 +42,12 @@ def _bucket(total: np.ndarray) -> np.ndarray:
 
 
 def main() -> None:
-    j = pl.load_frame(text=True)
-    stripped = list(j["text"])
-    is_crea = j["is_creature"].fillna(False).astype(bool).to_numpy()
-    power = pd.to_numeric(j["power"], errors="coerce").to_numpy(float)
-    tough = pd.to_numeric(j["toughness"], errors="coerce").to_numpy(float)
-    has_pt = np.isfinite(power) & np.isfinite(tough)
-    n_ab = np.array([len(cc.ability_lines(s)) for s in stripped])
-    kw_count = pd.to_numeric(j["kw_count"], errors="coerce").fillna(0).to_numpy()
+    C = cc.CardCorpus.of(pl.load_frame(text=True))
+    stripped, power, tough = C.text, C.power, C.toughness
+    keywordless = C.is_creature & np.isfinite(power) & np.isfinite(tough) & (C.kw_count == 0)
     out: dict = {}
 
-    # ── (i.a) flying vs vigilance by body size, pure substitution ───────
+    # (i.a) flying vs vigilance by body size, pure substitution
     with np.load(pl.SCRATCH / "c1_pairwise_raw.npz", allow_pickle=True) as f:
         rows = f["rows"]
         sp = f["sp"]
@@ -74,17 +67,13 @@ def main() -> None:
                          **pl.mean_ci(d_sub[m], "flying_minus_vigilance_sp"),
                          "delta_pr": float(d_sub_pr[m].mean()),
                          "frac_pos": float((d_sub[m] > 0).mean())})
-    sub_tab = pd.DataFrame(sub_rows)
-    sub_tab.to_csv(pl.SCRATCH / "c1b_flying_size_sub.csv", index=False)
-    print(sub_tab.to_string(index=False), flush=True)
+    pl.write_table(sub_rows, "c1b_flying_size_sub.csv")
     slope = np.polyfit(tot[np.isfinite(tot)], d_sub[np.isfinite(tot)], 1)[0]
     out["flying_vs_vigilance_slope_per_PT_point"] = float(slope)
 
-    # ── (i.b) add-flying vs add-vigilance on keywordless creatures ──────
-    base = np.flatnonzero(is_crea & has_pt & (kw_count == 0))
+    # (i.b) add-flying vs add-vigilance on keywordless creatures
     rng = np.random.default_rng(3)
-    if len(base) > 1200:
-        base = np.sort(rng.choice(base, 1200, replace=False))
+    base = cc.sample_rows(keywordless, 1200, rng)
     arms = ["flying", "vigilance", "trample", "deathtouch", "lifelink", "defender"]
     texts = [cc.add_line(stripped[r], f"static: {a}") for r in base for a in arms]
     texts += [stripped[r] for r in base]           # the un-edited arm
@@ -108,9 +97,7 @@ def main() -> None:
             "vs_no_line_pr": float((A.pr[:, ai] - bare.pr).mean()),
             "off_manifold": float(A.off[:, ai].mean()),
         })
-    add_tab = pd.DataFrame(add_rows)
-    add_tab.to_csv(pl.SCRATCH / "c1b_add_keyword.csv", index=False)
-    print(add_tab.to_string(index=False), flush=True)
+    pl.write_table(add_rows, "c1b_add_keyword.csv")
 
     size_rows = []
     for lab in SIZE_BUCKETS:
@@ -121,21 +108,16 @@ def main() -> None:
         size_rows.append({"bucket": lab, "n": int(m.sum()),
                           "mean_PT_total": float(tot_b[m].mean()),
                           **pl.mean_ci(d, "flying_minus_vigilance_sp")})
-    size_tab = pd.DataFrame(size_rows)
-    size_tab.to_csv(pl.SCRATCH / "c1b_flying_size_add.csv", index=False)
-    print(size_tab.to_string(index=False), flush=True)
+    pl.write_table(size_rows, "c1b_flying_size_add.csv")
 
-    # ── (ii) deathtouch x trample 2x2 ───────────────────────────────────
-    mid = np.flatnonzero(is_crea & has_pt & (kw_count == 0) & (n_ab <= 1) &
-                         (power + tough >= 3) & (power + tough <= 10))
-    if len(mid) > 400:
-        mid = np.sort(rng.choice(mid, 400, replace=False))
+    # (ii) deathtouch x trample 2x2
+    mid = cc.sample_rows(keywordless & (C.n_abilities <= 1)
+                         & (power + tough >= 3) & (power + tough <= 10), 400, rng)
     # cells in order 00, 10, 01, 11
     cells = [(CONTROL_A, CONTROL_B), ("deathtouch", CONTROL_B),
              (CONTROL_A, "trample"), ("deathtouch", "trample")]
-    C = pl.score_texts([cc.add_line(cc.add_line(stripped[r], f"static: {k1}"),
-                                    f"static: {k2}")
-                        for r in mid for k1, k2 in cells]).reshape(len(mid), 4)
+    Q = pl.score_arms(mid, cells, lambda r, kk: cc.add_line(
+        cc.add_line(stripped[r], f"static: {kk[0]}"), f"static: {kk[1]}"))
 
     def terms(M: np.ndarray) -> dict[str, np.ndarray]:
         return {"deathtouch": M[:, 1] - M[:, 0], "trample": M[:, 2] - M[:, 0],
@@ -145,17 +127,13 @@ def main() -> None:
     labels = {"deathtouch": "deathtouch (vs control)", "trample": "trample (vs control)",
               "both": "both (vs control)",
               "interaction": "interaction (joint - sum of singles)"}
-    tt = pd.DataFrame([pl.contrast_row(v, term=labels[k])
-                       for k, v in terms(C.sp).items()])
-    tt.to_csv(pl.SCRATCH / "c1b_dt_trample.csv", index=False)
-    print(tt.to_string(index=False), flush=True)
-    out["dt_trample_off_manifold"] = float(C.off.mean())
-    out["dt_trample_pr"] = {k: float(v.mean()) for k, v in terms(C.pr).items()}
+    pl.write_table([pl.contrast_row(v, term=labels[k]) for k, v in terms(Q.sp).items()],
+                   "c1b_dt_trample.csv")
+    out["dt_trample_off_manifold"] = float(Q.off.mean())
+    out["dt_trample_pr"] = {k: float(v.mean()) for k, v in terms(Q.pr).items()}
 
-    # ── (iii) keyword-count ladder ──────────────────────────────────────
-    lad = np.flatnonzero(is_crea & has_pt & (kw_count == 0))
-    if len(lad) > 500:
-        lad = np.sort(rng.choice(lad, 500, replace=False))
+    # (iii) keyword-count ladder
+    lad = cc.sample_rows(keywordless, 500, rng)
     ladder_rows = []
     for order_name, order in (("strong-first", LADDER_STRONG),
                               ("weak-first", LADDER_WEAK)):
@@ -176,13 +154,9 @@ def main() -> None:
                 "marginal_pr": float((L.pr[:, rung] - L.pr[:, rung - 1]).mean()),
                 "off_manifold": float(L.off[:, rung].mean()),
             })
-    ladder = pd.DataFrame(ladder_rows)
-    ladder.to_csv(pl.SCRATCH / "c1b_ladder.csv", index=False)
-    print(ladder.to_string(index=False), flush=True)
+    pl.write_table(ladder_rows, "c1b_ladder.csv")
 
-    (pl.SCRATCH / "c1b_summary.json").write_text(
-        json.dumps(out, indent=2), encoding="utf-8")
-    print(json.dumps(out, indent=2), flush=True)
+    pl.write_summary(out, "c1b_summary.json")
 
 
 if __name__ == "__main__":
