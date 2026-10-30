@@ -15,7 +15,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import partial
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from effects.domain.budget_allocation import allocate
 from effects.domain.corpus_curation import (
@@ -30,13 +30,17 @@ from effects.domain.corpus_curation import (
     signature_label,
     text_capacity,
 )
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import EffectRecord, LegalityDecision
+from effects.domain.rule_families import (
+    FamilySentinel,
+    legality_family,
+    legality_modes,
+    rule_family,
+)
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.strata import Stratum
-
-if TYPE_CHECKING:
-    from effects.domain.damage_step_keywords import KeywordResolver
 
 #: A record's acting keys: the whole tuple, hashable and picklable as it is.
 Keys = tuple[ProvenanceKey, ...]
@@ -73,8 +77,6 @@ class Cell:
         """This cell with its legality modes folded into their rarest mode's family."""
         if not self.modes:
             return self
-        from effects.domain.rule_families import legality_family
-
         return dataclasses.replace(
             self, family=legality_family(self.modes, mode_counts), modes=frozenset(),
         )
@@ -91,8 +93,6 @@ class Cell:
         ``legality_mode_counts`` (the survey) its cell carries the modes for
         :meth:`resolved` to fold later.
         """
-        from effects.domain.rule_families import FamilySentinel, legality_modes, rule_family
-
         klass = sampling_class(record)
         half = _selection_half(record, klass)
         if klass == SamplingClass.PLAYABILITY_LEGALITY:
