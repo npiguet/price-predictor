@@ -270,10 +270,8 @@ class CorpusFacts:
 
     def provenance(self, config: TrainEffectModelConfig):
         """What a checkpoint of this run records about the data it saw."""
-        from effects.infrastructure.effect_model_store import (
-            SplitProvenance,
-            content_hash,
-        )
+        from effects.domain.split_provenance import SplitProvenance
+        from effects.infrastructure.effect_model_store import content_hash
 
         return SplitProvenance(
             held_out_cards=self.split.held_out_cards,

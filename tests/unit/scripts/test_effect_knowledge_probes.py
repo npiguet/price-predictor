@@ -922,7 +922,7 @@ class TestExtraction:
         checkpoint = common.load_checkpoint(_GEN1)
         if not Path(checkpoint.provenance.vocab_path).exists():
             pytest.skip("the gen-1 vocabulary is not on this machine")
-        from effects.infrastructure.effect_model_store import SplitProvenance
+        from effects.infrastructure import effect_model_store
 
         # The probes hash-check their inference files like every inference
         # command, and both files gen-1 recorded have since been rewritten in
@@ -932,7 +932,7 @@ class TestExtraction:
         # is read where it exists and the check is waived for this load.
         vocab = _ROOT / "models" / "effects" / "gen1-vocab-script.txt"
         with pytest.MonkeyPatch.context() as patch:
-            patch.setattr(SplitProvenance, "verify_hashes", lambda *a, **k: None)
+            patch.setattr(effect_model_store, "verify_hashes", lambda *a, **k: None)
             return common.load_probe_model(_GEN1, [
                 _FIXTURES / "gen1-sidecars" / "cardsfolder",
                 _FIXTURES / "gen1-sidecars" / "tokenscripts",
@@ -1488,8 +1488,8 @@ class TestProbeContext:
     trained against, never a corpus or probe set named in the script."""
 
     def _context(self, tmp_path, monkeypatch, *, recorded_digest=None):
+        from effects.domain.split_provenance import SplitProvenance
         from effects.infrastructure.corpus_store import CorpusStore
-        from effects.infrastructure.effect_model_store import SplitProvenance
 
         variants = tmp_path / "variant-scripts"
         manifest = _corpus_manifest(variant_scripts=str(variants))

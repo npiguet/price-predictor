@@ -20,6 +20,7 @@ from effects.domain.baselines import (
     Baseline,
 )
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.split_provenance import SplitProvenance
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
@@ -27,13 +28,13 @@ from effects.infrastructure.effect_model_store import (
     EffectModelStore,
     HashMismatchError,
     SplitMismatchError,
-    SplitProvenance,
     content_hash,
     filter_training_only,
     load_for_inference,
     model_output_for,
     require_same_split,
     resolve_inference_paths,
+    verify_hashes,
 )
 
 _MODEL_CONFIG = EffectModelConfig(
@@ -182,8 +183,8 @@ class TestCorpusProvenance:
 class TestHashChecking:
     def test_matching_hashes_pass(self, files):
         vocab, keywords = files
-        _provenance(files).verify_hashes(
-            vocab_path=vocab, keyword_path=keywords,
+        verify_hashes(
+            _provenance(files), vocab_path=vocab, keyword_path=keywords,
         )
 
     def test_a_changed_vocabulary_fails_fast(self, files):
@@ -191,21 +192,21 @@ class TestHashChecking:
         provenance = _provenance(files)
         vocab.write_text("[PAD]\n[UNK]\ndifferent\n", encoding="utf-8")
         with pytest.raises(HashMismatchError, match="vocabulary"):
-            provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
+            verify_hashes(provenance, vocab_path=vocab, keyword_path=keywords)
 
     def test_a_changed_keyword_file_fails_fast(self, files):
         vocab, keywords = files
         provenance = _provenance(files)
         keywords.write_text('{"Flying": {}}', encoding="utf-8")
         with pytest.raises(HashMismatchError, match="keyword definitions"):
-            provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
+            verify_hashes(provenance, vocab_path=vocab, keyword_path=keywords)
 
     def test_the_error_names_both_hashes(self, files):
         vocab, keywords = files
         provenance = _provenance(files)
         vocab.write_text("changed", encoding="utf-8")
         with pytest.raises(HashMismatchError) as excinfo:
-            provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
+            verify_hashes(provenance, vocab_path=vocab, keyword_path=keywords)
         assert provenance.vocab_hash[:12] in str(excinfo.value)
 
     def test_a_missing_file_hashes_as_empty_rather_than_raising(self, tmp_path):
@@ -214,7 +215,8 @@ class TestHashChecking:
     def test_an_unrecorded_hash_is_not_checked(self, files):
         """A run with no keyword file is degraded, not broken."""
         vocab, keywords = files
-        SplitProvenance(vocab_hash=content_hash(vocab)).verify_hashes(
+        verify_hashes(
+            SplitProvenance(vocab_hash=content_hash(vocab)),
             vocab_path=vocab, keyword_path=keywords,
         )
 
@@ -378,7 +380,7 @@ class TestInferencePathResolution:
         vocab_path, keyword_path = resolve_inference_paths(
             provenance, vocab_path=None, keyword_path=None,
         )
-        provenance.verify_hashes(vocab_path=vocab_path, keyword_path=keyword_path)
+        verify_hashes(provenance, vocab_path=vocab_path, keyword_path=keyword_path)
 
     def test_an_explicit_path_overrides(self, tmp_path, files):
         _vocab, keywords = files
@@ -398,8 +400,8 @@ class TestInferencePathResolution:
             provenance, vocab_path=other, keyword_path=None,
         )
         with pytest.raises(HashMismatchError):
-            provenance.verify_hashes(
-                vocab_path=vocab_path, keyword_path=keyword_path,
+            verify_hashes(
+                provenance, vocab_path=vocab_path, keyword_path=keyword_path,
             )
 
 

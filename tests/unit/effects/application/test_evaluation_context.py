@@ -12,9 +12,7 @@ from pathlib import Path
 import pytest
 
 from effects.application.evaluation_context import parse_baseline_checkpoint
-from effects.infrastructure.effect_model_store import (
-    SplitProvenance,
-)
+from effects.domain.split_provenance import SplitProvenance
 
 
 class TestCorpusMismatch:

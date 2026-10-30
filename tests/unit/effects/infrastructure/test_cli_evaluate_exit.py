@@ -25,8 +25,8 @@ def test_a_failed_gate_still_exits_zero(monkeypatch, capsys) -> None:
 
 def test_a_checkpoint_that_recorded_no_corpus_exits_two(monkeypatch, caplog) -> None:
     """Every gate reads the curated strata; nothing else names its training games."""
+    from effects.domain.split_provenance import SplitProvenance
     from effects.infrastructure import effect_model_store
-    from effects.infrastructure.effect_model_store import SplitProvenance
 
     monkeypatch.setattr(
         effect_model_store, "load_for_inference",

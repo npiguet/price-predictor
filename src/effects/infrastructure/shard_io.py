@@ -16,12 +16,12 @@ import shutil
 import zlib
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
-from enum import StrEnum
 from pathlib import Path
 from typing import IO, NamedTuple
 
 from effects.domain.corpus_curation import record_hash
 from effects.domain.records import EffectRecord
+from effects.domain.shard_generation import MixedGenerationsError, ShardGeneration
 from effects.infrastructure.record_codec import (
     format_record_line,
     parse_record_line,
@@ -372,22 +372,6 @@ def count_shard_records(shard: Path) -> int:
 
 # ── shard generation (FR-033) ───────────────────────────────────────────
 
-class ShardGeneration(StrEnum):
-    """The two record generations a shard can hold.
-
-    A gen-2 record always carries ``random_seat``; a gen-1 one never does, and
-    on gen-1 ``playability`` records ``actor_player`` keeps feature 023's
-    meaning rather than naming the deciding player (FR-030a).
-    """
-
-    GEN_1 = "gen-1"
-    GEN_2 = "gen-2"
-
-
-class MixedGenerationsError(ValueError):
-    """A records set holds both gen-1 and gen-2 shards."""
-
-
 def shard_generation(path: Path) -> ShardGeneration | None:
     """The shard's generation by its first complete record; None if empty.
 
@@ -395,7 +379,7 @@ def shard_generation(path: Path) -> ShardGeneration | None:
     records disagree.
     """
     for data in iter_record_dicts(path):
-        return ShardGeneration.GEN_2 if "random_seat" in data else ShardGeneration.GEN_1
+        return ShardGeneration.of(data)
     return None
 
 

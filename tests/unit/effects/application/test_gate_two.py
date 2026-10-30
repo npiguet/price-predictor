@@ -925,8 +925,8 @@ class TestGateTwoRecords:
         self, tmp_path,
     ):
         from effects.application.gate_two import gate_two_records
+        from effects.domain.split_provenance import SplitProvenance
         from effects.infrastructure.corpus_store import CorpusStore
-        from effects.infrastructure.effect_model_store import SplitProvenance
 
         corpus = tmp_path / "corpus"
         recorded = _printed_board(game="gd-1")

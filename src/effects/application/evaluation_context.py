@@ -16,10 +16,8 @@ from effects.domain.baselines import Baseline
 if TYPE_CHECKING:
     from effects.application.model_loading import LoadedModel, Runnable
     from effects.domain.corpus_manifest import CorpusManifest
-    from effects.infrastructure.effect_model_store import (
-        EffectCheckpoint,
-        SplitProvenance,
-    )
+    from effects.domain.split_provenance import SplitProvenance
+    from effects.infrastructure.effect_model_store import EffectCheckpoint
     from effects.infrastructure.sidecar_io import SidecarCache
 
 

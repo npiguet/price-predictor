@@ -271,12 +271,14 @@ class TestShardGeneration:
         return path
 
     def test_the_real_gen1_fixture_is_gen1(self):
-        from effects.infrastructure.shard_io import ShardGeneration, shard_generation
+        from effects.domain.shard_generation import ShardGeneration
+        from effects.infrastructure.shard_io import shard_generation
 
         assert shard_generation(_GEN1_FIXTURE) is ShardGeneration.GEN_1
 
     def test_a_shard_carrying_random_seat_is_gen2(self, tmp_path):
-        from effects.infrastructure.shard_io import ShardGeneration, shard_generation
+        from effects.domain.shard_generation import ShardGeneration
+        from effects.infrastructure.shard_io import shard_generation
 
         assert shard_generation(self._gen2_shard(tmp_path / "g2.jsonl.gz")) is ShardGeneration.GEN_2
 
@@ -288,7 +290,8 @@ class TestShardGeneration:
         assert shard_generation(empty) is None
 
     def test_a_set_holding_both_generations_is_refused(self, tmp_path):
-        from effects.infrastructure.shard_io import MixedGenerationsError, refuse_mixed_generations
+        from effects.domain.shard_generation import MixedGenerationsError
+        from effects.infrastructure.shard_io import refuse_mixed_generations
 
         gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
         with pytest.raises(MixedGenerationsError, match="gen-1"):

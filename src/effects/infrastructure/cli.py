@@ -57,6 +57,7 @@ from effects.domain.default_paths import (
     DEFAULT_WIN_RATES,
 )
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
+from effects.domain.shard_generation import MixedGenerationsError
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.domain.dataclass_defaults import field_default
@@ -803,7 +804,7 @@ def _train_effect_model_parser(subparsers) -> None:
     HoldoutMismatchError: 1,
     # Raised in a prefetch worker too, which hands the exception itself over.
     ValidationGameInTrainingError: 1,
-    "effects.infrastructure.shard_io.MixedGenerationsError": 1,
+    MixedGenerationsError: 1,
     SurfaceMismatchError: 2,
     EmptyHoldoutError: 2,
     f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 2,

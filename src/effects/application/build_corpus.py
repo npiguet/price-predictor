@@ -450,11 +450,8 @@ def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOut
 
 def _refuse_mixed_generations(records_dir: Path) -> None:
     """Before any record is read (FR-033)."""
-    from effects.infrastructure.shard_io import (
-        MixedGenerationsError,
-        iter_shards,
-        refuse_mixed_generations,
-    )
+    from effects.domain.shard_generation import MixedGenerationsError
+    from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
 
     try:
         refuse_mixed_generations(iter_shards(records_dir))

@@ -541,7 +541,8 @@ class TestGen2EnvelopeFields:
         a dataset built from gen-1 shards read as gen-2, and the mixed-
         generation guard on ``--corpus`` could never fire.
         """
-        from effects.infrastructure.shard_io import ShardGeneration, shard_generation, write_shard
+        from effects.domain.shard_generation import ShardGeneration
+        from effects.infrastructure.shard_io import shard_generation, write_shard
 
         rewritten = tmp_path / "curated.jsonl.gz"
         write_shard(rewritten, read_shard(_GEN1_FIXTURE))

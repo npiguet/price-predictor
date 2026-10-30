@@ -22,12 +22,12 @@ from effects.domain.ability_cache_layout import ARRAY_KEY, cache_path_for
 from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+from effects.domain.split_provenance import SplitProvenance
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
     EffectModelStore,
     HashMismatchError,
-    SplitProvenance,
     content_hash,
 )
 from effects.infrastructure.sidecar_io import sidecar_path_for

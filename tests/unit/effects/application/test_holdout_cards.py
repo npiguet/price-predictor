@@ -312,7 +312,7 @@ def test_the_cli_takes_the_repeatable_cards_folder_like_every_other_command():
 
 def test_a_real_gen1_checkpoint_split_reads_as_the_text_unit():
     """The 09.17f checkpoint's recorded split, as written, carries no unit."""
-    from effects.infrastructure.effect_model_store import SplitProvenance
+    from effects.domain.split_provenance import SplitProvenance
 
     recorded = {
         "held_out_cards": ["a-moss-pit skeleton"], "card_disjoint_games": [],

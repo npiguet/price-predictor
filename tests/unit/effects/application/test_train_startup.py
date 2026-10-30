@@ -18,9 +18,10 @@ from effects.application.train_effect_model import (
     run,
 )
 from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.shard_generation import MixedGenerationsError
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.shard_io import MixedGenerationsError, write_shard
+from effects.infrastructure.shard_io import write_shard
 
 #: Three texts ``text_is_held_out`` selects at the default permille, found by
 #: search: the trainer recomputes the holdout from its sidecars at startup and
@@ -210,11 +211,11 @@ def test_an_operator_error_out_of_training_exits_with_its_code(
     """A refused corpus, a resume under other settings, and a missing manifest
     or resume file end in one logged line, not a traceback."""
     from effects.application import train_effect_model
-    from effects.infrastructure import cli, effect_model_store, shard_io
+    from effects.infrastructure import cli, effect_model_store
 
     kind = {
         "HoldoutMismatchError": train_effect_model.HoldoutMismatchError,
-        "MixedGenerationsError": shard_io.MixedGenerationsError,
+        "MixedGenerationsError": MixedGenerationsError,
         "ValidationGameInTrainingError": train_effect_model.ValidationGameInTrainingError,
         "ResumeMismatchError": effect_model_store.ResumeMismatchError,
         "FileNotFoundError": FileNotFoundError,

@@ -7,9 +7,8 @@ import hashlib
 import logging
 import os
 import shutil
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -19,7 +18,7 @@ from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import Baseline
 from effects.domain.effect_model import EffectModel, EffectModelConfig
-from effects.domain.text_holdout import HoldoutUnit
+from effects.domain.split_provenance import SplitProvenance
 from price_predictor.infrastructure.torch_checkpoint import (
     load_checkpoint,
     save_checkpoint,
@@ -59,80 +58,22 @@ class SplitMismatchError(RuntimeError):
     """A variant checkpoint records a different split than the main one."""
 
 
-def _like(default, value):
-    """A stored ``value`` as its field's type, which a tuple's, a count's or an
-    enum's serialized form may not keep."""
-    return type(default)(value) if isinstance(default, (tuple, int, Enum)) else value
-
-
-@dataclass(frozen=True, slots=True)
-class SplitProvenance:
-    """What a checkpoint records about the data it saw; the game sets are
-    enumerated, since re-deriving them against a grown corpus would differ."""
-
-    held_out_cards: tuple[str, ...] = ()
-    card_disjoint_games: tuple[str, ...] = ()
-    game_disjoint_games: tuple[str, ...] = ()
-    vocab_path: str = ""
-    keyword_definitions_path: str = ""
-    vocab_hash: str = ""
-    keyword_definitions_hash: str = ""
-    withheld_keyword: str | None = None
-    #: The holdout flags the split was computed under (FR-134).
-    holdout_permille: int = 0
-    holdout_max_carriers: int = 0
-    #: The curated dataset read and its manifest digest (FR-147); ``""`` on a
-    #: checkpoint saved before curated corpora existed.
-    corpus_path: str = ""
-    corpus_digest: str = ""
-    #: FR-042. ``text`` is written as no field at all, so a checkpoint that
-    #: records none reads as it trained.
-    holdout_unit: HoldoutUnit = HoldoutUnit.TEXT
-
-    def as_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        # A plain string: an enum member would tie loading to its import path.
-        data["holdout_unit"] = str(self.holdout_unit)
-        if self.holdout_unit is HoldoutUnit.TEXT:
-            del data["holdout_unit"]
-        return data
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> SplitProvenance:
-        """The provenance ``as_dict`` wrote; a field a checkpoint predates
-        takes its default, which is how such a checkpoint trained."""
-        return cls(**{
-            spec.name: _like(spec.default, data[spec.name])
-            for spec in fields(cls) if spec.name in data
-        })
-
-    def file_hashes(self) -> dict[str, str]:
-        return {
-            "vocabulary": self.vocab_hash,
-            "keyword definitions": self.keyword_definitions_hash,
-        }
-
-    def describes_same_split(self, other: SplitProvenance) -> bool:
-        return (
-            self.held_out_cards == other.held_out_cards
-            and set(self.card_disjoint_games) == set(other.card_disjoint_games)
-            and set(self.game_disjoint_games) == set(other.game_disjoint_games)
-        )
-
-    def verify_hashes(self, *, vocab_path: Path, keyword_path: Path) -> None:
-        """Re-hash the files actually loaded; raise ``HashMismatchError`` on a
-        mismatch."""
-        for (label, recorded), path in zip(
-            self.file_hashes().items(), (vocab_path, keyword_path),
-        ):
-            actual = content_hash(path)
-            if recorded and actual != recorded:
-                raise HashMismatchError(
-                    f"{label} at {path} has changed since training: recorded "
-                    f"{recorded[:12]}…, actual {actual[:12] or '(missing)'}…. "
-                    "Encoding against a different vocabulary produces vectors "
-                    "that look valid and mean nothing."
-                )
+def verify_hashes(
+    provenance: SplitProvenance, *, vocab_path: Path, keyword_path: Path,
+) -> None:
+    """Re-hash the files actually loaded; raise ``HashMismatchError`` on a
+    mismatch."""
+    for (label, recorded), path in zip(
+        provenance.file_hashes().items(), (vocab_path, keyword_path),
+    ):
+        actual = content_hash(path)
+        if recorded and actual != recorded:
+            raise HashMismatchError(
+                f"{label} at {path} has changed since training: recorded "
+                f"{recorded[:12]}…, actual {actual[:12] or '(missing)'}…. "
+                "Encoding against a different vocabulary produces vectors "
+                "that look valid and mean nothing."
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,7 +278,7 @@ def verified_inference_paths(
     vocab, keywords = resolve_inference_paths(
         checkpoint.provenance, vocab_path=vocab_path, keyword_path=keyword_path,
     )
-    checkpoint.provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
+    verify_hashes(checkpoint.provenance, vocab_path=vocab, keyword_path=keywords)
     return vocab, keywords
 
 
