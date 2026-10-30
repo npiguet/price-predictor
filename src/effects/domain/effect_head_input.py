@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum
 from functools import lru_cache
+from types import MappingProxyType
 from typing import Protocol
 
 from effects.domain.keyword_names import overlay_keyword
@@ -514,6 +516,10 @@ class LineLookup(Protocol):
         """The charm-mode keys whose slots follow the key's (FR-063a)."""
 
 
+#: The ``stripped`` map of a record built as collected: no entity loses a keyword.
+NO_STRIP: Mapping[str, frozenset[str]] = MappingProxyType({})
+
+
 class SurfaceBuilder:
     """Lays records out as the token surface, under one batch's constants.
 
@@ -534,7 +540,7 @@ class SurfaceBuilder:
         self._zero = tuple([0.0] * e_dim)
 
     def build(
-        self, record: EffectRecord, stripped: dict[str, frozenset[str]] | None = None,
+        self, record: EffectRecord, stripped: Mapping[str, frozenset[str]] = NO_STRIP,
     ) -> EffectHeadInput:
         """One record's surface.
 
@@ -567,7 +573,6 @@ class SurfaceBuilder:
             ))
 
         masked = continuous_masked_keywords(record)
-        stripped = stripped or {}
         source_id = record.state.refs.source
         for entity in record.state.entities:
             gone = stripped.get(entity.id, frozenset())

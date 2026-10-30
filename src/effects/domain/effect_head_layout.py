@@ -165,7 +165,7 @@ class FieldSpec:
 
     def supervised_value(
         self, written: Mapping[str, object], unknown: frozenset[str] | set[str],
-        *, record_class: str | None, scope: FieldScope | None,
+        *, record_class: SamplingClass, scope: FieldScope,
     ):
         """This field's target for one affected entity, or None where it is absent.
 

@@ -25,6 +25,7 @@ from effects.domain.effect_head_input import (
     ACT_SLOT,
     INPUT_LAYOUT,
     KIND_FLAG_WIDTH,
+    NO_STRIP,
     InputLayout,
     SlotKind,
     SurfaceBuilder,
@@ -456,8 +457,9 @@ class SurfaceBatcher:
     def build(self, records, encoder: AbilityEncoder, strip_per_record=None) -> Materialized:
         """One batch of records on the device: ``prepare`` then ``materialize``.
 
-        ``strip_per_record`` holds one ``strip_keywords`` map (or None) per
-        record, because gate 2 batches a record with its perturbed twin.
+        ``strip_per_record`` holds one ``stripped`` map per record
+        (``NO_STRIP`` for one built as collected), because gate 2 batches a
+        record with its perturbed twin.
         """
         return self.materializer.materialize(
             self.prepare(records, strip_per_record), encoder,
@@ -468,7 +470,7 @@ class SurfaceBatcher:
         dropout, from the batcher's generator, in that order."""
         texts = self.batch_texts(records)
         staged = self.stage(texts)
-        strips = strip_per_record or [None] * len(records)
+        strips = strip_per_record or [NO_STRIP] * len(records)
         builder = self.surface_builder(staged.rows)
         surfaces = [builder.build(record, strip) for record, strip in zip(records, strips)]
         inputs = self._masked(collate_surfaces(

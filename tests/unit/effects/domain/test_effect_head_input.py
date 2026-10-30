@@ -24,6 +24,7 @@ from effects.domain.effect_head_input import (
     COUNTER_TYPES,
     EARLIER_LAYOUT,
     INPUT_LAYOUT,
+    NO_STRIP,
     OVERLAY_KEYWORDS,
     OVERLAY_KEYWORDS_GEN2,
     PHASES,
@@ -150,7 +151,7 @@ def _record(**overrides) -> EffectRecord:
 
 def _build(
     record, *, rng=None, e_for=_e_for, has_line=None, options_for=None,
-    context_dropout=0.0, stripped=None,
+    context_dropout=0.0, stripped=NO_STRIP,
 ):
     lines = _Lines(e_for=e_for)
     if has_line is not None:

@@ -49,6 +49,7 @@ from effects.domain.damage_step_keywords import (
     combat_participant,
 )
 from effects.domain.effect_head_input import (
+    NO_STRIP,
     OVERLAY_KEYWORDS_GEN2,
     THERMOMETER_STEPS,
     SlotKind,
@@ -300,7 +301,7 @@ class TestBatchThreading:
         batcher = _batcher()
         _batch, surfaces, _encoded = batcher.build(
             [record, record], _NoEncoder(),
-            strip_per_record=[None, {"A": frozenset({"first_strike"})}],
+            strip_per_record=[NO_STRIP, {"A": frozenset({"first_strike"})}],
         )
         assert _ability_count(surfaces[0], "A") == 2
         assert _ability_count(surfaces[1], "A") == 1

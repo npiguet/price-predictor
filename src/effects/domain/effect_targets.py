@@ -44,7 +44,7 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
-from effects.domain.sampling import sampling_class
+from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.state_snapshot import COLORS, Zone
 
 #: The zone outcome each moving event implies; the record keeps destroy and
@@ -103,14 +103,14 @@ class EntityTargets:
     """One entity's targets for this record.
 
     ``fields`` holds what the record wrote and nothing else, ``unknown`` what
-    it declares it cannot say; without ``record_class`` and ``scope`` only
-    written values are scored.
+    it declares it cannot say; ``record_class`` and ``scope`` decide which
+    unwritten fields take their silent value.
     """
 
+    record_class: SamplingClass
+    scope: FieldScope
     affected: bool = False
     fields: dict[str, float | int | list[float]] = field(default_factory=dict)
-    record_class: str | None = None
-    scope: FieldScope | None = None
     unknown: set[str] = field(default_factory=set)
 
     def supervised(self, spec: FieldSpec):

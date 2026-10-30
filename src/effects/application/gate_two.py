@@ -30,6 +30,7 @@ from effects.domain.damage_step_keywords import (
     KeywordsOf,
     qualifying_observations,
 )
+from effects.domain.effect_head_input import NO_STRIP
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, FieldSpec, FieldType
 from effects.domain.evaluation_report import (
     CheckName,
@@ -226,7 +227,7 @@ def _score_chunk(
 ) -> None:
     """Run one chunk of observations, paired, and fold it into ``scores``."""
     built = [observation.record for observation in chunk] * 2
-    strips = [None] * len(chunk) + [
+    strips = [NO_STRIP] * len(chunk) + [
         {observation.participant.carrier.id: frozenset({observation.row.keyword})}
         for observation in chunk
     ]
