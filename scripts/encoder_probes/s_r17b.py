@@ -23,6 +23,7 @@ from collections import Counter
 import numpy as np
 import probe_lib as pl
 import s_common as S
+from _lib.jsonio import write_json
 from _lib.stats import wls
 
 K = 10
@@ -54,17 +55,15 @@ def main() -> None:
     ap.add_argument("--neighbours", choices=("embedding", "bow"), default="embedding")
     bow = ap.parse_args().neighbours == "bow"
 
-    d = S.load_all(text=bow)
-    join, emb = d["join"], d["emb"]
-    val = d["val"]
-    pred_f = pl.predict_labels(emb, d["pf"])
-    pred_h = pl.predict_labels(emb, d["ph"])
-    n_in = S.num(join, "n_in_deck")
+    fr = S.ProbeFrame(text=bow)
+    join, emb, val = fr.join, fr.emb, fr.val
+    pred_f, pred_h = fr.pred_f, fr.pred_h
+    n_in = fr.num("n_in_deck")
     nb_emb = np.load(S.OUT / "s_r17_neighbours.npy")
     nb_idx = bow_neighbours(join) if bow else nb_emb
 
     flag_cols = [c for c in join.columns if c.startswith(("kw_", "ph_"))]
-    rare = {c: S.flag(join, c) > 0 for c in flag_cols}
+    rare = {c: fr.num(c, 0) > 0 for c in flag_cols}
     rare_any = np.any(np.stack([v for v in rare.values() if 20 <= v.sum() < 200]), 0)
 
     if bow:
@@ -80,9 +79,7 @@ def main() -> None:
 
     rows = []
     for head in ("score_play", "played_rate"):
-        y = S.num(join, f"shrunk_{head}")
-        w = S.num(join, f"w_{head}")
-        have = np.isfinite(y) & (w > 0)
+        y, w, have = fr.label(head)
         nb_mean = S.neighbour_mean(y, nb_idx)
         for tag, p in (("fidelity/all", np.asarray(pred_f[head], float)),
                        ("honest/val", np.asarray(pred_h[head], float))):
@@ -109,32 +106,28 @@ def main() -> None:
 
     if bow:
         out["controlled"] = rows
-        with open(S.OUT / "s_r17c.json", "w") as f:
-            json.dump(out, f, indent=1, default=float)
+        write_json(S.OUT / "s_r17c.json", out, indent=1)
         for r in rows:
             print(" | ".join(str(x) for x in r))
         print("overlap", out["mean_overlap_with_embedding_neighbourhood"])
         return
 
     out["neighbourhood_controlled"] = rows
-    out["naive_slope_vs_null"] = naive_slopes(join, val, nb_idx, pred_f, pred_h)
-    with open(S.OUT / "s_r17b.json", "w") as f:
-        json.dump(out, f, indent=1, default=float)
+    out["naive_slope_vs_null"] = naive_slopes(fr, nb_idx)
+    write_json(S.OUT / "s_r17b.json", out, indent=1)
     print(json.dumps(out, indent=1, default=float))
 
 
-def naive_slopes(join, val, nb_idx, pred_f, pred_h) -> list[list]:
+def naive_slopes(fr: S.ProbeFrame, nb_idx: np.ndarray) -> list[list]:
     """The naive (biased) slope and its mechanical nulls, for the record."""
     rows = []
     for head in ("score_play", "played_rate"):
-        y = S.num(join, f"shrunk_{head}")
-        w = S.num(join, f"w_{head}")
-        have = np.isfinite(y) & (w > 0)
+        y, w, have = fr.label(head)
         nb_mean = S.neighbour_mean(y, nb_idx)
-        for tag, p in (("fidelity/all", np.asarray(pred_f[head], float)),
-                       ("honest/val", np.asarray(pred_h[head], float))):
-            m = have & np.isfinite(nb_mean) & (val if tag == "honest/val"
-                                               else np.ones(len(join), bool))
+        for tag, p in (("fidelity/all", np.asarray(fr.pred_f[head], float)),
+                       ("honest/val", np.asarray(fr.pred_h[head], float))):
+            m = have & np.isfinite(nb_mean) & (fr.val if tag == "honest/val"
+                                               else np.ones(len(fr), bool))
             X = np.column_stack([np.ones(int(m.sum())), nb_mean[m] - y[m]])
             observed = wls(X, p[m] - y[m], w[m]).beta
             # null 1: the prediction replaced by the corpus mean

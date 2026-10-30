@@ -50,9 +50,8 @@ def main() -> None:
 
     targets: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for head in LABEL_TARGETS:
-        y = pd.to_numeric(join[f"shrunk_{head}"], errors="coerce").to_numpy(float)
-        keep = join[f"w_{head}"].to_numpy(float) > 0
-        targets[head] = (y, keep)
+        y, _, have = pl.label(join, head)
+        targets[head] = (y, have)
     for feat in FEATURE_TARGETS:
         y = pd.to_numeric(join[feat], errors="coerce").to_numpy(float)
         keep = np.isfinite(y)
@@ -78,12 +77,10 @@ def main() -> None:
     train_mean = emb[is_train].mean(axis=0)
     abl_rows = []
     for probe_name, probe in ps.probes.items():
-        head = probe.head
-        y = pd.to_numeric(join[f"shrunk_{head}"], errors="coerce").to_numpy(float)
+        y, w_all, have = pl.label(join, probe.head)
         if probe.space == "logit":
             y = pl.to_logit(y)
-        w_all = join[f"w_{head}"].to_numpy(float)
-        m = is_val & np.isfinite(y) & (w_all > 0)
+        m = is_val & have
         base = pl._r2(y[m], probe.predict(emb[m]), w_all[m])
         row = {"probe": probe_name, "base_val_r2": base}
         for k in range(N_BLOCKS):

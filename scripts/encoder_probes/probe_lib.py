@@ -440,6 +440,9 @@ class Label:
     w: np.ndarray
     have: np.ndarray
 
+    def __iter__(self):
+        return iter((self.y, self.w, self.have))
+
 
 def label(frame: pd.DataFrame, head: str) -> Label:
     y = num(frame, f"shrunk_{head}")

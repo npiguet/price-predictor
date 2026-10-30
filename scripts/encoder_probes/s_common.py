@@ -7,48 +7,51 @@ in ``output/encoder-probes/``.
 
 from __future__ import annotations
 
+import functools
 import warnings
 
 import numpy as np
 import pandas as pd
 import probe_lib as pl
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.linear_model import LogisticRegression
 
 OUT = pl.SCRATCH
-
-SD = {
-    "score_play": 0.0618,
-    "score_draw": 0.0618,
-    "played_rate": 0.1247,
-    "cast_lift": 0.0845,
-    "color_lift": 0.024,
-}
 
 COLORS = tuple("WUBRG")
 ALLIED = {frozenset(p) for p in (("W", "U"), ("U", "B"), ("B", "R"), ("R", "G"), ("G", "W"))}
 ENEMY = {frozenset(p) for p in (("W", "B"), ("U", "R"), ("B", "G"), ("R", "W"), ("G", "U"))}
 
 
-def load_all(text: bool = False) -> dict:
-    """``join`` (primary rows, card-table merged, with ``text`` if asked),
-    row-aligned ``emb``, both weighted probe sets and the split masks."""
-    join = pl.load_frame(text=text)
-    return {
-        "join": join,
-        "emb": pl.load_embedding_matrix(list(join["name"]), join),
-        "pf": pl.load_probes("fidelity", True),
-        "ph": pl.load_probes("honest", True),
-        "val": (join["split"] == "val").to_numpy(),
-        "train": (join["split"] == "train").to_numpy(),
-    }
+class ProbeFrame:
+    """What every ``s_*`` probe reads: ``join`` (primary rows, card-table
+    merged, with ``text`` if asked), the row-aligned ``emb``, both weighted
+    probe sets with their predictions, and the encoder's split masks."""
 
+    def __init__(self, text: bool = False) -> None:
+        self.join = pl.load_frame(text=text)
+        self.emb = pl.load_embedding_matrix(list(self.join["name"]), self.join)
+        self.pf = pl.load_probes("fidelity", True)
+        self.ph = pl.load_probes("honest", True)
+        self.val = (self.join["split"] == "val").to_numpy()
+        self.train = (self.join["split"] == "train").to_numpy()
 
-def num(join: pd.DataFrame, col: str) -> np.ndarray:
-    return pd.to_numeric(join[col], errors="coerce").to_numpy(float)
+    def __len__(self) -> int:
+        return len(self.join)
 
+    @functools.cached_property
+    def pred_f(self) -> pd.DataFrame:
+        return pl.predict_labels(self.emb, self.pf)
 
-def flag(join: pd.DataFrame, col: str) -> np.ndarray:
-    """A numeric column with missing values read as 0."""
-    return np.nan_to_num(num(join, col))
+    @functools.cached_property
+    def pred_h(self) -> pd.DataFrame:
+        return pl.predict_labels(self.emb, self.ph)
+
+    def label(self, head: str) -> pl.Label:
+        return pl.label(self.join, head)
+
+    def num(self, col: str, fill: float | None = None) -> np.ndarray:
+        return pl.num(self.join, col, fill)
 
 
 def cosine(a, b) -> float:
@@ -82,12 +85,45 @@ def card_colors(join: pd.DataFrame) -> np.ndarray:
     return np.stack([join[f"pip_{c.lower()}"].fillna(0).to_numpy() > 0 for c in COLORS], 1)
 
 
+def base_controls(join: pd.DataFrame) -> np.ndarray:
+    """The ``[1, MV, MV², creature]`` design every feature regression extends
+    (missing values read as 0)."""
+    mv = pl.num(join, "mv", 0)
+    return np.column_stack([np.ones(len(join)), mv, mv ** 2, pl.num(join, "is_creature", 0)])
+
+
+def flag_columns(join: pd.DataFrame) -> list[str]:
+    """The card table's yes/no feature columns the feature sweeps scan."""
+    return sorted({c for c in join.columns
+                   if c.startswith(("kw_", "ph_", "is_")) and c != "is_primary"}
+                  | {"big_tribe", "has_x", "hybrid", "phyrexian", "is_colorless_cost",
+                     "has_cost_line"})
+
+
+def permutation_folds(n: int, folds: int = 5, seed: int = 42) -> np.ndarray:
+    """A fold label per row: a seeded permutation cut into ``folds`` near-equal
+    parts. Passed to ``oof_predict`` as its groups, each part is one fold."""
+    fold = np.empty(n, dtype=np.int64)
+    for k, part in enumerate(np.array_split(np.random.default_rng(seed).permutation(n), folds)):
+        fold[part] = k
+    return fold
+
+
+def gbm(max_iter: int, learning_rate: float, validation_fraction: float,
+        categorical: list[int] | None = None) -> HistGradientBoostingRegressor:
+    """The early-stopped gradient-boosting regressor the nonlinear bounds use."""
+    return HistGradientBoostingRegressor(
+        max_iter=max_iter, learning_rate=learning_rate, early_stopping=True,
+        validation_fraction=validation_fraction, random_state=42,
+        categorical_features=categorical or None)
+
+
 # ── R8: the AI-hostile classes against MV × broad-type controls ─────────
 
 
 def hostile_classes(join: pd.DataFrame) -> dict[str, np.ndarray]:
     def col(c):
-        return flag(join, c)
+        return pl.num(join, c, 0)
 
     return {
         "fog / prevent damage": (col("ph_fog") + col("ph_prevent_damage")) > 0,
@@ -99,10 +135,18 @@ def hostile_classes(join: pd.DataFrame) -> dict[str, np.ndarray]:
     }
 
 
+def class_direction(emb: np.ndarray, members: np.ndarray) -> np.ndarray:
+    """Unit normal of a class-balanced logistic split of ``members`` from the rest."""
+    clf = LogisticRegression(max_iter=4000, C=1.0, class_weight="balanced")
+    clf.fit(emb, members.astype(int))
+    v = clf.coef_[0]
+    return v / np.linalg.norm(v)
+
+
 def control_cells(join: pd.DataFrame) -> np.ndarray:
     """Matching cell per card: mana value (clipped to 8) × first matching broad type."""
     def col(c):
-        return flag(join, c)
+        return pl.num(join, c, 0)
 
     type_cell = np.select(
         [col("is_creature") > 0, col("is_land") > 0, col("is_instant") > 0,
@@ -146,13 +190,13 @@ def nameable_blocks(join: pd.DataFrame) -> list[tuple[str, list[tuple[str, np.nd
     once: the flying flags and ``kw_count`` have their own slots and are not
     repeated among the keyword and phrase flags."""
     def cols(names):
-        return [(c, flag(join, c)) for c in names]
+        return [(c, pl.num(join, c, 0)) for c in names]
 
-    mv = flag(join, "mv")
+    mv = pl.num(join, "mv", 0)
     fly = ["kw_flying", "kw_flying_anywhere", "ph_flying_grant"]
     kw = sorted(c for c in join.columns if c.startswith("kw_") and c not in fly + ["kw_count"])
     ph = sorted(c for c in join.columns if c.startswith("ph_") and c not in fly)
-    year = num(join, "first_year")
+    year = pl.num(join, "first_year")
     year = np.where(np.isfinite(year), year, np.nanmedian(year))
     return [
         ("MV", [("mv", mv), ("mv2", mv**2)]),
@@ -160,7 +204,7 @@ def nameable_blocks(join: pd.DataFrame) -> list[tuple[str, list[tuple[str, np.nd
                                "is_enchantment", "is_land", "is_planeswalker", "is_aura",
                                "is_equipment", "is_vehicle", "is_legendary", "is_basic"))),
         ("+ P/T", cols(("power", "toughness"))
-         + [("has_pt", np.isfinite(num(join, "power")).astype(float))]),
+         + [("has_pt", np.isfinite(pl.num(join, "power")).astype(float))]),
         ("+ flying", cols(c for c in fly if c in join.columns)),
         ("+ keyword flags", cols(kw + ["kw_count"])),
         ("+ phrase / archetype flags", cols(ph)),
