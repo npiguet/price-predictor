@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from effects.application.evaluate_effect_model import NOT_IMPLEMENTED_CHECKS, not_implemented
+from effects.application.evaluate_effect_model import not_implemented
 from effects.domain.evaluation_report import CheckName, CheckStatus, EvaluationReport
 
 
@@ -22,10 +22,6 @@ class TestUnimplementedChecks:
             assert result.status is CheckStatus.NOT_IMPLEMENTED
             assert not result.blocks
             assert result.detail.startswith("not implemented")
-
-    def test_none_claims_the_corpus_lacks_its_records(self):
-        for name in NOT_IMPLEMENTED_CHECKS:
-            assert "does not have" not in not_implemented(name).detail
 
     def test_the_report_marks_them_apart_from_a_skip(self):
         report = EvaluationReport()

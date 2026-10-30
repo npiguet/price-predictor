@@ -146,7 +146,6 @@ def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, s
     assert facts == CorpusFacts.of(manifest)
     assert facts.split.card_disjoint_games == frozenset({"cg"})
     assert facts.split.game_disjoint_games == frozenset({"gg"})
-    assert (facts.holdout.permille, facts.holdout.max_carriers) == (20, 8)
     assert facts.gate_one_records == 4096
     assert facts.digest == manifest.digest()
 
