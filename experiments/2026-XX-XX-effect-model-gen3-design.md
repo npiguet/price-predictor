@@ -532,10 +532,14 @@ split into a selection half and a reporting half as [the stopping
 plan](#the-summed-validation-loss-disagrees-with-the-probes-over-training-and-gen-3-judges-checkpoints-by-probes-and-rule-scenarios)
 describes. Collection aimed at a rule feeds training separately.
 
-**A record whose outcome differs from its scenario's expected outcome is either a wrong scenario or
-a Forge departure from the rules.** A confirmed Forge departure is recorded on the scenario. The
-rule's records then stay out of the rule tests until Forge is patched on the hooks branch or the
-departure is accepted. Where Forge plays a situation as expected, Forge's outcome and the rule's
+**A record whose outcome differs from its scenario's expected outcome sends the scenario back for
+review, because the scenario is the likelier of the two to be wrong.** Each expected outcome is an
+automated reading of the rules text and the cards' scripts, never checked against a game. Forge's
+engine is mature and widely played. The review rereads the rule, the scripts and
+the record, and corrects the scenario where the reading was wrong. Only a disagreement that survives
+the review is a suspected Forge departure from the rules. A confirmed departure is recorded on the
+scenario, and the rule's records stay out of the rule tests until Forge is patched on the hooks
+branch or the departure is accepted. Where Forge plays a situation as expected, Forge's outcome and the rule's
 outcome are the same, so the choice between a rule label and Forge's outcome matters only for the
 rules that disagree.
 
