@@ -25,11 +25,15 @@ from __future__ import annotations
 
 import math
 import re
+import zlib
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
+
+from effects.domain.script_text import api_of, params
+from effects.domain.script_text import segments as script_segments
 
 FAMILIES: tuple[str, ...] = (
     "magnitudes", "mana-production", "mana-usage", "timing-costs", "interactions",
@@ -127,7 +131,6 @@ def capped(value: float) -> float:
 
 # ── script parsing ──────────────────────────────────────────────────────
 
-_LABEL_RE = re.compile(r"^\s*SV\d+:\s*")
 _INT_RE = re.compile(r"^[+-]?\d+$")
 
 
@@ -138,23 +141,7 @@ def segments(script: str | None) -> list[dict[str, str]]:
     """
     if not script or "$" not in script:
         return []
-    out = []
-    for part in script.split("[SEG]"):
-        found: dict[str, str] = {}
-        for piece in _LABEL_RE.sub("", part).split("|"):
-            key, separator, value = piece.partition("$")
-            key = key.strip()
-            if separator and key and key not in found:
-                found[key] = value.strip()
-        out.append(found)
-    return out
-
-
-def _api(found: dict[str, str]) -> str | None:
-    for key in ("SP", "AB", "DB"):
-        if key in found:
-            return found[key]
-    return None
+    return [params(segment) for segment in script_segments(script)]
 
 
 def _literal(value: str | None) -> float | None:
@@ -164,17 +151,14 @@ def _literal(value: str | None) -> float | None:
     return float(int(value)) if _INT_RE.match(value) else None
 
 
-def _sum_amount(parsed: list[dict[str, str]], keys: tuple[str, ...],
-                apis: frozenset[str] | None = None) -> float | None:
+def _sum_amount(parsed: list[dict[str, str]], keys: tuple[str, ...]) -> float | None:
     """A literal amount summed over segments; None where any is variable.
 
     0 where no segment states it, so "deals no damage" is a label like any
-    other. Restricted to segments of ``apis`` when given.
+    other.
     """
     total = 0.0
     for found in parsed:
-        if apis is not None and _api(found) not in apis:
-            continue
         for key in keys:
             if key in found:
                 value = _literal(found[key])
@@ -189,7 +173,11 @@ def _cost_shards(cost: str | None) -> list[str]:
 
 
 def mana_of_cost(cost: str | None) -> dict[str, float] | None:
-    """A ``Cost$``'s mana by colour, colourless and generic; None for ``X``."""
+    """A ``Cost$``'s mana by colour, colourless and generic; None for ``X``.
+
+    A hybrid pip counts for its first colour and a ``2/W`` pip as generic, so
+    the colours sum to the mana the cost asks for.
+    """
     out = {f"cost_{c}": 0.0 for c in (*_COLOURS, "c", "generic")}
     for shard in _cost_shards(cost):
         if shard == "X":
@@ -211,6 +199,143 @@ _PT_APIS = frozenset({
 _COUNTER_APIS = frozenset({"PutCounter", "PutCounterAll"})
 _SIDE_SKIP = ("SpellDescription", "TriggerDescription", "Description",
               "StackDescription", "TgtPrompt")
+#: The stated amounts, by label. A static's ``AddPower$``/``AddToughness$`` is
+#: not among them: reading it would relabel every probe set already frozen.
+_AMOUNT_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("damage", ("NumDmg",)),
+    ("power_change", ("NumAtt",)),
+    ("toughness_change", ("NumDef",)),
+    ("counters_placed", ("CounterNum",)),
+    ("life_amount", ("LifeAmount",)),
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _Script:
+    """One line's parsed script, as every family's labels read it."""
+
+    parsed: list[dict[str, str]]
+    line_kind: str
+    #: The root segment's API, else the sidecar's.
+    root_api: str | None
+    cost: str | None
+    #: The cost's mana by colour; None without a ``Cost$`` or for ``X``.
+    cost_mana: dict[str, float] | None
+
+    @property
+    def root(self) -> dict[str, str]:
+        return self.parsed[0]
+
+    @property
+    def apis(self) -> set[str]:
+        return {api_of(found) for found in self.parsed} - {None}
+
+    @property
+    def total_cost(self) -> float:
+        return sum(self.cost_mana.values()) if self.cost_mana else 0.0
+
+
+def _magnitudes(script: _Script) -> dict[str, float]:
+    labels: dict[str, float] = {}
+    root = script.root
+    is_charm_root = script.root_api == "Charm" or (
+        "Choices" in root and script.root_api in {"Charm", "GenericChoice"})
+    if not is_charm_root:
+        for name, keys in _AMOUNT_KEYS:
+            value = _sum_amount(script.parsed, keys)
+            if value is not None:
+                labels[name] = capped(value)
+    if labels.get("damage") and script.total_cost > 0 and script.line_kind != "spell":
+        labels["damage_per_mana"] = labels["damage"] / script.total_cost
+    return labels
+
+
+def _mana_production(script: _Script) -> dict[str, float]:
+    if "Mana" not in script.apis:
+        return {}
+    mana = next(found for found in script.parsed if api_of(found) == "Mana")
+    produced = mana.get("Produced", "").split()
+    labels = {f"produces_{colour}": float(colour.upper() in produced)
+              for colour in (*_COLOURS, "c")}
+    labels["any_colour"] = float("Any" in produced)
+    amount = _literal(mana.get("Amount", "1"))
+    if amount is not None:
+        labels["mana_amount"] = amount
+    labels["restricted"] = float(any(k.startswith("Restrict") for k in mana))
+    labels["conditional"] = float(any(
+        k.startswith("Condition") or k == "ActivationLimit"
+        for found in script.parsed for k in found))
+    return labels
+
+
+def _mana_usage(script: _Script) -> dict[str, float]:
+    """Never a spell line's cost: its mana cost is its card's."""
+    labels: dict[str, float] = {}
+    if script.line_kind != "spell" and script.cost_mana is not None:
+        labels.update(script.cost_mana)
+        labels["cost_total"] = script.total_cost
+    mode = script.root.get("Mode")
+    if mode in ("ReduceCost", "RaiseCost"):
+        labels["cost_reducer"] = float(mode == "ReduceCost")
+        labels["cost_tax"] = float(mode == "RaiseCost")
+    elif script.line_kind == "static":
+        labels["cost_reducer"] = 0.0
+        labels["cost_tax"] = 0.0
+    return labels
+
+
+def _timing_costs(script: _Script, types: str) -> dict[str, float]:
+    labels: dict[str, float] = {}
+    root = script.root
+    if script.line_kind == "spell":
+        labels["instant_speed"] = float("instant" in types)
+    elif script.line_kind == "activated":
+        labels["instant_speed"] = float(
+            "SorcerySpeed" not in root and "ActivationPhases" not in root)
+    if script.cost is not None:
+        shards = _cost_shards(script.cost)
+        labels["tap_cost"] = float("T" in shards)
+        labels["sacrifice_cost"] = float(any(s.startswith("Sac<") for s in shards))
+        labels["life_cost"] = float(any(s.startswith("PayLife<") for s in shards))
+    return labels
+
+
+def _side(script: _Script) -> dict[str, float]:
+    root_api = script.root_api
+    if root_api is None:
+        return {}
+    values = " ".join(
+        v for found in script.parsed for k, v in found.items() if k not in _SIDE_SKIP
+    )
+    defined = script.root.get("Defined", "")
+    return {
+        "affects_you": float(
+            defined in ("You", "Self") or "YouCtrl" in values
+            or bool(re.search(r"\bYou\b", values))),
+        "affects_opponent": float("Opponent" in values or "OppCtrl" in values),
+        "affects_each": float(
+            root_api.endswith("All") or root_api.endswith("EachPlayer")
+            or defined == "Player" or "ValidCards" in script.root),
+    }
+
+
+def _duration_repeatability(script: _Script) -> dict[str, float]:
+    labels: dict[str, float] = {}
+    apis = script.apis
+    if apis & _PT_APIS:
+        durations = {found.get("Duration") for found in script.parsed
+                     if api_of(found) in _PT_APIS}
+        counter = bool(apis & _COUNTER_APIS)
+        labels["as_counter"] = float(counter)
+        labels["until_end_of_turn"] = float(
+            not counter and not (durations & {"Permanent", "UntilHostLeavesPlay"}))
+    if script.line_kind == "spell":
+        labels["repeatable"] = 0.0
+    elif script.line_kind == "activated":
+        shards = _cost_shards(script.cost)
+        labels["repeatable"] = float(not any(
+            s.startswith(("Sac<1/CARDNAME", "Exile<1/CARDNAME")) for s in shards))
+    return labels
 
 
 def line_labels(
@@ -224,99 +349,21 @@ def line_labels(
     and damage per mana is read off the capped damage.
     """
     parsed = segments(script)
-    labels: dict[str, float] = {}
     if not parsed:
-        return labels
-    root = parsed[0]
-    apis = {_api(found) for found in parsed} - {None}
-    root_api = _api(root) or api
-    is_charm_root = root_api == "Charm" or ("Choices" in root and root_api in {
-        "Charm", "GenericChoice"})
-
-    # ── magnitudes ──
-    if not is_charm_root:
-        for name, keys, only in (
-            ("damage", ("NumDmg",), None),
-            ("power_change", ("NumAtt", "PowerBonus"), None),
-            ("toughness_change", ("NumDef", "ToughnessBonus"), None),
-            ("counters_placed", ("CounterNum",), None),
-            ("life_amount", ("LifeAmount",), None),
-        ):
-            value = _sum_amount(parsed, keys, only)
-            if value is not None:
-                labels[name] = capped(value)
-    cost = root.get("Cost")
-    cost_mana = mana_of_cost(cost) if cost is not None else None
-    total_cost = sum(cost_mana.values()) if cost_mana else 0.0
-    if labels.get("damage") and total_cost > 0 and line_kind != "spell":
-        labels["damage_per_mana"] = labels["damage"] / total_cost
-
-    # ── mana production ──
-    if "Mana" in apis:
-        mana = next(found for found in parsed if _api(found) == "Mana")
-        produced = mana.get("Produced", "").split()
-        for colour in (*_COLOURS, "c"):
-            labels[f"produces_{colour}"] = float(colour.upper() in produced)
-        labels["any_colour"] = float("Any" in produced)
-        amount = _literal(mana.get("Amount", "1"))
-        if amount is not None:
-            labels["mana_amount"] = amount
-        labels["restricted"] = float(any(
-            k.startswith("Restrict") for k in mana))
-        labels["conditional"] = float(any(
-            k.startswith("Condition") or k == "ActivationLimit"
-            for found in parsed for k in found))
-
-    # ── mana usage ── (never a spell line: its mana cost is its card's)
-    if cost is not None and line_kind != "spell" and cost_mana is not None:
-        labels.update(cost_mana)
-        labels["cost_total"] = total_cost
-    if root.get("Mode") in ("ReduceCost", "RaiseCost"):
-        labels["cost_reducer"] = float(root["Mode"] == "ReduceCost")
-        labels["cost_tax"] = float(root["Mode"] == "RaiseCost")
-    elif line_kind == "static":
-        labels["cost_reducer"] = 0.0
-        labels["cost_tax"] = 0.0
-
-    # ── timing and non-mana costs ──
-    if line_kind == "spell":
-        labels["instant_speed"] = float("instant" in types)
-    elif line_kind == "activated":
-        labels["instant_speed"] = float(
-            "SorcerySpeed" not in root and "ActivationPhases" not in root)
-    if cost is not None:
-        shards = _cost_shards(cost)
-        labels["tap_cost"] = float("T" in shards)
-        labels["sacrifice_cost"] = float(any(s.startswith("Sac<") for s in shards))
-        labels["life_cost"] = float(any(s.startswith("PayLife<") for s in shards))
-
-    # ── side ──
-    values = " ".join(
-        v for found in parsed for k, v in found.items() if k not in _SIDE_SKIP
+        return {}
+    cost = parsed[0].get("Cost")
+    parsed_script = _Script(
+        parsed=parsed, line_kind=line_kind, root_api=api_of(parsed[0]) or api,
+        cost=cost, cost_mana=mana_of_cost(cost) if cost is not None else None,
     )
-    defined = root.get("Defined", "")
-    if root_api is not None:
-        labels["affects_you"] = float(
-            defined in ("You", "Self") or "YouCtrl" in values
-            or bool(re.search(r"\bYou\b", values)))
-        labels["affects_opponent"] = float("Opponent" in values or "OppCtrl" in values)
-        labels["affects_each"] = float(
-            root_api.endswith("All") or root_api.endswith("EachPlayer")
-            or defined == "Player" or "ValidCards" in root)
-
-    # ── duration and repeatability ──
-    if apis & _PT_APIS:
-        durations = {found.get("Duration") for found in parsed if _api(found) in _PT_APIS}
-        counter = bool(apis & _COUNTER_APIS)
-        labels["as_counter"] = float(counter)
-        labels["until_end_of_turn"] = float(
-            not counter and not (durations & {"Permanent", "UntilHostLeavesPlay"}))
-    if line_kind == "spell":
-        labels["repeatable"] = 0.0
-    elif line_kind == "activated":
-        shards = _cost_shards(cost)
-        labels["repeatable"] = float(not any(
-            s.startswith(("Sac<1/CARDNAME", "Exile<1/CARDNAME")) for s in shards))
+    labels = {
+        **_magnitudes(parsed_script),
+        **_mana_production(parsed_script),
+        **_mana_usage(parsed_script),
+        **_timing_costs(parsed_script, types),
+        **_side(parsed_script),
+        **_duration_repeatability(parsed_script),
+    }
     return {
         name: capped(value) if TARGETS_BY_NAME[name].kind == AMOUNT else value
         for name, value in labels.items()
@@ -492,14 +539,6 @@ class TriggerJoin:
         return JoinResult(cause=cause, fired=fired, fired_joined=joined)
 
 
-def join_triggers(records: Iterable) -> JoinResult:
-    """:class:`TriggerJoin` over a whole iterable of records."""
-    join = TriggerJoin()
-    for record in records:
-        join.observe(record)
-    return join.result()
-
-
 def mined_pairs(items: Iterable) -> list[tuple[object, object]]:
     """Positive pairs read off the scripts: what the join cannot reach.
 
@@ -523,9 +562,8 @@ def mined_pairs(items: Iterable) -> list[tuple[object, object]]:
                 lifegain_trigger.append(item)
         if "Sac<" in (root.get("Cost") or "") and item.line_kind == "activated":
             sac.append(item)
-        if any(_api(found) == "GainLife" for found in parsed):
+        if any(api_of(found) == "GainLife" for found in parsed):
             lifegain.append(item)
-    import zlib
 
     pairs: list[tuple[object, object]] = []
     for triggers, causes in ((death, sac), (lifegain_trigger, lifegain)):

@@ -13,8 +13,17 @@ Nothing here does work at import time.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
+
+
+def records(directories: Iterable[Path], *, shards: int | None = None) -> Iterator:
+    """Every record of the first ``shards`` shards of each directory, in path order."""
+    from effects.infrastructure.shard_io import iter_shards, read_shard
+
+    for directory in directories:
+        for shard in iter_shards(Path(directory))[:shards]:
+            yield from read_shard(shard)
 
 
 def qualifying(
@@ -32,22 +41,18 @@ def qualifying(
     does not. ``shards`` bounds the shards read per directory; ``per_game``
     None takes every qualifying record of a game.
     """
-    from effects.infrastructure.shard_io import iter_shards, read_shard
-
     chosen: list = []
     per: Counter[str] = Counter()
-    for directory in directories:
-        for shard in iter_shards(Path(directory))[:shards]:
-            for record in read_shard(shard):
-                if per_game is not None and per[record.game_id] >= per_game:
-                    continue
-                found = choose(record)
-                if found is None:
-                    continue
-                per[record.game_id] += 1
-                chosen.append(found)
-                if len(chosen) >= count:
-                    return chosen
+    for record in records(directories, shards=shards):
+        if per_game is not None and per[record.game_id] >= per_game:
+            continue
+        found = choose(record)
+        if found is None:
+            continue
+        per[record.game_id] += 1
+        chosen.append(found)
+        if len(chosen) >= count:
+            break
     return chosen
 
 

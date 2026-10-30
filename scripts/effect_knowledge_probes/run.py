@@ -50,6 +50,7 @@ from effect_knowledge_probes import (  # noqa: E402
     common,
     labels,
     ladder,
+    record_walk,
     sweeps,
 )
 from effect_knowledge_probes import board as board_probe  # noqa: E402
@@ -106,7 +107,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-ablation", action="store_true")
     parser.add_argument("--no-board", action="store_true",
                         help="skip the board-abilities ablation (board.py)")
-    parser.add_argument("--reports-dir", type=Path, default=common.DEFAULT_REPORTS,
+    parser.add_argument("--reports-dir", type=Path, default=common.REPORTS,
                         help="where the report directory goes, and the probe set "
                              "unless --probe-set-dir is given")
     parser.add_argument("--probe-set-dir", type=Path, default=None,
@@ -259,11 +260,8 @@ def _key_json(key) -> dict | None:
 
 def _observe_training(args, context: common.ProbeContext, outcomes: ObservedOutcomes) -> None:
     """The first ``--profile-shards`` training shards, for the observed-outcome labels."""
-    from effects.infrastructure.shard_io import iter_shards, read_shard
-
-    for shard in sorted(iter_shards(context.training_dir))[: args.profile_shards]:
-        for record in read_shard(shard):
-            outcomes.observe(record)
+    for record in record_walk.records([context.training_dir], shards=args.profile_shards):
+        outcomes.observe(record)
 
 
 def _label_lines(context: common.ProbeContext, line_items, surface: Surface,
@@ -279,7 +277,8 @@ def _label_lines(context: common.ProbeContext, line_items, surface: Surface,
             path = sidecars.path_for(item.script_file)
         except KeyError:
             path = None
-        types = common.card_types(converted_text_path(path)) if path else ""
+        types = (common.card_facts(converted_text_path(path))["type_line"].lower()
+                 if path else "")
         found = labels.line_labels(item.script_text, item.line_kind, item.api, types)
         weights = {}
         if item.text in spread:
@@ -491,7 +490,6 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
     from effects.domain.effect_losses import per_entity_loss
     from effects.domain.effect_model import EffectModel
     from effects.domain.surface_collation import per_entity_targets
-    from effects.infrastructure.shard_io import iter_shards, read_shard
 
     layers = args.method_c_layers
     config = replace(probe_model.checkpoint.model_config, n_layers=max(layers, 1))
@@ -503,8 +501,7 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
 
     def stream():
         while True:
-            for shard in sorted(iter_shards(Path(corpus) / "training")):
-                yield from read_shard(shard)
+            yield from record_walk.records([Path(corpus) / "training"])
 
     records, steps, started = stream(), 0, time.time()
     shallow.train()
@@ -585,8 +582,8 @@ def _board_subsets(args, context: common.ProbeContext) -> dict[str, dict[str, li
             continue
         progress(f"board subsets: scanning {stratum}")
         chosen[stratum] = board_probe.collect(
-            board_probe.stratum_records(
-                directory, shards=args.board_shards or board_probe.SHARDS_PER_STRATUM),
+            record_walk.records(
+                [directory], shards=args.board_shards or board_probe.SHARDS_PER_STRATUM),
             context.sidecars(),
             per_subset=args.board_records or board_probe.RECORDS_PER_SUBSET)
         progress("  " + ", ".join(
@@ -787,8 +784,8 @@ def probe_set_location(args: argparse.Namespace, corpus_digest: str) -> Path:
 
 
 def report_dir(reports_dir: Path, checkpoint: Path, date: str) -> Path:
-    stem = common.checkpoint_stem(checkpoint)
-    return Path(reports_dir) / f"knowledge-probes-{stem}-{date.replace('-', '')}"
+    label = common.checkpoint_label(checkpoint)
+    return Path(reports_dir) / f"knowledge-probes-{label}-{date.replace('-', '')}"
 
 
 def main(argv: list[str] | None = None) -> int:
