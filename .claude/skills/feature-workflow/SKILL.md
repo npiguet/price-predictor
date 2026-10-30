@@ -76,8 +76,36 @@ The last check is not about style, and it is the one that catches errors rather 
 
 - **Audience:** the user, to track and understand what is being built.
 - **Purpose:** a **normative** specification — *what* to build and how it behaves from the outside (commands, CLI surface, contracts, records), based on the conclusions reached in the experiment doc. Stops short of an implementation manual.
-- **Format & tone:** tight, direct, WHAT-not-WHY. Prefer **short bullet points and tables over long paragraphs**. Minimal, deliberate bold — only structural labels (list lead-ins, table columns, mini-headers), never mid-sentence emphasis. Keep rationale, gen-over-gen comparisons, and benchmark numbers **out** — those live in `experiments/` (link to them instead). Use timeless present tense.
+- **Format & tone:** tight, direct, WHAT-not-WHY. Prefer **short bullet points and tables over long paragraphs**. No bold anywhere in the document: a list or table gets a plain lead-in line of its own ("In scope", "Exit codes"), and a term that needs weight gets its own sentence. Keep rationale, gen-over-gen comparisons, and benchmark numbers **out** — those live in `experiments/` (link to them instead). Use timeless present tense.
 - These are hand-written (not spec-kit), and are the source the speckit `spec.md` is derived from.
+
+### Document structure
+
+Every root spec has a preamble followed by numbered sections, in this order.
+
+**Preamble** (before § 1, unnumbered):
+
+- An H1 title, `<Component> — <feature>`, with `(generation N)` appended when the spec belongs to a series of generations.
+- One paragraph opening "Normative spec for …", listing what the spec covers, then linking the experiment record(s) that hold the rationale.
+- When the spec builds on an earlier one, the amendment clause: "This spec amends [base]. Everything it does not mention stays as the base spec specifies. Where the two disagree, this spec governs." An amending spec describes only what changes; it never restates the base.
+- When the spec belongs to a series of generations, a `gen | what` table naming each generation.
+
+**Numbered sections**, headed `# N. Title` and `## N.M Title`, cross-referenced as `§ N.M`. Another spec is cited as a link plus its §.
+
+1. **What it does** — the capability as the user sees it, and what gets delivered. A few sentences or bullets.
+2. **Scope** — three lists, each bullet pointing to the § that covers it: "In scope", "Reused unchanged", "Out of scope" (saying where each deferred item will be handled, when known). This is the only home for out-of-scope items; no separate trailing section.
+3. **How it works** — optional. An overview, included only when the contract sections need one to be followed.
+4. **Contract sections** — one per contract: data formats, protocols, the parts of an algorithm visible from outside (loss, sampling, selection). Ordered the way data flows through the feature.
+5. **Operator surface** — every command as a code block, flags and defaults in aligned columns; then startup validation as bullets, an exit-code table, and what the user sees printed. Defaults live here only; contract sections refer to flags by name.
+6. **Records and artifacts** — every file written, as a table (file, when written, purpose), and what each checkpoint contains.
+
+**Never in a root spec:** "Why …" sections, Rationale, Risks and mitigations, Expected impact, Contingency plans, Open questions, Future directions, or an Evaluation section that predicts results. All of these belong in the experiment record. A section about evaluation specifies what the evaluation command measures and outputs, never what it should find.
+
+**Headers name the topic.** This is the opposite of the experiment-record rule: a spec is a reference document, looked up by subject. "Pair sampling" is right; a header stating a finding is not.
+
+**"Because" only for constraints.** A reason stays in a spec only when an implementer could break something by ignoring it — "kept outside `output/cardsfolder/` because `encode-cards --clean` deletes every `.npz` there". Any other justification goes in the experiment record.
+
+**Specs written before this structure stay as they are.** They describe implemented, finished features and are not restructured. They are not a model either: a new spec follows this structure even where an older one did otherwise.
 
 ## `specs/NNN-name/` — spec-kit feature directories
 
