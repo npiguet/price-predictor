@@ -74,6 +74,14 @@ class TestFlagSignatures:
         with pytest.raises(ValueError, match="mirror_of"):
             make_record(kind=RecordKind.COMBAT, mirror_of="run.3.9")
 
+    def test_a_probe_names_the_combat_it_mirrors(self, make_record):
+        record = make_record(kind=RecordKind.COMBAT, fork=True, mirror_of="run.3.9")
+        assert record.mirror_of == "run.3.9"
+        assert record.is_probe
+
+    def test_an_unforked_combat_record_is_not_a_probe(self, make_record):
+        assert not make_record(kind=RecordKind.COMBAT).is_probe
+
     def test_variant_of_requires_the_synthetic_flag(self, make_record):
         with pytest.raises(ValueError, match="variant_of"):
             make_record(variant_of="Serra Angel")
