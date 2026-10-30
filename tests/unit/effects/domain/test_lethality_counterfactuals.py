@@ -107,7 +107,8 @@ class TestQualify:
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         qualified = _qualify(record)
         assert qualified is not None
-        assert (qualified.kind, qualified.amount, qualified.stated) == ("damage", 3, "text")
+        effect = qualified.effect
+        assert (effect.kind, effect.amount, effect.stated) == ("damage", 3, "text")
         assert qualified.hit == ("E1",)
 
     def test_a_survivor_qualifies(self):
@@ -155,12 +156,13 @@ class TestQualify:
     def test_a_paid_x_is_the_amount(self):
         record = _record([_damage("E1", 4), _died("E1")], [_creature("E1", 4)], x=4)
         qualified = _qualify(record, BOLT.replace("NumDmg$ 3", "NumDmg$ X"))
-        assert (qualified.amount, qualified.stated) == (4, "x")
+        assert (qualified.effect.amount, qualified.effect.stated) == (4, "x")
 
     def test_a_symmetric_shrink_qualifies(self):
         record = _record([_shrunk("E1", 2), _died("E1")], [_creature("E1", 2)])
         qualified = _qualify(record, SHRINK)
-        assert (qualified.kind, qualified.amount, qualified.symmetric) == ("shrink", 2, True)
+        effect = qualified.effect
+        assert (effect.kind, effect.amount, effect.symmetric) == ("shrink", 2, True)
 
 
 class TestCopies:
@@ -172,13 +174,13 @@ class TestCopies:
         outcomes = set()
         for number in range(200):
             copy = counterfactual(record, qualified, targets, _line(BOLT), BOLT, rng, number)
-            amount = int(copy.text.split("NumDmg$ ")[1].split()[0])
+            amount = int(copy.edit.text.split("NumDmg$ ")[1].split()[0])
             creature = copy.record.state.entity("E1")
             fields = copy.targets["E1"].fields
             dies = fields.get("zone_outcome") == DIED
             assert dies == (amount >= creature.pt.base[1])
             assert fields["damage_taken"] == amount
-            assert f"deals {amount} damage" in copy.text
+            assert f"deals {amount} damage" in copy.edit.text
             outcomes.add(dies)
         assert outcomes == {True, False}
 
@@ -186,8 +188,8 @@ class TestCopies:
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         copy = counterfactual(record, _qualify(record), derive_targets(record), _line(BOLT), BOLT,
                               random.Random(1), 0)
-        assert copy.key.tree == SourceTree.COUNTERFACTUAL
-        assert copy.record.ability == (copy.key,)
+        assert copy.edit.key.tree == SourceTree.COUNTERFACTUAL
+        assert copy.record.ability == (copy.edit.key,)
         assert copy.record.record_id == "r.0-0.1~cf0"
         assert record.state.entity("E1").pt.base == (2, 2)
 
@@ -197,7 +199,7 @@ class TestCopies:
         qualified = _qualify(record, text)
         copy = counterfactual(record, qualified, derive_targets(record), _line(text), text,
                               random.Random(3), 0)
-        assert copy.key is None and copy.text is None
+        assert copy.edit.key is None and copy.edit.text is None
         assert copy.targets["E1"].fields["damage_taken"] == copy.record.state.refs.x
 
     def test_a_player_s_life_follows_the_amount(self):
@@ -211,7 +213,7 @@ class TestCopies:
     def test_a_shrink_edits_power_and_toughness_together(self):
         qualified = _qualify(
             _record([_shrunk("E1", 2), _died("E1")], [_creature("E1", 2)]), SHRINK)
-        edited = edit_text(SHRINK, qualified, 5)
+        edited = edit_text(SHRINK, qualified.effect, 5)
         assert "NumAtt$ -5" in edited and "NumDef$ -5" in edited and "-5/-5" in edited
 
 
@@ -226,15 +228,15 @@ class TestTheProseSurface:
         copy = counterfactual(record, _qualify(record), derive_targets(record),
                               _line(BOLT), self.PROSE, random.Random(1), 0)
         amount = copy.targets["E1"].fields["damage_taken"]
-        assert copy.text == f"cardname deals {int(amount)} damage to target creature."
-        assert f"NumDmg$ {int(amount)}" in copy.script
+        assert copy.edit.text == f"cardname deals {int(amount)} damage to target creature."
+        assert f"NumDmg$ {int(amount)}" in copy.edit.script
 
     def test_prose_naming_no_amount_keeps_the_amount_and_moves_the_toughness(self):
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2)])
         prose = "cardname deals damage to target creature."
         copy = counterfactual(record, _qualify(record), derive_targets(record),
                               _line(BOLT), prose, random.Random(1), 0)
-        assert copy.key is None
+        assert copy.edit.key is None
         assert copy.targets["E1"].fields["damage_taken"] == 3.0
 
     def test_role_spans_move_with_an_edit_that_changes_the_prose_length(self):
@@ -249,9 +251,9 @@ class TestTheProseSurface:
             record, _qualify(record, script), derive_targets(record),
             _line(script, spans), prose, random.Random(1), 0,
         )
-        moved = copy.text.index("target")
-        assert [(s.start, s.end) for s in copy.role_spans] == [
-            (0, moved), (moved, len(copy.text)),
+        moved = copy.edit.text.index("target")
+        assert [(s.start, s.end) for s in copy.edit.role_spans] == [
+            (0, moved), (moved, len(copy.edit.text)),
         ]
 
 
@@ -277,19 +279,19 @@ class TestThePinnedOutput:
             replace(entity, pt=None, damage=0) for entity in record.state.entities
         ]
         assert replace(state.refs, x=None) == replace(record.state.refs, x=None)
-        if copy.key is None:
+        if copy.edit.key is None:
             assert copy.record.ability == record.ability
         else:
-            assert copy.record.ability == (copy.key,)
-            assert replace(copy.key, script_file=KEY.script_file) == KEY
+            assert copy.record.ability == (copy.edit.key,)
+            assert replace(copy.edit.key, script_file=KEY.script_file) == KEY
         return (
             copy.record.record_id,
-            None if copy.key is None else copy.key.script_file,
+            None if copy.edit.key is None else copy.edit.key.script_file,
             state.refs.x,
             tuple((entity.id, entity.pt.base, entity.damage)
                   for entity in state.entities if entity.pt is not None),
-            copy.text, copy.script,
-            tuple((span.start, span.end, span.role) for span in copy.role_spans),
+            copy.edit.text, copy.edit.script,
+            tuple((span.start, span.end, span.role) for span in copy.edit.role_spans),
             tuple((subject, entry.affected, sorted(entry.fields.items()))
                   for subject, entry in copy.targets.items()),
         )
@@ -463,5 +465,5 @@ class TestStepWiring:
         copies = StepPreparer._counterfactuals(
             preparer, records, [derive_targets(r) for r in records], batcher)
         assert len(copies) == 3
-        assert {copy.key for copy in copies} == set(batcher.staged)
-        assert all(batcher.staged[copy.key] == (copy.text, KEY) for copy in copies)
+        assert {copy.edit.key for copy in copies} == set(batcher.staged)
+        assert all(batcher.staged[copy.edit.key] == (copy.edit.text, KEY) for copy in copies)

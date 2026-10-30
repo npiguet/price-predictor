@@ -341,10 +341,11 @@ class StepPreparer:
                     record, qualified, record_targets, line, batcher.text_of(key),
                     batcher.rng, number,
                 )
-                if copy.key is not None:
+                edit = copy.edit
+                if edit.key is not None:
                     batcher.stand_in(
-                        copy.key, copy.text, key,
-                        script=copy.script, role_spans=copy.role_spans,
+                        edit.key, edit.text, key,
+                        script=edit.script, role_spans=edit.role_spans,
                     )
                 copies.append(copy)
         return copies
