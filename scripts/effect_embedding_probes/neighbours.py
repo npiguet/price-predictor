@@ -67,7 +67,7 @@ def card_texts(card: str, paths: ProbePaths) -> list[str]:
     return [encoded.text for encoded in encoded_lines(path, read_sidecar(path), paths.surface)]
 
 
-def unit(E: np.ndarray) -> np.ndarray:
+def centred_unit(E: np.ndarray) -> np.ndarray:
     centred = E - E.mean(axis=0)
     return centred / np.linalg.norm(centred, axis=1, keepdims=True)
 
@@ -79,7 +79,7 @@ def main() -> None:
     paths = resolve_paths(parser.parse_args())
     table = load_texts(paths)
     full = matrix(table, "e_full")
-    U = unit(full)
+    U = centred_unit(full)
     lines = ["# Nearest neighbours of well-known abilities (centred cosine)", ""]
     index = {text: i for i, text in enumerate(table.text)}
     for card in CARDS:
@@ -95,7 +95,7 @@ def main() -> None:
             lines += [md_table(
                 ["cosine", "card", "API", "prose"],
                 [[f"{sims[j]:.3f}", table.card.iloc[j], table.api.iloc[j],
-                  (table.prose.iloc[j] or table.text.iloc[j])[:100].replace("|", "/")]
+                  (table.prose.iloc[j] or table.text.iloc[j])[:100]]
                  for j in np.argsort(sims)[::-1][:8]], "rlll"), ""]
     (paths.out / "neighbours.md").write_text("\n".join(lines), encoding="utf-8")
 
@@ -133,7 +133,7 @@ def main() -> None:
         dist = np.linalg.norm(full[members] - centres[c], axis=1)
         near = members[np.argsort(dist)[:3]]
         examples = " // ".join(
-            (table.prose.iloc[i] or table.text.iloc[i])[:70].replace("|", "/")
+            (table.prose.iloc[i] or table.text.iloc[i])[:70]
             for i in near)
         api_text = ", ".join(f"{a} {s:.0%}" for a, s in apis.items())
         rows.append([c, len(members), api_text, examples])

@@ -33,16 +33,16 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from _lib.markdown import md_table
+from _lib.paths import REPO
 
 from effects.domain import default_paths
 
-ROOT = Path(__file__).resolve().parents[2]
-REPORTS = ROOT / default_paths.DEFAULT_REPORTS_DIR
-DEFAULT_CHECKPOINT = ROOT / default_paths.DEFAULT_CHECKPOINT
-DEFAULT_ABILITIES = ROOT / default_paths.DEFAULT_ABILITIES_ROOT
-DEFAULT_CARDS_FOLDERS = tuple(ROOT / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
-VARIANT_TREE = ROOT / default_paths.DEFAULT_VARIANT_SCRIPTS
-TREES = ("cardsfolder", "tokenscripts")
+REPORTS = REPO / default_paths.DEFAULT_REPORTS_DIR
+DEFAULT_CHECKPOINT = REPO / default_paths.DEFAULT_CHECKPOINT
+DEFAULT_ABILITIES = REPO / default_paths.DEFAULT_ABILITIES_ROOT
+DEFAULT_CARDS_FOLDERS = tuple(REPO / folder for folder in default_paths.DEFAULT_CARDS_FOLDERS)
+VARIANT_TREE = REPO / default_paths.DEFAULT_VARIANT_SCRIPTS
 SEED = 42
 
 
@@ -241,6 +241,9 @@ def as_int(value: str | None) -> float:
 _MANA_SYMBOL_RE = re.compile(r"^(?:[WUBRGCS]|[WUBRG2]/[WUBRGP]|[WUBRG]/P)$")
 
 
+# Not ``ManaCost.parse``: it reads Forge's compact shards (``WU``, ``W2``), these tokens
+# and the converted text's braces are slash-separated, and a ``2/W`` pip counts one here
+# (a symbol paid) but two as a mana value.
 def cost_features(cost: str | None) -> dict[str, float]:
     """The cost of an activated ability, from its ``Cost$`` parameter."""
     out = {
@@ -529,6 +532,9 @@ def write_markdown(frame: pd.DataFrame, path: Path, title: str,
 
 # ── the candidate features, shared by every script ──────────────────────
 
+#: The categorical columns of the script-feature design matrix.
+SCRIPT_CATS = ["api_c", "line_kind", "mode_c", "target", "head_c", "keyword_c"]
+
 CATEGORICAL = ("api", "line_kind", "mode", "target", "script_head",
                "keyword_name")
 
@@ -609,19 +615,17 @@ def design(table: pd.DataFrame, *, categorical=(), numeric=()) -> np.ndarray:
 
 
 def to_markdown(frame: pd.DataFrame, floatfmt: str = ".3f") -> str:
-    """A pipe table without the optional ``tabulate`` dependency."""
-    def cell(value: object) -> str:
+    """A pipe table of ``frame``: floats formatted, NaN blank, numeric columns right-aligned."""
+    def cell(value: object) -> object:
         if isinstance(value, float | np.floating):
             return "" if np.isnan(value) else format(value, floatfmt)
-        return str(value).replace("|", "/")
+        return value
 
-    header = "| " + " | ".join(str(c) for c in frame.columns) + " |"
-    rule = "|" + "|".join(
-        "---:" if pd.api.types.is_numeric_dtype(frame[c]) else "---"
-        for c in frame.columns) + "|"
-    rows = ["| " + " | ".join(cell(v) for v in row) + " |"
-            for row in frame.itertuples(index=False)]
-    return "\n".join([header, rule, *rows])
+    align = "".join("r" if pd.api.types.is_numeric_dtype(frame[c]) else "l"
+                    for c in frame.columns)
+    return md_table(list(frame.columns),
+                    ([cell(v) for v in row] for row in frame.itertuples(index=False)),
+                    align)
 
 
 def winsorized(values: np.ndarray, tail: float = 0.001) -> np.ndarray:

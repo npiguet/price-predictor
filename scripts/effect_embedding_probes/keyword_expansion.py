@@ -56,8 +56,9 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.paths import REPO  # noqa: E402
+
 from effect_embedding_probes.common import (  # noqa: E402
-    ROOT,
     ProbePaths,
     add_probe_arguments,
     load_manifest_sets,
@@ -229,8 +230,8 @@ def load_readers(paths: ProbePaths):
     provenance = checkpoint.provenance
     # The recorded paths are repository-relative and this script may run from
     # anywhere, so they are anchored at the repository root.
-    files = inference_files(checkpoint, vocab=ROOT / provenance.vocab_path,
-                            keywords=ROOT / provenance.keyword_definitions_path)
+    files = inference_files(checkpoint, vocab=REPO / provenance.vocab_path,
+                            keywords=REPO / provenance.keyword_definitions_path)
     encoder = AbilityEncoder(checkpoint.encoder_config)
     encoder.load_state_dict(checkpoint.encoder_state)
     encoder.eval()
@@ -258,7 +259,7 @@ def corpus_lines(trees) -> list[dict]:
     return rows
 
 
-def unit(matrix: np.ndarray) -> np.ndarray:
+def unit_rows(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(matrix, axis=-1, keepdims=True)
     return matrix / np.maximum(norms, 1e-12)
 
@@ -268,7 +269,7 @@ def unit(matrix: np.ndarray) -> np.ndarray:
 
 def ranks(query: np.ndarray, keys: np.ndarray) -> np.ndarray:
     """Rank (1 = nearest) of ``keys[i]`` among all keys for ``query[i]``."""
-    sims = unit(query) @ unit(keys).T
+    sims = unit_rows(query) @ unit_rows(keys).T
     own = np.diag(sims)[:, None]
     return (sims > own).sum(axis=1) + 1
 
@@ -402,7 +403,7 @@ def encode_corpus(r: Readers, lines: list[dict], out: Path) -> Corpus:
     if cache_file.exists():
         stored = np.load(cache_file, allow_pickle=True)
         if list(stored["texts"]) == texts:
-            return Corpus(lines, texts, unit(stored["plain"]), unit(stored["forced"]))
+            return Corpus(lines, texts, unit_rows(stored["plain"]), unit_rows(stored["forced"]))
         cache_file.unlink()
     plain_tokens = [r.tok.tokenize(t) for t in texts]
     forced_tokens = [r.tok.expand_keywords(list(t), probability=1.0) for t in plain_tokens]
@@ -412,7 +413,7 @@ def encode_corpus(r: Readers, lines: list[dict], out: Path) -> Corpus:
     forced = plain.copy()
     forced[changed] = r.encode([forced_tokens[i] for i in changed])
     np.savez(cache_file, texts=np.array(texts, dtype=object), plain=plain, forced=forced)
-    return Corpus(lines, texts, unit(plain), unit(forced))
+    return Corpus(lines, texts, unit_rows(plain), unit_rows(forced))
 
 
 def expansion_effect(paths: ProbePaths, corpus: Corpus, keyword_lines: list[dict]) -> list[str]:
@@ -426,7 +427,7 @@ def expansion_effect(paths: ProbePaths, corpus: Corpus, keyword_lines: list[dict
         matrix = (cache.read(row["source"] + ".txt")
                   if row["source"].startswith("cardsfolder/") else None)
         if matrix is not None:
-            e = unit(matrix[row["index"]][None])[0]
+            e = unit_rows(matrix[row["index"]][None])[0]
             i = corpus.row_of[row["text"]]
             check.append((float(e @ corpus.forced[i]), float(e @ corpus.plain[i])))
     if check:
@@ -552,8 +553,8 @@ def unknown_keywords(r: Readers, corpus: Corpus, measured: pd.DataFrame, A: np.n
         })
         new_tokens.append(u_tokens)
         bare_tokens.append(b_tokens)
-    U = unit(r.encode(new_tokens))
-    U0 = unit(r.encode(bare_tokens))
+    U = unit_rows(r.encode(new_tokens))
+    U0 = unit_rows(r.encode(bare_tokens))
     sim = pd.DataFrame(rows)
     sim["cos_new_to_real"] = np.einsum("ij,ij->i", U, A)
     sim["cos_new_to_forced"] = np.einsum("ij,ij->i", U, B)
