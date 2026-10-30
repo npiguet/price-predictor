@@ -215,6 +215,17 @@ class RawShardWriter:
         self._flush()
 
 
+def write_plain_shard(
+    directory, lifetime: str, records, *, run_id: str = "run", worker: int = 0,
+) -> Path:
+    """A plain ``{run_id}.{worker}-{lifetime}.jsonl`` raw shard holding
+    ``records``, written through :class:`RawShardWriter`."""
+    with RawShardWriter(directory, run_id, worker, lifetime, compressed=False) as shard:
+        for record in records:
+            shard.write(record)
+    return shard.path
+
+
 def fresh_interpreter_env(**overrides: str) -> dict[str, str]:
     """The environment for a ``sys.executable`` child that imports the tree
     under test, which an installed copy of the package would otherwise shadow."""

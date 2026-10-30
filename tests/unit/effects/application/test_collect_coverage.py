@@ -32,6 +32,7 @@ from tests.unit.effects.builders import (
     fresh_interpreter_env,
     held_out_cards,
     make_entity,
+    write_plain_shard,
 )
 from tests.unit.effects.domain.test_coverage import _record
 
@@ -285,7 +286,6 @@ class TestTheRoundPlaysTheComputedDecks:
         # the real counter learns anything: it reads shards it has not seen and
         # adds to a running total. Round 1 produces nothing, round 2 nine "aa"
         # records, round 3 the tenth.
-        from effects.infrastructure.record_codec import format_record_line
 
         records_dir = tmp_path / "records"
         records_dir.mkdir()
@@ -295,11 +295,8 @@ class TestTheRoundPlaysTheComputedDecks:
             count = next(produced, 0)
             if not count:
                 return
-            line = format_record_line(
-                _record([make_entity("E1", "aa")], source="E1")
-            )
-            shard = records_dir / f"run.0-{matches}{count}.jsonl"
-            shard.write_text("\n".join([line] * count) + "\n", encoding="utf-8")
+            record = _record([make_entity("E1", "aa")], source="E1")
+            write_plain_shard(records_dir, f"{matches}{count}", [record] * count)
 
         supervisor.play_round.side_effect = _play
 
@@ -518,26 +515,18 @@ class TestIncrementalCounting:
     A counted shard is therefore final.
     """
 
-    def _shard(self, directory: Path, name: str, cards: list[str]) -> Path:
+    def _shard(self, directory: Path, lifetime: str, cards: list[str]) -> Path:
         """One shard whose every record qualifies for the named card."""
-        from effects.infrastructure.record_codec import format_record_line
-
-        directory.mkdir(parents=True, exist_ok=True)
-        lines = [
-            format_record_line(
-                _record([make_entity(f"E-{card}", card)], source=f"E-{card}")
-            )
+        return write_plain_shard(directory, lifetime, [
+            _record([make_entity(f"E-{card}", card)], source=f"E-{card}")
             for card in cards
-        ]
-        path = directory / f"{name}.jsonl"
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return path
+        ], run_id="a")
 
     def test_the_first_pass_counts_every_shard(self, tmp_path) -> None:
         from effects.application.collect_coverage import CoverageCounter
 
-        self._shard(tmp_path, "a.0-x", ["alpha", "beta"])
-        self._shard(tmp_path, "a.0-y", ["alpha"])
+        self._shard(tmp_path, "x", ["alpha", "beta"])
+        self._shard(tmp_path, "y", ["alpha"])
         coverage = {n: CardCoverage(n) for n in ("alpha", "beta")}
 
         CoverageCounter().update(coverage, tmp_path)
@@ -549,7 +538,7 @@ class TestIncrementalCounting:
         """The bug this replaces: every round re-counted the whole corpus."""
         from effects.application.collect_coverage import CoverageCounter
 
-        self._shard(tmp_path, "a.0-x", ["alpha"])
+        self._shard(tmp_path, "x", ["alpha"])
         coverage = {"alpha": CardCoverage("alpha")}
         counter = CoverageCounter()
 
@@ -561,12 +550,12 @@ class TestIncrementalCounting:
     def test_a_new_shard_adds_to_the_running_total(self, tmp_path) -> None:
         from effects.application.collect_coverage import CoverageCounter
 
-        self._shard(tmp_path, "a.0-x", ["alpha"])
+        self._shard(tmp_path, "x", ["alpha"])
         coverage = {"alpha": CardCoverage("alpha")}
         counter = CoverageCounter()
         counter.update(coverage, tmp_path)
 
-        self._shard(tmp_path, "a.0-y", ["alpha", "alpha"])
+        self._shard(tmp_path, "y", ["alpha", "alpha"])
         counter.update(coverage, tmp_path)
 
         assert coverage["alpha"].records == 3
@@ -575,7 +564,7 @@ class TestIncrementalCounting:
         """The operator needs to see the round cost fall, not infer it."""
         from effects.application.collect_coverage import CoverageCounter
 
-        self._shard(tmp_path, "a.0-x", ["alpha"])
+        self._shard(tmp_path, "x", ["alpha"])
         counter = CoverageCounter()
         coverage = {"alpha": CardCoverage("alpha")}
 
@@ -600,15 +589,8 @@ class TestCountingCrossesTheNameBoundary:
         self, tmp_path,
     ) -> None:
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_codec import format_record_line
 
-        shard = tmp_path / "run.0-x.jsonl"
-        shard.write_text(
-            format_record_line(
-                _record([make_entity("E1", "Soul Echo")], source="E1")
-            ) + "\n",
-            encoding="utf-8",
-        )
+        write_plain_shard(tmp_path, "x", [_record([make_entity("E1", "Soul Echo")], source="E1")])
         coverage = {"soul echo": CardCoverage("soul echo")}
 
         CoverageCounter().update(coverage, tmp_path)
@@ -619,15 +601,8 @@ class TestCountingCrossesTheNameBoundary:
         self, tmp_path,
     ) -> None:
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_codec import format_record_line
 
-        shard = tmp_path / "run.0-x.jsonl"
-        shard.write_text(
-            format_record_line(
-                _record([make_entity("E1", "Some Token")], source="E1")
-            ) + "\n",
-            encoding="utf-8",
-        )
+        write_plain_shard(tmp_path, "x", [_record([make_entity("E1", "Some Token")], source="E1")])
         coverage = {"soul echo": CardCoverage("soul echo")}
 
         CoverageCounter().update(coverage, tmp_path)
@@ -645,14 +620,9 @@ class TestCountingReportsProgress:
     """
 
     def _shards(self, directory: Path, count: int) -> None:
-        from effects.infrastructure.record_codec import format_record_line
-
-        directory.mkdir(parents=True, exist_ok=True)
-        line = format_record_line(_record([make_entity("E1", "aa")], source="E1"))
+        record = _record([make_entity("E1", "aa")], source="E1")
         for n in range(count):
-            (directory / f"run.0-{n:03d}.jsonl").write_text(
-                line + "\n", encoding="utf-8",
-            )
+            write_plain_shard(directory, f"{n:03d}", [record])
 
     def test_it_reports_progress_while_reading(self, tmp_path, caplog) -> None:
         from effects.application.collect_coverage import CoverageCounter
@@ -730,16 +700,9 @@ class TestParallelCounting:
     """
 
     def _shards(self, directory: Path, spec: dict[str, int]) -> None:
-        from effects.infrastructure.record_codec import format_record_line
-
-        directory.mkdir(parents=True, exist_ok=True)
         for n, (card, count) in enumerate(spec.items()):
-            line = format_record_line(
-                _record([make_entity("E1", card)], source="E1")
-            )
-            (directory / f"run.0-{n:03d}.jsonl").write_text(
-                "\n".join([line] * count) + "\n", encoding="utf-8",
-            )
+            record = _record([make_entity("E1", card)], source="E1")
+            write_plain_shard(directory, f"{n:03d}", [record] * count)
 
     def test_parallel_and_serial_agree(self, tmp_path) -> None:
         from effects.application.collect_coverage import CoverageCounter
@@ -759,14 +722,10 @@ class TestParallelCounting:
     def test_a_card_split_across_shards_sums(self, tmp_path) -> None:
         """The reduce step, which is where a parallel count goes wrong."""
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_codec import format_record_line
 
-        tmp_path.mkdir(parents=True, exist_ok=True)
-        line = format_record_line(_record([make_entity("E1", "Soul Echo")], source="E1"))
+        record = _record([make_entity("E1", "Soul Echo")], source="E1")
         for n in range(6):
-            (tmp_path / f"run.0-{n}.jsonl").write_text(
-                "\n".join([line] * 5) + "\n", encoding="utf-8",
-            )
+            write_plain_shard(tmp_path, str(n), [record] * 5)
 
         coverage = {"soul echo": CardCoverage("soul echo")}
         CoverageCounter().update(coverage, tmp_path, workers=3)

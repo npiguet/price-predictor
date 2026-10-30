@@ -192,6 +192,19 @@ def _rewrite(record_id: str, ability=(_KEY,), **overrides):
     return _resolution(record_id, **fields)
 
 
+#: A creature headed for the graveyard, which a substitution usually rewrites.
+_TO_GRAVEYARD = Event(
+    type=EventType.ZONE_CHANGE, subjects=("E1",), params={"to_zone": "graveyard"},
+)
+
+
+def _substitution(record_id: str, *, incoming: Event = _TO_GRAVEYARD, **payload_kwargs):
+    """A rewrite whose payload holds ``incoming`` and ``payload_kwargs`` alone."""
+    return _rewrite(
+        record_id, payload=RewritePayload(incoming=incoming, **payload_kwargs),
+    )
+
+
 def _combat(record_id: str, **overrides):
     fields: dict = {
         "kind": RecordKind.COMBAT,
@@ -1256,16 +1269,6 @@ class TestRewriteRecordsSayWhatHappened:
     against a 7% share of the trainer's mix.
     """
 
-    def _substitution(self, record_id: str, **payload_kwargs):
-        return _rewrite(
-            record_id,
-            payload=RewritePayload(
-                incoming=Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
-                               params={"to_zone": "graveyard"}),
-                **payload_kwargs,
-            ),
-        )
-
     def test_a_healthy_window_reports_every_record_carrying_a_result(self):
         finding = _named(validate_corpus(_healthy()), "which replacement result")
         assert finding.ok
@@ -1274,7 +1277,7 @@ class TestRewriteRecordsSayWhatHappened:
 
     def test_a_record_with_no_result_fails_and_says_which_two_causes(self):
         records = _healthy() + [
-            self._substitution("run.0-L1.900", outgoing=None),
+            _substitution("run.0-L1.900", outgoing=None),
         ]
         finding = _named(validate_corpus(records), "which replacement result")
         assert not finding.ok
@@ -1283,7 +1286,7 @@ class TestRewriteRecordsSayWhatHappened:
 
     def test_the_histogram_names_every_outcome_the_window_saw(self):
         records = _healthy() + [
-            self._substitution(f"run.0-L1.{900 + index}", result=result)
+            _substitution(f"run.0-L1.{900 + index}", result=result)
             for index, result in enumerate(
                 (RewriteResult.REPLACED, RewriteResult.PREVENTED,
                  RewriteResult.SKIPPED, RewriteResult.NOT_REPLACED)
@@ -1360,14 +1363,9 @@ class TestOutgoingAgreesWithTheResult:
     """
 
     def _with(self, record_id: str, result, **payload_kwargs):
-        return _rewrite(
-            record_id,
-            payload=RewritePayload(
-                incoming=Event(type=EventType.DAMAGE_DEALT,
-                               params={"amount": 3}),
-                result=result,
-                **payload_kwargs,
-            ),
+        return _substitution(
+            record_id, incoming=Event(type=EventType.DAMAGE_DEALT, params={"amount": 3}),
+            result=result, **payload_kwargs,
         )
 
     def test_a_healthy_window_reports_none(self):
@@ -1421,17 +1419,6 @@ class TestRewritesNameTheAbilityThatRanInstead:
     reports the number and judges nothing until someone passes a floor.
     """
 
-    def _substitution(self, record_id: str, **payload_kwargs):
-        payload_kwargs.setdefault("result", RewriteResult.REPLACED)
-        return _rewrite(
-            record_id,
-            payload=RewritePayload(
-                incoming=Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
-                               params={"to_zone": "graveyard"}),
-                **payload_kwargs,
-            ),
-        )
-
     def test_it_is_watched_by_default(self):
         finding = _named(validate_corpus(_healthy()), "ran instead")
         assert finding.watched
@@ -1439,13 +1426,13 @@ class TestRewritesNameTheAbilityThatRanInstead:
         assert "watched, no floor" in finding.measured
 
     def test_a_resolver_that_keys_nothing_reads_as_zero(self):
-        records = _healthy() + [self._substitution("run.0-L1.900")]
+        records = _healthy() + [_substitution("run.0-L1.900", result=RewriteResult.REPLACED)]
         finding = _named(validate_corpus(records), "ran instead")
         assert "2/3" in finding.measured
         assert finding.ok, "watched findings never fail a run"
 
     def test_a_floor_turns_the_measurement_into_a_verdict(self):
-        records = _healthy() + [self._substitution("run.0-L1.900")]
+        records = _healthy() + [_substitution("run.0-L1.900", result=RewriteResult.REPLACED)]
         strict = Thresholds(min_rewrite_replaced_by_rate=0.9)
         finding = _named(validate_corpus(records, strict), "ran instead")
         assert not finding.watched
@@ -1455,7 +1442,7 @@ class TestRewritesNameTheAbilityThatRanInstead:
         """``prevented`` never reaches an ability, so counting it would drag
         the rate down and blame the resolver for the handler's control flow."""
         records = _healthy() + [
-            self._substitution("run.0-L1.900", result=RewriteResult.PREVENTED),
+            _substitution("run.0-L1.900", result=RewriteResult.PREVENTED),
         ]
         assert "2/2" in _named(validate_corpus(records), "ran instead").measured
 
