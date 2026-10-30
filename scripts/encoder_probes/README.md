@@ -6,7 +6,7 @@ The probe battery behind
 encoder. Scripts load the production checkpoint and cached embeddings via
 `probe_lib.py` and write their outputs to `output/encoder-probes/`
 (gitignored). The session that produced the document left its exact outputs
-there (`p0_report.md`, `l_report.md`, `c_report.md`, plus the CSV/JSON/pickle
+there (`p0_report.md`, `l_report.md`, plus the CSV/JSON/pickle
 artifacts each script names); rerunning a script regenerates them.
 
 Run from the repo root with the repo venv:
@@ -46,7 +46,6 @@ and `resources/AllPrintings.json`.
 | `c4_body_vs_spell.py` | body premium, dork-vs-rock | `c4_*.csv`/`.json` |
 | `c5_types.py` | tribal-noun scale, type swaps, taplands | `c5_*.csv`/`.json` |
 | `c6_spot.py`, `c7_labelside.py` | riders/timing spot checks; the counterfactual-vs-correlational split | `c6_*.csv`, `c7_labelside.csv`/`.json` |
-| `c_report.py` | assembles the C-series artifacts into one report with the encoder-vs-label divergence columns | `c_report.md` |
 | `q1_blocks.py`, `q2_attention.py` | pool-query specialization (none) | `q1_*.csv`/`.json`/`.npy`, `q2_*.csv`/`.json` |
 | `q3_decode.py` | "The embedding is a card description first…" — decodability table, {X} as one pip, integer collapse | `q3_*.csv`/`.json` |
 | `q4_token_geometry.py` | the integer collapse is unordered tokens, not learned diminishing returns — number-line projections of the integer tokens plus the label utility curve by printed power | `q4_token_geometry.csv`, `q4_power_labels.csv` |
@@ -57,7 +56,7 @@ and `resources/AllPrintings.json`.
 1. `p0_build.py` (everything imports its caches), then `p0b_card_table.py` (the feature table the shared loader merges in)
 2. `l_mediation.py` → `l_analyze.py` (CPU; label side)
 3. `r1*` / `r2*` (GPU), then `r1r2_derived.py`; `s_*` (CPU; `s_r17.py` before `s_r17b.py`) — independent of each other
-4. `c1`–`c13` (GPU, except the label-side `c7`, `c8` and `c13`; `c1` before `c1b` and `c8`), `q1`–`q4`, then `c_report.py`
+4. `c1`–`c13` (GPU, except the label-side `c7`, `c8` and `c13`; `c1` before `c1b` and `c8`), `q1`–`q4`
 
 Probes and predictions are checkpoint-specific: repointing
 `probe_lib`'s checkpoint path and rerunning `p0_build.py --force` is the

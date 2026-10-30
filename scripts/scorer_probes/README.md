@@ -13,7 +13,7 @@ Run from this directory with the repo venv:
 `..\..\.venv\Scripts\python.exe <script>`. Most scripts accept `--smoke`
 (tiny CPU run). External inputs: the Y: corpus files (`probe_lib.YDATA`),
 `output/cardsfolder-512/`, `models/sealed/scorer/512-…_mwlog.pt`, and for
-`forge_hints.py` / `human_rank_probe.py` / `cardtool.py` a sibling Forge
+`forge_hints.py` / `human_rank_probe.py` a sibling Forge
 checkout at `../forge`.
 
 ## Script → document section
@@ -37,7 +37,7 @@ checkout at `../forge`.
 | `post_hoc_slices.py` | prose numbers with no t-script: within-set correlations, set offsets, dynamic range, nonbasic-land counts, gen4-512 color distribution, card-class slices (tricks/counterspells/planeswalkers/vehicles/X/hybrid), text-length null, on/off-color add decomposition, multi-face slice, splash economics + 5-color census, forge-best add robustness | stdout |
 | `make_figures.py` | renders the document's figures (calibration, ablation, PC-truncation, PC-label meanings, label weights, det groups, builder scores, shape ladders, color economics, land adds, card values, synergy dose, noncreature mix, noncreature colors) from the staged outputs | `experiments/images/2026-08-27-scorer-*.png/.svg` |
 | `label_probe.py` → `rarity_probe.py` / `human_rank_probe.py` | label-level numbers ("0.57 sd above human pick order", power-vs-toughness, rarity gradient) — run in that order (`labels_joined.csv` feeds the other two) | `labels_joined.csv`, stdout |
-| `synergy_pairs.json` + `verify.py` (+ `cardtool.py`, `dump.py`) | the curated 60-triple synergy dataset used by t4, with its validator and browsing helpers | — |
+| `synergy_pairs.json` | the curated 60-triple synergy dataset used by t4 | — |
 
 ## Order for a from-scratch rerun
 
