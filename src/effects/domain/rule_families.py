@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from enum import StrEnum
+from types import MappingProxyType
 
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, KeywordResolver
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
@@ -40,6 +41,10 @@ from effects.domain.records import (
     RecordKind,
 )
 from effects.domain.script_text import root_param
+
+#: The legality table of a caller placing records without a manifest: every
+#: mode counts zero, so a stacked restriction falls to its first mode by name.
+NO_MODE_COUNTS: Mapping[str, int] = MappingProxyType({})
 
 
 class FamilySentinel(StrEnum):
@@ -116,16 +121,13 @@ def legality_modes(record: EffectRecord, sidecars: SidecarLookup) -> frozenset[s
     return frozenset(modes)
 
 
-def legality_family(
-    modes: frozenset[str], mode_counts: Mapping[str, int] | None = None,
-) -> str:
+def legality_family(modes: frozenset[str], mode_counts: Mapping[str, int]) -> str:
     """The rarest of ``modes`` by the corpus-wide ``mode_counts``, so stacked
-    restrictions never found a family of their own; ties and a missing table
-    fall to the first mode by name."""
+    restrictions never found a family of their own; ties and modes the table
+    does not count fall to the first mode by name."""
     if not modes:
         return FamilySentinel.NONE
-    counts = mode_counts or {}
-    return min(modes, key=lambda mode: (counts.get(mode, 0), mode))
+    return min(modes, key=lambda mode: (mode_counts.get(mode, 0), mode))
 
 
 def combat_family(record: EffectRecord, resolver: KeywordResolver) -> str:
@@ -141,7 +143,7 @@ def combat_family(record: EffectRecord, resolver: KeywordResolver) -> str:
 def rule_family(
     record: EffectRecord, sidecars: SidecarLookup, *,
     resolver: KeywordResolver | None = None,
-    legality_mode_counts: Mapping[str, int] | None = None,
+    legality_mode_counts: Mapping[str, int] = NO_MODE_COUNTS,
 ) -> str:
     """The rules category ``record`` belongs to (module docstring).
 

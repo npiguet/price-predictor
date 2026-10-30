@@ -248,8 +248,8 @@ class CorpusFacts:
     #: The corpus-wide ``text -> games`` table (FR-146).
     rarity: Mapping[str, int] | None = None
     #: Records per legality mode, so the epoch line places a legality record
-    #: in the family the build balanced it in; None without one.
-    legality_mode_counts: Mapping[str, int] | None = None
+    #: in the family the build balanced it in; empty without one.
+    legality_mode_counts: Mapping[str, int] = field(default_factory=dict)
     #: The manifest's digest at read time (FR-147).
     digest: str = ""
 
@@ -264,7 +264,7 @@ class CorpusFacts:
             holdout=manifest.holdout,
             gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
             rarity=manifest.rarity,
-            legality_mode_counts=manifest.legality_mode_counts or None,
+            legality_mode_counts=manifest.legality_mode_counts,
             digest=manifest.digest(),
         )
 

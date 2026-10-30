@@ -192,7 +192,7 @@ class PreparerSettings:
     param_keys: tuple[str, ...]
     widths: dict[SlotKind, int]
     heads: frozenset[Head]
-    legality_mode_counts: Mapping[str, int] | None = None
+    legality_mode_counts: Mapping[str, int] = field(default_factory=dict)
 
 
 def training_heads(config: TrainEffectModelConfig, *, api_types) -> frozenset[Head]:

@@ -92,10 +92,11 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
         )]
     runnable = context.main_runnable(everything)
     manifest = context.manifest
-    mode_counts = manifest.legality_mode_counts or None
     scored = {
         stratum: (
-            score_records(rows, runnable, legality_mode_counts=mode_counts)
+            score_records(
+                rows, runnable, legality_mode_counts=manifest.legality_mode_counts,
+            )
             if rows else []
         )
         for stratum, rows in strata.items()

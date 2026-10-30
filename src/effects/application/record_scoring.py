@@ -6,6 +6,7 @@ split by row into the trainer's per-entity loss over each record alone.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import torch
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
 
 
 def score_records(
-    records, runnable: Runnable, *, legality_mode_counts=None,
+    records, runnable: Runnable, *, legality_mode_counts: Mapping[str, int],
 ) -> list[RecordResult]:
     """Every record's own losses and grouping keys, for the breakdowns.
 
@@ -63,7 +64,7 @@ def _record_losses(
 
 def _record_result(
     record, batcher: SurfaceBatcher, resolver: KeywordResolver,
-    losses: dict[str, float], legality_mode_counts=None,
+    losses: dict[str, float], legality_mode_counts: Mapping[str, int],
 ) -> RecordResult:
     """The grouping keys of one scored record, beside its losses."""
     try:
