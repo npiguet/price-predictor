@@ -35,8 +35,7 @@ scorer/encoder probe outputs (`output/scorer-probes/forge_hints.csv`,
 | script | what it feeds | output |
 |---|---|---|
 | `probe_lib.py` | shared harness: corpus replay through any checkpoint, the state interventions, batched forward passes, CONTEXT-token extraction | — |
-| `d1_channels.py` | "It reads its own pool, and nothing else on the table" — count-preserving ablation of every input channel with a size-matched placebo, four checkpoints, split by pack and pick | `d1_channels.json` |
-| `d1_report.py` | the same run's per-pack block sizes, and each block read against the placebo of its own size (run after `d1_channels.py`) | `d1_placebo_table.csv` |
+| `d1_channels.py` | "It reads its own pool, and nothing else on the table" — count-preserving ablation of every input channel with a size-matched placebo, four checkpoints, split by pack and pick, and each block read against the placebo of its own size in each pack | `d1_channels.json`, `d1_placebo_table.csv` |
 | `d2_pickorder.py` | "Half its picks are settled before it looks at the board" — the exact pack-1-pick-1 ranking, the unconditional colour preference, the attribution against the scorer's card values and the encoder's text axes, and how much of the policy is context-free | `d2_pickorder.json`, `d2_p1p1_values.csv`, `d2_p1p1_logits.csv` |
 | `d3_exchange.py` | state exchange between agents (feeds the Method section's shared-state note) and the per-pick policy-movement profile behind "The learning went where the reward could see it" | `d3_*.json` / `.csv` |
 | `d4_commitment.py` | "Colour commitment hardens across the draft" — donor-pool transplants at seven pick numbers, with an other-colour placebo | `d4_commitment.json` |

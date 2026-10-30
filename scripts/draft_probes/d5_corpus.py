@@ -69,7 +69,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _lib import stats
-from draft_probes.probe_lib import G4, HINTS, OUT
+from _lib.markdown import print_table
+from _lib.stats import cluster_mean_se, ols_cluster
+from draft_probes.probe_lib import G4, HINTS, OUT, write_csv
 
 from draft.application.draft_training_common import leave_one_out_rewards
 from draft.domain.draft_geometry import DraftGeometry
@@ -85,42 +87,6 @@ CORPUS_SUFFIX = "-yardstick-v-forge-drafts.jsonl"
 LOG_SUFFIX = "-training.log"
 
 LABELS = ("gen4", "gen1", "forge-full")
-
-
-# --------------------------------------------------------------- OLS + cluster
-
-def ols_cluster(
-    y: np.ndarray, X: np.ndarray, clusters: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """OLS coefficients and cluster-robust (CR1) standard errors.
-
-    ``X`` must already contain its intercept column. Clusters are an integer
-    label per row; the sandwich uses the usual G/(G-1) * (N-1)/(N-K) correction.
-    """
-    n, k = X.shape
-    xtx_inv = np.linalg.pinv(X.T @ X)
-    beta = xtx_inv @ (X.T @ y)
-    resid = y - X @ beta
-    meat = np.zeros((k, k))
-    for g in np.unique(clusters):
-        m = clusters == g
-        xg_u = X[m].T @ resid[m]
-        meat += np.outer(xg_u, xg_u)
-    n_g = len(np.unique(clusters))
-    correction = (n_g / max(n_g - 1, 1)) * ((n - 1) / max(n - k, 1))
-    cov = xtx_inv @ meat @ xtx_inv * correction
-    return beta, np.sqrt(np.maximum(np.diag(cov), 0.0))
-
-
-def cluster_mean_se(
-    values: np.ndarray, clusters: np.ndarray,
-) -> tuple[float, float]:
-    """Mean of ``values`` with a standard error clustered on ``clusters``."""
-    if len(values) == 0:
-        return float("nan"), float("nan")
-    X = np.ones((len(values), 1))
-    beta, se = ols_cluster(values, X, clusters)
-    return float(beta[0]), float(se[0])
 
 
 def fmt_pm(mean: float, se: float, digits: int = 3) -> str:
@@ -145,8 +111,6 @@ def pearson(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
 def spearman(a: np.ndarray, b: np.ndarray) -> float:
     return stats.spearman(a, b, min_n=4)
 
-
-# ------------------------------------------------------------------ seat table
 
 @dataclass(slots=True)
 class SeatRow:
@@ -271,7 +235,10 @@ def build_tables(flagged: set[str]) -> tuple[list[SeatRow], dict[str, PickStats]
     return rows, dict(stats)
 
 
-# ------------------------------------------------------------------ analysis 1
+def pods(rows: list[SeatRow]) -> list[str]:
+    """The cluster of each seat: its pod, the corpus-qualified draft."""
+    return [f"{r.corpus}/{r.draft_id}" for r in rows]
+
 
 def dummies(values: list[str], base: str, levels: tuple[str, ...]) -> np.ndarray:
     cols = [ln for ln in levels if ln != base]
@@ -303,11 +270,11 @@ def regress(
         blocks.append(np.array([[float(r.pod_gen4)] for r in rows]))
         names.append("pod_gen4_count")
     X = np.hstack(blocks)
-    _, cl = np.unique([f"{r.corpus}/{r.draft_id}" for r in rows], return_inverse=True)
-    beta, se = ols_cluster(y, X, cl)
+    fit = ols_cluster(X, y, pods(rows))
+    beta, se = fit.beta, fit.se
     return {
         "n": len(rows),
-        "n_clusters": int(cl.max() + 1),
+        "n_clusters": len(set(pods(rows))),
         "base": "+".join(neighs) + f"={base}",
         "terms": [
             {"name": nm, "beta": float(b), "se": float(s), "t": float(b / s) if s else None}
@@ -330,9 +297,7 @@ def within_count_table(rows: list[SeatRow], neigh: str) -> list[dict]:
             if not grp:
                 cell[label] = None
                 continue
-            v = np.array([r.loo for r in grp], dtype=float)
-            _, cl = np.unique([r.draft_id for r in grp], return_inverse=True)
-            m, s = cluster_mean_se(v, cl)
+            m, s = cluster_mean_se([r.loo for r in grp], pods(grp))
             cell[label] = {"n": len(grp), "mean": m, "se": s}
         out.append(cell)
     return out
@@ -344,16 +309,13 @@ def analysis1(rows: list[SeatRow]) -> dict:
 
     crowd_y = np.array([r.loo for r in g4], dtype=float)
     crowd_X = np.column_stack([np.ones(len(g4)), [r.pod_gen4 for r in g4]])
-    _, cl = np.unique([f"{r.corpus}/{r.draft_id}" for r in g4], return_inverse=True)
-    cb, cse = ols_cluster(crowd_y, crowd_X, cl)
+    crowd = ols_cluster(crowd_X, crowd_y, pods(g4))
 
     return {
         "n_gen4_seats": len(g4),
         "n_all_seats": len(allr),
-        "gen4_mean_loo": dict(zip(
-            ("mean", "se"),
-            cluster_mean_se(crowd_y, cl))),
-        "crowding_only": {"slope": float(cb[1]), "se": float(cse[1])},
+        "gen4_mean_loo": dict(zip(("mean", "se"), cluster_mean_se(crowd_y, pods(g4)))),
+        "crowding_only": {"slope": float(crowd.beta[1]), "se": float(crowd.se[1])},
         "upstream_gen4seats": regress(g4, "up_agent"),
         "downstream_gen4seats": regress(g4, "down_agent"),
         "joint_gen4seats": regress(g4, ("up_agent", "down_agent")),
@@ -367,8 +329,6 @@ def analysis1(rows: list[SeatRow]) -> dict:
             allr, "up_agent", with_own=True, control_crowding=False),
     }
 
-
-# ------------------------------------------------------------------ analysis 2
 
 def rate(num: int, den: int) -> dict:
     if den == 0:
@@ -404,10 +364,7 @@ def analysis2(rows: list[SeatRow], stats: dict[str, PickStats]) -> dict:
         cells = []
         for key in sorted(buckets, key=lambda k: (k == "4+", k)):
             grp = buckets[key]
-            v = np.array([r.loo for r in grp], dtype=float)
-            _, cl = np.unique(
-                [f"{r.corpus}/{r.draft_id}" for r in grp], return_inverse=True)
-            m, s = cluster_mean_se(v, cl)
+            m, s = cluster_mean_se([r.loo for r in grp], pods(grp))
             cells.append({"flagged_drafted": key, "n": len(grp), "mean": m, "se": s})
         # within-agent slope of loo on flagged count, clustered
         v = np.array([r.loo for r in sub], dtype=float)
@@ -416,13 +373,12 @@ def analysis2(rows: list[SeatRow], stats: dict[str, PickStats]) -> dict:
             [r.n_flagged for r in sub],
             [r.pod_gen4 for r in sub],
         ])
-        _, cl = np.unique(
-            [f"{r.corpus}/{r.draft_id}" for r in sub], return_inverse=True)
-        b, se = ols_cluster(v, X, cl)
+        slope = ols_cluster(X, v, pods(sub))
         by_bucket[label] = {
             "cells": cells,
             "mean_flagged_drafted": float(np.mean([r.n_flagged for r in sub])),
-            "slope_per_flagged_card": {"beta": float(b[1]), "se": float(se[1])},
+            "slope_per_flagged_card": {"beta": float(slope.beta[1]),
+                                       "se": float(slope.se[1])},
         }
 
     diffs = {}
@@ -437,8 +393,6 @@ def analysis2(rows: list[SeatRow], stats: dict[str, PickStats]) -> dict:
             diffs[f"{key}:{a}-{b}"] = {"diff": d, "se": se, "z": d / se if se else None}
     return {"per_agent": per_agent, "by_flagged_count": by_bucket, "contrasts": diffs}
 
-
-# ------------------------------------------------------------------ analysis 3
 
 _ROUND = re.compile(r"^\[[^\]]+\]\s+round (\d+) \|")
 _REWARD = re.compile(
@@ -583,16 +537,15 @@ def analysis3() -> dict:
     return out
 
 
-# ---------------------------------------------------------------------- report
+def terms_rows(res: dict) -> list[list]:
+    return [[t["name"], f"{t['beta']:+.4f}", f"{t['se']:.4f}", f"{t['t']:+.2f}",
+             stars(t["beta"], t["se"])] for t in res["terms"] if t["name"] != "intercept"]
+
 
 def print_terms(res: dict, title: str) -> None:
-    print(f"  {title}  (n={res['n']} seats, {res['n_clusters']} draft clusters; "
+    print(f"\n  {title}  (n={res['n']} seats, {res['n_clusters']} draft clusters; "
           f"base {res['base']})")
-    for t in res["terms"]:
-        if t["name"] == "intercept":
-            continue
-        print(f"    {t['name']:<24} {t['beta']:+.4f} +- {t['se']:.4f}"
-              f"  t={t['t']:+.2f} {stars(t['beta'], t['se'])}")
+    print_table(["term", "beta", "se", "t", ""], terms_rows(res), "lrrrl")
 
 
 def report(a1: dict, a2: dict, a3: dict) -> None:
@@ -630,62 +583,56 @@ def report_a1(a1: dict) -> None:
                        ("downstream", "downstream_within_count")):
         print(f"\n  -- (c) within fixed pod gen-4 count: gen-4 seat mean loo by "
               f"{which} label --")
-        print(f"    {'pod g4':>6} {'n':>5} | " +
-              " | ".join(f"{ln:>22}" for ln in LABELS))
-        for cell in a1[key]:
-            if cell["n"] < 40:
-                continue
-            parts = []
-            for ln in LABELS:
-                v = cell[ln]
-                parts.append("                  n/a" if not v else
-                             f"{v['mean']:+.3f}+-{v['se']:.3f} (n={v['n']:>4})")
-            print(f"    {cell['pod_gen4_count']:>6} {cell['n']:>5} | " +
-                  " | ".join(f"{p:>22}" for p in parts))
+        print_table(["pod g4", "n", *LABELS],
+                    [[cell["pod_gen4_count"], cell["n"]]
+                     + ["n/a" if not cell[ln] else
+                        f"{cell[ln]['mean']:+.3f}+-{cell[ln]['se']:.3f} (n={cell[ln]['n']})"
+                        for ln in LABELS]
+                     for cell in a1[key] if cell["n"] >= 40], "rr" + "r" * len(LABELS))
 
     print("\n  -- mirror: ALL seats, own label + pod gen-4 count controlled --")
     print_terms(a1["mirror_all_seats_upstream"],
                 "outcome loo ~ upstream neighbour label")
 
 
-
 def report_a2(a2: dict) -> None:
     print("\n[A2] BUILD-AROUND TRAPS (AI:RemoveDeck:Random / RemRandomDecks)")
     pa = a2["per_agent"]
-    print(f"    {'agent':<12} {'picks':>9} {'flagged avail':>14} {'take%':>8} "
-          f"{'real-choice take%':>19} {'unflagged-alt take%':>21}")
-    for ln in LABELS:
-        d = pa[ln]
-        a, b, cc = (d["take_rate_when_available"], d["take_rate_real_choice"],
-                    d["take_rate_unflagged_alt"])
-        print(f"    {ln:<12} {d['picks']:>9} {a['n']:>14} "
-              f"{100*a['rate']:>7.2f}% "
-              f"{100*b['rate']:>10.2f}% (n={b['n']:>6}) "
-              f"{100*cc['rate']:>11.2f}% (n={cc['n']:>6})")
+
+    def pct(r: dict) -> str:
+        return f"{100 * r['rate']:.2f}%"
+
+    print_table(["agent", "picks", "flagged avail", "take%", "real-choice take% (n)",
+                 "unflagged-alt take% (n)"],
+                [[ln, pa[ln]["picks"], pa[ln]["take_rate_when_available"]["n"],
+                  pct(pa[ln]["take_rate_when_available"]),
+                  f"{pct(pa[ln]['take_rate_real_choice'])} "
+                  f"(n={pa[ln]['take_rate_real_choice']['n']})",
+                  f"{pct(pa[ln]['take_rate_unflagged_alt'])} "
+                  f"(n={pa[ln]['take_rate_unflagged_alt']['n']})"] for ln in LABELS],
+                "lrrrrr")
     print()
-    print(f"    {'agent':<12} {'flagged taken':>14} {'ended in 40-card deck':>23} "
-          f"{'mean flagged/seat':>19}")
-    for ln in LABELS:
-        d, bb = pa[ln], a2["by_flagged_count"][ln]
-        p = d["flagged_taken_played"]
-        print(f"    {ln:<12} {d['flagged_taken']:>14} "
-              f"{100*p['rate']:>16.2f}% +-{100*p['se']:.2f} "
-              f"{bb['mean_flagged_drafted']:>19.3f}")
+    print_table(["agent", "flagged taken", "ended in 40-card deck", "mean flagged/seat"],
+                [[ln, pa[ln]["flagged_taken"],
+                  f"{pct(pa[ln]['flagged_taken_played'])} "
+                  f"+-{100 * pa[ln]['flagged_taken_played']['se']:.2f}",
+                  f"{a2['by_flagged_count'][ln]['mean_flagged_drafted']:.3f}"]
+                 for ln in LABELS], "lrrr")
     print("\n  -- contrasts (gen-1 is the distillation-of-Forge control) --")
-    for k, v in a2["contrasts"].items():
-        print(f"    {k:<48} {100*v['diff']:+7.2f} pp  +-{100*v['se']:.2f}  "
-              f"z={v['z']:+.2f} {stars(v['diff'], v['se'])}")
+    print_table(["contrast", "diff (pp)", "se (pp)", "z", ""],
+                [[k, f"{100 * v['diff']:+.2f}", f"{100 * v['se']:.2f}", f"{v['z']:+.2f}",
+                  stars(v["diff"], v["se"])] for k, v in a2["contrasts"].items()], "lrrrl")
     print("\n  -- mean pod-relative deck_score by flagged cards drafted --")
+    rows = []
     for ln in LABELS:
         bb = a2["by_flagged_count"][ln]
-        cells = " | ".join(
-            f"{c['flagged_drafted']}: {c['mean']:+.3f}+-{c['se']:.3f} (n={c['n']})"
-            for c in bb["cells"])
         s = bb["slope_per_flagged_card"]
-        print(f"    {ln:<12} {cells}")
-        print(f"    {'':<12} slope per flagged card (net of crowding): "
-              f"{s['beta']:+.4f} +- {s['se']:.4f} {stars(s['beta'], s['se'])}")
-
+        rows.append([ln, " | ".join(
+            f"{c['flagged_drafted']}: {c['mean']:+.3f}+-{c['se']:.3f} (n={c['n']})"
+            for c in bb["cells"]),
+            f"{s['beta']:+.4f} +- {s['se']:.4f} {stars(s['beta'], s['se'])}"])
+    print_table(["agent", "mean loo by flagged drafted",
+                 "slope per flagged card (net of crowding)"], rows)
 
 
 def report_a3(a3: dict) -> None:
@@ -700,14 +647,12 @@ def report_a3(a3: dict) -> None:
               f"{100*d['frac_rounds_clipped_at_1.0']:.1f}% of rounds clipped")
         print(f"    KL(pi_k||pi_k+1) mean {d['kl_step_mean']:.5f} "
               f"(CV {d['kl_step_cv']:.2f})")
-        for name, c in d["correlations_kl_step_vs"].items():
-            if math.isnan(c["pearson_r"]):
-                print(f"      vs {name:<20} degenerate: constant at "
-                      f"{c['x_mean']:.3f} (round-standardised by construction)")
-                continue
-            print(f"      vs {name:<20} r={c['pearson_r']:+.3f}"
-                  f"+-{c['pearson_se']:.3f}  rho={c['spearman_rho']:+.3f}  "
-                  f"r(logKL)={c['pearson_r_logKL']:+.3f}")
+        print_table(["vs", "r", "rho", "r(logKL)"],
+                    [[name, f"degenerate: constant at {c['x_mean']:.3f}", "", ""]
+                     if math.isnan(c["pearson_r"]) else
+                     [name, f"{c['pearson_r']:+.3f}+-{c['pearson_se']:.3f}",
+                      f"{c['spearman_rho']:+.3f}", f"{c['pearson_r_logKL']:+.3f}"]
+                     for name, c in d["correlations_kl_step_vs"].items()], "lrrr")
         acc = d["kl_init_accumulation"]
         print(f"    KL(pi_0||pi_k): final {acc['kl_init_final']:.3f}; "
               f"r vs round {acc['r_vs_round_linear']:+.3f}, "
@@ -720,12 +665,10 @@ def report_a3(a3: dict) -> None:
               f"final margin {d['margin_final']:+.3f}")
     p = a3["pooled"]
     print(f"\n  pooled ({p['n_rounds']} rounds, {p['note']}):")
-    for name, c in p["correlations_kl_step_vs"].items():
-        print(f"    KL(pi_k||pi_k+1) vs {name:<12} r={c['pearson_r']:+.3f}"
-              f" +- {c['pearson_se']:.3f}")
+    print_table(["KL(pi_k||pi_k+1) vs", "r", "se"],
+                [[name, f"{c['pearson_r']:+.3f}", f"{c['pearson_se']:.3f}"]
+                 for name, c in p["correlations_kl_step_vs"].items()], "lrr")
 
-
-# ------------------------------------------------------------------------ main
 
 def write_csvs(out_dir: Path, a1: dict, a2: dict, a3: dict) -> list[Path]:
     written = []
@@ -740,56 +683,49 @@ def write_csvs(out_dir: Path, a1: dict, a2: dict, a3: dict) -> list[Path]:
 
 def write_a1_csv(out_dir: Path, a1: dict) -> Path:
     p = out_dir / "d5_a1_neighbour_terms.csv"
-    with p.open("w", encoding="utf-8", newline="") as h:
-        w = csv.writer(h)
-        w.writerow(["model", "base", "n", "n_clusters", "term", "beta", "se", "t"])
+    write_csv(p, [
+        {"model": key, "base": a1[key]["base"], "n": a1[key]["n"],
+         "n_clusters": a1[key]["n_clusters"], "term": t["name"],
+         "beta": f"{t['beta']:.6f}", "se": f"{t['se']:.6f}",
+         "t": "" if t["t"] is None else f"{t['t']:.4f}"}
         for key in ("upstream_gen4seats", "downstream_gen4seats", "joint_gen4seats",
                     "upstream_gen4seats_nocontrol", "downstream_gen4seats_nocontrol",
-                    "mirror_all_seats_upstream", "mirror_all_seats_upstream_nocontrol"):
-            res = a1[key]
-            for t in res["terms"]:
-                w.writerow([key, res["base"], res["n"], res["n_clusters"],
-                            t["name"], f"{t['beta']:.6f}", f"{t['se']:.6f}",
-                            "" if t["t"] is None else f"{t['t']:.4f}"])
+                    "mirror_all_seats_upstream", "mirror_all_seats_upstream_nocontrol")
+        for t in a1[key]["terms"]])
     return p
 
 
 def write_a2_csv(out_dir: Path, a2: dict) -> Path:
     p = out_dir / "d5_a2_flagged_rates.csv"
-    with p.open("w", encoding="utf-8", newline="") as h:
-        w = csv.writer(h)
-        w.writerow(["agent", "metric", "k", "n", "rate", "se"])
-        for label, d in a2["per_agent"].items():
-            for key in ("take_rate_when_available", "take_rate_real_choice",
-                        "take_rate_unflagged_alt", "flagged_taken_played"):
-                r = d[key]
-                w.writerow([label, key, r["k"], r["n"],
-                            "" if r["rate"] is None else f"{r['rate']:.6f}",
-                            "" if r["se"] is None else f"{r['se']:.6f}"])
+    write_csv(p, [
+        {"agent": label, "metric": key, "k": d[key]["k"], "n": d[key]["n"],
+         "rate": "" if d[key]["rate"] is None else f"{d[key]['rate']:.6f}",
+         "se": "" if d[key]["se"] is None else f"{d[key]['se']:.6f}"}
+        for label, d in a2["per_agent"].items()
+        for key in ("take_rate_when_available", "take_rate_real_choice",
+                    "take_rate_unflagged_alt", "flagged_taken_played")])
     return p
 
 
 def write_a3_csv(out_dir: Path, a3: dict) -> Path:
     p = out_dir / "d5_a3_run_summary.csv"
-    with p.open("w", encoding="utf-8", newline="") as h:
-        w = csv.writer(h)
-        w.writerow(["run", "n_rounds", "grad_norm_mean", "kl_step_mean",
-                    "corr_kl_step_reward_std", "corr_kl_step_adv_near0",
-                    "corr_kl_step_adv_max", "corr_kl_step_grad_norm",
-                    "kl_init_final", "best_margin", "best_round",
-                    "best_round_frac", "margin_final"])
-        for run, d in a3["runs"].items():
-            c = d["correlations_kl_step_vs"]
-            w.writerow([
-                run, d["n_rounds_parsed"], f"{d['grad_norm_mean']:.4f}",
-                f"{d['kl_step_mean']:.6f}",
-                f"{c['reward_std']['pearson_r']:.4f}",
-                f"{c['adv_near_zero_frac']['pearson_r']:.4f}",
-                f"{c['adv_max_abs']['pearson_r']:.4f}",
-                f"{c['grad_norm_preclip']['pearson_r']:.4f}",
-                f"{d['kl_init_accumulation']['kl_init_final']:.4f}",
-                d["best_margin"], d["best_round"],
-                f"{d['best_round_frac_of_run']:.4f}", f"{d['margin_final']:.4f}"])
+    rows = []
+    for run, d in a3["runs"].items():
+        c = d["correlations_kl_step_vs"]
+        rows.append({
+            "run": run, "n_rounds": d["n_rounds_parsed"],
+            "grad_norm_mean": f"{d['grad_norm_mean']:.4f}",
+            "kl_step_mean": f"{d['kl_step_mean']:.6f}",
+            "corr_kl_step_reward_std": f"{c['reward_std']['pearson_r']:.4f}",
+            "corr_kl_step_adv_near0": f"{c['adv_near_zero_frac']['pearson_r']:.4f}",
+            "corr_kl_step_adv_max": f"{c['adv_max_abs']['pearson_r']:.4f}",
+            "corr_kl_step_grad_norm": f"{c['grad_norm_preclip']['pearson_r']:.4f}",
+            "kl_init_final": f"{d['kl_init_accumulation']['kl_init_final']:.4f}",
+            "best_margin": d["best_margin"], "best_round": d["best_round"],
+            "best_round_frac": f"{d['best_round_frac_of_run']:.4f}",
+            "margin_final": f"{d['margin_final']:.4f}",
+        })
+    write_csv(p, rows)
     return p
 
 

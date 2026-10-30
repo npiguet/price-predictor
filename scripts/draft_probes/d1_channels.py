@@ -17,6 +17,13 @@ the *same* states. Three design rules, all forced by the critique:
 Retype arms ask a different question: relabelling POOL as TAKEN keeps every card
 and every count and destroys only the ownership distinction.
 
+Each block's flip rate is then read against the placebo ladder interpolated at
+the block's own mean size, inside each pack, because the blocks and the state
+grow at very different rates across the draft: by pack 3 a seat holds about 37
+cards it drafted, has passed about 32, and knows of about 143 taken by others.
+That table is ``d1_placebo_table.csv``; ratio > 1 means the block carries more
+than its size predicts.
+
 Usage
 -----
     python scripts/draft_probes/d1_channels.py --limit-drafts 150
@@ -34,6 +41,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.markdown import print_table
 from _lib.stats import js_distance, softmax
 from draft_probes.probe_lib import (
     CORPUS,
@@ -52,6 +60,7 @@ from draft_probes.probe_lib import (
     replay_fidelity,
     retype,
     set_context,
+    write_csv,
     zero_recency,
 )
 
@@ -73,6 +82,32 @@ def placebo(k: int, mean_row: int, seed: int):
         return replace(st, card_idx=idx)
 
     return apply
+
+
+def placebo_table(results: dict, mean_size: dict[int, dict[str, float]]) -> list[dict]:
+    """Per model, pack and block: the block's flip rate against the placebo
+    ladder's, interpolated at the block's mean size in that pack."""
+    rows = []
+    for gen, res in results.items():
+        arms = {a["arm"]: a for a in res["arms"]}
+        ks = sorted(int(a.split("=")[1]) for a in arms if a.startswith("placebo"))
+        for pack in (1, 2, 3):
+            curve_x = np.array([0.0] + [float(k) for k in ks])
+            curve_y = np.array([0.0] + [arms[f"placebo k={k}"]["flip_by_pack"][pack]
+                                        for k in ks])
+            for block in BLOCKS:
+                k = mean_size[pack][block]
+                expected = float(np.interp(k, curve_x, curve_y))
+                observed = arms[f"{block} identity"]["flip_by_pack"][pack]
+                rows.append({
+                    "model": gen, "pack": pack, "block": block,
+                    "mean_size": round(k, 1),
+                    "observed_flip": round(observed, 4),
+                    "placebo_flip": round(expected, 4),
+                    "ratio": round(observed / expected, 2) if expected > 0
+                    else float("nan"),
+                })
+    return rows
 
 
 def main() -> None:
@@ -170,17 +205,34 @@ def main() -> None:
                   f"  p1 {fb[1]:.3f} p2 {fb[2]:.3f} p3 {fb[3]:.3f}"
                   f"  <=8 {r['flip_pick_le8']:.3f} >=9 {r['flip_pick_ge9']:.3f}")
 
+    mean_size = {int(p): {name: float(sizes[pack_no == p].mean())
+                          for name, sizes in block_size.items()}
+                 for p in sorted(set(pack_no.tolist()))}
     meta = {
         "corpus": str(CORPUS),
         "seat_label": args.seat_label,
         "limit_drafts": args.limit_drafts,
         "mean_block_size": {k: float(v.mean()) for k, v in block_size.items()},
+        "mean_block_size_by_pack": mean_size,
         "placebo_ks": placebo_ks,
     }
     (OUT / "d1_channels.json").write_text(
         json.dumps({"meta": meta, "models": results}, indent=2), encoding="utf-8")
     print(f"\nmean block sizes: {meta['mean_block_size']}")
     print(f"wrote {OUT / 'd1_channels.json'}")
+
+    rows = placebo_table(results, mean_size)
+    write_csv(OUT / "d1_placebo_table.csv", rows)
+    print("\nBlanking a block, against blanking the same number of random tokens.")
+    print("ratio > 1: the block carries more than its size predicts.\n")
+    for gen in results:
+        print(f"=== {gen} ===")
+        print_table(["pack", "block", "size", "observed", "placebo", "ratio"],
+                    [[r["pack"], r["block"], f"{r['mean_size']:.1f}",
+                      f"{r['observed_flip']:.3f}", f"{r['placebo_flip']:.3f}",
+                      f"{r['ratio']:.2f}"] for r in rows if r["model"] == gen], "rlrrrr")
+        print()
+    print(f"wrote {OUT / 'd1_placebo_table.csv'}")
 
 
 if __name__ == "__main__":

@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import json
 import random
 import sys
 from dataclasses import replace
@@ -46,18 +45,21 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.jsonio import write_json
+from _lib.markdown import num, print_table
+from _lib.stats import mean_se
 from draft_corpus_common import ColourResolver
 from draft_probes.probe_lib import (
     CARDS,
     CORPUS,
     MODELS,
     OUT,
+    PACK_SIZE,
     TYPE_POOL,
     CardTable,
-    PolicyRunner,
+    absolute_pick,
     iter_corpus_states,
     iter_runners,
-    load_agent,
 )
 
 
@@ -69,6 +71,11 @@ def write_slots(slots: list[int], row: int):
         idx[slots] = row
         return replace(st, card_idx=idx)
     return apply
+
+
+def mean_se_n(values) -> dict:
+    mean, se, n = mean_se(values)
+    return {"mean": mean, "se": se, "n": n}
 
 
 def main() -> None:
@@ -94,10 +101,9 @@ def main() -> None:
 
     # One reference model picks the X/Y pair, so every model is asked about the
     # same pair and the choice cannot favour any of them.
-    ref_model, _ = load_agent(MODELS["gen4"])
-    ref = PolicyRunner(ref_model, table, batch_size=args.batch)
+    _, ref = next(iter_runners(table, args.batch, {"gen4": MODELS["gen4"]}))
     base_logits = ref.logits(base_samples)
-    del ref_model
+    del ref
 
     # Build the work list: per state, a colour-matched pair closest in base logit.
     mat = table.matrix()
@@ -131,7 +137,7 @@ def main() -> None:
             "sample": s, "x": i, "y": j, "z": z, "gap": gap, "cos": cos,
             "slots": [int(p) for p in pool_slots[:args.max_dose]],
             "x_row": xr, "y_row": yr,
-            "pick": (s.state.pack_number - 1) * 15 + s.state.pick_number,
+            "pick": absolute_pick(s.state),
         })
     print(f"{len(jobs)} states with a colour-matched pack pair; "
           f"median base-logit gap {np.median([j['gap'] for j in jobs]):.3f}")
@@ -162,16 +168,9 @@ def main() -> None:
             eff = np.array(eff_x + eff_y)
             picks2 = np.array(picks + picks)
             sims2 = np.array(sims + sims)
-            buckets = {}
-            for lo, hi, name in ((1, 15, "pack 1"), (16, 30, "pack 2"),
-                                 (31, 45, "pack 3")):
-                m = (picks2 >= lo) & (picks2 <= hi)
-                if m.sum() > 50:
-                    buckets[name] = {
-                        "mean": float(eff[m].mean()),
-                        "se": float(eff[m].std() / np.sqrt(m.sum())),
-                        "n": int(m.sum()),
-                    }
+            pack_of = (picks2 - 1) // PACK_SIZE + 1
+            buckets = {f"pack {k}": mean_se_n(eff[pack_of == k]) for k in (1, 2, 3)
+                       if (pack_of == k).sum() > 50}
             # Similarity control. Arm Y writes a colour- and logit-matched card,
             # not an embedding twin, so part of the rise on X could be "my pool
             # now looks more like X" rather than "I already own X". Splitting by
@@ -182,43 +181,36 @@ def main() -> None:
             for lo, hi in zip(qs[:-1], qs[1:]):
                 m = (sims2 >= lo) & (sims2 <= hi)
                 if m.sum() > 50:
-                    sim_rows.append({
-                        "cos_lo": float(lo), "cos_hi": float(hi),
-                        "mean": float(eff[m].mean()),
-                        "se": float(eff[m].std() / np.sqrt(m.sum())),
-                        "n": int(m.sum()),
-                    })
+                    sim_rows.append({"cos_lo": float(lo), "cos_hi": float(hi),
+                                     **mean_se_n(eff[m])})
+            effect, placebo = mean_se_n(eff), mean_se_n(plc)
             per_dose[dose] = {
-                "effect_mean": float(eff.mean()),
-                "effect_se": float(eff.std() / np.sqrt(eff.size)),
+                "effect_mean": effect["mean"],
+                "effect_se": effect["se"],
                 "effect_x": float(np.mean(eff_x)),
                 "effect_y": float(np.mean(eff_y)),
-                "placebo_mean": float(np.mean(plc)),
-                "placebo_se": float(np.std(plc) / np.sqrt(len(plc))),
+                "placebo_mean": placebo["mean"],
+                "placebo_se": placebo["se"],
                 "n_pairs": len(jobs),
                 "by_pack": buckets,
                 "by_similarity": sim_rows,
             }
         results[gen] = per_dose
         print(f"\n=== {gen} — logit change on a card already in the pool ===")
-        print(f"{'copies':>7s} {'effect':>9s} {'se':>7s} {'from X':>8s} "
-              f"{'from Y':>8s} {'placebo':>9s} {'p1':>8s} {'p2':>8s} {'p3':>8s}")
-        for dose, r in per_dose.items():
-            bp = r["by_pack"]
-            print(f"{dose:7d} {r['effect_mean']:+9.4f} {r['effect_se']:7.4f} "
-                  f"{r['effect_x']:+8.4f} {r['effect_y']:+8.4f} "
-                  f"{r['placebo_mean']:+9.4f} "
-                  + " ".join(f"{bp[k]['mean']:+8.4f}" if k in bp else f"{'-':>8s}"
-                             for k in ("pack 1", "pack 2", "pack 3")))
+        print_table(["copies", "effect", "se", "from X", "from Y", "placebo", "p1", "p2", "p3"],
+                    [[dose, f"{r['effect_mean']:+.4f}", num(r["effect_se"]),
+                      f"{r['effect_x']:+.4f}", f"{r['effect_y']:+.4f}",
+                      f"{r['placebo_mean']:+.4f}"]
+                     + [f"{r['by_pack'][k]['mean']:+.4f}" if k in r["by_pack"] else "-"
+                        for k in ("pack 1", "pack 2", "pack 3")]
+                     for dose, r in per_dose.items()], "r" * 9)
         sim = per_dose[1]["by_similarity"]
         if sim:
             print("  one copy, by how close the control card sits to it: "
                   + ", ".join(f"cos {r['cos_lo']:.2f}-{r['cos_hi']:.2f}: "
                               f"{r['mean']:+.4f}" for r in sim))
 
-    (OUT / "d8_duplicates.json").write_text(
-        json.dumps({"n_states": len(jobs), "models": results}, indent=2),
-        encoding="utf-8")
+    write_json(OUT / "d8_duplicates.json", {"n_states": len(jobs), "models": results})
     print(f"\nwrote {OUT / 'd8_duplicates.json'}")
 
 

@@ -9,9 +9,9 @@ makes it the honest place to ask what the model has worked out about the draft.
 Three targets, fitted by ridge on a draft-disjoint split and read off pick by
 pick:
 
-- **the seat's eventual two colours** — five one-vs-rest logistic probes. Asks
-  when commitment is represented, and whether it is represented before the pool
-  itself reveals it.
+- **the seat's eventual two colours** — five one-vs-rest ridge probes, scored by
+  AUC. Asks when commitment is represented, and whether it is represented before
+  the pool itself reveals it.
 - **the seat's final pod-relative `deck_score`** — the exact quantity GRPO
   optimised, and the one the untrained critic head would have carried. A trunk
   that predicts it has learned a value function without a value head.
@@ -32,6 +32,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from sklearn.linear_model import Ridge
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -44,6 +45,7 @@ from draft_probes.probe_lib import (
     OUT,
     WUBRG,
     CardTable,
+    absolute_pick,
     deck_lane,
     iter_corpus_records,
     iter_corpus_states,
@@ -54,17 +56,12 @@ from draft_probes.probe_lib import (
 from draft.application.draft_training_common import leave_one_out_rewards
 
 PROBED = {gen: MODELS[gen] for gen in ("gen1", "gen3", "gen4")}
+RIDGE_ALPHA = 30.0
 
 
-def ridge_fit(X: np.ndarray, y: np.ndarray, lam: float = 30.0) -> np.ndarray:
-    X1 = np.hstack([X, np.ones((X.shape[0], 1), dtype=X.dtype)])
-    A = X1.T @ X1
-    A[np.diag_indices_from(A)] += lam
-    return np.linalg.solve(A, X1.T @ y)
-
-
-def ridge_pred(X: np.ndarray, w: np.ndarray) -> np.ndarray:
-    return np.hstack([X, np.ones((X.shape[0], 1), dtype=X.dtype)]) @ w
+def ridge_readout(X_tr: np.ndarray, y_tr: np.ndarray, X_va: np.ndarray) -> np.ndarray:
+    """A ridge fit on the train rows, read off the validation rows."""
+    return Ridge(alpha=RIDGE_ALPHA).fit(X_tr, y_tr).predict(X_va)
 
 
 def main() -> None:
@@ -107,8 +104,7 @@ def main() -> None:
     y_col = np.stack([final_colours[(s.draft_id, s.seat)] for s in samples])
     y_rew = np.array([reward[(s.draft_id, s.seat)] for s in samples],
                      dtype=np.float32)
-    pick_abs = np.array([(s.state.pack_number - 1) * 15 + s.state.pick_number
-                         for s in samples])
+    pick_abs = np.array([absolute_pick(s.state) for s in samples])
     draft_ids = sorted({s.draft_id for s in samples})
     val_ids = set(draft_ids[::4])            # draft-disjoint 25 % validation
     is_val = np.array([s.draft_id in val_ids for s in samples])
@@ -124,15 +120,11 @@ def main() -> None:
             tr, va = m & ~is_val, m & is_val
             if tr.sum() < 200 or va.sum() < 100:
                 continue
-            aucs = []
-            for c in range(5):
-                w = ridge_fit(ctx[tr], y_col[tr, c])
-                aucs.append(auc(y_col[va, c], ridge_pred(ctx[va], w)))
-            w = ridge_fit(ctx[tr], y_rew[tr])
-            r2_rew = weighted_r2(y_rew[va], ridge_pred(ctx[va], w))
+            aucs = [auc(y_col[va, c], ridge_readout(ctx[tr], y_col[tr, c], ctx[va]))
+                    for c in range(5)]
+            r2_rew = weighted_r2(y_rew[va], ridge_readout(ctx[tr], y_rew[tr], ctx[va]))
             r2_pool = float(np.mean([
-                weighted_r2(pool_frac[va, c],
-                   ridge_pred(ctx[va], ridge_fit(ctx[tr], pool_frac[tr, c])))
+                weighted_r2(pool_frac[va, c], ridge_readout(ctx[tr], pool_frac[tr, c], ctx[va]))
                 for c in range(5)
             ]))
             rows.append({

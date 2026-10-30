@@ -38,7 +38,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from _lib.corpora import card_column
 from _lib.stats import spearman
 from draft_corpus_common import ColourResolver
+from draft_probes.d2_pickorder import card_scalars, p1p1_samples, static_agreement
 from draft_probes.probe_lib import (
     CARD_VALUES,
     CARDS,
@@ -98,8 +98,7 @@ def main() -> None:
     vswap = card_column(CARD_VALUES, "v_swap")
     print(f"graders: human {len(human)}, v_swap {len(vswap)}")
 
-    p1p1 = list(iter_corpus_states(CORPUS, table, clocks=[(1, 1)],
-                                   limit_drafts=args.limit_drafts))
+    p1p1 = p1p1_samples(table, args.limit_drafts)
     states = list(iter_corpus_states(CORPUS, table, labels=["gen4"],
                                      limit_drafts=args.state_drafts))
     print(f"{len(p1p1)} opening boosters, {len(states)} full states")
@@ -111,12 +110,8 @@ def main() -> None:
     for name, runner in iter_runners(table, args.batch, checkpoints):
         _, margin, picks = SUBJECTS[name]
         # Context-free card scalar: centre each booster, then average per card.
-        acc: dict[str, list[float]] = defaultdict(list)
-        for s, c in zip(p1p1, centred(runner.logits(p1p1))):
-            for nm, v in zip(s.pack_names, c):
-                acc[nm].append(float(v))
-        scalar = {k: float(np.mean(v)) for k, v in acc.items()
-                  if len(v) >= args.min_appearances}
+        scalar, appear = card_scalars(p1p1, centred(runner.logits(p1p1)))
+        scalar = {k: v for k, v in scalar.items() if appear[k] >= args.min_appearances}
 
         vals = np.array(list(scalar.values()))
         lean_wg = [v for k, v in scalar.items() if colours(k) and colours(k) <= WG]
@@ -125,16 +120,12 @@ def main() -> None:
         common_h = [k for k in scalar if k in human]
         common_v = [k for k in scalar if k in vswap]
 
-        # How often the context-free ranking already decides the real pick.
+        # How often the context-free ranking already decides the real pick,
+        # over the picks that are a choice at all.
         base = runner.logits(states)
-        hit = tot = 0
-        for s, lg in zip(states, base):
-            sc = [scalar.get(nm) for nm in s.pack_names]
-            if any(v is None for v in sc) or len(sc) < 2:
-                continue
-            hit += int(int(np.argmax(sc)) == int(np.argmax(lg)))
-            tot += 1
         base_arg = argmaxes(base)
+        agree = static_agreement(states, scalar, base_arg)
+        decided = agree[np.isfinite(agree) & (np.array([len(s.pack_names) for s in states]) >= 2)]
 
         def flip(interv) -> float:
             alt = runner.logits(states, interv)
@@ -149,7 +140,7 @@ def main() -> None:
                                   np.array([human[k] for k in common_h])),
             "rho_vswap": spearman(np.array([scalar[k] for k in common_v]),
                                   np.array([vswap[k] for k in common_v])),
-            "context_free": hit / tot if tot else float("nan"),
+            "context_free": float(decided.mean()) if decided.size else float("nan"),
             "pool_flip": flip(mean_substitute(TYPE_POOL, mean_row=mean_row)),
             "taken_flip": flip(mean_substitute(TYPE_TAKEN, mean_row=mean_row)),
             "n_cards": len(scalar),

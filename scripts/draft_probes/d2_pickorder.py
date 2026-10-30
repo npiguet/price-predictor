@@ -60,6 +60,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _lib.corpora import card_column
+from _lib.markdown import banner, print_table
 from _lib.stats import ols, spearman
 from draft_corpus_common import WUBRG, ColourResolver
 from draft_probes.probe_lib import (
@@ -368,21 +369,28 @@ def attribution(cards, meta, scalar, gens, n_boot) -> dict:
 # Part 4 — how much of the policy is the fixed order
 # --------------------------------------------------------------------------
 
+def static_agreement(states, scalar: dict[str, float], argmax) -> np.ndarray:
+    """Per state: 1.0 when the best pack card by the context-free ``scalar`` is
+    the policy's ``argmax`` pick, 0.0 when it is not, NaN when a pack card has
+    no scalar."""
+    agree = np.full(len(states), np.nan)
+    for i, s in enumerate(states):
+        vals = [scalar.get(n) for n in s.pack_names]
+        if all(v is not None for v in vals):
+            agree[i] = float(int(np.argmax(vals)) == argmax[i])
+    return agree
+
+
 def static_order(allpicks, scalar, ap_arg, gens) -> dict:
     pack_no = np.array([s.state.pack_number for s in allpicks])
     pick_no = np.array([s.state.pick_number for s in allpicks])
-    covered = np.array([all(n in scalar[gens[0]] for n in s.pack_names) for s in allpicks])
     static = {}
     for g in gens:
-        agree = np.full(len(allpicks), np.nan)
-        for i, s in enumerate(allpicks):
-            if covered[i]:
-                vals = np.array([scalar[g][n] for n in s.pack_names])
-                agree[i] = float(int(np.argmax(vals)) == ap_arg[g][i])
+        agree = static_agreement(allpicks, scalar[g], ap_arg[g])
         m = np.isfinite(agree)
         static[g] = {
             "n_states": int(m.sum()),
-            "coverage": float(covered.mean()),
+            "coverage": float(m.mean()),
             "agree_overall": float(agree[m].mean()),
             "agree_by_pack": {int(p): float(agree[m & (pack_no == p)].mean())
                               for p in sorted(set(pack_no.tolist()))},
@@ -398,98 +406,91 @@ def report(args, p1, cards, gens, runs, payload, y, source_names) -> None:
     scalar, p1_cent = runs["scalar"], runs["p1_cent"]
     colour, static = payload["part2_colour"], payload["part4_static_order"]
     attr = payload["part3_attribution"]
-    W = 22
-    print("\n" + "=" * 72)
-    print(f"D2 PICK ORDER — {len(p1)} distinct opening boosters, "
-          f"{payload['meta']['n_sets']} sets, {len(cards)} cards with "
-          f">= {args.min_appearances} appearances")
-    print("=" * 72)
+    banner(f"D2 PICK ORDER — {len(p1)} distinct opening boosters, "
+           f"{payload['meta']['n_sets']} sets, {len(cards)} cards with "
+           f">= {args.min_appearances} appearances", width=72)
 
     print("\n--- PART 1: scale of the P1P1 order (centred logits) ---")
-    print(f"{'':<{W}}" + "".join(f"{g:>10}" for g in gens))
-    print(f"{'sd of card scalar':<{W}}" + "".join(f"{y[g].std():>10.3f}" for g in gens))
-    print(f"{'sd within a booster':<{W}}"
-          + "".join(f"{np.mean([c.std() for c in p1_cent[g]]):>10.3f}" for g in gens))
+    print_table(["", *gens], [
+        ["sd of card scalar", *(f"{y[g].std():.3f}" for g in gens)],
+        ["sd within a booster",
+         *(f"{np.mean([c.std() for c in p1_cent[g]]):.3f}" for g in gens)],
+    ], "l" + "r" * len(gens))
     for g in gens:
         top = sorted(cards, key=lambda c: -scalar[g][c])[:5]
         bot = sorted(cards, key=lambda c: scalar[g][c])[:3]
         print(f"  {g:>5} top: {', '.join(top)}")
         print(f"  {g:>5} bot: {', '.join(bot)}")
 
-    supply_share = colour["supply_share_pct"]
     print("\n--- PART 2 (H6): the colour prior with nothing open yet ---")
-    print(f"{'supply share %':<{W}}" + "".join(f"{c:>8}" for c in COLOURS))
-    print(f"{'':<{W}}" + "".join(f"{supply_share[c]:>8.1f}" for c in COLOURS))
+    right = "l" + "r" * len(COLOURS)
+    print_table(["", *COLOURS],
+                [["supply share %", *(f"{colour['supply_share_pct'][c]:.1f}" for c in COLOURS)]],
+                right)
     print("\nmean centred P1P1 logit by colour identity (gold split):")
-    print(f"{'model':<{W}}" + "".join(f"{c:>8}" for c in COLOURS))
-    for g in gens:
-        print(f"{g:<{W}}"
-              + "".join(f"{colour['mean_centred_logit'][g][c]:>8.3f}" for c in COLOURS))
+    print_table(["model", *COLOURS],
+                [[g, *(f"{colour['mean_centred_logit'][g][c]:.3f}" for c in COLOURS)]
+                 for g in gens], right)
     print("\nargmax lean, taken% - available% (percentage points):")
-    print(f"{'model':<{W}}" + "".join(f"{c:>8}" for c in COLOURS))
-    for g in gens:
-        print(f"{g:<{W}}"
-              + "".join(f"{colour['argmax_lean_pp'][g][c]:>+8.2f}" for c in COLOURS))
+    print_table(["model", *COLOURS],
+                [[g, *(f"{colour['argmax_lean_pp'][g][c]:+.2f}" for c in COLOURS)]
+                 for g in gens], right)
 
     pair, decomp = attr["spearman"], attr["r2_decomposition"]
     head, cat_shift = attr["headline_vs_human"], attr["gen_minus_gen1_by_category_z"]
     print("\n--- PART 3 (H7): where the order comes from ---")
     print("Spearman of each model's P1P1 scalar against each source:")
-    print(f"{'source':<38}" + "".join(f"{g:>10}" for g in gens) + f"{'n':>8}")
+    rows = []
     for sname in source_names + [f"model:{h}" for h in gens]:
-        cells = []
-        n = 0
-        for g in gens:
-            e = pair[g].get(sname)
-            cells.append("       ." if e is None else f"{e['spearman']:>10.3f}")
-            if e:
-                n = e["n"]
-        print(f"{sname:<38}" + "".join(cells) + f"{n:>8}")
+        cells = [pair[g].get(sname) for g in gens]
+        n = next((e["n"] for e in reversed(cells) if e), 0)
+        rows.append([sname, *("." if e is None else f"{e['spearman']:.3f}" for e in cells), n])
+    print_table(["source", *gens, "n"], rows, "l" + "r" * (len(gens) + 1))
 
     print(f"\nR2 decomposition (n={decomp[gens[0]]['n_cards']} cards with all "
           "sources present):")
     keys = ["R2_human_alone", "R2_scorer_alone", "R2_encoder_alone",
             "R2_human+scorer", "R2_full", "R2_unique_human",
             "R2_unique_scorer", "R2_unique_encoder", "R2_unexplained"]
-    print(f"{'quantity':<22}" + "".join(f"{g:>10}" for g in gens))
-    for k in keys:
-        print(f"{k:<22}" + "".join(f"{decomp[g][k]:>10.3f}" for g in gens))
+    print_table(["quantity", *gens], [[k, *(f"{decomp[g][k]:.3f}" for g in gens)]
+                                      for k in keys], "l" + "r" * len(gens))
 
     print(f"\nHEADLINE - distance to the human pick order (n={head['n_cards']} "
           "ranked cards, paired):")
+    rows = []
     for g in gens:
-        line = f"  {g:<6} spearman vs human = {head['spearman_vs_human'][g]:+.4f}"
-        if g in head["vs_gen1"]:
-            d = head["vs_gen1"][g]
-            line += (f"   delta vs gen1 = {d['delta_spearman']:+.4f} "
-                     f"[{d['ci95'][0]:+.4f}, {d['ci95'][1]:+.4f}] "
-                     f"P(>0)={d['p_delta_gt_0']:.3f}")
-        print(line)
+        d = head["vs_gen1"].get(g)
+        rows.append([g, f"{head['spearman_vs_human'][g]:+.4f}"]
+                    + (["", "", ""] if d is None else
+                       [f"{d['delta_spearman']:+.4f}",
+                        f"[{d['ci95'][0]:+.4f}, {d['ci95'][1]:+.4f}]",
+                        f"{d['p_delta_gt_0']:.3f}"]))
+    print_table(["model", "spearman vs human", "delta vs gen1", "95% CI", "P(delta > 0)"],
+                rows, "lrrrr")
 
     if cat_shift:
         print("\ngen - gen1 shift in z-scored P1P1 scalar, by card category:")
-        cats = sorted(next(iter(cat_shift.values())))
-        print(f"{'category':<22}{'n':>6}" + "".join(f"{g:>18}" for g in cat_shift))
-        for cat in cats:
-            n = next(iter(cat_shift.values()))[cat]["n"]
-            print(f"{cat:<22}{n:>6}"
-                  + "".join(f"{cat_shift[g][cat]['mean_z_shift']:>+11.3f}"
-                            f" +-{cat_shift[g][cat]['se']:.3f}" for g in cat_shift))
+        first = next(iter(cat_shift.values()))
+        print_table(["category", "n", *cat_shift],
+                    [[cat, first[cat]["n"],
+                      *(f"{cat_shift[g][cat]['mean_z_shift']:+.3f} "
+                        f"+-{cat_shift[g][cat]['se']:.3f}" for g in cat_shift)]
+                     for cat in sorted(first)], "lr" + "r" * len(cat_shift))
 
     print("\n--- PART 4 (H2): share of picks the context-free order already "
           "explains ---")
     print(f"states: {static[gens[0]]['n_states']} of {payload['meta']['part4_states']} "
           f"({args.seat_label} seats, {args.part4_drafts} drafts; "
           f"coverage {static[gens[0]]['coverage']:.3f})")
-    print(f"{'model':<10}{'overall':>9}" + "".join(f"{'pack' + str(p):>8}" for p in (1, 2, 3)))
-    for g in gens:
-        print(f"{g:<10}{static[g]['agree_overall']:>9.3f}"
-              + "".join(f"{static[g]['agree_by_pack'][p]:>8.3f}" for p in (1, 2, 3)))
+    print_table(["model", "overall", "pack1", "pack2", "pack3"],
+                [[g, f"{static[g]['agree_overall']:.3f}",
+                  *(f"{static[g]['agree_by_pack'][p]:.3f}" for p in (1, 2, 3))]
+                 for g in gens], "lrrrr")
     print("\nby pick number:")
     picks = sorted(static[gens[0]]["agree_by_pick"])
-    print(f"{'model':<10}" + "".join(f"{k:>6}" for k in picks))
-    for g in gens:
-        print(f"{g:<10}" + "".join(f"{static[g]['agree_by_pick'][k]:>6.2f}" for k in picks))
+    print_table(["model", *picks],
+                [[g, *(f"{static[g]['agree_by_pick'][k]:.2f}" for k in picks)] for g in gens],
+                "l" + "r" * len(picks))
 
 
 def main() -> None:

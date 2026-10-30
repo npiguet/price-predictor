@@ -58,8 +58,6 @@ import argparse
 import json
 import math
 import sys
-import time
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -67,7 +65,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from _lib.corpora import card_column
-from _lib.stats import js_distance, kl_divergence, softmax, spearman
+from _lib.markdown import banner, num, print_table
+from _lib.stats import cluster_mean_se, js_distance, kl_divergence, softmax, spearman
 from draft_corpus_common import score_play
 from draft_probes.probe_lib import (
     CORPUS,
@@ -76,33 +75,19 @@ from draft_probes.probe_lib import (
     OUT,
     WIN_RATES,
     CardTable,
-    PolicyRunner,
     argmaxes,
     iter_corpus_states,
-    load_agent,
+    iter_runners,
     write_csv,
 )
 
-POLICIES = [(gen, MODELS[gen]) for gen in ("gen1", "gen3", "gen4")]
+POLICIES = {gen: MODELS[gen] for gen in ("gen1", "gen3", "gen4")}
 SOURCES = ["gen4", "gen1", "forge-full"]
 FOREIGN = ["forge-full", "gen1"]  # state sources gen-4 never produced
 
 
 def _kl(p: np.ndarray, q: np.ndarray) -> float:
     return kl_divergence(p, q, floor=1e-12)
-
-
-def cluster_se(values: np.ndarray, clusters: list[str]) -> float:
-    """SE of the mean of ``values`` with errors clustered on ``clusters``."""
-    n = len(values)
-    if n == 0:
-        return float("nan")
-    mean = values.mean()
-    sums: dict[str, float] = defaultdict(float)
-    for v, c in zip(values, clusters):
-        sums[c] += v - mean
-    var = sum(s * s for s in sums.values()) / (n * n)
-    return float(math.sqrt(max(var, 0.0)))
 
 
 def load_win_rate_grader() -> dict[str, float]:
@@ -131,45 +116,21 @@ def collect(limit: int) -> tuple[CardTable, dict[str, list]]:
     return table, buckets
 
 
-def run_policies(table: CardTable, samples: list, batch: int) -> dict[str, dict]:
-    """For each checkpoint: per-sample softmax, argmax and chosen card name.
-
-    Batches are formed over a length-sorted view of the states and the results
-    unsorted afterwards. A state grows from ~15 tokens at pack 1 pick 1 to a few
-    hundred by pack 3, and :class:`PolicyRunner` pads each batch to its longest
-    member, so sorting cuts the padding a mixed batch would carry. Padding is
-    masked out, so this changes nothing but the wall clock.
-    """
-    order = sorted(range(len(samples)),
-                   key=lambda i: int(samples[i].state.card_idx.shape[0]))
-    ordered = [samples[i] for i in order]
-    res: dict[str, dict] = {}
-    for name, ckpt in POLICIES:
-        if not ckpt.exists():
-            raise SystemExit(f"missing checkpoint {ckpt}")
-        t0 = time.time()
-        model, _cfg = load_agent(ckpt)
-        runner = PolicyRunner(model, table, batch_size=batch)
-        got: list = []
-        step = max(batch * 8, 1)
-        for start in range(0, len(ordered), step):
-            got.extend(runner.logits(ordered[start:start + step]))
-            print(f"    {name}: {len(got)}/{len(ordered)} "
-                  f"({time.time() - t0:.0f}s)", flush=True)
-        logits: list = [None] * len(samples)
-        for pos, i in enumerate(order):
-            logits[i] = got[pos]
-        probs = [softmax(ln) for ln in logits]
-        arg = argmaxes(logits)
-        res[name] = {"probs": probs, "argmax": arg}
-        del model, runner
-        try:
-            import torch
-            torch.cuda.empty_cache()
-        except Exception:
-            pass
-        print(f"  forward pass done: {name}")
-    return res
+def run_policies(table: CardTable, buckets: dict[str, list],
+                 batch: int) -> dict[str, dict[str, dict]]:
+    """``runs[source][policy]``: per-sample softmax and argmax of every
+    checkpoint on every source's states, each checkpoint loaded once."""
+    missing = [str(p) for p in POLICIES.values() if not p.exists()]
+    if missing:
+        raise SystemExit(f"missing checkpoint {', '.join(missing)}")
+    runs: dict[str, dict[str, dict]] = {src: {} for src in SOURCES if buckets[src]}
+    for name, runner in iter_runners(table, batch, POLICIES):
+        for src in runs:
+            logits = runner.logits(buckets[src])
+            runs[src][name] = {"probs": [softmax(ln) for ln in logits],
+                               "argmax": argmaxes(logits)}
+            print(f"  {name} on '{src}' states done", flush=True)
+    return runs
 
 
 def slices(samples: list) -> dict[str, np.ndarray]:
@@ -191,7 +152,7 @@ def part1(buckets: dict[str, list], runs: dict[str, dict[str, dict]]) -> list[di
         sl = slices(samples)
         target = np.array([s.target for s in samples])
         valid = target >= 0
-        names = [p for p, _ in POLICIES]
+        names = list(POLICIES)
         # policy vs recorded
         for p in names:
             arg = runs[src][p]["argmax"]
@@ -223,7 +184,7 @@ def part1(buckets: dict[str, list], runs: dict[str, dict[str, dict]]) -> list[di
 def part2(buckets: dict[str, list], runs: dict[str, dict[str, dict]],
           graders: dict[str, dict[str, float]]) -> list[dict]:
     rows: list[dict] = []
-    names = [p for p, _ in POLICIES]
+    names = list(POLICIES)
     for src in SOURCES:
         samples = buckets[src]
         if not samples:
@@ -250,7 +211,7 @@ def part2(buckets: dict[str, list], runs: dict[str, dict[str, dict]],
                 ])
                 d = pol - rec
                 same = np.array([arg[i] == samples[i].target for i in keep])
-                se = cluster_se(d, clusters)
+                _, se = cluster_mean_se(d, clusters)
                 rows.append({
                     "state_source": src, "grader": gname, "policy": p,
                     "n": len(keep),
@@ -304,84 +265,61 @@ def part3(samples: list, runs: dict[str, dict]) -> list[dict]:
 
 # --------------------------------------------------------------------- report
 
-def _fmt(v: float, w: int = 7, p: int = 4) -> str:
-    return f"{v:{w}.{p}f}" if v == v else " " * (w - 3) + "n/a"
-
-
 def report(agree, grades, lev, meta) -> None:
-    print("\n" + "=" * 78)
-    print("PART 1 - agreement matrix (state exchange)")
-    print("=" * 78)
+    banner("PART 1 - agreement matrix (state exchange)")
+    cols = ("all", "pack1", "pack2", "pack3", "early(<=8)", "late(>=9)")
     for src in SOURCES:
         rs = [r for r in agree if r["state_source"] == src]
         if not rs:
             continue
         n = next((r["n"] for r in rs if r["slice"] == "all"), 0)
         print(f"\nstates from seat label '{src}'   n={n}")
-        print(f"{'pair':22s} {'all':>7s} {'pack1':>7s} {'pack2':>7s} "
-              f"{'pack3':>7s} {'early':>7s} {'late':>7s}   {'JS(all)':>8s}")
-        seen = []
-        for r in rs:
-            key = (r["a"], r["b"])
-            if key in seen:
-                continue
-            seen.append(key)
+        rows = []
+        for key in dict.fromkeys((r["a"], r["b"]) for r in rs):
             by = {x["slice"]: x for x in rs if (x["a"], x["b"]) == key}
-            js = by["all"]["js"]
-            print(f"{r['a']+' vs '+r['b']:22s} "
-                  + " ".join(_fmt(by[s]["agreement"]) for s in
-                             ("all", "pack1", "pack2", "pack3",
-                              "early(<=8)", "late(>=9)"))
-                  + f"   {_fmt(js, 8):>8s}")
+            rows.append([f"{key[0]} vs {key[1]}"]
+                        + [num(by[c]["agreement"]) for c in cols] + [num(by["all"]["js"])])
+        print_table(["pair", "all", "pack1", "pack2", "pack3", "early", "late", "JS(all)"],
+                    rows, "l" + "r" * 7)
 
-    print("\n" + "=" * 78)
-    print("PART 2 - grade of the policy's card minus grade of the card taken")
-    print("        (paired per state; SE clustered on draft_id; higher = better)")
-    print("=" * 78)
+    banner("PART 2 - grade of the policy's card minus grade of the card taken\n"
+           "        (paired per state; SE clustered on draft_id; higher = better)")
     for gname in ("shrunk_score_play", "-draft_rank"):
         rs = [r for r in grades if r["grader"] == gname]
         if not rs:
             continue
         print(f"\ngrader: {gname}")
-        print(f"{'states':12s} {'policy':7s} {'n':>6s} {'dmean':>9s} "
-              f"{'SE':>8s} {'t':>7s} {'agree':>7s} {'better':>7s} {'worse':>7s}")
-        for r in rs:
-            print(f"{r['state_source']:12s} {r['policy']:7s} {r['n']:6d} "
-                  f"{r['mean_delta']:9.5f} {r['se_clustered']:8.5f} "
-                  f"{r['t']:7.2f} {r['agree_with_recorded']:7.3f} "
-                  f"{r['frac_better']:7.3f} {r['frac_worse']:7.3f}")
+        print_table(["states", "policy", "n", "dmean", "SE", "t", "agree", "better", "worse"],
+                    [[r["state_source"], r["policy"], r["n"], num(r["mean_delta"], 5),
+                      num(r["se_clustered"], 5), num(r["t"], 2),
+                      num(r["agree_with_recorded"], 3), num(r["frac_better"], 3),
+                      num(r["frac_worse"], 3)] for r in rs], "llrrrrrrr")
 
-    print("\n" + "=" * 78)
-    print("PART 3 - leverage profile on gen-4's own states")
-    print("=" * 78)
-    print(f"{'pack':>4s} {'pick':>4s} {'n':>6s} {'|pack|':>7s} "
-          f"{'KL(1||4)':>9s} {'KL(3||4)':>9s} {'dis14':>7s} {'dis34':>7s} "
-          f"{'rand':>7s} {'dis/rand':>9s}")
-    for r in lev:
-        print(f"{r['pack']:4d} {r['pick']:4d} {r['n']:6d} {r['pack_size']:7.2f} "
-              f"{r['kl_gen1_gen4']:9.4f} {r['kl_gen3_gen4']:9.4f} "
-              f"{r['disagree_gen1_gen4']:7.3f} {r['disagree_gen3_gen4']:7.3f} "
-              f"{_fmt(r['random_baseline'])} "
-              f"{_fmt(r['disagree_over_baseline'], 9)}")
+    banner("PART 3 - leverage profile on gen-4's own states")
+    print_table(["pack", "pick", "n", "|pack|", "KL(1||4)", "KL(3||4)", "dis14", "dis34",
+                 "rand", "dis/rand"],
+                [[r["pack"], r["pick"], r["n"], num(r["pack_size"], 2),
+                  num(r["kl_gen1_gen4"]), num(r["kl_gen3_gen4"]),
+                  num(r["disagree_gen1_gen4"], 3), num(r["disagree_gen3_gen4"], 3),
+                  num(r["random_baseline"]), num(r["disagree_over_baseline"])]
+                 for r in lev], "r" * 10)
     print("\ntrend across pick index (mean over packs, weighted by n):")
+    trend = []
     for key in ("kl_gen1_gen4", "kl_gen3_gen4", "disagree_gen1_gen4",
                 "disagree_over_baseline"):
-        by_pick = {}
+        by_pick: dict[int, list] = {}
         for r in lev:
             by_pick.setdefault(r["pick"], []).append((r["n"], r[key]))
-        picks = sorted(by_pick)
-        vals = []
-        for p in picks:
-            ws = [(n, v) for n, v in by_pick[p] if v == v]
-            vals.append(sum(n * v for n, v in ws) / sum(n for n, _ in ws)
-                        if ws else float("nan"))
-        ok = [(p, v) for p, v in zip(picks, vals) if v == v]
-        rho = spearman(np.array([p for p, _ in ok]),
-                       np.array([v for _, v in ok])) if len(ok) > 2 else float("nan")
-        early = [v for p, v in ok if p <= 8]
-        late = [v for p, v in ok if p >= 9]
-        print(f"  {key:24s} picks1-8 {np.mean(early):8.4f}  "
-              f"picks9-15 {np.mean(late):8.4f}  spearman(pick, value) {rho:+.3f}")
+        ok = []
+        for pick in sorted(by_pick):
+            ws = [(n, v) for n, v in by_pick[pick] if v == v]
+            if ws:
+                ok.append((pick, sum(n * v for n, v in ws) / sum(n for n, _ in ws)))
+        rho = (spearman(np.array([p for p, _ in ok]), np.array([v for _, v in ok]))
+               if len(ok) > 2 else float("nan"))
+        trend.append([key, num(np.mean([v for p, v in ok if p <= 8])),
+                      num(np.mean([v for p, v in ok if p >= 9])), f"{rho:+.3f}"])
+    print_table(["metric", "picks 1-8", "picks 9-15", "spearman(pick, value)"], trend, "lrrr")
     print(f"\ngrader coverage: win-rate {meta['n_win_rate_cards']} cards, "
           f"draft_rank {meta['n_rank_cards']} cards")
 
@@ -399,12 +337,7 @@ def main() -> None:
     for s in SOURCES:
         print(f"  states[{s}] = {len(buckets[s])}")
 
-    runs: dict[str, dict[str, dict]] = {}
-    for src in SOURCES:
-        if not buckets[src]:
-            continue
-        print(f"running 3 checkpoints on '{src}' states")
-        runs[src] = run_policies(table, buckets[src], args.batch)
+    runs = run_policies(table, buckets, args.batch)
 
     graders = {
         "shrunk_score_play": load_win_rate_grader(),
@@ -413,7 +346,7 @@ def main() -> None:
     meta = {
         "corpus": str(CORPUS),
         "limit_drafts": args.limit_drafts,
-        "checkpoints": {n: str(p) for n, p in POLICIES},
+        "checkpoints": {n: str(p) for n, p in POLICIES.items()},
         "n_states": {s: len(buckets[s]) for s in SOURCES},
         "n_win_rate_cards": len(graders["shrunk_score_play"]),
         "n_rank_cards": len(graders["-draft_rank"]),

@@ -24,6 +24,7 @@ live tracker is pinned to, so a replayed state is the one the deployed policy sa
 from __future__ import annotations
 
 import csv
+from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from itertools import islice
@@ -32,7 +33,7 @@ from pathlib import Path
 import numpy as np
 from _lib.paths import MODELS as MODEL_DIR
 from _lib.paths import OUTPUT, SEALED_TRAINING_DATA
-from draft_corpus_common import ColourResolver
+from draft_corpus_common import BASIC_LAND_TYPES, WUBRG, ColourResolver
 
 from draft.application.draft_pick_states import RawPickState
 from draft.domain.draft_geometry import DraftGeometry, DraftRecord
@@ -68,8 +69,8 @@ MODELS = {
     "gen4b": G4 / "lr1e-5_t2all_nodecay.pt",
 }
 
-WUBRG = "WUBRG"
-BASIC = frozenset({"Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"})
+# Cards per booster in every corpus the battery reads.
+PACK_SIZE = 15
 
 
 class CardTable:
@@ -387,8 +388,7 @@ class PolicyRunner:
         the natural place to ask what the trunk has worked out about the draft:
         a probe fitted on it is reading the model's own state, not its choice.
         """
-        return np.concatenate(
-            self._run(samples, intervention, want="context"), axis=0)
+        return np.stack(self._run(samples, intervention, want="context"))
 
     def logits(
         self,
@@ -398,56 +398,60 @@ class PolicyRunner:
         """Per-sample PACK logits, in PACK-token order, one array per sample."""
         return self._run(samples, intervention, want="logits")
 
-    def _run(self, samples, intervention, want):
+    def _run(self, samples, intervention, want) -> list[np.ndarray]:
+        """One output per sample, in sample order.
+
+        A state grows from ~15 tokens at pack 1 pick 1 to a few hundred by pack
+        3, and each batch is padded to its longest member, so the batches are
+        cut from a length-sorted view of the states. Padding is masked out:
+        only the wall clock changes. Interventions run in sample order first,
+        so one that draws random numbers draws them as it would unsorted.
+        """
+        states = [intervention(s) if intervention is not None else s.state
+                  for s in samples]
+        order = sorted(range(len(states)), key=lambda i: int(states[i].card_idx.shape[0]))
+        out: list = [None] * len(states)
+        for start in range(0, len(order), self._batch_size):
+            batch = order[start:start + self._batch_size]
+            for i, result in zip(batch, self._forward([states[i] for i in batch], want)):
+                out[i] = result
+        return out
+
+    def _forward(self, states, want) -> list[np.ndarray]:
+        """One batch of states through the policy: per-state PACK logits, or
+        per-state CONTEXT-token outputs."""
         torch = self._torch
         emb = self._embedding_matrix()
-        model = self._model
-        out: list[np.ndarray] = []
-        for start in range(0, len(samples), self._batch_size):
-            chunk = samples[start:start + self._batch_size]
-            states = [
-                intervention(s) if intervention is not None else s.state
-                for s in chunk
-            ]
-            n_max = max(int(st.card_idx.shape[0]) for st in states)
-            b = len(states)
-            card_idx = np.zeros((b, n_max), dtype=np.int64)
-            type_idx = np.zeros((b, n_max), dtype=np.int64)
-            packs_ago = np.zeros((b, n_max), dtype=np.int64)
-            pick_ago = np.zeros((b, n_max), dtype=np.int64)
-            mask = np.zeros((b, n_max), dtype=bool)
-            pack_no = np.zeros(b, dtype=np.int64)
-            pick_no = np.zeros(b, dtype=np.int64)
-            pack_rows: list[np.ndarray] = []
-            for i, st in enumerate(states):
-                n = int(st.card_idx.shape[0])
-                card_idx[i, :n] = st.card_idx
-                type_idx[i, :n] = st.type_idx
-                packs_ago[i, :n] = st.packs_ago
-                pick_ago[i, :n] = st.pick_ago
-                mask[i, :n] = True
-                pack_no[i] = st.pack_number
-                pick_no[i] = st.pick_number
-                pack_rows.append(np.flatnonzero(st.type_idx == TYPE_PACK))
+        n_max = max(int(st.card_idx.shape[0]) for st in states)
+        b = len(states)
+        card_idx = np.zeros((b, n_max), dtype=np.int64)
+        type_idx = np.zeros((b, n_max), dtype=np.int64)
+        packs_ago = np.zeros((b, n_max), dtype=np.int64)
+        pick_ago = np.zeros((b, n_max), dtype=np.int64)
+        mask = np.zeros((b, n_max), dtype=bool)
+        pack_no = np.zeros(b, dtype=np.int64)
+        pick_no = np.zeros(b, dtype=np.int64)
+        for i, st in enumerate(states):
+            n = int(st.card_idx.shape[0])
+            card_idx[i, :n] = st.card_idx
+            type_idx[i, :n] = st.type_idx
+            packs_ago[i, :n] = st.packs_ago
+            pick_ago[i, :n] = st.pick_ago
+            mask[i, :n] = True
+            pack_no[i] = st.pack_number
+            pick_no[i] = st.pick_number
 
-            dev = self._device
-            t = lambda a: torch.from_numpy(a).to(dev)  # noqa: E731
-            with torch.no_grad():
-                card_emb = emb[t(card_idx)]
-                if want == "logits":
-                    logits, _ = model(
-                        card_emb, t(type_idx), t(packs_ago), t(pick_ago),
-                        t(mask), t(pack_no), t(pick_no),
-                    )
-                    logits = logits.float().cpu().numpy()
-                    for i, rows in enumerate(pack_rows):
-                        out.append(logits[i, rows])
-                    continue
-                out.append(self._trunk_context(
-                    card_emb, t(type_idx), t(packs_ago), t(pick_ago),
-                    t(mask), t(pack_no), t(pick_no),
-                ))
-        return out
+        dev = self._device
+        t = lambda a: torch.from_numpy(a).to(dev)  # noqa: E731
+        inputs = (t(type_idx), t(packs_ago), t(pick_ago), t(mask), t(pack_no), t(pick_no))
+        with torch.no_grad():
+            card_emb = emb[t(card_idx)]
+            if want == "context":
+                return list(self._trunk_context(card_emb, *inputs))
+            logits, _ = self._model(card_emb, *inputs)
+        logits = logits.float().cpu().numpy()
+        return [logits[i, np.flatnonzero(st.type_idx == TYPE_PACK)]
+                for i, st in enumerate(states)]
 
     def _trunk_context(self, card_emb, type_idx, packs_ago, pick_ago,
                        card_mask, pack_number, pick_number) -> np.ndarray:
@@ -498,9 +502,34 @@ def replay_fidelity(samples: Sequence[PickSample], logits: Sequence[np.ndarray])
                           for s, ln in zip(samples, logits) if s.target >= 0]))
 
 
+def absolute_pick(state: RawPickState) -> int:
+    """The pick's index across the whole draft, 1-based."""
+    return (state.pack_number - 1) * PACK_SIZE + state.pick_number
+
+
 def colour_weights(ids: frozenset) -> list[tuple[str, float]]:
     """A card's share of each colour, a gold card split evenly; ``C`` if colourless."""
     return [(c, 1.0 / len(ids)) for c in ids] if ids else [("C", 1.0)]
+
+
+def deck_colour_shares(deck: Sequence[str], colours: ColourResolver) -> tuple[np.ndarray, int]:
+    """A deck's WUBRG colour shares over its coloured cards, and how many those
+    are; basics and other colourless cards carry no lane."""
+    acc: Counter[str] = Counter()
+    n = 0
+    for name in deck:
+        ids = colours(name)
+        if ids:
+            n += 1
+            for c, w in colour_weights(ids):
+                acc[c] += w
+    return np.array([acc[c] / n if n else 0.0 for c in WUBRG]), n
+
+
+def wg_ur(beta) -> float:
+    """White-and-green over blue-and-red: the mean of a WUBRG-ordered
+    coefficient vector's W and G entries minus that of its U and R."""
+    return (beta[0] + beta[4]) / 2 - (beta[1] + beta[3]) / 2
 
 
 def deck_lane(deck: Sequence[str], colours: ColourResolver) -> frozenset:
@@ -511,7 +540,7 @@ def deck_lane(deck: Sequence[str], colours: ColourResolver) -> frozenset:
     """
     acc: dict[str, float] = {}
     for name in deck:
-        if name in BASIC:
+        if name in BASIC_LAND_TYPES:
             continue
         ids = colours(name)
         for c in ids:
