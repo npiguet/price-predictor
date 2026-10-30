@@ -712,7 +712,9 @@ minimal pair.
 **The mask removes the bias in the labels, not in the boards.** The trunk still reads the boards a
 rule's copies bring, such as many infect boards when infect is rebalanced. That skews what the
 model reads, not what it is told the answer is, and training on varied boards limits it. The
-rule's own outputs still need the importance weight of the calibration constraint above.
+rule's own outputs still need an importance weight: the rule's natural share divided by its
+drawn share, as the calibration constraint of the [gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)
+sets out.
 
 **A soft mask replaces the hard one if the hard mask is shown to cost the other outputs.** Under
 the soft mask, a record drawn k times keeps its other outputs at weight 1/k on each copy. Its
@@ -1517,11 +1519,9 @@ and inputs. The largest is the zone outcome, which 64 rules need to tell apart t
 now merges. Seventeen of the 22 outputs need no new collection, because the records already carry
 the event or field they would be trained on, and three more need it only in part.
 
-**Four outputs take a shape other than the one the map named.** A player losing is one binary per
-player, because in a two-player game a win is the other player's loss and a draw is both losing. A
-cost reduction and a base power and toughness change are signed deltas, against the printed cost
-and the previous base, like the existing power change. The legality of an attack target needs an
-attackers record anchored to one attacker, as a blockers record already is, which is the third fix.
+**Four outputs take a shape other than the one the map named.** They are a player losing, a cost
+adjustment, a base power and toughness change, and the legality of an attack target. The [gen-3
+spec](../specs/2026-10-30-ability-effect-model-gen3.md#112-new-outputs) gives each its shape.
 
 #### The 77 rules left out are subgames, casual mechanics, engine procedure and banding
 
