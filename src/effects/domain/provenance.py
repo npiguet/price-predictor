@@ -424,14 +424,15 @@ class SidecarLookup(Protocol):
         ...
 
 
-def first_text(
-    keys: Iterable[ProvenanceKey], text_of: Callable[[ProvenanceKey], str | None],
-) -> str | None:
+def first_text[T](
+    keys: Iterable[ProvenanceKey], text_of: Callable[[ProvenanceKey], T | None],
+) -> T | None:
     """The text of the first key ``text_of`` names one for, or None.
 
     The acting line is the first acting key that resolves, so every reader of
     "the text this record acts through" folds a key tuple this way, whatever
-    ``text_of`` resolves to.
+    ``text_of`` resolves to — ``[ACT]``'s ``e`` included, which is why the
+    check is against None: row 0 of the encoded matrix is a valid hit.
     """
     for key in keys:
         text = text_of(key)

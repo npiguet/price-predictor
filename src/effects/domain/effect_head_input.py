@@ -18,7 +18,7 @@ from functools import lru_cache
 from typing import Protocol
 
 from effects.domain.keyword_names import overlay_keyword
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.recorded_version import recorded_version
 from effects.domain.records import (
     ActivationPayload,
@@ -26,10 +26,10 @@ from effects.domain.records import (
     ContinuousPayload,
     EffectRecord,
     Moment,
-    PlayabilityDecisionPayload,
     PlayabilitySubkind,
     RecordKind,
     ResolutionOutcome,
+    acting_keys,
 )
 from effects.domain.state_snapshot import (
     COLORS,
@@ -618,25 +618,13 @@ class SurfaceBuilder:
         return not (dropout > 0.0 and self.rng.random() < dropout)
 
     def _act_vector(self, record: EffectRecord):
+        """The acting line's ``e``: the first of :func:`acting_keys` that
+        resolves, so ``[ACT]`` reads exactly the line rarity and gate 1 key on.
+        A merged line's keys all name the same row."""
         if not record.has_act_line:
             return self._zero
-        payload = record.payload
-        if isinstance(payload, PlayabilityDecisionPayload):
-            if not payload.candidates:
-                return self._zero
-            return self._first_vector(payload.candidates[0].ability)
-        if record.ability:
-            return self._first_vector(record.ability)
-        return self._zero
-
-    def _first_vector(self, keys):
-        """The first key that resolves; zeros if none do. A merged line's keys
-        all name the same row."""
-        for key in keys:
-            vector = self.lines.e_for(key)
-            if vector is not None:
-                return vector
-        return self._zero
+        vector = first_text(acting_keys(record), self.lines.e_for)
+        return self._zero if vector is None else vector
 
 
 def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]]:
