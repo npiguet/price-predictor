@@ -11,6 +11,7 @@ from pathlib import Path
 
 from effects.domain.ability_tokenizer import AbilityTokenizer, tokenizer_surface
 from effects.domain.keyword_definitions import KeywordDefinition
+from effects.domain.tokenizer_files import TokenizerFiles
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 
 
@@ -43,30 +44,24 @@ def load_definitions(keyword_path: Path) -> dict[str, KeywordDefinition]:
 
 
 def load_tokenizer(
-    vocab_path: Path, keyword_path: Path, *,
-    training_settings: Mapping | None = None,
+    files: TokenizerFiles, *, training_settings: Mapping | None = None,
 ) -> AbilityTokenizer:
-    """The tokenizer over ``vocab_path`` and the definitions at ``keyword_path``.
+    """The tokenizer over ``files``' vocabulary and keyword definitions.
 
     With a loaded checkpoint's ``training_settings`` it applies the rules that
     checkpoint trained under (:func:`tokenizer_surface`); without, the
     vocabulary's own surface's.
     """
-    from effects.domain.ability_encoder import surface_of
-
-    surface = surface_of(vocab_path)
+    surface = files.surface
     if training_settings is not None:
         surface = tokenizer_surface(surface, training_settings)
     return AbilityTokenizer(
-        load_vocabulary(Path(vocab_path)), load_definitions(keyword_path),
+        load_vocabulary(files.vocab), load_definitions(files.keywords),
         surface=surface,
     )
 
 
-def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
+def tokenizer_for(checkpoint, files: TokenizerFiles) -> AbilityTokenizer:
     """The tokenizer ``checkpoint`` trained with, under the rules it recorded
     (a gen-1 checkpoint reads its script vocabulary with the prose grammar)."""
-    return load_tokenizer(
-        vocab_path, keyword_path,
-        training_settings=checkpoint.training_settings or {},
-    )
+    return load_tokenizer(files, training_settings=checkpoint.training_settings or {})

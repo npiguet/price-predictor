@@ -23,7 +23,6 @@ from effects.domain.ability_encoder import (
     collate_lines,
     encoding_role_spans,
     encoding_text,
-    surface_of,
 )
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
@@ -73,15 +72,17 @@ class AbilityEncoderRunner:
         checkpoint,
         tokenizer: AbilityTokenizer,
         *,
-        vocab_path,
+        surface: Surface,
         device: torch.device | None = None,
         truncations: TruncationLog | None = None,
     ) -> AbilityEncoderRunner:
+        """``surface`` is the checkpoint's vocabulary's, which the tokenizer's
+        own grammar may not be (``tokenizer_surface``)."""
         return cls(
             checkpoint.encoder_config,
             checkpoint.encoder_state,
             tokenizer,
-            surface=surface_of(vocab_path),
+            surface=surface,
             device=device,
             withheld_keyword=checkpoint.provenance.withheld_keyword,
             truncations=truncations,

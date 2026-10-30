@@ -29,7 +29,6 @@ from effects.application.geometry_checks import (
     run_gate_three,
 )
 from effects.application.record_scoring import score_records
-from effects.domain.ability_encoder import surface_of
 from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
     CheckName,
@@ -135,7 +134,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 def _sidecar_index(context: EvaluationContext):
     """The card and token trees' sidecars (FR-123), keyed on the checkpoint's
     surface once for every variant's cache."""
-    return SidecarIndex(context.config.cards_folders, surface=surface_of(context.vocab_path))
+    return SidecarIndex(context.config.cards_folders, surface=context.tokenizer_files.surface)
 
 
 def _load_cache(context: EvaluationContext, sidecars, variant: str = "full"):

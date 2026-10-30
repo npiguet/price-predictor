@@ -19,10 +19,10 @@ from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
     RESUME_NAME,
     ResumeMismatchError,
-    content_hash,
     load_resume_state,
     resume_mismatches,
     save_resume_state,
+    tokenizer_hashes,
 )
 
 if TYPE_CHECKING:
@@ -63,8 +63,7 @@ def resume_settings(spec: RunSpec, *, training_settings: dict) -> dict:
     return {
         "seed": spec.seed,
         "corpus_digest": spec.facts.digest,
-        "vocab_hash": content_hash(config.vocab_path),
-        "keyword_definitions_hash": content_hash(config.keyword_definitions),
+        **tokenizer_hashes(config.tokenizer_files),
         **{name: getattr(config, name) for name in compared_flags()},
         **training_settings,
     }

@@ -14,7 +14,6 @@ from functools import partial
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
 from effects.application.model_loading import Runnable, forward_chunks
-from effects.domain.ability_encoder import surface_of
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
@@ -105,7 +104,7 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
         )
     # Both checkpoints read one vocabulary (require_same_split), so one
     # surface's texts decide the stratum for both: the batcher's own join.
-    texts = KeyResolver(context.sidecars, surface_of(context.vocab_path))
+    texts = KeyResolver(context.sidecars, context.tokenizer_files.surface)
     stratum = unique_text_stratum(context.corpus_path, games, texts.text_of)
     if not stratum:
         return CheckResult(

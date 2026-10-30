@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from effects.application.model_loading import LoadedModel, Runnable
     from effects.domain.corpus_manifest import CorpusManifest
     from effects.domain.split_provenance import SplitProvenance
+    from effects.domain.tokenizer_files import TokenizerFiles
     from effects.infrastructure.converted_trees import SourceTrees
     from effects.infrastructure.effect_model_store import EffectCheckpoint
     from effects.infrastructure.sidecar_io import SidecarCache
@@ -33,8 +34,9 @@ class EvaluationContext:
 
     config: EvaluateEffectModelConfig
     main: EffectCheckpoint
-    vocab_path: Path
-    keyword_path: Path
+    #: The vocabulary and keyword files every loaded checkpoint reads with,
+    #: hash-checked against ``main``; a baseline must record the same hashes.
+    tokenizer_files: TokenizerFiles
     corpus_path: Path
     manifest: CorpusManifest
     _main_model: LoadedModel | None = field(default=None, repr=False)
@@ -60,11 +62,7 @@ class EvaluationContext:
     def _load(self, checkpoint) -> LoadedModel:
         from effects.application.model_loading import load_model
 
-        return load_model(
-            checkpoint,
-            vocab_path=self.vocab_path, keyword_path=self.keyword_path,
-            sidecars=self.sidecars,
-        )
+        return load_model(checkpoint, files=self.tokenizer_files, sidecars=self.sidecars)
 
 
 @dataclass
@@ -161,13 +159,16 @@ def with_corpus_defaults(
 def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     """The main checkpoint, hash-checked, with its corpus verified (FR-147)."""
     from effects.infrastructure.corpus_store import CorpusStore
-    from effects.infrastructure.effect_model_store import load_for_inference
+    from effects.infrastructure.effect_model_store import (
+        inference_files,
+        load_effect_checkpoint,
+    )
     from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
 
     main_path = Path(config.checkpoint)
-    main, vocab_path, keyword_path = load_for_inference(
-        main_path,
-        vocab_path=config.vocab_path, keyword_path=config.keyword_definitions,
+    main = load_effect_checkpoint(main_path)
+    files = inference_files(
+        main, vocab=config.vocab_path, keywords=config.keyword_definitions,
     )
     corpus_path = resolve_corpus_path(
         main.provenance, corpus=config.corpus, checkpoint=main_path,
@@ -177,7 +178,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     # Before any record is read (FR-033).
     refuse_mixed_generations(iter_shards(Path(corpus_path)))
     return EvaluationContext(
-        with_corpus_defaults(config, manifest), main, vocab_path, keyword_path,
+        with_corpus_defaults(config, manifest), main, files,
         corpus_path=corpus_path, manifest=manifest,
     )
 

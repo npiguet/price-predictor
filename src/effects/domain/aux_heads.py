@@ -128,3 +128,7 @@ TRAINING_HEADS: tuple[HeadSpec, ...] = tuple(
 TRAINING_ONLY_MODULES: tuple[str, ...] = tuple(
     module for spec in TRAINING_HEADS for module in spec.modules
 )
+#: Their state-dict key prefixes: what saving drops and loading forgives.
+TRAINING_ONLY_PREFIXES: tuple[str, ...] = tuple(
+    f"{module}." for module in TRAINING_ONLY_MODULES
+)

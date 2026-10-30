@@ -235,23 +235,20 @@ def load_probe_model(
     over the same trees, the variant-script tree among them.
     """
     from effects.application.model_loading import load_runnable
-    from effects.domain.ability_encoder import surface_of
-    from effects.infrastructure.effect_model_store import verified_inference_paths
+    from effects.infrastructure.effect_model_store import inference_files
 
     checkpoint = checkpoint or load_checkpoint(checkpoint_path)
     # Hash-checked like every inference command: a probe over a vocabulary
     # that moved since training reads vectors that look valid and mean nothing.
-    vocab, keywords = verified_inference_paths(
-        checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
-    )
+    files = inference_files(checkpoint, vocab=vocab_path, keywords=keyword_path)
     runnable = load_runnable(
-        checkpoint, vocab_path=vocab, keyword_path=keywords,
+        checkpoint, files=files,
         sidecars=sidecar_cache(cards_folders, variant_scripts), records=records,
     )
     return ProbeModel(
         checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,
         batcher=runnable.batcher, fields=runnable.fields,
-        device=runnable.batcher.materializer.device, surface=surface_of(vocab),
+        device=runnable.batcher.materializer.device, surface=files.surface,
         e_dim=checkpoint.encoder_config.e_dim,
     )
 

@@ -37,7 +37,6 @@ from effects.application.train_effect_model import (
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     AbilityEncoderConfig,
-    surface_of,
 )
 from effects.domain.ability_tokenizer import TOKENIZER_RULES, TOKENIZER_RULES_KEY
 from effects.domain.baselines import baseline_masks
@@ -210,7 +209,7 @@ def _identity_table(config: TrainEffectModelConfig, device: torch.device) -> Ide
     """The identity baseline's table, one row per text the sidecars hold."""
     texts = known_texts(
         config.source_trees.sidecar_roots(),
-        surface_of(config.vocab_path),
+        config.tokenizer_files.surface,
     )
     logger.info("Identity table over %d ability texts.", len(texts))
     return IdentityTable(texts, config.e_dim).to(device)

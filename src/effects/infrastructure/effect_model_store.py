@@ -10,15 +10,16 @@ import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 import torch
 
 from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
-from effects.domain.aux_heads import TRAINING_ONLY_MODULES
+from effects.domain.aux_heads import TRAINING_ONLY_PREFIXES
 from effects.domain.baselines import Baseline
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.split_provenance import SplitProvenance
+from effects.domain.tokenizer_files import TokenizerFiles
 from price_predictor.infrastructure.torch_checkpoint import (
     load_checkpoint,
     save_checkpoint,
@@ -58,16 +59,26 @@ class SplitMismatchError(RuntimeError):
     """A variant checkpoint records a different split than the main one."""
 
 
-def verify_hashes(
-    provenance: SplitProvenance, *, vocab_path: Path, keyword_path: Path,
-) -> None:
+def tokenizer_hashes(files: TokenizerFiles) -> dict[str, str]:
+    """Both files' content hashes, under the names a checkpoint's provenance
+    and a resume file record them by."""
+    return {
+        "vocab_hash": content_hash(files.vocab),
+        "keyword_definitions_hash": content_hash(files.keywords),
+    }
+
+
+def verify_hashes(provenance: SplitProvenance, files: TokenizerFiles) -> None:
     """Re-hash the files actually loaded; raise ``HashMismatchError`` on a
     mismatch."""
     for (label, recorded), path in zip(
-        provenance.file_hashes().items(), (vocab_path, keyword_path),
+        provenance.file_hashes().items(), (files.vocab, files.keywords),
     ):
+        if not recorded:
+            # A run with no keyword-definition file is degraded, not broken.
+            continue
         actual = content_hash(path)
-        if recorded and actual != recorded:
+        if actual != recorded:
             raise HashMismatchError(
                 f"{label} at {path} has changed since training: recorded "
                 f"{recorded[:12]}…, actual {actual[:12] or '(missing)'}…. "
@@ -99,10 +110,9 @@ class EffectCheckpoint:
 
 def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
     """Drop the training-only heads from a model state dict (FR-076)."""
-    prefixes = tuple(f"{name}." for name in TRAINING_ONLY_MODULES)
     return {
         key: value for key, value in state.items()
-        if not key.startswith(prefixes)
+        if not key.startswith(TRAINING_ONLY_PREFIXES)
     }
 
 
@@ -110,8 +120,7 @@ def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
 #: and the zero-initialized option-kind embedding (FR-063a). Anything else
 #: missing is refused, or it would run at random initial weights.
 OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
-    *(f"{module}." for module in TRAINING_ONLY_MODULES),
-    "option_kind_embedding.",
+    *TRAINING_ONLY_PREFIXES, "option_kind_embedding.",
 )
 
 
@@ -245,63 +254,26 @@ def require_same_split(
             )
 
 
-def resolve_inference_paths(
-    provenance: SplitProvenance,
-    *,
-    vocab_path: Path | None,
-    keyword_path: Path | None,
-) -> tuple[Path, Path]:
-    """The vocabulary and keyword paths an inference command should use
-    (FR-097): the recorded ones unless overridden."""
-    resolved_vocab = Path(vocab_path) if vocab_path else Path(provenance.vocab_path)
-    resolved_keyword = (
-        Path(keyword_path) if keyword_path
-        else Path(provenance.keyword_definitions_path)
-    )
-    return resolved_vocab, resolved_keyword
-
-
 def load_effect_checkpoint(path: Path) -> EffectCheckpoint:
     """The checkpoint at ``path``, read through the store of its own directory."""
     path = Path(path)
     return EffectModelStore(path.parent).load(path)
 
 
-def verified_inference_paths(
-    checkpoint: EffectCheckpoint,
-    *,
-    vocab_path: Path | None = None,
-    keyword_path: Path | None = None,
-) -> tuple[Path, Path]:
-    """:func:`resolve_inference_paths`, then the hash check on what it
-    resolved, an override included."""
-    vocab, keywords = resolve_inference_paths(
-        checkpoint.provenance, vocab_path=vocab_path, keyword_path=keyword_path,
+def inference_files(
+    checkpoint: EffectCheckpoint, *,
+    vocab: Path | None = None, keywords: Path | None = None,
+) -> TokenizerFiles:
+    """The vocabulary and keyword files an inference command reads (FR-097):
+    the ones ``checkpoint`` recorded unless overridden, hash-checked either
+    way, so no command can resolve its files and forget to verify them."""
+    recorded = checkpoint.provenance.tokenizer_files
+    files = TokenizerFiles(
+        Path(vocab) if vocab else recorded.vocab,
+        Path(keywords) if keywords else recorded.keywords,
     )
-    verify_hashes(checkpoint.provenance, vocab_path=vocab, keyword_path=keywords)
-    return vocab, keywords
-
-
-class InferenceCheckpoint(NamedTuple):
-    """A checkpoint with the vocabulary and keyword files it verified against."""
-
-    checkpoint: EffectCheckpoint
-    vocab_path: Path
-    keyword_path: Path
-
-
-def load_for_inference(
-    path: Path,
-    *,
-    vocab_path: Path | None = None,
-    keyword_path: Path | None = None,
-) -> InferenceCheckpoint:
-    """Load ``path`` and resolve and hash-check its inference files (FR-097)."""
-    checkpoint = load_effect_checkpoint(path)
-    vocab, keywords = verified_inference_paths(
-        checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
-    )
-    return InferenceCheckpoint(checkpoint, vocab, keywords)
+    verify_hashes(checkpoint.provenance, files)
+    return files
 
 
 #: Rewritten at the end of every epoch; not a checkpoint (see CLAUDE.md

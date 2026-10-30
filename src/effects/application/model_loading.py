@@ -15,7 +15,6 @@ import random
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import batched
-from pathlib import Path
 
 import torch
 
@@ -32,7 +31,6 @@ from effects.domain.ability_encoder import (
     AbilityEncoder,
     TruncationLog,
     log_truncation,
-    surface_of,
 )
 from effects.domain.ability_tokenizer import (
     INFERENCE_KEYWORD_EXPAND_P,
@@ -46,6 +44,7 @@ from effects.domain.effect_model import EffectModel
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.sampling import sampling_class
 from effects.domain.surface_collation import entity_index, per_entity_targets
+from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.effect_model_store import load_weights
 from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import tokenizer_for
@@ -152,9 +151,10 @@ class LoadedModel:
 
 
 def load_model(
-    checkpoint, *, vocab_path: Path, keyword_path: Path, sidecars: SidecarCache,
+    checkpoint, *, files: TokenizerFiles, sidecars: SidecarCache,
 ) -> LoadedModel:
-    """``checkpoint``'s weights on the device, with its tokenizer, joining
+    """``checkpoint``'s weights on the device, with its tokenizer over
+    ``files`` (:func:`~effects.infrastructure.effect_model_store.inference_files`), joining
     keys through ``sidecars``, which several loads may share
     (:meth:`SourceTrees.sidecar_cache`)."""
     device = default_device()
@@ -163,23 +163,19 @@ def load_model(
         checkpoint=checkpoint,
         encoder=encoder,
         model=model,
-        tokenizer=tokenizer_for(checkpoint, vocab_path, keyword_path),
+        tokenizer=tokenizer_for(checkpoint, files),
         identity_table=_identity_table(checkpoint, device),
-        surface=surface_of(vocab_path),
+        surface=files.surface,
         device=device,
         sidecars=sidecars,
     )
 
 
 def load_runnable(
-    checkpoint, *, vocab_path: Path, keyword_path: Path, sidecars: SidecarCache,
-    records,
+    checkpoint, *, files: TokenizerFiles, sidecars: SidecarCache, records,
 ) -> Runnable:
     """One checkpoint, loaded and ready to run over ``records``."""
-    return load_model(
-        checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
-        sidecars=sidecars,
-    ).runnable(records)
+    return load_model(checkpoint, files=files, sidecars=sidecars).runnable(records)
 
 
 def _identity_table(checkpoint, device) -> IdentityTable | None:

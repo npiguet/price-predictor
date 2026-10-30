@@ -12,11 +12,14 @@ from effects.domain import default_paths
 from effects.domain.ability_cache_layout import DEFAULT_CACHE_ROOT
 from effects.domain.baselines import Baseline, taxonomy_matrix
 from effects.domain.provenance import ProvenanceSidecar
+from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.effect_model_store import (
-    InferenceCheckpoint,
-    load_for_inference,
+    EffectCheckpoint,
+    EffectModelStore,
+    inference_files,
+    load_effect_checkpoint,
     model_output_for,
 )
 from effects.infrastructure.sidecar_io import iter_sidecars, rendered_prose
@@ -46,7 +49,7 @@ class EncodeAbilitiesConfig:
         with another variant's weights; an explicit value overrides."""
         if self.checkpoint is not None:
             return Path(self.checkpoint)
-        return model_output_for(self.variant) / "latest.pt"
+        return EffectModelStore(model_output_for(self.variant)).latest_path()
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,12 +65,12 @@ def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
         store.clean()
 
     # Hash-checked before anything is written.
-    loaded = load_for_inference(
-        config.resolved_checkpoint(),
-        vocab_path=config.vocab_path, keyword_path=config.keyword_definitions,
+    checkpoint = load_effect_checkpoint(config.resolved_checkpoint())
+    files = inference_files(
+        checkpoint, vocab=config.vocab_path, keywords=config.keyword_definitions,
     )
-    e_dim = loaded.checkpoint.encoder_config.e_dim
-    provenance = loaded.checkpoint.provenance
+    e_dim = checkpoint.encoder_config.e_dim
+    provenance = checkpoint.provenance
 
     folders = config.source_trees.folders()
     # A relative default resolved from another directory names nothing, and
@@ -80,7 +83,7 @@ def run(config: EncodeAbilitiesConfig) -> EncodeSummary:
     if config.variant == Baseline.TAXONOMY:
         matrices = (taxonomy_matrix(sidecar, e_dim) for _path, sidecar in sources)
     else:
-        matrices = encode_tree(build_runner(loaded), sources)
+        matrices = encode_tree(build_runner(checkpoint, files), sources)
     rows = 0
     for (_path, sidecar), matrix in zip(sources, matrices, strict=True):
         store.write(sidecar.script_file, matrix, sidecar)
@@ -135,7 +138,7 @@ def encode_tree(
     return [encoded[rows] for rows in rows_of]
 
 
-def build_runner(loaded: InferenceCheckpoint):
+def build_runner(checkpoint: EffectCheckpoint, files: TokenizerFiles):
     """The checkpoint's encoder, built once for the whole run."""
     from effects.application.ability_encoder_runner import (
         AbilityEncoderRunner,
@@ -143,9 +146,7 @@ def build_runner(loaded: InferenceCheckpoint):
     from effects.domain.ability_encoder import TruncationLog, log_truncation
     from effects.infrastructure.tokenizer_loading import tokenizer_for
 
-    checkpoint, vocab_path, keyword_path = loaded
     return AbilityEncoderRunner.from_checkpoint(
-        checkpoint, tokenizer_for(checkpoint, vocab_path, keyword_path),
-        vocab_path=vocab_path,
+        checkpoint, tokenizer_for(checkpoint, files), surface=files.surface,
         truncations=TruncationLog(log_truncation(logger, "encode-abilities")),
     )

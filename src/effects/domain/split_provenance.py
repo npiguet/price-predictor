@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any
 
 from effects.domain.text_holdout import HoldoutUnit
+from effects.domain.tokenizer_files import TokenizerFiles
 
 
 def _like(default, value):
@@ -61,6 +62,11 @@ class SplitProvenance:
             spec.name: _like(spec.default, data[spec.name])
             for spec in fields(cls) if spec.name in data
         })
+
+    @property
+    def tokenizer_files(self) -> TokenizerFiles:
+        """The vocabulary and keyword-definition files as recorded."""
+        return TokenizerFiles.of(self.vocab_path, self.keyword_definitions_path)
 
     def file_hashes(self) -> dict[str, str]:
         return {

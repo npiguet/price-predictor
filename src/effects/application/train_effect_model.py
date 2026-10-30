@@ -22,6 +22,7 @@ from effects.domain.effect_head_layout import active_fields
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.text_holdout import HoldoutUnit, normalize_script_text
+from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
@@ -224,6 +225,11 @@ class TrainEffectModelConfig:
         """``--cards-folder`` and ``--variant-scripts`` as one value."""
         return SourceTrees.of(self.cards_folders, self.variant_scripts)
 
+    @property
+    def tokenizer_files(self) -> TokenizerFiles:
+        """``--vocab-path`` and ``--keyword-definitions`` as one value."""
+        return TokenizerFiles.of(self.vocab_path, self.keyword_definitions)
+
     def resolved_model_output(self) -> Path:
         from effects.infrastructure.effect_model_store import model_output_for
 
@@ -276,7 +282,7 @@ class CorpusFacts:
     def provenance(self, config: TrainEffectModelConfig):
         """What a checkpoint of this run records about the data it saw."""
         from effects.domain.split_provenance import SplitProvenance
-        from effects.infrastructure.effect_model_store import content_hash
+        from effects.infrastructure.effect_model_store import tokenizer_hashes
 
         return SplitProvenance(
             held_out_cards=self.split.held_out_cards,
@@ -284,8 +290,7 @@ class CorpusFacts:
             game_disjoint_games=tuple(sorted(self.split.game_disjoint_games)),
             vocab_path=str(config.vocab_path),
             keyword_definitions_path=str(config.keyword_definitions),
-            vocab_hash=content_hash(Path(config.vocab_path)),
-            keyword_definitions_hash=content_hash(Path(config.keyword_definitions)),
+            **tokenizer_hashes(config.tokenizer_files),
             withheld_keyword=config.withhold_keyword,
             holdout_permille=self.holdout.permille,
             holdout_max_carriers=self.holdout.max_carriers,

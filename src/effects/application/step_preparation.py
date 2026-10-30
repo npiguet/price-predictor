@@ -28,7 +28,7 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     ValidationGameInTrainingError,
 )
-from effects.domain.ability_encoder import TruncationLog, surface_of
+from effects.domain.ability_encoder import TruncationLog
 from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
 from effects.domain.aux_head_targets import (
     created_objects_targets,
@@ -222,7 +222,7 @@ class StepPreparer:
     ) -> None:
         self.config = settings.config
         self.seed = settings.seed
-        self.surface = surface_of(settings.config.vocab_path)
+        self.surface = settings.config.tokenizer_files.surface
         self.surface_spec = SurfaceSpec.for_training(settings.config, settings.widths)
         self.split = settings.split
         self.rarity = settings.rarity
@@ -237,9 +237,7 @@ class StepPreparer:
             lambda text, keys: self.truncated.append((text, keys)),
         )
         self._api_targets: dict[str, tuple[int, tuple[int, ...]]] = {}
-        self.tokenizer = load_tokenizer(
-            self.config.vocab_path, self.config.keyword_definitions,
-        )
+        self.tokenizer = load_tokenizer(self.config.tokenizer_files)
         self.sidecars = self.config.source_trees.sidecar_cache()
         #: One memoised join for the run, not per step.
         self.resolver = KeyResolver(self.sidecars, self.surface)
