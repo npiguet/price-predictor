@@ -329,7 +329,7 @@ Inside the deterministic features, the color pips are the one group the scorer c
 
 ![Held-out accuracy change from erasing each deterministic-feature group](images/2026-08-27-scorer-det-groups.png)
 
-*Source: `t5b_det_groups.py`.*
+*Source: `t5_ablation.py --groups`.*
 
 Erasing the six pip counts flips 14% of match predictions, the largest effect of any single group. The full mana-cost group accounts for two thirds of what all 32 features contribute. The color flags and the power/toughness/loyalty slots have small effects, distinguishable from zero (z ≈ −2.5 each). Mana value alone is marginal. Mana production and is_land contribute nothing, because the text embedding already knows what a card produces and whether it is a land. The single-group effects sum to approximately the all-32 effect, so the contribution decomposes additively across the groups, with nothing left to interactions.
 
