@@ -14,8 +14,6 @@ Sections (``--section all`` default):
 """
 
 import argparse
-import json
-import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -25,7 +23,11 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.jsonio import write_json
+from _lib.stats import ols
 from scorer_probes import probe_lib as pl
+
+from sealed.domain import card_embedding_layout as layout
 
 OUT = pl.SCRATCH
 
@@ -72,9 +74,7 @@ def sec_t0():
 
 def _colors_of_deck(cards, loc, cache):
     pres = set()
-    for c in cards:
-        if c.lower() in pl.BASIC_LAND_NAMES:
-            continue
+    for c in pl.nonbasic(cards):
         if c not in cache:
             e = loc.load_embedding(c)
             cache[c] = None if e is None else (e[-pl.FC:][pl.layout.COLOR_PIPS] > 0)
@@ -108,7 +108,7 @@ def sec_decks():
         tot = 0
         for deck in pl.read_generated_decks(pl.YDATA / "decks" / fname, limit=3000):
             nb = sum(1 for c in deck.cards
-                     if c.lower() not in pl.BASIC_LAND_NAMES and is_nonbasic_land(c))
+                     if not pl.is_basic(c) and is_nonbasic_land(c))
             counts[nb] += 1
             tot += 1
         dist = " ".join(f"{k}:{100 * v / tot:.0f}%" for k, v in sorted(counts.items()))
@@ -143,26 +143,9 @@ def sec_t2class():
     df = pd.read_csv(OUT / "t2_card_values.csv")
     df = df[df.v_swap.notna()].copy()
     loc = pl.ConvertedCardLocator(pl.CARDS_PATH)
-    cols = {"is_trick": [], "is_counter": [], "is_pw": [], "is_vehicle": [],
-            "makes_tokens": [], "x_cost": [], "hyb": [], "tok_len": []}
-    for name in df.name:
-        t = loc.load_text(name)
-        txt = t.text.lower() if t else ""
-        types = re.search(r"types:.*", txt)
-        types = types.group(0) if types else ""
-        mc = re.search(r"mana cost:.*", txt)
-        mc = mc.group(0) if mc else ""
-        cols["is_trick"].append(bool("instant" in types
-                                     and re.search(r"gets? \+\d+/\+\d+ until end of turn", txt)))
-        cols["is_counter"].append("counter target" in txt and "spell" in txt)
-        cols["is_pw"].append("planeswalker" in types)
-        cols["is_vehicle"].append("vehicle" in types)
-        cols["makes_tokens"].append(bool(re.search(r"create.{0,60}token", txt)))
-        cols["x_cost"].append("{x}" in mc)
-        cols["hyb"].append("/" in mc)
-        cols["tok_len"].append(len(txt.split()))
-    for k, v in cols.items():
-        df[k] = v
+    classes = pd.DataFrame([pl.card_classes(t.text if (t := loc.load_text(name)) else "")
+                            for name in df.name], index=df.index)
+    df = pd.concat([df, classes], axis=1)
     base = df[df.det_is_land == 0]
 
     def grp(mask, label):
@@ -191,16 +174,12 @@ def sec_t2class():
             print(f"  PW mv[{lo},{hi}): n={len(p)} v={p.v_swap.mean():+.3f}"
                   f"  vs creatures {c.v_swap.mean():+.3f}")
 
-    sub = base[base.shrunk_score_play.notna()].copy()
-    X = np.column_stack([np.ones(len(sub)), sub.shrunk_score_play, sub.mv,
-                         sub.is_creature.astype(float), sub.tok_len])
-    Xs = X.copy()
-    Xs[:, 1:] = (X[:, 1:] - X[:, 1:].mean(0)) / X[:, 1:].std(0)
-    b, *_ = np.linalg.lstsq(Xs, sub.v_swap.values, rcond=None)
-    resid = sub.v_swap.values - Xs @ b
-    se = np.sqrt(np.sum(resid ** 2) / (len(sub) - 5)
-                 * np.linalg.inv(Xs.T @ Xs).diagonal())
-    print(f"text-length std beta={b[4]:+.4f} (t={b[4] / se[4]:+.1f})"
+    sub = base[base.shrunk_score_play.notna()]
+    X = np.column_stack([sub.shrunk_score_play, sub.mv, sub.is_creature.astype(float),
+                         sub.tok_len])
+    fit = ols(np.column_stack([np.ones(len(sub)), (X - X.mean(0)) / X.std(0)]),
+              sub.v_swap.values)
+    print(f"text-length std beta={fit.beta[4]:+.4f} (t={fit.t[4]:+.1f})"
           f" controlling score_play/mv/is_creature (n={len(sub)})")
 
 
@@ -225,31 +204,29 @@ def sec_t1color():
 
 
 def sec_addrobust():
-    import random
-    random.seed(42)
     probe = pl.Probe()
     wr = pl.load_win_rates()
-    decks_by_set: dict = {}
+    # Each context needs its own deck plus the five next same-set builds to
+    # draw add candidates from.
+    decks_by_set: dict[str, list[tuple[str, ...]]] = {}
     match_file = pl.YDATA / "matches-b07" / "match-outcomes-gen0.txt.gz"
-    for set_code, method_a, deck_a, method_b, deck_b in pl.iter_match_decks(match_file):
-        for method, deck in ((method_a, deck_a), (method_b, deck_b)):
-            if method == "forge-best":
-                decks_by_set.setdefault(set_code, []).append(deck)
+    for d in pl.sample_match_decks(
+            [match_file], 6, group=lambda d: d.set_code if d.method == "forge-best" else None):
+        decks_by_set.setdefault(d.set_code, []).append(d.cards)
     base_mats, adds = [], []
     for s in [s for s, v in decks_by_set.items() if len(v) >= 6][:50]:
         v = decks_by_set[s]
-        deck = [c for c in v[0] if c.lower() not in pl.BASIC_LAND_NAMES]
-        try:
-            bm = probe.deck_matrix(deck)
-        except KeyError:
+        deck = pl.nonbasic(v[0])
+        bm = probe.deck_matrix_or_none(deck)
+        if bm is None:
             continue
         cands = []
         for other in v[1:6]:
-            for c in other:
-                if c.lower() in pl.BASIC_LAND_NAMES or c in deck:
+            for c in pl.nonbasic(other):
+                if c in deck:
                     continue
                 e = probe.embedding(c)
-                if e is None or e[-pl.FC:][pl.layout.IS_LAND] > 0.5:
+                if e is None or layout.is_land_embedding(e):
                     continue
                 q = (wr.get(c) or {}).get("shrunk_score_play")
                 if q is not None:
@@ -365,11 +342,11 @@ def sec_colors():
         print(f"mean multicolor-card share in 5-color decks: "
               f"{100 * np.mean(gold5):.0f}%")
     print("4-color decks, top sets:", dict(sets4.most_common(8)))
-    (OUT / "post_hoc_colors.json").write_text(json.dumps(
-        {"census": dict(sorted(census.items())), "by_colors": rows,
-         "sets5": dict(sets5.most_common()),
-         "gold_share_5c": (float(np.mean(gold5)) if gold5 else None),
-         "sets4_top": dict(sets4.most_common(8))}, indent=1), encoding="utf-8")
+    write_json(OUT / "post_hoc_colors.json",
+               {"census": dict(sorted(census.items())), "by_colors": rows,
+                "sets5": dict(sets5.most_common()),
+                "gold_share_5c": (float(np.mean(gold5)) if gold5 else None),
+                "sets4_top": dict(sets4.most_common(8))}, indent=1)
     print("saved", OUT / "post_hoc_colors.json")
 
 

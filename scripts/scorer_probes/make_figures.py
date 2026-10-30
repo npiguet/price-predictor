@@ -8,7 +8,6 @@ into ``experiments/images/``. Requires matplotlib (``pip install matplotlib``).
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -172,21 +171,9 @@ def fig_card_values():
     df = df[df.v_swap.notna() & (df.det_is_land == 0)].copy()
 
     loc = pl.ConvertedCardLocator(pl.CARDS_PATH)
-    trick, counter, pw, veh, xc = [], [], [], [], []
-    for name in df.name:
-        t = loc.load_text(name)
-        txt = t.text.lower() if t else ""
-        types = re.search(r"types:.*", txt)
-        types = types.group(0) if types else ""
-        mc = re.search(r"mana cost:.*", txt)
-        mc = mc.group(0) if mc else ""
-        trick.append(bool("instant" in types
-                          and re.search(r"gets? \+\d+/\+\d+ until end of turn", txt)))
-        counter.append("counter target" in txt and "spell" in txt)
-        pw.append("planeswalker" in types)
-        veh.append("vehicle" in types)
-        xc.append("{x}" in mc)
-    df["trick"], df["counter"], df["pw"], df["veh"], df["xc"] = trick, counter, pw, veh, xc
+    classes = pd.DataFrame([pl.card_classes(t.text if (t := loc.load_text(name)) else "")
+                            for name in df.name], index=df.index)
+    df = pd.concat([df, classes], axis=1)
 
     fig, axes = plt.subplots(1, 2, figsize=(11.6, 4.0))
 
@@ -211,14 +198,14 @@ def fig_card_values():
     ncre = df[df.is_creature == False]  # noqa: E712
     classes = [
         ("creature", cre.v_swap),
-        ("planeswalker", df[df.pw].v_swap),
+        ("planeswalker", df[df.is_pw].v_swap),
         ("removal (instant or sorcery)",
          ncre[(ncre.is_removal == True)].v_swap),  # noqa: E712
-        ("counterspell", df[df.counter].v_swap),
-        ("vehicle", df[df.veh].v_swap),
-        ("X-cost spell", df[df.xc].v_swap),
+        ("counterspell", df[df.is_counter].v_swap),
+        ("vehicle", df[df.is_vehicle].v_swap),
+        ("X-cost spell", df[df.x_cost].v_swap),
         ("card draw", ncre[ncre.draws_cards == True].v_swap),  # noqa: E712
-        ("combat trick", df[df.trick].v_swap),
+        ("combat trick", df[df.is_trick].v_swap),
         ("other noncreature", ncre[(ncre.is_removal == False)  # noqa: E712
                                    & (ncre.draws_cards == False)].v_swap),  # noqa: E712
     ]

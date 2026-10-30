@@ -8,7 +8,6 @@ downstream statistical cuts.
 from __future__ import annotations
 
 import csv
-import hashlib
 import sys
 from collections import Counter
 from pathlib import Path
@@ -23,34 +22,14 @@ OUT = pl.SCRATCH / "t0_decks.csv"
 PER_METHOD_CAP = 4000
 
 
-def collect_decks():
-    """Dedup by content; cap per method. Returns list of (method, set, deck)."""
-    seen: set[str] = set()
-    per_method: Counter = Counter()
-    out = []
-    for rel in pl.MATCH_FILES:
-        path = pl.YDATA / rel
-        if not path.exists():
-            print("missing:", path)
-            continue
-        for set_code, method_a, deck_a, method_b, deck_b in pl.iter_match_decks(path):
-            for method, deck in ((method_a, deck_a), (method_b, deck_b)):
-                if per_method[method] >= PER_METHOD_CAP:
-                    continue
-                key = hashlib.md5(
-                    ("|".join(sorted(deck)) + set_code).encode()
-                ).hexdigest()
-                if key in seen:
-                    continue
-                seen.add(key)
-                per_method[method] += 1
-                out.append((method, set_code, deck))
-    print("collected:", dict(per_method))
-    return out
+def collect_decks() -> list[pl.MatchDeck]:
+    decks = list(pl.sample_match_decks(pl.MATCH_PATHS, PER_METHOD_CAP))
+    print("collected:", dict(Counter(d.method for d in decks)))
+    return decks
 
 
 def deck_features(probe: pl.Probe, deck: list[str], text_cache: dict) -> dict | None:
-    nonbasic = [c for c in deck if c.lower() not in pl.BASIC_LAND_NAMES]
+    nonbasic = pl.nonbasic(deck)
     mats, feats = [], []
     for name in nonbasic:
         e = probe.embedding(name)
@@ -66,7 +45,7 @@ def deck_features(probe: pl.Probe, deck: list[str], text_cache: dict) -> dict | 
 
     m = np.stack(mats)
     det = m[:, -pl.layout.FEATURE_COUNT:]
-    pips = det[:, 1:6]  # W U B R G pip counts
+    pips = det[:, pl.layout.COLOR_PIPS]
     is_land = det[:, pl.layout.IS_LAND] > 0.5
     spells = ~is_land
     mv = det[:, pl.layout.MANA_VALUE]
@@ -116,28 +95,27 @@ def main():
     text_cache: dict = {}
     rows, mats = [], []
     skipped = 0
-    for method, set_code, deck in decks:
+    for d in decks:
         try:
-            feat = deck_features(probe, deck, text_cache)
+            feat = deck_features(probe, d.cards, text_cache)
         except KeyError:
             feat = None
         if feat is None:
             skipped += 1
             continue
-        nonbasic = [c for c in deck if c.lower() not in pl.BASIC_LAND_NAMES]
-        labels = [wr.get(c) for c in nonbasic]
+        labels = [wr.get(c) for c in pl.nonbasic(d.cards)]
         sp = [r["shrunk_score_play"] for r in labels if r and r["shrunk_score_play"] is not None]
         cl = [r["shrunk_cast_lift"] for r in labels if r and r["shrunk_cast_lift"] is not None]
         pr = [r["shrunk_played_rate"] for r in labels if r and r["shrunk_played_rate"] is not None]
         feat.update(
-            method=method,
-            set_code=set_code,
+            method=d.method,
+            set_code=d.set_code,
             mean_score_play=float(np.mean(sp)) if sp else np.nan,
             mean_cast_lift=float(np.mean(cl)) if cl else np.nan,
             mean_played_rate=float(np.mean(pr)) if pr else np.nan,
         )
         rows.append(feat)
-        mats.append(probe.deck_matrix(deck))
+        mats.append(probe.deck_matrix(d.cards))
 
     print(f"featurized {len(rows)} decks ({skipped} skipped); scoring...")
     scores = probe.score_matrices(mats)
