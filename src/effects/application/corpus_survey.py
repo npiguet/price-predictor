@@ -12,6 +12,7 @@ refusal rule, the held-out test and a record's cell cannot drift apart.
 
 from __future__ import annotations
 
+import functools
 import logging
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
@@ -233,7 +234,7 @@ class Survey:
 
 @dataclass(frozen=True, slots=True)
 class SurveyConfig:
-    """What every survey worker needs, sent once through the pool initializer."""
+    """What every survey worker needs, sent once to each process."""
 
     read: ReadConfig
     #: How many smallest hashes the supply keeps per cell and key.
@@ -243,31 +244,22 @@ class SurveyConfig:
     game_disjoint_keywords: tuple[str, ...] = ()
 
 
-_SURVEY: tuple[SurveyConfig, WorkerContext] | None = None
+class SurveyWorker:
+    """One process's survey side: the config, and the read context every shard
+    it surveys shares. Built once per process by :func:`run_parallel`."""
 
+    def __init__(self, config: SurveyConfig) -> None:
+        self.config = config
+        self.context = WorkerContext(config.read)
 
-def init_survey_worker(config: SurveyConfig) -> None:
-    global _SURVEY
-    _SURVEY = (config, WorkerContext(config.read))
-
-
-def survey_shard(shard: SourceShard) -> ShardSurvey:
-    """Survey one shard. Module-level so a process pool can pickle it."""
-    assert _SURVEY is not None, "init_survey_worker was not run"
-    config, context = _SURVEY
-    return survey_shard_with(config, context, shard)
-
-
-def survey_shard_with(
-    config: SurveyConfig, context: WorkerContext, shard: SourceShard,
-) -> ShardSurvey:
-    """One shard's survey, its games routed at the end of the shard."""
-    surveyor = _ShardSurveyor(config, context, ShardSurvey(
-        shard=shard, supply=TrainingSupply(config.heap_cap),
-    ))
-    for record in context.records(shard):
-        surveyor.observe(record)
-    return surveyor.finish()
+    def survey(self, shard: SourceShard) -> ShardSurvey:
+        """One shard's survey, its games routed at the end of the shard."""
+        surveyor = _ShardSurveyor(self.config, self.context, ShardSurvey(
+            shard=shard, supply=TrainingSupply(self.config.heap_cap),
+        ))
+        for record in self.context.records(shard):
+            surveyor.observe(record)
+        return surveyor.finish()
 
 
 @dataclass(frozen=True, slots=True)
@@ -409,7 +401,7 @@ def run_survey(
     logger.info("Surveying %d shard(s) under %s", len(shards), root)
     return merge_surveys(
         run_parallel(
-            shards, survey_shard, initializer=init_survey_worker, initargs=(config,),
+            shards, SurveyWorker.survey, context=functools.partial(SurveyWorker, config),
             workers=workers, label="Surveyed", progress_every=progress_every,
         ),
         heap_cap=config.heap_cap,

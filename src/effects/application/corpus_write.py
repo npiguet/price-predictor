@@ -7,6 +7,7 @@ the manifest reports about what was written is tallied here.
 
 from __future__ import annotations
 
+import functools
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -122,28 +123,23 @@ class WriteResult:
 
 # ── the pass ────────────────────────────────────────────────────────────
 
-_WRITE: tuple[WritePlan, WorkerContext] | None = None
-
 _NO_COPIES = CopyPlan()
 
 
-def init_write_worker(config: WriteConfig) -> None:
-    global _WRITE
-    _WRITE = (config.plan, WorkerContext(config.read))
+class WriteWorker:
+    """One process's write side: the plan, and the read context every shard
+    it writes shares. Built once per process by :func:`run_parallel`."""
 
+    def __init__(self, config: WriteConfig) -> None:
+        self.plan = config.plan
+        self.context = WorkerContext(config.read)
 
-def write_shard_pass(shard: SourceShard) -> WriteResult:
-    """Filter one shard into its output parts. Module-level so it pickles."""
-    assert _WRITE is not None, "init_write_worker was not run"
-    plan, context = _WRITE
-    return write_shard_with(plan, context, shard)
-
-
-def write_shard_with(plan: WritePlan, context: WorkerContext, shard: SourceShard) -> WriteResult:
-    writer = _ShardWriter(plan, context)
-    for record in context.records(shard):
-        writer.observe(record)
-    return writer.finish(shard.part_name)
+    def write(self, shard: SourceShard) -> WriteResult:
+        """Filter one shard into its output parts."""
+        writer = _ShardWriter(self.plan, self.context)
+        for record in self.context.records(shard):
+            writer.observe(record)
+        return writer.finish(shard.part_name)
 
 
 class _ShardWriter:
@@ -232,7 +228,7 @@ def run_write_pass(
     """Write every shard's output parts, in parallel, reporting progress."""
     total = WriteResult()
     for part in run_parallel(
-        shards, write_shard_pass, initializer=init_write_worker, initargs=(config,),
+        shards, WriteWorker.write, context=functools.partial(WriteWorker, config),
         workers=workers, label="Wrote", progress_every=progress_every,
     ):
         merge_into(total, part)

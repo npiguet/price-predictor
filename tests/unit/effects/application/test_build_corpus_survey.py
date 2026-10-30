@@ -20,10 +20,9 @@ from effects.application.corpus_survey import (
     ReadConfig,
     ShardSurvey,
     SurveyConfig,
-    init_survey_worker,
+    SurveyWorker,
     merge_surveys,
     run_survey,
-    survey_shard,
 )
 from effects.application.parallel_map import progress_line
 from effects.domain.corpus_curation import game_disjoint_draw
@@ -147,8 +146,8 @@ def a_config(
 
 def _survey_one(tmp_path, records, **config):
     write_shard(tmp_path / "records" / "run.0-a.jsonl.gz", records)
-    init_survey_worker(a_config(tmp_path / "records", **config))
-    return survey_shard(list_shards(tmp_path / "records")[0])
+    worker = SurveyWorker(a_config(tmp_path / "records", **config))
+    return worker.survey(list_shards(tmp_path / "records")[0])
 
 
 def test_survey_counts_records_classes_and_games(tmp_path):
