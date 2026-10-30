@@ -12,6 +12,7 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import NamedTuple
 
 import torch
 
@@ -20,22 +21,22 @@ from effects.application.surface_batching import (
     Materializer,
     PreparedBatch,
     SurfaceBatcher,
+    SurfaceSpec,
 )
 from effects.application.text_staging import MaskedTokens, TextStager, pinned
 from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.domain.ability_encoder import TruncationLog, surface_of
 from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
-from effects.domain.aux_heads import TRAINING_HEADS, Head
-from effects.domain.baselines import baseline_masks
-from effects.domain.damage_step_keywords import KeywordResolver
-from effects.domain.effect_head_input import SlotKind
-from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH, FieldSpec
-from effects.domain.effect_targets import (
+from effects.domain.aux_head_targets import (
     created_objects_targets,
-    derive_targets,
     supervises_created_objects,
     verdict_targets,
 )
+from effects.domain.aux_heads import TRAINING_HEADS, Head
+from effects.domain.damage_step_keywords import KeywordResolver
+from effects.domain.effect_head_input import SlotKind
+from effects.domain.effect_head_layout import CREATED_OBJECTS_WIDTH, VERDICT_WIDTH, FieldSpec
+from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.provenance import SidecarLine
@@ -47,12 +48,13 @@ from effects.domain.sampling import (
     sample_weights,
     sampling_class,
 )
+from effects.domain.script_text import params, segments
 from effects.domain.split import (
     CorpusSplit,
 )
 from effects.domain.surface_collation import entity_target_tensors
-from effects.domain.value_targets import params, segments, value_targets
-from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+from effects.domain.value_targets import value_targets
+from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 
 #: Rarity-bucket label for a record with no acting text (combat, legality).
@@ -108,6 +110,13 @@ class DeviceStep:
             index=targets.index.pin_memory(),
         )
         self.heads.pin()
+
+
+class RecordLabels(NamedTuple):
+    """Where one trained record is counted on the epoch line (FR-055)."""
+
+    bucket: str
+    family: str
 
 
 @dataclass(frozen=True)
@@ -213,7 +222,7 @@ class StepPreparer:
         self.config = settings.config
         self.seed = settings.seed
         self.surface = surface_of(settings.config.vocab_path)
-        self.masks = baseline_masks(settings.config.variant)
+        self.surface_spec = SurfaceSpec.for_training(settings.config, settings.widths)
         self.split = settings.split
         self.rarity = settings.rarity
         self.legality_mode_counts = settings.legality_mode_counts
@@ -221,7 +230,6 @@ class StepPreparer:
         self.param_keys = list(settings.param_keys)
         self._api_type_index = {name: i for i, name in enumerate(self.api_types)}
         self._api_key_index = {name: i for i, name in enumerate(self.param_keys)}
-        self.widths = settings.widths
         self.heads = settings.heads
         self.truncated: list[tuple[str, tuple]] = []
         self.truncations = truncations or TruncationLog(
@@ -231,9 +239,9 @@ class StepPreparer:
         self.tokenizer = load_tokenizer(
             self.config.vocab_path, self.config.keyword_definitions,
         )
-        self.sidecars = SidecarCache(sidecar_roots(
+        self.sidecars = SidecarCache.from_folders(
             self.config.cards_folders, self.config.variant_scripts,
-        ))
+        )
         #: One memoised join for the run, not per step.
         self.resolver = KeyResolver(self.sidecars, self.surface)
         self._keywords = KeywordResolver(self.sidecars)
@@ -262,9 +270,7 @@ class StepPreparer:
                 truncations=self.truncations,
             ),
             resolver=self.resolver,
-            masks=self.masks,
-            e_dim=self.config.e_dim,
-            widths=self.widths,
+            spec=self.surface_spec,
             materializer=materializer,
             context_dropout=self.config.context_dropout if training else 0.0,
             rng=(
@@ -312,7 +318,9 @@ class StepPreparer:
         """The surfaces, the per-entity targets and ``heads``' targets."""
         batch = batcher.prepare(records)
         return DeviceStep(
-            batch=replace(batch, texts={}, prepared=[], surfaces=[]),
+            batch=replace(
+                batch, texts={}, staged=replace(batch.staged, prepared=[]), surfaces=[],
+            ),
             fields=fields,
             targets=entity_target_tensors(batch.surfaces, targets, fields),
             heads=self._head_targets(records, batcher, batch, heads=heads),
@@ -372,16 +380,16 @@ class StepPreparer:
                 torch.tensor(created),
             )
         # No text, no matrix for these heads to read.
-        if not heads or not batch.rows:
+        if not heads or not batch.staged.rows:
             return targets
-        texts = sorted(batch.rows, key=batch.rows.__getitem__)
+        texts = batch.staged.ordered
         if Head.VALUE in heads:
             targets[Head.VALUE] = value_batch(texts, batch.texts)
         if Head.API in heads:
             targets[Head.API] = self._api_batch(texts, batch.texts)
         if Head.MLM in heads:
             targets[Head.MLM] = batcher.draw_mlm_mask(
-                batch.prepared, self.config.mlm_mask_prob,
+                batch.staged.prepared, self.config.mlm_mask_prob,
             )
         return targets
 
@@ -392,7 +400,8 @@ class StepPreparer:
         row order: the API type (``-1`` when none or unknown) and the
         multi-hot of parameter keys over every chained segment."""
         types: list[int] = []
-        keys = torch.zeros(len(texts), max(len(self.param_keys), 1))
+        rows: list[int] = []
+        columns: list[int] = []
         for row, text in enumerate(texts):
             cached = self._api_targets.get(text)
             if cached is None:
@@ -409,8 +418,12 @@ class StepPreparer:
                 )
                 self._api_targets[text] = cached
             types.append(cached[0])
-            for column in cached[1]:
-                keys[row, column] = 1.0
+            rows += [row] * len(cached[1])
+            columns += cached[1]
+        # One indexed write: torch dispatches every element assignment on the
+        # host half of the step.
+        keys = torch.zeros(len(texts), max(len(self.param_keys), 1))
+        keys[torch.tensor(rows, dtype=torch.long), torch.tensor(columns, dtype=torch.long)] = 1.0
         return torch.tensor(types, dtype=torch.long), keys
 
     def _texts(self, records: Sequence[EffectRecord]) -> dict[str, str | None]:
@@ -435,14 +448,14 @@ class StepPreparer:
 
     def _shard_labels(
         self, records: list, texts: Mapping[str, str | None], games: TextGames,
-    ) -> dict[str, tuple[str, str]]:
-        """``record_id -> (rarity bucket, rule family)`` for one shard's
-        records, bucketed by the games the weights read."""
-        labels: dict[str, tuple[str, str]] = {}
+    ) -> dict[str, RecordLabels]:
+        """``record_id -> labels`` for one shard's records, bucketed by the
+        games the weights read."""
+        labels: dict[str, RecordLabels] = {}
         for record in records:
             text = texts[record.record_id]
             bucket = NO_TEXT_BUCKET if text is None else games.bucket(text)
-            labels[record.record_id] = (
+            labels[record.record_id] = RecordLabels(
                 bucket, rule_family(
                     record, self.sidecars, resolver=self._keywords,
                     legality_mode_counts=self.legality_mode_counts,
@@ -477,9 +490,9 @@ class StepPreparer:
             buckets: Counter[str] = Counter()
             families: Counter[str] = Counter()
             for record in plan.records:
-                bucket, family = labels[record.record_id]
-                buckets[bucket] += 1
-                families[family] += 1
+                counted = labels[record.record_id]
+                buckets[counted.bucket] += 1
+                families[counted.family] += 1
             step, copies = self.prepare_training_step(
                 plan, fields=task.fields, pin=pin,
                 rng=step_rng(self.seed, task.epoch, task.position, index),

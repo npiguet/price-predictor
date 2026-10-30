@@ -27,7 +27,6 @@ from effects.domain.aux_heads import (
 )
 from effects.domain.effect_losses import LossParts, mlm_loss, per_entity_loss
 from effects.domain.effect_model import EffectModel
-from effects.domain.surface_collation import gather_entities
 
 
 def autocast_enabled(device: torch.device) -> bool:
@@ -144,11 +143,10 @@ class StepLossComputer:
             batch, _surfaces, encoded = materializer.materialize(
                 prepared.batch, modules.encoder, step=step,
             )
-            hidden = modules.model(**batch)
-            outputs = modules.model.per_entity(hidden)
+            hidden = modules.model(batch)
             targets = prepared.targets
-            gathered = gather_entities(
-                outputs, targets.index.to(self.device, non_blocking=True),
+            gathered = modules.model.per_entity_at(
+                hidden, targets.index.to(self.device, non_blocking=True),
             )
             loss, parts = per_entity_loss(
                 gathered, targets.fields_on(self.device, non_blocking=True),

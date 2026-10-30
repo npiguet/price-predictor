@@ -168,7 +168,7 @@ class Counterfactual:
 
 def lethal(kind: EffectKind, amount: int, entity: EntityState) -> bool:
     """Whether ``amount`` kills ``entity`` under rule 704.5f-g."""
-    return _RULES[kind].lethal(entity.pt.total[1], entity.damage, amount)
+    return _RULES[kind].lethal(entity.toughness, entity.damage, amount)
 
 
 def _blocked(found: dict[str, str]) -> bool:
@@ -257,7 +257,7 @@ def _player_hit(fields: dict, found: _Amount) -> _Hit:
 
 def _creature_hit(entity: EntityState | None, fields: dict, found: _Amount,
                   keywords_of: KeywordsOf, attached: set[str]) -> _Hit:
-    if entity is None or entity.zone != "battlefield":
+    if entity is None or not entity.on_battlefield:
         return _Hit.MISSED
     rules = _RULES[found.kind]
     took = fields.get(rules.field)
@@ -265,7 +265,7 @@ def _creature_hit(entity: EntityState | None, fields: dict, found: _Amount,
         return _Hit.MISSED
     if took != found.amount * rules.sign:
         return _Hit.REFUSED
-    if "creature" not in entity.types or entity.pt is None:
+    if not entity.is_creature or entity.pt is None:
         return _Hit.REFUSED
     if set(fields) - rules.hit_fields:
         return _Hit.REFUSED
@@ -423,17 +423,9 @@ def _edited_text(record: EffectRecord, qualified: Qualified, line: SidecarLine,
 
 def _with_toughness(entities: tuple[EntityState, ...], chosen: str, toughness: int
                     ) -> tuple[EntityState, ...]:
-    """``entities`` with ``chosen`` at total toughness ``toughness`` and no marked damage.
-
-    The base moves so the total lands on ``toughness``; the boosts and the
-    counters stay as they were.
-    """
-    def moved(entity: EntityState) -> EntityState:
-        pt = entity.pt
-        base = toughness - pt.boosts[1] - pt.counters[1]
-        return replace(entity, pt=replace(pt, base=(pt.base[0], base)), damage=0)
-
-    return tuple(moved(entity) if entity.id == chosen else entity for entity in entities)
+    """``entities`` with ``chosen`` at total toughness ``toughness`` and no marked damage."""
+    return tuple(entity.with_total_toughness(toughness) if entity.id == chosen else entity
+                 for entity in entities)
 
 
 def _relabelled_targets(targets: dict[str, EntityTargets], qualified: Qualified, amount: int,

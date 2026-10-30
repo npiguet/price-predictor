@@ -6,29 +6,94 @@ half, and a per-element torch assignment costs a dispatch per element.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
+
 import numpy as np
 import torch
 
 from effects.domain.effect_head_input import SlotKind
 from effects.domain.effect_head_layout import FieldSpec, FieldType
+from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
+
+
+@dataclass(frozen=True, slots=True)
+class TrunkInputs:
+    """One padded batch of token surfaces, as the trunk reads it.
+
+    Each slot kind's features sit in a ``(batch, slots, width)`` tensor of
+    their own, zero at the slots of other kinds. ``e_rows`` names the row of
+    the batch's ``e`` matrix each slot reads (``-1`` where its ``e`` is in
+    ``e_vectors`` already); :meth:`with_e` resolves it on the device. Without
+    ``option_kinds`` every row reads as an ordinary one.
+    """
+
+    slot_features: dict[SlotKind, torch.Tensor]
+    slot_kinds: torch.Tensor
+    positions: torch.Tensor
+    e_vectors: torch.Tensor
+    attention_mask: torch.Tensor
+    option_kinds: torch.Tensor | None = None
+    e_rows: torch.Tensor | None = None
+
+    def _mapped(self, move) -> TrunkInputs:
+        def moved(tensor):
+            return None if tensor is None else move(tensor)
+
+        return TrunkInputs(
+            slot_features={kind: move(tensor) for kind, tensor in self.slot_features.items()},
+            slot_kinds=move(self.slot_kinds),
+            positions=move(self.positions),
+            e_vectors=move(self.e_vectors),
+            attention_mask=move(self.attention_mask),
+            option_kinds=moved(self.option_kinds),
+            e_rows=moved(self.e_rows),
+        )
+
+    def to(self, device, *, non_blocking: bool = False) -> TrunkInputs:
+        return self._mapped(lambda tensor: tensor.to(device, non_blocking=non_blocking))
+
+    def pin(self) -> TrunkInputs:
+        """Every tensor copied to page-locked host memory, so a
+        ``non_blocking`` copy does not hold the host."""
+        return self._mapped(torch.Tensor.pin_memory)
+
+    def with_e(self, matrix: torch.Tensor | None) -> TrunkInputs:
+        """The slots that named a row of ``matrix`` filled with it
+        (:func:`scatter_e_rows`), and ``e_rows`` spent; a batch with no
+        matrix keeps the ``e_vectors`` it was collated with."""
+        if matrix is None:
+            return replace(self, e_rows=None)
+        return replace(
+            self, e_vectors=scatter_e_rows(self.e_vectors, self.e_rows, matrix), e_rows=None,
+        )
 
 
 def gather_entities(outputs: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
     """``(batch, entities, width)``: each surface's ``[CARD]`` and ``[PLAYER]``
-    columns of the per-entity output, in one batched gather."""
+    columns of the trunk output, in one batched gather."""
     return outputs.gather(1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]))
+
+
+def entity_index(surfaces: list) -> torch.Tensor:
+    """``(batch, entities)``: the column of each surface's ``entity_slots``, in
+    their order, zero past a surface's last (a padding column no reader takes)."""
+    width = max((len(s.entity_slots) for s in surfaces), default=1)
+    index = np.zeros((len(surfaces), width), dtype=np.int64)
+    for row, surface in enumerate(surfaces):
+        index[row, : len(surface.entity_slots)] = surface.entity_slots
+    return torch.from_numpy(index)
 
 
 def collate_surfaces(
     surfaces: list, *, e_dim: int, widths: dict[SlotKind, int],
-) -> dict[str, torch.Tensor]:
+) -> TrunkInputs:
     """Pad a batch of token surfaces, to its own longest, into the trunk's
-    keyword arguments, each slot kind's features in a tensor of its own.
+    inputs, each slot kind's features in a tensor of its own.
 
     A slot whose ``e`` is an ``int`` row lands in ``e_rows`` (``-1``
     elsewhere), for the caller to resolve on the device with
-    :func:`scatter_e_rows`.
+    :meth:`TrunkInputs.with_e`.
     """
     batch = len(surfaces)
     width = max((len(s.slots) for s in surfaces), default=1)
@@ -59,17 +124,17 @@ def collate_surfaces(
             elif slot.e is not None:
                 e_vectors[row, column, : len(slot.e)] = slot.e
 
-    return {
-        "slot_features": {
+    return TrunkInputs(
+        slot_features={
             kind: torch.from_numpy(array) for kind, array in features.items()
         },
-        "slot_kinds": torch.from_numpy(slot_kinds),
-        "positions": torch.from_numpy(positions),
-        "e_vectors": torch.from_numpy(e_vectors),
-        "e_rows": torch.from_numpy(e_rows),
-        "attention_mask": torch.from_numpy(attention),
-        "option_kinds": torch.from_numpy(option_kinds),
-    }
+        slot_kinds=torch.from_numpy(slot_kinds),
+        positions=torch.from_numpy(positions),
+        e_vectors=torch.from_numpy(e_vectors),
+        attention_mask=torch.from_numpy(attention),
+        option_kinds=torch.from_numpy(option_kinds),
+        e_rows=torch.from_numpy(e_rows),
+    )
 
 
 def scatter_e_rows(
@@ -100,7 +165,6 @@ def entity_target_tensors(
     width = max((len(s.entity_slots) for s in surfaces), default=1)
     gate = np.zeros((batch, width), dtype=np.float32)
     mask = np.zeros((batch, width), dtype=np.float32)
-    index = np.zeros((batch, width), dtype=np.int64)
     collected: dict[str, np.ndarray] = {}
     present: dict[str, np.ndarray] = {}
 
@@ -117,11 +181,8 @@ def entity_target_tensors(
 
     for row, (surface, targets) in enumerate(zip(surfaces, targets_per_surface)):
         for column, slot_index in enumerate(surface.entity_slots):
-            slot = surface.slots[slot_index]
-            key = slot.entity_id or slot.player_id
             mask[row, column] = 1
-            index[row, column] = slot_index
-            entry = targets.get(key)
+            entry = targets.get(surface.slots[slot_index].subject_id)
             if entry is None:
                 continue
             gate[row, column] = 1.0 if entry.affected else 0.0
@@ -141,5 +202,14 @@ def entity_target_tensors(
             {name: torch.from_numpy(rows) for name, rows in present.items()},
         ),
         torch.from_numpy(mask),
-        torch.from_numpy(index),
+        entity_index(surfaces),
+    )
+
+
+def per_entity_targets(
+    records: list, surfaces: list, fields: tuple[FieldSpec, ...],
+) -> EntityTargetBatch:
+    """The per-entity targets of ``records``, built into ``surfaces``."""
+    return entity_target_tensors(
+        surfaces, [derive_targets(record) for record in records], fields,
     )

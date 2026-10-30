@@ -155,47 +155,21 @@ def per_entity_loss(
             column for column with ``targets``.
         fields: the fields active at this step.
 
-    The gate trains on every real entity, players included. A field trains
-    where the gate's *target* fires and the field is present, never where the
-    prediction fires: a head that gates everything off would escape the field
-    loss.
+    The gate trains on every :attr:`~EntityTargetBatch.real` entity, a field
+    wherever :meth:`~EntityTargetBatch.scored` puts it.
     """
     names: list[str] = []
     terms: list[torch.Tensor] = []
-    device = outputs.device
-    field_targets = targets.fields
-    real_mask = targets.mask.detach().bool().cpu()
-    gate_host = targets.gate.detach().cpu()
-    real = real_mask.flatten().nonzero().squeeze(1)
-    hit_mask = real_mask & gate_host.bool()
     flat_outputs = outputs.reshape(-1, outputs.shape[-1])
-    gate = functional.binary_cross_entropy_with_logits(
-        flat_outputs.index_select(0, real.to(device, non_blocking=True))[:, GATE_INDEX],
-        gate_host.flatten().index_select(0, real).float().to(device, non_blocking=True),
-        reduction="sum",
-    )
+    total = _gate_term(flat_outputs, targets)
     if report_parts:
         names.append("gate")
-        terms.append(gate.detach())
-    total = gate
+        terms.append(total.detach())
 
     for spec in fields:
-        target = field_targets.values.get(spec.name)
-        if target is None:
+        loss = _field_term(spec, flat_outputs, targets)
+        if loss is None:
             continue
-        present = field_targets.present[spec.name].detach().bool().cpu()
-        rows = (hit_mask & present).flatten().nonzero().squeeze(1)
-        if rows.numel() == 0:
-            continue
-        rows_device = rows.to(device, non_blocking=True)
-        start, end = FIELD_SLICES[spec.name]
-        flat_target = target.reshape(-1, *target.shape[2:])
-        loss = field_loss(
-            spec, flat_outputs.index_select(0, rows_device)[:, start:end],
-            flat_target.index_select(
-                0, rows if flat_target.device.type == "cpu" else rows_device,
-            ).to(device, non_blocking=True),
-        )
         if report_parts:
             names.append(spec.name)
             terms.append(loss.detach())
@@ -209,6 +183,41 @@ def per_entity_loss(
             torch.stack([term.double() for term in terms]) / max(records, 1),
         )
     return per_row(total, records), parts
+
+
+def _gate_term(flat_outputs: torch.Tensor, targets: EntityTargetBatch) -> torch.Tensor:
+    """The affected gate's BCE over every real entity, summed."""
+    device = flat_outputs.device
+    real = targets.real.flatten().nonzero().squeeze(1)
+    affected = targets.gate.detach().cpu().flatten().index_select(0, real).float()
+    return functional.binary_cross_entropy_with_logits(
+        flat_outputs.index_select(0, real.to(device, non_blocking=True))[:, GATE_INDEX],
+        affected.to(device, non_blocking=True),
+        reduction="sum",
+    )
+
+
+def _field_term(
+    spec: FieldSpec, flat_outputs: torch.Tensor, targets: EntityTargetBatch,
+) -> torch.Tensor | None:
+    """One field's loss over the entities it is scored at, summed; None where
+    the batch carries no target for it or scores it nowhere."""
+    target = targets.fields.values.get(spec.name)
+    if target is None:
+        return None
+    rows = targets.scored(spec.name).flatten().nonzero().squeeze(1)
+    if rows.numel() == 0:
+        return None
+    device = flat_outputs.device
+    rows_device = rows.to(device, non_blocking=True)
+    start, end = FIELD_SLICES[spec.name]
+    flat_target = target.reshape(-1, *target.shape[2:])
+    return field_loss(
+        spec, flat_outputs.index_select(0, rows_device)[:, start:end],
+        flat_target.index_select(
+            0, rows if flat_target.device.type == "cpu" else rows_device,
+        ).to(device, non_blocking=True),
+    )
 
 
 def created_objects_loss(
@@ -226,21 +235,20 @@ def created_objects_loss(
         rows = rows.to(prediction.device, non_blocking=True)
         prediction = prediction.index_select(0, rows)
         target = target.to(prediction.device).index_select(0, rows)
-    total = prediction.new_zeros(())
-    for slot in range(CREATED_OBJECT_SLOTS):
-        base = slot * CREATED_SLOT_WIDTH
-        flags = slice(base + CreatedSlot.PRESENT, base + CreatedSlot.COUNT)
-        total = total + functional.binary_cross_entropy_with_logits(
-            prediction[:, flags], target[:, flags], reduction="sum",
-        )
-        magnitudes = slice(base + CreatedSlot.COUNT, base + CreatedSlot.TYPES)
-        total = total + _poisson(
-            prediction[:, magnitudes], capped(target[:, magnitudes]),
-        )
-        rest = slice(base + CreatedSlot.TYPES, base + CREATED_SLOT_WIDTH)
-        total = total + functional.binary_cross_entropy_with_logits(
-            prediction[:, rest], target[:, rest], reduction="sum",
-        )
+    # Every slot at once, as ``(records, slots, slot width)``.
+    slots = (-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
+    predicted = prediction[:, :-1].reshape(slots)
+    wanted = target[:, :-1].reshape(slots)
+    flags = slice(CreatedSlot.PRESENT, CreatedSlot.COUNT)
+    magnitudes = slice(CreatedSlot.COUNT, CreatedSlot.TYPES)
+    rest = slice(CreatedSlot.TYPES, CREATED_SLOT_WIDTH)
+    total = functional.binary_cross_entropy_with_logits(
+        predicted[..., flags], wanted[..., flags], reduction="sum",
+    )
+    total = total + _poisson(predicted[..., magnitudes], capped(wanted[..., magnitudes]))
+    total = total + functional.binary_cross_entropy_with_logits(
+        predicted[..., rest], wanted[..., rest], reduction="sum",
+    )
     total = total + functional.binary_cross_entropy_with_logits(
         prediction[:, -1], target[:, -1], reduction="sum",
     )
@@ -322,33 +330,31 @@ def mlm_loss(
 
 
 def api_loss(
-    type_logits: torch.Tensor | None,
-    type_targets: torch.Tensor | None,
+    type_logits: torch.Tensor,
+    type_targets: torch.Tensor,
     key_logits: torch.Tensor | None,
     key_targets: torch.Tensor | None,
 ) -> torch.Tensor:
     """Script-API classification from ``e``, one row per text: the API type's
-    cross-entropy plus every parameter key's binary cross-entropy."""
-    given = type_logits if type_logits is not None else key_logits
-    rows = int(given.shape[0]) if given is not None else 0
+    cross-entropy plus every parameter key's binary cross-entropy. The keys
+    are None for a run whose sidecars name no parameter key, which builds no
+    key head."""
+    rows = int(type_logits.shape[0])
     total = None
-    if type_logits is not None and type_targets is not None:
-        # A line with no API type carries -1 and is skipped.
-        known = (type_targets.detach().cpu() >= 0).nonzero().squeeze(1)
-        if known.numel():
-            known = known.to(type_logits.device, non_blocking=True)
-            total = functional.cross_entropy(
-                type_logits.index_select(0, known),
-                type_targets.to(type_logits.device).index_select(0, known),
-                reduction="sum",
-            )
+    # A line with no API type carries -1 and is skipped.
+    known = (type_targets.detach().cpu() >= 0).nonzero().squeeze(1)
+    if known.numel():
+        known = known.to(type_logits.device, non_blocking=True)
+        total = functional.cross_entropy(
+            type_logits.index_select(0, known),
+            type_targets.to(type_logits.device).index_select(0, known),
+            reduction="sum",
+        )
     if key_logits is not None and key_targets is not None:
         keys = functional.binary_cross_entropy_with_logits(
             key_logits, key_targets.float(), reduction="sum",
         )
         total = keys if total is None else total + keys
     if total is None:
-        if type_targets is None and key_targets is None:
-            raise ValueError("api_loss needs at least one of its two targets")
-        return given.new_zeros(())
+        return type_logits.new_zeros(())
     return per_row(total, rows)

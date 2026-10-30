@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from effects.application.build_corpus import BuildCorpusConfig, decide
-from effects.application.corpus_survey import GameTally, RarityTally, Survey
+from effects.application.corpus_survey import GameTally, RarityTally, ShardSurvey, Survey
 from effects.domain.corpus_plan import Cell, TrainingSupply
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from tests.unit.effects.application.test_ability_text import FakeSidecarCache
@@ -101,13 +101,16 @@ def a_survey(
         rarity.key_records.setdefault(keys, 0)
         rarity.key_games[keys] = set(games)
     return Survey(
-        shards=(), records=0, rarity=rarity, supply=supply,
-        games=GameTally(
-            held_out=set(held_out), game_disjoint=set(game_disjoint),
-            held_out_text_games={
-                text: set(games) for text, games in (held_out_text_games or {}).items()
-            },
+        totals=ShardSurvey(
+            name="", size=0, supply=supply, rarity=rarity,
+            games=GameTally(
+                held_out=set(held_out), game_disjoint=set(game_disjoint),
+                held_out_text_games={
+                    text: set(games) for text, games in (held_out_text_games or {}).items()
+                },
+            ),
         ),
+        shards=(),
     )
 
 
@@ -123,7 +126,7 @@ def _decide(survey, fake_sidecars, **config):
 def _written(decisions, survey, cell: Cell, keys) -> int:
     """Copies a plan writes for every hash the survey kept for ``(cell, keys)``."""
     plan = decisions.selection.plans[cell, keys]
-    return sum(plan.copies(value) for value in survey.supply.heaps[cell, keys].values())
+    return sum(plan.copies(value) for value in survey.totals.supply.heaps[cell, keys].values())
 
 
 # ── the fold ────────────────────────────────────────────────────────────
@@ -333,7 +336,7 @@ def test_text_cap_and_reuse_cap_bound_a_short_familys_texts(fake_sidecars):
     # 10 records, each written four times; 200 over 150 records, each once or twice.
     assert plans[cell, TEXT_KEYS["t1"]].base == 4
     plan = plans[cell, TEXT_KEYS["t2"]]
-    copies = [plan.copies(v) for v in survey.supply.heaps[cell, TEXT_KEYS["t2"]].values()]
+    copies = [plan.copies(v) for v in survey.totals.supply.heaps[cell, TEXT_KEYS["t2"]].values()]
     assert set(copies) == {1, 2}
     # The 1,000-record text is capped: 200 of its smallest hashes, once each.
     assert plans[cell, TEXT_KEYS["t3"]].base == 0

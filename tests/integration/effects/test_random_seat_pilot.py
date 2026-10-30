@@ -37,11 +37,8 @@ import pytest
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.records import Moment, PlayabilitySubkind, RecordKind
 from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
-from effects.infrastructure.record_io import (
-    iter_shard_lines,
-    iter_shards,
-    record_from_dict,
-)
+from effects.infrastructure.record_codec import record_from_dict
+from effects.infrastructure.shard_io import iter_shard_lines, iter_shards
 from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 

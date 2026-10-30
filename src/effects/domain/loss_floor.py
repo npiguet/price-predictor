@@ -62,9 +62,7 @@ def _supervised(
     """One field's targets over every supervised entity of every batch, the
     selection :func:`per_entity_loss` scores."""
     parts = [
-        batch.fields.values[name][
-            batch.mask.bool() & batch.gate.bool() & batch.fields.present[name].bool()
-        ]
+        batch.fields.values[name][batch.scored(name)]
         for batch in batches if name in batch.fields
     ]
     if not parts:
@@ -93,7 +91,7 @@ def constant_predictor_outputs(
     if supervised is None:
         supervised = {spec.name: _supervised(batches, spec.name) for spec in fields}
     vector = torch.zeros(PER_ENTITY_WIDTH)
-    real = [batch.gate[batch.mask.bool()] for batch in batches]
+    real = [batch.gate[batch.real] for batch in batches]
     vector[GATE_INDEX] = _logit(_mean(torch.cat(real or [torch.zeros(0)])))
 
     for spec in fields:

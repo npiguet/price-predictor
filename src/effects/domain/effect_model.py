@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from effects.domain.ability_encoder import ENCODER_D_MODEL
+from effects.domain.ability_encoder import DROPOUT, ENCODER_D_MODEL, FF_MULTIPLIER
 from effects.domain.effect_head_input import ACT_SLOT, SlotKind
 from effects.domain.effect_head_layout import (
     CREATED_OBJECTS_WIDTH,
@@ -21,13 +21,12 @@ from effects.domain.effect_head_layout import (
     VALUE_WIDTH,
     VERDICT_WIDTH,
 )
+from effects.domain.surface_collation import TrunkInputs, gather_entities
 
 # Hardcoded architecture (contracts/cli.md: "Hardcoded, not flags").
 TRUNK_D_MODEL = 256
 TRUNK_N_LAYERS = 6
 TRUNK_N_HEADS = 4
-FF_MULTIPLIER = 4
-DROPOUT = 0.1
 MAX_POSITION = 512
 
 
@@ -124,40 +123,38 @@ class EffectModel(nn.Module):
         # Amounts and costs the script states, read from e alone (FR-058).
         self.value_head = _mlp(config.e_dim, d, VALUE_WIDTH)
 
-    def forward(
-        self,
-        slot_features: dict[SlotKind, torch.Tensor],
-        slot_kinds: torch.Tensor,
-        positions: torch.Tensor,
-        e_vectors: torch.Tensor,
-        attention_mask: torch.Tensor,
-        option_kinds: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+    def forward(self, inputs: TrunkInputs) -> torch.Tensor:
         """Run the trunk. Returns ``(batch, slots, d_model)``.
 
-        ``slot_features`` maps each kind to a ``(batch, slots, width)`` tensor
-        zero at the slots of other kinds. Without ``option_kinds`` every row
-        reads as an ordinary one.
+        ``inputs.e_vectors`` is read as it stands: resolve ``e_rows`` first
+        (:meth:`TrunkInputs.with_e`).
         """
+        features = inputs.slot_features
         hidden = (
-            self.global_proj(slot_features[SlotKind.GLOBAL])
-            + self.act_proj(slot_features[SlotKind.ACT])
-            + self.player_proj(slot_features[SlotKind.PLAYER])
-            + self.card_proj(slot_features[SlotKind.CARD])
-            + self.e_proj(e_vectors)
-            + self.slot_kind_embedding(slot_kinds)
-            + self.position_embedding(positions)
+            self.global_proj(features[SlotKind.GLOBAL])
+            + self.act_proj(features[SlotKind.ACT])
+            + self.player_proj(features[SlotKind.PLAYER])
+            + self.card_proj(features[SlotKind.CARD])
+            + self.e_proj(inputs.e_vectors)
+            + self.slot_kind_embedding(inputs.slot_kinds)
+            + self.position_embedding(inputs.positions)
         )
-        if option_kinds is not None:
-            hidden = hidden + self.option_kind_embedding(option_kinds)
+        if inputs.option_kinds is not None:
+            hidden = hidden + self.option_kind_embedding(inputs.option_kinds)
         hidden = self.dropout(hidden)
-        hidden = self.trunk(hidden, src_key_padding_mask=attention_mask == 0)
+        hidden = self.trunk(hidden, src_key_padding_mask=inputs.attention_mask == 0)
         return self.norm(hidden)
 
     def per_entity(self, hidden: torch.Tensor) -> torch.Tensor:
-        """Map the shared per-entity head over every slot; callers select the
-        ``[CARD]`` and ``[PLAYER]`` positions."""
+        """The shared per-entity head over every trunk output it is handed."""
         return self.per_entity_head(hidden)
+
+    def per_entity_at(self, hidden: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
+        """``(batch, entities, PER_ENTITY_WIDTH)``: the per-entity head at the
+        trunk columns ``index`` names. The head reads each position alone, so
+        gathering first gives the same outputs and never runs it over an
+        ability slot."""
+        return self.per_entity_head(gather_entities(hidden, index))
 
     def created_objects(self, hidden: torch.Tensor) -> torch.Tensor:
         return self.created_objects_head(hidden[:, 0, :])

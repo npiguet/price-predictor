@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 
 from effects.domain.corpus_curation import record_hash
-from effects.infrastructure import record_io
-from effects.infrastructure.record_io import (
+from effects.infrastructure import shard_io
+from effects.infrastructure.record_codec import parse_record_line
+from effects.infrastructure.shard_io import (
     iter_shard_lines,
-    parse_record_line,
     read_records,
     read_shard,
     repack_shards,
@@ -132,10 +132,10 @@ def test_the_deal_is_the_in_memory_deal(tmp_path, runs, monkeypatch, groups):
     ``seed:index`` from the parts' order, numbered in index order.
 
     Three groups make every group carry several shards, the path a stratum
-    with more shards than :data:`record_io._GROUPS` takes, without writing
+    with more shards than :data:`shard_io._GROUPS` takes, without writing
     hundreds of files to get there.
     """
-    monkeypatch.setattr(record_io, "_GROUPS", groups)
+    monkeypatch.setattr(shard_io, "_GROUPS", groups)
     seed, count = 7, 32
     lines = [line for part in runs for line in iter_shard_lines(part)]
     expected: dict[int, list[str]] = defaultdict(list)

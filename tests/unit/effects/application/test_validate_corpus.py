@@ -19,16 +19,11 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.validate_corpus import (
-    FieldPresence,
-    Finding,
-    Findings,
-    Thresholds,
-    validate_corpus,
-)
+from effects.application.corpus_validation.findings import Finding, Findings, Thresholds
+from effects.application.corpus_validation.presence import FieldPresence
+from effects.application.validate_corpus import validate_corpus
 from effects.domain.event_schema import (
-    ATTRIBUTION_ROOT,
-    ATTRIBUTION_UNRESOLVED,
+    AttributionKind,
     Event,
     EventType,
 )
@@ -56,13 +51,14 @@ from effects.domain.state_snapshot import (
     InclusionTier,
     StateSnapshot,
 )
-from effects.infrastructure.record_io import read_window
-from effects.infrastructure.sidecar_io import SidecarCache, write_sidecar
+from effects.infrastructure.shard_io import read_window
+from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.builders import (
     RawShardWriter,
     make_entity,
     make_record,
     make_snapshot,
+    write_sidecar,
 )
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
@@ -102,7 +98,7 @@ def _resolution(record_id: str, game_id: str = "run.0-L1.0", **overrides):
                 Event(
                     type=EventType.DAMAGE_DEALT,
                     subjects=("E1",),
-                    attributed_to=ATTRIBUTION_ROOT,
+                    attributed_to=AttributionKind.ROOT,
                 ),
             ),
         ),
@@ -165,7 +161,7 @@ def _mana(record_id: str, turn: int, **overrides):
                     type=EventType.MANA_PRODUCED,
                     subjects=("P0",),
                     params={"mana_by_color": {"G": 1}},
-                    attributed_to=ATTRIBUTION_ROOT,
+                    attributed_to=AttributionKind.ROOT,
                 ),
             ),
         ),
@@ -220,7 +216,7 @@ def _record_with_event(event_type: EventType, record_id: str = "r0", **overrides
             events=(
                 Event(
                     type=event_type, subjects=("E1",),
-                    attributed_to=ATTRIBUTION_ROOT,
+                    attributed_to=AttributionKind.ROOT,
                 ),
             ),
         ),
@@ -1168,7 +1164,7 @@ class TestDuplicateEventsInsideOneRecord:
         """
         event = Event(
             type=EventType.DAMAGE_DEALT, subjects=("E1",),
-            params={"amount": 3}, attributed_to=ATTRIBUTION_ROOT,
+            params={"amount": 3}, attributed_to=AttributionKind.ROOT,
         )
         return _resolution(
             f"run.0-L1.{index}", state=_snapshot(turn=index - 890),
@@ -1550,8 +1546,8 @@ class TestAttribution:
     def test_the_three_states_are_counted_apart_from_absent(self):
         records = _healthy() + [
             self._with("run.0-L1.900", "2"),
-            self._with("run.0-L1.901", ATTRIBUTION_ROOT),
-            self._with("run.0-L1.902", ATTRIBUTION_UNRESOLVED),
+            self._with("run.0-L1.901", AttributionKind.ROOT),
+            self._with("run.0-L1.902", AttributionKind.UNRESOLVED),
             self._with("run.0-L1.903", None),
         ]
         detail = " ".join(
@@ -1726,7 +1722,7 @@ class TestForkEventsNameAClause:
         assert not finding.ok and not finding.watched
 
     def test_a_fork_naming_the_root_line_clears_the_floor(self):
-        records = _healthy() + [self._fork("run.0-L1.900", ATTRIBUTION_ROOT)]
+        records = _healthy() + [self._fork("run.0-L1.900", AttributionKind.ROOT)]
         assert _named(
             validate_corpus(records, Thresholds(min_fork_attributed_rate=0.9)),
             "fork records",
@@ -1734,7 +1730,7 @@ class TestForkEventsNameAClause:
 
     def test_an_explicit_unresolved_counts_as_naming_something(self):
         """Saying the pointer did not land is a fact; saying nothing is not."""
-        records = _healthy() + [self._fork("run.0-L1.900", ATTRIBUTION_UNRESOLVED)]
+        records = _healthy() + [self._fork("run.0-L1.900", AttributionKind.UNRESOLVED)]
         finding = _named(validate_corpus(records), "fork records")
         assert "1/1 events on fork records name a clause" in finding.measured
 
@@ -1758,7 +1754,7 @@ class TestEventsThatDeclareACauseNameOne:
                 events=(
                     Event(
                         type=EventType.ZONE_CHANGE, subjects=("E1",),
-                        params=params, attributed_to=ATTRIBUTION_ROOT,
+                        params=params, attributed_to=AttributionKind.ROOT,
                     ),
                 ),
             ),
@@ -1938,7 +1934,7 @@ class TestGen2FieldPresence:
         path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
 
     def _rows(self, *, seat: bool, what_if: bool | None) -> list[dict]:
-        from effects.infrastructure.record_io import record_to_dict
+        from effects.infrastructure.record_codec import record_to_dict
 
         blockers = _resolution("run.0-L1.1")
         rows = [record_to_dict(_resolution("run.0-L1.0")), record_to_dict(blockers)]

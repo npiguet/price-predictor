@@ -178,15 +178,18 @@ def gate_three_verdict(geometry: CacheGeometry) -> CheckResult:
     )
 
 
+def _uncached(check: CheckName, missing: str, *, variant: str | None = None) -> CheckResult:
+    """The skip a check reading the ability cache reports when there is none
+    to read, naming the command that writes it."""
+    command = "encode-abilities" + (f" --variant {variant}" if variant else "")
+    return CheckResult(check, CheckStatus.SKIPPED, f"{missing}; run {command} first")
+
+
 def run_gate_three(cached: CachedVectors, abilities_root: Path) -> CheckResult:
     """Gate 3, read off the cache, or a skip where there is none to read."""
     logger.info("gate 3: geometry over %d unique cached texts", len(cached.by_text))
     if len(cached) < 2:
-        return CheckResult(
-            CheckName.GATE_3, CheckStatus.SKIPPED,
-            f"no ability cache under {abilities_root}; run "
-            "encode-abilities first",
-        )
+        return _uncached(CheckName.GATE_3, f"no ability cache under {abilities_root}")
     return gate_three_verdict(cached.geometry)
 
 
@@ -247,10 +250,7 @@ def check_nearest_neighbours(
     """Each query's three nearest lines, in prose; an unresolved query is
     listed as such rather than left out."""
     if len(cached) < 2:
-        return CheckResult(
-            CheckName.NEAREST_NEIGHBOUR, CheckStatus.SKIPPED,
-            "the ability cache is empty; run encode-abilities first",
-        )
+        return _uncached(CheckName.NEAREST_NEIGHBOUR, "the ability cache is empty")
     lines = []
     unresolved = 0
     for query in queries:
@@ -374,10 +374,7 @@ def check_decodability(
     """How much of each winnability label is linearly readable from pooled
     ``e``, validated on the checkpoint's held-out cards."""
     if not cached.by_card:
-        return CheckResult(
-            CheckName.DECODABILITY, CheckStatus.SKIPPED,
-            "the ability cache is empty; run encode-abilities first",
-        )
+        return _uncached(CheckName.DECODABILITY, "the ability cache is empty")
     if not Path(win_rates_path).exists():
         return CheckResult(
             CheckName.DECODABILITY, CheckStatus.SKIPPED,
@@ -425,9 +422,8 @@ def check_baseline_geometry(
 ) -> CheckResult:
     """Compare a baseline's cache geometry against the shipping one."""
     if len(baseline_vectors) < 2 or len(full) < 2:
-        return CheckResult(
-            CheckName.baseline_comparison(name), CheckStatus.SKIPPED,
-            f"no {name} cache; run encode-abilities --variant {name}",
+        return _uncached(
+            CheckName.baseline_comparison(name), f"no {name} cache", variant=name,
         )
     shipping, baseline = full.geometry, baseline_vectors.geometry
     return CheckResult(

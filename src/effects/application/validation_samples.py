@@ -13,11 +13,15 @@ import logging
 import random
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from effects.domain.corpus_curation import CapHeap, KeyedCapHeap, record_hash
 from effects.domain.records import EffectRecord
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import VALIDATION_STRATA, Stratum
+
+if TYPE_CHECKING:
+    from effects.infrastructure.corpus_store import CorpusStore
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +71,7 @@ def _gate_one_round_robin(
     quota rather than by the slice.
     """
     from effects.domain.sampling import sampling_class
-    from effects.infrastructure.record_io import read_records
+    from effects.infrastructure.shard_io import read_records
 
     per_text: dict[str, dict[str, CapHeap]] = {
         name: {} for name in quota if name in GATE_ONE_CLASSES
@@ -111,7 +115,7 @@ def _collect(
     only: frozenset[str] | None = None,
 ) -> dict[str, KeyedCapHeap[EffectRecord]]:
     from effects.domain.sampling import sampling_class
-    from effects.infrastructure.record_io import read_records
+    from effects.infrastructure.shard_io import read_records
 
     heaps: dict[str, KeyedCapHeap[EffectRecord]] = {
         name: KeyedCapHeap(cap) for name, cap in quota.items()
@@ -129,11 +133,11 @@ def _collect(
 
 
 def draw_samples(
-    *, card_disjoint: Path, game_disjoint: Path, gate_one: Path,
-    mix: Mapping[str, float], size: int, seed: int,
+    store: CorpusStore, *, mix: Mapping[str, float], size: int, seed: int,
     held_out_text_of: Callable[[EffectRecord], str | None] | None = None,
 ) -> dict[str, list[EffectRecord]]:
-    """One mixture-matched sample per stratum, seeded and shuffled.
+    """One mixture-matched sample per validation stratum of ``store``,
+    seeded and shuffled.
 
     ``size <= 0`` reads nothing and returns both strata empty. Without
     ``held_out_text_of`` the gate-one slice is drawn by smallest hash alone
@@ -147,13 +151,13 @@ def draw_samples(
 
     if held_out_text_of is not None:
         gate_records = _gate_one_round_robin(
-            gate_one, quota, seed=seed, held_out_text_of=held_out_text_of,
+            store.gate_one_dir, quota, seed=seed, held_out_text_of=held_out_text_of,
         )
     else:
-        gate = _collect(gate_one, quota, seed=seed, only=GATE_ONE_CLASSES)
+        gate = _collect(store.gate_one_dir, quota, seed=seed, only=GATE_ONE_CLASSES)
         gate_records = {name: heap.items() for name, heap in gate.items()}
-    for stratum, directory in zip(VALIDATION_STRATA, (card_disjoint, game_disjoint)):
-        heaps = _collect(directory, quota, seed=seed)
+    for stratum in VALIDATION_STRATA:
+        heaps = _collect(store.output_dir(stratum), quota, seed=seed)
         sample: list[EffectRecord] = []
         for name, cap in quota.items():
             chosen: list[EffectRecord] = []
@@ -176,8 +180,10 @@ def draw_samples(
     return out
 
 
-def write_samples(store, samples: Mapping[str, Iterable[EffectRecord]]) -> dict[str, int]:
-    from effects.infrastructure.record_io import write_shard
+def write_samples(
+    store: CorpusStore, samples: Mapping[str, Iterable[EffectRecord]],
+) -> dict[str, int]:
+    from effects.infrastructure.shard_io import write_shard
 
     return {
         stratum: write_shard(store.sample_path(stratum), records)

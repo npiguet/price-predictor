@@ -16,7 +16,7 @@ import logging
 import sys
 import typing
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import MISSING, fields
+from dataclasses import fields
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -26,21 +26,18 @@ from effects.application.build_corpus import (
     BuildCorpusError,
 )
 from effects.application.build_vocab import DEFAULT_TARGET_SIZE, EmptyCardsFolderError
-from effects.application.collect_coverage import (
-    HOLDOUT_LIST_NAME,
-    CollectCoverageConfig,
-    HoldoutSource,
-)
+from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
+from effects.application.collector_common import HOLDOUT_LIST_NAME, HoldoutSource
+from effects.application.corpus_validation.findings import Thresholds
 from effects.application.evaluation_context import CorpusMismatchError
-from effects.application.holdout_cards import HoldoutCardsConfig
+from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
 from effects.application.train_effect_model import (
     EmptyHoldoutError,
     HoldoutMismatchError,
     SurfaceMismatchError,
     TrainEffectModelConfig,
 )
-from effects.application.validate_corpus import Thresholds
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BASELINES, Baseline
 from effects.domain.collection_caps import DEFAULT_RANDOM_SEAT_PROBABILITY, CollectionCaps
@@ -61,6 +58,7 @@ from effects.domain.default_paths import (
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
+from price_predictor.domain.dataclass_defaults import field_default
 from sealed.infrastructure.effect_collection_flags import (
     add_cap_flags,
     announce_probe_state,
@@ -107,7 +105,7 @@ def add_config_flags(
     for name in only if only is not None else [n for n in specs if n not in claimed]:
         spec = specs[name]
         kind = _flag_type(config, name, hints[name])
-        default = spec.default if spec.default is not MISSING else spec.default_factory()
+        default = field_default(spec)
         if isinstance(default, Path):
             # Spelled as typed in --help; argparse parses a string default too.
             default = default.as_posix()
@@ -241,7 +239,8 @@ def _add_holdout_sources(
 
 def _add_holdout_flags(parser: argparse.ArgumentParser) -> None:
     """The holdout rule, on every command that computes it: ``holdout-cards``,
-    ``build-corpus`` and ``collect-variants`` must be passed the same values."""
+    ``build-corpus``, ``collect-variants`` and ``collect-coverage --only-cards``
+    must be passed the same values."""
     parser.add_argument(
         "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
         help=(
@@ -403,6 +402,9 @@ def _collect_coverage_parser(subparsers) -> None:
             "beside any other holdout source"
         ),
     )
+    # The held-out round credits a game to a held-out text under this rule,
+    # so it has to be the one build-corpus is given.
+    _add_holdout_flags(parser)
     add_config_flags(parser, CollectCoverageConfig, only=(
         "min_text_games", "target_records", "no_progress_rounds",
         "decks_per_round", "workers",
@@ -508,7 +510,10 @@ def _run_collector(
 def run_collect_coverage(args: argparse.Namespace) -> int:
     from effects.application.collect_coverage import run as collect
 
-    return _run_collector(args, "collect-coverage", CollectCoverageConfig, collect)
+    return _run_collector(
+        args, "collect-coverage", CollectCoverageConfig, collect,
+        holdout=holdout_rule(args),
+    )
 
 
 def run_collect_variants(args: argparse.Namespace) -> int:
@@ -635,18 +640,14 @@ def _holdout_cards_parser(subparsers) -> None:
     _add_holdout_flags(parser)
 
 
+@exits_with({HoldoutCardsError: 1})
 def run_holdout_cards(args: argparse.Namespace) -> int:
     """Write the list, and report the share of the corpus it removes: what a
     depleted pool loses, and the knob the two holdout flags turn."""
-    from effects.application.holdout_cards import HoldoutCardsError
     from effects.application.holdout_cards import run as holdout_cards
 
     config = config_from_args(HoldoutCardsConfig, args, holdout=holdout_rule(args))
-    try:
-        report = holdout_cards(config)
-    except HoldoutCardsError as exc:
-        print(exc)
-        return 1
+    report = holdout_cards(config)
     if report.unit is HoldoutUnit.TEMPLATE:
         print(f"held-out templates: {report.keys}")
     print(f"held-out texts: {report.texts}")
@@ -682,16 +683,25 @@ def _field_coverage_parser(subparsers) -> None:
     )
 
 
-def run_field_coverage(args: argparse.Namespace) -> int:
-    from effects.application.field_coverage import field_coverage, report_lines
-    from effects.infrastructure.record_io import iter_shards, read_shard
+def _require_shards(root: Path) -> list[Path] | None:
+    """The shards under ``root``; None, having said so, where there are none."""
+    from effects.infrastructure.shard_io import iter_shards
 
-    root = args.effect_records
     shards = iter_shards(root)
     if not shards:
         print(f"no shards under {root}")
+        return None
+    return shards
+
+
+def run_field_coverage(args: argparse.Namespace) -> int:
+    from effects.application.field_coverage import field_coverage, report_lines
+    from effects.infrastructure.shard_io import read_records
+
+    root = args.effect_records
+    if _require_shards(root) is None:
         return 1
-    coverage = field_coverage(record for shard in shards for record in read_shard(shard))
+    coverage = field_coverage(read_records(root))
     if not coverage:
         print(f"no records under {root}")
         return 1
@@ -728,13 +738,13 @@ def _validate_corpus_parser(subparsers) -> None:
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
-    from effects.application.validate_corpus import FieldPresence, validate_corpus
-    from effects.infrastructure.record_io import iter_shards, read_window
+    from effects.application.corpus_validation.presence import FieldPresence
+    from effects.application.validate_corpus import validate_corpus
+    from effects.infrastructure.shard_io import read_window
 
     root = args.effect_records
-    shards = iter_shards(root)
-    if not shards:
-        print(f"no shards under {root}")
+    shards = _require_shards(root)
+    if shards is None:
         return 1
 
     presence = FieldPresence()
@@ -788,7 +798,7 @@ def _train_effect_model_parser(subparsers) -> None:
 
 @exits_with({
     HoldoutMismatchError: 1,
-    "effects.infrastructure.record_io.MixedGenerationsError": 1,
+    "effects.infrastructure.shard_io.MixedGenerationsError": 1,
     SurfaceMismatchError: 2,
     EmptyHoldoutError: 2,
     f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 2,

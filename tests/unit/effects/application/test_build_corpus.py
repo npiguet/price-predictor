@@ -63,9 +63,9 @@ from effects.domain.state_snapshot import StateSnapshot
 from effects.domain.strata import Stratum
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
+from effects.infrastructure.shard_io import iter_shards, read_records, read_shard, write_shard
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
 
 _HELD_OUT_CARD = "Held Out Bears"
 #: Found by brute force over ``text_is_held_out(..., permille=20)`` (the
@@ -1074,23 +1074,11 @@ def test_the_build_writes_a_validation_sample_per_stratum(tmp_path, shared_corpu
     assert store.load().validation_sample == 4
 
 
-def test_the_cli_exposes_the_rework_flags():
+def test_the_max_events_help_says_zero_disables_the_rule():
+    """The zero reading must survive in --help, not just in the docstring:
+    this is what would have caught it silently vanishing."""
     from effects.infrastructure.cli import build_parser
-    args = build_parser().parse_args([
-        "build-corpus", "--shard-records", "500", "--max-events-per-record", "32",
-        "--validation-sample", "64",
-    ])
-    assert (args.shard_records, args.max_events_per_record, args.validation_sample) == (500, 32, 64)
-    defaults = build_parser().parse_args(["build-corpus"])
-    assert (
-        defaults.shard_records,
-        defaults.max_events_per_record,
-        defaults.validation_sample,
-    ) == (2000, 64, 2048)
 
-    # The zero reading for each of the three flags must survive in --help,
-    # not just in the docstring: this is what would have caught it silently
-    # vanishing from --max-events-per-record's help text.
     subparsers_action = next(
         action for action in build_parser()._actions
         if getattr(action, "choices", None) and "build-corpus" in action.choices
@@ -1308,7 +1296,7 @@ def test_a_records_set_mixing_generations_is_refused(tmp_path, a_corpus):
     import gzip
     import json
 
-    from effects.infrastructure.record_io import record_to_dict
+    from effects.infrastructure.record_codec import record_to_dict
 
     gen1 = record_to_dict(_resolution("old.1", "g-old", ability=(_BOLT_KEY,)))
     del gen1["random_seat"]
@@ -1329,17 +1317,13 @@ def test_the_retired_game_count_flag_is_rejected_by_argparse(capsys):
     assert "--game-disjoint-games" in capsys.readouterr().err
 
 
-def test_the_new_flags_reach_the_config():
+def test_the_game_disjoint_keywords_parse_as_a_comma_separated_list():
     from effects.infrastructure.cli import build_parser
 
     args = build_parser().parse_args([
-        "build-corpus", "--game-disjoint-share", "0.02",
-        "--game-disjoint-keyword-share", "0.3", "--game-disjoint-keywords", "trample,infect",
-        "--reuse-cap", "2", "--holdout-unit", "text",
+        "build-corpus", "--game-disjoint-keywords", "trample,infect",
     ])
-    assert (args.game_disjoint_share, args.game_disjoint_keyword_share) == (0.02, 0.3)
     assert args.game_disjoint_keywords == ("trample", "infect")
-    assert (args.reuse_cap, args.holdout_unit) == (2, HoldoutUnit.TEXT)
 
 
 def test_an_unscored_game_disjoint_keyword_is_refused(tmp_path, shared_corpus):

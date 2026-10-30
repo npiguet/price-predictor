@@ -176,21 +176,21 @@ def single_block(record, keywords_of) -> tuple[str, str] | None:
     attacker = record.state.entity(attacker_id)
     blocker = record.state.entity(blocker_id)
     for entity in (attacker, blocker):
-        if (entity is None or entity.pt is None or entity.zone != "battlefield"
-                or "creature" not in entity.types):
+        if (entity is None or entity.pt is None or not entity.on_battlefield
+                or not entity.is_creature):
             return None
         if keywords_of(entity) & COMBAT_KEYWORDS:
             return None
     if blocker.combat is None or tuple(blocker.combat.blocking) != (attacker_id,):
         return None
-    if attacker.pt.total[0] <= 0 or blocker.pt.total[0] < 0:
+    if attacker.power <= 0 or blocker.power < 0:
         return None
     # Marked damage is either none or this step's own, which the snapshot taken at
     # the first damage event already shows; damage from earlier in the turn would
     # make the cleared board in the grid a different board.
-    if attacker.damage not in (0, blocker.pt.total[0]):
+    if attacker.damage not in (0, blocker.power):
         return None
-    if blocker.damage not in (0, attacker.pt.total[0]):
+    if blocker.damage not in (0, attacker.power):
         return None
     # The real outcome must obey the rule on the board before the step, so
     # prevention, regeneration or a replacement the board does not show cannot

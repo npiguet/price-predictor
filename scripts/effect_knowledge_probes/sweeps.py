@@ -191,8 +191,7 @@ def set_untapped_lands(record, player_id: str, pips: list[str], amount: int):
 
 
 def _has_mana_ability(entity, sidecars) -> bool:
-    for key in (*entity.printed, *entity.granted_attached,
-                *entity.granted_temporary.abilities):
+    for key in (*entity.ability_keys, *entity.granted_temporary.abilities):
         line = sidecars.line_or_none(key)
         if line is not None and line.script_api_type in _MANA_APIS:
             return True

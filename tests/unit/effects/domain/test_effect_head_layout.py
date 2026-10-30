@@ -96,14 +96,6 @@ class TestFieldSpec:
 
 
 class TestValueHeadLayout:
-    def test_the_at_least_steps_the_thermometer_and_the_cap_agree(self):
-        # One scale on both sides of a comparison: the board's thermometer, the
-        # value head's at-least bits and the magnitude every amount is scored at.
-        from effects.domain.effect_head_input import MAGNITUDE_CAP, THERMOMETER_STEPS
-        from effects.domain.effect_head_layout import AT_LEAST_STEPS
-
-        assert THERMOMETER_STEPS == AT_LEAST_STEPS == MAGNITUDE_CAP
-
     def test_every_amount_has_an_at_least_block_and_no_cost_flag_does(self):
         from effects.domain.effect_head_layout import (
             AT_LEAST_SLICES,

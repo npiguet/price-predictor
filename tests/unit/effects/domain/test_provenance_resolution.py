@@ -71,6 +71,13 @@ def test_a_gap_inside_a_declared_range_raises():
         _sidecar().resolution_of(_GAP)
 
 
+def test_the_failure_names_the_script_file_and_the_likely_cause():
+    with pytest.raises(KeyError) as excinfo:
+        _sidecar().resolution_of(_GAP)
+    assert _SCRIPT in str(excinfo.value)
+    assert "reconversion" in str(excinfo.value)
+
+
 # ── charm modes (FR-005a) ───────────────────────────────────────────────
 
 _CHARM_SCRIPT = "cardsfolder/c/cryptic_command.txt"

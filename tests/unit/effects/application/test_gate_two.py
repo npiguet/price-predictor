@@ -72,6 +72,7 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     StateSnapshot,
 )
+from effects.domain.surface_collation import gather_entities
 from effects.infrastructure.model_runner import Runnable
 from tests.unit.effects.builders import keyword_score, make_batcher, slots_of_kind
 
@@ -219,9 +220,9 @@ class TestStrippingTheAbilityChannel:
         record = _printed_board()
         batcher = _batcher()
         rows = _rows(batcher, [record])
-        base = batcher.surface_for(record, rows)
-        stripped = batcher.surface_for(
-            record, rows, strip_keywords={"A": frozenset({"first_strike"})},
+        base = batcher.surface_builder(rows).build(record)
+        stripped = batcher.surface_builder(rows).build(
+            record, {"A": frozenset({"first_strike"})},
         )
         assert _ability_count(base, "A") == 2
         assert _ability_count(stripped, "A") == 1
@@ -231,8 +232,8 @@ class TestStrippingTheAbilityChannel:
         record = _printed_board()
         batcher = _batcher()
         rows = _rows(batcher, [record])
-        stripped = batcher.surface_for(
-            record, rows, strip_keywords={"A": frozenset({"first_strike"})},
+        stripped = batcher.surface_builder(rows).build(
+            record, {"A": frozenset({"first_strike"})},
         )
         kept = [
             slot.e for slot in slots_of_kind(stripped, SlotKind.ABILITY)
@@ -244,8 +245,8 @@ class TestStrippingTheAbilityChannel:
         record = _printed_board()
         batcher = _batcher()
         rows = _rows(batcher, [record])
-        stripped = batcher.surface_for(
-            record, rows, strip_keywords={"A": frozenset({"first_strike"})},
+        stripped = batcher.surface_builder(rows).build(
+            record, {"A": frozenset({"first_strike"})},
         )
         assert _ability_count(stripped, "B0") == 1
 
@@ -253,9 +254,9 @@ class TestStrippingTheAbilityChannel:
         record = _printed_board()
         batcher = _batcher()
         rows = _rows(batcher, [record])
-        base = batcher.surface_for(record, rows)
-        stripped = batcher.surface_for(
-            record, rows, strip_keywords={"A": frozenset({"lifelink"})},
+        base = batcher.surface_builder(rows).build(record)
+        stripped = batcher.surface_builder(rows).build(
+            record, {"A": frozenset({"lifelink"})},
         )
         assert base.slots == stripped.slots
 
@@ -264,8 +265,8 @@ class TestStrippingTheAbilityChannel:
         record = _printed_board()
         batcher = _batcher()
         rows = _rows(batcher, [record])
-        stripped = batcher.surface_for(
-            record, rows, strip_keywords={"A": frozenset({"first_strike"})},
+        stripped = batcher.surface_builder(rows).build(
+            record, {"A": frozenset({"first_strike"})},
         )
         assert all(
             slot.e != (0.0,) * 4
@@ -286,9 +287,9 @@ class TestStrippingTheOverlayChannel:
         record = _overlay_board()
         batcher = _batcher()
         rows = _rows(batcher, [record])
-        base = batcher.surface_for(record, rows)
-        stripped = batcher.surface_for(
-            record, rows, strip_keywords={"A": frozenset({"first_strike"})},
+        base = batcher.surface_builder(rows).build(record)
+        stripped = batcher.surface_builder(rows).build(
+            record, {"A": frozenset({"first_strike"})},
         )
         assert self._overlay_bit(base, "A") == 1.0
         assert self._overlay_bit(stripped, "A") == 0.0
@@ -760,17 +761,19 @@ class _AbilityCountingModel:
     def eval(self):
         return self
 
-    def __call__(self, **batch):
-        return batch
-
-    def per_entity(self, batch):
-        slot_kinds = batch["slot_kinds"]
+    def __call__(self, inputs):
+        """Every slot's "hidden" is its record's ability count."""
+        slot_kinds = inputs.slot_kinds
         abilities = (slot_kinds == int(SlotKind.ABILITY)).sum(dim=1).float()
-        row = torch.zeros(slot_kinds.shape[0], PER_ENTITY_WIDTH)
-        row[:, FIELD_SLICES["damage_taken"][0]] = 0.5 * abilities
+        return abilities[:, None, None].expand(-1, slot_kinds.shape[1], 1)
+
+    def per_entity_at(self, hidden, index):
+        abilities = gather_entities(hidden, index)[..., 0]
+        row = torch.zeros(*abilities.shape, PER_ENTITY_WIDTH)
+        row[..., FIELD_SLICES["damage_taken"][0]] = 0.5 * abilities
         died = FIELD_SLICES["zone_outcome"][0] + ZONE_OUTCOMES.index("died")
-        row[:, died] = 0.5 * abilities
-        return row[:, None, :].expand(-1, slot_kinds.shape[1], -1)
+        row[..., died] = 0.5 * abilities
+        return row
 
 
 def _runnable() -> Runnable:
@@ -914,7 +917,7 @@ class TestPopulation:
 
 class TestGateTwoRecords:
     def _write(self, directory, *records):
-        from effects.infrastructure.record_io import write_shard
+        from effects.infrastructure.shard_io import write_shard
 
         write_shard(directory / "shard-00001.jsonl.gz", records)
 

@@ -7,7 +7,7 @@ terminate; the unit's own rules are in ``tests/unit/effects/domain/test_coverage
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -119,7 +119,7 @@ class TestCoverageDeckBuilding:
     def test_a_deck_is_forty_cards_with_twenty_three_nonlands(self):
         import random
 
-        from effects.application.collect_coverage import build_coverage_decks
+        from effects.application.collector_common import build_coverage_decks
 
         names = [f"card {i}" for i in range(40)]
         decks = build_coverage_decks(
@@ -141,7 +141,7 @@ class TestCoverageDeckBuilding:
     def test_a_heavier_card_appears_more_often(self):
         import random
 
-        from effects.application.collect_coverage import build_coverage_decks
+        from effects.application.collector_common import build_coverage_decks
 
         names = [f"card {i}" for i in range(40)]
         weights = {n: 1.0 for n in names}
@@ -157,7 +157,7 @@ class TestCoverageDeckBuilding:
         """A weight can name a card the tree has no text for; basics need its cost."""
         import random
 
-        from effects.application.collect_coverage import build_coverage_decks
+        from effects.application.collector_common import build_coverage_decks
 
         names = [f"card {i}" for i in range(40)]
         decks = build_coverage_decks(
@@ -170,7 +170,7 @@ class TestCoverageDeckBuilding:
 
 class TestHeldOutExclusion:
     def test_no_split_holds_nothing_out(self):
-        from effects.application.collect_coverage import load_held_out
+        from effects.application.collector_common import load_held_out
 
         assert load_held_out(None) == frozenset()
 
@@ -189,81 +189,6 @@ class TestHeldOutExclusion:
         assert set(units) == {"Serra Angel"}
 
 
-class TestRunClosesTheSupervisor:
-    """``CollectorSupervisor.stop()`` is the only caller of
-    ``WorkerLogFiles.close_all()``. Unless ``run()`` invokes it, a coverage
-    run's worker log handles -- opened so the latched effect-record failure
-    reporters are visible to an operator -- stay open until the interpreter
-    exits on its own, not when the run itself finishes.
-    """
-
-    def _config(self, tmp_path, **overrides):
-        cardsfolder = tmp_path / "cardsfolder"
-        cardsfolder.mkdir()
-        (cardsfolder / "bears.txt").write_text(
-            "name: Grizzly Bears\ntypes: creature\n", encoding="utf-8",
-        )
-        overrides.setdefault("target_records", 0)
-        return CollectCoverageConfig(
-            cards_folders=(cardsfolder,),
-            effect_records=tmp_path / "records",
-            **overrides,
-        )
-
-    def test_stop_runs_even_though_no_round_was_ever_needed(
-        self, tmp_path, monkeypatch,
-    ):
-        """``target_records=0`` satisfies every card before the ``while``
-        loop's first check, so ``play_round`` is never called -- proving
-        ``stop()`` is not merely tacked on after the last round, but wraps
-        the supervisor's whole lifetime regardless of how many rounds ran."""
-        from unittest.mock import MagicMock
-
-        import effects.application.collect_coverage as collect_coverage
-        import effects.infrastructure.collector_connector as collector_connector
-
-        monkeypatch.setattr(
-            collect_coverage, "consult_castability", lambda names: {},
-        )
-        supervisor = MagicMock()
-        monkeypatch.setattr(
-            collector_connector, "CollectorSupervisor",
-            MagicMock(return_value=supervisor),
-        )
-
-        code = collect_coverage.run(self._config(tmp_path))
-
-        assert code == 0
-        supervisor.play_round.assert_not_called()
-        supervisor.stop.assert_called_once()
-
-    def test_stop_runs_even_if_a_round_raises(self, tmp_path, monkeypatch):
-        """The property a bare call after the loop cannot give: a round that
-        raises must still close the log handles and shut the pool down
-        before the exception is let through, not leave the handles open on
-        the way out."""
-        from unittest.mock import MagicMock
-
-        import effects.application.collect_coverage as collect_coverage
-        import effects.infrastructure.collector_connector as collector_connector
-
-        monkeypatch.setattr(
-            collect_coverage, "consult_castability", lambda names: {},
-        )
-        supervisor = MagicMock()
-        supervisor.play_round.side_effect = RuntimeError("boom")
-        monkeypatch.setattr(
-            collector_connector, "CollectorSupervisor",
-            MagicMock(return_value=supervisor),
-        )
-
-        with pytest.raises(RuntimeError, match="boom"):
-            collect_coverage.run(self._config(tmp_path, target_records=50))
-
-        supervisor.play_round.assert_called_once()
-        supervisor.stop.assert_called_once()
-
-
 class TestExclusionsWithoutACheckpoint:
     """The holdout no longer needs a trained model to exist (T171).
 
@@ -275,7 +200,7 @@ class TestExclusionsWithoutACheckpoint:
     """
 
     def test_the_depletion_list_is_read_and_folded(self, tmp_path) -> None:
-        from effects.application.collect_coverage import HoldoutSource
+        from effects.application.collector_common import HoldoutSource
 
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\nLim-Dûl's Vault\n", encoding="utf-8")
@@ -288,13 +213,13 @@ class TestExclusionsWithoutACheckpoint:
         )
 
     def test_neither_source_means_no_exclusions(self) -> None:
-        from effects.application.collect_coverage import HoldoutSource
+        from effects.application.collector_common import HoldoutSource
 
         assert HoldoutSource().exclusions() == frozenset()
 
     def test_both_sources_at_once_is_refused(self, tmp_path) -> None:
         """Two spellings of the same holdout is the bug this feature just had."""
-        from effects.application.collect_coverage import HoldoutSource
+        from effects.application.collector_common import HoldoutSource
 
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\n", encoding="utf-8")
@@ -329,9 +254,8 @@ class TestTheRoundPlaysTheComputedDecks:
     `match-outcomes` that reaches none of the cards coverage exists for.
     """
 
-    def test_the_decks_played_are_built_from_the_weights(self, tmp_path):
+    def test_the_decks_played_are_built_from_the_weights(self, tmp_path, fake_supervisor):
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
@@ -341,8 +265,7 @@ class TestTheRoundPlaysTheComputedDecks:
         (cards / "a" / "bb.txt").write_text(
             "name: bb\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
         )
-        supervisor = MagicMock()
-        supervisor.interrupted = False
+        supervisor = fake_supervisor
 
         # Two candidates, and a recount that plays out over three rounds, so
         # the test can tell "decks track the weights `run` recomputes each
@@ -363,7 +286,7 @@ class TestTheRoundPlaysTheComputedDecks:
         # the real counter learns anything: it reads shards it has not seen and
         # adds to a running total. Round 1 produces nothing, round 2 nine "aa"
         # records, round 3 the tenth.
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         records_dir = tmp_path / "records"
         records_dir.mkdir()
@@ -381,9 +304,7 @@ class TestTheRoundPlaysTheComputedDecks:
 
         supervisor.play_round.side_effect = _play
 
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", return_value={}):
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
             collect_coverage.run(
                 collect_coverage.CollectCoverageConfig(
                     effect_records=tmp_path / "records",
@@ -464,10 +385,9 @@ class TestCtrlCEndsTheRun:
     ``ForgeWorkerPool.interrupted``, so ``run`` built a fresh pool for the
     next round and Ctrl-C degraded to "skip this round, start another".
 
-    ``spec=CollectorSupervisor`` rather than a bare ``MagicMock`` on purpose:
-    a bare one answers to ``interrupted`` whether or not the supervisor
-    exposes it, which is the same blindness ``TestARoundEndsInItsReport``
-    exists for.
+    The ``fake_supervisor`` is ``spec``-ed on purpose: a bare ``MagicMock``
+    answers to ``interrupted`` whether or not the supervisor exposes it, which
+    is the same blindness ``TestARoundEndsInItsReport`` exists for.
     """
 
     def _two_round_config(self, tmp_path):
@@ -484,21 +404,16 @@ class TestCtrlCEndsTheRun:
             no_progress_rounds=5,
         )
 
-    def _run_with(self, tmp_path, *, interrupted: bool):
+    def _run_with(self, tmp_path, supervisor, *, interrupted: bool):
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
-        supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
         supervisor.interrupted = interrupted
-
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", return_value={}):
+        with patch.object(collect_coverage, "consult_castability", return_value={}):
             code = collect_coverage.run(self._two_round_config(tmp_path))
         return code, supervisor
 
-    def test_an_interrupted_round_is_the_last_round(self, tmp_path):
-        code, supervisor = self._run_with(tmp_path, interrupted=True)
+    def test_an_interrupted_round_is_the_last_round(self, tmp_path, fake_supervisor):
+        code, supervisor = self._run_with(tmp_path, fake_supervisor, interrupted=True)
 
         assert supervisor.play_round.call_count == 1, (
             "a second round was started after the operator interrupted the "
@@ -506,9 +421,9 @@ class TestCtrlCEndsTheRun:
         )
         assert code == 130, "an interrupted run must not report success"
 
-    def test_an_uninterrupted_run_plays_every_round_it_needs(self, tmp_path):
+    def test_an_uninterrupted_run_plays_every_round_it_needs(self, tmp_path, fake_supervisor):
         """The control: five stalled rounds, then retirement ends the run."""
-        code, supervisor = self._run_with(tmp_path, interrupted=False)
+        code, supervisor = self._run_with(tmp_path, fake_supervisor, interrupted=False)
 
         assert supervisor.play_round.call_count == 5
         assert code == 0
@@ -541,11 +456,10 @@ class TestOnlyDeckedCardsCountAStalledRound:
             "a card that was never put in a deck retired without one attempt"
         )
 
-    def test_the_round_reports_exactly_the_names_it_decked(self, tmp_path):
+    def test_the_round_reports_exactly_the_names_it_decked(self, tmp_path, fake_supervisor):
         """``run`` must hand ``retire_stalled`` the round's own decks, not the
         whole coverage unit -- otherwise the guard above never fires."""
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
         # Sixty candidates against a single deck of 23 nonland slots: most of
         # the unit cannot be in the round at all, which is the real shape of
@@ -558,8 +472,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
                 f"name: {name}\nmana cost: {{G}}\ntypes: creature\n",
                 encoding="utf-8",
             )
-        supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
-        supervisor.interrupted = False
+        supervisor = fake_supervisor
         seen = []
         real = collect_coverage.retire_stalled
 
@@ -570,9 +483,7 @@ class TestOnlyDeckedCardsCountAStalledRound:
                 decked=decked,
             )
 
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", return_value={}), \
+        with patch.object(collect_coverage, "consult_castability", return_value={}), \
              patch.object(collect_coverage, "retire_stalled", _spy):
             collect_coverage.run(CollectCoverageConfig(
                 effect_records=tmp_path / "records",
@@ -614,7 +525,7 @@ class TestIncrementalCounting:
 
     def _shard(self, directory: Path, name: str, cards: list[str]) -> Path:
         """One shard whose every record qualifies for the named card."""
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         directory.mkdir(parents=True, exist_ok=True)
         lines = [
@@ -694,7 +605,7 @@ class TestCountingCrossesTheNameBoundary:
         self, tmp_path,
     ) -> None:
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         shard = tmp_path / "run.0-x.jsonl"
         shard.write_text(
@@ -713,7 +624,7 @@ class TestCountingCrossesTheNameBoundary:
         self, tmp_path,
     ) -> None:
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         shard = tmp_path / "run.0-x.jsonl"
         shard.write_text(
@@ -739,7 +650,7 @@ class TestCountingReportsProgress:
     """
 
     def _shards(self, directory: Path, count: int) -> None:
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         directory.mkdir(parents=True, exist_ok=True)
         line = format_record_line(_record([_entity("E1", "aa")], source="E1"))
@@ -779,7 +690,7 @@ class TestCountingReportsProgress:
 
         self._shards(tmp_path, 120)
         counter = TextCoverageCounter(
-            {"cardsfolder": str(tmp_path / "none")}, progress_every=50,
+            {"cardsfolder": str(tmp_path / "none")}, _holding({"t"}), progress_every=50,
         )
 
         with caplog.at_level("INFO"):
@@ -824,7 +735,7 @@ class TestParallelCounting:
     """
 
     def _shards(self, directory: Path, spec: dict[str, int]) -> None:
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         directory.mkdir(parents=True, exist_ok=True)
         for n, (card, count) in enumerate(spec.items()):
@@ -853,7 +764,7 @@ class TestParallelCounting:
     def test_a_card_split_across_shards_sums(self, tmp_path) -> None:
         """The reduce step, which is where a parallel count goes wrong."""
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         tmp_path.mkdir(parents=True, exist_ok=True)
         line = format_record_line(_record([_entity("E1", "Soul Echo")], source="E1"))
@@ -906,9 +817,52 @@ class TestHeldOutTextUnit:
         resolutions, everything = _texts_by_game(_GEN1_SHARD)
         assert resolutions and everything != resolutions
         counted = count_text_shard(
-            _GEN1_SHARD, roots=_GEN1_ROOTS, texts=frozenset(everything),
+            _GEN1_SHARD, roots=_GEN1_ROOTS, held_out=_holding(everything),
         )
         assert counted == resolutions
+
+    def test_a_game_goes_to_the_first_acting_text_held_out_by_its_unit(
+        self, tmp_path,
+    ):
+        """The text build-corpus credits, not the first text the round lists.
+
+        Under ``template`` the first acting key prints ``NumDmg$ 2``, whose
+        template is held out though no listed card prints that exact text;
+        build-corpus credits the game to it, so the round's listed ``Draw``
+        text, acting second, must not count the game either.
+        """
+        from effects.application.collect_coverage import (
+            TextCoverageCounter,
+            count_text_shard,
+        )
+        from effects.domain.coverage import TextCoverage
+        from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+        from effects.domain.text_holdout import HoldoutUnit
+        from effects.infrastructure.shard_io import write_shard
+        from tests.unit.effects.builders import make_record, write_sidecar
+
+        damage, draw = "SP$ DealDamage | NumDmg$ 2", "SP$ Draw | NumCards$ 1"
+        keys = []
+        for stem, text in (("variant", damage), ("listed", draw)):
+            key = ProvenanceKey(f"cardsfolder/a/{stem}.txt", 0, "spell", 0)
+            write_sidecar(
+                ProvenanceSidecar(card=stem, script_file=key.script_file, lines=(
+                    SidecarLine(0, "spell", (key,), script_text=text),
+                )),
+                tmp_path / "cardsfolder" / "a" / f"{stem}.provenance.json",
+            )
+            keys.append(key)
+        shard = tmp_path / "records" / "run.0-a.jsonl.gz"
+        write_shard(shard, [make_record(ability=tuple(keys), payload=ResolutionPayload(
+            events=(Event(type=EventType.CARD_DRAWN, subjects=("P0",)),),
+        ))])
+        roots = {"cardsfolder": str(tmp_path / "cardsfolder")}
+        held_out = _holding({"SP$ DealDamage | NumDmg$ 3", draw}, HoldoutUnit.TEMPLATE)
+        coverage = {draw: TextCoverage(text=draw)}
+
+        assert count_text_shard(shard, roots=roots, held_out=held_out) == {damage: {"g1"}}
+        TextCoverageCounter(roots, held_out).update(coverage, tmp_path / "records", workers=1)
+        assert coverage[draw].games == set()
 
     def test_a_refused_resolution_does_not_count_toward_its_text(self, tmp_path):
         """A record the quality rules refuse never reaches the manifest."""
@@ -916,7 +870,7 @@ class TestHeldOutTextUnit:
 
         from effects.application.collect_coverage import count_text_shard
         from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
-        from effects.infrastructure.record_io import read_shard, write_shard
+        from effects.infrastructure.shard_io import read_shard, write_shard
 
         effects = [
             record for record in read_shard(_GEN1_SHARD)
@@ -932,10 +886,10 @@ class TestHeldOutTextUnit:
             for record in effects
         ])
         _, everything = _texts_by_game(_GEN1_SHARD)
-        texts = frozenset(everything)
+        held_out = _holding(everything)
 
-        assert count_text_shard(clean, roots=_GEN1_ROOTS, texts=texts)
-        assert count_text_shard(flooded, roots=_GEN1_ROOTS, texts=texts) == {}
+        assert count_text_shard(clean, roots=_GEN1_ROOTS, held_out=held_out)
+        assert count_text_shard(flooded, roots=_GEN1_ROOTS, held_out=held_out) == {}
 
     def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
         """A sidecar cache per shard re-read every sidecar the shard named."""
@@ -956,9 +910,9 @@ class TestHeldOutTextUnit:
             "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
         }
         shard = _FIXTURES / "gen1-records.jsonl.gz"
-        first = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
+        first = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
         read_by_one = len(reads)
-        second = collect_coverage.count_text_shard(shard, roots=roots, texts=frozenset())
+        second = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
         collect_coverage._sidecars.cache_clear()
 
         assert read_by_one > 0
@@ -994,7 +948,7 @@ class TestHeldOutTextUnit:
         """Spec Story 2 scenario 5."""
         import random
 
-        from effects.application.collect_coverage import build_coverage_decks
+        from effects.application.collector_common import build_coverage_decks
         from effects.domain.coverage import (
             DeckCandidate,
             TextCoverage,
@@ -1022,11 +976,23 @@ _GEN1_ROOTS = {
 }
 
 
+def _holding(texts, unit=None):
+    """A holdout of exactly ``texts``, by ``unit`` (``text`` by default)."""
+    from effects.domain.split import HeldOutCards
+    from effects.domain.text_holdout import HoldoutUnit, holdout_key
+
+    unit = unit or HoldoutUnit.TEXT
+    return HeldOutCards(
+        names=frozenset(), script_files=frozenset(), texts=frozenset(texts),
+        keys=frozenset(holdout_key(text, unit) for text in texts), unit=unit,
+    )
+
+
 def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
     """``text -> games`` over the shard's resolution records, and over every
     record: each record counted through its first key with a script text."""
     from effects.domain.text_holdout import normalize_script_text
-    from effects.infrastructure.record_io import read_shard
+    from effects.infrastructure.shard_io import read_shard
     from effects.infrastructure.sidecar_io import SidecarCache
 
     cache = SidecarCache({tree: Path(root) for tree, root in _GEN1_ROOTS.items()})
@@ -1116,9 +1082,8 @@ class TestNonDeckTypesLeaveTheUnit:
 
         assert is_deckable("name: x\n")
 
-    def test_the_training_unit_holds_no_non_deck_card(self, tmp_path):
+    def test_the_training_unit_holds_no_non_deck_card(self, tmp_path, fake_supervisor):
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
@@ -1135,22 +1100,18 @@ class TestNonDeckTypesLeaveTheUnit:
             consulted.append(list(names))
             return {}
 
-        supervisor = MagicMock()
-        supervisor.interrupted = False
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", _consult):
+        with patch.object(collect_coverage, "consult_castability", _consult):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
                 target_records=1, decks_per_round=5,
             ))
 
         assert consulted == [["aa"]]
-        decks = supervisor.play_round.call_args.args[0].read_text(encoding="utf-8")
+        decks = fake_supervisor.play_round.call_args.args[0].read_text(encoding="utf-8")
         assert "my_plan" not in decks and "squee" not in decks
 
     def test_the_held_out_round_drops_non_deck_carriers_only(
-        self, tmp_path, caplog,
+        self, tmp_path, caplog, fake_supervisor,
     ):
         """A text a non-deck held-out card shares stays held out.
 
@@ -1161,7 +1122,6 @@ class TestNonDeckTypesLeaveTheUnit:
         import logging
 
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
 
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
@@ -1185,9 +1145,7 @@ class TestNonDeckTypesLeaveTheUnit:
             consulted.append(list(names))
             return {}
 
-        with patch.object(collector_connector, "CollectorSupervisor",
-                          return_value=MagicMock(interrupted=False)), \
-             patch.object(collect_coverage, "consult_castability", _consult), \
+        with patch.object(collect_coverage, "consult_castability", _consult), \
              patch("effects.infrastructure.converted_trees.load_card_texts",
                    return_value=texts_by_card), \
              caplog.at_level(logging.INFO, logger=collect_coverage.__name__):

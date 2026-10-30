@@ -35,8 +35,8 @@ from effects.domain.evaluation_report import CheckStatus
 from effects.domain.line_query import LineQuery, normalize_prose
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
-from tests.unit.effects.builders import read_cache
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import read_cache, write_sidecar
 
 
 def _write_source(
@@ -497,7 +497,6 @@ class TestWardCanary:
         print the line resolves to nothing on the real corpus."""
         from effects.infrastructure.sidecar_io import (
             converted_text_path,
-            prose_for,
             prose_lines,
             read_sidecar,
         )
@@ -511,7 +510,7 @@ class TestWardCanary:
             sidecar = read_sidecar(path)
             rendered = prose_lines(converted_text_path(path))
             printed = {
-                normalize_prose(prose_for(line, rendered) or "")
+                normalize_prose(line.prose_in(rendered) or "")
                 for line in sidecar.lines
             }
             assert normalize_prose(query.prose) in printed, query.card

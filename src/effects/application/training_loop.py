@@ -15,6 +15,7 @@ import random
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
+from typing import NamedTuple
 
 import torch
 
@@ -39,10 +40,10 @@ from effects.application.train_effect_model import (
     MAX_GRAD_NORM,
     CorpusFacts,
     EpochResult,
+    RunSpec,
     TrainEffectModelConfig,
     epoch_shards,
     learning_rate_at,
-    load_shard,
     steps_per_shard,
 )
 from effects.application.validation_pass import ValidationSamples, Validator
@@ -52,6 +53,7 @@ from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
     EffectModelStore,
 )
+from effects.infrastructure.shard_io import load_shard
 from effects.infrastructure.step_workers import StepWorkerPool
 from effects.infrastructure.torch_device import default_device
 from price_predictor.infrastructure.torch_training import clip_per_group
@@ -67,6 +69,14 @@ MAX_STEPS_AHEAD = 32
 #: rather than raising out-of-memory, so an unbounded allocator makes the run
 #: slow instead of failing.
 CUDA_MEMORY_FRACTION = 0.9
+
+
+class EpochPlan(NamedTuple):
+    """One epoch's shard tasks in the drawn order, and how many shards were
+    drawn: a shard given no steps gets no task."""
+
+    drawn: int
+    tasks: list[ShardTask]
 
 
 def reports_now(*, index: int, budget: int) -> bool:
@@ -126,20 +136,18 @@ class TrainingLoop:
         validation_samples: Mapping[str, Path],
     ) -> None:
         self.config = config
-        self.facts = facts
         #: Processes preparing steps; 0 prepares them in this one. Not a
         #: training setting: it moves where the host half runs, not what it
         #: computes.
         self.prefetch_workers = max(int(config.prefetch_workers), 0)
         self.training_shards = list(training_shards)
         self.validation_samples = dict(validation_samples)
-        #: Resolved once, so the seed logged and checkpointed is the one every
-        #: draw used.
-        self.seed = (
+        self.spec = RunSpec(
+            config, facts,
             config.seed if config.seed is not None
-            else random.SystemRandom().getrandbits(32)
+            else random.SystemRandom().getrandbits(32),
         )
-        torch.manual_seed(self.seed)
+        torch.manual_seed(self.spec.seed)
         self.device = default_device()
         #: The device half of every step, training's and validation's.
         self.losses = StepLossComputer(config, self.device)
@@ -156,17 +164,13 @@ class TrainingLoop:
         if not samples.probe:
             self.reporter.no_probe()
             return 1
-        self.reporter.run_start(self.seed, samples, shards=len(self.training_shards))
+        self.reporter.run_start(self.spec.seed, samples, shards=len(self.training_shards))
         self.reporter.thin_holdout(samples)
         self._cap_cuda_memory()
-        settings = preparer_settings(
-            self.config, seed=self.seed, facts=self.facts,
-            widths=feature_widths(samples.probe),
-        )
+        settings = preparer_settings(self.spec, widths=feature_widths(samples.probe))
         run = build_run(
-            self.config,
-            StepPreparer(settings, truncations=self.reporter.truncations),
-            samples.present, facts=self.facts, seed=self.seed, device=self.device,
+            self.spec, StepPreparer(settings, truncations=self.reporter.truncations),
+            samples.present, device=self.device,
         )
         first_epoch = 1
         if self.config.resume:
@@ -212,18 +216,18 @@ class TrainingLoop:
         return self._close_epoch(epoch, run, result)
 
     def _train_epoch(self, epoch: int, run: RunContext, tally: EpochTally) -> None:
-        drawn, tasks = self._epoch_tasks(epoch, run)
-        for task in tasks:
+        plan = self._epoch_plan(epoch, run)
+        for task in plan.tasks:
             steps = (
                 local_steps(task, run.preparer, pin=self.is_cuda)
                 if run.pool is None else run.pool.shard()
             )
-            self._train_on_shard(task, steps, run, tally, of=drawn)
+            self._train_on_shard(task, steps, run, tally, of=plan.drawn)
             self._release_cache()
         if run.pool is not None and epoch < self.config.epochs:
             # Queued before validation so the workers prepare while this
             # process validates; nothing validation decides changes them.
-            for task in self._epoch_tasks(epoch + 1, run)[1]:
+            for task in self._epoch_plan(epoch + 1, run).tasks:
                 run.pool.submit(task)
 
     def _close_epoch(self, epoch: int, run: RunContext, result: EpochResult) -> bool:
@@ -248,7 +252,7 @@ class TrainingLoop:
             model_config=run.model_config,
             encoder_state=run.encoder.state_dict(),
             model_state=run.model.state_dict(),
-            provenance=self.facts.provenance(self.config),
+            provenance=self.spec.facts.provenance(self.config),
             variant=self.config.variant,
             best_val_loss=run.stopper.best,
             epoch=epoch,
@@ -260,18 +264,15 @@ class TrainingLoop:
             training_settings=dict(run.training_settings),
         )
 
-    def _epoch_tasks(self, epoch: int, run: RunContext) -> tuple[int, list[ShardTask]]:
-        """``(shards drawn, tasks)`` for one epoch, in the drawn order.
-
-        A shard given no steps gets no task, but every task keeps its drawn
-        ``position``, which seeds its generators.
-        """
+    def _epoch_plan(self, epoch: int, run: RunContext) -> EpochPlan:
+        """One epoch's plan. Every task keeps its drawn ``position``, which
+        seeds its generators, whether or not the shards before it got steps."""
         shards = epoch_shards(
             self.training_shards, epoch=epoch,
-            per_epoch=self.config.shards_per_epoch, seed=self.seed,
+            per_epoch=self.config.shards_per_epoch, seed=self.spec.seed,
         )
         allocation = steps_per_shard(self.config.steps_per_epoch, len(shards))
-        return len(shards), [
+        return EpochPlan(len(shards), [
             ShardTask(
                 shard=Path(shard), epoch=epoch, position=position,
                 budget=budget, fields=run.fields[epoch],
@@ -280,7 +281,7 @@ class TrainingLoop:
                 zip(shards, allocation), start=1,
             )
             if budget > 0
-        ]
+        ])
 
     def _start_workers(
         self, settings: PreparerSettings, run: RunContext, *, first_epoch: int,
@@ -301,7 +302,7 @@ class TrainingLoop:
             pin=self.is_cuda,
         )
         try:
-            for task in self._epoch_tasks(first_epoch, run)[1]:
+            for task in self._epoch_plan(first_epoch, run).tasks:
                 pool.submit(task)
         except BaseException:
             pool.close()

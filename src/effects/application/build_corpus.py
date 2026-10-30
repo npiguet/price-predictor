@@ -231,6 +231,18 @@ class Decisions:
     #: Kept records per legality mode (FR-053's ``legality_mode_counts``).
     mode_counts: dict[str, int]
 
+    def write_plan(self, store: CorpusStore) -> WritePlan:
+        """What the write pass applies: these decisions, its parts in ``store``."""
+        return WritePlan(
+            parts_dirs={
+                stratum: str(store.parts_dir_for(stratum)) for stratum in OUTPUT_STRATA
+            },
+            strata=self.strata,
+            plans=self.selection.plans,
+            keyless_plans=self.selection.keyless,
+            mode_counts=self.mode_counts,
+        )
+
 
 def _keyword_misfires(
     key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
@@ -239,9 +251,9 @@ def _keyword_misfires(
     (FR-015), replacing a script with a reminder template it does not carry."""
     if definitions is None or not Path(definitions).exists():
         return []
-    from effects.application.extract_keyword_definitions import load_keyword_definitions
     from effects.domain.ability_tokenizer import display_name_of
     from effects.domain.rule_families import KEYWORD_API_TYPE
+    from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 
     names = {name.lower() for name in load_keyword_definitions(Path(definitions))}
     found: list[str] = []
@@ -266,12 +278,13 @@ def decide(
 ) -> Decisions:
     """Fold keys to texts, split the games, and plan every record's copies.
 
-    ``survey.supply`` must already be legality-resolved, as :func:`_survey`
-    leaves it.
+    ``survey.totals.supply`` must already be legality-resolved, as
+    :func:`_survey` leaves it.
     """
-    if survey.supply.heap_cap != config.heap_cap:
+    totals = survey.totals
+    if totals.supply.heap_cap != config.heap_cap:
         raise ValueError(
-            f"the survey kept {survey.supply.heap_cap} hashes per cell and key, "
+            f"the survey kept {totals.supply.heap_cap} hashes per cell and key, "
             f"but config.text_cap {config.text_cap} keeps {config.heap_cap}. "
             "decide() must be run against the Survey that this same "
             "--text-cap produced, or the copy plans it writes would disagree "
@@ -286,14 +299,14 @@ def decide(
 
     key_text: dict[Keys, str] = {}
     text_games: dict[str, set[int]] = {}
-    for keys in survey.rarity.key_records:
+    for keys in totals.rarity.key_records:
         text = first_text(keys, text_of)
         if text is None:
             # A runtime-only trait or an unconverted script: no text to cap
             # against, so its records are sampled with the cell's keyless ones.
             continue
         key_text[keys] = text
-        text_games.setdefault(text, set()).update(survey.rarity.key_games.get(keys, ()))
+        text_games.setdefault(text, set()).update(totals.rarity.key_games.get(keys, ()))
 
     misfires = _keyword_misfires(key_text, sidecars, config.keyword_definitions)
     if misfires:
@@ -304,13 +317,13 @@ def decide(
             "Keyword. First: " + "; ".join(misfires[:5])
         )
 
-    held_out = frozenset(survey.games.held_out)
-    game_disjoint = frozenset(survey.games.game_disjoint) - held_out
+    held_out = frozenset(totals.games.held_out)
+    game_disjoint = frozenset(totals.games.game_disjoint) - held_out
     card_disjoint = admit_card_disjoint(
-        held_out, survey.games.held_out_text_games,
+        held_out, totals.games.held_out_text_games,
         cap=config.card_disjoint_text_cap, seed=config.seed,
     )
-    members, keys_of = members_of(survey.supply, key_text)
+    members, keys_of = members_of(totals.supply, key_text)
     return Decisions(
         selection=plan_selection(
             members, keys_of, mix=config.mix(), ceiling=config.training_records,
@@ -324,7 +337,7 @@ def decide(
         ),
         rarity={text: len(games) for text, games in text_games.items()},
         key_text=key_text,
-        mode_counts=dict(sorted(survey.mode_counts.items())),
+        mode_counts=dict(sorted(totals.mode_counts.items())),
     )
 
 
@@ -340,16 +353,7 @@ def build(config: BuildCorpusConfig) -> int:
     trees = _converted_trees(config)
     held_out = _select_holdout(config, trees)
     surface = surface_of(config.vocab_path)
-    logger.info(
-        "Holdout (%s unit): %d ability text(s) on %d card(s) and %d token "
-        "script(s); encoding surface %r.",
-        config.holdout.unit, len(held_out.texts), len(held_out.names),
-        sum(
-            1 for script in held_out.script_files
-            if split_script_file(script)[0] == SourceTree.TOKENSCRIPTS
-        ),
-        surface,
-    )
+    _log_holdout(config, held_out, surface)
     _refuse_mixed_generations(Path(config.records_dir))
     read = ReadConfig(
         records_dir=str(config.records_dir), sidecar_roots=trees.root_paths,
@@ -363,15 +367,7 @@ def build(config: BuildCorpusConfig) -> int:
     store.clear_outputs()
     written = run_write_pass(
         [shard.name for shard in survey.shards],
-        config=WriteConfig(read=read, plan=WritePlan(
-            parts_dirs={
-                stratum: str(store.parts_dir_for(stratum)) for stratum in OUTPUT_STRATA
-            },
-            strata=decisions.strata,
-            plans=decisions.selection.plans,
-            keyless_plans=decisions.selection.keyless,
-            mode_counts=decisions.mode_counts,
-        )),
+        config=WriteConfig(read=read, plan=decisions.write_plan(store)),
         workers=config.workers,
     )
     report_write_pass(survey, written)
@@ -389,6 +385,19 @@ def build(config: BuildCorpusConfig) -> int:
         sum(written.training.kept.values()), store.directory, manifest.digest(),
     )
     return 0
+
+
+def _log_holdout(config: BuildCorpusConfig, held_out: HeldOutCards, surface: Surface) -> None:
+    logger.info(
+        "Holdout (%s unit): %d ability text(s) on %d card(s) and %d token "
+        "script(s); encoding surface %r.",
+        config.holdout.unit, len(held_out.texts), len(held_out.names),
+        sum(
+            1 for script in held_out.script_files
+            if split_script_file(script)[0] == SourceTree.TOKENSCRIPTS
+        ),
+        surface,
+    )
 
 
 def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
@@ -441,7 +450,7 @@ def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOut
 
 def _refuse_mixed_generations(records_dir: Path) -> None:
     """Before any record is read (FR-033)."""
-    from effects.infrastructure.record_io import (
+    from effects.infrastructure.shard_io import (
         MixedGenerationsError,
         iter_shards,
         refuse_mixed_generations,
@@ -465,17 +474,20 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
         ),
         workers=config.workers,
     )
-    supply = survey.supply
+    totals = survey.totals
+    supply = totals.supply
     logger.info(
         "Surveyed %d record(s) in %d game(s); %d game(s) name a held-out card, "
         "%d are game-disjoint; %d record(s) are training-bound, and %d more act "
         "through a held-out text.",
-        survey.records, len(survey.games.games), len(survey.games.held_out),
-        len(survey.games.game_disjoint),
+        totals.records, len(totals.games.games), len(totals.games.held_out),
+        len(totals.games.game_disjoint),
         sum(supply.keyed.values()) + sum(supply.keyless.values()),
-        sum(survey.held_out_text_dropped.values()),
+        sum(totals.held_out_text_dropped.values()),
     )
-    return dataclasses.replace(survey, supply=supply.resolved(survey.mode_counts))
+    return dataclasses.replace(survey, totals=dataclasses.replace(
+        totals, supply=supply.resolved(totals.mode_counts),
+    ))
 
 
 def _decide_or_refuse(
@@ -484,14 +496,14 @@ def _decide_or_refuse(
 ) -> Decisions:
     """:func:`decide`, refusing a corpus the quality rules reject or a dataset
     gate 1 could not be scored on."""
-    check_refusals(survey.refusals, survey.kept)
+    check_refusals(survey.totals.refusals, survey.totals.kept)
     decisions = decide(survey, sidecars=trees.sidecars, surface=surface, config=config)
     if not decisions.strata.card_disjoint:
         raise BuildCorpusError(
             "No game is admitted to the card-disjoint stratum, so the dataset "
             "cannot score gate 1 and the trainer would refuse it in its first "
-            f"minute. {config.records_dir} holds {len(survey.games.games)} game(s), "
-            f"{len(survey.games.held_out)} of which name one of the "
+            f"minute. {config.records_dir} holds {len(survey.totals.games.games)} game(s), "
+            f"{len(survey.totals.games.held_out)} of which name one of the "
             f"{len(held_out.names)} held-out card(s). Depleted and "
             "full-strength shards live in sibling subdirectories of the raw "
             "corpus root: point --records-dir at the parent of both, and check "
@@ -513,10 +525,8 @@ def _write_validation_samples(
     from effects.application.validation_samples import draw_samples, write_samples
 
     samples = draw_samples(
-        card_disjoint=store.card_disjoint_dir, game_disjoint=store.game_disjoint_dir,
-        gate_one=store.gate_one_dir, mix=config.mix(), size=config.validation_sample,
-        seed=config.seed,
-        held_out_text_of=lambda record: context.held_out_text(acting_keys(record) or None),
+        store, mix=config.mix(), size=config.validation_sample, seed=config.seed,
+        held_out_text_of=lambda record: context.held_out_text(acting_keys(record)),
     )
     sampled = write_samples(store, samples)
     for stratum, count in sampled.items():
@@ -534,7 +544,7 @@ def _repack_outputs(
     """
     import shutil
 
-    from effects.infrastructure.record_io import iter_shards, repack_shards
+    from effects.infrastructure.shard_io import iter_shards, repack_shards
 
     for stratum in OUTPUT_STRATA:
         parts = iter_shards(store.parts_dir_for(stratum))

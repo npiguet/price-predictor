@@ -13,9 +13,8 @@ import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from effects.application.collect_coverage import (
+from effects.application.collector_common import (
     CollectorConfig,
-    HoldoutSource,
     build_coverage_decks,
     collector_supervisor,
     play_decks,
@@ -27,9 +26,10 @@ from effects.domain.script_variants import (
     perturb,
     renamed_script,
     script_card_name,
+    script_mana_cost,
     variant_name,
 )
-from effects.domain.split import HeldOutCards, HoldoutRule
+from effects.domain.split import HeldOutCards
 from effects.infrastructure.one_shot_workers import write_variant_sidecars
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
@@ -64,11 +64,6 @@ class CollectVariantsConfig(CollectorConfig):
             "(default: %(default)s)"
         ),
     })
-    #: The holdout rule a variant printing a held-out text is dropped under,
-    #: over ``cards_folders``; given the flags ``build-corpus`` is, so the two
-    #: agree.
-    holdout: HoldoutRule = HoldoutRule()
-
     def volume_source(self) -> Path:
         """The directory the volume cap counts records in."""
         return self.corpus_records or self.effect_records
@@ -76,12 +71,21 @@ class CollectVariantsConfig(CollectorConfig):
 
 @dataclass(frozen=True, slots=True)
 class GeneratedVariant:
-    """One perturbed script and where it came from."""
+    """One perturbed script and where it came from.
+
+    ``mana_cost`` is read off the script as written, since a variant has no
+    prose (FR-056); None for a script declaring none.
+    """
 
     name: str
     source_card: str
     path: Path
     perturbation: str
+    mana_cost: str | None = None
+
+    def deck_candidate(self) -> DeckCandidate:
+        """The deck candidate ``compute_basic_lands`` reads for this variant."""
+        return DeckCandidate(self.name, self.mana_cost)
 
 
 def variant_budget(existing_records: int, volume: float) -> int:
@@ -190,32 +194,12 @@ def generate_variants(
         name = variant_name(card_name, len(generated))
         # The sanitized card name is the path a provenance key resolves to.
         path = output_path / f"{sanitize_card_name(name)}.txt"
-        path.write_text(
-            "\n".join(renamed_script(perturbed, name)) + "\n", encoding="utf-8",
-        )
-        generated.append(GeneratedVariant(name, card_name, path, description))
+        script = renamed_script(perturbed, name)
+        path.write_text("\n".join(script) + "\n", encoding="utf-8")
+        generated.append(GeneratedVariant(
+            name, card_name, path, description, mana_cost=script_mana_cost(script),
+        ))
     return generated
-
-
-def _brace_wrap_mana_cost(cost: str) -> str:
-    """Forge's raw ``ManaCost:`` shards, brace-delimited like the converted
-    corpus (e.g. ``"2 R R"`` -> ``"{2}{R}{R}"``).
-
-    ``convert_mana_cost`` extracts ``{...}`` groups, so an unwrapped cost
-    silently parses as costless. ``"no cost"`` round-trips to the literal
-    ``ManaCost.parse`` special-cases.
-    """
-    return "".join(f"{{{shard}}}" for shard in cost.split())
-
-
-def _deck_candidate(variant: GeneratedVariant) -> DeckCandidate:
-    """The deck candidate ``compute_basic_lands`` reads for a variant, its
-    mana cost taken from the perturbed script (a variant has no prose, FR-056)."""
-    lines = variant.path.read_text(encoding="utf-8").splitlines()
-    cost = next(
-        (ln.split(":", 1)[1] for ln in lines if ln.startswith("ManaCost:")), "",
-    )
-    return DeckCandidate(variant.name, _brace_wrap_mana_cost(cost) or None)
 
 
 def run(config: CollectVariantsConfig) -> int:
@@ -246,7 +230,7 @@ def run(config: CollectVariantsConfig) -> int:
 
 def _size_budget(config: CollectVariantsConfig) -> int:
     """How many variant scripts this run may generate; says why when none."""
-    from effects.infrastructure.record_io import count_records
+    from effects.infrastructure.shard_io import count_records
 
     source_scripts = sum(1 for _ in Path(config.forge_cards_path).rglob("*.txt"))
     source = config.volume_source()
@@ -266,10 +250,7 @@ def _size_budget(config: CollectVariantsConfig) -> int:
 
 
 def _generate(config: CollectVariantsConfig, budget: int) -> list[GeneratedVariant]:
-    held_out = HoldoutSource(
-        effect_records=config.effect_records, exclude_cards=config.exclude_cards,
-        split_from=config.split_from,
-    ).exclusions()
+    held_out = config.holdout_source().exclusions()
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
         held_out=held_out, limit=budget, seed=config.seed,
@@ -380,17 +361,13 @@ def _play_and_check_growth(
     config: CollectVariantsConfig, variants: list[GeneratedVariant], budget: int,
 ) -> int:
     """Play one round of variant decks and fail it when it collected nothing."""
-    from effects.infrastructure.record_io import (
-        count_records,
-        count_shard_records,
-        iter_shards,
-    )
+    from effects.infrastructure.shard_io import count_records, count_shard_records, iter_shards
 
     # Equal weights: a fresh variant has no records to balance against.
     decks_file = Path(config.effect_records) / "variant-decks.txt"
     decks = build_coverage_decks(
         {variant.name: 1.0 for variant in variants},
-        {variant.name: _deck_candidate(variant) for variant in variants},
+        {variant.name: variant.deck_candidate() for variant in variants},
         config.decks_per_round,
         rng=random.Random(config.seed),
     )

@@ -94,35 +94,6 @@ class TestTheTwoSidesAgree:
         )
 
 
-class TestPropertyNames:
-    def test_every_property_is_namespaced_for_the_collectors(self):
-        """A worker started without instrumentation ignores the lot."""
-        for name in CollectionCaps().as_system_properties():
-            assert name.startswith("effect.")
-
-    def test_underscores_become_dots(self):
-        properties = CollectionCaps().as_system_properties()
-        assert "effect.mana.cap" in properties
-        assert "effect.interventions.per.game" in properties
-        assert "effect.probe.keywords" in properties
-
-    def test_values_are_strings(self):
-        """They become -D arguments, so a non-string would stringify later and
-        somewhere less obvious."""
-        for value in CollectionCaps().as_system_properties().values():
-            assert isinstance(value, str)
-
-
-class TestTheManaCap:
-    def test_it_defaults_to_one_per_game(self):
-        """A Mountain taps a dozen times a game for the same R, and the repeats
-        observe a board that barely moved."""
-        assert CollectionCaps().mana_cap == 1
-
-    def test_it_is_overridable_for_more_mana_coverage(self):
-        assert CollectionCaps(mana_cap=5).mana_cap == 5
-
-
 #: The Java side of the contract. Read rather than mirrored in a constant,
 #: because a mirrored list is a third copy to drift.
 _JAVA_CAPS = (
@@ -164,11 +135,6 @@ class TestTheJvmReadsExactlyWhatThePythonSideWrites:
 class TestNoSnapshotDepthKnob:
     """Every record collects all four tiers, so no command can choose a depth."""
 
-    def test_the_caps_carry_no_tier_field(self):
-        assert "snapshot_tiers" not in {
-            field for field in CollectionCaps.__dataclass_fields__
-        }
-
     def test_no_property_names_a_depth(self):
         assert "effect.snapshot.tiers" not in CollectionCaps().as_system_properties()
         assert "effect.snapshot.tiers" not in _effect_collection_caps(
@@ -178,11 +144,6 @@ class TestNoSnapshotDepthKnob:
 
 class TestTheRandomSeat:
     """FR-021: both knobs travel to the worker like every other cap."""
-
-    def test_it_is_off_by_default(self):
-        caps = CollectionCaps()
-        assert caps.random_seat_share == 0.0
-        assert caps.random_seat_probability == 0.0
 
     def test_both_reach_their_properties(self):
         properties = CollectionCaps(

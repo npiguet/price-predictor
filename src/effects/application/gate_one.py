@@ -9,18 +9,13 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
 from functools import partial
 
-import numpy as np
 import torch
 
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
 from effects.domain.ability_encoder import surface_of
-from effects.domain.effect_head_layout import FIELDS_BY_NAME, GATE_INDEX, HeadField
-from effects.domain.effect_losses import magnitude_target
-from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.evaluation_report import (
     Bound,
@@ -34,18 +29,12 @@ from effects.domain.gate_metrics import (
     GATE1_MIN_DEVIANCE_REDUCTION,
     GATE1_MIN_GATE_F1_GAIN,
     GATE1_MIN_ZONE_ACCURACY_GAIN,
-    balanced_accuracy,
-    f1_score,
-    poisson_deviance,
-)
-from effects.domain.head_decoding import (
-    MAGNITUDE_TYPES,
-    expected_magnitude,
-    field_outputs,
+    GateOneMetrics,
+    MarginAccumulator,
 )
 from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import RecordKind, acting_keys
-from effects.domain.surface_collation import entity_target_tensors, gather_entities
+from effects.domain.surface_collation import per_entity_targets
 from effects.infrastructure.corpus_store import (
     CorpusStore,
     card_disjoint_resolutions,
@@ -54,15 +43,6 @@ from effects.infrastructure.corpus_store import (
 from effects.infrastructure.model_runner import BATCH_RECORDS, Runnable
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class GateOneMetrics:
-    """One model's scores on the card-disjoint split's unique-text stratum."""
-
-    affected_gate_f1: float
-    zone_outcome_accuracy: float
-    mean_poisson_deviance: float
 
 
 #: A key's text on the checkpoint's surface: ``SurfaceBatcher.text_of`` or
@@ -130,79 +110,8 @@ def measure(records, runnable: Runnable) -> GateOneMetrics:
 def _forward(chunk, runnable: Runnable) -> tuple[torch.Tensor, EntityTargetBatch]:
     """``(gathered, targets)`` for one chunk, on the host, ``gathered``
     aligned column for column with the targets."""
-    model = runnable.model
-    batch, surfaces, _encoded = runnable.batcher.build(chunk, runnable.encoder)
-    outputs = model.per_entity(model(**batch))
-    targets = [derive_targets(record) for record in chunk]
-    batch_targets = entity_target_tensors(surfaces, targets, runnable.fields)
-    gathered = gather_entities(
-        outputs, batch_targets.index.to(outputs.device),
-    ).float().cpu()
-    return gathered, batch_targets
-
-
-class MarginAccumulator:
-    """The three margins' predictions and observations, chunk by chunk.
-
-    Pooled over the whole pass rather than averaged per chunk, so a chunk with
-    one affected entity weighs what that one entity does.
-    """
-
-    def __init__(self, fields) -> None:
-        self._magnitude_specs = [
-            spec for spec in fields if spec.type in MAGNITUDE_TYPES
-        ]
-        self._gate_pred: list[np.ndarray] = []
-        self._gate_true: list[np.ndarray] = []
-        self._zone_pred: list[np.ndarray] = []
-        self._zone_true: list[np.ndarray] = []
-        self._count_pred: list[np.ndarray] = []
-        self._count_true: list[np.ndarray] = []
-
-    def add(self, gathered: torch.Tensor, targets: EntityTargetBatch) -> None:
-        """Fold one chunk in: the gate over every real entity, zone and
-        magnitude only where they train (target affected, field present)."""
-        gate, field_targets = targets.gate, targets.fields
-        real = targets.mask.bool()
-        self._gate_pred.append(
-            (gathered[..., GATE_INDEX][real] > 0).numpy().astype(np.int8)
-        )
-        self._gate_true.append(gate[real].numpy().astype(np.int8))
-
-        affected = real & gate.bool()
-        zone = HeadField.ZONE_OUTCOME
-        if zone in field_targets:
-            scored = affected & field_targets.present[zone]
-            logits = field_outputs(gathered, FIELDS_BY_NAME[zone])[scored]
-            if logits.numel():
-                self._zone_pred.append(logits.argmax(-1).numpy())
-                self._zone_true.append(field_targets.values[zone][scored].numpy())
-        for spec in self._magnitude_specs:
-            target = field_targets.values.get(spec.name)
-            if target is None:
-                continue
-            scored = affected & field_targets.present[spec.name]
-            slice_ = field_outputs(gathered, spec)[scored]
-            if not slice_.numel():
-                continue
-            self._count_pred.append(expected_magnitude(spec, slice_).numpy())
-            self._count_true.append(magnitude_target(spec, target[scored]).numpy())
-
-    def metrics(self) -> GateOneMetrics:
-        """The three margins over everything added; NaN where nothing was."""
-        return GateOneMetrics(
-            affected_gate_f1=f1_score(_cat(self._gate_pred), _cat(self._gate_true)),
-            zone_outcome_accuracy=balanced_accuracy(
-                _cat(self._zone_pred), _cat(self._zone_true),
-            ),
-            mean_poisson_deviance=poisson_deviance(
-                _cat(self._count_pred), _cat(self._count_true),
-            ),
-        )
-
-
-def _cat(chunks: list[np.ndarray]) -> np.ndarray:
-    return np.concatenate(chunks) if chunks else np.empty(0)
+    gathered, surfaces = runnable.per_entity_outputs(chunk)
+    return gathered, per_entity_targets(chunk, surfaces, runnable.fields)
 
 
 def run_gate_one(context: EvaluationContext, identity) -> CheckResult:

@@ -18,19 +18,12 @@ from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
 from effects.domain.effect_head_layout import active_fields
-from effects.domain.records import (
-    EffectRecord,
-)
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.text_holdout import HoldoutUnit, normalize_script_text
 from effects.infrastructure.converted_trees import ConvertedTrees
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import (
-    iter_shards,
-    read_shard,
-    refuse_mixed_generations,
-)
+from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +226,13 @@ class TrainEffectModelConfig:
         return model_output_for(self.variant)
 
 
+#: The flags a sweep arm differs by: the checkpoint's training settings record
+#: each under its own name, and a resume compares them there, as recorded.
+SWEEP_FLAGS: tuple[str, ...] = (
+    "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob", "api_weight",
+)
+
+
 @dataclass(frozen=True)
 class CorpusFacts:
     """What a run reads off its curated corpus's manifest at startup and
@@ -289,6 +289,17 @@ class CorpusFacts:
             corpus_digest=self.digest,
             holdout_unit=self.holdout.unit,
         )
+
+
+@dataclass(frozen=True)
+class RunSpec:
+    """What one training run is: its flags, the facts its corpus's manifest
+    gave, and the seed, resolved once so the seed logged and checkpointed is
+    the one every draw used."""
+
+    config: TrainEffectModelConfig
+    facts: CorpusFacts
+    seed: int
 
 
 class SurfaceMismatchError(ValueError):
@@ -390,11 +401,6 @@ class EarlyStopper:
     def should_stop(self) -> bool:
         """Never with ``patience`` 0: that run trains every epoch it is given."""
         return self.patience > 0 and self.since_best >= self.patience
-
-
-def load_shard(path: Path) -> list[EffectRecord]:
-    """One shard's records, the largest unit the trainer ever holds."""
-    return list(read_shard(Path(path)))
 
 
 class HoldoutMismatchError(ValueError):

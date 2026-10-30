@@ -3,7 +3,7 @@
 The records are built with the domain types and written with the collector's
 own serializer, so each test reads the shape a real gen-2 shard carries: Forge's
 phase name, the ``first_strike`` substep, combat damage events with their cause,
-and keywords already normalized as ``record_io`` parses them.
+and keywords already normalized as ``record_codec`` parses them.
 """
 
 from __future__ import annotations
@@ -22,7 +22,8 @@ from effects.domain.state_snapshot import (
     GrantedTemporary,
     PlayerState,
 )
-from effects.infrastructure.record_io import format_record_line, read_shard
+from effects.infrastructure.record_codec import format_record_line
+from effects.infrastructure.shard_io import read_shard
 from tests.unit.effects.domain.test_effect_head_input import _entity, _record, _snapshot
 
 _SCRIPT = Path(__file__).parents[3] / "scripts" / "repair_first_strike_steps.py"

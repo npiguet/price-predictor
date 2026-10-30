@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol
+from itertools import chain
 
 from effects.domain.records import EffectRecord, events_of
 from effects.domain.text_holdout import normalize_script_text
@@ -87,11 +87,12 @@ class DeckCandidate:
         return self.mana_cost
 
 
-class CoverageUnit(Protocol):
+class CoverageUnit:
     """What the round loop and ``retire_stalled`` read of a coverage unit.
 
     A card in the ordinary run, a held-out ability text in the held-out round:
-    both progress toward a target, stall, and retire by the same rule.
+    both progress toward a target, stall, and retire by the same rule, so a
+    subclass says only what its :attr:`progress` counts.
     """
 
     retired: bool
@@ -100,15 +101,21 @@ class CoverageUnit(Protocol):
     @property
     def progress(self) -> int:
         """What a round must raise for the unit to count as progressing."""
-        ...
+        raise NotImplementedError
 
-    def satisfied(self, target: int) -> bool: ...
+    def satisfied(self, target: int) -> bool:
+        return self.progress >= target
 
-    def done(self, target: int) -> bool: ...
+    def done(self, target: int) -> bool:
+        return self.retired or self.satisfied(target)
+
+    def shortfall(self, target: int) -> int:
+        """How far :attr:`progress` is below ``target``."""
+        return target - self.progress
 
 
 @dataclass
-class CardCoverage:
+class CardCoverage(CoverageUnit):
     """One card's progress toward its record target."""
 
     name: str
@@ -121,15 +128,9 @@ class CardCoverage:
     def progress(self) -> int:
         return self.records
 
-    def satisfied(self, target: int) -> bool:
-        return self.records >= target
-
-    def done(self, target: int) -> bool:
-        return self.retired or self.satisfied(target)
-
 
 @dataclass
-class TextCoverage:
+class TextCoverage(CoverageUnit):
     """One held-out ability text's progress toward its game floor (FR-036).
 
     Games rather than records: one long game can write hundreds of records of
@@ -148,12 +149,6 @@ class TextCoverage:
         """Distinct games."""
         return len(self.games)
 
-    def satisfied(self, floor: int) -> bool:
-        return len(self.games) >= floor
-
-    def done(self, floor: int) -> bool:
-        return self.retired or self.satisfied(floor)
-
 
 def qualifying_cards(record: EffectRecord) -> set[str]:
     """Cards this record counts toward (FR-049).
@@ -164,19 +159,14 @@ def qualifying_cards(record: EffectRecord) -> set[str]:
     by_id: dict[str, str] = {
         entity.id: entity.name for entity in record.state.entities
     }
-    names: set[str] = set()
-
-    source = record.state.refs.source
-    if source in by_id:
-        names.add(by_id[source])
-    for target in record.state.refs.targets:
-        if target in by_id:
-            names.add(by_id[target])
-    for event in events_of(record):
-        for subject in event.subjects:
-            if subject in by_id:
-                names.add(by_id[subject])
-    return names
+    refs = record.state.refs
+    return {
+        by_id[entity] for entity in chain(
+            (refs.source,), refs.targets,
+            (subject for event in events_of(record) for subject in event.subjects),
+        )
+        if entity in by_id
+    }
 
 
 def deck_weights(
@@ -191,7 +181,7 @@ def deck_weights(
     for name, card in coverage.items():
         if card.done(target):
             continue
-        weights[name] = float(target - card.records)
+        weights[name] = float(card.shortfall(target))
     return weights
 
 
@@ -206,7 +196,7 @@ def text_deck_weights(
         if unit.done(floor):
             continue
         for card in carriers[text]:
-            weights[card] += float(floor - len(unit.games))
+            weights[card] += float(unit.shortfall(floor))
     return dict(weights)
 
 

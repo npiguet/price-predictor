@@ -25,7 +25,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
-from effects.infrastructure.record_io import read_shard
+from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.builders import (
     make_batcher,
@@ -79,7 +79,7 @@ def _batcher(sidecars=None, **masks) -> SurfaceBatcher:
 
 def test_a_dropped_key_gets_no_ability_token():
     rows = {"creatures you control get +1/+1": 0, "deals 3 damage to any target": 1}
-    surface = _batcher().surface_for(_record(), rows)
+    surface = _batcher().surface_builder(rows).build(_record())
     assert [slot.e for slot in slots_of_kind(surface, SlotKind.ABILITY)] == [0]
 
 
@@ -106,14 +106,14 @@ def _columns(surface, kind):
 def test_the_state_only_variant_keeps_the_zero_token_for_a_real_line():
     surface, inputs = _prepared("state-only")
     (ability,) = _columns(surface, SlotKind.ABILITY)
-    assert inputs["e_rows"][0, ability] == -1
-    assert torch.all(inputs["e_vectors"][0, ability] == 0.0)
+    assert inputs.e_rows[0, ability] == -1
+    assert torch.all(inputs.e_vectors[0, ability] == 0.0)
 
 
 def test_the_state_only_variant_zeroes_the_acting_lines_e():
     surface, inputs = _prepared("state-only")
     (act,) = _columns(surface, SlotKind.ACT)
-    assert inputs["e_rows"][0, act] == -1
+    assert inputs.e_rows[0, act] == -1
 
 
 def test_the_no_state_variant_keeps_the_acting_lines_e():
@@ -121,20 +121,20 @@ def test_the_no_state_variant_keeps_the_acting_lines_e():
     surface, inputs = _prepared("no-state")
     (act,) = _columns(surface, SlotKind.ACT)
     (ability,) = _columns(surface, SlotKind.ABILITY)
-    assert inputs["e_rows"][0, act] >= 0
-    assert inputs["e_rows"][0, ability] == -1
+    assert inputs.e_rows[0, act] >= 0
+    assert inputs.e_rows[0, ability] == -1
 
 
 def test_the_no_state_variant_keeps_only_the_record_kind_flags_of_global():
     from effects.domain.effect_head_input import KIND_FLAG_WIDTH
 
-    full = _prepared("full")[1]["slot_features"][SlotKind.GLOBAL][0, 0]
+    full = _prepared("full")[1].slot_features[SlotKind.GLOBAL][0, 0]
     _surface, inputs = _prepared("no-state")
-    blank = inputs["slot_features"][SlotKind.GLOBAL][0, 0]
+    blank = inputs.slot_features[SlotKind.GLOBAL][0, 0]
     assert torch.all(blank[:-KIND_FLAG_WIDTH] == 0.0)
     assert torch.equal(blank[-KIND_FLAG_WIDTH:], full[-KIND_FLAG_WIDTH:])
     assert full[:-KIND_FLAG_WIDTH].abs().sum() > 0
-    assert torch.all(inputs["slot_features"][SlotKind.CARD] == 0.0)
+    assert torch.all(inputs.slot_features[SlotKind.CARD] == 0.0)
 
 
 class _Counting(_Sidecars):
@@ -160,14 +160,14 @@ class _Mismatching(_Sidecars):
 
 def test_a_key_is_joined_once_however_often_the_batch_asks():
     # Three keys, asked for by `batch_texts` and then three more times per
-    # record inside `surface_for`, over two passes.
+    # record inside `SurfaceBuilder.build`, over two passes.
     sidecars = _Counting()
     batcher = _batcher(sidecars)
     records = [_record()]
     for _ in range(2):
         texts = batcher.batch_texts(records)
         rows = {text: row for row, text in enumerate(sorted(texts))}
-        batcher.surface_for(records[0], rows)
+        batcher.surface_builder(rows).build(records[0])
 
     assert sidecars.calls == [_ACT, _PHANTOM, _ANTHEM]
 
@@ -277,7 +277,7 @@ def test_a_decision_records_act_slot_reads_its_candidates_e():
     record = decisions[0]
     texts = batcher.batch_texts([record])
     rows = {text: row for row, text in enumerate(sorted(texts))}
-    surface = batcher.surface_for(record, rows)
+    surface = batcher.surface_builder(rows).build(record)
     act = surface.slots[ACT_SLOT]
     candidate_text = batcher.text_of(record.payload.candidates[0].ability[0])
     assert act.e == rows[candidate_text]
@@ -288,7 +288,7 @@ def test_gen1_sidecars_add_no_option_rows():
     texts = batcher.batch_texts(records)
     rows = {text: row for row, text in enumerate(sorted(texts))}
     for record in records:
-        surface = batcher.surface_for(record, rows)
+        surface = batcher.surface_builder(rows).build(record)
         assert not any(slot.option for slot in surface.slots)
 
 
@@ -318,7 +318,7 @@ def test_a_real_gen2_charm_gets_its_four_mode_rows_after_its_root():
     texts = batcher.batch_texts([record])
     assert len(texts) == 5  # the root and each mode's own chain
     rows = {text: row for row, text in enumerate(sorted(texts))}
-    abilities = slots_of_kind(batcher.surface_for(record, rows), SlotKind.ABILITY)
+    abilities = slots_of_kind(batcher.surface_builder(rows).build(record), SlotKind.ABILITY)
     assert [slot.option for slot in abilities] == [False, True, True, True, True]
     assert [slot.e for slot in abilities[1:]] == [
         rows[batcher.text_of(mode)] for mode in modes
@@ -426,8 +426,8 @@ def test_a_stand_in_key_reads_its_text_with_the_real_line():
 def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
     """``--withhold-keyword``: the line still says what the keyword does, so the
     zero-shot check has a definition the model trained on reading."""
-    from effects.application.extract_keyword_definitions import KeywordDefinition
     from effects.domain.ability_tokenizer import AbilityTokenizer
+    from effects.domain.keyword_definitions import KeywordDefinition
 
     words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
              "cant", "be", "blocked", "except", "by", "creatures", "with", "or"]
@@ -451,8 +451,8 @@ def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():
 
 def test_a_withheld_keywords_token_never_appears_even_inside_an_expansion():
     """Flying's own reminder text says "flying", and so does Reach's."""
-    from effects.application.extract_keyword_definitions import KeywordDefinition
     from effects.domain.ability_tokenizer import AbilityTokenizer
+    from effects.domain.keyword_definitions import KeywordDefinition
 
     words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
              "cant", "be", "blocked", "except", "by", "creatures", "with", "or",

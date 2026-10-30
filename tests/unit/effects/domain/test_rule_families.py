@@ -22,7 +22,7 @@ from effects.domain.rule_families import (
     rule_family,
 )
 from effects.domain.state_snapshot import GrantedTemporary
-from effects.infrastructure.record_io import read_shard
+from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 
 _FIXTURES = Path(__file__).parents[3] / "fixtures" / "effects"

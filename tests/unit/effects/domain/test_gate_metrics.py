@@ -6,8 +6,17 @@ import math
 
 import numpy as np
 import pytest
+import torch
 
+from effects.domain.effect_head_layout import (
+    FIELD_SLICES,
+    FIELDS_BY_NAME,
+    GATE_INDEX,
+    PER_ENTITY_WIDTH,
+    ZONE_OUTCOMES,
+)
 from effects.domain.gate_metrics import (
+    MarginAccumulator,
     balanced_accuracy,
     cosine_distance,
     f1_score,
@@ -15,6 +24,7 @@ from effects.domain.gate_metrics import (
     poisson_deviance,
     top_component_share,
 )
+from tests.unit.effects.builders import fields_everywhere, make_entity_targets
 
 
 class TestGateOneMetrics:
@@ -98,3 +108,45 @@ class TestCosineDistance:
 
     def test_cosine_distance_of_a_zero_vector_is_nan(self):
         assert math.isnan(cosine_distance(np.zeros(3), np.ones(3)))
+
+
+class TestMarginAccumulator:
+    """The three margins pool every chunk's entities, then reduce once."""
+
+    def _chunk(self, affected_damage: float, observed_damage: float = 2.0):
+        gathered = torch.zeros(1, 2, PER_ENTITY_WIDTH)
+        gathered[0, 0, GATE_INDEX] = 3.0   # predicted affected
+        gathered[0, 1, GATE_INDEX] = -3.0  # predicted unaffected
+        start, _ = FIELD_SLICES["zone_outcome"]
+        gathered[0, 0, start + ZONE_OUTCOMES.index("died")] = 5.0
+        damage, _ = FIELD_SLICES["damage_taken"]
+        gathered[0, 0, damage] = torch.log(torch.tensor(affected_damage))
+        targets = fields_everywhere({
+            "zone_outcome": torch.tensor(
+                [[float(ZONE_OUTCOMES.index("died")), 0.0]],
+            ),
+            "damage_taken": torch.tensor([[observed_damage, 0.0]]),
+        })
+        return gathered, make_entity_targets(torch.tensor([[1.0, 0.0]]), targets)
+
+    def test_a_perfect_chunk_scores_perfectly(self):
+        margins = MarginAccumulator(
+            (FIELDS_BY_NAME["zone_outcome"], FIELDS_BY_NAME["damage_taken"]),
+        )
+        margins.add(*self._chunk(2.0))
+        metrics = margins.metrics()
+        assert metrics.affected_gate_f1 == pytest.approx(1.0)
+        assert metrics.zone_outcome_accuracy == pytest.approx(1.0)
+        assert metrics.mean_poisson_deviance == pytest.approx(0.0, abs=1e-6)
+
+    def test_a_count_netted_negative_scores_as_none_as_it_trains(self):
+        """A heal netted into ``damage_taken`` trains as zero damage, not as
+        the heal's size."""
+        margins = MarginAccumulator((FIELDS_BY_NAME["damage_taken"],))
+        margins.add(*self._chunk(1e-6, observed_damage=-2.0))
+        assert margins.metrics().mean_poisson_deviance == pytest.approx(0.0, abs=1e-4)
+
+    def test_nothing_added_is_unmeasured_rather_than_perfect(self):
+        metrics = MarginAccumulator(()).metrics()
+        assert math.isnan(metrics.affected_gate_f1)
+        assert math.isnan(metrics.mean_poisson_deviance)

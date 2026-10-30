@@ -31,24 +31,9 @@ from effects.application.train_effect_model import (
     epoch_shards,
     steps_per_shard,
 )
-from effects.domain.records import (
-    EffectRecord,
-)
 from effects.domain.split import (
     HeldOutCards,
 )
-from effects.domain.state_snapshot import EntityState
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot
-
-
-def _entity(name: str) -> EntityState:
-    return make_entity(f"E-{name}", name)
-
-
-def _record(game_id: str, entities=()) -> EffectRecord:
-    return make_record(
-        game_id=game_id, state=make_snapshot(entities=tuple(entities)),
-    )
 
 
 def _held() -> HeldOutCards:

@@ -58,31 +58,7 @@ class TestEarlyStopping:
         assert stopper.should_stop
 
 
-class TestConfigDefaults:
-    def test_the_defaults_are_the_contracts(self):
-        config = TrainEffectModelConfig()
-        assert config.corpus is None
-        assert config.e_dim == 64
-        assert config.e_noise == 0.1
-        assert config.keyword_expand_p == 0.25
-        assert config.context_dropout == 0.15
-        assert (config.mlm_weight, config.mlm_mask_prob) == (0.1, 0.15)
-        assert config.api_weight == 0.003
-        assert config.curriculum_epoch == 3
-        assert (config.batch_size, config.grad_accum) == (32, 1)
-        assert (config.steps_per_epoch, config.epochs, config.patience) == (
-            5_000, 40, 5
-        )
-        assert config.withhold_keyword is None
-
-    def test_the_cards_folders_default_to_both_converted_trees(self):
-        assert TrainEffectModelConfig().cards_folders == (
-            Path("output/cardsfolder/"), Path("output/tokenscripts/"),
-        )
-
-    def test_variant_scripts_default_to_absent(self):
-        assert TrainEffectModelConfig().variant_scripts is None
-
+class TestModelOutput:
     def test_full_writes_to_the_shipping_directory(self):
         assert TrainEffectModelConfig().resolved_model_output() == (
             DEFAULT_MODEL_OUTPUT

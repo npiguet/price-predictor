@@ -17,6 +17,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from effects.domain.records import EffectRecord
+from price_predictor.domain.dataclass_defaults import field_default
 
 #: A field with no declared default: there is nothing to compare against, so
 #: only whether it varies says anything about it.
@@ -146,7 +147,8 @@ def _visit(value: Any, path: str, tally: dict[str, _Tally]) -> None:
             # payload's fields and the continuous payload's would share a path.
             child_path = f"{path}.payload<{type(child).__name__}>"
         else:
-            tally.setdefault(child_path, _Tally()).add(child, _default_of(spec))
+            default = field_default(spec, otherwise=_REQUIRED)
+            tally.setdefault(child_path, _Tally()).add(child, default)
         _descend(child, child_path, tally)
 
 
@@ -160,14 +162,6 @@ def _descend(value: Any, path: str, tally: dict[str, _Tally]) -> None:
 
 def _is_instance(value: Any) -> bool:
     return dataclasses.is_dataclass(value) and not isinstance(value, type)
-
-
-def _default_of(spec: dataclasses.Field) -> Any:
-    if spec.default is not dataclasses.MISSING:
-        return spec.default
-    if spec.default_factory is not dataclasses.MISSING:
-        return spec.default_factory()
-    return _REQUIRED
 
 
 def _differs(value: Any, default: Any) -> bool:

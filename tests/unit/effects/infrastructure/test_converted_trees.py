@@ -8,7 +8,8 @@ from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarL
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.converted_trees import ConvertedTrees
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import write_sidecar
 
 
 def _convert(root: Path, script_file: str, name: str, text: str) -> None:

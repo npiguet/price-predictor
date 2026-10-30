@@ -18,6 +18,7 @@ from effects.domain.effect_head_input import (
     CARD_TYPES,
     COUNTER_TYPES,
     OVERLAY_KEYWORDS,
+    THERMOMETER_STEPS,
 )
 from effects.domain.sampling import SamplingClass
 from effects.domain.state_snapshot import COLORS
@@ -180,10 +181,20 @@ class FieldSpec:
         return self.silent
 
 
+def counter_field(counter_type: str) -> str:
+    """The generated per-entity field one counter type's changes land in."""
+    return f"counters_delta_{counter_type.lower()}"
+
+
+def mana_field(color: str) -> str:
+    """The generated per-entity field one colour's mana changes land in."""
+    return f"mana_delta_{color.lower()}"
+
+
 def _counter_fields() -> tuple[FieldSpec, ...]:
     return tuple(
         FieldSpec(
-            name=f"counters_delta_{name.lower()}",
+            name=counter_field(name),
             type=FieldType.SIGNED_DELTA,
             scope=FieldScope.PERMANENT,
             group=FieldGroup.SPARSE,
@@ -196,7 +207,7 @@ def _counter_fields() -> tuple[FieldSpec, ...]:
 def _mana_fields() -> tuple[FieldSpec, ...]:
     return tuple(
         FieldSpec(
-            name=f"mana_delta_{color.lower()}",
+            name=mana_field(color),
             type=FieldType.SIGNED_DELTA,
             scope=FieldScope.PLAYER,
             silent=0.0,
@@ -315,7 +326,7 @@ for _name, _kind in VALUE_TARGETS:
 #: Steps of the at-least targets (FR-058b): whether each stated amount is at
 #: least k for k = 1 … 40, the board's thermometer length, which pushes ``e``
 #: to carry amounts in the code the board side carries.
-AT_LEAST_STEPS = 40
+AT_LEAST_STEPS = THERMOMETER_STEPS
 #: ``amount target -> (start, end)`` of its at-least block, after every
 #: :data:`VALUE_SLICES` block so the earlier layout of the head is a prefix.
 AT_LEAST_SLICES: dict[str, tuple[int, int]] = {}

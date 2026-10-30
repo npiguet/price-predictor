@@ -67,6 +67,15 @@ class BuildVocabConfig:
     )
     target_size: int = DEFAULT_TARGET_SIZE
 
+    def __post_init__(self) -> None:
+        try:
+            self.surface = Surface(self.surface)
+        except ValueError:
+            raise ValueError(
+                f"--surface must be one of {', '.join(repr(s.value) for s in Surface)}, "
+                f"got {self.surface!r}"
+            ) from None
+
     def resolved_vocab_path(self) -> Path:
         """``--vocab-path``, defaulting per surface so a script rebuild never
         overwrites the vocabulary a prose checkpoint recorded."""
@@ -167,16 +176,16 @@ def template_texts(
 
 
 def seed_tokens(
-    surface: Surface, definitions: dict, staged: list[str],
+    stager: AbilityTokenizer, definitions: dict, staged: list[str],
 ) -> SeededTokens:
     """The tokens seeded ahead of the corpus, so no truncation can drop them:
     template words (FR-019), and on the script surface the chain labels and
-    every key part (FR-002a, FR-009b)."""
-    stager = staging_tokenizer(surface, definitions)
+    every key part (FR-002a, FR-009b). ``stager`` is the surface's
+    :func:`staging_tokenizer`."""
     seeded = SeededTokens()
     for text in template_texts(stager, definitions, staged):
         seeded.template_words.extend(t.text for t in stager.tokenize(text))
-    if surface == Surface.SCRIPT:
+    if stager.surface == Surface.SCRIPT:
         longest = max(
             (int(n) for line in staged for n in _LABEL_RE.findall(line)), default=0,
         )
@@ -193,17 +202,12 @@ def seed_tokens(
 
 def run(config: BuildVocabConfig) -> int:
     """Build and write the vocabulary. Returns the resulting size."""
-    if config.surface not in (Surface.PROSE, Surface.SCRIPT):
-        raise ValueError(
-            f"--surface must be {Surface.PROSE.value!r} or {Surface.SCRIPT.value!r}, "
-            f"got {config.surface!r}"
-        )
     folders = _scan_sources(config)
     definitions = _load_definitions(Path(config.keyword_definitions))
     staged = script_lines(folders) if config.surface == Surface.SCRIPT else []
     stager = staging_tokenizer(config.surface, definitions)
     staged_tokens = [stager.tokenize(line) for line in staged]
-    seeded = seed_tokens(config.surface, definitions, staged)
+    seeded = seed_tokens(stager, definitions, staged)
 
     results, sources = _scan_vocabularies(folders, definitions)
     # The staged script lines count as a source too.

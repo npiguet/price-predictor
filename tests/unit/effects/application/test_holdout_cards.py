@@ -24,7 +24,8 @@ from effects.application.holdout_cards import (
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.split import HoldoutRule, text_keyed_holdout
 from effects.domain.text_holdout import HoldoutUnit
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import write_sidecar
 
 
 def _report(card_files, texts_by_card, *, unit="text", canonical_names=None, **rule):
@@ -139,25 +140,6 @@ def test_the_list_is_sorted_so_two_runs_produce_the_same_file() -> None:
         "with no printings file to resolve against, the list keeps the "
         "converted tree's spelling"
     )
-
-
-def test_a_checkpoint_records_the_holdout_flags_it_trained_under() -> None:
-    """A depleted corpus was composed against these values (T169, FR-134).
-
-    Without them, a later run inheriting the split has no way to tell whether
-    the corpus it is reading was depleted against the same holdout, and the
-    disagreement is silent.
-    """
-    from effects.infrastructure.effect_model_store import SplitProvenance
-
-    provenance = SplitProvenance(
-        held_out_cards=("Alpha",), holdout_permille=20, holdout_max_carriers=8,
-    )
-
-    restored = SplitProvenance.from_dict(provenance.as_dict())
-
-    assert restored.holdout_permille == 20
-    assert restored.holdout_max_carriers == 8
 
 
 class TestTheFileSpeaksForgesSpelling:
@@ -326,17 +308,6 @@ def test_the_cli_takes_the_repeatable_cards_folder_like_every_other_command():
         "holdout-cards", "--out", "x.txt", "--cards-folder", "a/", "--cards-folder", "b/",
     ])
     assert args.cards_folders == (Path("a/"), Path("b/"))
-
-
-def test_a_checkpoint_records_the_holdout_unit_and_reads_none_as_text():
-    from effects.infrastructure.effect_model_store import SplitProvenance
-
-    template = SplitProvenance(held_out_cards=("Alpha",), holdout_unit="template")
-    assert SplitProvenance.from_dict(template.as_dict()).holdout_unit == "template"
-
-    text = SplitProvenance(held_out_cards=("Alpha",))
-    assert "holdout_unit" not in text.as_dict()
-    assert SplitProvenance.from_dict(text.as_dict()).holdout_unit == "text"
 
 
 def test_a_real_gen1_checkpoint_split_reads_as_the_text_unit():

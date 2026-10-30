@@ -19,7 +19,7 @@ from effects.application.train_effect_model import (
 from effects.domain.corpus_manifest import CorpusManifest
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import MixedGenerationsError, write_shard
+from effects.infrastructure.shard_io import MixedGenerationsError, write_shard
 
 #: Three texts ``text_is_held_out`` selects at the default permille, found by
 #: search: the trainer recomputes the holdout from its sidecars at startup and
@@ -37,7 +37,8 @@ _CARD_TEXTS = {
 def _card_tree(root):
     """A converted tree whose holdout recomputes to ``_HELD_OUT_TEXTS``."""
     from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
-    from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+    from effects.infrastructure.sidecar_io import sidecar_path_for
+    from tests.unit.effects.builders import write_sidecar
 
     for name, texts in _CARD_TEXTS.items():
         stem = name.lower().replace(" ", "_")
@@ -123,7 +124,7 @@ def test_the_startup_line_counts_held_out_texts_not_only_cards(config, caplog):
 
 def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, started):
     assert run(config) == 0
-    facts = started[-1].facts
+    facts = started[-1].spec.facts
     manifest = corpus.load()
     assert facts == CorpusFacts.of(manifest)
     assert facts.split.card_disjoint_games == frozenset({"cg"})
@@ -176,11 +177,11 @@ def test_an_operator_error_out_of_training_exits_with_its_code(
     """A refused corpus, a resume under other settings, and a missing manifest
     or resume file end in one logged line, not a traceback."""
     from effects.application import train_effect_model
-    from effects.infrastructure import cli, effect_model_store, record_io
+    from effects.infrastructure import cli, effect_model_store, shard_io
 
     kind = {
         "HoldoutMismatchError": train_effect_model.HoldoutMismatchError,
-        "MixedGenerationsError": record_io.MixedGenerationsError,
+        "MixedGenerationsError": shard_io.MixedGenerationsError,
         "ResumeMismatchError": effect_model_store.ResumeMismatchError,
         "FileNotFoundError": FileNotFoundError,
     }[failure]
@@ -240,7 +241,7 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
 def test_the_trainer_takes_the_manifests_unit_when_the_flag_is_absent(config, started):
     """A gen-1 manifest records no unit and reads as ``text``."""
     assert run(config) == 0
-    assert started[-1].facts.holdout.unit is HoldoutUnit.TEXT
+    assert started[-1].spec.facts.holdout.unit is HoldoutUnit.TEXT
     assert config.holdout_unit is None
 
 
@@ -281,12 +282,12 @@ def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
     )
 
     assert run(config) == 0
-    assert started[-1].facts.holdout.unit is HoldoutUnit.TEXT
+    assert started[-1].spec.facts.holdout.unit is HoldoutUnit.TEXT
 
 
 def test_a_records_set_mixing_generations_is_refused(corpus, config, make_record):
     """FR-033: refused before any record is read."""
-    from effects.infrastructure.record_io import record_to_dict
+    from effects.infrastructure.record_codec import record_to_dict
 
     gen1 = record_to_dict(make_record(record_id="old", game_id="og"))
     del gen1["random_seat"]

@@ -5,9 +5,9 @@ a coverage run that appended to ``match-outcomes.txt`` would corrupt what the
 scorer trains on — and the corruption would be invisible, because the rows would
 look exactly like ordinary self-play rows.
 
-**Byte-identical** is the right comparison here, unlike for the instrumentation
-opt-in: nothing is supposed to be appended at all, so the files must not change
-by even a timestamp.
+The check is that a records-only worker never creates either file, rather than
+that a pre-existing one keeps its bytes: the worker is never told a sealed
+path, so a byte comparison of files it cannot see would pass whatever it did.
 """
 
 from __future__ import annotations
@@ -19,72 +19,27 @@ from pathlib import Path
 import pytest
 
 from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
-from effects.infrastructure.record_io import read_records
-from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
+from effects.infrastructure.shard_io import read_records
+from price_predictor.infrastructure.forge_jvm import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from tests.integration.conftest import POLL_SECONDS, require_jar, run_worker
 
 pytestmark = pytest.mark.integration
 
+#: Short of the default: a records-only worker plays an ordinary sealed game.
 _COLLECTION_SECONDS = 180
-_POLL_SECONDS = 5
-
-
-def _require_jar() -> None:
-    try:
-        resolve_connector_jar()
-    except FileNotFoundError:
-        pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
 
 
 def _run_records_only(records_dir: Path) -> int:
     """Run a records-only worker until it writes something, then stop it."""
-    process = MatchWorkerConnector().start(
-        None,
-        run_id=str(uuid.uuid4()),
-        best_of=1,
-        effect_records_dir=records_dir,
-        worker_index=0,
-    )
-    try:
-        deadline = time.monotonic() + _COLLECTION_SECONDS
-        while time.monotonic() < deadline:
-            time.sleep(_POLL_SECONDS)
-            if process.poll() is not None:
-                pytest.fail(f"worker exited early with {process.returncode}")
-            if sum(1 for _ in read_records(records_dir)) >= 5:
-                break
-        return sum(1 for _ in read_records(records_dir))
-    finally:
-        kill_process_tree(process)
-
-
-def test_a_coverage_run_leaves_the_sealed_corpora_byte_identical(
-    tmp_path: Path,
-) -> None:
-    _require_jar()
-    sealed_dir = tmp_path / "sealed"
-    sealed_dir.mkdir()
-    outcomes = sealed_dir / "match-outcomes.txt"
-    cards_played = sealed_dir / "cards-played.txt"
-    outcomes.write_bytes(b"pre-existing;row\n")
-    cards_played.write_bytes(b"pre-existing;row\n")
-
-    before_outcomes = outcomes.read_bytes()
-    before_cards = cards_played.read_bytes()
-
-    written = _run_records_only(tmp_path / "records")
-    if written == 0:
-        pytest.skip("worker produced no records within the collection window")
-
-    assert outcomes.read_bytes() == before_outcomes
-    assert cards_played.read_bytes() == before_cards
+    return len(run_worker(records_dir, seconds=_COLLECTION_SECONDS))
 
 
 def test_a_records_only_worker_creates_no_sealed_file_at_all(
     tmp_path: Path,
 ) -> None:
     """Not "created and left empty" — never constructed."""
-    _require_jar()
+    require_jar()
     _run_records_only(tmp_path / "records")
 
     for name in ("match-outcomes.txt", "cards-played.txt"):
@@ -94,7 +49,7 @@ def test_a_records_only_worker_creates_no_sealed_file_at_all(
 
 def test_the_records_it_writes_are_still_well_formed(tmp_path: Path) -> None:
     """Writing no sealed corpus must not mean writing a broken one."""
-    _require_jar()
+    require_jar()
     records_dir = tmp_path / "records"
     if _run_records_only(records_dir) == 0:
         pytest.skip("worker produced no records within the collection window")
@@ -174,7 +129,7 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
     sees this card because it never sees any *named* card, only whatever an
     unweighted sealed pool happens to contain.
     """
-    _require_jar()
+    require_jar()
     records_dir = tmp_path / "records"
     records_dir.mkdir()
     decks_file = tmp_path / "decks.txt"
@@ -208,7 +163,7 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
         names: set[str] = set()
         progress_lines = 0
         while time.monotonic() < deadline:
-            time.sleep(_POLL_SECONDS)
+            time.sleep(POLL_SECONDS)
             for process in processes:
                 if process.poll() is not None:
                     pytest.fail(f"worker exited early with {process.returncode}")

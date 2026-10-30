@@ -159,6 +159,21 @@ def script_card_name(lines: list[str]) -> str | None:
     return None
 
 
+def script_mana_cost(lines: list[str]) -> str | None:
+    """The mana cost a Forge script's first ``ManaCost:`` line declares,
+    brace-delimited like the converted corpus (``"2 R R"`` -> ``"{2}{R}{R}"``);
+    None where it declares none.
+
+    The deck builder reads a cost through ``convert_mana_cost``, which extracts
+    ``{...}`` groups, so an unwrapped cost silently parses as costless.
+    ``"no cost"`` round-trips to the literal ``ManaCost.parse`` special-cases.
+    """
+    cost = next(
+        (line.split(":", 1)[1] for line in lines if line.startswith("ManaCost:")), "",
+    )
+    return "".join(f"{{{shard}}}" for shard in cost.split()) or None
+
+
 def renamed_script(lines: list[str], name: str) -> list[str]:
     """Give the variant its own name so Forge files it as a separate card."""
     return [

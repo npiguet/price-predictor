@@ -252,19 +252,3 @@ def game_hash(game_id: str) -> int:
 def game_disjoint_draw(game_id: str) -> float:
     """A game's position in [0, 1), from its id alone (FR-044)."""
     return game_hash(game_id) % 10**6 / 10**6
-
-
-def in_game_disjoint_stratum(
-    game_id: str,
-    has_keyword_combat: bool,
-    share: float,
-    keyword_share: float,
-) -> bool:
-    """Whether a game not held out enters the game-disjoint stratum (FR-044–046).
-
-    A pure function of the game, so a rebuild over a grown corpus places every
-    game it placed before (SC-007). A game holding a qualifying keyword combat
-    takes the higher threshold, since those are what gate 2 scores.
-    """
-    threshold = keyword_share if has_keyword_combat else share
-    return game_disjoint_draw(game_id) < threshold

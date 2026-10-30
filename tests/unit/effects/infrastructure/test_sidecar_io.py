@@ -1,8 +1,10 @@
-"""The provenance join (T036).
+"""The provenance join on disk (T036).
 
-Three cases and one alignment rule. The three cases are the whole contract: a
-key resolves, a key was deduplicated away, or the sidecar does not describe the
-card at all — and only the third may fail.
+The join's cases are the whole contract — a key resolves, a key was
+deduplicated away, a trait exists only at runtime, or the sidecar does not
+describe the card at all, and only the last may fail — and are pinned on the
+domain sidecar in ``tests/unit/effects/domain/test_provenance_resolution.py``.
+Here: the alignment rule, the file form, and the cache that reads it.
 """
 
 from __future__ import annotations
@@ -23,13 +25,12 @@ from effects.domain.provenance import (
 from effects.infrastructure import sidecar_io as _sidecar_io
 from effects.infrastructure.sidecar_io import (
     SidecarCache,
-    prose_for,
     read_sidecar,
     sidecar_from_dict,
     sidecar_path_for,
     sidecar_to_dict,
-    write_sidecar,
 )
+from tests.unit.effects.builders import write_sidecar
 
 _SCRIPT = "cardsfolder/a/ajanis_pridemate.txt"
 _TRIGGER = ProvenanceKey(_SCRIPT, 0, "trigger", 0)
@@ -70,84 +71,6 @@ def _sidecar() -> ProvenanceSidecar:
         ),
         dropped_keys=(_DROPPED,),
     )
-
-
-class TestTheThreeJoinCases:
-    def test_a_key_in_lines_resolves(self):
-        line = _sidecar().line_for(_TRIGGER)
-        assert line.line_kind == "triggered"
-
-    def test_a_dropped_key_resolves_to_no_line_and_does_not_raise(self):
-        """The converter deduplicated it; the trait is still live at runtime."""
-        assert _sidecar().line_for(_DROPPED) is None
-        assert _sidecar().row_for(_DROPPED) is None
-
-    def test_a_gap_inside_a_declared_range_fails_loudly(self):
-        with pytest.raises(KeyError, match="neither the lines nor the dropped_keys"):
-            _sidecar().line_for(_ABSENT)
-
-    def test_the_failure_names_the_script_file_and_the_likely_cause(self):
-        with pytest.raises(KeyError) as excinfo:
-            _sidecar().line_for(_ABSENT)
-        assert _SCRIPT in str(excinfo.value)
-        assert "reconversion" in str(excinfo.value)
-
-
-class TestARuntimeOnlyTrait:
-    """A trait Forge attaches to a live card that the parsed script never had.
-
-    Level up, bestow and scavenge each append a spell ability. A static that
-    grants a trigger to other permanents keys that trigger to the granting
-    card's script, which declares no trigger. A disguise creature's face-down
-    state keys to a face the script never wrote down. All three belong to no
-    line and no dropped key, and failing on them stops training on a corpus
-    that is entirely correct.
-
-    They are told apart by what the sidecar declared: nothing at all for the
-    key's ``(face, trait_kind)``, or nothing this far along it.
-    """
-
-    def test_an_index_past_everything_declared_resolves_to_no_line(self):
-        # The fixture declares static[0] (rendered) and static[2] (dropped).
-        beyond = ProvenanceKey(_SCRIPT, 0, "static", 5)
-        assert _sidecar().is_runtime_only(beyond)
-        assert _sidecar().line_for(beyond) is None
-        assert _sidecar().row_for(beyond) is None
-
-    def test_a_gap_inside_the_declared_range_still_fails(self):
-        """``dropped_keys`` is declared-minus-claimed, so every index the
-        converter parsed is in one of the two lists. A gap between them means
-        the sidecar was rebuilt against a different trait list."""
-        assert not _sidecar().is_runtime_only(_ABSENT)
-        with pytest.raises(KeyError):
-            _sidecar().line_for(_ABSENT)
-
-    def test_a_kind_the_face_never_declared_is_runtime_only(self):
-        """Nothing was declared for the kind, so nothing about it was parsed.
-
-        On the real corpus this is a static that grants a trigger to *other*
-        permanents: the granted trigger keys to the granting card's script,
-        which declares no trigger of its own. This fixture does declare a
-        trigger, so ``activated`` stands in for the undeclared kind.
-        """
-        granted = ProvenanceKey(_SCRIPT, 0, "activated", 0)
-        assert _sidecar().is_runtime_only(granted)
-        assert _sidecar().line_for(granted) is None
-
-    def test_a_dropped_key_counts_toward_what_was_declared(self):
-        """It is a trait the converter saw, so it bounds the parsed range."""
-        assert _sidecar().is_runtime_only(ProvenanceKey(_SCRIPT, 0, "static", 3))
-        assert not _sidecar().is_runtime_only(
-            ProvenanceKey(_SCRIPT, 0, "static", 2)
-        )
-
-    def test_a_face_the_script_never_declared_is_runtime_only(self):
-        """Each face has its own trait list, and a disguise creature's
-        face-down state keys to a face the converted script never wrote
-        down."""
-        assert _sidecar().is_runtime_only(
-            ProvenanceKey(_SCRIPT, 1, "keyword", 0)
-        )
 
 
 class TestRowAlignment:
@@ -329,7 +252,7 @@ class TestSidecarCache:
 
     def test_the_cache_joins_a_record_key_to_its_row(self, tmp_path):
         cache = self._write_trees(tmp_path)
-        assert cache.row_for(_TRIGGER) == 1
+        assert cache.get(_TRIGGER.script_file).row_for(_TRIGGER) == 1
         assert cache.line_for(_TRIGGER).script_api_type == "PutCounter"
 
 
@@ -368,7 +291,7 @@ class TestTheVariantTreeHasNoProse:
     def test_the_line_still_resolves(self, tmp_path):
         """Only the prose surface is absent; the join itself is ordinary."""
         cache, key = self._cache(tmp_path)
-        assert cache.row_for(key) == 0
+        assert cache.get(key.script_file).row_for(key) == 0
         assert cache.line_for(key).script_text == "SP$ DealDamage | NumDmg$ 7"
 
 
@@ -389,15 +312,15 @@ class TestTheProseSplit:
         )
 
     def test_a_continuation_line_keeps_its_colon(self):
-        assert prose_for(self._line(1, 0), self._RENDERED) == "{T}: add {G}."
+        assert self._line(1, 0).prose_in(self._RENDERED) == "{T}: add {G}."
 
     def test_a_prefixed_line_starts_after_its_prefix(self):
         line = self._line(0, len("static: "))
-        assert prose_for(line, self._RENDERED) == "creatures you control have:"
+        assert line.prose_in(self._RENDERED) == "creatures you control have:"
 
     def test_a_sidecar_without_the_offset_falls_back_to_the_first_colon(self):
         """Sidecars on disk predate the field and must still read."""
-        assert prose_for(self._line(0, None), self._RENDERED) == (
+        assert self._line(0, None).prose_in(self._RENDERED) == (
             "creatures you control have:"
         )
 

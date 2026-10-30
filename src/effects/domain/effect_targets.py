@@ -13,33 +13,31 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from effects.domain.effect_head_input import CARD_TYPES, COUNTER_TYPES, OVERLAY_KEYWORDS
+from effects.domain.effect_head_input import (
+    CARD_TYPES,
+    COUNTER_TYPES,
+    OVERLAY_KEYWORDS,
+    vocabulary_slot,
+)
 from effects.domain.effect_head_layout import (
-    CREATED_OBJECT_SLOTS,
-    CREATED_OBJECTS_WIDTH,
-    CREATED_SLOT_WIDTH,
     DURATIONS,
     LIBRARY_EVENTS,
-    VERDICT_BITS,
-    VERDICT_WIDTH,
     ZONE_OUTCOMES,
-    CreatedSlot,
     FieldScope,
     FieldSpec,
     HeadField,
     ZoneOutcome,
+    counter_field,
+    mana_field,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.keyword_names import overlay_keyword
 from effects.domain.records import (
-    ActivationPayload,
     ContinuousPayload,
     EffectRecord,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
-    ResolutionPayload,
-    RewritePayload,
     TriggerPayload,
     events_of,
 )
@@ -91,17 +89,10 @@ _SETTERS: dict[EventType, tuple[str, int]] = {
     EventType.UNATTACHED: (HeadField.ATTACHED_TO_CHANGE, 1),
 }
 
-_OVERLAY_INDEX: dict[str, int] = {
-    keyword: index for index, keyword in enumerate(OVERLAY_KEYWORDS)
-}
-#: ``lower-cased member -> its flag``, for the type and colour channels.
-_TYPE_SLOTS: dict[str, int] = {t.lower(): i for i, t in enumerate(CARD_TYPES)}
-_COLOR_SLOTS: dict[str, int] = {c.lower(): i for i, c in enumerate(COLORS)}
-
 
 def overlay_index(raw: str) -> int | None:
     """The overlay slot a keyword, in any spelling Forge writes, sets."""
-    return _OVERLAY_INDEX.get(overlay_keyword(raw))
+    return vocabulary_slot(overlay_keyword(raw), OVERLAY_KEYWORDS)
 
 
 @dataclass
@@ -216,7 +207,7 @@ def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
 def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
     counter = str(event.params.get("counter_type", "OTHER")).upper()
     name = (
-        f"counters_delta_{counter.lower()}"
+        counter_field(counter)
         if counter in COUNTER_TYPES
         else HeadField.COUNTERS_DELTA_OTHER
     )
@@ -231,15 +222,15 @@ def _apply_pt_change(entry: EntityTargets, event: Event) -> None:
 
 def _apply_type_change(entry: EntityTargets, event: Event) -> None:
     params = event.params
-    _apply_multi(entry, HeadField.TYPES_GAINED, params.get("types_added"), _TYPE_SLOTS)
-    _apply_multi(entry, HeadField.TYPES_LOST, params.get("types_removed"), _TYPE_SLOTS)
+    _apply_multi(entry, HeadField.TYPES_GAINED, params.get("types_added"), CARD_TYPES)
+    _apply_multi(entry, HeadField.TYPES_LOST, params.get("types_removed"), CARD_TYPES)
     _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
 
 
 def _apply_color_change(entry: EntityTargets, event: Event) -> None:
     params = event.params
-    _apply_multi(entry, HeadField.COLORS_GAINED, params.get("colors"), _COLOR_SLOTS)
-    _apply_multi(entry, HeadField.COLORS_LOST, params.get("colors_removed"), _COLOR_SLOTS)
+    _apply_multi(entry, HeadField.COLORS_GAINED, params.get("colors"), COLORS)
+    _apply_multi(entry, HeadField.COLORS_LOST, params.get("colors_removed"), COLORS)
     _apply_duration(entry, HeadField.TYPE_COLOR_DURATION, event.duration)
 
 
@@ -250,11 +241,13 @@ def _apply_duration(entry: EntityTargets, name: str, duration: str | None) -> No
         entry.set(name, DURATIONS.index(duration))
 
 
-def _apply_multi(entry: EntityTargets, name: str, values, slots: dict[str, int]) -> None:
+def _apply_multi(
+    entry: EntityTargets, name: str, values, vocabulary: tuple[str, ...],
+) -> None:
     for value in values or ():
-        index = slots.get(str(value).strip().lower())
+        index = vocabulary_slot(str(value), vocabulary)
         if index is not None:
-            entry.flag(name, index, len(slots))
+            entry.flag(name, index, len(vocabulary))
 
 
 def _apply_keywords(entry: EntityTargets, params: dict) -> None:
@@ -273,7 +266,7 @@ def _apply_mana(entry: EntityTargets, mana, *, sign: int) -> None:
     for color, amount in (mana or {}).items():
         key = str(color).strip().upper()
         if key in COLORS:
-            entry.add(f"mana_delta_{key.lower()}", sign * float(amount))
+            entry.add(mana_field(key), sign * float(amount))
 
 
 #: The events no table above states, each read off its own parameters.
@@ -340,13 +333,13 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
                 entry, HeadField.KEYWORDS_LOST if lost else HeadField.KEYWORDS_GAINED,
                 keyword.lstrip("-"),
             )
-        for channel, slots, gained_field, lost_field in (
-            (contribution.types, _TYPE_SLOTS, HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
-            (contribution.colors, _COLOR_SLOTS, HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
+        for channel, vocabulary, gained_field, lost_field in (
+            (contribution.types, CARD_TYPES, HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
+            (contribution.colors, COLORS, HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
         ):
             gained, lost = _split_contribution(channel)
-            _apply_multi(entry, gained_field, gained, slots)
-            _apply_multi(entry, lost_field, lost, slots)
+            _apply_multi(entry, gained_field, gained, vocabulary)
+            _apply_multi(entry, lost_field, lost, vocabulary)
             if "=" in channel and lost_field not in entry.fields:
                 entry.unknown.add(lost_field)
 
@@ -370,131 +363,3 @@ def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
             gained.append(token)
     return gained, lost
 
-
-# ── the [ACT] and [GLOBAL] heads (FR-060a) ──────────────────────────────
-
-
-def verdict_targets(
-    record: EffectRecord,
-) -> tuple[list[float], list[bool]] | None:
-    """The verdict head's targets at ``[ACT]`` and which of them this record sets.
-
-    A ``decision`` record sets its candidate's verdict bits, a cost half the
-    mana it paid by colour, a ``trigger`` record whether it fired; every other
-    column is masked out, since a cost half is no evidence of playability.
-    """
-    target = [0.0] * VERDICT_WIDTH
-    mask = [False] * VERDICT_WIDTH
-    bits = len(VERDICT_BITS)
-    match record.payload:
-        case PlayabilityDecisionPayload(candidates=(candidate, *_)):
-            for index, value in enumerate(
-                (candidate.can_play, candidate.affordable, candidate.has_legal_target)
-            ):
-                target[index] = 1.0 if value else 0.0
-                mask[index] = True
-        case ActivationPayload(costs=costs):
-            paid = costs.mana_by_color
-            for offset, color in enumerate(COLORS):
-                target[bits + offset] = float(paid.get(color, 0))
-                mask[bits + offset] = True
-        case TriggerPayload(fired=fired):
-            target[-1] = 1.0 if fired else 0.0
-            mask[-1] = True
-        case _:
-            return None
-    return target, mask
-
-
-def supervises_created_objects(record: EffectRecord) -> bool:
-    """Effect halves and in-place rewrites carry created-objects targets; any
-    other rewrite ran another ability, whose effect half supervises it."""
-    match record.payload:
-        case ResolutionPayload():
-            return True
-        case RewritePayload(rewritten=rewritten):
-            return rewritten
-    return False
-
-
-def created_objects_targets(record: EffectRecord) -> list[float]:
-    """The created-objects head's targets at ``[GLOBAL]`` (FR-078).
-
-    Scripted groups first by id, then characteristics-only groups by
-    descending count; the flag past the last slot marks more than K groups.
-    """
-    groups: dict[tuple, TokenGroup] = {}
-    for event in events_of(record):
-        if event.type is not EventType.TOKEN_CREATED:
-            continue
-        found = TokenGroup.of(event.params)
-        group = groups.setdefault(found.key, found)
-        group.count += int(event.params.get("count", 1) or 1)
-
-    ordered = sorted(
-        (g for g in groups.values() if g.scripted), key=lambda g: g.id,
-    ) + sorted(
-        (g for g in groups.values() if not g.scripted), key=lambda g: -g.count,
-    )
-    target = [0.0] * CREATED_OBJECTS_WIDTH
-    for slot, group in enumerate(ordered[:CREATED_OBJECT_SLOTS]):
-        group.write(target, slot * CREATED_SLOT_WIDTH)
-    target[-1] = 1.0 if len(ordered) > CREATED_OBJECT_SLOTS else 0.0
-    return target
-
-
-@dataclass
-class TokenGroup:
-    """Tokens one record created that the head counts as one group (FR-078):
-    by token-script id where the event names one, else by characteristics."""
-
-    scripted: bool
-    id: str
-    power: object
-    toughness: object
-    types: str
-    keywords: tuple
-    count: int = 0
-
-    @classmethod
-    def of(cls, params: dict) -> TokenGroup:
-        script = params.get("token_script_id") or None
-        traits = params.get("characteristics") or {}
-        keywords = traits.get("keywords") or ()
-        if isinstance(keywords, str):
-            keywords = (keywords,)
-        return cls(
-            scripted=script is not None, id=str(script or ""),
-            power=traits.get("power"), toughness=traits.get("toughness"),
-            types=str(traits.get("types", "")), keywords=tuple(keywords),
-        )
-
-    @property
-    def key(self) -> tuple:
-        if self.scripted:
-            return ("script", self.id)
-        return ("traits", self.types, self.power, self.toughness,
-                tuple(sorted(map(str, self.keywords))))
-
-    def write(self, target: list[float], base: int) -> None:
-        """This group's slot, from ``base`` on."""
-        target[base + CreatedSlot.PRESENT] = 1.0
-        target[base + CreatedSlot.SCRIPTED] = 1.0 if self.scripted else 0.0
-        target[base + CreatedSlot.COUNT] = float(self.count)
-        target[base + CreatedSlot.POWER] = max(_number(self.power), 0.0)
-        target[base + CreatedSlot.TOUGHNESS] = max(_number(self.toughness), 0.0)
-        card_types = self.types.split(" - ", 1)[0].lower().split()
-        for index, card_type in enumerate(CARD_TYPES):
-            if card_type in card_types:
-                target[base + CreatedSlot.TYPES + index] = 1.0
-        for keyword in self.keywords:
-            index = overlay_index(str(keyword))
-            if index is not None:
-                target[base + CreatedSlot.KEYWORDS + index] = 1.0
-
-
-def _number(value) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0

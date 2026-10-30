@@ -30,7 +30,8 @@ from effects.infrastructure.effect_model_store import (
     SplitProvenance,
     content_hash,
 )
-from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
+from effects.infrastructure.sidecar_io import sidecar_path_for
+from tests.unit.effects.builders import write_sidecar
 
 E_DIM = 8
 
@@ -399,7 +400,7 @@ class TestTheRealEncoder:
 class TestProseOfAVariant:
     def test_a_variants_source_script_is_not_read_as_prose(self, tmp_path):
         """The trainer encodes a variant from its script; the cache must too."""
-        from effects.application.encode_abilities import prose_of
+        from effects.infrastructure.sidecar_io import rendered_prose
 
         source = tmp_path / "variant_bolt.txt"
         source.write_text(
@@ -408,8 +409,10 @@ class TestProseOfAVariant:
         variant = _sidecar("variant-scripts/variant_bolt.txt")
         card = _sidecar("cardsfolder/v/variant_bolt.txt")
         sidecar_path = tmp_path / "variant_bolt.provenance.json"
-        assert prose_of(variant, sidecar_path) == []
-        assert prose_of(card, sidecar_path) == source.read_text(encoding="utf-8").splitlines()
+        assert rendered_prose(sidecar_path, variant) == []
+        assert rendered_prose(sidecar_path, card) == (
+            source.read_text(encoding="utf-8").splitlines()
+        )
 
 
 class TestTheWithheldKeyword:
@@ -417,9 +420,9 @@ class TestTheWithheldKeyword:
     with the token dropped, never a token training never updated (FR-070)."""
 
     def test_the_runner_encodes_the_keyword_as_its_expansion(self):
-        from effects.application.extract_keyword_definitions import KeywordDefinition
         from effects.domain.ability_encoder import AbilityEncoder
         from effects.domain.ability_tokenizer import AbilityTokenizer
+        from effects.domain.keyword_definitions import KeywordDefinition
         from effects.infrastructure.ability_encoder_runner import AbilityEncoderRunner
 
         words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",

@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from enum import StrEnum
 
-from effects.domain.event_schema import ATTRIBUTION_UNRESOLVED
+from effects.domain.event_schema import AttributionKind
 from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.records import EffectRecord, RecordKind, acting_keys, events_of
 
@@ -108,4 +108,6 @@ def has_unattributed_events(record: EffectRecord) -> bool:
     A watched number over every kind, combat included, so it reads the
     collector's attribution rather than which kinds a rule reaches.
     """
-    return any(event.attributed_to == ATTRIBUTION_UNRESOLVED for event in events_of(record))
+    return any(
+        event.attribution is AttributionKind.UNRESOLVED for event in events_of(record)
+    )

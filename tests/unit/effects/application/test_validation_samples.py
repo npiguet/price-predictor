@@ -12,7 +12,9 @@ from effects.domain.sampling import (
     SamplingClass,
     sampling_class,
 )
-from effects.infrastructure.record_io import write_shard
+from effects.domain.strata import Stratum
+from effects.infrastructure.corpus_store import CorpusStore
+from effects.infrastructure.shard_io import write_shard
 
 
 def test_class_quota_rounds_each_share_and_keeps_every_class():
@@ -33,37 +35,35 @@ def strata(tmp_path, make_record):
         [res(i, f"gg{i % 3}") for i in range(100, 130)]
         + [combat(i, f"gg{i % 3}") for i in range(100, 130)]
     )
-    for name, records in (("card", card), ("game", game), ("gate", gate)):
-        write_shard(tmp_path / name / "shard-00001.jsonl.gz", records)
-    return tmp_path
+    store = CorpusStore(tmp_path)
+    for stratum, records in (
+        (Stratum.CARD_DISJOINT, card), (Stratum.GAME_DISJOINT, game), (Stratum.GATE_ONE, gate),
+    ):
+        write_shard(store.output_dir(stratum) / "shard-00001.jsonl.gz", records)
+    return store
 
 
 MIX = {SamplingClass.RESOLUTION_EFFECT: 0.5, SamplingClass.COMBAT: 0.5}
 
 
 def test_each_stratum_holds_the_quota_per_class(strata):
-    samples = draw_samples(card_disjoint=strata / "card", game_disjoint=strata / "game",
-                           gate_one=strata / "gate", mix=MIX, size=20, seed=1)
+    samples = draw_samples(strata, mix=MIX, size=20, seed=1)
     for stratum in ("card-disjoint", "game-disjoint"):
         by_class = Counter(sampling_class(r) for r in samples[stratum])
         assert by_class == {SamplingClass.RESOLUTION_EFFECT: 10, SamplingClass.COMBAT: 10}
 
 
 def test_card_disjoint_resolutions_come_from_the_gate_one_slice_first(strata):
-    samples = draw_samples(card_disjoint=strata / "card", game_disjoint=strata / "game",
-                           gate_one=strata / "gate", mix=MIX, size=20, seed=1)
+    samples = draw_samples(strata, mix=MIX, size=20, seed=1)
     resolutions = {r.record_id for r in samples["card-disjoint"] if r.kind is RecordKind.RESOLUTION}
     assert {f"r{i}" for i in range(6)} <= resolutions      # all six gate-one records
     assert len(resolutions) == 10                           # topped up from the stratum
 
 
 def test_the_draw_is_seeded_and_shuffled(strata):
-    a = draw_samples(card_disjoint=strata / "card", game_disjoint=strata / "game",
-                     gate_one=strata / "gate", mix=MIX, size=20, seed=1)
-    b = draw_samples(card_disjoint=strata / "card", game_disjoint=strata / "game",
-                     gate_one=strata / "gate", mix=MIX, size=20, seed=1)
-    c = draw_samples(card_disjoint=strata / "card", game_disjoint=strata / "game",
-                     gate_one=strata / "gate", mix=MIX, size=20, seed=2)
+    a = draw_samples(strata, mix=MIX, size=20, seed=1)
+    b = draw_samples(strata, mix=MIX, size=20, seed=1)
+    c = draw_samples(strata, mix=MIX, size=20, seed=2)
     def ids(sample):
         return [r.record_id for r in sample["game-disjoint"]]
 
@@ -75,22 +75,20 @@ def test_the_draw_is_seeded_and_shuffled(strata):
 
 def test_a_short_class_takes_what_there_is(strata):
     samples = draw_samples(
-        card_disjoint=strata / "card", game_disjoint=strata / "game",
-        gate_one=strata / "gate", mix={SamplingClass.RESOLUTION_COST: 1.0}, size=5, seed=1,
+        strata, mix={SamplingClass.RESOLUTION_COST: 1.0}, size=5, seed=1,
     )
     assert samples["card-disjoint"] == []
 
 
 def test_zero_validation_sample_reads_nothing_and_draws_nothing(strata, monkeypatch):
     """``--validation-sample 0`` means no sample: not even a read of the strata."""
-    from effects.infrastructure import record_io
+    from effects.infrastructure import shard_io
 
     def bomb(directory):
         raise AssertionError(f"draw_samples read {directory} despite size=0")
 
-    monkeypatch.setattr(record_io, "read_records", bomb)
-    samples = draw_samples(card_disjoint=strata / "card", game_disjoint=strata / "game",
-                           gate_one=strata / "gate", mix=MIX, size=0, seed=1)
+    monkeypatch.setattr(shard_io, "read_records", bomb)
+    samples = draw_samples(strata, mix=MIX, size=0, seed=1)
     assert samples == {"card-disjoint": [], "game-disjoint": []}
 
 
@@ -143,14 +141,14 @@ def test_card_disjoint_resolution_slots_spread_over_held_out_texts(tmp_path, mak
     ] + [
         make_record(record_id=f"rare{i}", game_id="g2", ability=(rare,)) for i in range(3)
     ]
-    for name in ("card", "gate"):
-        write_shard(tmp_path / name / "s.jsonl.gz", records)
-    write_shard(tmp_path / "game" / "s.jsonl.gz", records[:1])
+    store = CorpusStore(tmp_path)
+    for stratum in (Stratum.CARD_DISJOINT, Stratum.GATE_ONE):
+        write_shard(store.output_dir(stratum) / "s.jsonl.gz", records)
+    write_shard(store.game_disjoint_dir / "s.jsonl.gz", records[:1])
     text_of = {common: "common text", rare: "rare text"}
 
     samples = draw_samples(
-        card_disjoint=tmp_path / "card", game_disjoint=tmp_path / "game",
-        gate_one=tmp_path / "gate", mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=10, seed=1,
+        store, mix={SamplingClass.RESOLUTION_EFFECT: 1.0}, size=10, seed=1,
         held_out_text_of=lambda record: text_of[record.ability[0]],
     )
     chosen = [r.record_id for r in samples["card-disjoint"]]

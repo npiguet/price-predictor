@@ -25,7 +25,6 @@ from effects.domain.corpus_curation import (
     class_targets,
     copy_plan,
     game_disjoint_draw,
-    in_game_disjoint_stratum,
     outcome_signature,
     rate_plan,
     signature_label,
@@ -151,7 +150,7 @@ class TrainingSupply:
         # A partial rather than a lambda, so the supply pickles.
         self.heaps = defaultdict(partial(CapHeap, self.heap_cap))
 
-    def add(self, cell: Cell, keys: Keys | None, value: int) -> None:
+    def add(self, cell: Cell, keys: Keys, value: int) -> None:
         """One training-bound record, by its cell, acting keys and record hash."""
         if not keys:
             self.keyless[cell] += 1
@@ -468,11 +467,18 @@ class GameRouting:
     def route(self, game_id: str, *, held_out: bool, keyword_combat: bool) -> GameRoute:
         if held_out:
             return GameRoute.HELD_OUT
-        if in_game_disjoint_stratum(
-            game_id, keyword_combat, self.game_disjoint_share, self.keyword_share,
-        ):
+        if self.game_disjoint(game_id, keyword_combat=keyword_combat):
             return GameRoute.GAME_DISJOINT
         return GameRoute.TRAINING
+
+    def game_disjoint(self, game_id: str, *, keyword_combat: bool) -> bool:
+        """Whether a game not held out enters the game-disjoint stratum (SC-007).
+
+        A game holding a qualifying keyword combat takes the higher threshold,
+        since those are what gate 2 scores.
+        """
+        threshold = self.keyword_share if keyword_combat else self.game_disjoint_share
+        return game_disjoint_draw(game_id) < threshold
 
     def under_keyword_threshold(self, game_id: str) -> bool:
         """A game-disjoint game placed only by the keyword threshold."""

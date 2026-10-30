@@ -12,10 +12,9 @@ from pathlib import Path
 import pytest
 
 from effects.domain.event_schema import (
-    ATTRIBUTION_ROOT,
-    ATTRIBUTION_UNRESOLVED,
     CAUSE_BEARING_TYPES,
     EVENT_PARAMS,
+    AttributionKind,
     Event,
     EventType,
     attribution_kind,
@@ -138,23 +137,28 @@ class TestAttributionIsTriState:
         assert attribution_kind("2") == "sub_ability"
 
     def test_the_two_sentinels_read_as_themselves(self):
-        assert attribution_kind(ATTRIBUTION_ROOT) == "root"
-        assert attribution_kind(ATTRIBUTION_UNRESOLVED) == "unresolved"
+        assert attribution_kind(AttributionKind.ROOT) == "root"
+        assert attribution_kind(AttributionKind.UNRESOLVED) == "unresolved"
 
     def test_null_is_unknown_and_not_the_root(self):
         """The whole point of adding the sentinels, asserted rather than assumed."""
         assert attribution_kind(None) == "absent"
 
+    def test_an_event_reads_its_own_attribution(self):
+        event = Event(type=EventType.DAMAGE_DEALT, attributed_to=AttributionKind.UNRESOLVED)
+        assert event.attribution is AttributionKind.UNRESOLVED
+        assert Event(type=EventType.DAMAGE_DEALT).attribution is AttributionKind.ABSENT
+
     def test_the_four_states_are_distinct(self):
         seen = {
             attribution_kind(value)
-            for value in ("3", ATTRIBUTION_ROOT, ATTRIBUTION_UNRESOLVED, None)
+            for value in ("3", AttributionKind.ROOT, AttributionKind.UNRESOLVED, None)
         }
         assert len(seen) == 4
 
     def test_a_sentinel_is_not_mistakable_for_a_chain_index(self):
         assert all(
-            not value.isdigit() for value in (ATTRIBUTION_ROOT, ATTRIBUTION_UNRESOLVED)
+            not value.isdigit() for value in (AttributionKind.ROOT, AttributionKind.UNRESOLVED)
         )
 
     def test_a_sentinel_survives_the_wire_form_unchanged(self):
@@ -162,10 +166,10 @@ class TestAttributionIsTriState:
         event = Event(
             type=EventType.DAMAGE_DEALT,
             subjects=("E1",),
-            attributed_to=ATTRIBUTION_UNRESOLVED,
+            attributed_to=AttributionKind.UNRESOLVED,
         )
         assert Event.from_dict(event.as_dict()).attributed_to == (
-            ATTRIBUTION_UNRESOLVED
+            AttributionKind.UNRESOLVED
         )
 
 
@@ -199,7 +203,7 @@ _CONNECTOR_EFFECTS = (
 #: All six are wired somewhere, just not for an ability's own resolution to
 #: announce what it did -- this scan structurally cannot see that gap, distinguish
 #: its two sub-shapes, or distinguish either from a type that fires normally.
-#: the event-type check (``_EventTypes``) in ``validate_corpus.py``, run against a real
+#: the event-type check (``corpus_validation.event_checks.EventTypes``), run against a real
 #: collection, is the only thing that can. This set shrinks as each remaining type
 #: is moved from unreferenced to emitted; a type silently added or removed here
 #: fails the test, which is the point.
@@ -352,7 +356,7 @@ def _emitted_event_types() -> set[str]:
     types are recorded in ``KNOWN_UNEMITTED`` and shrink as each is wired and
     emitted; the referenced-but-unfired gap cannot be recorded here at all — a
     reference is a reference regardless of what it is for — which is why
-    the event-type check (``_EventTypes``) in ``validate_corpus.py``, run against a real
+    the event-type check (``corpus_validation.event_checks.EventTypes``), run against a real
     collection, exists as this scan's permanent counterpart rather than a
     one-off check.
     """
@@ -421,7 +425,7 @@ class TestEveryDeclaredTypeIsReachable:
        not have caught any of it either way: no static scan, however wide, can
        see whether a reference is on a path that actually runs. Only a corpus
        measurement can, which is what makes the event-type check in
-       ``validate_corpus.py`` this test's permanent counterpart rather than a
+       ``corpus_validation/event_checks.py`` this test's permanent counterpart rather than a
        one-off check that stops mattering once the guard is fixed.
 
     A Task 12 fix round found a **third** category, distinct from both parts

@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.extract_keyword_definitions import KeywordDefinition
 from effects.domain.ability_tokenizer import (
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
     Token,
     withheld_keyword_tokens,
 )
+from effects.domain.keyword_definitions import KeywordDefinition
 from effects.domain.provenance import RoleSpan
 
 # "flying" and "vigilance" are deliberately absent: the fixture adds them as
@@ -693,7 +693,7 @@ class TestKeywordLines:
         """Scenario 7: normalized at load, not in the file."""
         import json
 
-        from effects.application.extract_keyword_definitions import (
+        from effects.infrastructure.tokenizer_loading import (
             load_keyword_definitions,
         )
 
@@ -709,7 +709,7 @@ class TestKeywordLines:
     def test_an_old_definitions_file_has_no_formatter(self, tmp_path):
         import json
 
-        from effects.application.extract_keyword_definitions import (
+        from effects.infrastructure.tokenizer_loading import (
             load_keyword_definitions,
         )
 
@@ -750,8 +750,12 @@ def _fixture_keyword_lines() -> list[str]:
 def test_no_definition_expands_to_a_percent_or_unk(surface, source):
     """SC-002 over every real definition and every real fixture keyword line,
     against a vocabulary seeded the way ``build-vocab`` seeds it."""
-    from effects.application.build_vocab import SEEDED_SPECIALS, seed_tokens
-    from effects.application.extract_keyword_definitions import (
+    from effects.application.build_vocab import (
+        SEEDED_SPECIALS,
+        seed_tokens,
+        staging_tokenizer,
+    )
+    from effects.infrastructure.tokenizer_loading import (
         load_keyword_definitions,
     )
     from price_predictor.application.build_vocabulary import MULTI_WORD_KEYWORDS
@@ -761,7 +765,7 @@ def test_no_definition_expands_to_a_percent_or_unk(surface, source):
         pytest.skip("no keyword-definition file in output/")
     definitions = load_keyword_definitions(path)
     staged = _fixture_keyword_lines() if surface == "script" else []
-    seeded = seed_tokens(surface, definitions, staged)
+    seeded = seed_tokens(staging_tokenizer(surface, definitions), definitions, staged)
     vocab: dict[str, int] = {}
     for token in (*SEEDED_SPECIALS, *MULTI_WORD_KEYWORDS, *seeded.all()):
         vocab.setdefault(token, len(vocab))

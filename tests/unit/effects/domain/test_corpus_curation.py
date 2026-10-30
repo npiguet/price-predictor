@@ -12,7 +12,6 @@ from effects.domain.corpus_curation import (
     copy_plan,
     game_disjoint_draw,
     game_hash,
-    in_game_disjoint_stratum,
     outcome_signature,
     rate_plan,
     record_hash,
@@ -195,7 +194,7 @@ _FIXTURE = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-records.js
 
 class TestOutcomeSignature:
     def _effect(self):
-        from effects.infrastructure.record_io import read_shard
+        from effects.infrastructure.shard_io import read_shard
 
         return next(
             r for r in read_shard(_FIXTURE)
@@ -234,26 +233,7 @@ class TestOutcomeSignature:
         assert signature_label(frozenset()) == "(empty)"
 
 
-class TestGameDisjointPlacement:
-    """Spec Story 4 scenarios 5 and 6."""
-
-    def test_a_game_below_the_share_enters(self):
-        game = next(f"g{i}" for i in range(1000) if game_disjoint_draw(f"g{i}") < 0.01)
-        assert in_game_disjoint_stratum(game, False, 0.01, 0.15)
-
-    def test_a_keyword_combat_game_uses_the_keyword_share(self):
-        game = next(
-            f"g{i}" for i in range(1000) if 0.01 <= game_disjoint_draw(f"g{i}") < 0.15
-        )
-        assert not in_game_disjoint_stratum(game, False, 0.01, 0.15)
-        assert in_game_disjoint_stratum(game, True, 0.01, 0.15)
-
-    def test_placement_depends_on_the_game_alone(self):
-        games = [f"g{i}" for i in range(2000)]
-        first = {g for g in games[:500] if in_game_disjoint_stratum(g, False, 0.05, 0.15)}
-        grown = {g for g in games if in_game_disjoint_stratum(g, False, 0.05, 0.15)}
-        assert first <= grown
-
+class TestGameDisjointDraw:
     def test_the_draw_is_crc32_of_the_game_id(self):
         import zlib
 

@@ -5,7 +5,7 @@ field. The compatibility rules are in
 ``specs/023-ability-effect-model/contracts/record-schema.md`` and, with no
 version field, ``tests/unit/effects/domain/test_schema_compatibility.py`` is
 their enforcement. Pure dataclasses; serialization lives in
-``infrastructure/record_io.py``.
+``infrastructure/record_codec.py``.
 """
 
 from __future__ import annotations

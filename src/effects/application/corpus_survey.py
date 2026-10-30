@@ -34,7 +34,6 @@ from effects.domain.corpus_plan import (
     TrainingSupply,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME, qualifying_observations
-from effects.domain.provenance import first_text
 from effects.domain.record_quality import QualityDefect, record_refusal
 from effects.domain.records import (
     EffectRecord,
@@ -47,7 +46,6 @@ from effects.domain.tally_merge import NOT_MERGED, merge_into
 
 if TYPE_CHECKING:
     from effects.domain.damage_step_keywords import KeywordResolver
-    from effects.domain.provenance import ProvenanceKey
     from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
@@ -99,7 +97,7 @@ class WorkerContext:
         return self._resolver
 
     def records(self, relative: str) -> Iterator[EffectRecord]:
-        from effects.infrastructure.record_io import read_shard
+        from effects.infrastructure.shard_io import read_shard
 
         return read_shard(Path(self.read.records_dir) / relative)
 
@@ -129,21 +127,17 @@ class WorkerContext:
     def hash_of(self, record: EffectRecord) -> int:
         return record_hash(record.record_id, seed=self.read.seed)
 
-    def held_out_text(self, keys: Keys | None) -> str | None:
+    def held_out_text(self, keys: Keys) -> str | None:
         """The held-out script text these acting keys resolve to, normalized,
         or None. Always the script surface, whatever ``--vocab-path`` says,
         since that is the surface the holdout is chosen on."""
         if not keys or not self.read.held_out.keys:
             return None
         if keys not in self._held_text:
-            self._held_text[keys] = first_text(keys, self._held_out_script)
+            self._held_text[keys] = self.read.held_out.text_acted_through(
+                keys, self.sidecars.script_text,
+            )
         return self._held_text[keys]
-
-    def _held_out_script(self, key: ProvenanceKey) -> str | None:
-        # The holdout key normalizes first, so testing the normalized text
-        # tests the script.
-        text = self.sidecars.script_text(key)
-        return text if text is not None and self.read.held_out.holds_text(text) else None
 
 
 # ── the tallies ─────────────────────────────────────────────────────────
@@ -200,7 +194,8 @@ class GameTally:
 
 @dataclass(slots=True)
 class ShardSurvey:
-    """One shard's contribution. Plain data, so it pickles back cheaply."""
+    """One shard's contribution, or every shard's folded into
+    :attr:`Survey.totals`. Plain data, so it pickles back cheaply."""
 
     name: str = field(metadata=NOT_MERGED)
     size: int = field(metadata=NOT_MERGED)
@@ -218,18 +213,13 @@ class ShardSurvey:
 
 @dataclass(frozen=True, slots=True)
 class Survey:
-    """What the whole corpus holds."""
+    """What the whole corpus holds: every shard's survey folded together, and
+    what only the fold can see."""
 
+    #: Its ``name`` and ``size`` are blank; ``supply`` counts training-bound
+    #: records only, its legality cells resolved by the build.
+    totals: ShardSurvey
     shards: tuple[SourceShard, ...]
-    records: int
-    rarity: RarityTally
-    #: Training-bound records only; legality cells resolved by the build.
-    supply: TrainingSupply
-    games: GameTally
-    refusals: RefusalTally = field(default_factory=RefusalTally)
-    kept: Counter[SamplingClass] = field(default_factory=Counter)
-    mode_counts: Counter[str] = field(default_factory=Counter)
-    held_out_text_dropped: Counter[SamplingClass] = field(default_factory=Counter)
     #: Per top-level source directory (FR-149): held-out games in a depleted
     #: directory are a collection leak nothing else would notice.
     games_by_source: dict[str, int] = field(default_factory=dict)
@@ -289,7 +279,7 @@ class _PendingRecord:
     game: str
     klass: SamplingClass
     cell: Cell
-    keys: Keys | None
+    keys: Keys
     value: int
     #: Never trains, even in a training game.
     acts_through_held_out_text: bool
@@ -339,7 +329,7 @@ class _ShardSurveyor:
         out.games.games.add(game)
         cell = context.cell_of(record)
         out.mode_counts.update(cell.modes)
-        keys = acting_keys(record) or None
+        keys = acting_keys(record)
         if keys:
             out.rarity.note(keys, game)
         held_text = context.held_out_text(keys)
@@ -401,15 +391,8 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
         held_by_source[source] |= part.games.held_out
 
     return Survey(
+        totals=total,
         shards=tuple(sorted(shards, key=lambda s: s.name)),
-        records=total.records,
-        rarity=total.rarity,
-        supply=total.supply,
-        games=total.games,
-        refusals=total.refusals,
-        kept=total.kept,
-        mode_counts=total.mode_counts,
-        held_out_text_dropped=total.held_out_text_dropped,
         games_by_source={s: len(g) for s, g in games_by_source.items()},
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
         split_games=split_games,
@@ -418,7 +401,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
 
 def shard_names(records_dir: Path) -> list[str]:
     """Every shard under the corpus root, as posix paths relative to it."""
-    from effects.infrastructure.record_io import iter_shards
+    from effects.infrastructure.shard_io import iter_shards
 
     root = Path(records_dir)
     return [shard.relative_to(root).as_posix() for shard in iter_shards(root)]

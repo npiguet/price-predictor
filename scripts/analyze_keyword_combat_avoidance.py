@@ -44,23 +44,23 @@ import argparse
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from effects.domain.damage_step_keywords import KeywordResolver, _power, _remaining_toughness
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.records import PlayabilitySubkind, RecordKind
-from effects.infrastructure.record_io import read_records
+from effects.infrastructure.shard_io import read_records
 from effects.infrastructure.sidecar_io import SidecarCache
 
 STRIKES_FIRST = {"first_strike", "double_strike"}
 
 
 def _is_creature(entity) -> bool:
-    return "creature" in entity.types and entity.zone == "battlefield"
+    return entity.is_creature and entity.on_battlefield
 
 
 def _kills(hitter, hit, kw_hitter, kw_hit) -> bool:
     """Would ``hitter``'s combat damage destroy ``hit``?"""
-    if "indestructible" in kw_hit or _power(hitter) < 1:
+    if "indestructible" in kw_hit or hitter.power < 1:
         return False
-    return "deathtouch" in kw_hitter or _power(hitter) >= _remaining_toughness(hit)
+    return "deathtouch" in kw_hitter or hitter.power >= hit.remaining_toughness
 
 
 def attack_class(attacker, blockers, kw) -> str:
@@ -80,7 +80,7 @@ def attack_class(attacker, blockers, kw) -> str:
         return "indestructible blocker kills it"
     # Only deathtouch creatures can kill it. Split by whether it would have
     # survived them without the keyword, which is the case deathtouch decides.
-    if all(_power(b) < _remaining_toughness(attacker) for b in killers):
+    if all(b.power < attacker.remaining_toughness for b in killers):
         return "deathtouch blocker kills it (survives it otherwise)"
     return "deathtouch blocker kills it (dies anyway)"
 
@@ -89,14 +89,13 @@ def block_class(attacker, blocker, kw) -> str:
     ka, kb = kw(attacker), kw(blocker)
     blocker_kills = _kills(blocker, attacker, kb, ka)
     attacker_kills = _kills(attacker, blocker, ka, kb)
-    if "deathtouch" in ka and attacker_kills and _power(attacker) < _remaining_toughness(blocker):
+    if "deathtouch" in ka and attacker_kills and attacker.power < blocker.remaining_toughness:
         return (
             "trade, only because the attacker has deathtouch" if blocker_kills
             else "chump, only because the attacker has deathtouch"
         )
-    if "indestructible" in ka and not blocker_kills and _power(blocker) >= _remaining_toughness(
-        attacker
-    ):
+    if ("indestructible" in ka and not blocker_kills
+            and blocker.power >= attacker.remaining_toughness):
         return (
             "blocker dies, attacker saved by indestructible" if attacker_kills
             else "nobody dies, attacker saved by indestructible"

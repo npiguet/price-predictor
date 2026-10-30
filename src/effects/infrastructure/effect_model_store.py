@@ -9,6 +9,7 @@ import os
 import shutil
 from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -18,6 +19,7 @@ from effects.domain.ability_encoder import AbilityEncoderConfig
 from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import Baseline
 from effects.domain.effect_model import EffectModelConfig
+from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.infrastructure.torch_checkpoint import (
     load_checkpoint,
     save_checkpoint,
@@ -58,9 +60,9 @@ class SplitMismatchError(RuntimeError):
 
 
 def _like(default, value):
-    """A stored ``value`` as its field's type, which a tuple's or a count's
-    serialized form may not keep."""
-    return type(default)(value) if isinstance(default, (tuple, int)) else value
+    """A stored ``value`` as its field's type, which a tuple's, a count's or an
+    enum's serialized form may not keep."""
+    return type(default)(value) if isinstance(default, (tuple, int, Enum)) else value
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,15 +85,15 @@ class SplitProvenance:
     #: checkpoint saved before curated corpora existed.
     corpus_path: str = ""
     corpus_digest: str = ""
-    #: ``template`` or ``text`` (FR-042). ``text`` is written as no field at
-    #: all, so a checkpoint that records none reads as it trained.
-    holdout_unit: str = "text"
+    #: FR-042. ``text`` is written as no field at all, so a checkpoint that
+    #: records none reads as it trained.
+    holdout_unit: HoldoutUnit = HoldoutUnit.TEXT
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
         # A plain string: an enum member would tie loading to its import path.
         data["holdout_unit"] = str(self.holdout_unit)
-        if self.holdout_unit == "text":
+        if self.holdout_unit is HoldoutUnit.TEXT:
             del data["holdout_unit"]
         return data
 

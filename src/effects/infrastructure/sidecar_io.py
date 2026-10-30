@@ -10,8 +10,9 @@ import errno
 import json
 import logging
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 
 from effects.domain.provenance import (
     KeyResolution,
@@ -26,11 +27,12 @@ from effects.domain.provenance import (
 )
 from effects.domain.text_holdout import normalize_script_text
 
+if TYPE_CHECKING:
+    from effects.domain.ability_tokenizer import Surface
+
 logger = logging.getLogger(__name__)
 
 SIDECAR_SUFFIX = ".provenance.json"
-
-_JSON_SEPARATORS = (",", ":")
 
 
 def tree_of_folder(folder: Path) -> str:
@@ -214,19 +216,6 @@ def read_sidecar(path: Path) -> ProvenanceSidecar:
     raise AssertionError("unreachable: the last attempt either returns or raises")
 
 
-def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
-    """Write one sidecar beside its converted text.
-
-    The inverse of :func:`read_sidecar`, for producing one without Forge.
-    """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(sidecar_to_dict(sidecar), separators=_JSON_SEPARATORS),
-        encoding="utf-8",
-    )
-
-
 def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
     """``script file -> its sidecar's script texts`` over one converted tree.
 
@@ -237,7 +226,7 @@ def load_tree_texts(root: Path | None) -> dict[str, list[str]]:
         return {}
     out: dict[str, list[str]] = {}
     for _path, sidecar in iter_sidecars(root):
-        texts = [line.script_text for line in sidecar.lines if line.script_text]
+        texts = sidecar.script_texts()
         if texts:
             out[sidecar.script_file] = texts
     return out
@@ -261,21 +250,38 @@ def prose_lines(converted_txt: Path) -> list[str]:
     return path.read_text(encoding="utf-8").splitlines()
 
 
-def prose_for(line, lines: list[str]) -> str | None:
-    """One line's converted prose, without its ``kind[n]: `` prefix.
+def rendered_prose(sidecar_path: Path, sidecar: ProvenanceSidecar) -> list[str]:
+    """The converted prose lines beside a sidecar, as :meth:`SidecarCache.prose_for`
+    reads them; none for a variant, whose ``.txt`` is the Forge source script."""
+    if sidecar.tree == SourceTree.VARIANT_SCRIPTS:
+        return []
+    return prose_lines(converted_text_path(sidecar_path))
 
-    Role spans are offsets into the prose without the prefix. The split is
-    the sidecar's ``prose_offset``, since a continuation line has no prefix
-    but may hold a ``{T}: ``; an older sidecar without it is cut at the first
-    ``": "``, right for every line such sidecars hold.
-    """
-    if not lines or not (0 <= line.line_index < len(lines)):
-        return None
-    rendered = lines[line.line_index]
-    if line.prose_offset is not None:
-        return rendered[line.prose_offset:]
-    separator = rendered.find(": ")
-    return rendered if separator < 0 else rendered[separator + 2:]
+
+class EncodedLine(NamedTuple):
+    """One sidecar line, its converted prose, and the text it is encoded from."""
+
+    line: SidecarLine
+    prose: str | None
+    text: str | None
+
+
+def encoded_lines(
+    sidecar_path: Path, sidecar: ProvenanceSidecar, surface: Surface,
+) -> list[EncodedLine]:
+    """Every line of one sidecar as ``surface`` encodes it, row-aligned with
+    the ability cache: the one spelling of read the prose, cut the line's
+    out, fall back to the other surface (``encoding_text``)."""
+    # Here rather than at the top: the encoder module imports torch, and the
+    # survey workers that read sidecars must not.
+    from effects.domain.ability_encoder import encoding_text
+
+    rendered = rendered_prose(sidecar_path, sidecar)
+    out = []
+    for line in sidecar.lines:
+        prose = line.prose_in(rendered)
+        out.append(EncodedLine(line, prose, encoding_text(line, prose, surface)))
+    return out
 
 
 class UnconvertedScript(KeyError):
@@ -312,6 +318,14 @@ class SidecarCache:
         #: ``script_file -> times asked`` for keys :meth:`line_or_none` read as
         #: no line although the sidecar exists and does not describe them.
         self.undescribed: dict[str, int] = {}
+
+    @classmethod
+    def from_folders(
+        cls, folders: Iterable[Path], variant_scripts: Path | None = None,
+    ) -> SidecarCache:
+        """A cache over ``--cards-folder`` values, each keyed by the tree its
+        name ends in (FR-063b), plus the variant tree where one is given."""
+        return cls(sidecar_roots(folders, variant_scripts))
 
     def path_for(self, script_file: str) -> Path:
         tree, relative = split_script_file(script_file)
@@ -401,11 +415,7 @@ class SidecarCache:
                 converted_text_path(self.path_for(key.script_file))
             )
             self._prose[key.script_file] = rendered
-        return prose_for(line, rendered)
-
-    def row_for(self, key: ProvenanceKey) -> int | None:
-        """The ability-cache row a record's key names, or None where it was dropped."""
-        return self.get(key.script_file).row_for(key)
+        return line.prose_in(rendered)
 
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
         """The join's answer for a key, with the two no-sidecar cases folded in.

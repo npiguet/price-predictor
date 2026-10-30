@@ -207,19 +207,14 @@ CAUSE_BEARING_TYPES: frozenset[EventType] = frozenset(
 )
 
 
-#: ``attributed_to`` when the acting line's own top-level clause produced the
-#: event, rather than one of its sub-abilities.
-ATTRIBUTION_ROOT = "root"
-
-#: ``attributed_to`` when the collector looked for a producing clause and the
-#: pointer named nothing on the acting chain.
-ATTRIBUTION_UNRESOLVED = "unresolved"
-
 class AttributionKind(StrEnum):
     """Which of the four things an event's ``attributed_to`` is saying.
 
-    ``absent`` means unknown, not root: shards collected before the sentinels
-    wrote ``null`` for both.
+    ``root`` and ``unresolved`` are also the two sentinels the collector writes
+    there: the acting line's own top-level clause produced the event, or a
+    producing clause was sought and the pointer named nothing on the acting
+    chain. ``absent`` means unknown, not root: shards collected before the
+    sentinels wrote ``null`` for both.
     """
 
     ABSENT = "absent"
@@ -228,14 +223,16 @@ class AttributionKind(StrEnum):
     SUB_ABILITY = "sub_ability"
 
 
+#: The values ``attributed_to`` carries as written rather than as a chain index.
+_SENTINELS = frozenset({AttributionKind.ROOT, AttributionKind.UNRESOLVED})
+
+
 def attribution_kind(attributed_to: str | None) -> AttributionKind:
     """The :class:`AttributionKind` an event's ``attributed_to`` is saying."""
     if attributed_to is None:
         return AttributionKind.ABSENT
-    if attributed_to == ATTRIBUTION_ROOT:
-        return AttributionKind.ROOT
-    if attributed_to == ATTRIBUTION_UNRESOLVED:
-        return AttributionKind.UNRESOLVED
+    if attributed_to in _SENTINELS:
+        return AttributionKind(attributed_to)
     return AttributionKind.SUB_ABILITY
 
 
@@ -281,6 +278,10 @@ class Event:
                 f"event {self.type.value} carries params {sorted(unknown)} that "
                 f"the schema does not normalize; allowed: {sorted(allowed)}"
             )
+
+    @property
+    def attribution(self) -> AttributionKind:
+        return attribution_kind(self.attributed_to)
 
     def as_dict(self) -> dict:
         return {

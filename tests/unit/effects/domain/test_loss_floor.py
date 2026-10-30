@@ -10,14 +10,13 @@ import torch.nn.functional as functional
 
 from effects.domain.effect_head_layout import FIELD_SLICES, FIELDS_BY_NAME, PER_ENTITY_WIDTH
 from effects.domain.effect_losses import LossParts, per_entity_loss
-from effects.domain.entity_field_targets import EntityFieldTargets
 from effects.domain.loss_floor import (
     PartsMean,
     constant_predictor_floor,
     constant_predictor_outputs,
 )
 from effects.domain.state_snapshot import COLORS
-from tests.unit.effects.builders import make_entity_targets
+from tests.unit.effects.builders import fields_everywhere, make_entity_targets
 
 
 class TestConstantPredictorFloor:
@@ -32,7 +31,7 @@ class TestConstantPredictorFloor:
         gate = torch.tensor(gate, dtype=torch.float32)
         return make_entity_targets(
             gate=gate,
-            fields=EntityFieldTargets.everywhere({
+            fields=fields_everywhere({
                 name: torch.tensor(value, dtype=torch.float32)
                 for name, value in fields.items()
             }),
@@ -164,7 +163,7 @@ class TestDegenerateFields:
         gate = torch.tensor(gate, dtype=torch.float32)
         return make_entity_targets(
             gate=gate,
-            fields=EntityFieldTargets.everywhere({
+            fields=fields_everywhere({
                 name: torch.tensor(value, dtype=torch.float32)
                 for name, value in fields.items()
             }),

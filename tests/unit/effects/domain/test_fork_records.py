@@ -18,21 +18,18 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import (
-    STAGE_ONE_TIERS,
     GlobalState,
-    InclusionTier,
     StateSnapshot,
 )
 from tests.unit.effects.builders import make_record, make_snapshot
 
 _KEY = ProvenanceKey("cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
 
-def _snapshot(tiers=STAGE_ONE_TIERS) -> StateSnapshot:
+def _snapshot() -> StateSnapshot:
     return make_snapshot(
         global_=GlobalState(
             turn=4, phase="main1", active="P0", priority="P0", stack_size=1,
         ),
-        tiers=tiers,
     )
 
 
@@ -103,25 +100,6 @@ class TestDamageStepProbes:
     def test_an_ordinary_combat_record_is_not_a_probe(self):
         assert not _combat().is_probe
 
-
-class TestSnapshotTierFour:
-    def test_stage_one_does_not_collect_hand_and_graveyard(self):
-        assert not _snapshot().collected(
-            InclusionTier.UNREFERENCED_HAND_GRAVEYARD
-        )
-
-    def test_a_fork_record_may_collect_it(self):
-        """A forced resolution chose from cards nobody was going to play."""
-        tiers = STAGE_ONE_TIERS | {
-            InclusionTier.UNREFERENCED_STACK,
-            InclusionTier.UNREFERENCED_HAND_GRAVEYARD,
-        }
-        record = _record(
-            interventional=True, fork=True, state=_snapshot(tiers=tiers),
-        )
-        assert record.state.collected(
-            InclusionTier.UNREFERENCED_HAND_GRAVEYARD
-        )
 
 class TestTheDiffIsNeverATrainingTarget:
     def test_a_probe_record_carries_no_diff_field(self):

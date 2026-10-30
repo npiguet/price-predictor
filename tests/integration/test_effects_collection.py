@@ -17,65 +17,23 @@ stay green.
 from __future__ import annotations
 
 import re
-import time
-import uuid
 from pathlib import Path
 
 import pytest
 
-from effects.infrastructure.record_io import iter_shards, read_records
-from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
-from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
+from effects.infrastructure.shard_io import iter_shards
+from tests.integration.conftest import require_jar, run_worker
 
 pytestmark = pytest.mark.integration
-
-#: A worker needs to initialize Forge, build two decks and play a game before it
-#: writes anything; this is generous enough for a cold JVM on a slow disk.
-_COLLECTION_SECONDS = 240
-_POLL_SECONDS = 5
-
-
-def _require_jar() -> None:
-    try:
-        resolve_connector_jar()
-    except FileNotFoundError:
-        pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
-
-
-def _run_worker(records_dir: Path, output_file: Path | None) -> list:
-    """Run one instrumented worker until it has written records, then stop it."""
-    connector = MatchWorkerConnector()
-    process = connector.start(
-        output_file,
-        run_id=str(uuid.uuid4()),
-        best_of=1,
-        effect_records_dir=records_dir,
-        worker_index=0,
-    )
-    try:
-        deadline = time.monotonic() + _COLLECTION_SECONDS
-        while time.monotonic() < deadline:
-            time.sleep(_POLL_SECONDS)
-            records = list(read_records(records_dir))
-            if len(records) >= 5:
-                return records
-            if process.poll() is not None:
-                pytest.fail(
-                    f"worker exited early with code {process.returncode}"
-                )
-        return list(read_records(records_dir))
-    finally:
-        kill_process_tree(process)
-
 
 def test_collection_writes_records_under_one_attribution_mode(
     tmp_path: Path,
 ) -> None:
-    _require_jar()
+    require_jar()
     records_dir = tmp_path / "records"
     output_file = tmp_path / "match-outcomes.txt"
 
-    records = _run_worker(records_dir, output_file)
+    records = run_worker(records_dir, output_file)
     if not records:
         pytest.skip("worker produced no records within the collection window")
 
@@ -124,11 +82,11 @@ def test_the_flag_leaves_the_sealed_corpora_alone(tmp_path: Path) -> None:
     two runs are never byte-identical and a byte comparison could only ever
     fail.
     """
-    _require_jar()
+    require_jar()
     records_dir = tmp_path / "records"
     output_file = tmp_path / "match-outcomes.txt"
 
-    _run_worker(records_dir, output_file)
+    run_worker(records_dir, output_file)
     if not output_file.exists():
         pytest.skip("worker completed no match within the collection window")
 
@@ -159,10 +117,10 @@ def test_the_flag_leaves_the_sealed_corpora_alone(tmp_path: Path) -> None:
 
 def test_records_only_mode_writes_no_sealed_corpus(tmp_path: Path) -> None:
     """The coverage and variant collectors reuse this worker (FR-052, FR-059)."""
-    _require_jar()
+    require_jar()
     records_dir = tmp_path / "records"
 
-    _run_worker(records_dir, None)
+    run_worker(records_dir, None)
 
     assert not (tmp_path / "match-outcomes.txt").exists()
     assert not (tmp_path / "cards-played.txt").exists()

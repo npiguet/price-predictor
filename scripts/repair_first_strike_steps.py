@@ -135,7 +135,7 @@ class ResolvedKeywords:
     """
 
     def __init__(self, resolver) -> None:
-        from effects.infrastructure.record_io import record_from_dict
+        from effects.infrastructure.record_codec import record_from_dict
 
         self._resolver = resolver
         self._parse = record_from_dict
@@ -154,7 +154,8 @@ class ResolvedKeywords:
 
 def repair_shard(path: Path, keywords_of, *, write: bool) -> Counter:
     """Repair one shard; rewrite it only when something changed."""
-    from effects.infrastructure.record_io import iter_shard_lines, parse_record_line
+    from effects.infrastructure.record_codec import parse_record_line
+    from effects.infrastructure.shard_io import iter_shard_lines
 
     counts: Counter = Counter()
     lines: list[str] = []
@@ -191,14 +192,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     from effects.domain.damage_step_keywords import KeywordResolver
-    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+    from effects.infrastructure.sidecar_io import SidecarCache
 
     folders = args.cards_folder or [
         Path("output/cardsfolder"), Path("output/tokenscripts"),
     ]
-    keywords_of = ResolvedKeywords(KeywordResolver(SidecarCache(
-        sidecar_roots(folders, args.variant_scripts),
-    )))
+    keywords_of = ResolvedKeywords(KeywordResolver(
+        SidecarCache.from_folders(folders, args.variant_scripts),
+    ))
     shards = sorted(args.corpus.rglob("*.jsonl.gz"))
     print(f"{len(shards)} shards under {args.corpus}", flush=True)
     total: Counter = Counter()

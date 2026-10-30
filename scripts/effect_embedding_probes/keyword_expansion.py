@@ -65,9 +65,6 @@ from common import (  # noqa: E402
     resolve_paths,
 )
 
-from effects.application.extract_keyword_definitions import (  # noqa: E402
-    load_keyword_definitions,
-)
 from effects.domain.ability_encoder import (  # noqa: E402
     AbilityEncoder,
     collate_lines,
@@ -86,6 +83,9 @@ from effects.infrastructure.effect_model_store import (  # noqa: E402
     verified_inference_paths,
 )
 from effects.infrastructure.sidecar_io import sidecar_paths, tree_of_folder  # noqa: E402
+from effects.infrastructure.tokenizer_loading import (  # noqa: E402
+    load_keyword_definitions,
+)
 from price_predictor.infrastructure.tokenizer_store import (  # noqa: E402
     load_vocabulary,
 )

@@ -66,14 +66,8 @@ class BoardEdit:
         own channels; damage is cleared so the toughness is what the ability
         faces.
         """
-        from effects.domain.state_snapshot import PowerToughness
-
-        def edit(entity):
-            pt = entity.pt or PowerToughness(base=(0, 0))
-            base_t = toughness - pt.boosts[1] - pt.counters[1]
-            return replace(entity, pt=replace(pt, base=(pt.base[0], base_t)), damage=0)
-
-        return self.edit_entity(entity_id, edit)
+        return self.edit_entity(
+            entity_id, lambda entity: entity.with_total_toughness(toughness))
 
     def set_marked_damage(self, entity_id: str, damage: int) -> BoardEdit:
         return self.edit_entity(entity_id, lambda e: replace(e, damage=damage))

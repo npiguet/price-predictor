@@ -27,7 +27,13 @@ from effects.domain.records import (
     RewritePayload,
     TriggerPayload,
 )
-from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.domain.state_snapshot import (
+    EntityState,
+    GlobalState,
+    InclusionTier,
+    PlayerState,
+    StateSnapshot,
+)
 
 EFFECTS_FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
 #: The converted card and token trees the gen-1 fixture records were collected against.
@@ -35,18 +41,30 @@ GEN1_SIDECAR_FOLDERS = (
     EFFECTS_FIXTURES / "gen1-sidecars" / "cardsfolder",
     EFFECTS_FIXTURES / "gen1-sidecars" / "tokenscripts",
 )
+GEN1_KEYWORD_DEFINITIONS = EFFECTS_FIXTURES / "keyword-definitions.json"
+#: The seed and shard count of the short real runs over the gen-1 records.
+GEN1_TRAINING_SEED = 11
+GEN1_TRAINING_SHARDS = 3
 
 _EVENT = Event(type=EventType.LIFE_CHANGE, params={"delta": 1})
 
 
+#: The tiers stage-one collection wrote: what a test snapshot claims by default.
+STAGE_ONE_TIERS: frozenset[InclusionTier] = frozenset(
+    {InclusionTier.REFERENCED, InclusionTier.CORE}
+)
+
+
 def make_snapshot(**overrides) -> StateSnapshot:
-    """An empty turn-1 board; ``overrides`` replace any ``StateSnapshot`` field."""
+    """An empty turn-1 board collected at the stage-one tiers; ``overrides``
+    replace any ``StateSnapshot`` field."""
     defaults: dict = {
         "global_": GlobalState(
             turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
         ),
         "players": (),
         "entities": (),
+        "tiers": STAGE_ONE_TIERS,
     }
     defaults.update(overrides)
     return StateSnapshot(**defaults)
@@ -116,6 +134,19 @@ def make_record(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> Effect
     return EffectRecord(**defaults)
 
 
+def named_entity(name: str, **overrides) -> EntityState:
+    """:func:`make_entity` with its id derived from ``name``."""
+    return make_entity(f"E-{name}", name, **overrides)
+
+
+def record_on_board(game_id: str, entities=(), ability=None, **overrides) -> EffectRecord:
+    """A record of game ``game_id`` whose board holds ``entities``."""
+    return make_record(
+        game_id=game_id, ability=ability,
+        state=make_snapshot(entities=tuple(entities)), **overrides,
+    )
+
+
 #: Records per gzip member, as the Java collector blocks them.
 RAW_BLOCK_RECORDS = 256
 
@@ -148,7 +179,7 @@ class RawShardWriter:
         self.close()
 
     def write(self, record: EffectRecord) -> None:
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         self._block.append(format_record_line(record) + "\n")
         if len(self._block) >= RAW_BLOCK_RECORDS:
@@ -223,7 +254,11 @@ def make_batcher(
     import torch
 
     from effects.application.ability_text import KeyResolver
-    from effects.application.surface_batching import Materializer, SurfaceBatcher
+    from effects.application.surface_batching import (
+        Materializer,
+        SurfaceBatcher,
+        SurfaceSpec,
+    )
     from effects.application.text_staging import TextStager
     from effects.domain.baselines import BaselineMasks
     from effects.domain.effect_head_input import INPUT_LAYOUT
@@ -235,12 +270,11 @@ def make_batcher(
             keyword_expand_p=keyword_expand_p, truncations=truncations,
         ),
         resolver=resolver or KeyResolver(sidecars, surface),
-        masks=masks, e_dim=e_dim, widths=widths or {},
+        spec=SurfaceSpec(e_dim, widths or {}, masks, input_layout or INPUT_LAYOUT),
         materializer=Materializer(
             device or torch.device("cpu"), masks, identity_table, noise,
         ),
         context_dropout=context_dropout, rng=rng,
-        input_layout=input_layout or INPUT_LAYOUT,
     )
 
 
@@ -319,17 +353,15 @@ def stub_validator(loop, on_score=None) -> None:
     Only ``score`` is stood in for, so the epoch's own choice of which pass
     feeds the margins and the floor is still the real one.
     """
-    from effects.application.gate_one import MarginAccumulator
-    from effects.application.validation_pass import ValidationPass, Validator
+    from effects.application.validation_pass import ProgressMargins, Validator
 
     class _Scored(Validator):
-        def score(self, records, run, fields, *, parts=False, margins=False, targets=False):
+        def score(self, records, run, fields, collectors=()):
             if on_score is not None:
-                on_score(fields, margins)
-            return ValidationPass(
-                1.0, {}, MarginAccumulator(fields) if margins else None,
-                [] if targets else None,
-            )
+                on_score(
+                    fields, any(isinstance(c, ProgressMargins) for c in collectors),
+                )
+            return 1.0
 
     loop.validator = _Scored(loop.config, loop.device, loop.losses)
 
@@ -363,13 +395,36 @@ def stub_below_the_loop(monkeypatch):
 
 def write_validation_samples(directory, records) -> dict:
     """Both validation strata's samples under ``directory``, each ``records``."""
-    from effects.infrastructure.record_io import write_shard
+    from effects.infrastructure.shard_io import write_shard
 
     samples = {}
     for stratum in ("card-disjoint", "game-disjoint"):
         samples[stratum] = directory / f"{stratum}.jsonl.gz"
         write_shard(samples[stratum], records)
     return samples
+
+
+def fields_everywhere(values):
+    """``EntityFieldTargets`` holding ``values``, each present at every entity."""
+    import torch
+
+    from effects.domain.entity_field_targets import EntityFieldTargets
+
+    return EntityFieldTargets(
+        dict(values),
+        {name: torch.ones(value.shape[:2], dtype=torch.bool) for name, value in values.items()},
+    )
+
+
+def stated_targets(text: str) -> dict[str, float | None]:
+    """The value head's targets for ``text`` by name, None where masked."""
+    from effects.domain.value_targets import VALUE_TARGET_NAMES, value_targets
+
+    targets = value_targets(text)
+    return {
+        name: value if stated else None
+        for name, value, stated in zip(VALUE_TARGET_NAMES, targets.values, targets.mask)
+    }
 
 
 def make_entity_targets(gate, fields=None, mask=None, index=None):
@@ -381,7 +436,7 @@ def make_entity_targets(gate, fields=None, mask=None, index=None):
     from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
 
     if not isinstance(fields, EntityFieldTargets):
-        fields = EntityFieldTargets.everywhere(fields or {})
+        fields = fields_everywhere(fields or {})
     if mask is None:
         mask = torch.ones_like(gate)
     if index is None:
@@ -408,3 +463,41 @@ def keyword_score(qualifying: int, agreeing: int):
     return KeywordScore(
         qualifying=qualifying, agreeing=agreeing, observations=qualifying,
     )
+
+
+def gen1_training_config(corpus, out, **overrides):
+    """A short real run's config over the application conftest's ``corpus``
+    fixture, every draw the host half takes switched on."""
+    from effects.application.train_effect_model import TrainEffectModelConfig
+
+    settings = dict(
+        corpus=str(corpus.root), cards_folders=GEN1_SIDECAR_FOLDERS,
+        keyword_definitions=GEN1_KEYWORD_DEFINITIONS, vocab_path=corpus.vocab,
+        model_output=out, seed=GEN1_TRAINING_SEED, batch_size=8, steps_per_epoch=7,
+        shards_per_epoch=GEN1_TRAINING_SHARDS, epochs=2, curriculum_epoch=2, patience=5,
+        e_dim=16, encoder_layers=1, encoder_d_model=32,
+        # Every draw the host half takes, at rates that make each one fire.
+        keyword_expand_p=0.5, context_dropout=0.2, mlm_weight=0.1,
+        mlm_mask_prob=0.3, value_weight=0.05, api_weight=0.05, e_noise=0.1,
+    )
+    settings.update(overrides)
+    return TrainEffectModelConfig(**settings)
+
+
+def write_sidecar(sidecar, path: Path) -> None:
+    """Write one sidecar where ``convert`` would, so a test can produce one
+    without Forge; the inverse of ``sidecar_io.read_sidecar``."""
+    import json
+
+    from effects.infrastructure.sidecar_io import sidecar_to_dict
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(sidecar_to_dict(sidecar), separators=(",", ":")), encoding="utf-8",
+    )
+
+
+def player_of(snapshot: StateSnapshot, player_id: str) -> PlayerState | None:
+    """The snapshot's player of ``player_id``, or None."""
+    return next((each for each in snapshot.players if each.id == player_id), None)

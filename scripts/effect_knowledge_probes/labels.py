@@ -575,7 +575,7 @@ _PROTECTION = ("hexproof", "shroud", "protection", "ward")
 def _is_protected(entity, sidecars) -> bool:
     if any(k in _PROTECTION for k in entity.granted_temporary.keywords):
         return True
-    for key in (*entity.printed, *entity.granted_attached):
+    for key in entity.ability_keys:
         line = sidecars.line_or_none(key)
         text = (line.script_text or "") if line is not None else ""
         if text.split(":", 1)[0].strip().lower() in _PROTECTION:

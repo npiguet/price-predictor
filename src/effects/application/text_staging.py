@@ -103,14 +103,22 @@ class StagedTexts:
     baseline's vectors) is set; neither, for the ``identity`` baseline.
     """
 
+    #: Each text's row of the batch's ``e`` matrix.
     rows: dict[str, int]
+    #: Empty for the two baselines that never reach the encoder.
     prepared: list[EncodedLine]
+    #: None when the encoder is not called.
     encoder_inputs: dict[str, torch.Tensor] | None
     stand_in: torch.Tensor | None
 
     @property
     def ordered(self) -> list[str]:
+        """The texts in matrix-row order."""
         return sorted(self.rows, key=self.rows.__getitem__)
+
+    def pin(self) -> None:
+        self.encoder_inputs = pinned(self.encoder_inputs)
+        self.stand_in = pinned(self.stand_in)
 
 
 @dataclass(frozen=True)
@@ -143,12 +151,11 @@ class TextStager:
         )
 
     def prepare_texts(
-        self, ordered: list[str], lines_of: Mapping[str, SidecarLine] | None = None,
-        *, rng: random.Random, keys_of: Callable[[str], list] = lambda text: [],
+        self, ordered: list[str], lines_of: Mapping[str, SidecarLine], *,
+        rng: random.Random, keys_of: Callable[[str], list],
     ) -> list[EncodedLine]:
         """Each text through :meth:`prepare`, with the role spans of its
         sidecar line in ``lines_of``."""
-        lines_of = lines_of or {}
         return [
             self.prepare(
                 text, encoding_role_spans(lines_of.get(text), text, self.surface),
@@ -158,8 +165,8 @@ class TextStager:
         ]
 
     def prepare(
-        self, text: str, role_spans: tuple = (), *, rng: random.Random,
-        keys_of: Callable[[str], list] = lambda text: [],
+        self, text: str, role_spans: tuple, *, rng: random.Random,
+        keys_of: Callable[[str], list],
     ) -> EncodedLine:
         """One text tokenized with ``role_spans`` and its keywords expanded; a
         truncation is reported under ``keys_of(text)``."""

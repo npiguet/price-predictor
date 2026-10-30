@@ -118,13 +118,7 @@ class SidecarIndex:
     """
 
     def __init__(self, sidecar_roots: Path | Iterable[Path], *, surface: Surface) -> None:
-        from effects.domain.ability_encoder import encoding_text
-        from effects.infrastructure.sidecar_io import (
-            converted_text_path,
-            iter_sidecars,
-            prose_for,
-            prose_lines,
-        )
+        from effects.infrastructure.sidecar_io import encoded_lines, iter_sidecars
 
         roots = (
             (Path(sidecar_roots),) if isinstance(sidecar_roots, (str, Path))
@@ -133,13 +127,11 @@ class SidecarIndex:
         sources: list[IndexedSource] = []
         for root in roots:
             for path, sidecar in iter_sidecars(root):
-                rendered = prose_lines(converted_text_path(path))
-                lines: list[CachedLine | None] = []
-                for line in sidecar.lines:
-                    prose = prose_for(line, rendered)
-                    text = encoding_text(line, prose, surface)
-                    lines.append(CachedLine(text, prose) if text else None)
-                sources.append(IndexedSource(sidecar.script_file, sidecar.card, tuple(lines)))
+                lines = tuple(
+                    CachedLine(encoded.text, encoded.prose) if encoded.text else None
+                    for encoded in encoded_lines(path, sidecar, surface)
+                )
+                sources.append(IndexedSource(sidecar.script_file, sidecar.card, lines))
         self.sources: tuple[IndexedSource, ...] = tuple(sources)
 
     def matrices(

@@ -14,6 +14,7 @@ from effects.domain.ability_tokenizer import Surface
 from effects.domain.canonical_digest import canonical_digest
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
+from price_predictor.domain.dataclass_defaults import field_default
 
 
 class ManifestDrift(NamedTuple):
@@ -43,6 +44,21 @@ class ClassCounts:
     kept: int
     dropped_by_cap: int
     unique_texts: int
+
+
+@dataclass(frozen=True, slots=True)
+class FamilyRow:
+    """One rule family's row of ``families`` (FR-053): what its class budget
+    gave it and what the training output holds. ``share`` is the equal split
+    before redistribution, so ``shortfall`` is ``max(0, share - written)``."""
+
+    available: int
+    share: int
+    planned: int
+    #: Copies included; ``repeats`` is how many of them are copies.
+    written: int
+    repeats: int
+    shortfall: int
 
 
 def _optional_float(value) -> float | None:
@@ -86,24 +102,31 @@ _ABSENT = "absent"
 _OMITTED_AT_DEFAULT = "omitted_at_default"
 
 
-def _reads(read, **extra) -> dict[str, Any]:
-    """A field's metadata: its reader, plus any of the flags above."""
-    return {_READ: read, **extra}
+def _reads(
+    read, *, absent: Any = MISSING, omitted_at_default: bool = False,
+) -> dict[str, Any]:
+    """A field's metadata: its reader, the value an absent one reads as when
+    ``absent`` is given, and whether ``as_dict`` omits it at its default."""
+    metadata: dict[str, Any] = {_READ: read}
+    if absent is not MISSING:
+        metadata[_ABSENT] = absent
+    if omitted_at_default:
+        metadata[_OMITTED_AT_DEFAULT] = True
+    return metadata
 
 
 def _gen1_implied(read) -> dict[str, Any]:
-    return _reads(read, **{_OMITTED_AT_DEFAULT: True})
+    return _reads(read, omitted_at_default=True)
 
 
 def _default_of(spec: Field) -> Any:
     """The value a manifest lacking ``spec`` reads as; KeyError if it has none."""
     if _ABSENT in spec.metadata:
         return spec.metadata[_ABSENT]
-    if spec.default is not MISSING:
-        return spec.default
-    if spec.default_factory is not MISSING:
-        return spec.default_factory()
-    raise KeyError(spec.name)
+    try:
+        return field_default(spec)
+    except ValueError:
+        raise KeyError(spec.name) from None
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,7 +222,9 @@ class CorpusManifest:
     holdout_unit: HoldoutUnit = field(
         default=HoldoutUnit.TEXT, metadata=_gen1_implied(HoldoutUnit),
     )
-    #: ``class -> family -> {available, share, written, repeats, shortfall}``.
+    #: ``class -> family ->`` a :class:`FamilyRow`'s fields. Stored as plain
+    #: numbers rather than rows: a manifest built before ``planned`` existed
+    #: lacks it, and reading one in as a row would change its digest.
     families: dict[str, dict[str, dict[str, int]]] = field(
         default_factory=dict, metadata=_gen1_implied(_doubly_nested_int_map),
     )

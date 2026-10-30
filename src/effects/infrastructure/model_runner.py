@@ -18,6 +18,7 @@ from effects.application.surface_batching import (
     IdentityTable,
     Materializer,
     SurfaceBatcher,
+    SurfaceSpec,
 )
 from effects.application.text_staging import TextStager
 from effects.domain.ability_encoder import (
@@ -34,11 +35,11 @@ from effects.domain.ability_tokenizer import (
 from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
-from effects.domain.effect_head_input import InputLayout, feature_widths
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
 from effects.domain.sampling import sampling_class
-from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+from effects.domain.surface_collation import entity_index
+from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_tokenizer
 from effects.infrastructure.torch_device import default_device
 
@@ -52,9 +53,9 @@ def build_sidecars(config) -> SidecarCache:
     """The sidecar roots ``--cards-folder`` names (FR-063b), each keyed by the
     tree its name ends in, so ``output/gen1-cardsfolder`` serves
     ``cardsfolder/`` keys."""
-    return SidecarCache(sidecar_roots(
+    return SidecarCache.from_folders(
         config.cards_folders, getattr(config, "variant_scripts", None),
-    ))
+    )
 
 
 def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
@@ -93,6 +94,17 @@ class Runnable:
             for chunk in batched(items, size):
                 yield list(chunk)
 
+    def per_entity_outputs(self, records, strips=None) -> tuple[torch.Tensor, list]:
+        """``(outputs, surfaces)``: the per-entity head at each record's
+        ``[CARD]`` and ``[PLAYER]`` slots, ``(records, entities, width)`` on
+        the host in each surface's ``entity_slots`` order, and the surfaces
+        built. ``strips`` is gate 2's per-record perturbation
+        (:meth:`SurfaceBatcher.build`)."""
+        batch, surfaces, _encoded = self.batcher.build(records, self.encoder, strips)
+        hidden = self.model(batch)
+        index = entity_index(surfaces).to(hidden.device)
+        return self.model.per_entity_at(hidden, index).float().cpu(), surfaces
+
     def keyword_resolver(self) -> KeywordResolver:
         """A resolver over the batcher's own sidecar cache, never a second
         one: reading different joins, a perturbation would strip nothing."""
@@ -122,8 +134,7 @@ class LoadedModel:
 
     def _batcher(self, records) -> SurfaceBatcher:
         checkpoint = self.checkpoint
-        layout = InputLayout.of(checkpoint.training_settings)
-        masks = baseline_masks(checkpoint.variant)
+        spec = SurfaceSpec.for_checkpoint(checkpoint, records)
         return SurfaceBatcher(
             stager=TextStager(
                 tokenizer=self.tokenizer,
@@ -133,13 +144,10 @@ class LoadedModel:
                 truncations=TruncationLog(log_truncation(logger, "evaluation")),
             ),
             resolver=KeyResolver(self.sidecars, self.surface),
-            masks=masks,
-            e_dim=checkpoint.encoder_config.e_dim,
-            widths=feature_widths(records, layout=layout),
-            materializer=Materializer(self.device, masks, self.identity_table),
+            spec=spec,
+            materializer=Materializer(self.device, spec.masks, self.identity_table),
             context_dropout=0.0,
             rng=random.Random(EVALUATION_SEED),
-            input_layout=layout,
         )
 
 
