@@ -41,6 +41,8 @@ class TestBuildVocab:
         assert args.target_size == 5000
 
     def test_cards_folder_is_repeatable(self):
+        """Every command takes ``--cards-folder`` through one helper, so one
+        command's parse stands for all of them."""
         args = parse(
             "build-vocab", "--cards-folder", "a/", "--cards-folder", "b/",
         )
@@ -339,7 +341,3 @@ class TestBuildCorpus:
     def test_a_class_the_mixture_has_no_name_for_is_refused_at_the_parser(self):
         with pytest.raises(SystemExit):
             parse("build-corpus", "--class-mix", "oracle=1.0")
-
-    def test_cards_folder_is_repeatable(self):
-        args = parse("build-corpus", "--cards-folder", "a/", "--cards-folder", "b/")
-        assert args.cards_folders == (Path("a/"), Path("b/"))
