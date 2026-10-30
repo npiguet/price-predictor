@@ -239,6 +239,19 @@ def test_at_step_zero_nothing_is_added():
     assert torch.equal(noise.apply(matrix, step=0), matrix)
 
 
+def test_a_resume_file_holding_the_old_step_key_still_loads():
+    """Resume files written before the state dropped its unread ``step`` carry
+    it; an interrupted run must continue across the change."""
+    noise = NoiseState(ratio=0.1, ramp_steps=1)
+    noise.apply(_spread_matrix(rows=20), step=1)
+    saved = noise.state_dict()
+    restored = NoiseState(ratio=0.1, ramp_steps=1)
+    restored.load_state_dict({**saved, "step": 7}, torch.device("cpu"))
+    assert torch.equal(restored.sigma, noise.sigma)
+    assert torch.equal(restored._factor, noise._factor)
+    assert restored._draws_since_factor == noise._draws_since_factor
+
+
 def test_a_scoring_batcher_carries_no_noise(tmp_path):
     """Validation, evaluation and encoding never perturb e (scenario 4): the
     materializer a scoring batch is built with has none unless handed one."""

@@ -74,9 +74,7 @@ def _settings_of(run: RunContext) -> dict:
     return resume_settings(run.spec, training_settings=run.training_settings)
 
 
-def save_resume(
-    run: RunContext, epoch: int, *, finished: bool, best: bool = False,
-) -> None:
+def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
     """Everything the next epoch needs, written once the epoch is scored,
     training-only heads included."""
     directory = run.spec.config.resolved_model_output()
@@ -84,7 +82,6 @@ def save_resume(
         "epoch": epoch,
         "step": run.step,
         "warmup": run.warmup,
-        "finished": finished,
         "settings": _settings_of(run),
         "encoder": run.encoder.state_dict(),
         "model": run.model.state_dict(),

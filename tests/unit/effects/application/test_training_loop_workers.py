@@ -280,6 +280,30 @@ def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
     assert not multiprocessing.active_children()
 
 
+def test_a_resume_file_holding_keys_no_longer_written_resumes_the_same_run(
+    monkeypatch, corpus, tmp_path, caplog, in_process,
+):
+    """Resume files on disk still carry the ``finished`` flag and the noise
+    state's ``step``, which nothing read; an interrupted run must continue
+    across their removal exactly as it would have."""
+    from effects.infrastructure.effect_model_store import (
+        load_resume_state,
+        save_resume_state,
+    )
+
+    out = tmp_path / "older"
+    first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    state = load_resume_state(out)
+    state["finished"] = False
+    state["noise"]["step"] = state["step"]
+    save_resume_state(out, state)
+    second = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True)
+
+    assert first["losses"] + second["losses"] == in_process["losses"]
+    for name, value in in_process["parameters"].items():
+        assert torch.equal(value, second["parameters"][name]), name
+
+
 def test_a_run_resumed_for_more_epochs_warms_up_as_the_run_it_continues(
     monkeypatch, corpus, tmp_path, caplog, in_process,
 ):
@@ -323,7 +347,6 @@ def _stopped_early(out: Path) -> None:
     )
 
     state = load_resume_state(out)
-    state["finished"] = True
     state["stopper"]["since_best"] = 5
     save_resume_state(out, state)
 

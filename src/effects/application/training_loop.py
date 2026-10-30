@@ -241,7 +241,7 @@ class TrainingLoop:
                 EffectModelStore(output).save(checkpoint)
             if self.config.save_every_epoch:
                 EffectModelStore(output / EPOCHS_DIR).save(checkpoint)
-        save_resume(run, epoch, finished=stopper.should_stop, best=best)
+        save_resume(run, epoch, best=best)
         if stopper.should_stop:
             self.reporter.early_stop()
         return stopper.should_stop

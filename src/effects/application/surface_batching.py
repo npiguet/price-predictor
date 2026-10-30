@@ -69,8 +69,6 @@ class NoiseState:
         self.ramp_steps = max(int(ramp_steps), 1)
         self.decay = decay
         self.sigma: torch.Tensor | None = None
-        #: The training step of the last batch, kept for the resume file.
-        self.step = 0
         self.refactor_every = max(int(refactor_every), 1)
         #: ``V √Λ`` of the last factorized ``Σ`` and the draw it was taken at.
         self._factor: torch.Tensor | None = None
@@ -78,16 +76,17 @@ class NoiseState:
 
     def state_dict(self) -> dict:
         return {
-            "sigma": self.sigma, "step": self.step,
+            "sigma": self.sigma,
             "factor": self._factor, "draws_since_factor": self._draws_since_factor,
         }
 
     def load_state_dict(self, state: dict, device: torch.device) -> None:
+        """Restore :meth:`state_dict`'s keys and ignore any other, so a resume
+        file still holding the ``step`` the state once saved continues."""
         def on(tensor):
             return tensor.to(device) if tensor is not None else None
 
         self.sigma = on(state["sigma"])
-        self.step = state["step"]
         self._factor = on(state["factor"])
         self._draws_since_factor = state["draws_since_factor"]
 
@@ -113,12 +112,11 @@ class NoiseState:
 
     def apply(self, matrix: torch.Tensor | None, *, step: int) -> torch.Tensor | None:
         """``matrix`` plus ``L z``, where ``L Lᵀ = r²Σ``, at training step
-        ``step``; a batch with no ``e`` still records its step.
+        ``step``; a batch with no ``e`` stays None.
 
         ``L = V √Λ`` with eigenvalues clamped at zero, so a singular ``Σ``
         (a batch narrower than ``e_dim``) never fails to factorize.
         """
-        self.step = step
         if matrix is None:
             return None
         self.update(matrix)
