@@ -8,10 +8,12 @@ combat grids, boundary metrics) and writes one CSV per kind of result into
 ``experiments/2026-09-18-effect-model-gen2/data/``. A run directory that does not
 exist yet is skipped, so the script can be re-run as more of the sweep lands.
 
-Values that exist only in the records' text (the arms' damage grids measured before
-the grid files were kept, gen-1's reference figures, the noise pilots' caches) live
-in ``transcribed.py`` beside this script, and are written out with the rest.
-``make_charts.py`` draws every chart from these CSVs alone.
+Figures that exist only in the records' text (the noise pilots' caches, corpus scans,
+the arms' damage grids measured before the grid files were kept, gen-1's reference
+figures) are hand-maintained in the CSVs themselves. A CSV of only such figures is
+not written here; in a CSV that mixes them with computed rows, the rows whose key the
+run directories do not produce are read back from the committed file and written out
+again. ``make_charts.py`` draws every chart from these CSVs alone.
 """
 
 from __future__ import annotations
@@ -26,7 +28,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import transcribed  # noqa: E402
 from _lib.paths import MODELS, OUTPUT, REPO  # noqa: E402
 from lineage import GEN1, RUN_LIST, Run  # noqa: E402
 
@@ -320,40 +321,99 @@ def zone_effects(ck: Checkpoint) -> dict[str, list[list]]:
 
 # ── main ───────────────────────────────────────────────────────────────────
 
+#: Every CSV this script writes, with its header, in writing order.
+HEADERS = {
+    "runs.csv": ["run", "directory", "e_width", "lethality_copies", "lr_scale", "continues",
+                 "first_epoch", "last_epoch"],
+    "epochs.csv": ["run", "epoch", "train", "card_disjoint", "game_disjoint", "gate_f1",
+                   "zone_acc", "deviance"],
+    "fields_by_epoch.csv": ["run", "epoch", "field", "card_disjoint_loss", "explained_pct"],
+    "checkpoints.csv": ["checkpoint", "run", "role", "epoch", "e_width", "lethality_copies",
+                        "lr_scale", "card_disjoint", "game_disjoint", "gate_f1", "zone_acc",
+                        "deviance", "probe_directory"],
+    "gate2.csv": ["checkpoint", "keyword", "qualifying_records", "agreement_pct", "verdict"],
+    "gate3.csv": ["checkpoint", "mean_pairwise_cosine", "top_component_share",
+                  "participation_ratio"],
+    "probe_ladder.csv": ["checkpoint", "family", "target", "kind", "stratum", "n", "rung",
+                         "probe", "score"],
+    "sweeps.csv": ["checkpoint", "sweep", "value", "prediction", "records"],
+    "sweep_records.csv": ["checkpoint", "sweep", "record", "value", "prediction"],
+    "ablation.csv": ["checkpoint", "field", "base_loss", "replacement", "scope",
+                     "loss_increase"],
+    "board_abilities.csv": ["checkpoint", "subset", "records", "field", "loss",
+                            "card_slot_noise_increase"],
+    "embedding_probes.csv": ["checkpoint", "target", "metric", "score", "constant_baseline"],
+    "damage_grids.csv": ["checkpoint", "record_set", "damage", "toughness", "predicted_death"],
+    "combat_grids.csv": ["checkpoint", "variant", "reads", "striker_power", "struck_toughness",
+                         "predicted_death"],
+    "evasion_grid.csv": ["checkpoint", "attacker_keyword", "blocker_trait",
+                         "predicted_may_block", "rule_may_block"],
+    "evasion_ranking.csv": ["checkpoint", "attacker_keyword", "allowed_mean",
+                            "forbidden_mean", "auc"],
+    "target_families.csv": ["checkpoint", "family", "items", "legal", "auc"],
+    "target_restrictions.csv": ["checkpoint", "restriction", "family", "items", "legal", "auc"],
+    "target_flips.csv": ["checkpoint", "flip", "targets", "predicted_legal_before",
+                         "predicted_legal_after"],
+    "colour_pips.csv": ["checkpoint", "configuration", "records", "rule_affordable",
+                        "predicted_affordable", "below_exact_mean", "below_exact_share"],
+    "colour_pips_ranking.csv": ["checkpoint", "items", "auc"],
+    "colour_pips_by_cost.csv": ["checkpoint", "cost", "records", "pip_missing", "one_short",
+                                "pip_missing_plus_2", "all_off_colour"],
+    "zone_counts.csv": ["checkpoint", "field", "player_items", "affected", "auc",
+                        "records_naming_api", "one_player_affected", "more_for_that_player",
+                        "actual_mean", "predicted_mean"],
+    "zone_moves.csv": ["checkpoint", "zone_before", "cards", "moved", "auc"],
+    "zone_outcomes.csv": ["checkpoint", "zone_before", "outcome", "cards", "p_outcome_mean",
+                          "top_right", "predicted_instead"],
+    "zone_amounts.csv": ["checkpoint", "api", "records",
+                         *(f"amount_{a}" for a in range(1, 7))],
+    "zone_who.csv": ["checkpoint", "api", "records", "targeted_before", "targeted_after",
+                     "other_before", "other_after"],
+    "boundary_by_epoch.csv": ["run", "epoch", "error_vs_rule", "lethal_by_1", "exactly_lethal",
+                              "short_by_1", "gap"],
+}
 
-def main() -> None:
-    epochs = {run.name: epochs_of(run) for run in [*RUN_LIST, GEN1]}
+#: The CSVs that also hold hand-entered rows, with how many leading cells key a row.
+#: A row of the committed file whose key the run directories do not produce is kept.
+HAND_ENTERED_KEY_CELLS = {"gate3.csv": 1, "embedding_probes.csv": 1, "damage_grids.csv": 2,
+                          "boundary_by_epoch.csv": 2}
 
-    write("runs.csv", ["run", "directory", "e_width", "lethality_copies", "lr_scale",
-                       "continues", "first_epoch", "last_epoch"],
-          [[r.name, r.directory, r.width, r.copies, r.lr_scale, r.parent or "",
-            min(e.epoch for e in epochs[r.name]), max(e.epoch for e in epochs[r.name])]
-           for r in [GEN1, *RUN_LIST] if epochs[r.name]])
 
-    write("epochs.csv", ["run", "epoch", "train", "card_disjoint", "game_disjoint", "gate_f1",
-                         "zone_acc", "deviance"],
-          [[name, e.epoch, e.train, e.card_disjoint, e.game_disjoint, e.gate_f1,
-            e.zone_accuracy, e.deviance] for name, eps in epochs.items() for e in eps])
+def hand_entered_rows(name: str, produced: list[list]) -> list[list[str]]:
+    """The rows of the committed ``name`` whose key ``produced`` lacks, as the file spells them."""
+    path = OUT / name
+    if not path.exists():
+        return []
+    key_cells = HAND_ENTERED_KEY_CELLS[name]
+    seen = {tuple(str(v) for v in row[:key_cells]) for row in produced}
+    with open(path, encoding="utf-8", newline="") as f:
+        committed = list(csv.reader(f))[1:]
+    return [row for row in committed if tuple(row[:key_cells]) not in seen]
 
-    write("fields_by_epoch.csv", ["run", "epoch", "field", "card_disjoint_loss",
-                                  "explained_pct"],
-          [[name, e.epoch, f, loss, pct] for name, eps in epochs.items() for e in eps
-           for f, (loss, pct) in e.fields.items()])
 
-    cks = checkpoints(epochs)
-    write("checkpoints.csv", ["checkpoint", "run", "role", "epoch", "e_width", "lethality_copies",
-                              "lr_scale", "card_disjoint", "game_disjoint", "gate_f1", "zone_acc",
-                              "deviance", "probe_directory"],
-          [[ck.id, ck.run.name, ck.role, e.epoch, ck.run.width, ck.run.copies,
-            ck.run.lr_scale, e.card_disjoint, e.game_disjoint, e.gate_f1,
-            e.zone_accuracy, e.deviance, ck.directory] for ck, e in cks])
+def log_tables(epochs: dict[str, list[EpochSummary]],
+               cks: list[tuple[Checkpoint, EpochSummary]]) -> dict[str, list[list]]:
+    """The tables read from training and evaluation logs and boundary files."""
+    return {
+        "runs.csv": [[r.name, r.directory, r.width, r.copies, r.lr_scale, r.parent or "",
+                      min(e.epoch for e in epochs[r.name]), max(e.epoch for e in epochs[r.name])]
+                     for r in [GEN1, *RUN_LIST] if epochs[r.name]],
+        "epochs.csv": [[name, e.epoch, e.train, e.card_disjoint, e.game_disjoint, e.gate_f1,
+                        e.zone_accuracy, e.deviance] for name, eps in epochs.items()
+                       for e in eps],
+        "fields_by_epoch.csv": [[name, e.epoch, f, loss, pct] for name, eps in epochs.items()
+                                for e in eps for f, (loss, pct) in e.fields.items()],
+        "checkpoints.csv": [[ck.id, ck.run.name, ck.role, e.epoch, ck.run.width, ck.run.copies,
+                             ck.run.lr_scale, e.card_disjoint, e.game_disjoint, e.gate_f1,
+                             e.zone_accuracy, e.deviance, ck.directory] for ck, e in cks],
+        "gate2.csv": [r for ck, _ in cks for r in gate2(ck)],
+        "gate3.csv": [r for ck, _ in cks if (r := gate3(ck))],
+        "boundary_by_epoch.csv": [r for run in RUN_LIST for r in boundary(run)],
+    }
 
-    write("gate2.csv", ["checkpoint", "keyword", "qualifying_records", "agreement_pct",
-                        "verdict"], [r for ck, _ in cks for r in gate2(ck)])
-    write("gate3.csv", ["checkpoint", "mean_pairwise_cosine", "top_component_share",
-                        "participation_ratio"],
-          [r for ck, _ in cks if (r := gate3(ck))] + transcribed.GATE3)
 
+def scorecard_tables(cks: list[tuple[Checkpoint, EpochSummary]]) -> dict[str, list[list]]:
+    """The tables read from each checkpoint's knowledge-probe scorecard."""
     ladder, sweeps, sweep_records, board, ablation = [], [], [], [], []
     gen1_card = (OUTPUT / "effects" / "reports"
                  / "knowledge-probes-2026-09-17-full-textless-corpus-20261009/scorecard.json")
@@ -390,81 +450,46 @@ def main() -> None:
             for field, entry in body.get("ablation", {}).items():
                 board.append([cid, subset, body.get("n"), field, entry.get("base_loss"),
                               entry.get("noise", {}).get("cards")])
-    write("probe_ladder.csv", ["checkpoint", "family", "target", "kind", "stratum", "n", "rung",
-                               "probe", "score"], ladder)
-    write("sweeps.csv", ["checkpoint", "sweep", "value", "prediction", "records"], sweeps)
-    write("sweep_records.csv", ["checkpoint", "sweep", "record", "value", "prediction"],
-          sweep_records)
-    write("ablation.csv", ["checkpoint", "field", "base_loss", "replacement", "scope",
-                           "loss_increase"], ablation)
-    write("board_abilities.csv", ["checkpoint", "subset", "records", "field", "loss",
-                                  "card_slot_noise_increase"], board)
-    write("embedding_probes.csv", ["checkpoint", "target", "metric", "score",
-                                   "constant_baseline"],
-          [r for ck, _ in cks for r in embedding_probes(ck)] + transcribed.EMBEDDING_GEN1)
+    return {"probe_ladder.csv": ladder, "sweeps.csv": sweeps, "sweep_records.csv": sweep_records,
+            "ablation.csv": ablation, "board_abilities.csv": board}
 
-    grids = [row for ck, _ in cks for record_set, f in damage_grid_files(ck) if f.exists()
-             for row in cell_rows([ck.id, record_set], grid_cells(read(f)))]
-    known = {(g[0], g[1]) for g in grids}
-    grids += [row for key, cells in transcribed.DAMAGE_GRIDS.items() if key not in known
-              for row in cell_rows(list(key), cells)]
-    write("damage_grids.csv", ["checkpoint", "record_set", "damage", "toughness",
-                               "predicted_death"], grids)
 
-    write("combat_grids.csv", ["checkpoint", "variant", "reads", "striker_power",
-                               "struck_toughness", "predicted_death"],
-          [r for ck, _ in cks for r in combat(ck)])
-
+def report_tables(cks: list[tuple[Checkpoint, EpochSummary]]) -> dict[str, list[list]]:
+    """The tables read from each checkpoint's probe stdout and report files."""
     ev = [evasion(ck) for ck, _ in cks]
-    write("evasion_grid.csv", ["checkpoint", "attacker_keyword", "blocker_trait",
-                               "predicted_may_block", "rule_may_block"],
-          [r for cells, _ in ev for r in cells])
-    write("evasion_ranking.csv", ["checkpoint", "attacker_keyword", "allowed_mean",
-                                  "forbidden_mean", "auc"],
-          [r for _, ranking in ev for r in ranking])
     tg = [targeting(ck) for ck, _ in cks]
-    write("target_families.csv", ["checkpoint", "family", "items", "legal", "auc"],
-          [r for families, _, _ in tg for r in families])
-    write("target_restrictions.csv",
-          ["checkpoint", "restriction", "family", "items", "legal", "auc"],
-          [r for _, restrictions, _ in tg for r in restrictions])
-    write("target_flips.csv", ["checkpoint", "flip", "targets", "predicted_legal_before",
-                               "predicted_legal_after"], [r for _, _, flips in tg for r in flips])
-
     cp = [colour_pips(ck) for ck, _ in cks]
-    write("colour_pips.csv", ["checkpoint", "configuration", "records", "rule_affordable",
-                              "predicted_affordable", "below_exact_mean",
-                              "below_exact_share"], [r for rows, _, _ in cp for r in rows])
-    write("colour_pips_ranking.csv", ["checkpoint", "items", "auc"],
-          [r for _, rows, _ in cp for r in rows])
-    write("colour_pips_by_cost.csv", ["checkpoint", "cost", "records", "pip_missing",
-                                      "one_short", "pip_missing_plus_2", "all_off_colour"],
-          [r for _, _, rows in cp for r in rows])
     ze = [zone_effects(ck) for ck, _ in cks]
-    write("zone_counts.csv", ["checkpoint", "field", "player_items", "affected", "auc",
-                              "records_naming_api", "one_player_affected",
-                              "more_for_that_player", "actual_mean", "predicted_mean"],
-          [r for z in ze for r in z["counts"]])
-    write("zone_moves.csv", ["checkpoint", "zone_before", "cards", "moved", "auc"],
-          [r for z in ze for r in z["moves"]])
-    write("zone_outcomes.csv", ["checkpoint", "zone_before", "outcome", "cards",
-                                "p_outcome_mean", "top_right", "predicted_instead"],
-          [r for z in ze for r in z["outcomes"]])
-    write("zone_amounts.csv", ["checkpoint", "api", "records",
-                               *(f"amount_{a}" for a in range(1, 7))],
-          [r for z in ze for r in z["amounts"]])
-    write("zone_who.csv", ["checkpoint", "api", "records", "targeted_before",
-                           "targeted_after", "other_before", "other_after"],
-          [r for z in ze for r in z["who"]])
+    return {
+        "embedding_probes.csv": [r for ck, _ in cks for r in embedding_probes(ck)],
+        "damage_grids.csv": [row for ck, _ in cks
+                             for record_set, f in damage_grid_files(ck) if f.exists()
+                             for row in cell_rows([ck.id, record_set], grid_cells(read(f)))],
+        "combat_grids.csv": [r for ck, _ in cks for r in combat(ck)],
+        "evasion_grid.csv": [r for cells, _ in ev for r in cells],
+        "evasion_ranking.csv": [r for _, ranking in ev for r in ranking],
+        "target_families.csv": [r for families, _, _ in tg for r in families],
+        "target_restrictions.csv": [r for _, restrictions, _ in tg for r in restrictions],
+        "target_flips.csv": [r for _, _, flips in tg for r in flips],
+        "colour_pips.csv": [r for rows, _, _ in cp for r in rows],
+        "colour_pips_ranking.csv": [r for _, rows, _ in cp for r in rows],
+        "colour_pips_by_cost.csv": [r for _, _, rows in cp for r in rows],
+        "zone_counts.csv": [r for z in ze for r in z["counts"]],
+        "zone_moves.csv": [r for z in ze for r in z["moves"]],
+        "zone_outcomes.csv": [r for z in ze for r in z["outcomes"]],
+        "zone_amounts.csv": [r for z in ze for r in z["amounts"]],
+        "zone_who.csv": [r for z in ze for r in z["who"]],
+    }
 
-    bnd = [r for run in RUN_LIST for r in boundary(run)]
-    seen = {(r[0], r[1]) for r in bnd}
-    bnd += [r for r in transcribed.BOUNDARY if (r[0], r[1]) not in seen]
-    write("boundary_by_epoch.csv", ["run", "epoch", "error_vs_rule", "lethal_by_1",
-                                    "exactly_lethal", "short_by_1", "gap"], bnd)
 
-    for name, (header, rows) in transcribed.TABLES.items():
-        write(name, header, rows)
+def main() -> None:
+    epochs = {run.name: epochs_of(run) for run in [*RUN_LIST, GEN1]}
+    cks = checkpoints(epochs)
+    tables = {**log_tables(epochs, cks), **scorecard_tables(cks), **report_tables(cks)}
+    for name in HAND_ENTERED_KEY_CELLS:
+        tables[name] += hand_entered_rows(name, tables[name])
+    for name, header in HEADERS.items():
+        write(name, header, tables[name])
 
 
 if __name__ == "__main__":
