@@ -1,7 +1,7 @@
 """The training loop: the optimizer, the epochs and the shards between steps.
 
-The schedule and corpus reading are pure functions in ``train_effect_model``;
-each step's host half is a ``StepPreparer``'s and its device half a
+The schedule is ``training_schedule``'s pure functions and corpus reading
+``train_effect_model``'s; each step's host half is a ``StepPreparer``'s and its device half a
 ``StepLossComputer``'s, validation is a ``Validator``'s and every line between
 steps a ``RunReporter``'s. An epoch is a step count, not a pass over the
 corpus, and walks ``--shards-per-epoch`` shards one at a time. The best
@@ -38,11 +38,14 @@ from effects.application.step_preparation import (
 from effects.application.step_workers import StepWorkerPool
 from effects.application.surface_batching import IDENTITY_TABLE_KEY
 from effects.application.train_effect_model import (
-    MAX_GRAD_NORM,
     CorpusFacts,
     EpochResult,
     RunSpec,
     TrainEffectModelConfig,
+)
+from effects.application.training_schedule import (
+    MAX_GRAD_NORM,
+    Curriculum,
     epoch_shards,
     learning_rate_at,
     steps_per_shard,
@@ -83,12 +86,6 @@ def reports_now(*, index: int, budget: int) -> bool:
     """Whether the step at zero-based ``index`` reads its numbers back: only a
     shard's last, since each read is a device synchronization."""
     return index + 1 >= budget
-
-
-def resets_at(config, *, epoch: int) -> bool:
-    """Whether the early stopper forgets its best at the start of ``epoch``:
-    at the curriculum epoch, where the objective gains the sparse fields."""
-    return config.curriculum_epoch > 1 and epoch == config.curriculum_epoch
 
 
 def local_steps(task: ShardTask, preparer: StepPreparer, *, pin: bool) -> Iterator:
@@ -153,6 +150,7 @@ class TrainingLoop:
         self.losses = StepLossComputer(config, self.device)
         self.validator = Validator(config, self.device, self.losses)
         self.reporter = RunReporter(config, facts)
+        self.curriculum = Curriculum(config.curriculum_epoch)
 
     @property
     def is_cuda(self) -> bool:
@@ -200,7 +198,7 @@ class TrainingLoop:
         # so it never crosses into a different objective.
         run.optimizer.zero_grad(set_to_none=True)
         tally = EpochTally(running=torch.zeros((), device=self.device))
-        if resets_at(self.config, epoch=epoch):
+        if self.curriculum.resets_at(epoch):
             run.stopper.reset()
             self.reporter.curriculum(epoch, len(run.fields[epoch]))
         self._train_epoch(epoch, run, tally)
@@ -354,7 +352,7 @@ class TrainingLoop:
         self.reporter.shard(task, of, opened, stats, trained=time.perf_counter() - started)
 
     def _set_learning_rate(self, run: RunContext) -> float:
-        rate = learning_rate_at(run.step, warmup=run.warmup) * self.config.lr_scale
+        rate = learning_rate_at(run.step, warmup=run.warmup, scale=self.config.lr_scale)
         for group in run.optimizer.param_groups:
             group["lr"] = rate
         return rate

@@ -25,13 +25,15 @@ from effects.application.surface_batching import (
     NoiseState,
 )
 from effects.application.train_effect_model import (
-    LEARNING_RATE,
-    WEIGHT_DECAY,
-    EarlyStopper,
     RunSpec,
     TrainEffectModelConfig,
-    fields_for_epoch,
     recorded_flags,
+)
+from effects.application.training_schedule import (
+    LEARNING_RATE,
+    WEIGHT_DECAY,
+    Curriculum,
+    EarlyStopper,
     warmup_steps,
 )
 from effects.domain.ability_encoder import (
@@ -142,6 +144,7 @@ def build_run(
     """The encoder, the model, the optimizer and both device halves, sized by
     ``preparer``."""
     config = spec.config
+    curriculum = Curriculum(config.curriculum_epoch)
     vocab_size = preparer.tokenizer.vocab_size
     widths = preparer.surface_spec.widths
     encoder_config = AbilityEncoderConfig(
@@ -190,7 +193,7 @@ def build_run(
             spec, api_types=preparer.api_types, param_keys=preparer.param_keys,
         ),
         fields={
-            epoch: fields_for_epoch(config, present=present, epoch=epoch)
+            epoch: curriculum.fields_for(epoch, present)
             for epoch in range(1, config.epochs + 1)
         },
         stopper=EarlyStopper(config.patience),

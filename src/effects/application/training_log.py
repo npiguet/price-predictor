@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from effects.application.train_effect_model import MAX_GRAD_NORM
+from effects.application.training_schedule import MAX_GRAD_NORM
 from effects.domain.loss_floor import FLOOR_EPSILON
 
 

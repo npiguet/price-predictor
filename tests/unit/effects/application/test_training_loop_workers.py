@@ -34,10 +34,8 @@ from effects.application.step_preparation import (
     StepPreparer,
     StepReady,
 )
-from effects.application.train_effect_model import (
-    ValidationGameInTrainingError,
-    fields_for_epoch,
-)
+from effects.application.train_effect_model import ValidationGameInTrainingError
+from effects.application.training_schedule import Curriculum
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.effect_head_input import feature_widths
 from effects.domain.effect_model import EffectModel
@@ -435,8 +433,8 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     loop = make_training_loop(config, rarity={"x": 3})
     settings = preparer_settings(loop.spec, widths=feature_widths(records))
     assert settings.heads == frozenset({"value", "api", "mlm"})
-    fields = fields_for_epoch(
-        config, present=frozenset(sampling_class(r) for r in records), epoch=1,
+    fields = Curriculum(config.curriculum_epoch).fields_for(
+        1, frozenset(sampling_class(r) for r in records),
     )
     task = ShardTask(
         shard=Path("fixture"), epoch=1, position=2, budget=5, fields=fields,

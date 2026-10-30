@@ -27,10 +27,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from effects.application.train_effect_model import (
-    epoch_shards,
-    steps_per_shard,
-)
+from effects.application.training_schedule import epoch_shards, steps_per_shard
 from effects.domain.split import (
     HeldOutCards,
 )

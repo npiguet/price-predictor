@@ -12,10 +12,8 @@ from __future__ import annotations
 import pytest
 
 from effects.application.step_preparation import StepPreparer
-from effects.application.train_effect_model import (
-    EarlyStopper,
-    TrainEffectModelConfig,
-)
+from effects.application.train_effect_model import TrainEffectModelConfig
+from effects.application.training_schedule import EarlyStopper
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import (
