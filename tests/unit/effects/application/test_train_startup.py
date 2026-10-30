@@ -14,6 +14,7 @@ import pytest
 from effects.application.train_effect_model import (
     CorpusFacts,
     HoldoutMismatchError,
+    MissingTrainingInputError,
     TrainEffectModelConfig,
     run,
 )
@@ -124,6 +125,20 @@ def test_the_startup_line_counts_held_out_texts_not_only_cards(config, caplog):
     assert "3 held-out ability text(s) on 2 card(s)" in caplog.text
 
 
+def test_a_corpus_without_training_shards_is_refused(corpus, config, started):
+    (corpus.training_dir / "t.jsonl.gz").unlink()
+    with pytest.raises(MissingTrainingInputError, match="No training shards under"):
+        run(config)
+    assert not started
+
+
+def test_a_corpus_without_validation_samples_is_refused(corpus, config, started):
+    corpus.sample_path("game-disjoint").unlink()
+    with pytest.raises(MissingTrainingInputError, match="has no validation samples"):
+        run(config)
+    assert not started
+
+
 def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, started):
     assert run(config) == 0
     facts = started[-1].spec.facts
@@ -199,6 +214,7 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
 
 
 @pytest.mark.parametrize("failure, code", [
+    ("MissingTrainingInputError", 1),
     ("HoldoutMismatchError", 1),
     ("MixedGenerationsError", 1),
     ("ValidationGameInTrainingError", 1),
@@ -214,6 +230,7 @@ def test_an_operator_error_out_of_training_exits_with_its_code(
     from effects.infrastructure import cli, effect_model_store
 
     kind = {
+        "MissingTrainingInputError": train_effect_model.MissingTrainingInputError,
         "HoldoutMismatchError": train_effect_model.HoldoutMismatchError,
         "MixedGenerationsError": MixedGenerationsError,
         "ValidationGameInTrainingError": train_effect_model.ValidationGameInTrainingError,

@@ -47,6 +47,12 @@ class EmptyHoldoutError(RuntimeError):
     """The card-disjoint stratum holds no records."""
 
 
+class MissingTrainingInputError(RuntimeError):
+    """Something a run reads before its first step is not there: ``--corpus``
+    itself, its training shards, its validation samples, or any record in
+    them. Refused before a model is built, rather than training on nothing."""
+
+
 def check_holdout(
     *,
     card_disjoint_records: int,
@@ -416,17 +422,18 @@ def with_variant_scripts(
 
 
 def run(config: TrainEffectModelConfig) -> int:
-    """Train the encoder and effect head jointly. Returns an exit code.
+    """Train the encoder and effect head jointly. Returns an exit code; a
+    corpus it cannot train on is refused by exception, which the CLI maps to
+    one.
 
     Torch is imported only here, so ``python -m effects --help`` stays fast.
     """
     if config.corpus is None:
-        logger.error(
+        raise MissingTrainingInputError(
             "train-effect-model reads a curated corpus: pass --corpus DIR, built "
             "with `python -m effects build-corpus`. Training straight from raw "
             "shards was withdrawn with FR-125."
         )
-        return 1
     store = CorpusStore(Path(config.corpus))
     manifest = store.load()
     config = with_variant_scripts(config, manifest)
@@ -436,18 +443,17 @@ def run(config: TrainEffectModelConfig) -> int:
     )
     training_shards = iter_shards(store.training_dir)
     if not training_shards:
-        logger.error("No training shards under %s.", store.training_dir)
-        return 1
+        raise MissingTrainingInputError(f"No training shards under {store.training_dir}.")
     validation_samples = {
         stratum: store.sample_path(stratum) for stratum in VALIDATION_STRATA
     }
     missing = [str(p) for p in validation_samples.values() if not p.exists()]
     if missing:
-        logger.error(
-            "The corpus at %s has no validation samples (%s). Rebuild it with a "
-            "build-corpus that writes validation/samples/.", config.corpus, ", ".join(missing),
+        raise MissingTrainingInputError(
+            f"The corpus at {config.corpus} has no validation samples "
+            f"({', '.join(missing)}). Rebuild it with a build-corpus that writes "
+            "validation/samples/."
         )
-        return 1
     # Before any record is read (FR-033).
     refuse_mixed_generations(iter_shards(Path(config.corpus)))
     check_manifest_holdout(manifest, config)

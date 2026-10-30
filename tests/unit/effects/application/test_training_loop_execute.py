@@ -117,3 +117,16 @@ def test_the_second_epoch_starts_in_training_mode(run):
     assert all(payload for kind, _, payload in events if kind == "loss")
     # And the loop leaves the modules the way an epoch needs to find them.
     assert model.training
+
+
+def test_empty_validation_samples_are_refused_before_a_model_is_built(tmp_path):
+    """No record to measure feature widths from: the CLI maps it to exit 1."""
+    from effects.application.train_effect_model import MissingTrainingInputError
+
+    samples = write_validation_samples(tmp_path, [])
+    loop = make_training_loop(
+        TrainEffectModelConfig(corpus=str(tmp_path), prefetch_workers=0),
+        validation_samples=samples,
+    )
+    with pytest.raises(MissingTrainingInputError, match="nothing to measure feature widths"):
+        loop.execute()

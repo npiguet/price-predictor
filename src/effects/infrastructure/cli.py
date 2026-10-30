@@ -35,6 +35,7 @@ from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsEr
 from effects.application.train_effect_model import (
     EmptyHoldoutError,
     HoldoutMismatchError,
+    MissingTrainingInputError,
     SurfaceMismatchError,
     TrainEffectModelConfig,
     ValidationGameInTrainingError,
@@ -802,6 +803,7 @@ def _train_effect_model_parser(subparsers) -> None:
 
 
 @exits_with({
+    MissingTrainingInputError: 1,
     HoldoutMismatchError: 1,
     # Raised in a prefetch worker too, which hands the exception itself over.
     ValidationGameInTrainingError: 1,

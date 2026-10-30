@@ -26,7 +26,6 @@ from effects.application.train_effect_model import (
     CorpusFacts,
     EpochResult,
     TrainEffectModelConfig,
-    check_holdout,
 )
 from effects.application.training_log import (
     format_norms,
@@ -127,12 +126,6 @@ class RunReporter:
             len(present), len(SAMPLING_CLASSES), ", ".join(missing),
         )
 
-    def no_probe(self) -> None:
-        logger.error(
-            "The corpus's validation samples hold no records, so there is "
-            "nothing to measure feature widths from.",
-        )
-
     def run_start(self, seed: int, samples: ValidationSamples, *, shards: int) -> None:
         logger.info(
             "Seed %d (%s), %d of %d training shards per epoch, drawn across "
@@ -144,13 +137,8 @@ class RunReporter:
         )
         logger.info("Classes present: %s", ", ".join(sorted(samples.present)))
 
-    def thin_holdout(self, samples: ValidationSamples) -> None:
-        """Warn on a thin holdout, raise on an empty one (FR-088b); the gate-1
-        slice is the build's count, not this run's."""
-        warning = check_holdout(
-            card_disjoint_records=len(samples.card_disjoint),
-            unique_text_records=self.facts.gate_one_records,
-        )
+    def thin_holdout(self, warning: str | None) -> None:
+        """``check_holdout``'s warning on a thin holdout, if it gave one."""
         if warning:
             logger.warning("%s", warning)
 

@@ -40,8 +40,10 @@ from effects.application.surface_batching import IDENTITY_TABLE_KEY
 from effects.application.train_effect_model import (
     CorpusFacts,
     EpochResult,
+    MissingTrainingInputError,
     RunSpec,
     TrainEffectModelConfig,
+    check_holdout,
 )
 from effects.application.training_schedule import (
     MAX_GRAD_NORM,
@@ -160,10 +162,17 @@ class TrainingLoop:
         samples = ValidationSamples.load(self.validation_samples)
         self.reporter.missing_classes(samples.present)
         if not samples.probe:
-            self.reporter.no_probe()
-            return 1
+            raise MissingTrainingInputError(
+                "The corpus's validation samples hold no records, so there is "
+                "nothing to measure feature widths from."
+            )
         self.reporter.run_start(self.spec.seed, samples, shards=len(self.training_shards))
-        self.reporter.thin_holdout(samples)
+        # Raises on an empty card-disjoint stratum (FR-088b); the gate-1 slice
+        # is the build's count, not this run's.
+        self.reporter.thin_holdout(check_holdout(
+            card_disjoint_records=len(samples.card_disjoint),
+            unique_text_records=self.spec.facts.gate_one_records,
+        ))
         self._cap_cuda_memory()
         settings = preparer_settings(self.spec, widths=feature_widths(samples.probe))
         run = build_run(

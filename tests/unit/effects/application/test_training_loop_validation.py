@@ -10,6 +10,7 @@ import torch
 
 from effects.application.train_effect_model import (
     CorpusFacts,
+    MissingTrainingInputError,
     TrainEffectModelConfig,
     run,
 )
@@ -51,9 +52,9 @@ def test_the_loop_loads_both_samples_and_the_probe(samples):
     assert samples.present == {"resolution-effect", "combat"}
 
 
-def test_run_refuses_to_train_without_a_corpus(caplog):
-    assert run(TrainEffectModelConfig()) == 1
-    assert "--corpus" in caplog.text
+def test_run_refuses_to_train_without_a_corpus():
+    with pytest.raises(MissingTrainingInputError, match="--corpus"):
+        run(TrainEffectModelConfig())
 
 
 def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
