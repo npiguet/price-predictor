@@ -406,7 +406,9 @@ bracket they follow.
   | `script_restriction` | several of the above, where Forge evaluates them together and cannot report which failed |
 
   A check Forge evaluates apart from the others is reported under its own identifier.
-- `timing` and each named check carry `responsible_static` where a static decided it.
+- Each `failed_checks` entry carries `responsible_static` where a static decided it. A
+  candidate whose `timing` bit is false carries a `casting_speed` entry. The candidate's own
+  `responsible_static` keeps its gen-2 meaning.
 - The collector evaluates both players' candidates at every priority stop, the player
   without priority included.
 
@@ -454,6 +456,7 @@ uses.
 | `conditions_met` | resolution payload | list of `{segment, met}`, `segment` the chain index `attributed_to` uses |
 | `active` | each listed static line | bool |
 | `anchor_attacker`, `legal_defenders`, `must_attack` | `attackers` payload | entity ref; list of player or entity refs; bool |
+| `must_block` | `blockers` payload, per listed creature | bool: the creature is required to block the anchor |
 | `turn_action` | `kind` | with the subkinds of § 8.11 |
 | the fields of § 8.4 | snapshot | as `rules/gen3-fields.json` gives each field's shape |
 
@@ -711,15 +714,18 @@ The verdict head gains a column for `timing` and one for each identifier of
 
 - A record's natural share is the number of copies gen-2's class, family and signature
   budgets give it.
-- `build-corpus` reads each record's rule tags (§ 5.1) and adds copies beyond the natural
-  share until every rule holds an equal share of its class, through the gen-2
-  water-filling allocator and reuse cap.
-- A record tagged with several rules counts toward each. Its added copies are drawn for
-  the rule furthest below its share. A record with no tag keeps its natural share.
+- A rule's share is taken within each sampling class: the class budget divided by the
+  number of rules tagged on the class's records (§ 5.1).
+- Within a class, `build-corpus` adds copies of a rule's records beyond their natural
+  share until the rule's written records reach its share, through the gen-2 water-filling
+  allocator. The reuse cap and `--text-cap` bound the added copies.
+- Added copies come on top of the class budget.
+- A record tagged with several rules counts toward each. Each added copy is drawn for the
+  rule furthest below its share. A record with no tag keeps its natural share.
 - An added copy carries the rule it was drawn for. A copy within the natural share carries
   none.
-- The manifest records, per rule, the records available, the share, the records written
-  and the shortfall.
+- The manifest records, per class and rule, the records available, the share, the records
+  written and the shortfall.
 
 ## 12.2 Condition balance
 
@@ -754,23 +760,23 @@ get examples from three sources, in amounts per-rule rebalancing sets:
 
 ## 13.1 Rule mask
 
-- Under `--rule-mask hard`, a copy drawn for a rule trains that rule's outputs, named by
-  the rules-to-fields map, and the affected gate on the rule's own entities. Every other
-  output is masked.
-- Under `--rule-mask soft`, a record drawn k times keeps its other outputs at weight 1/k
-  on each copy.
-- A copy drawn for a rule weighs the rule's outputs by the rule's natural share divided
-  by its drawn share.
-- A copy within the natural share, and a gen-2 lethality copy, trains every output.
+For a record, n is its natural share and d the number of its copies written, natural and
+added.
+
+- Under `--rule-mask hard`, an added copy trains the outputs the rules-to-fields map names
+  for the rule it was drawn for, and the affected gate on the rule's own entities where the
+  record supervises the gate. Every other output is masked. A copy within the natural share
+  trains every output.
+- Under `--rule-mask soft`, every copy trains every output. Outputs other than those of a
+  rule an added copy was drawn for weigh n / d on each copy.
+- Under both, the outputs of every rule an added copy of the record was drawn for weigh
+  n / d on each copy of that record.
+- A gen-2 lethality copy trains every output at full weight.
 
 ## 13.2 One loss scale
 
 - Each output field's loss is divided by the loss of its constant prediction on the same
   records, with that denominator clamped below at `--deviance-floor`.
-- The default floor is measured once, from the per-field explained deviance gen-2's
-  256-wide continuation runs logged over their last five epochs. It is the largest
-  constant-prediction loss among the fields whose explained deviance moves by more than 5
-  points between consecutive epochs.
 - The constant prediction is computed under the same distribution as the field's own
   loss.
 
@@ -785,8 +791,10 @@ spec's Poisson. Gate 1's deviance margin reads the negative binomial deviance.
   epochs: each step moves the average toward the current weights by
   1 / (`--steps-per-epoch` × `--ema-epochs`).
 - The average starts from the weights at the end of the learning-rate warmup.
-- Validation, stopping and the saved checkpoints use the averaged weights.
-- `resume.pt` carries the averaged weights.
+- Validation, stopping and the saved checkpoints use the averaged weights. An epoch that
+  ends before the warmup does is validated on the current weights, and is neither a best
+  candidate nor counted by `--patience`.
+- `resume.pt` carries the averaged weights and the step they started from.
 - A resume refuses a change to `--rule-mask`, `--deviance-floor`, `--ema-epochs`,
   `--stratum-weight` or `--relation-values`.
 
@@ -799,19 +807,21 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
 
 - Each validation stratum has a stratum score, computed on the averaged weights each
   epoch from forward passes only, over that stratum's records. Its components:
-  - the model-level knowledge probes;
-  - the damage-by-toughness sweep and the combat grids;
-  - the rule tests (§ 14.4);
+  - the knowledge probes read at the model's own prediction, rung 3 of the gen-2 ladder:
+    each probe type one score, averaged into one component;
+  - the damage grid, the combat grid and the evasion grid, each scored against the rule's
+    outcome in every cell, averaged into one component;
+  - the rule tests (§ 14.4), each rule counting equally;
   - the mean of every output field's explained deviance, each field counting equally. A
-    field whose constant-prediction loss is below `--deviance-floor` is left out of the
-    mean.
-- Each component is rescaled so that 0 is no better than its baseline and 1 is perfect:
-  an AUC as 2 × AUC − 1, an R² and an explained deviance as they are, and a grid's or
-  sweep's error as one minus its ratio to the error of a constant prediction.
-- A rule test is scored as an AUC: how well the model's prediction of the rule's outcome
-  ranks the test records where the outcome happens above those where it does not.
-  Records matching a variant of polarity `other` are not rule-test records.
-- The rule tests' component is the mean over rules, each rule counting equally.
+    field whose constant-prediction loss is at or below `--deviance-floor` is left out of
+    the mean.
+- Each score is rescaled so that 0 is no better than its baseline and 1 is perfect, then
+  clipped below at −1:
+  - an AUC as 2 × AUC − 1;
+  - an R² and an explained deviance as they are;
+  - a grid as one minus the ratio of its error to the error of predicting the grid's mean
+    outcome in every cell, its error being the mean absolute difference between the
+    predicted probability and the rule's outcome over its cells.
 - The stratum score is the mean of the four rescaled components, each counting equally.
 - The control score is the card-disjoint stratum score weighted by `--stratum-weight`,
   plus the game-disjoint stratum score weighted by one minus it.
@@ -826,7 +836,8 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
 - Each probe set and the rule tests are split in two by game. The selection half feeds the
   control score. The reporting half scores the selected checkpoint.
 - Each half of a probe set is at least as large as gen-2's whole probe set.
-- A probe that selects training records drops repeated rows of one record.
+- A probe that selects training records drops repeated rows of one record. Such a probe
+  is reported and never feeds a stratum score.
 
 ## 14.3 Gate 1
 
@@ -840,8 +851,15 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
   every rule with a confirmed Forge departure (§ 4.4).
 - Records from probe forks, interventional resolutions, directed forks and collection aimed
   at a rule are not rule-test records.
-- A rule test reads the model's prediction for the rule's outputs on the rule's test
-  records.
+- Records matching a variant of polarity `other` are not rule-test records.
+- For each output the map names for the rule, a rule test reads the model's prediction at
+  the entity the scenario's outcome names, or at the record for an output on the acting
+  ability: the probability of the scenario's outcome for a binary or categorical output,
+  the expected value for a count or a delta.
+- A rule test's score is the AUC with which that prediction ranks the records where the
+  outcome happens above those where it does not, averaged over the rule's outputs.
+- A rule whose test records in a stratum hold one polarity only is left out of that
+  stratum's rule-test component.
 
 ## 14.5 New probes and measures
 
@@ -878,7 +896,7 @@ python -m effects collect-coverage
 
 python -m effects train-effect-model
     [--rule-mask hard|soft]              default hard
-    [--deviance-floor F]                 default measured from gen-2 (§ 13.2)
+    [--deviance-floor F]                 default measured from gen-2, below
     [--ema-epochs E]                     default 1; span of the averaged weights
     [--relation-values on|off]           default on
     [--stratum-weight W]                 default 0.5; card-disjoint share of the control score
@@ -890,6 +908,12 @@ python -m effects train-effect-model
 
 `collect-variants` takes `--directed-fork-rules` and `--directed-forks-per-game` as
 `match-outcomes` does.
+
+The `--deviance-floor` default is measured once. The noisy fields are those whose explained
+deviance, as gen-2's 256-wide continuation runs logged it over their last five epochs, moves
+by more than 5 points between consecutive epochs. The default is the largest
+constant-prediction loss among them, computed on gen-2's card-disjoint validation sample
+under gen-3's distributions.
 
 Startup validation
 
@@ -912,7 +936,8 @@ Printed output
   ends, under `--count-dropped-events`.
 - `rule-counts` prints, per rule, the records in which its effect happens and does not,
   split by random-seat games and games between two Forge AIs.
-- Each training epoch line carries each stratum's control score and its components.
+- Each training epoch line carries each stratum's score and its components, and the
+  control score.
 
 # 16. Records and artifacts
 

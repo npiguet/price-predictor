@@ -594,7 +594,8 @@ already one of them.
 
 **The collector runs the rule's detector on the board at each phase boundary, the moment
 interventional forks already use.** When the board meets the rule's precondition, it forks, applies
-the operation and plays the fork on. The score check gen-2 makes before any change still applies.
+the operation and plays the fork on. The score check every fork makes before any change still
+applies.
 Gen-2's cap of two forks per real resolution does not fit, because a directed fork is not tied to
 a resolution. Directed forks take a budget of their own instead, two per game like the other fork
 kinds.
@@ -714,9 +715,9 @@ minimal pair.
 **The mask removes the bias in the labels, not in the boards.** The trunk still reads the boards a
 rule's copies bring, such as many infect boards when infect is rebalanced. That skews what the
 model reads, not what it is told the answer is, and training on varied boards limits it. The
-rule's own outputs still need an importance weight: the rule's natural share divided by its
-drawn share, as the calibration constraint of the [gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)
-sets out.
+rule's own outputs still need an importance weight: on every copy of a record, the record's natural
+share divided by the number of copies drawn, as the calibration constraint of the [gen-4
+record](XXXX-XX-XX-effect-model-gen4-design.md) sets out.
 
 **A soft mask replaces the hard one if the hard mask is shown to cost the other outputs.** Under
 the soft mask, a record drawn k times keeps its other outputs at weight 1/k on each copy. Its
@@ -773,7 +774,7 @@ boundary chart counted three Suffocating Blast resolutions as twelve of its 40 r
 
 **Gen-3's control score is built from probes and rule scenarios.** The control score is what
 stopping reads and what picks the checkpoint the run keeps. Gen-3 builds it from the model-level
-knowledge probes, the damage-by-toughness and combat grids, and the frozen rule tests of the rules
+knowledge probes, the damage, combat and evasion grids, and the frozen rule tests of the rules
 index. Every input is a forward pass, so nothing is trained to compute it. Built per rule, the score
 follows the balance training aims for rather than how often a situation happens in self-play. It
 answers the disagreement [Background](#the-validation-loss-is-too-noisy-to-stop-on-and-it-disagrees-with-the-probes-about-which-epoch-is-best)
@@ -791,10 +792,10 @@ explained deviance, and the score reads the mean over the fields.
 
 - **A field with almost nothing to learn is left out of the mean.** A field whose constant
   prediction already has a tiny loss, such as `poison_delta`, has an explained deviance that swings
-  widely on a few records. A field enters the mean only when its constant-prediction loss reaches a
-  floor. The floor is read off gen-2's 256-wide continuation runs: it is the largest
-  constant-prediction loss among the fields whose explained deviance moves by more than 5 points
-  from one epoch to the next.
+  widely on a few records. A field enters the mean only when its constant-prediction loss is above
+  a floor. The floor is read off the last five epochs of gen-2's 256-wide continuation runs: it is
+  the largest constant-prediction loss among the fields whose explained deviance moves by more than
+  5 points from one epoch to the next.
 - **An equal mean rewards a weak field going from 20% to 30% as much as life going from 80% to
   90%.** That is the intent, but it lets a weak field's noise steer stopping, which makes the
   smoothing more necessary, not less.
@@ -804,8 +805,9 @@ AUC, where 0.5 is chance. Some are R², the field mean is an explained deviance,
 measure an error. Each component is rescaled so that 0 is no better than its baseline and 1 is
 perfect. The knowledge probes, the grids, the rule tests and the field mean then count equally.
 Within the rule tests, each rule counts equally. A rule test is scored as an AUC: how well the
-predicted outcome ranks the records where it happens above those where it does not. A scenario's third-branch variants have no such pair, so their
-records stay out of the rule tests.
+predicted outcome ranks the records where it happens above those where it does not. A record
+matching a third-branch variant is neither a case where the outcome happens nor one where it does
+not, so the AUC cannot rank it, and the rule tests leave it out.
 
 Gen-4's adaptive sampling would compute the same per-field scores on training records
 ([gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)).
@@ -823,8 +825,8 @@ encoder and to score it. They read the `e` of their own epoch's encoder, so the 
 checkpoint cannot come from different epochs. The two strata measure the encoder from two sides.
 The card-disjoint stratum asks how well `e` describes texts it never trained on, which a new set
 brings. The game-disjoint stratum asks how well it describes known cards in situations it never
-trained on, which is most of what the agent sees. The control score weighs the two evenly by
-default.
+trained on, which is most of what the agent sees. Neither side is known to matter more to the
+agent, so the control score weighs the two evenly by default.
 
 **Three other designs are not taken:**
 
@@ -1180,8 +1182,8 @@ edits.
 
 **The affected gate answers whether an action changed an entity, and legality answers whether the
 entity could be chosen.** The two come apart in both directions. Destroy all creatures affects every
-creature on the board and targets none. Destroy target creature makes every creature a legal
-target except an opponent's creature with hexproof, and affects nothing until a target is picked. Gen-2 raises the gate on a
+creature on the board and targets none. Destroy target creature can target every creature that
+hexproof, shroud or protection does not shield, and affects nothing until a target is picked. Gen-2 raises the gate on a
 decision record's legal targets, so the gate learns legality on decision records and effects
 everywhere else.
 
