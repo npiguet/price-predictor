@@ -43,7 +43,13 @@ from effects.domain.records import (
 from effects.domain.split import HeldOutCards
 from effects.infrastructure.shard_io import list_shards, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
+from tests.unit.effects.builders import (
+    held_out_cards,
+    make_entity,
+    make_record,
+    make_snapshot,
+    write_sidecar,
+)
 
 _PAYLOAD_BY_KIND: dict[RecordKind, tuple[Moment | None, object]] = {
     RecordKind.RESOLUTION: (Moment.RESOLUTION, ResolutionPayload()),
@@ -122,10 +128,9 @@ def converted_tree(tmp_path, *keys: ProvenanceKey, text=None) -> dict[str, Path]
 
 #: The text ``_SECRET`` and ``_GOBLIN`` both print, and the holdout that names it.
 _SECRET_TEXT = "SP$ DealDamage | NumDmg$ 9"
-_HOLDOUT = HeldOutCards(
-    names=frozenset({"secret card"}),
-    script_files=frozenset({_SECRET[0].script_file, _GOBLIN[0].script_file}),
-    texts=frozenset({_SECRET_TEXT}), keys=frozenset({_SECRET_TEXT}), unit="text",
+_HOLDOUT = held_out_cards(
+    {"secret card"}, {_SECRET[0].script_file, _GOBLIN[0].script_file},
+    texts={_SECRET_TEXT},
 )
 
 
@@ -137,7 +142,7 @@ def a_config(
         read=ReadConfig(
             records_dir=Path(records_dir), sidecar_roots=dict(sidecar_roots or {}),
             max_events=64,
-            held_out=held_out or HeldOutCards(names=frozenset(), script_files=frozenset()),
+            held_out=held_out or held_out_cards(),
             seed=42,
         ),
         heap_cap=heap_cap,
@@ -180,9 +185,7 @@ def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
 
     survey = run_survey(
         tmp_path,
-        config=a_config(tmp_path, held_out=HeldOutCards(
-            names=frozenset({"soul echo"}), script_files=frozenset(),
-        )),
+        config=a_config(tmp_path, held_out=held_out_cards({"soul echo"})),
         workers=1,
     )
 
@@ -296,7 +299,7 @@ def test_a_refused_record_still_routes_its_game_to_the_card_disjoint_stratum(tmp
     """
     out = _survey_one(tmp_path, [
         a_record(record_id="junk", game_id="g1", ability=(), entity_names=("Soul Echo",)),
-    ], held_out=HeldOutCards(names=frozenset({"soul echo"}), script_files=frozenset()))
+    ], held_out=held_out_cards({"soul echo"}))
 
     assert out.games.held_out == {"g1"}
     assert out.games.games == set()
@@ -321,7 +324,7 @@ def test_the_supply_counts_only_records_the_write_pass_trains_on(tmp_path):
         a_record(record_id="d", game_id=disjoint, kind="rewrite", ability=_BOLT),
         a_record(record_id="h", game_id=held, kind="rewrite", ability=_BOLT,
                  entity_names=("Soul Echo",)),
-    ], held_out=HeldOutCards(names=frozenset({"soul echo"}), script_files=frozenset()),
+    ], held_out=held_out_cards({"soul echo"}),
         sidecar_roots=converted_tree(tmp_path, *_BOLT), share=0.05)
 
     assert sum(out.supply.keyed.values()) == 1

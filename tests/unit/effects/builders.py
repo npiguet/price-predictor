@@ -27,6 +27,7 @@ from effects.domain.records import (
     RewritePayload,
     TriggerPayload,
 )
+from effects.domain.split import HeldOutCards
 from effects.domain.state_snapshot import (
     EntityState,
     GlobalState,
@@ -34,6 +35,7 @@ from effects.domain.state_snapshot import (
     PlayerState,
     StateSnapshot,
 )
+from effects.domain.text_holdout import HoldoutUnit, holdout_key
 
 EFFECTS_FIXTURES = Path(__file__).parents[2] / "fixtures" / "effects"
 #: The converted card and token trees the gen-1 fixture records were collected against.
@@ -144,6 +146,19 @@ def record_on_board(game_id: str, entities=(), ability=None, **overrides) -> Eff
     return make_record(
         game_id=game_id, ability=ability,
         state=make_snapshot(entities=tuple(entities)), **overrides,
+    )
+
+
+def held_out_cards(
+    names=(), script_files=(), *, texts=(), unit: HoldoutUnit = HoldoutUnit.TEXT,
+) -> HeldOutCards:
+    """A holdout of exactly these cards, script files and ``texts``, each
+    text's :meth:`HeldOutCards.holds_text` key derived under ``unit`` as
+    :func:`text_keyed_holdout` derives it."""
+    return HeldOutCards(
+        names=frozenset(names), script_files=frozenset(script_files),
+        texts=frozenset(texts),
+        keys=frozenset(holdout_key(text, unit) for text in texts), unit=unit,
     )
 
 

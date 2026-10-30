@@ -28,13 +28,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from effects.application.training_schedule import epoch_shards, steps_per_shard
-from effects.domain.split import (
-    HeldOutCards,
-)
+from effects.domain.split import HeldOutCards
+from tests.unit.effects.builders import held_out_cards
 
 
 def _held() -> HeldOutCards:
-    return HeldOutCards(names=frozenset({"Serra Angel"}), script_files=frozenset())
+    return held_out_cards({"Serra Angel"})
 
 
 class TestEpochShards:

@@ -53,11 +53,11 @@ class HeldOutCards:
     script_files: frozenset[str]
     #: The held-out ability texts; under depletion also gate 1's unique-text
     #: slice.
-    texts: frozenset[str] = frozenset()
+    texts: frozenset[str]
     #: The held-out units (masked templates under ``template``, the texts under
     #: ``text``) that :meth:`holds_text` tests against.
-    keys: frozenset[str] = frozenset()
-    unit: HoldoutUnit = HoldoutUnit.TEXT
+    keys: frozenset[str]
+    unit: HoldoutUnit
 
     def __post_init__(self) -> None:
         folded = frozenset(fold_card_name(name) for name in self.names)

@@ -71,7 +71,13 @@ from effects.infrastructure.shard_io import (
     write_shard,
 )
 from effects.infrastructure.sidecar_io import sidecar_path_for
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
+from tests.unit.effects.builders import (
+    held_out_cards,
+    make_entity,
+    make_record,
+    make_snapshot,
+    write_sidecar,
+)
 
 _HELD_OUT_CARD = "Held Out Bears"
 #: Found by brute force over ``text_is_held_out(..., permille=20)`` (the
@@ -387,15 +393,10 @@ def test_no_training_record_belongs_to_a_withheld_game(default_build):
 
 def test_no_training_record_names_a_held_out_card(default_build):
     """FR-088: the exclusion is by game, and every held-out game is dropped."""
-    from effects.domain.split import (
-        HeldOutCards,
-        record_names_held_out_card,
-    )
+    from effects.domain.split import record_names_held_out_card
 
     manifest = default_build.load()
-    held_out = HeldOutCards(
-        names=frozenset(manifest.held_out_cards), script_files=frozenset(),
-    )
+    held_out = held_out_cards(manifest.held_out_cards)
     for record in read_records(default_build.training_dir):
         assert not record_names_held_out_card(record, held_out)
 

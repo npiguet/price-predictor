@@ -30,6 +30,7 @@ from effects.domain.records import (
 )
 from tests.unit.effects.builders import (
     fresh_interpreter_env,
+    held_out_cards,
 )
 from tests.unit.effects.domain.test_coverage import _entity, _record
 
@@ -971,14 +972,9 @@ _GEN1_ROOTS = {
 
 def _holding(texts, unit=None):
     """A holdout of exactly ``texts``, by ``unit`` (``text`` by default)."""
-    from effects.domain.split import HeldOutCards
-    from effects.domain.text_holdout import HoldoutUnit, holdout_key
+    from effects.domain.text_holdout import HoldoutUnit
 
-    unit = unit or HoldoutUnit.TEXT
-    return HeldOutCards(
-        names=frozenset(), script_files=frozenset(), texts=frozenset(texts),
-        keys=frozenset(holdout_key(text, unit) for text in texts), unit=unit,
-    )
+    return held_out_cards(texts=texts, unit=unit or HoldoutUnit.TEXT)
 
 
 def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:

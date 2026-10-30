@@ -138,7 +138,7 @@ def select_holdout(
     *,
     permille: int,
     max_carriers: int,
-    unit: HoldoutUnit = HoldoutUnit.TEXT,
+    unit: HoldoutUnit,
 ) -> HoldoutSelection:
     """Pick the held-out texts, and the cards depletion has to remove.
 
