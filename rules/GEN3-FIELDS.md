@@ -9,7 +9,7 @@ Columns: rules = rules that need it, counting the rules that need it through ano
 ## Conventions
 
 - **text.** Anything rules text describes is read as ability tokens carrying e vectors, never as a vocabulary of effect kinds. A floating effect, a dungeon room, a temporary grant and a locked face are lines, read through the same ability-token mechanism as printed lines.
-- **relations.** A link between two objects is an edge: a learned attention bias per relation type, added where the two slots meet, as the block-pairing section proposes. A link is never a flag on one end.
+- **relations.** A link between two objects is an edge: a typed, directed relation between their slots. Each relation type adds a learned vector to the key and another to the value where the two slots meet in attention, with its own vectors in every layer and head, as the gen-3 spec's relation-aware trunk (specs/2026-10-30-ability-effect-model-gen3.md, section 10) specifies. A link is never a flag on one end.
 - **amounts.** An amount is a scalar as raw plus log1p, the input layout's convention, with a thermometer added where the model compares it with damage or toughness.
 - **closed lists.** A one-hot or multi-hot is kept for closed lists Forge defines: zones, phases, colours, card types, designations, event types, replacement results.
 - **outputs.** Outputs use the existing field types (binary, count, signed delta, categorical, multi-binary) and are supervised only by records that carry them, as a field with no event is absent, not zero. Per-entity fields join the per-entity head; act-slot fields join the verdict head; global fields need a global head beside the created-objects head.
