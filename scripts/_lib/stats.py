@@ -199,11 +199,63 @@ def js_distance(p, q) -> float:
 def ridge_cv_r2(X, Y, groups, alpha: float, n_splits: int = 5, **ridge_options) -> np.ndarray:
     """Out-of-fold R² of a grouped ridge fit: one per column of ``Y``, then pooled."""
     from sklearn.linear_model import Ridge
-    from sklearn.model_selection import GroupKFold
 
-    pred = np.zeros_like(Y)
-    for train, test in GroupKFold(n_splits=n_splits).split(X, Y, groups):
-        pred[test] = Ridge(alpha=alpha, **ridge_options).fit(X[train], Y[train]).predict(X[test])
+    pred = oof_predict(Ridge(alpha=alpha, **ridge_options), X, Y, groups, folds=n_splits)
     ss_res = ((Y - pred) ** 2).sum(axis=0)
     ss_tot = ((Y - Y.mean(axis=0)) ** 2).sum(axis=0)
     return np.append(1 - ss_res / ss_tot, 1 - ss_res.sum() / ss_tot.sum())
+
+
+def oof_predict(model, X, y, groups, *, folds: int = 5, weight=None,
+                method: str = "predict") -> np.ndarray:
+    """Out-of-fold predictions of ``model`` over ``GroupKFold`` folds, so no
+    group sits on both sides of a fit; ``weight`` is passed to every fit."""
+    from sklearn.model_selection import GroupKFold, cross_val_predict
+
+    params = None if weight is None else {"sample_weight": weight}
+    return cross_val_predict(model, X, y, groups=groups, cv=GroupKFold(folds),
+                             method=method, params=params)
+
+
+def ols_cluster(X, y, clusters) -> LinearFit:
+    """Ordinary least squares with cluster-robust (CR1) standard errors.
+
+    ``X`` carries its own intercept column; ``clusters`` labels each row. The
+    sandwich takes the usual ``G/(G-1) · (N-1)/(N-K)`` small-sample correction.
+    """
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y, dtype=float)
+    n, k = X.shape
+    bread = np.linalg.pinv(X.T @ X)
+    beta = bread @ (X.T @ y)
+    resid = y - X @ beta
+    _, cluster = np.unique(np.asarray(clusters), return_inverse=True)
+    scores = np.zeros((cluster.max() + 1, k))
+    np.add.at(scores, cluster, X * resid[:, None])
+    g = len(scores)
+    correction = g / max(g - 1, 1) * (n - 1) / max(n - k, 1)
+    cov = bread @ (scores.T @ scores) @ bread * correction
+    return LinearFit(beta, np.sqrt(np.clip(np.diag(cov), 0, None)),
+                     weighted_r2(y, X @ beta), n, int(np.linalg.matrix_rank(X)))
+
+
+def cluster_mean_se(values, clusters) -> tuple[float, float]:
+    """The mean of ``values`` and its standard error clustered on ``clusters``."""
+    values = np.asarray(values, dtype=float)
+    if values.size == 0:
+        return float("nan"), float("nan")
+    fit = ols_cluster(np.ones((len(values), 1)), values, clusters)
+    return float(fit.beta[0]), float(fit.se[0])
+
+
+def pairwise_correct(diff) -> np.ndarray:
+    """Per pair, whether the score difference ranks the winner first: 1 when
+    positive, 0 when negative, ½ for an exact tie."""
+    diff = np.asarray(diff, dtype=float)
+    return np.where(diff > 0, 1.0, np.where(diff < 0, 0.0, 0.5))
+
+
+def coin_flip_band(n: int) -> float:
+    """Two standard errors of a coin-flip accuracy over ``n`` pairs: accuracy
+    differences inside it are indistinguishable from noise."""
+    return 2 * (0.25 / max(n, 1)) ** 0.5
