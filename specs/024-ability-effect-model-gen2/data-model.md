@@ -66,8 +66,8 @@ table and, through `MaskedTemplate`, the holdout.
 | `actor_player` | player id | `playability` | **redefined** (FR-030a): the deciding player — candidates' controller (`attackers`), blockers' controller (`blockers`), candidate ability's controller (`decision`). Gen-1 shards keep the active player / attacking player meaning |
 | `link_id` | string | `resolution` | **widened** (FR-029d): joins one cost record with every effect half of its resolution, one per chosen mode for a patched modal resolution |
 
-Both new fields are collection metadata: listed in `COLLECTION_METADATA_FIELDS`, never in
-`model_input_fields()`.
+Both new fields are collection metadata, never model inputs: `test_schema_compatibility.py`
+checks that flipping either leaves `SurfaceBuilder.build` unchanged.
 
 **Shard generation**: a shard whose records carry `random_seat` is gen-2; one without it is gen-1.
 Readers that consume a records set refuse one that mixes the two (FR-033).

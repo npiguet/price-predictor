@@ -98,14 +98,6 @@ PARTNERLESS_OUTCOMES: frozenset[ResolutionOutcome] = frozenset({
     ResolutionOutcome.COUNTERED,
 })
 
-#: Envelope fields that describe how a record was collected, never model inputs
-#: (FR-018): a model that can see ``fork`` learns to predict differently on
-#: forks, the confound forks exist to avoid.
-COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
-    "mode", "interventional", "fork", "synthetic", "ability_unresolved",
-    "random_seat", "what_if",
-})
-
 #: The legality subkinds, the ones that carry ``what_if`` (FR-031); a
 #: ``decision`` is always a real evaluation.
 LEGALITY_SUBKINDS: frozenset[PlayabilitySubkind] = frozenset({

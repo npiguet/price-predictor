@@ -16,10 +16,14 @@ The rules, from ``contracts/record-schema.md``:
 
 from __future__ import annotations
 
-from dataclasses import fields
+import random
+from dataclasses import fields, replace
 
+import pytest
+
+from effects.domain.effect_head_input import SurfaceBuilder
+from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
-    COLLECTION_METADATA_FIELDS,
     PAYLOAD_TYPES,
     ActivationPayload,
     CollectionMode,
@@ -28,9 +32,10 @@ from effects.domain.records import (
     PlayabilitySubkind,
     RecordKind,
     ResolutionOutcome,
+    UnresolvedReason,
 )
-from effects.domain.state_snapshot import InclusionTier
-from tests.unit.effects.builders import make_snapshot
+from effects.domain.state_snapshot import InclusionTier, PlayerState, StateSnapshot
+from tests.unit.effects.builders import make_entity, make_record, make_snapshot
 
 # The envelope as frozen before stage-one collection. A field may be added to
 # this set by a later stage; one may never be removed, renamed, or retyped.
@@ -177,13 +182,76 @@ class TestRuleThreeTiersAreAdditive:
         assert snapshot.tiers == frozenset()
 
 
-class TestRuleFourMetadataNeverBecomesAModelInput:
-    def test_the_metadata_set_is_the_one_the_contract_names(self):
-        assert COLLECTION_METADATA_FIELDS == {
-            "mode", "interventional", "fork", "synthetic", "ability_unresolved",
-            "random_seat", "what_if",
-        }
+_ACTING = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
+_PRINTED = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "keyword", 0)
 
-    def test_every_metadata_field_is_a_real_envelope_field(self):
-        assert COLLECTION_METADATA_FIELDS <= {f.name for f in fields(EffectRecord)}
+
+class _EveryLine:
+    """A :class:`LineLookup` where every key has a line of its own ``e``."""
+
+    def e_for(self, key):
+        return (float(key.index_within_kind), float(len(key.script_file)))
+
+    def has_line(self, key):
+        return True
+
+    def keyword_of(self, key):
+        return None
+
+    def options_for(self, key):
+        return ()
+
+
+def _board() -> StateSnapshot:
+    return make_snapshot(
+        players=(
+            PlayerState(id="P0", life=14, hand=3, library=21, graveyard=9),
+            PlayerState(id="P1", life=8, hand=1, library=30, graveyard=4),
+        ),
+        entities=(
+            make_entity("E1", "Serra Angel", printed=(_PRINTED,), mana_value=5),
+            make_entity("E2", "Grizzly Bears", controller="P1", mana_value=2),
+        ),
+    )
+
+
+def _surface(record: EffectRecord):
+    return SurfaceBuilder(_EveryLine(), e_dim=2, rng=random.Random(0)).build(record)
+
+
+class TestRuleFourMetadataNeverBecomesAModelInput:
+    """Flipping a collection-metadata field leaves the model's input unchanged.
+
+    The contract's metadata list is ``mode``, ``interventional``, ``fork``,
+    ``synthetic``, ``ability_unresolved``, ``random_seat`` and ``what_if``: a
+    model that could see one would learn to predict differently on forks, or
+    on the random seat, which is the confound the flags exist to keep out.
+    """
+
+    @pytest.mark.parametrize("flip", [
+        {"mode": CollectionMode.PATCHED},
+        {"fork": True},
+        {"synthetic": True},
+        {"random_seat": True},
+        {"random_seat": None},
+    ])
+    def test_a_resolution_s_surface_ignores_the_flag(self, flip):
+        base = make_record(state=_board(), ability=(_ACTING,))
+        assert _surface(replace(base, **flip)) == _surface(base)
+
+    def test_an_intervention_s_surface_is_its_fork_s(self):
+        fork = make_record(state=_board(), ability=(_ACTING,), fork=True)
+        assert _surface(replace(fork, interventional=True)) == _surface(fork)
+
+    def test_an_unresolved_reason_leaves_the_surface_alone(self):
+        base = make_record(state=_board())
+        flipped = replace(base, ability_unresolved=UnresolvedReason.ENGINE_EFFECT)
+        assert _surface(flipped) == _surface(base)
+
+    @pytest.mark.parametrize("what_if", [True, False])
+    def test_a_legality_record_s_surface_ignores_what_if(self, what_if):
+        base = make_record(
+            RecordKind.PLAYABILITY, subkind=PlayabilitySubkind.ATTACKERS, state=_board(),
+        )
+        assert _surface(replace(base, what_if=what_if)) == _surface(base)
 
