@@ -33,10 +33,9 @@ the epoch's own warmup) dwarfs every later value; the loss charts clip the
 y-axis to the range that matters and annotate the off-scale point instead of
 letting it flatten the rest of the chart.
 
-Colours are the first three slots of the reference categorical palette
-(blue/orange/aqua), the ones validated all-pairs in both light and dark mode
-(worst pair CVD Delta E 9.2 light / 9.4 dark, normal-vision 24.0 light / 20.9
-dark) -- this script never puts more than three colours on one panel.
+Colours are the blue/orange/green of ``_lib.style``, the palette every
+experiment figure shares -- this script never puts more than three colours on
+one panel.
 
 Usage
 -----
@@ -50,31 +49,24 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import matplotlib
+import matplotlib.pyplot as plt
+from _lib.style import BLUE, GREEN, ORANGE
+from matplotlib.lines import Line2D
+from matplotlib.ticker import MultipleLocator
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.lines import Line2D  # noqa: E402
-from matplotlib.ticker import MultipleLocator  # noqa: E402
+from effects.application.training_log import EpochSummary, parse_epoch_summaries
 
-from effects.application.training_log import EpochSummary, parse_epoch_summaries  # noqa: E402
-
-# Palette: first three slots of the validated reference categorical order
-# (references/palette.md in the dataviz skill), light-surface hex values.
-# These three clear the all-pairs floor in both modes, so they are safe
-# together on one panel without a secondary encoding.
-BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 INK, INK2, MUTED, RULE, BG = "#0b0b0b", "#52514e", "#898781", "#c3c2b7", "#fcfcfb"
 GRID = "#e1e0d9"
 
 VARIANTS = (
     ("full-textless-corpus", "full model", BLUE),
     ("identity", "identity baseline", ORANGE),
-    ("taxonomy", "taxonomy baseline", AQUA),
+    ("taxonomy", "taxonomy baseline", GREEN),
     ("state-only", "state-only baseline", MUTED),
 )
 STRATA = (("train", "train", BLUE), ("card_disjoint", "card-disjoint", ORANGE),
-          ("game_disjoint", "game-disjoint", AQUA))
+          ("game_disjoint", "game-disjoint", GREEN))
 CURRICULUM_EPOCH = 2.5  # sparse fields turn on at the first step of epoch 3
 
 # The ten fields with the largest constant-predictor floor at the full

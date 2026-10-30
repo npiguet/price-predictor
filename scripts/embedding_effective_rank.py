@@ -47,11 +47,11 @@ from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from sealed.infrastructure.encoder_store import SealedEncoderStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _lib.markdown import utf8_console  # noqa: E402
 from _lib.stats import participation_ratio  # noqa: E402
 
-# The report (and --help) print a few math symbols (≈, ‖·‖, ², …) that the
-# default Windows cp1252 stdout can't encode; force UTF-8.
-sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+# The report (and --help) print math symbols (≈, ‖·‖, ²) cp1252 cannot encode.
+utf8_console()
 
 DEFAULT_CKPT = Path("models/sealed/encoder/latest.pt")
 DEFAULT_VOCAB = Path("models/sealed/encoder/vocab.txt")
