@@ -74,6 +74,7 @@ from effects.domain.ability_tokenizer import (  # noqa: E402
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
     Surface,
+    bare_reminder,
     keyword_token,
     tokenizer_surface,
 )
@@ -343,7 +344,7 @@ def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one l
     for name, definition in definitions.items():
         token = keyword_token(name)
         template = definition.reminder_template or ""
-        expanded = tok._instantiate(template)  # noqa: SLF001
+        expanded = bare_reminder(template)
         parts = tok.tokenize(expanded)
         def_rows.append({
             "keyword": name,

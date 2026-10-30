@@ -667,7 +667,7 @@ class TestKeywordLines:
     def test_a_display_name_with_no_definition_stays_tokens(self):
         tokenizer = _open_tokenizer()
         tokens = tokenizer.tokenize("etbCounter:P1P1:2")
-        assert tokenizer.keyword_line_of("etbCounter:P1P1:2") is None
+        assert tokenizer.keywords.line_of("etbCounter:P1P1:2") is None
         assert tokenizer.expand_keywords(tokens, probability=1.0) == tokens
 
     def test_a_keyword_word_inside_another_line_takes_the_token_path(self):
@@ -680,12 +680,12 @@ class TestKeywordLines:
         assert "flying" not in [t.text for t in expanded if t.expanded_from is None]
 
     def test_the_match_is_case_insensitive(self):
-        assert _open_tokenizer().keyword_line_of("WARD:2").name == "Ward"
+        assert _open_tokenizer().keywords.line_of("WARD:2").name == "Ward"
 
     def test_a_chained_text_is_never_a_keyword_line(self):
         tokenizer = _open_tokenizer()
-        assert tokenizer.keyword_line_of("SV1: DB$ Draw") is None
-        assert tokenizer.keyword_line_of(
+        assert tokenizer.keywords.line_of("SV1: DB$ Draw") is None
+        assert tokenizer.keywords.line_of(
             "Execute$ SV1 | Mode$ Attacks [SEG] SV1: DB$ Pump",
         ) is None
 
@@ -772,13 +772,13 @@ def test_no_definition_expands_to_a_percent_or_unk(surface, source):
     tokenizer = AbilityTokenizer(vocab, definitions, surface=surface)
 
     texts = [
-        tokenizer.expansion_text(name)
+        tokenizer.keywords.line_text(name)
         for name, d in definitions.items() if d.reminder_template
     ]
     for line in staged:
-        keyword = tokenizer.keyword_line_of(line)
+        keyword = tokenizer.keywords.line_of(line)
         if keyword is not None and definitions[keyword.name].reminder_template:
-            texts.append(tokenizer.expansion_text(keyword.name, keyword.details))
+            texts.append(tokenizer.keywords.line_text(keyword.name, keyword.details))
     assert len(texts) > 150
     for text in texts:
         tokens = tokenizer.tokenize(text)

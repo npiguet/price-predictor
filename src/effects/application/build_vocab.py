@@ -164,14 +164,14 @@ def template_texts(
     wording, plus each staged keyword line's filled template, so a formatter's
     own words are seeded too (SC-002)."""
     texts = [
-        tokenizer.expansion_text(name)
+        tokenizer.keywords.line_text(name)
         for name, definition in definitions.items()
         if definition.reminder_template
     ]
     for line in staged:
-        keyword = tokenizer.keyword_line_of(line)
+        keyword = tokenizer.keywords.line_of(line)
         if keyword is not None and definitions[keyword.name].reminder_template:
-            texts.append(tokenizer.expansion_text(keyword.name, keyword.details))
+            texts.append(tokenizer.keywords.line_text(keyword.name, keyword.details))
     return texts
 
 
@@ -304,7 +304,7 @@ def _check_expansions(tokenizer: AbilityTokenizer, definitions: dict) -> None:
     for name, definition in definitions.items():
         if not definition.reminder_template:
             continue
-        tokens = tokenizer.tokenize(tokenizer.expansion_text(name))
+        tokens = tokenizer.tokenize(tokenizer.keywords.line_text(name))
         unknown = sorted({t.text for t in tokens if t.token_id == tokenizer.unk_id})
         if unknown:
             broken.append(f"{name}: {', '.join(unknown)}")
