@@ -130,37 +130,36 @@ def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
         card=data["card"],
         script_file=script_file,
         lines=tuple(
-            SidecarLine(
-                line_index=line["line_index"],
-                line_kind=line["line_kind"],
-                provenance=tuple(
-                    ProvenanceKey.from_dict(key, script_file=script_file)
-                    for key in line.get("provenance", ())
-                ),
-                sub_ability_links=tuple(
-                    SubAbilityLink(
-                        path=tuple(link["path"]), label=link.get("label", ""),
-                    )
-                    for link in line.get("sub_ability_links", ())
-                ),
-                script_api_type=line.get("script_api_type"),
-                script_param_keys=tuple(line.get("script_param_keys", ())),
-                script_text=line.get("script_text"),
-                role_spans=tuple(
-                    RoleSpan(
-                        start=span["start"], end=span["end"], role=Role(span["role"]),
-                    )
-                    for span in line.get("role_spans", ())
-                ),
-                prose_offset=line.get("prose_offset"),
-            )
-            for line in data.get("lines", ())
+            _line_from_dict(line, script_file) for line in data.get("lines", ())
         ),
-        dropped_keys=tuple(
-            ProvenanceKey.from_dict(key, script_file=script_file)
-            for key in data.get("dropped_keys", ())
-        ),
+        dropped_keys=_keys_from_dict(data.get("dropped_keys", ()), script_file),
     )
+
+
+def _line_from_dict(data: dict, script_file: str) -> SidecarLine:
+    """One line as :func:`_line_to_dict` writes it; a key's script file
+    defaults to the sidecar's own."""
+    return SidecarLine(
+        line_index=data["line_index"],
+        line_kind=data["line_kind"],
+        provenance=_keys_from_dict(data.get("provenance", ()), script_file),
+        sub_ability_links=tuple(
+            SubAbilityLink(path=tuple(link["path"]), label=link.get("label", ""))
+            for link in data.get("sub_ability_links", ())
+        ),
+        script_api_type=data.get("script_api_type"),
+        script_param_keys=tuple(data.get("script_param_keys", ())),
+        script_text=data.get("script_text"),
+        role_spans=tuple(
+            RoleSpan(start=span["start"], end=span["end"], role=Role(span["role"]))
+            for span in data.get("role_spans", ())
+        ),
+        prose_offset=data.get("prose_offset"),
+    )
+
+
+def _keys_from_dict(data, script_file: str) -> tuple[ProvenanceKey, ...]:
+    return tuple(ProvenanceKey.from_dict(key, script_file=script_file) for key in data)
 
 
 #: Errnos Windows reports while an indexer or virus scanner briefly holds a

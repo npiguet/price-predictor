@@ -3,6 +3,13 @@
 Every conversion is written out rather than reflected from the dataclass, so
 a field renamed in Python never silently renames itself in a corpus that
 cannot be rebuilt. Reading and writing whole shards is ``shard_io``'s.
+
+Each block of the record is one ``_x_to_json`` / ``_x_from_json`` pair here,
+except the two values whose wire form more than one file shares: an
+:class:`Event` (records, and the validator's event digests) and a
+:class:`ProvenanceKey` (records, sidecars, checkpoints' probe sets) serialise
+themselves beside their fields, in the domain, so every format writes them
+alike.
 """
 
 from __future__ import annotations
@@ -237,36 +244,75 @@ def _entity_from_json(data: dict) -> EntityState:
     )
 
 
+def _global_to_json(global_: GlobalState) -> dict:
+    return {
+        "turn": global_.turn,
+        "phase": global_.phase,
+        "active": global_.active,
+        "priority": global_.priority,
+        "stack_size": global_.stack_size,
+        "combat_substep": global_.combat_substep,
+        "emblems": _keys_to_json(global_.emblems),
+    }
+
+
+def _global_from_json(data: dict) -> GlobalState:
+    return GlobalState(
+        turn=data["turn"], phase=data["phase"], active=data["active"],
+        priority=data.get("priority"), stack_size=data.get("stack_size", 0),
+        combat_substep=data.get("combat_substep"),
+        emblems=_keys_from_json(data.get("emblems")),
+    )
+
+
+def _player_to_json(player: PlayerState) -> dict:
+    return {
+        "id": player.id, "life": player.life, "hand": player.hand,
+        "library": player.library, "graveyard": player.graveyard,
+        "poison": player.poison, "energy": player.energy,
+        "this_turn": dict(player.this_turn),
+        "floating_mana": dict(player.floating_mana),
+        "untapped_production": dict(player.untapped_production),
+    }
+
+
+def _player_from_json(data: dict) -> PlayerState:
+    return PlayerState(
+        id=data["id"], life=data["life"], hand=data["hand"],
+        library=data["library"], graveyard=data["graveyard"],
+        poison=data.get("poison", 0), energy=data.get("energy", 0),
+        this_turn=dict(data.get("this_turn", {})),
+        floating_mana=dict(data.get("floating_mana", {})),
+        untapped_production=dict(data.get("untapped_production", {})),
+    )
+
+
+def _refs_to_json(refs: Refs) -> dict:
+    return {
+        "targets": list(refs.targets),
+        "source": refs.source,
+        "modes": list(refs.modes),
+        "x": refs.x,
+        "choices": dict(refs.choices),
+    }
+
+
+def _refs_from_json(data: dict) -> Refs:
+    return Refs(
+        targets=tuple(data.get("targets", ())),
+        source=data.get("source"),
+        modes=tuple(data.get("modes", ())),
+        x=data.get("x"),
+        choices=dict(data.get("choices", {})),
+    )
+
+
 def _snapshot_to_json(state: StateSnapshot) -> dict:
     return {
-        "global": {
-            "turn": state.global_.turn,
-            "phase": state.global_.phase,
-            "active": state.global_.active,
-            "priority": state.global_.priority,
-            "stack_size": state.global_.stack_size,
-            "combat_substep": state.global_.combat_substep,
-            "emblems": _keys_to_json(state.global_.emblems),
-        },
-        "players": [
-            {
-                "id": p.id, "life": p.life, "hand": p.hand,
-                "library": p.library, "graveyard": p.graveyard,
-                "poison": p.poison, "energy": p.energy,
-                "this_turn": dict(p.this_turn),
-                "floating_mana": dict(p.floating_mana),
-                "untapped_production": dict(p.untapped_production),
-            }
-            for p in state.players
-        ],
+        "global": _global_to_json(state.global_),
+        "players": [_player_to_json(player) for player in state.players],
         "entities": [_entity_to_json(e) for e in state.entities],
-        "refs": {
-            "targets": list(state.refs.targets),
-            "source": state.refs.source,
-            "modes": list(state.refs.modes),
-            "x": state.refs.x,
-            "choices": dict(state.refs.choices),
-        },
+        "refs": _refs_to_json(state.refs),
         "pending_event": (
             state.pending_event.as_dict() if state.pending_event else None
         ),
@@ -275,35 +321,12 @@ def _snapshot_to_json(state: StateSnapshot) -> dict:
 
 
 def _snapshot_from_json(data: dict) -> StateSnapshot:
-    g = data["global"]
-    refs = data.get("refs") or {}
     pending = data.get("pending_event")
     return StateSnapshot(
-        global_=GlobalState(
-            turn=g["turn"], phase=g["phase"], active=g["active"],
-            priority=g.get("priority"), stack_size=g.get("stack_size", 0),
-            combat_substep=g.get("combat_substep"),
-            emblems=_keys_from_json(g.get("emblems")),
-        ),
-        players=tuple(
-            PlayerState(
-                id=p["id"], life=p["life"], hand=p["hand"],
-                library=p["library"], graveyard=p["graveyard"],
-                poison=p.get("poison", 0), energy=p.get("energy", 0),
-                this_turn=dict(p.get("this_turn", {})),
-                floating_mana=dict(p.get("floating_mana", {})),
-                untapped_production=dict(p.get("untapped_production", {})),
-            )
-            for p in data.get("players", ())
-        ),
+        global_=_global_from_json(data["global"]),
+        players=tuple(_player_from_json(p) for p in data.get("players", ())),
         entities=tuple(_entity_from_json(e) for e in data.get("entities", ())),
-        refs=Refs(
-            targets=tuple(refs.get("targets", ())),
-            source=refs.get("source"),
-            modes=tuple(refs.get("modes", ())),
-            x=refs.get("x"),
-            choices=dict(refs.get("choices", {})),
-        ),
+        refs=_refs_from_json(data.get("refs") or {}),
         pending_event=_event_from_json(pending) if pending else None,
         tiers=frozenset(InclusionTier(t) for t in data.get("tiers", ())),
     )
@@ -312,31 +335,35 @@ def _snapshot_from_json(data: dict) -> StateSnapshot:
 # ── payloads ────────────────────────────────────────────────────────────
 
 
-def _activation_to_json(payload: ActivationPayload) -> dict:
+def _costs_to_json(costs: Costs) -> dict:
     return {
-        "costs": {
-            "mana_by_color": dict(payload.costs.mana_by_color),
-            "tapped": list(payload.costs.tapped),
-            "life": payload.costs.life,
-            "sacrificed": list(payload.costs.sacrificed),
-            "discarded": list(payload.costs.discarded),
-            "exiled": list(payload.costs.exiled),
-        },
-        "outcome": payload.outcome.value,
+        "mana_by_color": dict(costs.mana_by_color),
+        "tapped": list(costs.tapped),
+        "life": costs.life,
+        "sacrificed": list(costs.sacrificed),
+        "discarded": list(costs.discarded),
+        "exiled": list(costs.exiled),
     }
 
 
+def _costs_from_json(data: dict) -> Costs:
+    return Costs(
+        mana_by_color=dict(data.get("mana_by_color", {})),
+        tapped=tuple(data.get("tapped", ())),
+        life=data.get("life", 0),
+        sacrificed=tuple(data.get("sacrificed", ())),
+        discarded=tuple(data.get("discarded", ())),
+        exiled=tuple(data.get("exiled", ())),
+    )
+
+
+def _activation_to_json(payload: ActivationPayload) -> dict:
+    return {"costs": _costs_to_json(payload.costs), "outcome": payload.outcome.value}
+
+
 def _activation_from_json(data: dict) -> ActivationPayload:
-    costs = data.get("costs") or {}
     return ActivationPayload(
-        costs=Costs(
-            mana_by_color=dict(costs.get("mana_by_color", {})),
-            tapped=tuple(costs.get("tapped", ())),
-            life=costs.get("life", 0),
-            sacrificed=tuple(costs.get("sacrificed", ())),
-            discarded=tuple(costs.get("discarded", ())),
-            exiled=tuple(costs.get("exiled", ())),
-        ),
+        costs=_costs_from_json(data.get("costs") or {}),
         outcome=ResolutionOutcome(data["outcome"]),
     )
 
@@ -369,16 +396,28 @@ def _rewrite_from_json(data: dict) -> RewritePayload:
     )
 
 
+def _contribution_to_json(contribution: Contribution) -> dict:
+    return {
+        "entity": contribution.entity, "pt_boost": list(contribution.pt_boost),
+        "keywords": list(contribution.keywords), "types": list(contribution.types),
+        "colors": list(contribution.colors), "name": contribution.name,
+    }
+
+
+def _contribution_from_json(data: dict) -> Contribution:
+    return Contribution(
+        entity=data["entity"],
+        pt_boost=tuple(data.get("pt_boost", (0, 0))),
+        keywords=tuple(normalize_keyword(k) for k in data.get("keywords", ())),
+        types=tuple(data.get("types", ())),
+        colors=tuple(data.get("colors", ())),
+        name=data.get("name"),
+    )
+
+
 def _continuous_to_json(payload: ContinuousPayload) -> dict:
     return {
-        "contributions": [
-            {
-                "entity": c.entity, "pt_boost": list(c.pt_boost),
-                "keywords": list(c.keywords), "types": list(c.types),
-                "colors": list(c.colors), "name": c.name,
-            }
-            for c in payload.contributions
-        ],
+        "contributions": [_contribution_to_json(c) for c in payload.contributions],
         "board_hash": payload.board_hash,
     }
 
@@ -386,17 +425,7 @@ def _continuous_to_json(payload: ContinuousPayload) -> dict:
 def _continuous_from_json(data: dict) -> ContinuousPayload:
     return ContinuousPayload(
         contributions=tuple(
-            Contribution(
-                entity=c["entity"],
-                pt_boost=tuple(c.get("pt_boost", (0, 0))),
-                keywords=tuple(
-                    normalize_keyword(k) for k in c.get("keywords", ())
-                ),
-                types=tuple(c.get("types", ())),
-                colors=tuple(c.get("colors", ())),
-                name=c.get("name"),
-            )
-            for c in data.get("contributions", ())
+            _contribution_from_json(c) for c in data.get("contributions", ())
         ),
         board_hash=data.get("board_hash", ""),
     )
@@ -439,39 +468,40 @@ def _trigger_from_json(data: dict) -> TriggerPayload:
     )
 
 
-def _decision_to_json(payload: PlayabilityDecisionPayload) -> dict:
+def _candidate_to_json(candidate: Candidate) -> dict:
     return {
-        "candidates": [
-            {
-                "ability": _keys_to_json(c.ability),
-                "verdict": {
-                    "can_play": c.can_play,
-                    "affordable": c.affordable,
-                    "has_legal_target": c.has_legal_target,
-                },
-                "legal_targets": list(c.legal_targets),
-                "cost_after_adjustment": dict(c.cost_after_adjustment),
-                "responsible_static": _keys_to_json(c.responsible_static),
-            }
-            for c in payload.candidates
-        ]
+        "ability": _keys_to_json(candidate.ability),
+        "verdict": {
+            "can_play": candidate.can_play,
+            "affordable": candidate.affordable,
+            "has_legal_target": candidate.has_legal_target,
+        },
+        "legal_targets": list(candidate.legal_targets),
+        "cost_after_adjustment": dict(candidate.cost_after_adjustment),
+        "responsible_static": _keys_to_json(candidate.responsible_static),
     }
+
+
+def _candidate_from_json(data: dict) -> Candidate:
+    verdict = data["verdict"]
+    return Candidate(
+        ability=_keys_from_json(data.get("ability")),
+        can_play=verdict["can_play"],
+        affordable=verdict["affordable"],
+        has_legal_target=verdict["has_legal_target"],
+        legal_targets=tuple(data.get("legal_targets", ())),
+        cost_after_adjustment=dict(data.get("cost_after_adjustment", {})),
+        responsible_static=_keys_from_json(data.get("responsible_static")),
+    )
+
+
+def _decision_to_json(payload: PlayabilityDecisionPayload) -> dict:
+    return {"candidates": [_candidate_to_json(c) for c in payload.candidates]}
 
 
 def _decision_from_json(data: dict) -> PlayabilityDecisionPayload:
     return PlayabilityDecisionPayload(
-        candidates=tuple(
-            Candidate(
-                ability=_keys_from_json(c.get("ability")),
-                can_play=c["verdict"]["can_play"],
-                affordable=c["verdict"]["affordable"],
-                has_legal_target=c["verdict"]["has_legal_target"],
-                legal_targets=tuple(c.get("legal_targets", ())),
-                cost_after_adjustment=dict(c.get("cost_after_adjustment", {})),
-                responsible_static=_keys_from_json(c.get("responsible_static")),
-            )
-            for c in data.get("candidates", ())
-        )
+        candidates=tuple(_candidate_from_json(c) for c in data.get("candidates", ())),
     )
 
 
