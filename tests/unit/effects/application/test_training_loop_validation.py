@@ -85,10 +85,10 @@ def test_validation_batches_drop_the_augmentations_but_keep_the_withholding(tmp_
     )
 
     stream = random.Random(3)
-    training = preparer.batcher(rng=stream)
+    training = preparer.training_batcher(stream)
     assert (training.stager.keyword_expand_p, training.context_dropout) == (0.5, 0.3)
 
-    scoring = preparer.batcher(training=False)
+    scoring = preparer.scoring_batcher()
     assert (scoring.stager.keyword_expand_p, scoring.context_dropout) == (0.0, 0.0)
     assert scoring.stager.withhold_keyword == "lifelink"
     # A training batcher draws from the step's own generator, and a scoring

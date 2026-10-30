@@ -21,7 +21,12 @@ from effects.domain.ability_encoder import (
     encoding_role_spans,
     prepare_line,
 )
-from effects.domain.ability_tokenizer import AbilityTokenizer, Surface, withheld_keyword_tokens
+from effects.domain.ability_tokenizer import (
+    INFERENCE_KEYWORD_EXPAND_P,
+    AbilityTokenizer,
+    Surface,
+    withheld_keyword_tokens,
+)
 from effects.domain.baselines import BaselineMasks
 from effects.domain.provenance import SidecarLine
 from effects.infrastructure.torch_device import pinned
@@ -120,6 +125,20 @@ class TextStager:
     withhold_keyword: str | None = None
     keyword_expand_p: float = 0.0
     truncations: TruncationLog | None = None
+
+    @classmethod
+    def for_inference(
+        cls, tokenizer: AbilityTokenizer, surface: Surface, *,
+        withhold_keyword: str | None, truncations: TruncationLog | None = None,
+    ) -> TextStager:
+        """The stager every pass outside a training step encodes through:
+        validation, evaluation and the cache. Expansion at the inference
+        probability, so two passes read one text alike; the withheld keyword
+        stays withheld, being a split rather than an augmentation."""
+        return cls(
+            tokenizer, surface, withhold_keyword=withhold_keyword,
+            keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P, truncations=truncations,
+        )
 
     def stage(
         self, texts: Mapping[str, SidecarLine], *, masks: BaselineMasks, e_dim: int,

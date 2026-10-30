@@ -43,11 +43,11 @@ def scored(corpus, records, tmp_path_factory):
         def epoch(self, run, samples, fields):
             card, game = super().epoch(run, samples, fields)
             seen["fed"] = card.progress()
-            seen["measured"] = measure(samples.card_disjoint, Runnable(
-                run.encoder, run.model,
-                run.preparer.batcher(training=False, materializer=run.scoring),
-                fields,
-            ))
+            batcher = run.preparer.scoring_batcher()
+            batcher.materializer = run.scoring
+            seen["measured"] = measure(
+                samples.card_disjoint, Runnable(run.encoder, run.model, batcher, fields),
+            )
             seen["loss"] = card.loss
             seen["loss without margins"] = self.score(
                 samples.card_disjoint, run, fields, (FieldParts(),),

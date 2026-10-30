@@ -24,11 +24,7 @@ from effects.domain.ability_encoder import (
     encoding_role_spans,
     encoding_text,
 )
-from effects.domain.ability_tokenizer import (
-    INFERENCE_KEYWORD_EXPAND_P,
-    AbilityTokenizer,
-    Surface,
-)
+from effects.domain.ability_tokenizer import AbilityTokenizer, Surface
 from effects.domain.provenance import SidecarLine
 from effects.infrastructure.torch_device import default_device
 
@@ -60,9 +56,9 @@ class AbilityEncoderRunner:
         self.encoder.eval()
         # Inference probability zero, so two runs write the same cache; the
         # withheld keyword expands as it did in training.
-        self.stager = TextStager(
+        self.stager = TextStager.for_inference(
             tokenizer, surface, withhold_keyword=withheld_keyword,
-            keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P, truncations=truncations,
+            truncations=truncations,
         )
         self.e_dim = config.e_dim
 

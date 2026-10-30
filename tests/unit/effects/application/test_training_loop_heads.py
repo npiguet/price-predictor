@@ -9,6 +9,7 @@ computed at all.
 
 from __future__ import annotations
 
+import random
 from types import SimpleNamespace
 
 import pytest
@@ -288,8 +289,8 @@ class TestTheBatchersTheLoopBuilds:
         assert run.training.noise is run.noise and run.noise.ratio == 0.2
         assert run.scoring.noise is None
         preparer = make_preparer(tmp_path, keyword_expand_p=0.25)
-        assert preparer.batcher(training=True).stager.keyword_expand_p == 0.25
-        assert preparer.batcher(training=False).stager.keyword_expand_p == (
+        assert preparer.training_batcher(random.Random(0)).stager.keyword_expand_p == 0.25
+        assert preparer.scoring_batcher().stager.keyword_expand_p == (
             INFERENCE_KEYWORD_EXPAND_P
         ) == 0.0
 

@@ -18,7 +18,6 @@ import torch
 
 from effects.application.ability_text import KeyResolver
 from effects.application.surface_batching import (
-    Materializer,
     PreparedBatch,
     SurfaceBatcher,
     SurfaceSpec,
@@ -29,7 +28,6 @@ from effects.application.train_effect_model import (
     ValidationGameInTrainingError,
 )
 from effects.domain.ability_encoder import TruncationLog
-from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
 from effects.domain.aux_head_targets import (
     created_objects_targets,
     supervises_created_objects,
@@ -239,37 +237,36 @@ class StepPreparer:
         self.resolver = KeyResolver(self.sidecars, self.surface)
         self._keywords = KeywordResolver(self.sidecars)
 
-    def batcher(
-        self, *, training: bool = True, rng: random.Random | None = None,
-        materializer: Materializer | None = None,
-    ) -> SurfaceBatcher:
-        """The records-to-inputs pipeline, built the same way for every caller.
-
-        ``training=False`` turns keyword expansion and context dropout off;
-        the withheld keyword stays withheld, being a split rather than an
-        augmentation. Scoring draws from a stream of its own, never the
-        training step's ``rng``. ``materializer`` is for callers that build
-        batches whole.
-        """
+    def training_batcher(self, rng: random.Random) -> SurfaceBatcher:
+        """One training step's records-to-inputs pipeline, drawing keyword
+        expansion and context dropout from the step's ``rng``."""
         return SurfaceBatcher(
             stager=TextStager(
                 tokenizer=self.tokenizer,
                 surface=self.surface,
                 withhold_keyword=self.config.withhold_keyword,
-                keyword_expand_p=(
-                    self.config.keyword_expand_p if training
-                    else INFERENCE_KEYWORD_EXPAND_P
-                ),
+                keyword_expand_p=self.config.keyword_expand_p,
                 truncations=self.truncations,
             ),
             resolver=self.resolver,
             spec=self.surface_spec,
-            materializer=materializer,
-            context_dropout=self.config.context_dropout if training else 0.0,
-            rng=(
-                (rng or random.Random(f"{self.seed}:unplanned")) if training
-                else random.Random(f"{self.seed}:validation")
+            context_dropout=self.config.context_dropout,
+            rng=rng,
+        )
+
+    def scoring_batcher(self) -> SurfaceBatcher:
+        """Validation's pipeline: no expansion beyond inference's and no
+        context dropout, drawing from a stream of its own rather than any
+        training step's, so how many batches it scores moves no step."""
+        return SurfaceBatcher(
+            stager=TextStager.for_inference(
+                self.tokenizer, self.surface,
+                withhold_keyword=self.config.withhold_keyword,
+                truncations=self.truncations,
             ),
+            resolver=self.resolver,
+            spec=self.surface_spec,
+            rng=random.Random(f"{self.seed}:validation"),
         )
 
     def prepare_training_step(
@@ -282,7 +279,7 @@ class StepPreparer:
         ``pin`` is for the training process only: page-locked memory does not
         survive a trip between processes.
         """
-        batcher = self.batcher(training=True, rng=rng)
+        batcher = self.training_batcher(rng)
         records = plan.records
         targets = [derive_targets(record) for record in records]
         copies = []
@@ -301,7 +298,7 @@ class StepPreparer:
         records = plan.records
         return self._build(
             records, [derive_targets(record) for record in records], fields,
-            self.batcher(training=False), heads=frozenset(),
+            self.scoring_batcher(), heads=frozenset(),
         )
 
     def _build(

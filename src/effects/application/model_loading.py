@@ -32,11 +32,7 @@ from effects.domain.ability_encoder import (
     TruncationLog,
     log_truncation,
 )
-from effects.domain.ability_tokenizer import (
-    INFERENCE_KEYWORD_EXPAND_P,
-    AbilityTokenizer,
-    Surface,
-)
+from effects.domain.ability_tokenizer import AbilityTokenizer, Surface
 from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_layout import FieldSpec, active_fields
@@ -135,11 +131,9 @@ class LoadedModel:
         checkpoint = self.checkpoint
         spec = SurfaceSpec.for_checkpoint(checkpoint, records)
         return SurfaceBatcher(
-            stager=TextStager(
-                tokenizer=self.tokenizer,
-                surface=self.surface,
+            stager=TextStager.for_inference(
+                self.tokenizer, self.surface,
                 withhold_keyword=checkpoint.provenance.withheld_keyword,
-                keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
                 truncations=TruncationLog(log_truncation(logger, "evaluation")),
             ),
             resolver=KeyResolver(self.sidecars, self.surface),
