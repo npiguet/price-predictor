@@ -14,17 +14,17 @@ from typing import TYPE_CHECKING
 from effects.application.corpus_survey import RefusalTally, Survey
 from effects.application.corpus_write import WriteResult
 from effects.domain.ability_tokenizer import Surface
-from effects.domain.corpus_manifest import FamilyRow
+from effects.domain.corpus_manifest import ClassCounts, CorpusManifest, FamilyRow
 from effects.domain.corpus_plan import BuildCorpusError, Keys
 from effects.domain.coverage import HELD_OUT_GAME_FLOOR
 from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import DROPPED_STRATA, OUTPUT_STRATA, Stratum
+from effects.domain.text_holdout import normalize_script_text
 
 if TYPE_CHECKING:
     from effects.application.build_corpus import BuildCorpusConfig, Decisions
-    from effects.domain.corpus_manifest import CorpusManifest
     from effects.domain.split import HeldOutCards
 
 logger = logging.getLogger(__name__)
@@ -179,8 +179,6 @@ def held_out_text_report(
     survey: Survey, written: WriteResult, held_out_texts: Iterable[str],
 ) -> tuple[tuple[str, ...], dict[str, int]]:
     """Held-out texts with no gate-one record, and those resolved in under five games."""
-    from effects.domain.text_holdout import normalize_script_text
-
     held_games = survey.totals.games.held_out
     texts = {normalize_script_text(text) for text in held_out_texts}
     without = tuple(sorted(texts - written.strata.gate_one_texts))
@@ -202,8 +200,6 @@ def build_manifest(
     decisions: Decisions, written: WriteResult,
 ) -> CorpusManifest:
     """Everything the build decided and wrote, as the manifest records it."""
-    from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
-
     training = written.training
     per_class = {
         name: ClassCounts(

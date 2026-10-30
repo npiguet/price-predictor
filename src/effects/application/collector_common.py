@@ -16,8 +16,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from effects.domain import default_paths
+from effects.domain.card_names import fold_card_name
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.split import HoldoutRule
+from sealed.domain.manabase import compute_basic_lands
 
 if TYPE_CHECKING:
     from effects.domain.coverage import DeckCandidate
@@ -195,8 +197,6 @@ def _depletion_list(training_corpus: Path) -> Path:
 def read_name_list(path: Path) -> frozenset[str]:
     """The card names a one-per-line list holds, folded to match converted
     names; blank lines skipped."""
-    from effects.domain.card_names import fold_card_name
-
     return frozenset(
         fold_card_name(line.strip())
         for line in Path(path).read_text(encoding="utf-8").splitlines()
@@ -230,8 +230,6 @@ def build_coverage_decks(
     then basics from ``compute_basic_lands``. A weighted card that is no
     candidate has no cost to read and is skipped.
     """
-    from sealed.domain.manabase import compute_basic_lands
-
     pool = [(name, w) for name, w in weights.items() if name in candidates and w > 0]
     if not pool:
         return []

@@ -21,6 +21,7 @@ from effects.application.collector_common import (
     play_decks,
 )
 from effects.domain import default_paths
+from effects.domain.card_names import fold_card_name
 from effects.domain.coverage import DeckCandidate
 from effects.domain.script_variants import (
     is_multi_face,
@@ -177,8 +178,6 @@ def generate_variants(
     can be enforced. Names are folded first, since a script's ``Name:`` is
     printed case and the holdout is lowercase.
     """
-    from effects.domain.card_names import fold_card_name
-
     held_out = frozenset(fold_card_name(name) for name in held_out)
     rng = random.Random(seed)
     output_path = Path(output_path)

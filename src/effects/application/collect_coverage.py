@@ -26,6 +26,7 @@ from effects.application.collector_common import (
     read_name_list,
 )
 from effects.application.parallel_map import run_parallel
+from effects.domain.card_names import fold_card_name
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.coverage import (
     HELD_OUT_GAME_FLOOR,
@@ -96,7 +97,6 @@ def count_shard(shard: Path) -> Counter[str]:
     """One shard's qualifying records, keyed by folded card name to match the
     converted (lowercase) unit names. Top-level so a process pool can pickle it.
     """
-    from effects.domain.card_names import fold_card_name
     from effects.infrastructure.shard_io import read_shard
 
     counts: Counter[str] = Counter()
@@ -607,7 +607,6 @@ def _text_coverage(
 def run_text_coverage(config: CollectCoverageConfig) -> int:
     """The held-out coverage round: listed cards only, keyed by held-out text."""
 
-    from effects.domain.card_names import fold_card_name
 
     trees = config.source_trees.converted()
     converted = trees.converted_cards
