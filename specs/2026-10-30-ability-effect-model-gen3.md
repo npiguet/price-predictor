@@ -282,8 +282,7 @@ output heads as the code builds them.
   reads and predicts.
 - `rules/gen3-fields.json` is the list of record for gen-3's new inputs, outputs,
   extensions and fixes, and `rules/GEN3-FIELDS.md` renders it. § 9 and § 11 summarize it.
-  Where its conventions disagree with this spec, this spec governs: relations are
-  specified by § 10.
+  Where it disagrees with this spec, this spec governs.
 - The map is a pure reading of the layout and the scenarios. It reruns over each new
   layout, and each rerun reports the rules every change made learnable.
 
@@ -520,6 +519,9 @@ The 33 inputs of `rules/gen3-fields.json` go into these places:
   embeddings serve chosen creature types.
 - Face state is one-hot over front, back, flipped, melded and face down, and replaces the
   face-down flag.
+- Subtypes, is a copy, is a token, and the same-name, attached-to, attacks and targets
+  relations read what the snapshot already records. Face state and pending-event details
+  read it in part, and § 8.4 adds the rest.
 
 ## 9.5 Turn, priority and control
 
@@ -896,7 +898,7 @@ python -m effects collect-coverage
 
 python -m effects train-effect-model
     [--rule-mask hard|soft]              default hard
-    [--deviance-floor F]                 default measured from gen-2, below
+    [--deviance-floor F]                 default 0.04; constant-prediction loss, in nats
     [--ema-epochs E]                     default 1; span of the averaged weights
     [--relation-values on|off]           default on
     [--stratum-weight W]                 default 0.5; card-disjoint share of the control score
@@ -908,12 +910,6 @@ python -m effects train-effect-model
 
 `collect-variants` takes `--directed-fork-rules` and `--directed-forks-per-game` as
 `match-outcomes` does.
-
-The `--deviance-floor` default is measured once. The noisy fields are those whose explained
-deviance, as gen-2's 256-wide continuation runs logged it over their last five epochs, moves
-by more than 5 points between consecutive epochs. The default is the largest
-constant-prediction loss among them, computed on gen-2's card-disjoint validation sample
-under gen-3's distributions.
 
 Startup validation
 

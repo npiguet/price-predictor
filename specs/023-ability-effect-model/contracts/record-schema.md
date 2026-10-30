@@ -99,8 +99,8 @@ snapshot: an `attackers` record is real when its phase is `combat_declare_attack
 `actor_player` is the active player, a `blockers` record when its phase is `combat_declare_blockers`
 and the anchored attacker is attacking, and every other legality record is a what-if. Their
 forbidden blockers include creatures the AI had already planned to block another attacker with.
-The legality de-duplication key is `(subkind, payload, snapshot)`; `--legality-rate` samples
-what-ifs only, and every real decision is written.
+The legality de-duplication key is `(subkind, payload, snapshot)`, and every real decision is
+written.
 
 ### Modal resolutions
 

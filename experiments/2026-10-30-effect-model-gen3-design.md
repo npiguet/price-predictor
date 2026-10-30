@@ -865,10 +865,13 @@ one dispersion parameter per field to the Poisson head it replaces. The constant
 division uses is computed with the same distribution, so the two changes combine. A distribution
 over bins of the amount is not taken: it needs a bin layout and an output per bin.
 
-**Rule-labelled copies fill the gaps the real data leaves.** Gen-2's lethality copies redraw the
-amount and the toughness of a qualifying damage spell and label the death by the rule. Where the
-rules index finds a rule with too few qualifying or varied real records, copies of the same kind
-supply them. The combat copies among the open options are one case.
+**Rule-labelled copies could fill the gaps the real data leaves, and gen-3 waits for the rules
+index before building any beyond the protection copies.** Gen-2's lethality copies redraw the amount
+and the toughness of a qualifying damage spell and label the death by the rule. Where the rules
+index finds a rule with too few qualifying or varied real records, copies of the same kind could
+supply them. Which rules need them is unknown until the detectors count each rule's records, so
+gen-3 keeps gen-2's lethality copies and adds only the protection copies. The combat copies among
+the open options are one candidate.
 
 **Two designs are not taken:**
 
@@ -1371,9 +1374,9 @@ The combat grid measures the result on blocks from the validation strata, which 
 **Gen-2's model can learn under a third of the rules that have an outcome, and the planned inputs and
 outputs would make all but 77 of them learnable.** No gen-3 corpus has been collected and no gen-3
 model trained. What has run is the rules catalogue, the map of every rule to the model's inputs and
-outputs, the merge of that map into a list of gen-3 fields, and the fixes to gen-2's defects on
-master. A rule is learnable when an output is trained on its outcome and the model reads every fact
-that decides it.
+outputs, the merge of that map into a list of gen-3 fields, the fixes to gen-2's defects on
+master, and the measurement of the deviance floor from gen-2's logs. A rule is learnable when an
+output is trained on its outcome and the model reads every fact that decides it.
 
 | mechanical and legality rules | count |
 |---|---:|
@@ -1738,8 +1741,8 @@ is asked. A creature planned for one block can no longer read as forbidden for a
 "can't block" creature is always listed as forbidden. The answer is the same whatever controls the
 seat, so the random seat no longer writes legality records of its own, and the AI's internal
 legality queries are no longer hooked. Every legality record is therefore a real declaration, one
-per defender or attacker per combat. `--legality-rate`, which sampled the AI's what-if queries, now
-has nothing to sample; removing the flag is left to the gen-3 collection work.
+per defender or attacker per combat. `--legality-rate`, which sampled the AI's what-if queries, is
+removed with them.
 
 **A reveal from a library during a resolution names the players whose libraries it came from.** A
 scry already names the player who scried in the same way. A reveal from a hand, a graveyard or any
@@ -1944,6 +1947,47 @@ source that makes two or more mana at once, such as Orzhov Basilica's `{W: 1, B:
 whose mana events are all empty gets no label. The collector writes no map at all when it cannot
 read the mana, so the empty maps seen in gen-2's events are not yet explained, and gen-3's first
 pilot should count them.
+
+### The deviance floor is 0.04 nats, where gen-2's output fields turn noisy
+
+**Below a constant-prediction loss of about 0.04 nats, nearly every output field's explained
+deviance is unstable, and above it most fields are steady.** The floor decides which fields the
+control score leaves out of its mean, and below which the training loss stops dividing by a smaller
+number. A field counts as noisy here when its explained deviance moves by more than 5 points between
+two consecutive epochs in either of gen-2's two 256-wide continuation runs, over each run's last
+five epochs. Every floor from 0.037 to 0.045 splits the fields the same way, and 0.04 is taken as
+the default.
+
+| floor, constant-prediction loss in nats | noisy fields at or below it | noisy fields above it |
+|---:|---:|---:|
+| 0.03 | 4 of 5 | 7 of 30 |
+| 0.04 | 7 of 8 | 4 of 27 |
+| 0.06 | 9 of 13 | 2 of 22 |
+| 0.174 | 11 of 25 | 0 of 10 |
+
+**The rule Description set gives 0.174, which would leave out most of the steady fields.** The
+largest constant-prediction loss among the noisy fields belongs to `blocker_legal`, noisy in both
+runs. A floor there leaves out `min_blockers`, `tap_state`, `cards_drawn` and most of the mana
+deltas, whose explained deviance barely moves. Noise does not rise steadily as the constant-prediction loss
+falls: `blocker_legal` and `poison_delta` are noisy among steady neighbours, and the break comes
+far lower.
+
+**At 0.04, the fields left out are the unstable or negative ones, and four noisy fields stay in.**
+The fields left out include the charge and −1/−1 counter deltas, `types_lost`, `keywords_lost` and
+`library_events`. The four noisy fields kept are `blocker_legal`, `poison_delta`, `mana_delta_c` and
+`types_gained`; only the first two are noisy in both runs. The averaged weights damp the
+epoch-to-epoch movement the measure counts, so it overstates the noise a gen-3 run will see.
+
+**The losses are gen-2's, so the count fields' constant predictions are Poisson.** A negative
+binomial fits a count field at least as well as a Poisson, so under gen-3 a count field's
+constant-prediction loss can only fall. The floor then leaves out no fewer count fields than this
+measurement shows.
+
+**The numbers come from the training logs of the two runs.** They are
+`models/effects/runs/2026-10-gen2-e256-lethality-ext20/train.log`, epochs 49 to 53, and
+`models/effects/runs/2026-10-gen2-e256-lethality-lr0.1/train.log`, epochs 69 to 73. Each epoch's
+line gives every field's card-disjoint explained deviance, and each run's "Constant-predictor floor
+(card-disjoint)" line gives the constant-prediction losses.
 
 ## Future plans
 
