@@ -7,7 +7,7 @@ cannot be rebuilt. Reading and writing whole shards is ``shard_io``'s.
 Each block of the record is one ``_x_to_json`` / ``_x_from_json`` pair here,
 except the two values whose wire form more than one file shares: an
 :class:`Event` (records, and the validator's event digests) and a
-:class:`ProvenanceKey` (records, sidecars, checkpoints' probe sets) serialise
+:class:`ProvenanceKey` (records, sidecars, the knowledge probes' frozen sets) serialise
 themselves beside their fields, in the domain, so every format writes them
 alike.
 """
