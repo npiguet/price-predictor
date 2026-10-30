@@ -654,11 +654,7 @@ class EffectRecord:
 
 
 def events_of(record: EffectRecord) -> tuple[Event, ...]:
-    """The events that happened in a record, whatever its kind.
-
-    Here rather than beside target derivation, which imports torch, because
-    the coverage counter's pool workers read it.
-    """
+    """The events that happened in a record, whatever its kind."""
     return record.payload.happened_events()
 
 
