@@ -348,8 +348,7 @@ class TestTheVariantRoundPlaysTheVariants:
 
         constructed = fake_supervisor.constructor.call_args.kwargs
         assert constructed["variant_scripts"] == tmp_path / "variants"
-        decks_file = fake_supervisor.play_round.call_args.args[0]
-        assert decks_file.read_text(encoding="utf-8").strip(), "no variant decks"
+        assert fake_supervisor.play_round.call_args.args[0], "no variant decks"
         assert fake_supervisor.play_round.call_args.kwargs["matches"] == 3
 
 

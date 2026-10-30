@@ -23,7 +23,6 @@ from effects.application.collector_common import (
     CollectorConfig,
     build_coverage_decks,
     collector_supervisor,
-    play_decks,
     read_name_list,
 )
 from effects.application.parallel_map import run_parallel
@@ -297,9 +296,8 @@ def play_rounds(
             logger.error("%s", rounds.no_decks)
             break
         decked = rounds.units_decked({name for deck in decks for name in deck})
-        play_decks(
-            supervisor, decks, decks_file,
-            label="coverage", matches=config.decks_per_round,
+        supervisor.play_round(
+            decks, decks_file, label="coverage", matches=config.decks_per_round,
         )
         read = rounds.count_new_shards()
         logger.info("Counted %d new shard(s) from round %d", read, round_number)

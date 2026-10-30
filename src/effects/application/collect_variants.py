@@ -18,7 +18,6 @@ from effects.application.collector_common import (
     CollectorConfig,
     build_coverage_decks,
     collector_supervisor,
-    play_decks,
 )
 from effects.domain import default_paths
 from effects.domain.card_names import fold_card_name
@@ -403,9 +402,8 @@ def _play_and_check_growth(
         # Listed rather than counted: a shard is never reopened, so what the
         # round wrote is exactly the shards it added.
         before = set(iter_shards(config.effect_records))
-        play_decks(
-            supervisor, decks, decks_file,
-            label="variant", matches=config.decks_per_round,
+        supervisor.play_round(
+            decks, decks_file, label="variant", matches=config.decks_per_round,
         )
 
     # Counted rather than assumed: scripts that never reach Forge's card

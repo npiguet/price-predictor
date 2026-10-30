@@ -289,7 +289,7 @@ class TestTheRoundPlaysTheComputedDecks:
         records_dir.mkdir()
         produced = iter([0, 9, 1])
 
-        def _play(_decks_file, *, matches):
+        def _play(_decks, _decks_file, *, label, matches):
             count = next(produced, 0)
             if not count:
                 return
@@ -311,13 +311,12 @@ class TestTheRoundPlaysTheComputedDecks:
                 )
             )
 
-        decks_file = supervisor.play_round.call_args.args[0]
-        rows = decks_file.read_text(encoding="utf-8").splitlines()
-        assert rows, "no decks were written"
-        assert all(row.split(";")[2].count("|") == 39 for row in rows)
+        decks = supervisor.play_round.call_args.args[0]
+        assert decks, "no decks were played"
+        assert all(len(deck) == 40 for deck in decks)
         assert supervisor.play_round.call_args.kwargs["matches"] == 150
 
-        flat = [name for row in rows for name in row.split(";")[2].split("|")]
+        flat = [name for deck in decks for name in deck]
         assert flat.count("bb") > flat.count("aa") * 3, (
             "bb is 10 records short of target and aa is only 1 short after "
             "the round-2 recount, so the final round's decks must favour bb "
@@ -490,11 +489,8 @@ class TestOnlyDeckedCardsCountAStalledRound:
                 no_progress_rounds=1,
             ))
 
-        decks_file = supervisor.play_round.call_args.args[0]
         decked_names = {
-            name
-            for row in decks_file.read_text(encoding="utf-8").splitlines()
-            for name in row.split(";")[2].split("|")
+            name for deck in supervisor.play_round.call_args.args[0] for name in deck
         }
         assert seen, "retire_stalled was never called"
         assert len(seen[0] & set(names)) < len(names), (
@@ -1104,8 +1100,8 @@ class TestNonDeckTypesLeaveTheUnit:
             ))
 
         assert consulted == [["aa"]]
-        decks = fake_supervisor.play_round.call_args.args[0].read_text(encoding="utf-8")
-        assert "my_plan" not in decks and "squee" not in decks
+        decked = {name for deck in fake_supervisor.play_round.call_args.args[0] for name in deck}
+        assert "my_plan" not in decked and "squee" not in decked
 
     def test_the_held_out_round_drops_non_deck_carriers_only(
         self, tmp_path, caplog, fake_supervisor,

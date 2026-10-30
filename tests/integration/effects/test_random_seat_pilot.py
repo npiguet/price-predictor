@@ -36,7 +36,7 @@ import pytest
 
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.records import Moment, PlayabilitySubkind, RecordKind
-from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
+from effects.infrastructure.deck_file import write_deck_file
 from effects.infrastructure.record_codec import record_from_dict
 from effects.infrastructure.shard_io import iter_shard_lines, iter_shards
 from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
@@ -107,7 +107,7 @@ def _run_pilot(tmp_path: Path) -> tuple[Path, Path, Path, list]:
         pytest.skip("forge-connector JAR not built (mvn install -DskipTests)")
 
     decks = tmp_path / "decks.txt"
-    write_deck_file([_DECK], decks, label="pilot", set_code=COVERAGE_SET_CODE)
+    write_deck_file([_DECK], decks, label="pilot")
     outcomes = tmp_path / "match-outcomes.txt"
     progress = tmp_path / "progress.txt"
     records_dir = tmp_path / "records"

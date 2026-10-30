@@ -9,6 +9,7 @@ everything here is the plumbing beneath both, so neither imports the other.
 from __future__ import annotations
 
 import random
+import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -256,32 +257,18 @@ def collector_supervisor(
     caps: CollectionCaps,
     variant_scripts: Path | None = None,
 ) -> Iterator[CollectorSupervisor]:
-    """A records-only supervisor that is stopped however its rounds end:
-    without ``stop()`` the worker logs holding the latched failure reports
-    stay unflushed until the interpreter exits."""
+    """A records-only supervisor under a fresh run id, stopped however its
+    rounds end: without ``stop()`` the worker logs holding the latched failure
+    reports stay unflushed until the interpreter exits."""
     from effects.infrastructure.collector_connector import CollectorSupervisor
 
     supervisor = CollectorSupervisor(
-        worker_count=workers, effect_records=effect_records, caps=caps,
-        variant_scripts=variant_scripts,
+        worker_count=workers, effect_records=effect_records,
+        run_id=str(uuid.uuid4()), caps=caps, variant_scripts=variant_scripts,
     )
     try:
         yield supervisor
     finally:
         supervisor.stop()
 
-
-def play_decks(
-    supervisor: CollectorSupervisor,
-    decks: list[list[str]],
-    decks_file: Path,
-    *,
-    label: str,
-    matches: int,
-) -> None:
-    """Play one round of ``decks``, which a records-only round reads from a file."""
-    from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
-
-    write_deck_file(decks, decks_file, label=label, set_code=COVERAGE_SET_CODE)
-    supervisor.play_round(decks_file, matches=matches)
 

@@ -14,8 +14,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from effects.domain.collection_caps import CollectionCaps
 from effects.infrastructure.collector_connector import CollectorSupervisor
 from tests.unit.sealed.conftest import FakeProcess
+
+#: The one deck every round here plays: a decks-only round refuses none.
+_DECKS = [["Plains"]]
+
+
+def _supervisor(tmp_path, *, workers: int = 1, run_id: str = "run") -> CollectorSupervisor:
+    return CollectorSupervisor(
+        worker_count=workers, effect_records=tmp_path, run_id=run_id,
+        caps=CollectionCaps(),
+    )
 
 
 def _rigged(supervisor: CollectorSupervisor) -> MagicMock:
@@ -29,10 +40,10 @@ def _rigged(supervisor: CollectorSupervisor) -> MagicMock:
 
 class TestCollectorSupervisorWorkerLogs:
     def test_start_worker_passes_a_real_open_log_file(self, tmp_path):
-        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
+        supervisor = _supervisor(tmp_path)
         fake_connector = _rigged(supervisor)
 
-        supervisor.start_worker(0)
+        supervisor.start_worker(0, tmp_path / "decks.txt")
 
         log_file = fake_connector.start.call_args.kwargs["log_file"]
         assert log_file is not None
@@ -43,12 +54,10 @@ class TestCollectorSupervisorWorkerLogs:
         self, tmp_path,
     ):
         records = tmp_path / "records"
-        supervisor = CollectorSupervisor(
-            worker_count=1, effect_records=records, run_id="run-xyz",
-        )
+        supervisor = _supervisor(records, run_id="run-xyz")
         _rigged(supervisor)
 
-        supervisor.start_worker(2)
+        supervisor.start_worker(2, tmp_path / "decks.txt")
 
         assert (records / "run-xyz.2.log").exists()
         supervisor.stop()
@@ -57,31 +66,31 @@ class TestCollectorSupervisorWorkerLogs:
         """Two lifetimes of one slot -- ForgeWorkerPool restarts many times
         per run -- must share one file so a reporter line from either
         lifetime survives to the end of the run."""
-        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
+        supervisor = _supervisor(tmp_path)
         fake_connector = _rigged(supervisor)
 
-        supervisor.start_worker(0)
-        supervisor.start_worker(0)  # same slot, a new JVM
+        supervisor.start_worker(0, tmp_path / "decks.txt")
+        supervisor.start_worker(0, tmp_path / "decks.txt")  # same slot, a new JVM
 
         first, second = fake_connector.start.call_args_list
         assert first.kwargs["log_file"] is second.kwargs["log_file"]
         supervisor.stop()
 
     def test_different_worker_slots_get_different_log_files(self, tmp_path):
-        supervisor = CollectorSupervisor(worker_count=2, effect_records=tmp_path)
+        supervisor = _supervisor(tmp_path, workers=2)
         fake_connector = _rigged(supervisor)
 
-        supervisor.start_worker(0)
-        supervisor.start_worker(1)
+        supervisor.start_worker(0, tmp_path / "decks.txt")
+        supervisor.start_worker(1, tmp_path / "decks.txt")
 
         first, second = fake_connector.start.call_args_list
         assert first.kwargs["log_file"] is not second.kwargs["log_file"]
         supervisor.stop()
 
     def test_stop_closes_the_worker_logs(self, tmp_path):
-        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
+        supervisor = _supervisor(tmp_path)
         fake_connector = _rigged(supervisor)
-        supervisor.start_worker(0)
+        supervisor.start_worker(0, tmp_path / "decks.txt")
         log_file = fake_connector.start.call_args.kwargs["log_file"]
 
         supervisor.stop()
@@ -91,10 +100,10 @@ class TestCollectorSupervisorWorkerLogs:
     def test_records_only_mode_is_unaffected_by_the_log_file(self, tmp_path):
         """The pre-existing records-only guard (output_file=None) must not be
         disturbed by adding a log destination."""
-        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
+        supervisor = _supervisor(tmp_path)
         fake_connector = _rigged(supervisor)
 
-        supervisor.start_worker(0)
+        supervisor.start_worker(0, tmp_path / "decks.txt")
 
         assert fake_connector.start.call_args.args[0] is None
         supervisor.stop()
@@ -109,21 +118,14 @@ class TestPlayRound:
     """
 
     def _supervisor(self, tmp_path):
-        return CollectorSupervisor(worker_count=2, effect_records=tmp_path)
-
-    def _decks_file(self, tmp_path) -> Path:
-        """A decks file with one (trivial) entry -- valid input for
-        ``play_round``, which now refuses an empty or missing one."""
-        path = tmp_path / "decks.txt"
-        path.write_text("coverage;COVERAGE;Plains\n", encoding="utf-8")
-        return path
+        return _supervisor(tmp_path, workers=2)
 
     def test_the_round_stops_at_its_match_budget(self, tmp_path):
         supervisor = self._supervisor(tmp_path)
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool:
-            supervisor.play_round(self._decks_file(tmp_path), matches=500)
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=500)
 
         stop = pool.call_args.kwargs["should_stop"]
         assert stop(499) is False
@@ -135,18 +137,22 @@ class TestPlayRound:
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool:
-            supervisor.play_round(self._decks_file(tmp_path), matches=10)
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=10)
 
         output_path = pool.call_args.kwargs["output_path"]
         assert output_path.is_file() or not output_path.exists()
         assert output_path != Path(tmp_path)
 
     def test_the_decks_file_reaches_the_worker_on_both_sides(self, tmp_path):
+        """Through the spawn the round hands its pool, the round's own file."""
         supervisor = self._supervisor(tmp_path)
         decks = tmp_path / "decks.txt"
+        with patch(
+            "effects.infrastructure.collector_connector.ForgeWorkerPool"
+        ) as pool:
+            supervisor.play_round(_DECKS, decks, label="coverage", matches=1)
         with patch.object(supervisor, "_connector") as connector:
-            supervisor._decks_file = decks
-            supervisor.start_worker(0)
+            pool.call_args.kwargs["spawn_worker"](0)
 
         kwargs = connector.start.call_args.kwargs
         assert kwargs["side_a_decks_path"] == decks
@@ -175,26 +181,32 @@ class TestPlayRound:
         """
         supervisor = self._supervisor(tmp_path)
         with patch.object(supervisor, "_connector") as connector:
-            supervisor._decks_file = tmp_path / "decks.txt"
-            supervisor.start_worker(0)
+            supervisor.start_worker(0, tmp_path / "decks.txt")
 
         call = connector.start.call_args
         assert call.args[0] is None
         assert call.kwargs["progress_file"] == supervisor.progress_path
 
-    def test_play_round_refuses_a_missing_decks_file(self, tmp_path):
+    def test_play_round_writes_the_decks_file_the_workers_read(self, tmp_path):
+        supervisor = self._supervisor(tmp_path)
+        decks = tmp_path / "decks.txt"
+        with patch("effects.infrastructure.collector_connector.ForgeWorkerPool"):
+            supervisor.play_round(
+                [["Plains", "Plains"], ["Island"]], decks, label="coverage", matches=1,
+            )
+
+        assert decks.read_text(encoding="utf-8") == (
+            "coverage;COVERAGE;Plains|Plains\ncoverage;COVERAGE;Island\n"
+        )
+
+    def test_play_round_refuses_a_round_with_no_deck(self, tmp_path):
         supervisor = self._supervisor(tmp_path)
 
-        with pytest.raises(ValueError, match="does not exist"):
-            supervisor.play_round(tmp_path / "missing.txt", matches=10)
-
-    def test_play_round_refuses_an_empty_decks_file(self, tmp_path):
-        supervisor = self._supervisor(tmp_path)
-        empty = tmp_path / "decks.txt"
-        empty.write_text("", encoding="utf-8")
-
-        with pytest.raises(ValueError, match="is empty"):
-            supervisor.play_round(empty, matches=10)
+        with patch(
+            "effects.infrastructure.collector_connector.ForgeWorkerPool"
+        ) as pool, pytest.raises(ValueError, match="no deck"):
+            supervisor.play_round([], tmp_path / "decks.txt", label="coverage", matches=10)
+        pool.assert_not_called()
 
 
 class TestTheRoundShutsTheRealPoolDown:
@@ -216,11 +228,9 @@ class TestTheRoundShutsTheRealPoolDown:
     def _played_round(self, tmp_path) -> CollectorSupervisor:
         from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
 
-        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
-        decks = tmp_path / "decks.txt"
-        decks.write_text("coverage;COVERAGE;Plains\n", encoding="utf-8")
+        supervisor = _supervisor(tmp_path)
         with patch.object(ForgeWorkerPool, "run", autospec=True):
-            supervisor.play_round(decks, matches=1)
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
         return supervisor
 
     def test_stop_asks_the_real_pool_to_stop(self, tmp_path):
@@ -246,7 +256,7 @@ class TestTheRoundShutsTheRealPoolDown:
         supervisor.stop()
 
         with patch.object(ForgeWorkerPool, "run", autospec=True):
-            supervisor.play_round(tmp_path / "decks.txt", matches=1)
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
         supervisor.stop()
 
 
@@ -265,15 +275,13 @@ class TestInterruptIsVisibleToTheCaller:
     def _round(self, tmp_path, *, interrupted: bool) -> CollectorSupervisor:
         from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
 
-        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
-        decks = tmp_path / "decks.txt"
-        decks.write_text("coverage;COVERAGE;Plains\n", encoding="utf-8")
+        supervisor = _supervisor(tmp_path)
 
         def _fake_run(pool):
             pool._interrupted = interrupted
 
         with patch.object(ForgeWorkerPool, "run", _fake_run):
-            supervisor.play_round(decks, matches=1)
+            supervisor.play_round(_DECKS, tmp_path / "decks.txt", label="coverage", matches=1)
         return supervisor
 
     def test_an_uninterrupted_round_reports_no_interrupt(self, tmp_path):
@@ -289,5 +297,5 @@ class TestInterruptIsVisibleToTheCaller:
         assert supervisor.interrupted is True
 
     def test_nothing_played_yet_is_not_an_interrupt(self, tmp_path):
-        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
+        supervisor = _supervisor(tmp_path)
         assert supervisor.interrupted is False
