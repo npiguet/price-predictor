@@ -914,18 +914,52 @@ ability slots, in both directions, and links the lines of one card with each oth
 slots are tied to their root by `mode of`. The trunk then knows exactly which card each line sits
 on, and reads the card's own lines as its own.
 
-| relation, one type per direction | source |
-|---|---|
-| line of, and line of the same card | the entity each ability slot is built from |
-| mode of | the charm root each mode line follows |
-| attached to | the snapshot's `attached_to` |
-| blocks, attacks | the combat status's `blocking` and `blocked_by`, and the attack target |
-| targets, source of | the acting ability's targets and source, and each stack object's targets |
-| affects, as a static | a new snapshot field listing, for each static line on the board and each floating effect in the command zone, the entities it changes |
-| controls, owns | the controller, and the planned `owner` field |
-| has the same name | the names in the snapshot |
-| exiled with | the planned field of objects exiled with a card |
-| paired with, protects, merged with | the planned fields for a soulbond pair, a battle's protector and a mutated permanent |
+**A link gets a relation type of its own when the rules give it behaviour no line states, or when
+the text that gives it meaning sits at the other end.** A band of attackers is blocked as one, and
+no line says which creatures formed it: the attack declaration did. "Exiled with Oblivion Ring" is explained by the host's text,
+while a ciphered card's own text acts through the creature it is encoded on. Every other link
+shares a type with its family, and the line that made the link says what it means. The number of
+types is limited by data rather than by cost. A type the corpus rarely shows learns poorly, so a
+rare link learns better inside a family. Whether a family needs splitting cannot be known before
+training, so the first trained model decides it.
+
+**A link made by an ability points from that ability's line, not from its card.** Rule 607 links an
+exiled card to the ability that exiled it. A card with two pairs of linked abilities then shows
+which pair each exiled card belongs to. Forge's `getExiledWith` returns a card, so the collector may
+have to record the exiling ability itself. The same holds for a card or player an ability chose.
+
+| family | examples | Forge source | relation, one type per direction |
+|---|---|---|---|
+| a card's own lines | a card and its abilities, a charm's modes, the cards of a mutated or melded permanent | the entity each ability slot is built from, `getMergedCards`, `getMeldedWith` | line of, line of the same card, mode of, merged with |
+| attachment | Aura, Equipment, Fortification, bestow, reconfigure, a Curse on a player | `getAttachedTo`, `getPlayerAttachedTo` | attached to |
+| combat | attacks, blocks | the combat status | attacks, blocks |
+| | banding | `Combat.getBandOfAttacker` | in band with |
+| | a lure, "must block" | `getMustBlockCards` | must block |
+| | goad | `getGoaded` | goaded by, from a card to a player |
+| the stack | targets, a source, the object a trigger is about | each stack object's targets and source, the triggered object | targets, source of, triggered by |
+| statics and floating effects | an anthem, "creatures can't block this turn" | a new snapshot field per static line and floating effect, `getEffectSource` | affects, created by |
+| delayed effects | "return it at the beginning of the next end step", Sneak Attack's sacrifice | the objects a delayed trigger holds | pending on |
+| linked by a line's text, rule 607 | Oblivion Ring, Banisher Priest, champion, imprint, hideaway, Forge's lasting remembered objects | `getExiledWith`, `getImprintedCards`, `getUntilLeavesBattlefield`, `getRemembered` | linked by text, from the line |
+| an exiled card acting through a permanent | cipher, haunt | `getEncodingCard`, `getHaunting` | bound to, from the exiled card to the permanent |
+| control and ownership | controls, owns | `getController`, `getOwner` | controls, owns |
+| | Control Magic, "for as long as" | `getGainControlTargets` | control granted by |
+| copies | a Clone, a token copy, a copied spell | `getCopiedPermanent`, `getCloneOrigin` | copy of |
+| pairs and protectors | soulbond, a battle's protector | `getPairedWith`, `getProtectingPlayer` | paired with, protects |
+| an object chosen | "choose a creature", Stuffy Doll's chosen player, the player a gift is promised to | `getChosenCard`, `getChosenPlayer`, `getPromisedGift` | chose, from the line |
+| this turn's history | Sengir Vampire, a creature that blocked or was blocked this turn, crewed or saddled this turn | `getDamageHistory`, `getBlockedThisTurn`, `getCrewedByThisTurn`, `getSaddledByThisTurn` | damaged this turn, fought this turn, crewed by |
+| names | the legend rule | the names in the snapshot | has the same name |
+
+**A mutated or melded permanent's cards all contribute their lines through `line of`.** The merged
+permanent has every line of every card under it, so no separate relation carries the abilities.
+`merged with` stays for which cards leave the battlefield with it.
+
+**Cost history needs no relation.** Devour, delve, convoke, emerge and exploit are read through a
+number, as in "for each creature devoured", so a count on the card is enough.
+
+**Which of Forge's remembered objects are links is left to planning.** Forge's scripts use the
+remembered list as scratch space, and many abilities clear it once they resolve. Only an entry that
+outlives its resolution is a link, and the rule that tells the two apart is settled when the
+collector is planned.
 
 **Each gen-2 feature that describes a link gains its relation, and keeps its own value where the
 relation cannot carry it.** A relation names the partner but carries no number. Attention takes
@@ -962,7 +996,7 @@ damaged creatures the anthem kept alive.
   does for graph edges (Ying et al., [Do Transformers Really Perform Bad for Graph
   Representation?](https://arxiv.org/abs/2106.05234), NeurIPS 2021). It changes how much a slot
   attends to its partner, not what it receives, so the kind of relation reaches the receiver only
-  through the partner's content. The trunk's four heads cannot each specialise in one of a dozen
+  through the partner's content. The trunk's four heads cannot each specialise in one of some fifty
   directed types. Summed scalars are ambiguous, since 0.8 can be 0.3 + 0.5 or eight times 0.1.
 - **A random group id per card, drawn for each record and added to the card's slot and its lines.**
   It would tie lines to cards without a custom layer. It adds to every slot a random vector the
@@ -983,7 +1017,7 @@ projection. A vector shared by the six layers would therefore be added into six 
 Shaw et al. use a separate table per layer in both their models, and per head as well in the
 smaller one (§4.1). They share vectors across heads elsewhere to save memory, because they store a
 vector for every pair of positions (§3.3). Gen-3 stores one per relation type, so its tables total
-under 100,000 parameters, at about 30 directed types, 64 dimensions per head, 4 heads and 6 layers.
+about 150,000 parameters, at about 50 directed types, 64 dimensions per head, 4 heads and 6 layers.
 Separate layers can also weigh the relations differently: an early layer can gather a card's lines
 through `line of`, and a later one combine its blockers and the statics affecting it. Each vector
 is one head wide, as in Shaw et al. The tables start at zero, so the new trunk starts out computing
