@@ -977,13 +977,43 @@ damaged creatures the anthem kept alive.
   It carries one partner per feature, and the model has to learn to match the position against the
   other slot's.
 
+**Each layer and each head has its own relation vectors, a key vector and a value vector per
+type.** A key vector is added to a key, and each layer and each head computes its keys with its own
+projection. A vector shared by the six layers would therefore be added into six unrelated spaces.
+Shaw et al. use a separate table per layer in both their models, and per head as well in the
+smaller one (§4.1). They share vectors across heads elsewhere to save memory, because they store a
+vector for every pair of positions (§3.3). Gen-3 stores one per relation type, so its tables total
+under 100,000 parameters, at about 30 directed types, 64 dimensions per head, 4 heads and 6 layers.
+Separate layers can also weigh the relations differently: an early layer can gather a card's lines
+through `line of`, and a later one combine its blockers and the statics affecting it. Each vector
+is one head wide, as in Shaw et al. The tables start at zero, so the new trunk starts out computing
+what the stock layer computes, which the equivalence test below relies on.
+
+**The value vectors stay, and one run with them held at zero tests what they add.** In Shaw et
+al.'s translation ablation, the key vectors carry the whole gain, and the value vectors add nothing
+(§4.3, Table 3). BLEU is the standard translation score, higher being better.
+
+| key vectors | value vectors | BLEU, English to German |
+|---|---|---:|
+| yes | yes | 25.8 |
+| yes | no | 25.8 |
+| no | yes | 25.3 |
+| no | no | 12.5 |
+
+The authors expect value vectors to matter "for tasks where information about the edge types
+selected by a given attention head is useful to downstream encoder or decoder layers" (§3.1). Gen-3
+is such a task, since a creature has to know that a message came from its blocker. RAT-SQL ties each
+key vector to its value vector (§3), which would halve a cost that is already negligible. The run
+with the value vectors held at zero is compared on the anthem probe and the combat grid.
+
 **The relation terms cost one product per relation type, not per pair.** The key term is computed
 once for each slot and each relation type and then looked up for each pair. The value term sums each
 slot's attention weights by relation type and multiplies them by the value vectors. Both scale with
 batch × slots × relation types. The value term needs the attention weights explicitly, so the trunk
 replaces `nn.TransformerEncoderLayer` with a layer of its own. The trunk is small beside the ability
-encoder, so explicit attention should cost a small share of a step. Step time and peak memory on one
-fixed shard, before and after, measure it.
+encoder, so explicit attention should cost a small share of a step. Shaw et al. measured a 7% drop
+in steps per second, at unchanged model and batch sizes (§3.3). Step time and peak memory on one
+fixed shard, before and after, measure gen-3's cost.
 
 **The custom layer is written test first, because its mistakes train without an error.** A
 transposed relation matrix or one built in a different slot order still lowers the loss. Five tests
