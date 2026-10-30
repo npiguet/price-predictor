@@ -10,14 +10,13 @@ arrow and label is fixed here, from the two records and the code under
 
 from __future__ import annotations
 
-import sys
 from functools import partial
 
 import chart_style
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from chart_style import WIDTH_COLOUR
+from chart_style import WIDTH_COLOUR, draw_requested
 from chart_style import shade as tint
 from matplotlib.patches import Circle, Ellipse, FancyArrowPatch, FancyBboxPatch
 
@@ -991,11 +990,8 @@ def design_changes() -> None:
 
 def main() -> None:
     """Draw every diagram, or only the ones named on the command line."""
-    only = set(sys.argv[1:])
-    for diagram in (model_and_probes, validation_strata, combat_step, encoder_reads,
-                    noise_shapes, design_changes):
-        if not only or diagram.__name__ in only:
-            diagram()
+    draw_requested([model_and_probes, validation_strata, combat_step, encoder_reads,
+                    noise_shapes, design_changes])
 
 
 if __name__ == "__main__":
