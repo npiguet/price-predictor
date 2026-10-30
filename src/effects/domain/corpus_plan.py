@@ -266,15 +266,21 @@ class AllocationNode:
     """One level of the selection hierarchy, and what it was given.
 
     A leaf is one member of one cell: ``supply`` is what it can write with
-    repeats, ``once`` without. ``share`` is the equal split before
-    redistribution, so ``share - written`` is a shortfall.
+    repeats, ``once`` without; neither is read above the leaves. ``share`` is
+    the equal split before redistribution, so ``share - written`` is a
+    shortfall.
     """
 
     children: dict[Any, AllocationNode] = field(default_factory=dict)
     supply: int = 0
-    once: int | None = None
+    once: int = 0
     share: int = 0
     planned: int = 0
+
+    @property
+    def is_leaf(self) -> bool:
+        """One member of one cell: every level above the members has children."""
+        return not self.children
 
     @property
     def capacity(self) -> int:
@@ -303,14 +309,19 @@ class AllocationNode:
     def allocate(self, budget: int, *, share: int | None = None) -> int:
         """Split ``budget`` down the tree; return what this node plans to write.
 
-        Over a cell's members it runs in two rounds — first what each supplies
-        once, then repeats — so no record repeats while another goes unused.
+        Over a cell's members it runs in two rounds (:func:`_split_in_rounds`),
+        and over every level above them by capacity alone.
         """
         self.share = budget if share is None else share
-        if not self.children:
+        if self.is_leaf:
             self.planned = min(max(0, budget), self.capacity)
             return self.planned
-        split = _split(budget, self.children)
+        if all(child.is_leaf for child in self.children.values()):
+            split = _split_in_rounds(budget, self.children)
+        else:
+            split = allocate(
+                budget, {key: child.capacity for key, child in self.children.items()},
+            )
         fair = self.share // len(self.children)
         self.planned = sum(
             child.allocate(split[key], share=fair) for key, child in self.children.items()
@@ -318,17 +329,17 @@ class AllocationNode:
         return self.planned
 
 
-def _split(budget: int, children: Mapping[Any, AllocationNode]) -> dict[Any, int]:
-    if any(child.once is None for child in children.values()):
-        return allocate(budget, {key: child.capacity for key, child in children.items()})
-    first = allocate(budget, {key: child.once for key, child in children.items()})
+def _split_in_rounds(budget: int, members: Mapping[Any, AllocationNode]) -> dict[Any, int]:
+    """A cell's budget over its members: first what each supplies once, then
+    repeats, so no record repeats while another goes unused."""
+    first = allocate(budget, {key: member.once for key, member in members.items()})
     left = budget - sum(first.values())
     if left <= 0:
         return first
     second = allocate(left, {
-        key: child.capacity - first[key] for key, child in children.items()
+        key: member.capacity - first[key] for key, member in members.items()
     })
-    return {key: first[key] + second.get(key, 0) for key in children}
+    return {key: first[key] + second.get(key, 0) for key in members}
 
 
 @dataclass(frozen=True, slots=True)
