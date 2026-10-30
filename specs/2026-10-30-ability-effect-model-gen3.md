@@ -39,8 +39,9 @@ The model reads every line of a permanent, tied to its card, and reads each link
 two objects as a typed relation in attention. A record drawn for a rule trains only that
 rule's outputs. Checkpoints are selected by knowledge probes and rule tests.
 
-The deliverable is a gen-3 corpus, a curated dataset built from it, and gen-3 checkpoints
-scored on the knowledge probes and the rule tests.
+The deliverable is a gen-3 corpus, a curated dataset built from it, and a gen-3 ability
+encoder with its `e` cache, for the game-playing agent. The trunk and heads train the
+encoder and score it; no consumer reads them.
 
 # 2. Scope
 
@@ -781,8 +782,8 @@ spec's Poisson. Gate 1's deviance margin reads the negative binomial deviance.
 - Training keeps an exponential moving average of the weights, with decay `--ema-decay`.
 - Validation, stopping and the saved checkpoints use the averaged weights.
 - `resume.pt` carries the averaged weights.
-- A resume refuses a change to `--rule-mask`, `--deviance-floor`, `--ema-decay` or
-  `--relation-values`.
+- A resume refuses a change to `--rule-mask`, `--deviance-floor`, `--ema-decay`,
+  `--stratum-weight` or `--relation-values`.
 
 # 14. Checkpoint selection and evaluation
 
@@ -791,21 +792,21 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
 
 ## 14.1 Control score
 
-- Each validation stratum has a control score, computed on the averaged weights each
-  epoch from forward passes only. Its components:
+- Each validation stratum has a stratum score, computed on the averaged weights each
+  epoch from forward passes only, over that stratum's records. Its components:
   - the model-level knowledge probes;
   - the damage-by-toughness sweep and the combat grids;
   - the rule tests (§ 14.4), averaged per rule;
-  - the mean of every output field's explained deviance on the card-disjoint stratum,
-    each field counting equally. A field whose constant-prediction loss is below
-    `--deviance-floor` is left out of the mean.
-- `TO DECIDE`: how the components combine into one score.
-- The in-game score reads the game-disjoint stratum. The `e` score reads the card-disjoint
-  stratum.
+  - the mean of every output field's explained deviance, each field counting equally. A
+    field whose constant-prediction loss is below `--deviance-floor` is left out of the
+    mean.
+- `TO DECIDE`: how the components combine into one stratum score.
+- The control score is the card-disjoint stratum score weighted by `--stratum-weight`,
+  plus the game-disjoint stratum score weighted by one minus it.
+- A run keeps one best checkpoint, the epoch with the best control score. Encoder, trunk
+  and heads are saved together from that epoch.
 - `--patience` counts epochs without a new best control score. A new best copies
   `resume.pt` to `resume-best.pt`.
-- `TO DECIDE`: whether a run keeps one best checkpoint per stratum, or one checkpoint
-  chosen on a weighted mix of the two scores.
 - Calibration stays a reported number.
 
 ## 14.2 Selection and reporting halves
@@ -868,6 +869,7 @@ python -m effects train-effect-model
     [--deviance-floor F]                 default TO DECIDE
     [--ema-decay D]                      default TO DECIDE
     [--relation-values on|off]           default on
+    [--stratum-weight W]                 default 0.5; card-disjoint share of the control score
     [--patience N]                       default 5; epochs without a new best control score
 ```
 
@@ -911,7 +913,7 @@ Printed output
 | `manifest.json` | by `build-corpus` | adds per-rule counts (§ 5.2), per-rule budgets (§ 12.1), one-sided conditions (§ 12.2), and the closed subtype and keyword lists (§ 11.2, § 11.3) |
 | `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts over a records set (§ 5.2) |
 | frozen rule tests | with the knowledge-probe set | the rule tests' records and their selection and reporting halves, with a content digest |
-| checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-decay` and `--relation-values` |
+| checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-decay`, `--stratum-weight` and `--relation-values` |
 | `resume.pt` | every epoch | adds the averaged weights |
 | knowledge-probe scorecards | per checkpoint | add the probes of § 14.5 and the rule tests, per half |
 
