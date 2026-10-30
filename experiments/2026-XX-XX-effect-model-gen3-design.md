@@ -483,8 +483,9 @@ the plan rests on them:
    it and to the output trained on its outcome, and the missing ones are added together with the
    record schema. Each line is tied to its card, and each link between two cards is read as a
    relation between their slots.
-3. **Training that draws records by rule.** Adaptive sampling draws more of what a weak field or a
-   short rule needs, and a record drawn for a rule trains only that rule's outputs.
+3. **Training that draws records by rule.** Each rule gets its share of training when the corpus is
+   built, and a record drawn for a rule trains only that rule's outputs. Drawing more of what a
+   weak field needs during training is deferred to gen-4.
 4. **Checkpoints judged by probes and rule scenarios**, with every output field on one scale in the
    loss.
 5. **Collection that records what decides each rule**: every line of a permanent, which rules check
@@ -573,9 +574,9 @@ branch or the departure is accepted. Where Forge plays a situation as expected, 
 outcome are the same, so the choice between a rule label and Forge's outcome matters only for the
 rules that disagree.
 
-**Rules could also be the pools of the adaptive sampling below.** A per-rule detector gives each
-record the rules it exercises, which is the same index that sampling by field needs. The two items
-would share the decision between pools, an index and a database.
+**Rules could also be the pools of gen-4's adaptive sampling.** A per-rule detector gives each
+record the rules it exercises, which is the same index that sampling by field needs
+([gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)).
 
 #### A directed fork needs an operation and a trigger on the live board
 
@@ -679,46 +680,13 @@ another player are rare enough to leave out.
 **Running the map again over each new layout measures what the change bought.** The map is a pure
 reading of the layout and the scenarios, so a rerun counts the rules each change made learnable.
 
-### Training could draw more of the records a weak output field needs, from the whole corpus
+### Drawing more of the records a weak output field needs is deferred to gen-4
 
-**When a field stays weak, training shows more of the records that supervise it.** The idea is
-established as adaptive data mixing and adaptive loss weighting. Large language-model pretraining
-stores its data as separate sources and draws from each by a mixing weight. Methods such as DoReMi
-raise a source's weight while its loss stays high against a reference model. Multi-task training,
-of which the 46 output fields are a case, balances the tasks' loss weights instead, with methods
-such as GradNorm and uncertainty weighting.
-
-**Four mechanisms are possible, from cheapest to most flexible.**
-
-1. **A weight per field in the loss.** The trainer already computes every field's loss separately,
-   so nothing on disk changes.
-2. **A field factor in the weighted shuffle within a shard.** An epoch uses about a third of each
-   shard's records, so this can raise a field's share about threefold and no further.
-3. **Pools with mixing weights.** `build-corpus` writes the training stratum as several shard
-   directories, one per pool, and files each record in the pool of the rarest field it supervises.
-   Gen-2 already gives a legality record the rarest single mode on its board. The trainer draws each
-   epoch's shards from the pools by weights a controller adjusts at each epoch boundary. A pool of a
-   few hundred records can stay in memory and be mixed into every step.
-4. **An index from field to records, possibly in a database.** A record would then count for every
-   field it supervises, not only its rarest. The cost is reading scattered records across the whole
-   corpus, where today the trainer reads whole shards in sequence.
-
-**Five constraints apply whichever mechanism is chosen.**
-
-- **Calibration.** A field drawn at five times its natural share teaches the model that its outcome
-  is five times as common. Each record's loss then needs an importance weight, its natural share
-  divided by its drawn share. Loss weighting does not shift the base rates in the same way.
-- **Memorization.** A rare field may rest on few distinct texts; poison comes from a handful of
-  infect and toxic abilities. Raising its share repeats those texts. The ceiling has to be on how
-  often each distinct text is seen per epoch, as gen-2's reuse cap is.
-- **Reproducibility.** A gen-2 run repeats bit for bit from its seed. A controller driven by losses
-  does not, because GPU arithmetic varies between runs. Changing the weights only at epoch
-  boundaries, and logging them, lets a rerun replay them.
-- **Weak against unlearnable.** A field can be weak because the snapshot lacks what decides it. The
-  controller should boost a field only while its training loss keeps falling, and pass a field that
-  stays flat to collection.
-- **Validation stays out of the loop.** The controller reads training loss. If the card-disjoint
-  validation steered training, it would stop being an unbiased measure.
+**Gen-3 rebalances by rule when the corpus is built, and adds no controller that reacts to a weak
+field during training.** The fields [Background](#some-output-fields-stay-weak-while-the-others-improve)
+finds weak stay a gap gen-3 does not close. The [gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md) carries the plan: the
+established methods, four mechanisms from a loss weight per field to an index over the whole corpus,
+and the five constraints any of them has to meet.
 
 ### A record drawn for a rule trains only that rule's outputs
 
@@ -827,8 +795,8 @@ details need deciding:
   life going from 80% to 90%. That is the intent, but it lets a weak field's noise steer stopping,
   which makes the smoothing more necessary, not less.
 
-The same per-field scores are what adaptive sampling reads on the training side, so the two share
-their bookkeeping.
+Gen-4's adaptive sampling would compute the same per-field scores on training records
+([gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)).
 
 **The probe sets grow, and a selection half picks while a reporting half measures.** Choosing the
 best of many epochs on a score favours the epoch whose noise happened to help, so the chosen
@@ -1323,10 +1291,9 @@ marker set to match. The first-strike step makes 6% of combat records, and block
 part of those. A keyword copy could show a first striker surviving its blocker as often as training
 needs.
 
-**Whether gen-3 adopts them depends on what the rest of gen-3 already fixes.** Four items above
-change the same outcomes: the snapshot taken before the damage step, the block pairing in the input,
-the whole first-strike step collected, and training that draws more of the records a weak field
-needs. Combat copies are worth their cost only for what remains after those. Three questions to
+**Whether gen-3 adopts them depends on what the rest of gen-3 already fixes.** Three items above
+change the same outcomes: the snapshot taken before the damage step, the block pairing in the input
+and the whole first-strike step collected. Combat copies are worth their cost only for what remains after those. Three questions to
 settle with them:
 
 - Which blocks qualify: single blocks only, or several blockers once the pairing is in the input,
@@ -1937,3 +1904,5 @@ pilot should count them.
   written before it, and measure its step time and peak memory on a fixed shard.
 - **Train with the hard mask on rule-drawn records first**, and move to the soft mask only if a
   comparison shows the hard mask costs the other outputs.
+- **Draw more of the records a weak output field needs, in gen-4** ([gen-4 record](XXXX-XX-XX-effect-model-gen4-design.md)),
+  starting from the fields gen-3's model leaves weak.
