@@ -258,7 +258,7 @@ def rendered_prose(sidecar_path: Path, sidecar: ProvenanceSidecar) -> list[str]:
     return prose_lines(converted_text_path(sidecar_path))
 
 
-class EncodedLine(NamedTuple):
+class LineText(NamedTuple):
     """One sidecar line, its converted prose, and the text it is encoded from."""
 
     line: SidecarLine
@@ -268,7 +268,7 @@ class EncodedLine(NamedTuple):
 
 def encoded_lines(
     sidecar_path: Path, sidecar: ProvenanceSidecar, surface: Surface,
-) -> list[EncodedLine]:
+) -> list[LineText]:
     """Every line of one sidecar as ``surface`` encodes it, row-aligned with
     the ability cache: the one spelling of read the prose, cut the line's
     out, fall back to the other surface (``encoding_text``)."""
@@ -280,7 +280,7 @@ def encoded_lines(
     out = []
     for line in sidecar.lines:
         prose = line.prose_in(rendered)
-        out.append(EncodedLine(line, prose, encoding_text(line, prose, surface)))
+        out.append(LineText(line, prose, encoding_text(line, prose, surface)))
     return out
 
 
