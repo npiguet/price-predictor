@@ -48,8 +48,7 @@ from effects.application.corpus_validation.findings import (
 )
 from effects.application.corpus_validation.key_joins import KeyJoins
 from effects.application.corpus_validation.payload_checks import (
-    CostChannels,
-    Outcomes,
+    Activations,
     Rewrites,
     Triggers,
 )
@@ -121,8 +120,7 @@ def _checks(sidecars: SidecarLookup | None) -> tuple[Check, ...]:
         ActingLines(),
         KeyJoins(sidecars),
         Modes(),
-        Outcomes(),
-        CostChannels(),
+        Activations(),
         Tiers(),
         Duplicates(),
         DuplicateEvents(),

@@ -44,21 +44,35 @@ _COST_FIELDS_ALWAYS_PAID = ("mana_by_color", "tapped")
 _NO_RESULT_LABEL = "absent"
 
 
-class Outcomes:
-    """Whether activation outcomes vary, as a real game's do."""
+class Activations:
+    """The activation records, read once: whether their outcomes vary, as a
+    real game's do, and which cost channels they ever populate."""
 
     def __init__(self) -> None:
         self.activations = 0
         self.outcomes: Counter[str] = Counter()
+        self.cost_fields: Counter[str] = Counter()
+        self.populated = 0
 
     def add(self, record: EffectRecord) -> None:
-        if isinstance(record.payload, ActivationPayload):
-            self.activations += 1
-            self.outcomes[record.payload.outcome.value] += 1
+        if not isinstance(record.payload, ActivationPayload):
+            return
+        self.activations += 1
+        self.outcomes[record.payload.outcome.value] += 1
+        paid = {
+            name: bool(getattr(record.payload.costs, name)) for name in _COST_FIELDS
+        }
+        for name, filled in paid.items():
+            self.cost_fields[name] += filled
+        self.populated += any(paid.values())
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
+        yield self._outcome_finding()
+        yield self._cost_finding(limits)
+
+    def _outcome_finding(self) -> Finding:
         shown = histogram(sorted(self.outcomes.items()))
-        yield Finding(
+        return Finding(
             name="outcome takes more than one value",
             # A window with no activation records holds, as an absent kind does.
             ok=len(self.outcomes) > 1 or self.activations == 0,
@@ -72,27 +86,7 @@ class Outcomes:
             ),
         )
 
-
-class CostChannels:
-    """Which cost channels the activation records ever populate."""
-
-    def __init__(self) -> None:
-        self.activations = 0
-        self.cost_fields: Counter[str] = Counter()
-        self.populated = 0
-
-    def add(self, record: EffectRecord) -> None:
-        if not isinstance(record.payload, ActivationPayload):
-            return
-        self.activations += 1
-        paid = {
-            name: bool(getattr(record.payload.costs, name)) for name in _COST_FIELDS
-        }
-        for name, filled in paid.items():
-            self.cost_fields[name] += filled
-        self.populated += any(paid.values())
-
-    def findings(self, limits: Thresholds) -> Iterator[Finding]:
+    def _cost_finding(self, limits: Thresholds) -> Finding:
         shown = ", ".join(
             f"{name} {self.cost_fields[name]}" for name in _COST_FIELDS
         )
@@ -120,7 +114,7 @@ class CostChannels:
                 f"activation records is under the {limits.min_cost_evidence} "
                 "this would need to mean anything",
             )
-        yield Finding(
+        return Finding(
             name="cost fields are not all empty",
             ok=not broken,
             measured=(
