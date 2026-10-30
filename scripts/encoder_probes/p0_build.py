@@ -25,12 +25,8 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-# The report is Markdown with non-cp1252 glyphs; the Windows console is not.
-for _stream in (sys.stdout, sys.stderr):
-    _stream.reconfigure(encoding="utf-8", errors="replace")
-
 import probe_lib as pl  # noqa: E402
+from _lib.markdown import md_table, utf8_console  # noqa: E402
 
 TRAINING_LOG = pl.REPO / (
     "models/sealed/encoder/full-20260517-014759-attn-6l-8h-8q-0.1mlm-512d-training.log"
@@ -56,19 +52,15 @@ def _split_sizes_from_log(path: Path) -> tuple[int, int] | None:
     return None
 
 
-def _md_table(frame: pd.DataFrame, floatfmt: str = "{:.4f}") -> str:
+def _frame_table(frame: pd.DataFrame, floatfmt: str = "{:.4f}") -> str:
+    """A frame as a pipe table: floats to ``floatfmt``, NaN and None blank."""
     def cell(v):
         if isinstance(v, float):
             return "" if v != v else floatfmt.format(v)
         return "" if v is None else str(v)
 
-    header = "| " + " | ".join(frame.columns) + " |"
-    rule = "| " + " | ".join("---" for _ in frame.columns) + " |"
-    body = [
-        "| " + " | ".join(cell(v) for v in row) + " |"
-        for row in frame.itertuples(index=False, name=None)
-    ]
-    return "\n".join([header, rule, *body])
+    return md_table(list(frame.columns),
+                    [[cell(v) for v in row] for row in frame.itertuples(index=False, name=None)])
 
 
 # ── sections ────────────────────────────────────────────────────────────
@@ -87,14 +79,11 @@ def section_join(join: pd.DataFrame, labels: dict) -> str:
         f"- Rows with a missing `.npz`: **{int(join['npz_path'].isna().sum())}**",
         f"- Unjoined: **{len(unjoined)}**",
         "",
-        "| join method | rows |",
-        "| --- | --- |",
+        md_table(["join method", "rows"], methods.items()),
+        "", "### Unjoined rows", "",
     ]
-    for method, count in methods.items():
-        lines.append(f"| {method} | {count} |")
-    lines += ["", "### Unjoined rows", ""]
     if len(unjoined):
-        lines.append(_md_table(unjoined))
+        lines.append(_frame_table(unjoined))
     else:
         lines.append("_none_")
     dups = join[join["dup_group"]]
@@ -108,7 +97,7 @@ def section_join(join: pd.DataFrame, labels: dict) -> str:
         "",
     ]
     if len(dups):
-        lines.append(_md_table(
+        lines.append(_frame_table(
             dups[["name", "txt_path", "n_in_deck", "is_primary"]]
             .assign(txt_path=lambda d: [Path(p).name for p in d["txt_path"]])
         ))
@@ -128,12 +117,12 @@ def section_split(split: tuple[set[str], set[str]], join: pd.DataFrame) -> str:
         "`CardLabels` reconstructed from the label snapshot — the snapshot is "
         "written immediately before the split, so it is the run's own label map.",
         "",
-        "| source | train | val |",
-        "| --- | --- | --- |",
-        f"| training log | {logged[0] if logged else '?'} | {logged[1] if logged else '?'} |",
-        f"| reconstruction | {got[0]} | {got[1]} |",
-        f"| join table (reconstruction minus unjoined rows) "
-        f"| {int(counts.get('train', 0))} | {int(counts.get('val', 0))} |",
+        md_table(["source", "train", "val"], [
+            ["training log", logged[0] if logged else "?", logged[1] if logged else "?"],
+            ["reconstruction", got[0], got[1]],
+            ["join table (reconstruction minus unjoined rows)",
+             int(counts.get("train", 0)), int(counts.get("val", 0))],
+        ]),
         "",
     ]
     if logged and tuple(logged) == got:
@@ -194,7 +183,7 @@ def section_probes(metrics: pd.DataFrame) -> str:
             lines += [
                 f"### {mode} / {'weighted' if weighted else 'unweighted'}",
                 "",
-                _md_table(sub[[
+                _frame_table(sub[[
                     "probe", "alpha", "n_fit", "cv_r2", "in_sample_r2",
                     "train_r2", "val_r2", "val_pearson",
                 ]].rename(columns={"in_sample_r2": "insample_r2"})),
@@ -219,12 +208,7 @@ def section_classes(classes: list[dict], variances: list[dict], emb_check: dict)
         f"({100 * sizes.sum() / max(1, emb_check['n_cards']):.1f}% of joined cards)",
         f"- Largest class: **{int(sizes.max()) if len(sizes) else 0}**",
         "",
-        "| class size | classes |",
-        "| --- | --- |",
-    ]
-    for size, count in dist.items():
-        lines.append(f"| {size} | {count} |")
-    lines += [
+        md_table(["class size", "classes"], dist.items()),
         "",
         "### Embedding identity check",
         "",
@@ -240,21 +224,16 @@ def section_classes(classes: list[dict], variances: list[dict], emb_check: dict)
         "separates irreducible noise from mere under-observation: a card seen "
         "eighty times has a noisy label a bigger corpus would sharpen.",
         "",
-        "| min_n | classes | members | within-class var | within SD | member var "
-        "| corpus var | explainable (vs members) | explainable (vs corpus) |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    usable = [v for v in variances if v]
-    for var in usable:
-        lines.append(
-            f"| {var['min_n']} | {var['n_classes']} | {var['n_members']} "
-            f"| {var['within_class_var']:.3e} | {var['noise_sd']:.4f} "
-            f"| {var['member_var']:.3e} | {var['corpus_var']:.3e} "
-            f"| {var['explainable_fraction_vs_members']:.3f} "
-            f"| {var['explainable_fraction_vs_corpus']:.3f} |"
-        )
-    if not usable:
-        lines.append("| | | | | | | | | |")
+    headers = ["min_n", "classes", "members", "within-class var", "within SD", "member var",
+               "corpus var", "explainable (vs members)", "explainable (vs corpus)"]
+    rows = [[var["min_n"], var["n_classes"], var["n_members"],
+             f"{var['within_class_var']:.3e}", f"{var['noise_sd']:.4f}",
+             f"{var['member_var']:.3e}", f"{var['corpus_var']:.3e}",
+             f"{var['explainable_fraction_vs_members']:.3f}",
+             f"{var['explainable_fraction_vs_corpus']:.3f}"]
+            for var in variances if var]
+    lines.append(md_table(headers, rows or [[""] * len(headers)]))
     lines += [
         "",
         "Read the corpus-relative column with care: functional reprints skew "
@@ -275,11 +254,9 @@ def section_manifold(stats: dict) -> str:
         "the 95th percentile has left the cloud the encoder was fitted on, and "
         "a probe read-off there is extrapolation.",
         "",
-        "| quantile | cosine distance |",
-        "| --- | --- |",
+        md_table(["quantile", "cosine distance"],
+                 [[name, f"{value:.5f}"] for name, value in q.items()]),
     ]
-    for name, value in q.items():
-        lines.append(f"| {name} | {value:.5f} |")
     lines += [
         "",
         f"**Off-manifold gate (p95): {q['p95']:.5f}**  ",
@@ -317,11 +294,8 @@ def section_external(join: pd.DataFrame) -> str:
             f"({100 * years.notna().mean():.1f}%) with an earliest printing "
             f"({int(years.min())}–{int(years.max())}).",
             "",
-            "| earliest-printing rarity | cards |",
-            "| --- | --- |",
+            md_table(["earliest-printing rarity", "cards"], rarity.items()),
         ]
-        for name, count in rarity.items():
-            lines.append(f"| {name} | {count} |")
     else:
         lines.append("- `AllPrintings.json` was not scanned.")
     return "\n".join(lines)
@@ -336,17 +310,11 @@ def section_placebo(placebo: dict) -> str:
         "(batched, GPU when present), so the ~5e-7 batching noise is inside "
         "every number below.",
         "",
-        "| edit | applicable cards | median |Δscore_play| | p95 |Δ| | max |Δ| |",
-        "| --- | --- | --- | --- | --- |",
+        md_table(["edit", "applicable cards", "median |Δscore_play|", "p95 |Δ|", "max |Δ|"],
+                 [[kind, 0, "", "", ""] if s["n"] == 0 else
+                  [kind, s["n"], f"{s['median']:.5f}", f"{s['p95']:.5f}", f"{s['max']:.5f}"]
+                  for kind, s in placebo["edits"].items()]),
     ]
-    for kind, s in placebo["edits"].items():
-        if s["n"] == 0:
-            lines.append(f"| {kind} | 0 | | | |")
-            continue
-        lines.append(
-            f"| {kind} | {s['n']} | {s['median']:.5f} | {s['p95']:.5f} | "
-            f"{s['max']:.5f} |"
-        )
     lines += [
         "",
         f"Sampled from {placebo['n_sampled']} cards; the fidelity/weighted "
@@ -435,6 +403,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-printings", action="store_true",
                         help="skip the AllPrintings.json scan")
     args = parser.parse_args(argv)
+    utf8_console()
 
     _log("loading labels")
     labels = pl.load_labels()
