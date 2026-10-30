@@ -29,7 +29,7 @@ from effects.application.step_preparation import (
     StepPreparer,
     StepReady,
 )
-from effects.infrastructure.record_io import load_shard
+from effects.infrastructure.shard_io import load_shard
 
 logger = logging.getLogger(__name__)
 

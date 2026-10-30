@@ -43,7 +43,7 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
-from effects.infrastructure.record_io import read_shard
+from effects.infrastructure.shard_io import read_shard
 from tests.unit.effects.builders import (
     EFFECTS_FIXTURES,
     GEN1_SIDECAR_FOLDERS,

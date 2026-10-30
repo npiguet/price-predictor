@@ -14,7 +14,7 @@ import pytest
 
 from effects.domain.records import RecordKind
 from effects.infrastructure.record_codec import format_record_line, record_to_dict
-from effects.infrastructure.record_io import (
+from effects.infrastructure.shard_io import (
     count_records,
     iter_shard_lines,
     iter_shards,
@@ -222,7 +222,7 @@ class TestShardsInSubdirectories:
 
 
 def test_write_shard_round_trips_through_the_reader(tmp_path):
-    from effects.infrastructure.record_io import read_shard, write_shard
+    from effects.infrastructure.shard_io import read_shard, write_shard
 
     records = [_record(record_id=f"run.0-a.{i}") for i in range(5)]
     path = tmp_path / "curated.0-a.jsonl.gz"
@@ -233,7 +233,7 @@ def test_write_shard_round_trips_through_the_reader(tmp_path):
 
 
 def test_write_shard_creates_the_directory_it_writes_into(tmp_path):
-    from effects.infrastructure.record_io import write_shard
+    from effects.infrastructure.shard_io import write_shard
 
     path = tmp_path / "training" / "curated.0-a.jsonl.gz"
     write_shard(path, [_record(record_id="run.0-a.0")])
@@ -241,7 +241,7 @@ def test_write_shard_creates_the_directory_it_writes_into(tmp_path):
 
 
 def test_write_shard_writes_a_readable_empty_shard_for_no_records(tmp_path):
-    from effects.infrastructure.record_io import read_shard, write_shard
+    from effects.infrastructure.shard_io import read_shard, write_shard
 
     path = tmp_path / "curated.0-a.jsonl.gz"
     assert write_shard(path, []) == 0
@@ -264,31 +264,31 @@ class TestShardGeneration:
         return path
 
     def test_the_real_gen1_fixture_is_gen1(self):
-        from effects.infrastructure.record_io import ShardGeneration, shard_generation
+        from effects.infrastructure.shard_io import ShardGeneration, shard_generation
 
         assert shard_generation(_GEN1_FIXTURE) is ShardGeneration.GEN_1
 
     def test_a_shard_carrying_random_seat_is_gen2(self, tmp_path):
-        from effects.infrastructure.record_io import ShardGeneration, shard_generation
+        from effects.infrastructure.shard_io import ShardGeneration, shard_generation
 
         assert shard_generation(self._gen2_shard(tmp_path / "g2.jsonl.gz")) is ShardGeneration.GEN_2
 
     def test_an_empty_shard_has_no_generation(self, tmp_path):
-        from effects.infrastructure.record_io import shard_generation
+        from effects.infrastructure.shard_io import shard_generation
 
         empty = tmp_path / "e.jsonl"
         empty.write_text("", encoding="utf-8")
         assert shard_generation(empty) is None
 
     def test_a_set_holding_both_generations_is_refused(self, tmp_path):
-        from effects.infrastructure.record_io import MixedGenerationsError, refuse_mixed_generations
+        from effects.infrastructure.shard_io import MixedGenerationsError, refuse_mixed_generations
 
         gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
         with pytest.raises(MixedGenerationsError, match="gen-1"):
             refuse_mixed_generations([_GEN1_FIXTURE, gen2])
 
     def test_a_single_generation_set_passes(self, tmp_path):
-        from effects.infrastructure.record_io import refuse_mixed_generations
+        from effects.infrastructure.shard_io import refuse_mixed_generations
 
         gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
         refuse_mixed_generations([gen2, gen2])
@@ -305,7 +305,7 @@ class TestReadRecordsMatching:
         return target
 
     def test_it_matches_a_filter_over_every_parsed_record(self, tmp_path):
-        from effects.infrastructure.record_io import read_records_matching
+        from effects.infrastructure.shard_io import read_records_matching
 
         directory = self._copy(tmp_path)
         everything = list(read_records(directory))
@@ -322,7 +322,7 @@ class TestReadRecordsMatching:
         assert got == expected and expected
 
     def test_no_filter_reads_everything(self, tmp_path):
-        from effects.infrastructure.record_io import read_records_matching
+        from effects.infrastructure.shard_io import read_records_matching
 
         directory = self._copy(tmp_path)
         assert len(list(read_records_matching(directory))) == len(
@@ -330,7 +330,7 @@ class TestReadRecordsMatching:
         )
 
     def test_a_line_with_an_unexpected_head_is_parsed_not_dropped(self, tmp_path):
-        from effects.infrastructure.record_io import read_records_matching
+        from effects.infrastructure.shard_io import read_records_matching
 
         record = _record(**ALL_KINDS["playability-blockers"])
         data = record_to_dict(record)
@@ -345,14 +345,14 @@ class TestReadRecordsMatching:
 
     def test_the_head_is_read_off_a_written_line(self):
         from effects.infrastructure.record_codec import format_record_line
-        from effects.infrastructure.record_io import peek_envelope
+        from effects.infrastructure.shard_io import peek_envelope
 
         record = _record(**ALL_KINDS["playability-blockers"])
         head = peek_envelope(format_record_line(record))
         assert head == (record.record_id, record.game_id, "playability")
 
     def test_a_head_of_another_shape_reads_as_none(self):
-        from effects.infrastructure.record_io import peek_envelope
+        from effects.infrastructure.shard_io import peek_envelope
 
         assert peek_envelope('{"kind":"combat","game_id":"g","record_id":"r"}') is None
 

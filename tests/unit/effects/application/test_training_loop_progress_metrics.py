@@ -20,7 +20,7 @@ from effects.application.gate_one import measure
 from effects.application.validation_pass import FieldParts, Validator
 from effects.domain.effect_model import EffectModel
 from effects.infrastructure.model_runner import Runnable
-from effects.infrastructure.record_io import write_shard
+from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import gen1_training_config, make_training_loop
 
 BATCH_SIZE = 32

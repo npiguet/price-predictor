@@ -22,7 +22,7 @@ from pathlib import Path
 
 from effects.domain.provenance import KeyResolution
 from effects.domain.records import RecordKind
-from effects.infrastructure.record_io import read_shard
+from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 
 

@@ -97,7 +97,7 @@ class WorkerContext:
         return self._resolver
 
     def records(self, relative: str) -> Iterator[EffectRecord]:
-        from effects.infrastructure.record_io import read_shard
+        from effects.infrastructure.shard_io import read_shard
 
         return read_shard(Path(self.read.records_dir) / relative)
 
@@ -401,7 +401,7 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
 
 def shard_names(records_dir: Path) -> list[str]:
     """Every shard under the corpus root, as posix paths relative to it."""
-    from effects.infrastructure.record_io import iter_shards
+    from effects.infrastructure.shard_io import iter_shards
 
     root = Path(records_dir)
     return [shard.relative_to(root).as_posix() for shard in iter_shards(root)]

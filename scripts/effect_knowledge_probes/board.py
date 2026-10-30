@@ -136,7 +136,7 @@ def collect(records: Iterable, sidecars, *, per_subset: int = RECORDS_PER_SUBSET
 
 def stratum_records(directory, *, shards: int = SHARDS_PER_STRATUM):
     """The records of the first ``shards`` shards under ``directory``, in path order."""
-    from effects.infrastructure.record_io import iter_shards, read_shard
+    from effects.infrastructure.shard_io import iter_shards, read_shard
 
     for shard in iter_shards(directory)[:shards]:
         yield from read_shard(shard)

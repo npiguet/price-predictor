@@ -225,7 +225,7 @@ class _ShardWriter:
 
     def finish(self, name: str) -> WriteResult:
         """Write each non-empty output as part ``name`` of its stratum."""
-        from effects.infrastructure.record_io import write_shard
+        from effects.infrastructure.shard_io import write_shard
 
         for stratum, records in self.outputs.items():
             if records:

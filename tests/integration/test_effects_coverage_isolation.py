@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
-from effects.infrastructure.record_io import read_records
+from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.forge_jvm import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 from tests.integration.conftest import POLL_SECONDS, require_jar, run_worker

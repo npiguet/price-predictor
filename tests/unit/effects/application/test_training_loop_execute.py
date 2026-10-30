@@ -17,7 +17,7 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
 )
 from effects.domain.records import CombatPayload, RecordKind
-from effects.infrastructure.record_io import write_shard
+from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import (
     StubLosses,
     make_training_loop,

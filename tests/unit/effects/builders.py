@@ -395,7 +395,7 @@ def stub_below_the_loop(monkeypatch):
 
 def write_validation_samples(directory, records) -> dict:
     """Both validation strata's samples under ``directory``, each ``records``."""
-    from effects.infrastructure.record_io import write_shard
+    from effects.infrastructure.shard_io import write_shard
 
     samples = {}
     for stratum in ("card-disjoint", "game-disjoint"):

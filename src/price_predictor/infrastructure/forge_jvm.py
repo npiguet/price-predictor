@@ -304,8 +304,8 @@ class WorkerLogFiles:
         """Where this worker's current log lives, whether or not it exists yet.
 
         ``{run_id}.{worker}.log``, deliberately one component short of a
-        shard's own ``{run_id}.{worker}-{lifetime}.jsonl`` (record_io.
-        shard_path): the lifetime token is minted inside the JVM, so a file
+        shard's own ``{run_id}.{worker}-{lifetime}.jsonl``: the lifetime
+        token is minted inside the JVM, so a file
         this class opens before spawning it can never carry one. Landing in
         the same directory as the shards it corresponds to, under a name the
         shard pattern makes recognisable at a glance, is what makes it

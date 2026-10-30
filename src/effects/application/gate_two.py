@@ -342,7 +342,7 @@ def gate_two_records(provenance, *, corpus_path: Path) -> Iterator:
     """
     from effects.domain.records import RecordKind
     from effects.infrastructure.corpus_store import CorpusStore
-    from effects.infrastructure.record_io import read_records_matching
+    from effects.infrastructure.shard_io import read_records_matching
 
     games = frozenset(provenance.game_disjoint_games)
     if not games:

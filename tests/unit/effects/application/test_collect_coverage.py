@@ -838,7 +838,7 @@ class TestHeldOutTextUnit:
         from effects.domain.coverage import TextCoverage
         from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
         from effects.domain.text_holdout import HoldoutUnit
-        from effects.infrastructure.record_io import write_shard
+        from effects.infrastructure.shard_io import write_shard
         from tests.unit.effects.builders import make_record, write_sidecar
 
         damage, draw = "SP$ DealDamage | NumDmg$ 2", "SP$ Draw | NumCards$ 1"
@@ -870,7 +870,7 @@ class TestHeldOutTextUnit:
 
         from effects.application.collect_coverage import count_text_shard
         from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
-        from effects.infrastructure.record_io import read_shard, write_shard
+        from effects.infrastructure.shard_io import read_shard, write_shard
 
         effects = [
             record for record in read_shard(_GEN1_SHARD)
@@ -992,7 +992,7 @@ def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]
     """``text -> games`` over the shard's resolution records, and over every
     record: each record counted through its first key with a script text."""
     from effects.domain.text_holdout import normalize_script_text
-    from effects.infrastructure.record_io import read_shard
+    from effects.infrastructure.shard_io import read_shard
     from effects.infrastructure.sidecar_io import SidecarCache
 
     cache = SidecarCache({tree: Path(root) for tree, root in _GEN1_ROOTS.items()})

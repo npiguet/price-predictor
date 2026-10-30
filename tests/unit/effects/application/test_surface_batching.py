@@ -25,7 +25,7 @@ from effects.domain.records import (
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
-from effects.infrastructure.record_io import read_shard
+from effects.infrastructure.shard_io import read_shard
 from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.builders import (
     make_batcher,

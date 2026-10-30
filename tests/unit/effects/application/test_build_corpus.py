@@ -63,7 +63,7 @@ from effects.domain.state_snapshot import StateSnapshot
 from effects.domain.strata import Stratum
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
+from effects.infrastructure.shard_io import iter_shards, read_records, read_shard, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
 

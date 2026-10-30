@@ -66,7 +66,7 @@ def validate_corpus(
 
     ``sidecars`` of ``None`` reports the key-join checks as unchecked rather
     than as holding. ``presence`` is the per-shard envelope tally
-    ``record_io.read_window`` fills from the raw lines (FR-033), since a parsed
+    ``shard_io.read_window`` fills from the raw lines (FR-033), since a parsed
     record cannot say whether a field was on the wire.
     """
     checks = _checks(sidecars)

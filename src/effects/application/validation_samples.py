@@ -71,7 +71,7 @@ def _gate_one_round_robin(
     quota rather than by the slice.
     """
     from effects.domain.sampling import sampling_class
-    from effects.infrastructure.record_io import read_records
+    from effects.infrastructure.shard_io import read_records
 
     per_text: dict[str, dict[str, CapHeap]] = {
         name: {} for name in quota if name in GATE_ONE_CLASSES
@@ -115,7 +115,7 @@ def _collect(
     only: frozenset[str] | None = None,
 ) -> dict[str, KeyedCapHeap[EffectRecord]]:
     from effects.domain.sampling import sampling_class
-    from effects.infrastructure.record_io import read_records
+    from effects.infrastructure.shard_io import read_records
 
     heaps: dict[str, KeyedCapHeap[EffectRecord]] = {
         name: KeyedCapHeap(cap) for name, cap in quota.items()
@@ -183,7 +183,7 @@ def draw_samples(
 def write_samples(
     store: CorpusStore, samples: Mapping[str, Iterable[EffectRecord]],
 ) -> dict[str, int]:
-    from effects.infrastructure.record_io import write_shard
+    from effects.infrastructure.shard_io import write_shard
 
     return {
         stratum: write_shard(store.sample_path(stratum), records)

@@ -55,7 +55,7 @@ from effects.infrastructure.record_codec import (
     record_from_dict,
     record_to_dict,
 )
-from effects.infrastructure.record_io import (
+from effects.infrastructure.shard_io import (
     iter_shard_lines,
     read_records,
     read_shard,
@@ -541,7 +541,7 @@ class TestGen2EnvelopeFields:
         a dataset built from gen-1 shards read as gen-2, and the mixed-
         generation guard on ``--corpus`` could never fire.
         """
-        from effects.infrastructure.record_io import ShardGeneration, shard_generation, write_shard
+        from effects.infrastructure.shard_io import ShardGeneration, shard_generation, write_shard
 
         rewritten = tmp_path / "curated.jsonl.gz"
         write_shard(rewritten, read_shard(_GEN1_FIXTURE))

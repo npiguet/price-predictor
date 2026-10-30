@@ -2,7 +2,7 @@
 
 Every conversion is written out rather than reflected from the dataclass, so
 a field renamed in Python never silently renames itself in a corpus that
-cannot be rebuilt. Reading and writing whole shards is ``record_io``'s.
+cannot be rebuilt. Reading and writing whole shards is ``shard_io``'s.
 """
 
 from __future__ import annotations

@@ -537,7 +537,7 @@ class KeywordResolver:
         return self._by_key[key]
 
     def keywords_of(self, entity) -> set[str]:
-        # Already normalized by ``record_io`` at parse time.
+        # Already normalized by ``record_codec`` at parse time.
         found = set(entity.granted_temporary.keywords)
         if self._sidecars is None:
             return found

@@ -21,7 +21,7 @@ from effects.domain.loss_floor import constant_predictor_floor
 from effects.domain.records import CombatPayload, RecordKind
 from effects.domain.sampling import SAMPLING_CLASSES
 from effects.domain.split import HoldoutRule
-from effects.infrastructure.record_io import write_shard
+from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import (
     StubLosses,
     fields_everywhere,

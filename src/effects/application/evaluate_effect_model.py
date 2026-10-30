@@ -40,7 +40,7 @@ from effects.domain.evaluation_report import (
 from effects.domain.strata import VALIDATION_STRATA
 from effects.infrastructure.ability_cache_store import SidecarIndex
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import read_shard
+from effects.infrastructure.shard_io import read_shard
 
 logger = logging.getLogger(__name__)
 

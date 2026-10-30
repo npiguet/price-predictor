@@ -53,7 +53,7 @@ from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
     EffectModelStore,
 )
-from effects.infrastructure.record_io import load_shard
+from effects.infrastructure.shard_io import load_shard
 from effects.infrastructure.step_workers import StepWorkerPool
 from effects.infrastructure.torch_device import default_device
 from price_predictor.infrastructure.torch_training import clip_per_group

@@ -17,7 +17,7 @@ from effects.infrastructure.corpus_store import (
     card_disjoint_resolutions,
     training_acting_keys,
 )
-from effects.infrastructure.record_io import write_shard
+from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import make_record
 
 

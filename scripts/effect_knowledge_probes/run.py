@@ -256,7 +256,7 @@ def _key_json(key) -> dict | None:
 
 def _observe_training(args, context: common.ProbeContext, outcomes: ObservedOutcomes) -> None:
     """The first ``--profile-shards`` training shards, for the observed-outcome labels."""
-    from effects.infrastructure.record_io import iter_shards, read_shard
+    from effects.infrastructure.shard_io import iter_shards, read_shard
 
     for shard in sorted(iter_shards(context.training_dir))[: args.profile_shards]:
         for record in read_shard(shard):
@@ -491,7 +491,7 @@ def method_c(args, probe_model, corpus: Path, eval_records: list) -> dict:
     from effects.domain.effect_losses import per_entity_loss
     from effects.domain.effect_model import EffectModel
     from effects.domain.surface_collation import per_entity_targets
-    from effects.infrastructure.record_io import iter_shards, read_shard
+    from effects.infrastructure.shard_io import iter_shards, read_shard
 
     layers = args.method_c_layers
     config = replace(probe_model.checkpoint.model_config, n_layers=max(layers, 1))
@@ -651,7 +651,7 @@ def _run_sweeps(probe_set: ProbeSet, probe_model, records: list, checkpoint) -> 
 
 def _validation_samples(context: common.ProbeContext, limit: int) -> list:
     """The first ``limit`` records of each stratum's fixed validation sample."""
-    from effects.infrastructure.record_io import read_shard
+    from effects.infrastructure.shard_io import read_shard
 
     samples = []
     for stratum in common.STRATA:

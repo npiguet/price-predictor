@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.infrastructure.record_io import iter_shards
+from effects.infrastructure.shard_io import iter_shards
 from tests.integration.conftest import require_jar, run_worker
 
 pytestmark = pytest.mark.integration

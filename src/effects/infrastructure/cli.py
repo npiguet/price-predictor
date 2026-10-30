@@ -685,7 +685,7 @@ def _field_coverage_parser(subparsers) -> None:
 
 def _require_shards(root: Path) -> list[Path] | None:
     """The shards under ``root``; None, having said so, where there are none."""
-    from effects.infrastructure.record_io import iter_shards
+    from effects.infrastructure.shard_io import iter_shards
 
     shards = iter_shards(root)
     if not shards:
@@ -696,7 +696,7 @@ def _require_shards(root: Path) -> list[Path] | None:
 
 def run_field_coverage(args: argparse.Namespace) -> int:
     from effects.application.field_coverage import field_coverage, report_lines
-    from effects.infrastructure.record_io import read_records
+    from effects.infrastructure.shard_io import read_records
 
     root = args.effect_records
     if _require_shards(root) is None:
@@ -740,7 +740,7 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
     number is what tells an operator whether a fix worked or merely moved."""
     from effects.application.corpus_validation.presence import FieldPresence
     from effects.application.validate_corpus import validate_corpus
-    from effects.infrastructure.record_io import read_window
+    from effects.infrastructure.shard_io import read_window
 
     root = args.effect_records
     shards = _require_shards(root)
@@ -798,7 +798,7 @@ def _train_effect_model_parser(subparsers) -> None:
 
 @exits_with({
     HoldoutMismatchError: 1,
-    "effects.infrastructure.record_io.MixedGenerationsError": 1,
+    "effects.infrastructure.shard_io.MixedGenerationsError": 1,
     SurfaceMismatchError: 2,
     EmptyHoldoutError: 2,
     f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 2,

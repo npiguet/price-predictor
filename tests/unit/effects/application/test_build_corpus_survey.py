@@ -40,7 +40,7 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.split import HeldOutCards
-from effects.infrastructure.record_io import write_shard
+from effects.infrastructure.shard_io import write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
 

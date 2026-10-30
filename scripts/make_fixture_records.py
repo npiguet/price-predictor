@@ -27,7 +27,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from effects.infrastructure.record_codec import record_from_dict
-from effects.infrastructure.record_io import SHARD_GLOBS, iter_shard_lines
+from effects.infrastructure.shard_io import SHARD_GLOBS, iter_shard_lines
 
 _KEY_FIELDS = {"script_file", "face", "trait_kind", "index_within_kind"}
 

@@ -230,7 +230,7 @@ def run(config: CollectVariantsConfig) -> int:
 
 def _size_budget(config: CollectVariantsConfig) -> int:
     """How many variant scripts this run may generate; says why when none."""
-    from effects.infrastructure.record_io import count_records
+    from effects.infrastructure.shard_io import count_records
 
     source_scripts = sum(1 for _ in Path(config.forge_cards_path).rglob("*.txt"))
     source = config.volume_source()
@@ -361,7 +361,7 @@ def _play_and_check_growth(
     config: CollectVariantsConfig, variants: list[GeneratedVariant], budget: int,
 ) -> int:
     """Play one round of variant decks and fail it when it collected nothing."""
-    from effects.infrastructure.record_io import count_records, count_shard_records, iter_shards
+    from effects.infrastructure.shard_io import count_records, count_shard_records, iter_shards
 
     # Equal weights: a fresh variant has no records to balance against.
     decks_file = Path(config.effect_records) / "variant-decks.txt"

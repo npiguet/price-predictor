@@ -158,7 +158,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     """The main checkpoint, hash-checked, with its corpus verified (FR-147)."""
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.effect_model_store import load_for_inference
-    from effects.infrastructure.record_io import iter_shards, refuse_mixed_generations
+    from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
 
     main_path = Path(config.checkpoint)
     main, vocab_path, keyword_path = load_for_inference(

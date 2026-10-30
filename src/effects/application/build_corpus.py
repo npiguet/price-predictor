@@ -450,7 +450,7 @@ def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOut
 
 def _refuse_mixed_generations(records_dir: Path) -> None:
     """Before any record is read (FR-033)."""
-    from effects.infrastructure.record_io import (
+    from effects.infrastructure.shard_io import (
         MixedGenerationsError,
         iter_shards,
         refuse_mixed_generations,
@@ -544,7 +544,7 @@ def _repack_outputs(
     """
     import shutil
 
-    from effects.infrastructure.record_io import iter_shards, repack_shards
+    from effects.infrastructure.shard_io import iter_shards, repack_shards
 
     for stratum in OUTPUT_STRATA:
         parts = iter_shards(store.parts_dir_for(stratum))

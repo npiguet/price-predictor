@@ -51,7 +51,7 @@ from effects.domain.state_snapshot import (
     InclusionTier,
     StateSnapshot,
 )
-from effects.infrastructure.record_io import read_window
+from effects.infrastructure.shard_io import read_window
 from effects.infrastructure.sidecar_io import SidecarCache
 from tests.unit.effects.builders import (
     RawShardWriter,

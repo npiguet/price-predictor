@@ -112,7 +112,7 @@ def count_shard(shard: Path) -> Counter[str]:
     converted (lowercase) unit names. Top-level so a process pool can pickle it.
     """
     from effects.domain.card_names import fold_card_name
-    from effects.infrastructure.record_io import read_shard
+    from effects.infrastructure.shard_io import read_shard
 
     counts: Counter[str] = Counter()
     for record in read_shard(shard):
@@ -144,7 +144,7 @@ class _ShardCounter:
         """``count`` each shard not yet read, in parallel, and ``apply`` it;
         returns how many. Applying adds, so the order shards finish in cannot
         matter. ``count`` must pickle."""
-        from effects.infrastructure.record_io import iter_shards
+        from effects.infrastructure.shard_io import iter_shards
 
         fresh = [
             shard for shard in iter_shards(Path(records_dir))
@@ -471,7 +471,7 @@ def count_text_shard(
     pickle it; each process resolves keys through its own :func:`_sidecars`,
     because a sidecar cache does not pickle.
     """
-    from effects.infrastructure.record_io import iter_shard_matching
+    from effects.infrastructure.shard_io import iter_shard_matching
 
     sidecars = _sidecars(tuple(sorted(roots.items())))
     games: dict[str, set[str]] = defaultdict(set)

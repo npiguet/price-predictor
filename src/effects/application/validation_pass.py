@@ -26,7 +26,7 @@ from effects.domain.gate_metrics import GateOneMetrics, MarginAccumulator
 from effects.domain.loss_floor import PartsMean, constant_predictor_floor
 from effects.domain.sampling import BatchPlan, sampling_class
 from effects.domain.strata import VALIDATION_STRATA, Stratum
-from effects.infrastructure.record_io import load_shard
+from effects.infrastructure.shard_io import load_shard
 
 if TYPE_CHECKING:
     from effects.application.run_context import RunContext

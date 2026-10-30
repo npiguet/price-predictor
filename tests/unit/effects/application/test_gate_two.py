@@ -917,7 +917,7 @@ class TestPopulation:
 
 class TestGateTwoRecords:
     def _write(self, directory, *records):
-        from effects.infrastructure.record_io import write_shard
+        from effects.infrastructure.shard_io import write_shard
 
         write_shard(directory / "shard-00001.jsonl.gz", records)
 

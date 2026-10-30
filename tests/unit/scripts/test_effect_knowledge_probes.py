@@ -48,7 +48,7 @@ from tests.unit.effects.builders import player_of  # noqa: E402
 
 @pytest.fixture(scope="module")
 def records():
-    from effects.infrastructure.record_io import read_shard
+    from effects.infrastructure.shard_io import read_shard
 
     return list(read_shard(_FIXTURES / "gen1-records.jsonl.gz"))
 

@@ -194,7 +194,7 @@ _FIXTURE = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-records.js
 
 class TestOutcomeSignature:
     def _effect(self):
-        from effects.infrastructure.record_io import read_shard
+        from effects.infrastructure.shard_io import read_shard
 
         return next(
             r for r in read_shard(_FIXTURE)

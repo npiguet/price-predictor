@@ -18,7 +18,7 @@ from effects.domain.corpus_manifest import CorpusManifest, SourceShard
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.strata import OUTPUT_STRATA, Stratum
 from effects.infrastructure.record_codec import parse_record_line, record_from_dict
-from effects.infrastructure.record_io import (
+from effects.infrastructure.shard_io import (
     iter_shard_lines,
     iter_shards,
     peek_envelope,

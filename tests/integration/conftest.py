@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from effects.domain.records import EffectRecord
-from effects.infrastructure.record_io import read_records
+from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.forge_jvm import kill_process_tree, resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 

@@ -168,7 +168,7 @@ def stratum_dir(corpus: Path, stratum: str) -> Path:
 
 
 def shards_of(directory: Path) -> list[Path]:
-    from effects.infrastructure.record_io import iter_shards
+    from effects.infrastructure.shard_io import iter_shards
 
     return list(iter_shards(Path(directory))) if Path(directory).exists() else []
 
@@ -185,7 +185,7 @@ def read_games(
     narrows it further to the records a probing run actually reads.
     """
     from effects.infrastructure.record_codec import record_from_dict
-    from effects.infrastructure.record_io import iter_shard_lines, refuse_mixed_generations
+    from effects.infrastructure.shard_io import iter_shard_lines, refuse_mixed_generations
 
     shards = list(shards)
     refuse_mixed_generations(shards)

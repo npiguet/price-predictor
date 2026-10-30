@@ -228,7 +228,7 @@ class TestVolumeCap:
         assert volume_ceiling(33_700, 0.0) == 0
 
     def test_a_ceiling_stops_the_count_early(self, tmp_path):
-        from effects.infrastructure.record_io import count_records, write_shard
+        from effects.infrastructure.shard_io import count_records, write_shard
 
         for index in range(4):
             write_shard(
@@ -472,7 +472,7 @@ class TestTheRunReportsWhatItCollected:
         """
 
         import effects.application.collect_variants as collect_variants
-        import effects.infrastructure.record_io as record_io
+        import effects.infrastructure.shard_io as shard_io
 
         path = tmp_path / "variant-scripts" / "bolt_variant_0.txt"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -484,7 +484,7 @@ class TestTheRunReportsWhatItCollected:
             perturbation="numeric",
         )
         monkeypatch.setattr(
-            record_io, "count_records", lambda directory, **_: source_records,
+            shard_io, "count_records", lambda directory, **_: source_records,
         )
         monkeypatch.setattr(
             collect_variants, "generate_variants", lambda *a, **k: [variant],

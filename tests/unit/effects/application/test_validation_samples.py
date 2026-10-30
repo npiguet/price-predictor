@@ -14,7 +14,7 @@ from effects.domain.sampling import (
 )
 from effects.domain.strata import Stratum
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import write_shard
+from effects.infrastructure.shard_io import write_shard
 
 
 def test_class_quota_rounds_each_share_and_keeps_every_class():
@@ -82,12 +82,12 @@ def test_a_short_class_takes_what_there_is(strata):
 
 def test_zero_validation_sample_reads_nothing_and_draws_nothing(strata, monkeypatch):
     """``--validation-sample 0`` means no sample: not even a read of the strata."""
-    from effects.infrastructure import record_io
+    from effects.infrastructure import shard_io
 
     def bomb(directory):
         raise AssertionError(f"draw_samples read {directory} despite size=0")
 
-    monkeypatch.setattr(record_io, "read_records", bomb)
+    monkeypatch.setattr(shard_io, "read_records", bomb)
     samples = draw_samples(strata, mix=MIX, size=0, seed=1)
     assert samples == {"card-disjoint": [], "game-disjoint": []}
 

@@ -32,7 +32,7 @@ def qualifying(
     does not. ``shards`` bounds the shards read per directory; ``per_game``
     None takes every qualifying record of a game.
     """
-    from effects.infrastructure.record_io import iter_shards, read_shard
+    from effects.infrastructure.shard_io import iter_shards, read_shard
 
     chosen: list = []
     per: Counter[str] = Counter()
