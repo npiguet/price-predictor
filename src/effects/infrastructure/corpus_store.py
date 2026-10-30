@@ -15,13 +15,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from effects.domain.corpus_manifest import CorpusManifest, SourceShard
+from effects.domain.corpus_plan import Keys
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.strata import OUTPUT_STRATA, Stratum
-from effects.infrastructure.record_codec import parse_record_line, record_from_dict
 from effects.infrastructure.shard_io import (
-    iter_shard_lines,
+    EnvelopeHead,
+    iter_shard_matching,
     iter_shards,
-    peek_envelope,
     read_records_matching,
 )
 
@@ -137,7 +137,7 @@ def current_sources(records_dir: Path) -> tuple[SourceShard, ...]:
     )
 
 
-def training_acting_keys(directory: Path) -> set[tuple]:
+def training_acting_keys(directory: Path) -> set[Keys]:
     """Every distinct ``acting_keys`` tuple among the records under ``directory``.
 
     ``directory`` is the curated corpus's ``training/``: what the checkpoint
@@ -147,15 +147,17 @@ def training_acting_keys(directory: Path) -> set[tuple]:
     """
     shards = iter_shards(directory)
     read: set[str] = set()
-    acting: set[tuple] = set()
+
+    def first_copy(head: EnvelopeHead) -> bool:
+        if head.record_id in read:
+            return False
+        read.add(head.record_id)
+        return True
+
+    acting: set[Keys] = set()
     for done, shard in enumerate(shards, start=1):
-        for line in iter_shard_lines(shard):
-            head = peek_envelope(line)
-            if head is not None:
-                if head.record_id in read:
-                    continue
-                read.add(head.record_id)
-            keys = acting_keys(record_from_dict(parse_record_line(line)))
+        for record in iter_shard_matching(shard, where=first_copy):
+            keys = acting_keys(record)
             if keys:
                 acting.add(keys)
         if done % 50 == 0:

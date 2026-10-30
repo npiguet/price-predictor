@@ -353,6 +353,26 @@ class TestReadRecordsMatching:
         ))
         assert [r.record_id for r in got] == [record.record_id]
 
+    def test_where_sees_each_head_once_after_the_other_filters(self, tmp_path):
+        """Once per line, so a predicate may keep state; parsed or peeked alike."""
+        from effects.infrastructure.shard_io import iter_shard_matching
+
+        directory = self._copy(tmp_path)
+        shard = directory / _GEN1_FIXTURE.name
+        combats = [r.record_id for r in read_records(directory) if r.kind is RecordKind.COMBAT]
+        seen: list[str] = []
+
+        def every_other(head) -> bool:
+            seen.append(head.record_id)
+            return len(seen) % 2 == 1
+
+        got = [
+            r.record_id
+            for r in iter_shard_matching(shard, kinds={RecordKind.COMBAT}, where=every_other)
+        ]
+        assert seen == combats and combats
+        assert got == combats[::2]
+
     def test_the_head_is_read_off_a_written_line(self):
         from effects.infrastructure.record_codec import format_record_line
         from effects.infrastructure.shard_io import peek_envelope

@@ -342,26 +342,39 @@ def iter_shard_matching(
     *,
     game_ids: Collection[str] | None = None,
     kinds: Collection[RecordKind] | None = None,
+    where: Callable[[EnvelopeHead], bool] | None = None,
 ) -> Iterator[EffectRecord]:
-    """The records of one shard of the named games and kinds, the rest
-    skipped unparsed; :func:`read_records_matching` for one shard."""
+    """The records of one shard of the named games and kinds that ``where``
+    keeps, the rest skipped unparsed; :func:`read_records_matching` for one
+    shard.
+
+    ``where`` sees each line's head once, and only once the two filters pass,
+    so it may keep state, such as the record ids it has already let through.
+    """
     for line in iter_shard_lines(shard):
         head = peek_envelope(line)
-        if head is not None and not _wanted(head.game_id, head.kind, game_ids, kinds):
+        if head is not None and not _wanted(head, game_ids, kinds, where):
             continue
         record = record_from_dict(parse_record_line(line))
-        if head is None and not _wanted(record.game_id, record.kind.value, game_ids, kinds):
+        if head is None and not _wanted(
+            EnvelopeHead(record.record_id, record.game_id, record.kind.value),
+            game_ids, kinds, where,
+        ):
             continue
         yield record
 
 
 def _wanted(
-    game_id: str, kind: str, game_ids: Collection[str] | None,
-    kinds: Collection[RecordKind] | None,
+    head: EnvelopeHead, game_ids: Collection[str] | None,
+    kinds: Collection[RecordKind] | None, where: Callable[[EnvelopeHead], bool] | None,
 ) -> bool:
-    """Whether a record of ``game_id`` and ``kind`` passes both filters: a
+    """Whether a record with this head passes every filter: a
     :class:`RecordKind` hashes as its value, so the envelope's string finds it."""
-    return (game_ids is None or game_id in game_ids) and (kinds is None or kind in kinds)
+    return (
+        (game_ids is None or head.game_id in game_ids)
+        and (kinds is None or head.kind in kinds)
+        and (where is None or where(head))
+    )
 
 
 def count_records(directory: Path, *, ceiling: int = 0) -> int:
