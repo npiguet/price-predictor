@@ -31,8 +31,9 @@ from effects.domain.records import (
 from tests.unit.effects.builders import (
     fresh_interpreter_env,
     held_out_cards,
+    make_entity,
 )
-from tests.unit.effects.domain.test_coverage import _entity, _record
+from tests.unit.effects.domain.test_coverage import _record
 
 
 class TestRetirement:
@@ -295,7 +296,7 @@ class TestTheRoundPlaysTheComputedDecks:
             if not count:
                 return
             line = format_record_line(
-                _record([_entity("E1", "aa")], source="E1")
+                _record([make_entity("E1", "aa")], source="E1")
             )
             shard = records_dir / f"run.0-{matches}{count}.jsonl"
             shard.write_text("\n".join([line] * count) + "\n", encoding="utf-8")
@@ -524,7 +525,7 @@ class TestIncrementalCounting:
         directory.mkdir(parents=True, exist_ok=True)
         lines = [
             format_record_line(
-                _record([_entity(f"E-{card}", card)], source=f"E-{card}")
+                _record([make_entity(f"E-{card}", card)], source=f"E-{card}")
             )
             for card in cards
         ]
@@ -604,7 +605,7 @@ class TestCountingCrossesTheNameBoundary:
         shard = tmp_path / "run.0-x.jsonl"
         shard.write_text(
             format_record_line(
-                _record([_entity("E1", "Soul Echo")], source="E1")
+                _record([make_entity("E1", "Soul Echo")], source="E1")
             ) + "\n",
             encoding="utf-8",
         )
@@ -623,7 +624,7 @@ class TestCountingCrossesTheNameBoundary:
         shard = tmp_path / "run.0-x.jsonl"
         shard.write_text(
             format_record_line(
-                _record([_entity("E1", "Some Token")], source="E1")
+                _record([make_entity("E1", "Some Token")], source="E1")
             ) + "\n",
             encoding="utf-8",
         )
@@ -647,7 +648,7 @@ class TestCountingReportsProgress:
         from effects.infrastructure.record_codec import format_record_line
 
         directory.mkdir(parents=True, exist_ok=True)
-        line = format_record_line(_record([_entity("E1", "aa")], source="E1"))
+        line = format_record_line(_record([make_entity("E1", "aa")], source="E1"))
         for n in range(count):
             (directory / f"run.0-{n:03d}.jsonl").write_text(
                 line + "\n", encoding="utf-8",
@@ -734,7 +735,7 @@ class TestParallelCounting:
         directory.mkdir(parents=True, exist_ok=True)
         for n, (card, count) in enumerate(spec.items()):
             line = format_record_line(
-                _record([_entity("E1", card)], source="E1")
+                _record([make_entity("E1", card)], source="E1")
             )
             (directory / f"run.0-{n:03d}.jsonl").write_text(
                 "\n".join([line] * count) + "\n", encoding="utf-8",
@@ -761,7 +762,7 @@ class TestParallelCounting:
         from effects.infrastructure.record_codec import format_record_line
 
         tmp_path.mkdir(parents=True, exist_ok=True)
-        line = format_record_line(_record([_entity("E1", "Soul Echo")], source="E1"))
+        line = format_record_line(_record([make_entity("E1", "Soul Echo")], source="E1"))
         for n in range(6):
             (tmp_path / f"run.0-{n}.jsonl").write_text(
                 "\n".join([line] * 5) + "\n", encoding="utf-8",

@@ -34,16 +34,8 @@ from effects.domain.records import (
     RewritePayload,
     TriggerPayload,
 )
-from effects.domain.state_snapshot import COLORS, GlobalState, StateSnapshot
+from effects.domain.state_snapshot import COLORS
 from tests.unit.effects.builders import fresh_interpreter_env, make_record
-
-_SNAPSHOT = StateSnapshot(
-    global_=GlobalState(
-        turn=1, phase="main1", active="P0", priority="P0", stack_size=0,
-    ),
-    players=(),
-    entities=(),
-)
 
 
 def _record(payload, kind=RecordKind.RESOLUTION, **overrides) -> EffectRecord:

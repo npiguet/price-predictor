@@ -42,10 +42,9 @@ KEY = ProvenanceKey("cardsfolder/s/shock.txt", 0, "spell", 0)
 
 
 def _creature(entity_id: str, toughness: int, *, damage: int = 0, **overrides) -> EntityState:
-    return EntityState(
-        id=entity_id, name=entity_id, zone="battlefield", controller="P1",
-        types=("creature",), pt=PowerToughness(base=(2, toughness)), damage=damage,
-        **overrides,
+    return make_entity(
+        entity_id, entity_id, controller="P1", types=("creature",),
+        pt=PowerToughness(base=(2, toughness)), damage=damage, **overrides,
     )
 
 
@@ -143,8 +142,7 @@ class TestQualify:
     def test_an_indestructible_or_enchanted_creature_is_not_copied(self):
         record = _record([_damage("E1", 3)], [_creature("E1", 2)])
         assert _qualify(record, keywords_of=lambda e: {"indestructible"}) is None
-        aura = EntityState(id="A1", name="aura", zone="battlefield", controller="P0",
-                           attached_to="E1")
+        aura = make_entity("A1", "aura", attached_to="E1")
         record = _record([_damage("E1", 3), _died("E1")], [_creature("E1", 2), aura])
         assert _qualify(record) is None
 
@@ -315,8 +313,8 @@ class TestThePinnedOutput:
 
         life = [Event(type=EventType.LIFE_CHANGE, subjects=(player,), params={"delta": -10})
                 for player in ("P0", "P1")]
-        boosted = EntityState(
-            id="E2", name="E2", zone="battlefield", controller="P1", types=("creature",),
+        boosted = make_entity(
+            "E2", "E2", controller="P1", types=("creature",),
             pt=PowerToughness(base=(1, 1), boosts=(1, 1), counters=(0, 1)), damage=1,
         )
         record = _record(

@@ -7,26 +7,22 @@ import pytest
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
-    ActivationPayload,
-    CombatPayload,
-    Costs,
     EffectRecord,
     Moment,
     RecordKind,
-    ResolutionOutcome,
     ResolutionPayload,
 )
 from effects.domain.state_snapshot import GlobalState, StateSnapshot
+from tests.unit.effects import builders
 
 
 @pytest.fixture
 def snapshot() -> StateSnapshot:
-    return StateSnapshot(
+    return builders.make_snapshot(
         global_=GlobalState(
             turn=4, phase="main1", active="P0", priority="P0", stack_size=1,
         ),
-        players=(),
-        entities=(),
+        tiers=frozenset(),
     )
 
 
@@ -42,35 +38,24 @@ def ability_key() -> ProvenanceKey:
 
 @pytest.fixture
 def make_record(snapshot, ability_key):
-    """Build a valid record of any kind, overriding whatever the test needs."""
+    """:func:`builders.make_record` on the ``snapshot`` board, with collected
+    ids and timestamp; a resolution acts through ``ability_key`` and its
+    effect half deals damage."""
 
-    def build(**overrides) -> EffectRecord:
-        kind = overrides.pop("kind", RecordKind.RESOLUTION)
+    def build(kind: RecordKind = RecordKind.RESOLUTION, **overrides) -> EffectRecord:
         defaults: dict = {
             "record_id": "run.3.11",
-            "run_id": "run",
             "timestamp": "2026-09-06T15:31:12.152018Z",
             "game_id": "run.3.2",
-            "kind": kind,
-            "actor_player": "P0",
             "state": snapshot,
         }
         if kind is RecordKind.RESOLUTION:
-            moment = overrides.pop("moment", Moment.RESOLUTION)
-            defaults["moment"] = moment
             defaults["ability"] = (ability_key,)
-            defaults["payload"] = (
-                ResolutionPayload(events=(Event(type=EventType.DAMAGE_DEALT),))
-                if moment is Moment.RESOLUTION
-                else ActivationPayload(
-                    costs=Costs(), outcome=ResolutionOutcome.RESOLVED,
+            if overrides.get("moment", Moment.RESOLUTION) is Moment.RESOLUTION:
+                defaults["payload"] = ResolutionPayload(
+                    events=(Event(type=EventType.DAMAGE_DEALT),),
                 )
-            )
-        elif kind is RecordKind.COMBAT:
-            defaults["payload"] = CombatPayload()
-        elif "payload" not in overrides:
-            raise ValueError(f"make_record has no default payload for {kind}")
         defaults.update(overrides)
-        return EffectRecord(**defaults)
+        return builders.make_record(kind, **defaults)
 
     return build

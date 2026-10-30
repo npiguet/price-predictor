@@ -16,7 +16,8 @@ from effects.domain.records import (
     RewritePayload,
     key_sites,
 )
-from effects.domain.state_snapshot import EntityState, GrantedTemporary
+from effects.domain.state_snapshot import GrantedTemporary
+from tests.unit.effects.builders import make_entity
 
 
 def _key(name: str, kind: str = "static") -> ProvenanceKey:
@@ -28,9 +29,8 @@ EMBLEM = _key("emblem")
 
 
 def _board(snapshot):
-    entity = EntityState(
-        id="E1", name="Bear", zone="battlefield", controller="P0",
-        printed=(PRINTED,), granted_attached=(ATTACHED,),
+    entity = make_entity(
+        "E1", "Bear", printed=(PRINTED,), granted_attached=(ATTACHED,),
         granted_temporary=GrantedTemporary(abilities=(TEMPORARY,)),
     )
     return replace(

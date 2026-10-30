@@ -40,7 +40,7 @@ from effects.domain.state_snapshot import (
     PowerToughness,
     StateSnapshot,
 )
-from tests.unit.effects.builders import fresh_interpreter_env
+from tests.unit.effects.builders import fresh_interpreter_env, make_entity, make_snapshot
 
 _WHITE_KNIGHT = ProvenanceKey("cardsfolder/w/white_knight.txt", 0, "static", 0)
 
@@ -64,11 +64,10 @@ def _creature(
     printed: tuple[ProvenanceKey, ...] = (),
     combat: CombatStatus | None = None,
 ) -> EntityState:
-    return EntityState(
-        id=entity_id, name=entity_id, zone="battlefield", controller=controller,
-        types=("creature",), pt=PowerToughness(base=(power, toughness)),
-        damage=damage, combat=combat, printed=printed,
-        granted_temporary=GrantedTemporary(keywords=keywords),
+    return make_entity(
+        entity_id, entity_id, controller=controller, types=("creature",),
+        pt=PowerToughness(base=(power, toughness)), damage=damage, combat=combat,
+        printed=printed, granted_temporary=GrantedTemporary(keywords=keywords),
     )
 
 
@@ -80,7 +79,7 @@ _STEPS = {
 
 
 def _board(*entities: EntityState, substep: str = "regular") -> StateSnapshot:
-    return StateSnapshot(
+    return make_snapshot(
         global_=GlobalState(
             turn=4, phase=_STEPS[substep], active="P0", priority="P0",
             stack_size=0, combat_substep=substep,
@@ -123,9 +122,8 @@ def _attacker_and_blockers(
 
 def _planeswalker() -> EntityState:
     """A defender that is not a player."""
-    return EntityState(
-        id="E9", name="Chandra, Torch of Defiance", zone="battlefield",
-        controller="P1", types=("planeswalker",),
+    return make_entity(
+        "E9", "Chandra, Torch of Defiance", controller="P1", types=("planeswalker",),
     )
 
 
