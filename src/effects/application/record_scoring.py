@@ -1,6 +1,6 @@
 """Every record's own losses and grouping keys, for the evaluation's breakdowns.
 
-Gate 1's forward pass (:func:`effects.application.gate_one.forward_chunks`),
+Gate 1's forward pass (:func:`effects.application.model_loading.forward_chunks`),
 split by row into the trainer's per-entity loss over each record alone.
 """
 
@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import torch
 
 from effects.application.breakdowns import TOTAL, RecordResult
-from effects.application.gate_one import forward_chunks
+from effects.application.model_loading import forward_chunks
 from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
 from effects.domain.effect_losses import per_entity_loss
 from effects.domain.entity_field_targets import EntityTargetBatch
@@ -21,8 +21,8 @@ from effects.domain.records import acting_keys
 from effects.domain.rule_families import rule_family
 
 if TYPE_CHECKING:
+    from effects.application.model_loading import Runnable
     from effects.application.surface_batching import SurfaceBatcher
-    from effects.infrastructure.model_runner import Runnable
 
 
 def score_records(

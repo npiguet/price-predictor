@@ -61,3 +61,12 @@ def load_tokenizer(
         load_vocabulary(Path(vocab_path)), load_definitions(keyword_path),
         surface=surface,
     )
+
+
+def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
+    """The tokenizer ``checkpoint`` trained with, under the rules it recorded
+    (a gen-1 checkpoint reads its script vocabulary with the prose grammar)."""
+    return load_tokenizer(
+        vocab_path, keyword_path,
+        training_settings=checkpoint.training_settings or {},
+    )

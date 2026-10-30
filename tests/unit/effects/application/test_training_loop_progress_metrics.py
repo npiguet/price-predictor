@@ -17,9 +17,9 @@ import torch
 
 from effects.application import run_context
 from effects.application.gate_one import measure
+from effects.application.model_loading import Runnable
 from effects.application.validation_pass import FieldParts, Validator
 from effects.domain.effect_model import EffectModel
-from effects.infrastructure.model_runner import Runnable
 from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import gen1_training_config, make_training_loop
 

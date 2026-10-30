@@ -19,6 +19,7 @@ from effects.application.step_preparation import (
     StepPreparer,
     training_heads,
 )
+from effects.application.step_workers import StepWorkerPool
 from effects.application.surface_batching import (
     IdentityTable,
     Materializer,
@@ -45,7 +46,6 @@ from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY, Slo
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.infrastructure.sidecar_io import script_vocabularies, sidecar_roots
-from effects.infrastructure.step_workers import StepWorkerPool
 
 logger = logging.getLogger(__name__)
 

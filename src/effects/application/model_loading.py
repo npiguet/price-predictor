@@ -1,5 +1,12 @@
-"""Load a saved checkpoint back into something that can be run over records,
-through the same ``surface_batching`` the trainer uses."""
+"""Turn a loaded checkpoint into something that can be run over records,
+through the same ``surface_batching`` the trainer uses.
+
+The weights themselves come off disk in the infrastructure
+(:func:`effects.infrastructure.effect_model_store.load_weights`); what is
+assembled here around them — the batcher, its text stager and key resolver,
+the identity baseline's table, the evaluated fields — is the trainer's own
+pipeline, so it lives beside it.
+"""
 
 from __future__ import annotations
 
@@ -32,21 +39,29 @@ from effects.domain.ability_tokenizer import (
     AbilityTokenizer,
     Surface,
 )
-from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
+from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.sampling import sampling_class
-from effects.domain.surface_collation import entity_index
+from effects.domain.surface_collation import entity_index, per_entity_targets
+from effects.infrastructure.effect_model_store import load_weights
 from effects.infrastructure.sidecar_io import SidecarCache
-from effects.infrastructure.tokenizer_loading import load_tokenizer
+from effects.infrastructure.tokenizer_loading import tokenizer_for
 from effects.infrastructure.torch_device import default_device
 
 logger = logging.getLogger(__name__)
 
 #: Seeds every evaluation batcher's generator, so evaluations repeat.
 EVALUATION_SEED = 42
+
+#: Records per forward pass when gate 1 and the breakdowns score a checkpoint.
+BATCH_RECORDS = 32
+
+#: Observations per forward pass in gate 2: each is built twice, as collected
+#: and perturbed, in one batch.
+BATCH_OBSERVATIONS = BATCH_RECORDS // 2
 
 
 def build_sidecars(config) -> SidecarCache:
@@ -56,23 +71,6 @@ def build_sidecars(config) -> SidecarCache:
     return SidecarCache.from_folders(
         config.cards_folders, getattr(config, "variant_scripts", None),
     )
-
-
-def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
-    """The tokenizer ``checkpoint`` trained with, under the rules it recorded
-    (a gen-1 checkpoint reads its script vocabulary with the prose grammar)."""
-    return load_tokenizer(
-        vocab_path, keyword_path,
-        training_settings=checkpoint.training_settings or {},
-    )
-
-
-#: Records per forward pass when gate 1 and the breakdowns score a checkpoint.
-BATCH_RECORDS = 32
-
-#: Observations per forward pass in gate 2: each is built twice, as collected
-#: and perturbed, in one batch.
-BATCH_OBSERVATIONS = BATCH_RECORDS // 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +107,17 @@ class Runnable:
         """A resolver over the batcher's own sidecar cache, never a second
         one: reading different joins, a perturbation would strip nothing."""
         return KeywordResolver(self.batcher.sidecars)
+
+
+def forward_chunks(
+    records, runnable: Runnable,
+) -> Iterator[tuple[list, torch.Tensor, EntityTargetBatch]]:
+    """``(chunk, gathered, targets)`` per chunk of ``records``, on the host,
+    ``gathered`` aligned column for column with the targets: gate 1's margins
+    and :mod:`effects.application.record_scoring` read one pass."""
+    for chunk in runnable.inference_chunks(records, BATCH_RECORDS):
+        gathered, surfaces = runnable.per_entity_outputs(chunk)
+        yield chunk, gathered, per_entity_targets(chunk, surfaces, runnable.fields)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +167,7 @@ def load_model(
     """``checkpoint``'s weights on the device, with its tokenizer;
     ``sidecars`` lets several loads share one cache."""
     device = default_device()
-    encoder, model = _load_weights(checkpoint, device)
+    encoder, model = load_weights(checkpoint, device)
     return LoadedModel(
         checkpoint=checkpoint,
         encoder=encoder,
@@ -178,32 +187,6 @@ def load_runnable(
     return load_model(
         config, checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
     ).runnable(records)
-
-
-#: Model state a shipped checkpoint may lack: the training-only heads (FR-076)
-#: and the zero-initialized option-kind embedding (FR-063a). Anything else
-#: missing is refused, or it would run at random initial weights.
-OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
-    *(f"{module}." for module in TRAINING_ONLY_MODULES),
-    "option_kind_embedding.",
-)
-
-
-def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
-    """The checkpoint's encoder and model on ``device``, in evaluation mode,
-    at the size the checkpoint recorded (FR-061)."""
-    encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
-    if checkpoint.encoder_state:
-        encoder.load_state_dict(checkpoint.encoder_state)
-    model = EffectModel(checkpoint.model_config).to(device)
-    missing, unexpected = model.load_state_dict(checkpoint.model_state, strict=False)
-    absent = [key for key in missing if not key.startswith(OPTIONAL_STATE_PREFIXES)]
-    if absent or unexpected:
-        raise RuntimeError(
-            f"the checkpoint's model state does not fit the model it declares: "
-            f"missing {absent}, unexpected {list(unexpected)}"
-        )
-    return encoder.eval(), model.eval()
 
 
 def _identity_table(checkpoint, device) -> IdentityTable | None:

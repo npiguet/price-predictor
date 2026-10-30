@@ -15,10 +15,10 @@ from typing import Any, NamedTuple
 
 import torch
 
-from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.ability_encoder import AbilityEncoder, AbilityEncoderConfig
 from effects.domain.aux_heads import TRAINING_ONLY_MODULES
 from effects.domain.baselines import Baseline
-from effects.domain.effect_model import EffectModelConfig
+from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.infrastructure.torch_checkpoint import (
     load_checkpoint,
@@ -163,6 +163,32 @@ def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
         key: value for key, value in state.items()
         if not key.startswith(prefixes)
     }
+
+
+#: Model state a shipped checkpoint may lack: the training-only heads (FR-076)
+#: and the zero-initialized option-kind embedding (FR-063a). Anything else
+#: missing is refused, or it would run at random initial weights.
+OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
+    *(f"{module}." for module in TRAINING_ONLY_MODULES),
+    "option_kind_embedding.",
+)
+
+
+def load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
+    """The checkpoint's encoder and model on ``device``, in evaluation mode,
+    at the size the checkpoint recorded (FR-061)."""
+    encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
+    if checkpoint.encoder_state:
+        encoder.load_state_dict(checkpoint.encoder_state)
+    model = EffectModel(checkpoint.model_config).to(device)
+    missing, unexpected = model.load_state_dict(checkpoint.model_state, strict=False)
+    absent = [key for key in missing if not key.startswith(OPTIONAL_STATE_PREFIXES)]
+    if absent or unexpected:
+        raise RuntimeError(
+            f"the checkpoint's model state does not fit the model it declares: "
+            f"missing {absent}, unexpected {list(unexpected)}"
+        )
+    return encoder.eval(), model.eval()
 
 
 #: Payload keys the checkpoint's own fields carry; anything else is ``extra``.

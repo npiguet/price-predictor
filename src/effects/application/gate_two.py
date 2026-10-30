@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 
+from effects.application.model_loading import BATCH_OBSERVATIONS
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
     MIN_DIRECTION_AGREEMENT,
@@ -39,10 +40,9 @@ from effects.domain.evaluation_report import (
 )
 from effects.domain.head_decoding import HeadReading
 from effects.domain.records import EffectRecord
-from effects.infrastructure.model_runner import BATCH_OBSERVATIONS
 
 if TYPE_CHECKING:
-    from effects.infrastructure.model_runner import Runnable
+    from effects.application.model_loading import Runnable
 
 logger = logging.getLogger(__name__)
 

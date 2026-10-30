@@ -35,6 +35,7 @@ from effects.application.step_preparation import (
     ShardTask,
     StepPreparer,
 )
+from effects.application.step_workers import StepWorkerPool
 from effects.application.surface_batching import IDENTITY_TABLE_KEY
 from effects.application.train_effect_model import (
     MAX_GRAD_NORM,
@@ -54,7 +55,6 @@ from effects.infrastructure.effect_model_store import (
     EffectModelStore,
 )
 from effects.infrastructure.shard_io import load_shard
-from effects.infrastructure.step_workers import StepWorkerPool
 from effects.infrastructure.torch_device import default_device
 from price_predictor.infrastructure.torch_training import clip_per_group
 

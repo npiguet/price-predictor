@@ -37,6 +37,7 @@ from effects.application.gate_two import (
     score_observation,
     subject_id,
 )
+from effects.application.model_loading import Runnable
 from effects.application.surface_batching import IdentityTable, SurfaceBatcher
 from effects.domain.baselines import BaselineMasks
 from effects.domain.damage_step_keywords import (
@@ -73,7 +74,6 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.domain.surface_collation import gather_entities
-from effects.infrastructure.model_runner import Runnable
 from tests.unit.effects.builders import keyword_score, make_batcher, slots_of_kind
 
 # ── a board: one first-striking attacker, one blocker ────────────────────

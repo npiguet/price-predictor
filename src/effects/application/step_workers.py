@@ -4,11 +4,14 @@ Shard ``k`` goes to worker ``k mod N``, each with a queue of its own, which
 keeps the run order fixed with no sequencing protocol. Pinning happens in the
 training process, because page-locked memory does not survive the trip
 between processes.
+
+Application-level process orchestration: which part of a training step runs
+in which process, and what crosses between them. How tensors cross is
+:mod:`effects.infrastructure.tensor_packing`'s.
 """
 
 from __future__ import annotations
 
-import io
 import logging
 import multiprocessing
 import os
@@ -30,12 +33,9 @@ from effects.application.step_preparation import (
     StepReady,
 )
 from effects.infrastructure.shard_io import load_shard
+from effects.infrastructure.tensor_packing import PackedStep, pack, unpack
 
 logger = logging.getLogger(__name__)
-
-#: Byte alignment of each tensor in a packed buffer: a view of a byte buffer
-#: as a wider dtype needs its offset to be a multiple of the element size.
-ALIGNMENT = 64
 
 #: How long a blocking queue call waits before checking the other end is alive.
 POLL_SECONDS = 0.5
@@ -43,21 +43,6 @@ POLL_SECONDS = 0.5
 #: Prepared steps the receiver thread holds ready beyond the one training;
 #: each is pinned memory, which this bounds.
 READY_STEPS = 2
-
-
-@dataclass(frozen=True)
-class PackedStep:
-    """A ``StepReady`` with every tensor moved into one flat buffer.
-
-    ``torch.multiprocessing`` pays a shared-memory mapping per tensor, and on
-    Windows that cost is per tensor rather than per byte.
-    """
-
-    #: The message pickled with each tensor replaced by its index in ``layout``.
-    skeleton: bytes
-    #: ``(dtype, shape, offset, nbytes)`` per tensor, in pickling order.
-    layout: tuple[tuple[torch.dtype, tuple[int, ...], int, int], ...]
-    flat: torch.Tensor
 
 
 @dataclass(frozen=True)
@@ -92,60 +77,6 @@ def _portable(error: BaseException) -> BaseException | None:
     except Exception:  # noqa: BLE001 — any failure means "send the text only"
         return None
     return error
-
-
-class _Packer(pickle.Pickler):
-    """Pickles a message with its tensors set aside, by index."""
-
-    def __init__(self, file) -> None:
-        super().__init__(file, protocol=pickle.HIGHEST_PROTOCOL)
-        self.tensors: list[torch.Tensor] = []
-
-    def persistent_id(self, obj):
-        if isinstance(obj, torch.Tensor):
-            self.tensors.append(obj)
-            return len(self.tensors) - 1
-        return None
-
-
-class _Unpacker(pickle.Unpickler):
-    def __init__(self, file, tensors: list[torch.Tensor]) -> None:
-        super().__init__(file)
-        self.tensors = tensors
-
-    def persistent_load(self, pid):
-        return self.tensors[pid]
-
-
-def pack(message: StepReady) -> PackedStep:
-    """``message`` as a skeleton and one flat buffer of every tensor's bytes."""
-    stream = io.BytesIO()
-    packer = _Packer(stream)
-    packer.dump(message)
-    tensors = [tensor.detach().contiguous() for tensor in packer.tensors]
-    layout = []
-    offset = 0
-    for tensor in tensors:
-        nbytes = tensor.numel() * tensor.element_size()
-        layout.append((tensor.dtype, tuple(tensor.shape), offset, nbytes))
-        offset += -(-nbytes // ALIGNMENT) * ALIGNMENT
-    flat = torch.empty(offset, dtype=torch.uint8)
-    for tensor, (_dtype, _shape, start, nbytes) in zip(tensors, layout):
-        if nbytes:
-            flat[start:start + nbytes] = tensor.reshape(-1).view(torch.uint8)
-    return PackedStep(stream.getvalue(), tuple(layout), flat)
-
-
-def unpack(packed: PackedStep, *, pin: bool = False) -> StepReady:
-    """The ``StepReady`` ``pack`` took apart, its tensors views of one buffer,
-    which ``pin`` pins in one copy."""
-    flat = packed.flat.pin_memory() if pin else packed.flat
-    tensors = [
-        flat[start:start + nbytes].view(dtype).reshape(shape) if nbytes
-        else torch.empty(shape, dtype=dtype, pin_memory=pin)
-        for dtype, shape, start, nbytes in packed.layout
-    ]
-    return _Unpacker(io.BytesIO(packed.skeleton), tensors).load()
 
 
 def _exit_with_parent() -> None:

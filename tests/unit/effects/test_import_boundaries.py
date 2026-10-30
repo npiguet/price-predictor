@@ -127,6 +127,43 @@ def test_effects_imports_only_the_declared_surface() -> None:
     )
 
 
+#: The composition root: it wires each command's application service to the
+#: adapters it runs on, so it is the one infrastructure module that names both.
+_COMPOSITION_ROOT = "cli.py"
+
+
+def test_infrastructure_never_imports_application() -> None:
+    """Infrastructure is the adapters' layer; orchestration lives above it.
+
+    Lazy imports count too, since ``ast.walk`` reaches inside functions: a
+    deferred import is still a dependency, only a later one.
+    """
+    violations = [
+        f"{path.relative_to(_SRC)}:{lineno} imports {module}"
+        for path in _python_files("effects")
+        if path.parent.name == "infrastructure" and path.name != _COMPOSITION_ROOT
+        for module, _names, lineno in _imported_modules(path)
+        if module == "effects.application" or module.startswith("effects.application.")
+    ]
+    assert not violations, (
+        "effects.infrastructure imports effects.application:\n  "
+        + "\n  ".join(violations)
+    )
+
+
+def test_the_domain_imports_neither_layer_above_it() -> None:
+    violations = [
+        f"{path.relative_to(_SRC)}:{lineno} imports {module}"
+        for path in _python_files("effects")
+        if path.parent.name == "domain"
+        for module, _names, lineno in _imported_modules(path)
+        if module.startswith(("effects.application", "effects.infrastructure"))
+    ]
+    assert not violations, (
+        "effects.domain imports a layer above it:\n  " + "\n  ".join(violations)
+    )
+
+
 #: Modules the corpus workers and record readers import, which must not pull in
 #: torch: every build-corpus survey and write worker is a fresh process, and
 #: loading torch in each costs seconds and hundreds of megabytes for nothing.

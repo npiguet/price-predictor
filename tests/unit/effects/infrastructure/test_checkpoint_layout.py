@@ -79,9 +79,9 @@ def _checkpoint(drop=()):
 def test_a_shipped_checkpoint_loads_without_its_training_only_heads():
     import torch
 
-    from effects.infrastructure.model_runner import _load_weights
+    from effects.infrastructure.effect_model_store import load_weights
 
-    encoder, model = _load_weights(_checkpoint(), torch.device("cpu"))
+    encoder, model = load_weights(_checkpoint(), torch.device("cpu"))
     assert not encoder.training and not model.training
 
 
@@ -90,10 +90,10 @@ def test_a_missing_shipped_key_is_refused():
     import pytest
     import torch
 
-    from effects.infrastructure.model_runner import _load_weights
+    from effects.infrastructure.effect_model_store import load_weights
 
     with pytest.raises(RuntimeError, match="verdict_head"):
-        _load_weights(
+        load_weights(
             _checkpoint(drop=("verdict_head.0.weight",)), torch.device("cpu"),
         )
 
@@ -102,8 +102,8 @@ def test_a_checkpoint_from_before_option_rows_still_loads():
     """The option-kind embedding starts at zero, so its absence changes nothing."""
     import torch
 
-    from effects.infrastructure.model_runner import _load_weights
+    from effects.infrastructure.effect_model_store import load_weights
 
-    _load_weights(
+    load_weights(
         _checkpoint(drop=("option_kind_embedding.weight",)), torch.device("cpu"),
     )

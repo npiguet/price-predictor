@@ -253,8 +253,8 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
     import shutil
     from pathlib import Path
 
+    from effects.application.model_loading import build_sidecars
     from effects.domain.provenance import ProvenanceKey
-    from effects.infrastructure.model_runner import build_sidecars
     from tests.unit.effects.builders import make_preparer
 
     fixture = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-sidecars"

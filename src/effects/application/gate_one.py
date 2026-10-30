@@ -8,15 +8,13 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from functools import partial
-
-import torch
 
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
+from effects.application.model_loading import Runnable, forward_chunks
 from effects.domain.ability_encoder import surface_of
-from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
@@ -34,13 +32,11 @@ from effects.domain.gate_metrics import (
 )
 from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import RecordKind, acting_keys
-from effects.domain.surface_collation import per_entity_targets
 from effects.infrastructure.corpus_store import (
     CorpusStore,
     card_disjoint_resolutions,
     training_acting_keys,
 )
-from effects.infrastructure.model_runner import BATCH_RECORDS, Runnable
 
 logger = logging.getLogger(__name__)
 
@@ -90,28 +86,12 @@ def unique_text_stratum(corpus_path, card_disjoint_games, text_of: TextOf) -> li
     )
 
 
-def forward_chunks(
-    records, runnable: Runnable,
-) -> Iterator[tuple[list, torch.Tensor, EntityTargetBatch]]:
-    """``(chunk, gathered, targets)`` per chunk of ``records``, shared by the
-    margins and :mod:`effects.application.record_scoring`."""
-    for chunk in runnable.inference_chunks(records, BATCH_RECORDS):
-        yield chunk, *_forward(chunk, runnable)
-
-
 def measure(records, runnable: Runnable) -> GateOneMetrics:
     """Run the model over ``records`` and score the three margins."""
     margins = MarginAccumulator(runnable.fields)
     for _chunk, gathered, targets in forward_chunks(records, runnable):
         margins.add(gathered, targets)
     return margins.metrics()
-
-
-def _forward(chunk, runnable: Runnable) -> tuple[torch.Tensor, EntityTargetBatch]:
-    """``(gathered, targets)`` for one chunk, on the host, ``gathered``
-    aligned column for column with the targets."""
-    gathered, surfaces = runnable.per_entity_outputs(chunk)
-    return gathered, per_entity_targets(chunk, surfaces, runnable.fields)
 
 
 def run_gate_one(context: EvaluationContext, identity) -> CheckResult:

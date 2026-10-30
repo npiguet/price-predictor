@@ -235,9 +235,9 @@ def load_probe_model(
     the inference constant, the variant masks applied, and the sidecars read
     over the same trees, the variant-script tree among them.
     """
+    from effects.application.model_loading import load_runnable
     from effects.domain.ability_encoder import surface_of
     from effects.infrastructure.effect_model_store import verified_inference_paths
-    from effects.infrastructure.model_runner import load_runnable
 
     checkpoint = checkpoint or load_checkpoint(checkpoint_path)
     # Hash-checked like every inference command: a probe over a vocabulary

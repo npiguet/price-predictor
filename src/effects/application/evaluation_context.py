@@ -14,12 +14,12 @@ from effects.domain import default_paths
 from effects.domain.baselines import Baseline
 
 if TYPE_CHECKING:
+    from effects.application.model_loading import LoadedModel, Runnable
     from effects.domain.corpus_manifest import CorpusManifest
     from effects.infrastructure.effect_model_store import (
         EffectCheckpoint,
         SplitProvenance,
     )
-    from effects.infrastructure.model_runner import LoadedModel, Runnable
     from effects.infrastructure.sidecar_io import SidecarCache
 
 
@@ -55,13 +55,13 @@ class EvaluationContext:
     def sidecars(self) -> SidecarCache:
         """The run's one sidecar cache, which every loaded checkpoint shares."""
         if self._sidecars is None:
-            from effects.infrastructure.model_runner import build_sidecars
+            from effects.application.model_loading import build_sidecars
 
             self._sidecars = build_sidecars(self.config)
         return self._sidecars
 
     def _load(self, checkpoint) -> LoadedModel:
-        from effects.infrastructure.model_runner import load_model
+        from effects.application.model_loading import load_model
 
         return load_model(
             self.config, checkpoint,

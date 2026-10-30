@@ -45,7 +45,7 @@ from effects.domain.sampling import sampling_class
 from effects.domain.split import (
     CorpusSplit,
 )
-from effects.infrastructure.step_workers import pack, unpack
+from effects.infrastructure.tensor_packing import pack, unpack
 from tests.unit.effects.builders import (
     GEN1_TRAINING_SEED,
     gen1_training_config,

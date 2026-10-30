@@ -133,11 +133,11 @@ def encode_tree(
 
 def build_runner(loaded: InferenceCheckpoint):
     """The checkpoint's encoder, built once for the whole run."""
-    from effects.domain.ability_encoder import TruncationLog, log_truncation
-    from effects.infrastructure.ability_encoder_runner import (
+    from effects.application.ability_encoder_runner import (
         AbilityEncoderRunner,
     )
-    from effects.infrastructure.model_runner import tokenizer_for
+    from effects.domain.ability_encoder import TruncationLog, log_truncation
+    from effects.infrastructure.tokenizer_loading import tokenizer_for
 
     checkpoint, vocab_path, keyword_path = loaded
     return AbilityEncoderRunner.from_checkpoint(
