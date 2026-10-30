@@ -636,7 +636,9 @@ def run_field_coverage(args: argparse.Namespace) -> int:
 
     root = args.effect_records
     shards = require_shards(root)
-    coverage = field_coverage(record for shard in shards for record in read_shard(shard))
+    coverage = field_coverage(
+        record for shard in shards for record in read_shard(shard.path(root))
+    )
     if not coverage:
         print(f"no records under {root}")
         return 1

@@ -21,6 +21,7 @@ import pytest
 
 from effects.application.build_corpus import BuildCorpusConfig, decide
 from effects.application.corpus_survey import GameTally, RarityTally, ShardSurvey, Survey
+from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, TrainingSupply
 from effects.domain.provenance import ProvenanceKey, SidecarLine
 from tests.unit.effects.application.test_ability_text import FakeSidecarCache
@@ -102,7 +103,7 @@ def a_survey(
         rarity.key_games[keys] = set(games)
     return Survey(
         totals=ShardSurvey(
-            name="", size=0, supply=supply, rarity=rarity,
+            shard=SourceShard(name="", size=0), supply=supply, rarity=rarity,
             games=GameTally(
                 held_out=set(held_out), game_disjoint=set(game_disjoint),
                 held_out_text_games={

@@ -14,7 +14,7 @@ import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
-from effects.domain.corpus_manifest import CorpusManifest, SourceShard
+from effects.domain.corpus_manifest import CorpusManifest
 from effects.domain.corpus_plan import Keys
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.strata import OUTPUT_STRATA, Stratum
@@ -126,15 +126,6 @@ class CorpusStore:
         return CorpusManifest.from_dict(
             json.loads(self.manifest_path.read_text(encoding="utf-8"))
         )
-
-
-def current_sources(records_dir: Path) -> tuple[SourceShard, ...]:
-    """Every raw shard under ``records_dir``, by relative path and size."""
-    root = Path(records_dir)
-    return tuple(
-        SourceShard(name=shard.relative_to(root).as_posix(), size=shard.stat().st_size)
-        for shard in iter_shards(root)
-    )
 
 
 def training_acting_keys(directory: Path) -> set[Keys]:

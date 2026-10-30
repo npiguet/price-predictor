@@ -8,12 +8,14 @@ the manifest reports about what was written is tallied here.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.corpus_survey import ReadConfig, RefusalTally, WorkerContext
 from effects.application.parallel_map import run_parallel
 from effects.domain.corpus_curation import CopyPlan
+from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, GameStrata, Keys
 from effects.domain.record_quality import has_unattributed_events
 from effects.domain.records import (
@@ -130,28 +132,18 @@ def init_write_worker(config: WriteConfig) -> None:
     _WRITE = (config.plan, WorkerContext(config.read))
 
 
-def output_name(relative: str) -> str:
-    """A flat, **injective** part name for a source in a subdirectory.
-
-    Injective because ``write_shard`` truncates, so a collision is a silent
-    overwrite; escaping ``_`` first makes it so, where a plain ``/ -> __``
-    would map ``a_/b`` and ``a/_b`` alike.
-    """
-    return relative.replace("_", "_u").replace("/", "_s")
-
-
-def write_shard_pass(relative: str) -> WriteResult:
+def write_shard_pass(shard: SourceShard) -> WriteResult:
     """Filter one shard into its output parts. Module-level so it pickles."""
     assert _WRITE is not None, "init_write_worker was not run"
     plan, context = _WRITE
-    return write_shard_with(plan, context, relative)
+    return write_shard_with(plan, context, shard)
 
 
-def write_shard_with(plan: WritePlan, context: WorkerContext, relative: str) -> WriteResult:
+def write_shard_with(plan: WritePlan, context: WorkerContext, shard: SourceShard) -> WriteResult:
     writer = _ShardWriter(plan, context)
-    for record in context.records(relative):
+    for record in context.records(shard):
         writer.observe(record)
-    return writer.finish(output_name(relative))
+    return writer.finish(shard.part_name)
 
 
 class _ShardWriter:
@@ -234,13 +226,13 @@ class _ShardWriter:
 
 
 def run_write_pass(
-    names: list[str], *, config: WriteConfig, workers: int | None,
+    shards: Sequence[SourceShard], *, config: WriteConfig, workers: int | None,
     progress_every: int = 50,
 ) -> WriteResult:
     """Write every shard's output parts, in parallel, reporting progress."""
     total = WriteResult()
     for part in run_parallel(
-        names, write_shard_pass, initializer=init_write_worker, initargs=(config,),
+        shards, write_shard_pass, initializer=init_write_worker, initargs=(config,),
         workers=workers, label="Wrote", progress_every=progress_every,
     ):
         merge_into(total, part)

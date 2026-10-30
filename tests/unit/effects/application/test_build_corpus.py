@@ -47,8 +47,8 @@ from effects.application.build_corpus import (
 )
 from effects.application.corpus_report import check_refusals as _check_refusals
 from effects.application.corpus_report import check_samples as _check_samples
-from effects.application.corpus_survey import RefusalTally, source_of
-from effects.application.corpus_write import output_name as _output_name
+from effects.application.corpus_survey import RefusalTally
+from effects.domain.corpus_manifest import SourceShard
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (
@@ -63,7 +63,13 @@ from effects.domain.state_snapshot import StateSnapshot
 from effects.domain.strata import Stratum
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.shard_io import iter_shards, read_records, read_shard, write_shard
+from effects.infrastructure.shard_io import (
+    iter_shards,
+    list_shards,
+    read_records,
+    read_shard,
+    write_shard,
+)
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
 
@@ -266,8 +272,7 @@ class CorpusFixture:
     def source_dirs(self) -> set[str]:
         """The top-level directory of every raw shard currently on disk."""
         return {
-            source_of(shard.relative_to(self.records).as_posix())
-            for shard in iter_shards(self.records)
+            shard.source for shard in list_shards(self.records)
         }
 
     @property
@@ -542,11 +547,15 @@ def test_output_name_is_injective_on_the_reviewers_counterexample():
     ``"a___b"``. Two source shards writing the same output filename is a
     silent overwrite (``write_shard`` truncates), so this has to hold.
     """
-    assert _output_name("a_/b") != _output_name("a/_b")
+    assert _part_name("a_/b") != _part_name("a/_b")
 
 
 def test_output_name_flattens_a_subdirectory_path():
-    assert _output_name("depleted/run.0-a.jsonl.gz") == "depleted_srun.0-a.jsonl.gz"
+    assert _part_name("depleted/run.0-a.jsonl.gz") == "depleted_srun.0-a.jsonl.gz"
+
+
+def _part_name(name: str) -> str:
+    return SourceShard(name=name, size=0).part_name
 
 
 # ── fix round 1: per-stratum counts and unique texts (review Finding 2) ─
@@ -906,8 +915,8 @@ def test_clear_outputs_removes_the_new_outputs_too(tmp_path):
 
 
 def test_source_of_is_the_first_path_component():
-    assert source_of("depleted/run.0-a.jsonl.gz") == "depleted"
-    assert source_of("run.0-a.jsonl.gz") == "."
+    assert SourceShard(name="depleted/run.0-a.jsonl.gz", size=0).source == "depleted"
+    assert SourceShard(name="run.0-a.jsonl.gz", size=0).source == "."
 
 
 def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):

@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.corpus_manifest import SourceShard
-from effects.infrastructure.corpus_store import CorpusStore, current_sources
+from effects.infrastructure.corpus_store import CorpusStore
+from effects.infrastructure.shard_io import list_shards
 from tests.unit.effects.domain.test_corpus_manifest import manifest
 
 
@@ -30,10 +31,10 @@ def test_the_store_names_the_three_output_directories(tmp_path):
     assert store.game_disjoint_dir == tmp_path / "validation" / "game-disjoint"
 
 
-def test_current_sources_lists_shards_relative_to_the_corpus_root(tmp_path):
+def test_the_listing_names_shards_relative_to_the_corpus_root(tmp_path):
     (tmp_path / "depleted").mkdir()
     (tmp_path / "depleted" / "run.0-a.jsonl.gz").write_bytes(b"x" * 7)
-    assert current_sources(tmp_path) == (
+    assert list_shards(tmp_path) == (
         SourceShard(name="depleted/run.0-a.jsonl.gz", size=7),
     )
 

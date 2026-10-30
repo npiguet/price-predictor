@@ -27,6 +27,7 @@ from effects.application.corpus_survey import (
 )
 from effects.application.parallel_map import progress_line
 from effects.domain.corpus_curation import game_disjoint_draw
+from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, GameRouting, TrainingSupply
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
@@ -40,7 +41,7 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.split import HeldOutCards
-from effects.infrastructure.shard_io import write_shard
+from effects.infrastructure.shard_io import list_shards, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
 
@@ -147,7 +148,7 @@ def a_config(
 def _survey_one(tmp_path, records, **config):
     write_shard(tmp_path / "records" / "run.0-a.jsonl.gz", records)
     init_survey_worker(a_config(tmp_path / "records", **config))
-    return survey_shard("run.0-a.jsonl.gz")
+    return survey_shard(list_shards(tmp_path / "records")[0])
 
 
 def test_survey_counts_records_classes_and_games(tmp_path):
@@ -219,7 +220,9 @@ def _part(name: str, games: set[str], hashes: tuple[int, ...], *, heap_cap: int 
     supply = TrainingSupply(heap_cap)
     for value in hashes:
         supply.add(_CELL, _BOLT, value)
-    part = ShardSurvey(name=name, size=0, supply=supply, records=len(hashes))
+    part = ShardSurvey(
+        shard=SourceShard(name=name, size=0), supply=supply, records=len(hashes),
+    )
     part.games.games = set(games)
     for game in games:
         part.rarity.note(_BOLT, game)

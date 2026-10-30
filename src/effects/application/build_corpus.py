@@ -407,7 +407,7 @@ def build(config: BuildCorpusConfig) -> int:
     # replaces the dataset rather than layering over it (FR-144).
     store.clear_outputs()
     written = run_write_pass(
-        [shard.name for shard in survey.shards],
+        survey.shards,
         config=WriteConfig(read=read, plan=decisions.write_plan(store)),
         workers=config.workers,
     )
@@ -443,11 +443,11 @@ def _log_holdout(config: BuildCorpusConfig, held_out: HeldOutCards, surface: Sur
 
 def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
     """``--verify``: the manifest's drift against the corpus on disk; writes nothing."""
-    from effects.infrastructure.corpus_store import current_sources
+    from effects.infrastructure.shard_io import list_shards
 
     records_dir = Path(config.records_dir)
     manifest = store.load()
-    added, removed, resized = manifest.drift(current_sources(records_dir))
+    added, removed, resized = manifest.drift(list_shards(records_dir))
     for label, names in (("added", added), ("removed", removed), ("resized", resized)):
         if names:
             logger.warning(

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import IO, NamedTuple
 
 from effects.domain.corpus_curation import record_hash
+from effects.domain.corpus_manifest import SourceShard
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.shard_generation import MixedGenerationsError, ShardGeneration
 from effects.infrastructure.record_codec import (
@@ -221,22 +222,21 @@ def iter_record_dicts(path: Path) -> Iterator[dict]:
 def read_window(
     directory: Path, limit: int = 0,
     observe: Callable[[str, dict], None] | None = None,
-    *, shards: Sequence[Path] | None = None,
+    *, shards: Sequence[SourceShard] | None = None,
 ) -> Iterator[EffectRecord]:
     """The first ``limit`` records under ``directory``; 0 reads all of them.
 
     ``observe``, when given, sees each record's raw dict, with its shard's
     path relative to ``directory``, before it is parsed: a parsed record
     cannot say whether a field was on the wire. ``shards`` is the directory's
-    listing when the caller already holds it.
+    :func:`list_shards` when the caller already holds it.
     """
     root = Path(directory)
     seen = 0
-    for shard in iter_shards(root) if shards is None else shards:
-        name = shard.relative_to(root).as_posix()
-        for data in iter_record_dicts(shard):
+    for shard in list_shards(root) if shards is None else shards:
+        for data in iter_record_dicts(shard.path(root)):
             if observe is not None:
-                observe(name, data)
+                observe(shard.name, data)
             yield record_from_dict(data)
             seen += 1
             if limit and seen >= limit:
@@ -269,14 +269,24 @@ def iter_shards(directory: Path) -> list[Path]:
     )
 
 
+def list_shards(directory: Path) -> tuple[SourceShard, ...]:
+    """Every shard :func:`iter_shards` finds under ``directory``, in its order,
+    by posix path relative to ``directory`` and size."""
+    root = Path(directory)
+    return tuple(
+        SourceShard(name=shard.relative_to(root).as_posix(), size=shard.stat().st_size)
+        for shard in iter_shards(root)
+    )
+
+
 class NoShardsError(ValueError):
     """A reader was pointed at a directory holding no shard."""
 
 
-def require_shards(directory: Path) -> list[Path]:
-    """:func:`iter_shards`, refusing an empty listing: for a command whose
+def require_shards(directory: Path) -> tuple[SourceShard, ...]:
+    """:func:`list_shards`, refusing an empty listing: for a command whose
     whole job is reading the directory, where nothing to read is a mistake."""
-    shards = iter_shards(directory)
+    shards = list_shards(directory)
     if not shards:
         raise NoShardsError(f"no shards under {directory}")
     return shards

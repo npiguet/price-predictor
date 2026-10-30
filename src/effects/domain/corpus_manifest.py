@@ -30,10 +30,34 @@ class ManifestDrift(NamedTuple):
 class SourceShard:
     """One raw shard the dataset was built from, by path and size: a shard is
     append-only and uniquely named, so its length is what changes, and hashing
-    tens of gigabytes would cost more than the build."""
+    tens of gigabytes would cost more than the build.
+
+    ``name`` is the shard's posix path relative to the corpus root, the one
+    spelling the listing, both passes and the manifest share; the directory
+    it reports under and the part it writes are read off it here.
+    """
 
     name: str
     size: int
+
+    @property
+    def source(self) -> str:
+        """The top-level directory the shard sits in, ``"."`` at the root."""
+        return self.name.split("/", 1)[0] if "/" in self.name else "."
+
+    @property
+    def part_name(self) -> str:
+        """A flat, **injective** name for the shard's write-pass part.
+
+        Injective because ``write_shard`` truncates, so a collision is a silent
+        overwrite; escaping ``_`` first makes it so, where a plain ``/ -> __``
+        would map ``a_/b`` and ``a/_b`` alike.
+        """
+        return self.name.replace("_", "_u").replace("/", "_s")
+
+    def path(self, root: Path) -> Path:
+        """Where the shard is under ``root``, the corpus root it was listed from."""
+        return Path(root) / self.name
 
 
 @dataclass(frozen=True, slots=True)
