@@ -112,7 +112,6 @@ def class_quota(mix: Mapping[str, float], size: int) -> dict[str, int]:
 
 def _collect(
     directory: Path, quota: Mapping[str, int], *, seed: int,
-    only: frozenset[str] | None = None,
 ) -> dict[str, KeyedCapHeap[EffectRecord]]:
     from effects.domain.sampling import sampling_class
     from effects.infrastructure.shard_io import read_records
@@ -123,7 +122,7 @@ def _collect(
     offered = 0
     for record in read_records(directory):
         name = sampling_class(record)
-        if name not in heaps or (only is not None and name not in only):
+        if name not in heaps:
             continue
         # A counter ends the tie-break: a repeated record_id would otherwise
         # compare two EffectRecords, which have no ordering.
@@ -134,14 +133,14 @@ def _collect(
 
 def draw_samples(
     store: CorpusStore, *, mix: Mapping[str, float], size: int, seed: int,
-    held_out_text_of: Callable[[EffectRecord], str | None] | None = None,
+    held_out_text_of: Callable[[EffectRecord], str | None],
 ) -> dict[str, list[EffectRecord]]:
     """One mixture-matched sample per validation stratum of ``store``,
     seeded and shuffled.
 
-    ``size <= 0`` reads nothing and returns both strata empty. Without
-    ``held_out_text_of`` the gate-one slice is drawn by smallest hash alone
-    rather than round-robin.
+    ``held_out_text_of`` names the held-out text a gate-one record acts
+    through, which the round-robin spreads that slice over. ``size <= 0``
+    reads nothing and returns both strata empty.
     """
     if size <= 0:
         return {stratum: [] for stratum in VALIDATION_STRATA}
@@ -149,13 +148,9 @@ def draw_samples(
     quota = class_quota(mix, size)
     out: dict[str, list[EffectRecord]] = {}
 
-    if held_out_text_of is not None:
-        gate_records = _gate_one_round_robin(
-            store.gate_one_dir, quota, seed=seed, held_out_text_of=held_out_text_of,
-        )
-    else:
-        gate = _collect(store.gate_one_dir, quota, seed=seed, only=GATE_ONE_CLASSES)
-        gate_records = {name: heap.items() for name, heap in gate.items()}
+    gate_records = _gate_one_round_robin(
+        store.gate_one_dir, quota, seed=seed, held_out_text_of=held_out_text_of,
+    )
     for stratum in VALIDATION_STRATA:
         heaps = _collect(store.output_dir(stratum), quota, seed=seed)
         sample: list[EffectRecord] = []
