@@ -48,14 +48,16 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from draft_corpus_common import read_prefix_scores
+from _lib.style import BLUE, GREEN, ORANGE
+from draft_corpus_common import prefix_curves, read_prefix_scores
 
 DECK = 23
 # entity -> (light, dark, slot). Colour follows the entity everywhere, including
-# the gap panel, where a line wears the hue of the opponent it measures.
-COLOR = {"forge-full": ("#2a78d6", "#3987e5", 1),
-         "gen1":       ("#eb6834", "#d95926", 2),
-         "gen4":       ("#1baf7a", "#199e70", 3),
+# the gap panel, where a line wears the hue of the opponent it measures. The
+# shared palette has one value per hue, so it serves both modes.
+COLOR = {"forge-full": (BLUE, BLUE, 1),
+         "gen1":       (ORANGE, ORANGE, 2),
+         "gen4":       (GREEN, GREEN, 3),
          "gen3":       ("#eda100", "#c98500", 4)}
 ORDER = ("forge-full", "gen1", "gen3", "gen4")
 INK, INK2, MUTED, RULE, BG = "#0b0b0b", "#52514e", "#898781", "#c3c2b7", "#fcfcfb"
@@ -70,18 +72,10 @@ REGION_FILL = ("#f2f1ee", "#232320")
 
 
 def curves(rows, agent_of, cap):
-    level, delta = defaultdict(list), defaultdict(list)
-    for key, by_t in rows.items():
-        a = agent_of[key]
-        for t, sc in by_t.items():
-            if sc is None or t > cap:
-                continue
-            level[(a, t)].append(sc)
-            prev = by_t.get(t - 1)
-            if prev is not None:
-                delta[(a, t)].append(sc - prev)
-    return ({k: st.fmean(v) for k, v in level.items() if v},
-            {k: st.fmean(v) for k, v in delta.items() if v})
+    """Mean level and step per ``(agent, t)`` over the picks the x-axis shows."""
+    level, delta = prefix_curves(rows, agent_of)
+    return ({k: st.fmean(v) for k, v in level.items() if v and k[1] <= cap},
+            {k: st.fmean(v) for k, v in delta.items() if v and k[1] <= cap})
 
 
 def step_by_level(rows, agent_of, lo_pick, hi_pick, width=0.5):

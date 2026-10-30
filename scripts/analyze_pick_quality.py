@@ -52,15 +52,18 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from statistics import mean, median
 
+from _lib.markdown import banner
 from draft_corpus_common import (
+    DEFAULT_CARDS_PATH,
     ColourResolver,
+    Lane,
     parse_drafts_arg,
     read_records,
     score_play,
+    seat_decisions,
     top_two_colours,
 )
 
-DEFAULT_CARDS_PATH = Path("output/cardsfolder-512")
 DEFAULT_WINRATES = Path("output/sealed/cards-win-rates.txt")
 QUALITY_COLUMN = "shrunk_score_play"
 
@@ -76,12 +79,9 @@ def build_pickrate_quality(
             for index, seat in enumerate(record.seats):
                 if seat.agent not in references:
                     continue
-                for pack in range(1, geometry.packs + 1):
-                    for pick in range(1, geometry.pack_size + 1):
-                        legal = geometry.legal_actions(record, index, pack, pick)
-                        taken[legal[0]] += 1
-                        for card in legal:
-                            seen[card] += 1
+                for decision in seat_decisions(record, geometry, index):
+                    taken[decision.taken] += 1
+                    seen.update(decision.legal)
     return {c: taken[c] / n for c, n in seen.items() if n >= min_obs}
 
 
@@ -99,41 +99,31 @@ def analyze(
 
     for record, geometry in read_records(path):
         for booster in record.boosters:
-            for card in booster.picks:
-                scored_slots[1] += 1
-                if card in quality:
-                    scored_slots[0] += 1
+            scored_slots[1] += len(booster.picks)
+            scored_slots[0] += sum(card in quality for card in booster.picks)
         for index, seat in enumerate(record.seats):
             if agents is not None and seat.agent not in agents:
                 continue
-            top2 = top_two_colours(geometry.drafted_pool(record, index), colours)
-            for pack in range(1, geometry.packs + 1):
-                for pick in range(1, geometry.pack_size + 1):
-                    legal = geometry.legal_actions(record, index, pack, pick)
-                    got = legal[0]
-                    if got not in quality:
-                        continue
-                    scored = [quality[c] for c in legal if c in quality]
-                    if len(scored) >= 2:
-                        best_total[seat.agent] += 1
-                        if quality[got] >= max(scored):
-                            best_hit[seat.agent] += 1
-                    taken_colours = colours(got)
-                    if not taken_colours or taken_colours <= top2:
-                        continue
-                    on_lane = [
-                        quality[card]
-                        for card in legal[1:]
-                        if card in quality
-                        and (c := colours(card))
-                        and c <= top2
-                    ]
-                    if on_lane:
-                        premiums[seat.agent].append(quality[got] - max(on_lane))
+            lane = Lane(frozenset(top_two_colours(geometry.drafted_pool(record, index),
+                                                  colours)), colours)
+            for decision in seat_decisions(record, geometry, index):
+                got = decision.taken
+                if got not in quality:
+                    continue
+                scored = [quality[c] for c in decision.legal if c in quality]
+                if len(scored) >= 2:
+                    best_total[seat.agent] += 1
+                    if quality[got] >= max(scored):
+                        best_hit[seat.agent] += 1
+                if not lane.off(got):
+                    continue
+                on_lane = [quality[card] for card in decision.legal[1:]
+                           if card in quality and lane.on(card)]
+                if on_lane:
+                    premiums[seat.agent].append(quality[got] - max(on_lane))
 
     coverage = 100 * scored_slots[0] / scored_slots[1] if scored_slots[1] else 0
-    print("=" * 96)
-    print(f"{label}   ({coverage:.1f}% of drafted card slots carry a quality label)")
+    banner(f"{label}   ({coverage:.1f}% of drafted card slots carry a quality label)", width=96)
     print(
         f"     {'agent':<12} {'best-card':>10} {'n':>8} {'mean prem':>11} "
         f"{'median':>9} {'share>0':>9}"

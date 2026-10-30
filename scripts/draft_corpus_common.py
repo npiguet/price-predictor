@@ -3,11 +3,12 @@
 Imported by the draft-corpus scripts beside it and by ``draft_probes/``.
 
 What lives here: parsing ``--drafts LABEL=PATH`` arguments, streaming
-``drafts.jsonl`` with each record's geometry, the prefix-deck-scores reader and
-the models that produce those scores, the ``shrunk_score_play`` card grader,
-resolving a card's WUBRG colour identity from its converted-card ``.txt``, and
-the colour summaries the lane diagnostics share (top-two lane, mana-base width,
-effective colour count).
+``drafts.jsonl`` with each record's geometry and a seat's pick decisions, the
+prefix-deck-scores reader, the per-pick curves built from it and the models that
+produce those scores, the ``shrunk_score_play`` card grader, resolving a card's
+WUBRG colour identity from its converted-card ``.txt``, a seat's colour lane,
+and the colour summaries the lane diagnostics share (top-two lane, mana-base
+width, effective colour count).
 """
 
 from __future__ import annotations
@@ -16,15 +17,19 @@ import json
 import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from _lib.corpora import load_win_rates
 
 from draft.domain.draft_geometry import DraftGeometry, DraftRecord
 from draft.infrastructure import draft_record_io
+from price_predictor.domain.value_objects import WUBRG
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
-WUBRG = "WUBRG"
+# Relative to the working directory, as every draft-corpus script is run from
+# the repository root.
+DEFAULT_CARDS_PATH = Path("output/cardsfolder-512")
 BASIC_LAND_TYPES = frozenset(
     {"Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"}
 )
@@ -64,6 +69,41 @@ class ColourResolver:
         return out
 
 
+@dataclass(frozen=True)
+class Decision:
+    """One pick a seat made: the cards still in the pack and the one it took.
+
+    ``legal`` is the pack as the seat saw it, ``taken`` first; ``pack`` and
+    ``pick`` are 1-based.
+    """
+
+    pack: int
+    pick: int
+    taken: str
+    legal: list[str]
+
+
+@dataclass(frozen=True)
+class Lane:
+    """A seat's colour lane, judged card by card through a colour resolver.
+
+    A colourless card is on no lane and off none -- it fits every deck -- so
+    ``on`` and ``off`` are both false for it. A gold card is off-lane unless the
+    lane covers every colour in it.
+    """
+
+    colours: frozenset
+    resolve: ColourResolver
+
+    def on(self, card: str) -> bool:
+        c = self.resolve(card)
+        return bool(c) and c <= self.colours
+
+    def off(self, card: str) -> bool:
+        c = self.resolve(card)
+        return bool(c) and not c <= self.colours
+
+
 def parse_drafts_arg(value: str) -> tuple[str, Path]:
     """``LABEL=PATH`` -> (label, path); a bare ``PATH`` labels by file stem."""
     if "=" in value:
@@ -79,32 +119,64 @@ def read_records(path: Path) -> Iterator[tuple[DraftRecord, DraftGeometry]]:
         yield record, DraftGeometry.from_record(record)
 
 
+def seat_decisions(record: DraftRecord, geometry: DraftGeometry,
+                   seat: int) -> Iterator[Decision]:
+    """Every pick ``seat`` made, in (pack, pick) order."""
+    for pack in range(1, geometry.packs + 1):
+        for pick in range(1, geometry.pack_size + 1):
+            legal = geometry.legal_actions(record, seat, pack, pick)
+            yield Decision(pack, pick, legal[0], legal)
+
+
+def iter_prefix_records(path: Path) -> Iterator[dict]:
+    """The records of one prefix-deck-scores JSONL file; a torn final line from
+    an interrupted run is skipped."""
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+
 def read_prefix_scores(paths: Iterable[Path], key_by_file: bool = False):
     """``(rows, agent_of)`` from prefix-deck-scores JSONL files.
 
     ``rows`` maps a seat to ``{n_picks: deck_score}`` and ``agent_of`` the seat to
     its agent. A seat is ``(draft_id, seat)``, prefixed by the file name when
-    ``key_by_file`` (corpora whose draft ids may collide). A torn final line from
-    an interrupted run is skipped.
+    ``key_by_file`` (corpora whose draft ids may collide).
     """
     rows: dict = defaultdict(dict)
     agent_of: dict = {}
     for path in map(Path, paths):
-        with path.open(encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    r = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                key = (r["draft_id"], r["seat"])
-                if key_by_file:
-                    key = (path.name, *key)
-                rows[key][r["n_picks"]] = r["deck_score"]
-                agent_of[key] = r["agent"]
+        for r in iter_prefix_records(path):
+            key = (r["draft_id"], r["seat"])
+            if key_by_file:
+                key = (path.name, *key)
+            rows[key][r["n_picks"]] = r["deck_score"]
+            agent_of[key] = r["agent"]
     return rows, agent_of
+
+
+def prefix_curves(rows: dict, agent_of: dict) -> tuple[dict, dict]:
+    """``(level, added)`` per ``(agent, n_picks)``: every seat's prefix deck score,
+    and its step ``score(t) - score(t-1)`` against itself. Both are defaultdicts
+    of lists, so a cell no seat reached reads as empty."""
+    level: dict = defaultdict(list)
+    added: dict = defaultdict(list)
+    for key, by_t in rows.items():
+        agent = agent_of[key]
+        for t, score in by_t.items():
+            if score is None:
+                continue
+            level[(agent, t)].append(score)
+            prev = by_t.get(t - 1)
+            if prev is not None:
+                added[(agent, t)].append(score - prev)
+    return level, added
 
 
 def load_labeler_and_scorer(cards_path: Path, scorer_path: Path, picker_path: Path,
