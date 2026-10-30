@@ -55,6 +55,54 @@ class CombatParticipant:
     defending_player: str | None
     combat_substep: str | None = None
 
+    @property
+    def is_attacking(self) -> bool:
+        combat = self.carrier.combat
+        return bool(combat and combat.attacking is not None)
+
+    @property
+    def is_unblocked(self) -> bool:
+        """An attacker no creature blocks."""
+        combat = self.carrier.combat
+        return bool(combat and combat.attacking is not None and not combat.blocked_by)
+
+    @property
+    def has_opponents(self) -> bool:
+        return bool(self.opponents)
+
+    @property
+    def deals_damage(self) -> bool:
+        """Checked by every damage-dealing row: removing lifelink from a 0/3 wall
+        moves nothing, and counting it would be a coin flip against the keyword."""
+        return self.carrier.power >= 1
+
+    @property
+    def lone_opponent(self) -> EntityState | None:
+        """The one creature the carrier trades damage with, or None.
+
+        With several, Forge's damage assignment decides who takes what, so a
+        "does this hit kill" rule cannot be answered; trample and indestructible
+        read every opponent instead, since a sum does not depend on the split.
+        """
+        return self.opponents[0] if len(self.opponents) == 1 else None
+
+    def subject(self, subject: Subject) -> str | None:
+        """The entity or player whose output field an effect on ``subject`` moves.
+
+        An ``OPPONENT`` effect is read at the first creature only, so a
+        three-blocker combat is one observation rather than three.
+        """
+        match subject:
+            case Subject.CARRIER:
+                return self.carrier.id
+            case Subject.OPPONENT:
+                return self.opponents[0].id if self.opponents else None
+            case Subject.CONTROLLER:
+                return self.carrier.controller
+            case Subject.DEFENDING_PLAYER:
+                return self.defending_player
+        raise ValueError(f"unhandled subject {subject}")
+
 
 #: ``EntityState -> the keywords it carries``, in this table's spelling.
 KeywordsOf = Callable[[EntityState], "set[str]"]
@@ -119,36 +167,10 @@ def _defending_player(
 # ── what the predicates read ────────────────────────────────────────────
 
 
-def _has_opponents(participant: CombatParticipant) -> bool:
-    return bool(participant.opponents)
-
-
-def _is_unblocked_attacker(participant: CombatParticipant) -> bool:
-    combat = participant.carrier.combat
-    return bool(combat and combat.attacking is not None and not combat.blocked_by)
-
-
-def _deals_damage(participant: CombatParticipant) -> bool:
-    """Checked by every damage-dealing row: removing lifelink from a 0/3 wall
-    moves nothing, and counting it would be a coin flip against the keyword."""
-    return participant.carrier.power >= 1
-
-
 _STRIKES_FIRST = frozenset({"first_strike", "double_strike"})
 _COUNTER_DAMAGE = frozenset({"wither", "infect"})
 #: Where wither's and infect's damage to a creature lands.
 _M1M1_COUNTERS = counter_field("M1M1")
-
-
-def _lone_opponent(participant: CombatParticipant) -> EntityState | None:
-    """The one creature the carrier trades damage with, or None.
-
-    With several, Forge's damage assignment decides who takes what, so a
-    "does this hit kill" rule cannot be answered; trample and indestructible
-    read every opponent instead, since a sum does not depend on the split.
-    """
-    opponents = participant.opponents
-    return opponents[0] if len(opponents) == 1 else None
 
 
 def _kills_outright(
@@ -156,7 +178,7 @@ def _kills_outright(
 ) -> bool:
     """One hit from the carrier would kill the creature it is fighting,
     deathtouch making one point lethal."""
-    opponent = _lone_opponent(participant)
+    opponent = participant.lone_opponent
     if opponent is None:
         return False
     power = participant.carrier.power
@@ -171,7 +193,7 @@ def _survives_a_normal_hit(participant: CombatParticipant) -> bool:
     Blind to deathtouch on purpose: it is the deathtouch row's own question,
     and that row's carrier always has deathtouch.
     """
-    opponent = _lone_opponent(participant)
+    opponent = participant.lone_opponent
     return opponent is not None and (
         opponent.remaining_toughness > participant.carrier.power
     )
@@ -199,7 +221,7 @@ def _strikes_first_because_of(keyword: str) -> Applies:
     ) -> bool:
         return (
             participant.combat_substep == CombatSubstep.FIRST_STRIKE
-            and _deals_damage(participant)
+            and participant.deals_damage
             and not (others & keywords_of(participant.carrier))
         )
 
@@ -219,35 +241,34 @@ def _strikes_first_and(keyword: str, holds: Applies) -> Applies:
 def _an_opponent_survives_a_normal_hit(
     participant: CombatParticipant, _keywords_of: KeywordsOf,
 ) -> bool:
-    return _deals_damage(participant) and _survives_a_normal_hit(participant)
+    return participant.deals_damage and _survives_a_normal_hit(participant)
 
 
 def _damages_a_creature(
     participant: CombatParticipant, _keywords_of: KeywordsOf,
 ) -> bool:
-    return _deals_damage(participant) and _has_opponents(participant)
+    return participant.deals_damage and participant.has_opponents
 
 
 def _damages_anything(
     participant: CombatParticipant, _keywords_of: KeywordsOf,
 ) -> bool:
-    return _deals_damage(participant) and (
-        _has_opponents(participant) or _is_unblocked_attacker(participant)
+    return participant.deals_damage and (
+        participant.has_opponents or participant.is_unblocked
     )
 
 
 def _damages_the_defending_player(
     participant: CombatParticipant, _keywords_of: KeywordsOf,
 ) -> bool:
-    return _deals_damage(participant) and _is_unblocked_attacker(participant)
+    return participant.deals_damage and participant.is_unblocked
 
 
 def _runs_over_its_blockers(
     participant: CombatParticipant, _keywords_of: KeywordsOf,
 ) -> bool:
     """A blocked attacker with more power than its blockers can soak."""
-    combat = participant.carrier.combat
-    if not combat or combat.attacking is None or not participant.opponents:
+    if not participant.is_attacking or not participant.has_opponents:
         return False
     soaked = sum(
         max(0, blocker.remaining_toughness)
@@ -261,7 +282,7 @@ def _would_be_destroyed(
 ) -> bool:
     """The damage coming in would otherwise be lethal: enough of it, summed
     over every opponent, or any of it from a deathtouch creature."""
-    if not _has_opponents(participant):
+    if not participant.has_opponents:
         return False
     hitters = [o for o in participant.opponents if o.power >= 1]
     if any(_COUNTER_DAMAGE & keywords_of(opponent) for opponent in hitters):
@@ -312,7 +333,7 @@ class KeywordEffect:
         both the counter and the scorer read."""
         return (
             self.applies(participant, keywords_of)
-            and subject_id(self, participant) is not None
+            and participant.subject(self.subject) is not None
         )
 
 
@@ -351,7 +372,7 @@ def _first_strike_step_effects(keyword: str) -> tuple[KeywordEffect, ...]:
         KeywordEffect(
             HeadField.DAMAGE_TAKEN, Subject.OPPONENT, direction=1,
             applies=_strikes_first_and(
-                keyword, lambda participant, _: _lone_opponent(participant) is not None,
+                keyword, lambda participant, _: participant.lone_opponent is not None,
             ),
         ),
         KeywordEffect(
@@ -361,7 +382,7 @@ def _first_strike_step_effects(keyword: str) -> tuple[KeywordEffect, ...]:
         KeywordEffect(
             HeadField.LIFE_DELTA, Subject.DEFENDING_PLAYER, direction=-1,
             applies=_strikes_first_and(
-                keyword, lambda participant, _: _is_unblocked_attacker(participant),
+                keyword, lambda participant, _: participant.is_unblocked,
             ),
         ),
     )
@@ -481,26 +502,6 @@ KEYWORDS_BY_NAME: dict[str, DamageStepKeyword] = {
 #: Gate 2's thresholds (FR-119).
 MIN_QUALIFYING_RECORDS = 200
 MIN_DIRECTION_AGREEMENT = 0.70
-
-
-def subject_id(
-    effect: KeywordEffect, participant: CombatParticipant,
-) -> str | None:
-    """The entity or player whose output field this effect moves.
-
-    An ``OPPONENT`` effect is read at the first creature only, so a
-    three-blocker combat is one observation rather than three.
-    """
-    match effect.subject:
-        case Subject.CARRIER:
-            return participant.carrier.id
-        case Subject.OPPONENT:
-            return participant.opponents[0].id if participant.opponents else None
-        case Subject.CONTROLLER:
-            return participant.carrier.controller
-        case Subject.DEFENDING_PLAYER:
-            return participant.defending_player
-    raise ValueError(f"unhandled subject {effect.subject}")
 
 
 # ── who is observed ─────────────────────────────────────────────────────

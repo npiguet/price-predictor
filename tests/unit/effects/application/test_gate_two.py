@@ -35,7 +35,6 @@ from effects.application.gate_two import (
     read_field,
     score_keywords,
     score_observation,
-    subject_id,
 )
 from effects.application.model_loading import Runnable
 from effects.application.surface_batching import IdentityTable, SurfaceBatcher
@@ -617,7 +616,7 @@ class TestSubjectResolution:
         participant = _participant(record, "A")
         effect = KEYWORDS_BY_NAME["indestructible"].effects[0]
         assert effect.subject is Subject.CARRIER
-        assert subject_id(effect, participant) == "A"
+        assert participant.subject(effect.subject) == "A"
 
     def test_the_opponent_is_the_first_creature_it_fights(self):
         record = _printed_board()
@@ -626,19 +625,19 @@ class TestSubjectResolution:
             e for e in KEYWORDS_BY_NAME["double_strike"].effects
             if e.subject is Subject.OPPONENT
         )
-        assert subject_id(effect, participant) == "B0"
+        assert participant.subject(effect.subject) == "B0"
 
     def test_the_controller_is_a_player(self):
         record = _printed_board()
         participant = _participant(record, "A")
         effect = KEYWORDS_BY_NAME["lifelink"].effects[0]
-        assert subject_id(effect, participant) == "P0"
+        assert participant.subject(effect.subject) == "P0"
 
     def test_the_defending_player_is_the_one_being_attacked(self):
         record = _printed_board()
         participant = _participant(record, "A")
         effect = KEYWORDS_BY_NAME["trample"].effects[0]
-        assert subject_id(effect, participant) == "P1"
+        assert participant.subject(effect.subject) == "P1"
 
 
 class TestQualifyingObservations:

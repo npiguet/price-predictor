@@ -29,7 +29,6 @@ from effects.domain.damage_step_keywords import (
     KeywordResolver,
     KeywordsOf,
     qualifying_observations,
-    subject_id,
 )
 from effects.domain.effect_head_layout import FIELDS_BY_NAME, FieldSpec, FieldType
 from effects.domain.evaluation_report import (
@@ -156,7 +155,7 @@ def score_observation(
             continue
         if not effect.observable(participant, keywords_of):
             continue
-        subject = subject_id(effect, participant)
+        subject = participant.subject(effect.subject)
         before, after = present.get(subject), stripped.get(subject)
         if before is None or after is None:
             continue
@@ -263,7 +262,7 @@ def _subject_vectors(
     """
     wanted = {
         subject for subject in (
-            subject_id(effect, participant) for effect in row.effects
+            participant.subject(effect.subject) for effect in row.effects
         ) if subject is not None
     }
     found: dict[str, torch.Tensor] = {}
