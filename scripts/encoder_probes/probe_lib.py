@@ -972,6 +972,41 @@ def score_texts(texts: Sequence[str]) -> Scored:
                   dist, nearest)
 
 
+@dataclass(frozen=True)
+class Variant:
+    """One edited text of a frame card: ``family`` groups the edits, ``row`` is
+    the card's frame row and ``variant`` names the edit."""
+
+    family: str
+    row: int
+    variant: str
+    text: str
+
+
+def score_variants(variants: Sequence[Variant], frame: pd.DataFrame, *,
+                   distance: bool = True) -> pd.DataFrame:
+    """Encode the variants in one batched pass and read the fidelity probes off them.
+
+    One row per variant: ``family``, ``row``, ``variant``, the card's ``name``,
+    ``score_play`` and ``played_rate`` in label units, and with ``distance``
+    the ``manifold_dist`` of the edited embedding.
+    """
+    emb = runner().encode_texts([v.text for v in variants], batch_size=96)
+    print(f"encoded {len(variants)} variants on {runner().device}", flush=True)
+    pred = predict_labels(emb, fidelity_probes())
+    rows = [v.row for v in variants]
+    out = pd.DataFrame({
+        "family": [v.family for v in variants], "row": rows,
+        "variant": [v.variant for v in variants],
+        "name": frame["name"].iloc[rows].to_numpy(),
+        "score_play": pred["score_play"].to_numpy(),
+        "played_rate": pred["played_rate"].to_numpy(),
+    })
+    if distance:
+        out["manifold_dist"] = manifold_distance(emb, reference_cloud()[1])[0]
+    return out
+
+
 def mean_ci(delta: np.ndarray, key: str = "mean_sd", n_boot: int = 4000) -> dict:
     """``{key: mean, ci_lo, ci_hi}`` of a paired per-card difference."""
     lo, hi = bootstrap_ci(delta, n_boot=n_boot, seed=7)

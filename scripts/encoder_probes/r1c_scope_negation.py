@@ -20,14 +20,12 @@ Outputs ``output/encoder-probes/r1c_*.csv`` + ``r1c_summary.json``.
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 import zlib
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 from scipy.stats import mannwhitneyu
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -37,7 +35,6 @@ from _lib.stats import bootstrap_ci  # noqa: E402
 
 GATE = pl.MANIFOLD_GATE
 SD_SCORE_PLAY = pl.SD["score_play"]
-BATCH = 96
 SEED = 909
 MAX_PER_FAMILY = 400
 
@@ -93,7 +90,7 @@ def main() -> None:
     rng = np.random.default_rng(SEED)
     freq = pl.subtype_frequencies()
 
-    specs: list[tuple[str, int, str, str]] = []  # family, row, variant, text
+    specs: list[pl.Variant] = []
     for family, fn in FAMILIES.items():
         hits = [i for i, t in texts.items() if fn(t) is not None]
         if len(hits) > MAX_PER_FAMILY:
@@ -101,28 +98,14 @@ def main() -> None:
         print(f"{family}: {len(hits)} cards", flush=True)
         for i in hits:
             base = texts[i]
-            specs.append((family, i, "base", base))
-            specs.append((family, i, "flip", fn(base)))
-            specs.append((family, i, "null_line_order", line_shuffle(base, rng)))
+            specs.append(pl.Variant(family, i, "base", base))
+            specs.append(pl.Variant(family, i, "flip", fn(base)))
+            specs.append(pl.Variant(family, i, "null_line_order", line_shuffle(base, rng)))
             for key, variant in pl.placebo_edits(base, freq).items():
                 if variant is not None:
-                    specs.append((family, i, f"null_{key}", variant))
+                    specs.append(pl.Variant(family, i, f"null_{key}", variant))
 
-    runner = pl.runner()
-    emb = runner.encode_texts([s[3] for s in specs], batch_size=BATCH)
-    print(f"encoded {len(specs)} variants on {runner.device}", flush=True)
-
-    pred = pl.predict_labels(emb, pl.fidelity_probes())
-    mdist, _ = pl.manifold_distance(emb, pl.reference_cloud()[1])
-
-    frame = pd.DataFrame({
-        "family": [s[0] for s in specs], "row": [s[1] for s in specs],
-        "variant": [s[2] for s in specs],
-        "name": [join["name"].iloc[s[1]] for s in specs],
-        "score_play": pred["score_play"].to_numpy(),
-        "played_rate": pred["played_rate"].to_numpy(),
-        "manifold_dist": mdist,
-    })
+    frame = pl.score_variants(specs, join)
     frame.to_csv(pl.SCRATCH / "r1c_variants.csv", index=False)
 
     out: dict = {"label_sd_score_play": SD_SCORE_PLAY, "gate": GATE, "families": {}}
@@ -186,9 +169,7 @@ def main() -> None:
             }
         out["families"][family] = rec
 
-    with open(pl.SCRATCH / "r1c_summary.json", "w") as f:
-        json.dump(out, f, indent=2)
-    print(json.dumps(out, indent=2))
+    pl.write_summary(out, "r1c_summary.json")
 
 
 if __name__ == "__main__":

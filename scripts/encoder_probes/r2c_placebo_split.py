@@ -13,7 +13,6 @@ Outputs ``output/encoder-probes/r2c_*.csv`` + ``r2c_summary.json``.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -27,7 +26,7 @@ import probe_lib as pl  # noqa: E402
 
 N_PAIRS = 500
 SEED = 31337
-BATCH = 96
+N_BOOT = 4000
 SD_SCORE_PLAY = pl.SD["score_play"]
 SD_PLAYED_RATE = pl.SD["played_rate"]
 
@@ -67,28 +66,18 @@ def main() -> None:
     print(f"matched {len(pairs)} pairs", flush=True)
 
     freq = pl.subtype_frequencies()
-    specs: list[tuple[str, int, str, str]] = []
+    specs: list[pl.Variant] = []
     for vi, ti, _ in pairs:
         for split, idx in (("val", vi), ("train", ti)):
             base = texts[idx]
-            specs.append((split, idx, "base", base))
+            specs.append(pl.Variant(split, idx, "base", base))
             for key, variant in pl.placebo_edits(base, freq).items():
                 if variant is not None:
-                    specs.append((split, idx, key, variant))
+                    specs.append(pl.Variant(split, idx, key, variant))
 
-    runner = pl.runner()
-    emb = runner.encode_texts([s[3] for s in specs], batch_size=BATCH)
-    print(f"encoded {len(specs)} variants on {runner.device}", flush=True)
-
-    pred = pl.predict_labels(emb, pl.fidelity_probes())
-    frame = pd.DataFrame({
-        "split": [s[0] for s in specs], "row": [s[1] for s in specs],
-        "edit": [s[2] for s in specs],
-        "name": [join["name"].iloc[s[1]] for s in specs],
-        "n_in_deck": [int(join["n_in_deck"].iloc[s[1]]) for s in specs],
-        "score_play": pred["score_play"].to_numpy(),
-        "played_rate": pred["played_rate"].to_numpy(),
-    })
+    frame = pl.score_variants(specs, join, distance=False).rename(
+        columns={"family": "split", "variant": "edit"})
+    frame.insert(4, "n_in_deck", join["n_in_deck"].iloc[frame["row"]].astype(int).to_numpy())
     frame.to_csv(pl.SCRATCH / "r2c_variants.csv", index=False)
 
     base = frame[frame["edit"] == "base"].set_index("row")
@@ -131,21 +120,17 @@ def main() -> None:
             entry["mannwhitney_p_two_sided"] = float(p)
             entry["ratio_train_over_val_median"] = float(
                 np.median(samples["train"]) / np.median(samples["val"]))
-            # bootstrap CI on the median ratio
+            # bootstrap CI on the median ratio, both halves resampled per draw
             rng2 = np.random.default_rng(7)
-            draws = []
-            for _ in range(4000):
-                a = rng2.choice(samples["train"], len(samples["train"]))
-                b = rng2.choice(samples["val"], len(samples["val"]))
-                draws.append(np.median(a) / np.median(b))
+            tr, va = samples["train"], samples["val"]
+            draws = (np.median(tr[rng2.integers(0, len(tr), (N_BOOT, len(tr)))], axis=1)
+                     / np.median(va[rng2.integers(0, len(va), (N_BOOT, len(va)))], axis=1))
             entry["ratio_ci95"] = [float(np.percentile(draws, 2.5)),
                                    float(np.percentile(draws, 97.5))]
         out[edit] = entry
 
     pd.DataFrame(rec_rows).to_csv(pl.SCRATCH / "r2c_placebo_by_split.csv", index=False)
-    with open(pl.SCRATCH / "r2c_summary.json", "w") as f:
-        json.dump(out, f, indent=2)
-    print(json.dumps(out, indent=2))
+    pl.write_summary(out, "r2c_summary.json")
 
 
 if __name__ == "__main__":
