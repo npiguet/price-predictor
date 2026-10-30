@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import importlib
 import logging
 import sys
 import typing
@@ -20,23 +21,22 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any, TypeVar
 
-from effects.application.build_corpus import (
-    DEFAULT_GAME_DISJOINT_KEYWORDS,
-    BuildCorpusConfig,
-    BuildCorpusError,
-)
+from effects.application.build_corpus import BuildCorpusConfig, BuildCorpusError
 from effects.application.build_vocab import DEFAULT_TARGET_SIZE, EmptyCardsFolderError
 from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
-from effects.application.collector_common import HOLDOUT_LIST_NAME, HoldoutSource
+from effects.application.collector_common import HOLDOUT_LIST_NAME, collection_target
 from effects.application.corpus_validation.findings import Thresholds
 from effects.application.evaluation_context import CorpusMismatchError
+from effects.application.extract_keyword_definitions import ExtractKeywordDefinitionsConfig
 from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
 from effects.application.train_effect_model import (
     EmptyHoldoutError,
     HoldoutMismatchError,
+    MissingTrainingInputError,
     SurfaceMismatchError,
     TrainEffectModelConfig,
+    ValidationGameInTrainingError,
 )
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BASELINES, Baseline
@@ -46,8 +46,6 @@ from effects.domain.default_paths import (
     DEFAULT_CARDS_FOLDER_PATHS,
     DEFAULT_CARDS_FOLDERS,
     DEFAULT_CHECKPOINT,
-    DEFAULT_CORPUS_OUTPUT,
-    DEFAULT_FORGE_CARDS_PATH,
     DEFAULT_KEYWORD_DEFINITIONS,
     DEFAULT_RECORDS_DIR,
     DEFAULT_SCRIPT_VOCAB_PATH,
@@ -55,7 +53,7 @@ from effects.domain.default_paths import (
     DEFAULT_VOCAB_PATH,
     DEFAULT_WIN_RATES,
 )
-from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
+from effects.domain.shard_generation import MixedGenerationsError
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
 from price_predictor.domain.dataclass_defaults import field_default
@@ -94,17 +92,18 @@ def add_config_flags(
     """A ``--field-name`` flag per field of ``config``, with the field's own default.
 
     ``only`` picks the fields, in order; without it, every field no flag on
-    ``parser`` claims yet. The type comes from the annotation and the help from
-    ``metadata["help"]``; a bool field is a ``store_true`` switch, and any other
-    non-scalar is refused, because its flag needs declaring by hand. Reads the
-    class and never builds one: a config's ``__post_init__`` may load torch.
+    ``parser`` claims yet. The type comes from ``metadata["type"]``, else the
+    annotation, and the help from ``metadata["help"]``; a bool field is a
+    ``store_true`` switch, and any other non-scalar without a ``type`` is
+    refused, because its flag needs declaring by hand. Reads the class and
+    never builds one: a config's ``__post_init__`` may load torch.
     """
     specs = {spec.name: spec for spec in fields(config)}
     hints = typing.get_type_hints(config)
     claimed = {action.dest for action in parser._actions}
     for name in only if only is not None else [n for n in specs if n not in claimed]:
         spec = specs[name]
-        kind = _flag_type(config, name, hints[name])
+        kind = spec.metadata.get("type") or _flag_type(config, name, hints[name])
         default = field_default(spec)
         if isinstance(default, Path):
             # Spelled as typed in --help; argparse parses a string default too.
@@ -278,7 +277,8 @@ def holdout_rule(args: argparse.Namespace) -> HoldoutRule:
 
 def _add_variant(parser: argparse.ArgumentParser, *, help_text: str | None = None) -> None:
     parser.add_argument(
-        "--variant", choices=BASELINES, default=Baseline.FULL.value, help=help_text,
+        "--variant", type=Baseline, choices=BASELINES, default=Baseline.FULL,
+        help=help_text,
     )
 
 
@@ -359,19 +359,11 @@ def _extract_keyword_definitions_parser(subparsers) -> None:
         help="Write Forge's keyword table (reminder-text templates) as JSON",
     )
     parser.set_defaults(func=run_extract_keyword_definitions)
-    parser.add_argument(
-        "--output", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
-        help="Output path (default: %(default)s)",
-    )
+    add_config_flags(parser, ExtractKeywordDefinitionsConfig)
 
 
 def run_extract_keyword_definitions(args: argparse.Namespace) -> int:
-    from effects.application.extract_keyword_definitions import (
-        ExtractKeywordDefinitionsConfig,
-    )
-    from effects.application.extract_keyword_definitions import (
-        run as extract,
-    )
+    from effects.application.extract_keyword_definitions import run as extract
 
     return extract(config_from_args(ExtractKeywordDefinitionsConfig, args))
 
@@ -407,7 +399,7 @@ def _collect_coverage_parser(subparsers) -> None:
     _add_holdout_flags(parser)
     add_config_flags(parser, CollectCoverageConfig, only=(
         "min_text_games", "target_records", "no_progress_rounds",
-        "decks_per_round", "workers",
+        "decks_per_round", "workers", "seed",
     ))
     add_cap_flags(parser)
 
@@ -425,23 +417,9 @@ def _collect_variants_parser(subparsers) -> None:
         parser, default=None,
         help_text=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
     )
-    parser.add_argument(
-        "--forge-cards-path", type=Path, default=DEFAULT_FORGE_CARDS_PATH,
-        help="Forge's source card scripts: a variant is a script Forge must load",
-    )
-    parser.add_argument(
-        "--variant-scripts", type=Path, default=DEFAULT_VARIANT_SCRIPTS,
-        help="Where perturbed scripts are written (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--corpus-records", type=_optional_path, default=None,
-        help=(
-            "The real records --variant-volume is measured against (default: "
-            "--effect-records); name the corpus when variants go to their own "
-            "directory, or the cap allows nothing"
-        ),
-    )
-    add_config_flags(parser, CollectVariantsConfig, only=("variant_volume", "seed"))
+    add_config_flags(parser, CollectVariantsConfig, only=(
+        "forge_cards_path", "variant_scripts", "corpus_records", "variant_volume", "seed",
+    ))
     _add_holdout_sources(parser, excluded="held-out cards, and their variants,")
     # A variant printing a held-out text is dropped under this rule, so it has
     # to be the one build-corpus is given.
@@ -449,18 +427,6 @@ def _collect_variants_parser(subparsers) -> None:
     _add_holdout_flags(parser)
     add_config_flags(parser, CollectVariantsConfig, only=("decks_per_round", "workers"))
     add_cap_flags(parser)
-
-
-def holdout_source(args: argparse.Namespace) -> HoldoutSource:
-    """A collector's :class:`HoldoutSource`; raises ValueError on a
-    contradictory one, before any worker starts."""
-    return HoldoutSource.from_flags(
-        effect_records=args.effect_records,
-        exclude_cards=args.exclude_cards,
-        split_from=args.split_from,
-        training_corpus=args.training_corpus,
-        only_cards=getattr(args, "only_cards", None),
-    )
 
 
 def collection_caps(args: argparse.Namespace) -> CollectionCaps:
@@ -478,51 +444,61 @@ def collection_caps(args: argparse.Namespace) -> CollectionCaps:
 def collector_config(
     config_type: type[_Config], args: argparse.Namespace, **overrides: Any,
 ) -> _Config:
-    """A collector's config, with its corpus location and holdout resolved."""
-    source = holdout_source(args)
+    """A collector's config, with its corpus location, deck holdout and
+    holdout rule resolved; raises ValueError on a contradictory holdout,
+    before any worker starts."""
+    effect_records, deck_holdout = collection_target(
+        effect_records=args.effect_records,
+        exclude_cards=args.exclude_cards,
+        split_from=args.split_from,
+        training_corpus=args.training_corpus,
+        only_cards=getattr(args, "only_cards", None),
+    )
     return config_from_args(
         config_type, args,
-        effect_records=source.effect_records,
-        exclude_cards=source.exclude_cards,
-        caps=collection_caps(args),
+        effect_records=effect_records, deck_holdout=deck_holdout,
+        caps=collection_caps(args), holdout=holdout_rule(args),
         **overrides,
     )
 
 
-def _run_collector(
-    args: argparse.Namespace, command: str, config_type: type,
-    collect: Callable[[Any], int], **overrides: Any,
-) -> int:
-    """Refuse a bad flag combination as a message before any worker starts."""
-    error = random_seat_error(args)
-    if error is None:
+class CollectorRefusal(ValueError):
+    """A collector's flags contradict each other: refused, naming the command,
+    before any worker starts."""
+
+
+def _collector_runner(command: str, config_type: type, module: str) -> Callable:
+    """The ``run_*`` of one collector: its config, refused as a message on a
+    bad flag combination, then ``module.run`` over it.
+
+    ``module`` is imported when the command runs, as every other ``run_*``
+    imports its application module, so ``--help`` never pays for it. A
+    ValueError out of the collection itself is not a refusal and keeps its
+    traceback.
+    """
+
+    @exits_with({CollectorRefusal: 1})
+    def run(args: argparse.Namespace) -> int:
+        error = random_seat_error(args)
+        if error is not None:
+            raise CollectorRefusal(f"{command}: {error}")
         try:
-            config = collector_config(config_type, args, **overrides)
+            config = collector_config(config_type, args)
         except ValueError as exc:
-            error = str(exc)
-    if error is not None:
-        print(f"{command}: {error}")
-        return 1
-    print(announce_probe_state(args.probe_keywords, args.probes_per_game))
-    return collect(config)
+            raise CollectorRefusal(f"{command}: {exc}") from exc
+        print(announce_probe_state(args.probe_keywords, args.probes_per_game))
+        return importlib.import_module(module).run(config)
+
+    run.__name__ = run.__qualname__ = f"run_{command.replace('-', '_')}"
+    return run
 
 
-def run_collect_coverage(args: argparse.Namespace) -> int:
-    from effects.application.collect_coverage import run as collect
-
-    return _run_collector(
-        args, "collect-coverage", CollectCoverageConfig, collect,
-        holdout=holdout_rule(args),
-    )
-
-
-def run_collect_variants(args: argparse.Namespace) -> int:
-    from effects.application.collect_variants import run as collect
-
-    return _run_collector(
-        args, "collect-variants", CollectVariantsConfig, collect,
-        holdout=holdout_rule(args),
-    )
+run_collect_coverage = _collector_runner(
+    "collect-coverage", CollectCoverageConfig, "effects.application.collect_coverage",
+)
+run_collect_variants = _collector_runner(
+    "collect-variants", CollectVariantsConfig, "effects.application.collect_variants",
+)
 
 
 # ── build-corpus ────────────────────────────────────────────────────────
@@ -537,10 +513,6 @@ def _class_mix(text: str) -> dict[str, float]:
         return parse_kind_mix(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from None
-
-
-def _keyword_list(text: str) -> tuple[str, ...]:
-    return tuple(part.strip() for part in text.split(",") if part.strip())
 
 
 def _build_corpus_parser(subparsers) -> None:
@@ -558,23 +530,8 @@ def _build_corpus_parser(subparsers) -> None:
         "--class-mix", type=_class_mix, default=None,
         help="class=share,… on-disk class proportions (default: the training mixture)",
     )
-    parser.add_argument(
-        "--max-events-per-record", type=int, default=MAX_EVENTS_PER_RECORD,
-        help=(
-            "A record carrying more events than this is refused as a game dump "
-            "rather than an ability; 0 disables the event-flood rule "
-            "(default: %(default)s)"
-        ),
-    )
-    parser.add_argument(
-        "--game-disjoint-keywords", type=_keyword_list,
-        default=DEFAULT_GAME_DISJOINT_KEYWORDS,
-        help=(
-            "Comma list of damage-step keywords raising a game's threshold "
-            f"(default: {','.join(DEFAULT_GAME_DISJOINT_KEYWORDS)})"
-        ),
-    )
     add_config_flags(parser, BuildCorpusConfig, only=(
+        "max_events_per_record", "game_disjoint_keywords",
         "text_cap", "reuse_cap", "training_records", "card_disjoint_text_cap",
         "validation_sample", "game_disjoint_share", "game_disjoint_keyword_share",
         "shard_records", "seed", "workers", "verify",
@@ -582,24 +539,10 @@ def _build_corpus_parser(subparsers) -> None:
 
 
 def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--records-dir", type=Path, default=DEFAULT_RECORDS_DIR,
-        help="Raw corpus root; discovery recurses (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--output", type=Path, default=DEFAULT_CORPUS_OUTPUT,
-        help="Curated dataset directory (default: %(default)s)",
-    )
+    add_config_flags(parser, BuildCorpusConfig, only=("records_dir", "output"))
     _add_cards_folder(parser)
-    # Strings rather than paths: the manifest records them, and a Path would
-    # rewrite their separators on Windows.
-    parser.add_argument(
-        "--vocab-path", type=str, default=DEFAULT_VOCAB_PATH,
-        help=(
-            "Decides the encoding surface the rarity table's text keys are "
-            "built on (default: %(default)s)"
-        ),
-    )
+    add_config_flags(parser, BuildCorpusConfig, only=("vocab_path",))
+    # A string rather than a path, as --vocab-path: the manifest records it.
     _add_variant_scripts(parser, path_type=str, without=(
         "a variant line resolves to no ability text, so it escapes the rarity "
         "table and the per-text cap"
@@ -614,8 +557,7 @@ def run_build_corpus(args: argparse.Namespace) -> int:
     from effects.application import build_corpus as build_corpus_module
 
     return build_corpus_module.build(config_from_args(
-        BuildCorpusConfig, args, max_events=args.max_events_per_record,
-        holdout=holdout_rule(args),
+        BuildCorpusConfig, args, holdout=holdout_rule(args),
     ))
 
 
@@ -683,25 +625,20 @@ def _field_coverage_parser(subparsers) -> None:
     )
 
 
-def _require_shards(root: Path) -> list[Path] | None:
-    """The shards under ``root``; None, having said so, where there are none."""
-    from effects.infrastructure.shard_io import iter_shards
-
-    shards = iter_shards(root)
-    if not shards:
-        print(f"no shards under {root}")
-        return None
-    return shards
+#: Every reader's "nothing to read"; named, as its module is not imported here.
+_NO_SHARDS = "effects.infrastructure.shard_io.NoShardsError"
 
 
+@exits_with({_NO_SHARDS: 1})
 def run_field_coverage(args: argparse.Namespace) -> int:
     from effects.application.field_coverage import field_coverage, report_lines
-    from effects.infrastructure.shard_io import read_records
+    from effects.infrastructure.shard_io import read_shard, require_shards
 
     root = args.effect_records
-    if _require_shards(root) is None:
-        return 1
-    coverage = field_coverage(read_records(root))
+    shards = require_shards(root)
+    coverage = field_coverage(
+        record for shard in shards for record in read_shard(shard.path(root))
+    )
     if not coverage:
         print(f"no records under {root}")
         return 1
@@ -735,25 +672,20 @@ def _validate_corpus_parser(subparsers) -> None:
     _add_cards_folder(parser)
 
 
+@exits_with({_NO_SHARDS: 1})
 def run_validate_corpus(args: argparse.Namespace) -> int:
     """Every invariant prints its measurement whether it passed or not: the
     number is what tells an operator whether a fix worked or merely moved."""
-    from effects.application.corpus_validation.presence import FieldPresence
-    from effects.application.validate_corpus import validate_corpus
-    from effects.infrastructure.shard_io import read_window
+    from effects.application.validate_corpus import validate_directory
 
     root = args.effect_records
-    shards = _require_shards(root)
-    if shards is None:
-        return 1
-
-    presence = FieldPresence()
-    findings = validate_corpus(
-        read_window(root, args.limit, presence.observe), config_from_args(Thresholds, args),
-        _sidecars_for_validation(args), presence,
+    report = validate_directory(
+        root, limit=args.limit, thresholds=config_from_args(Thresholds, args),
+        sidecars=_sidecars_for_validation(args),
     )
+    findings = report.findings
     window = f" (first {args.limit} records)" if args.limit else ""
-    print(f"{len(shards)} shards under {root}{window}\n")
+    print(f"{report.shards} shards under {root}{window}\n")
     for finding in findings:
         print("\n".join(finding.lines()))
     print("\n" + "\n".join(findings.summary()))
@@ -767,10 +699,10 @@ def _sidecars_for_validation(args: argparse.Namespace):
     a corpus that does not join, when this machine merely has no tree to join
     against, and the keyword-join check reports None as "not checked".
     """
-    from effects.infrastructure.sidecar_io import SidecarCache, sidecar_roots
+    from effects.infrastructure.converted_trees import SourceTrees
 
-    roots = sidecar_roots(path for path in args.cards_folders if path.is_dir())
-    return SidecarCache(roots) if roots else None
+    trees = SourceTrees.of(path for path in args.cards_folders if path.is_dir())
+    return trees.sidecar_cache() if trees.cards_folders else None
 
 
 # ── train-effect-model ──────────────────────────────────────────────────
@@ -791,14 +723,19 @@ def _train_effect_model_parser(subparsers) -> None:
     )
     _add_cards_folder(parser)
     _add_holdout_unit(parser, default=None)
-    _add_variant_scripts(parser)
+    _add_variant_scripts(parser, without=(
+        "the tree the corpus's manifest records is read, if any"
+    ))
     _add_variant(parser)
     add_config_flags(parser, TrainEffectModelConfig)
 
 
 @exits_with({
+    MissingTrainingInputError: 1,
     HoldoutMismatchError: 1,
-    "effects.infrastructure.shard_io.MixedGenerationsError": 1,
+    # Raised in a prefetch worker too, which hands the exception itself over.
+    ValidationGameInTrainingError: 1,
+    MixedGenerationsError: 1,
     SurfaceMismatchError: 2,
     EmptyHoldoutError: 2,
     f"{_EFFECT_MODEL_STORE}.ResumeMismatchError": 2,

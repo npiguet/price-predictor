@@ -1,18 +1,19 @@
 """Every record's own losses and grouping keys, for the evaluation's breakdowns.
 
-Gate 1's forward pass (:func:`effects.application.gate_one.forward_chunks`),
+Gate 1's forward pass (:func:`effects.application.model_loading.forward_chunks`),
 split by row into the trainer's per-entity loss over each record alone.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 import torch
 
 from effects.application.breakdowns import TOTAL, RecordResult
-from effects.application.gate_one import forward_chunks
-from effects.domain.damage_step_keywords import KeywordResolver, keyword_of_line
+from effects.application.model_loading import forward_chunks
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_losses import per_entity_loss
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.keyword_names import normalize_keyword
@@ -21,12 +22,12 @@ from effects.domain.records import acting_keys
 from effects.domain.rule_families import rule_family
 
 if TYPE_CHECKING:
+    from effects.application.model_loading import Runnable
     from effects.application.surface_batching import SurfaceBatcher
-    from effects.infrastructure.model_runner import Runnable
 
 
 def score_records(
-    records, runnable: Runnable, *, legality_mode_counts=None,
+    records, runnable: Runnable, *, legality_mode_counts: Mapping[str, int],
 ) -> list[RecordResult]:
     """Every record's own losses and grouping keys, for the breakdowns.
 
@@ -63,7 +64,7 @@ def _record_losses(
 
 def _record_result(
     record, batcher: SurfaceBatcher, resolver: KeywordResolver,
-    losses: dict[str, float], legality_mode_counts=None,
+    losses: dict[str, float], legality_mode_counts: Mapping[str, int],
 ) -> RecordResult:
     """The grouping keys of one scored record, beside its losses."""
     try:
@@ -75,9 +76,7 @@ def _record_result(
         # The sidecar does not describe the card the record names.
         family = None
     return RecordResult(
-        record_id=record.record_id,
         game_id=record.game_id,
-        kind=record.kind.value,
         subkind=record.subkind.value if record.subkind else None,
         text=first_text(acting_keys(record), batcher.text_of),
         family=family,
@@ -96,7 +95,7 @@ def record_keywords(
     found: set[str] = set()
     for key in acting_keys(record):
         line = batcher.sidecars.line_or_none(key)
-        keyword = keyword_of_line(line) if line is not None else None
+        keyword = line.bare_keyword if line is not None else None
         if keyword is not None:
             found.add(normalize_keyword(keyword))
     for entity in record.state.entities:

@@ -21,20 +21,17 @@ from effects.domain.effect_head_layout import (
     AT_LEAST_STEPS,
     CREATED_OBJECT_SLOTS,
     CREATED_SLOT_WIDTH,
-    DIRECTIONS,
     FIELD_SLICES,
     GATE_INDEX,
-    SIGNED_DIRECTIONS,
-    SIGNED_MAGNITUDE,
     VALUE_SLICES,
     VERDICT_BITS,
     CreatedSlot,
     FieldSpec,
-    FieldType,
 )
 from effects.domain.entity_field_targets import EntityTargetBatch
+from effects.domain.field_kinds import FIELD_KINDS, capped, poisson
 from effects.domain.state_snapshot import COLORS
-from effects.domain.value_targets import VALUE_TARGETS, ValueKind
+from effects.domain.value_targets import VALUE_TARGETS
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +51,28 @@ class LossParts:
         return dict(zip(self.names, self.values.tolist()))
 
 
+@dataclass(frozen=True, slots=True)
+class _Rows:
+    """The rows a host mask selects: tested and indexed on the host, where the
+    mask was built, and copied to the device once for gathering there."""
+
+    host: torch.Tensor
+    device: torch.Tensor
+
+    @classmethod
+    def of(cls, mask: torch.Tensor, device: torch.device) -> _Rows:
+        host = mask.detach().bool().cpu().flatten().nonzero().squeeze(1)
+        return cls(host, host.to(device, non_blocking=True))
+
+    @property
+    def empty(self) -> bool:
+        return self.host.numel() == 0
+
+    def select(self, tensor: torch.Tensor) -> torch.Tensor:
+        """``tensor``'s selected rows, gathered wherever ``tensor`` lives."""
+        return tensor.index_select(0, self.host if tensor.device.type == "cpu" else self.device)
+
+
 def per_row(total: torch.Tensor, rows: int) -> torch.Tensor:
     return total / max(int(rows), 1)
 
@@ -66,78 +85,21 @@ def at_least_targets(amounts: torch.Tensor) -> torch.Tensor:
     return (amounts.abs().unsqueeze(-1) >= steps).to(amounts.dtype)
 
 
-def capped(target: torch.Tensor) -> torch.Tensor:
-    """``target`` with every magnitude above :data:`MAGNITUDE_CAP` at the cap, sign kept."""
-    return target.clamp(min=-MAGNITUDE_CAP, max=MAGNITUDE_CAP)
-
-
-def counted(target: torch.Tensor) -> torch.Tensor:
-    """A count target clamped to ``[0, cap]``: a negative target (a heal
-    netted into ``damage_taken``) makes the Poisson NLL unbounded below."""
-    return target.clamp(min=0.0, max=MAGNITUDE_CAP)
-
-
 def magnitude_target(spec: FieldSpec, target: torch.Tensor) -> torch.Tensor:
     """The magnitude a count or signed-delta field's Poisson term trains on,
-    so anything scoring that term reads the target the same way."""
-    if spec.type is FieldType.COUNT:
-        return counted(target.float())
-    return capped(target.float()).abs()
-
-
-def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    """Poisson NLL on a log-rate prediction, summed. ``full=True`` changes no
-    gradient but puts every term's minimum near zero, so the loss does not
-    track batch composition."""
-    return functional.poisson_nll_loss(
-        prediction, target, log_input=True, full=True, reduction="sum",
-    )
-
-
-def delta_direction(target: torch.Tensor) -> torch.Tensor:
-    """A signed delta's direction class, in :data:`DIRECTIONS` order:
-    -1, 0 and 1 become 0, 1 and 2."""
-    return torch.sign(target).long() + 1
-
-
-def _signed_delta_loss(
-    prediction: torch.Tensor, target: torch.Tensor,
-) -> torch.Tensor:
-    """Direction (categorical) plus magnitude (count), summed, so a gain and
-    a loss are different predictions rather than a hedge."""
-    direction_logits = prediction[..., SIGNED_DIRECTIONS]
-    log_magnitude = prediction[..., SIGNED_MAGNITUDE]
-    direction = delta_direction(target)
-    loss = functional.cross_entropy(
-        direction_logits.reshape(-1, len(DIRECTIONS)), direction.reshape(-1),
-        reduction="sum",
-    )
-    return loss + _poisson(log_magnitude, target.abs())
+    at the per-entity head's cap, so anything scoring that term reads the
+    target the same way."""
+    return FIELD_KINDS[spec.type].magnitude(target, cap=MAGNITUDE_CAP)
 
 
 def field_loss(
     spec: FieldSpec, prediction: torch.Tensor, target: torch.Tensor,
 ) -> torch.Tensor:
-    """The loss for one field, chosen by what the field is (FR-080)."""
-    match spec.type:
-        case FieldType.BINARY:
-            return functional.binary_cross_entropy_with_logits(
-                prediction.squeeze(-1), target.float(), reduction="sum",
-            )
-        case FieldType.MULTI_BINARY:
-            return functional.binary_cross_entropy_with_logits(
-                prediction, target.float(), reduction="sum",
-            )
-        case FieldType.COUNT:
-            return _poisson(prediction.squeeze(-1), magnitude_target(spec, target))
-        case FieldType.SIGNED_DELTA:
-            return _signed_delta_loss(prediction, capped(target.float()))
-        case FieldType.CATEGORICAL:
-            return functional.cross_entropy(
-                prediction.reshape(-1, spec.arity), target.reshape(-1).long(),
-                reduction="sum",
-            )
-    raise ValueError(f"unhandled field type {spec.type}")
+    """The loss for one field, chosen by what the field is (FR-080), every
+    magnitude scored at :data:`MAGNITUDE_CAP`."""
+    return FIELD_KINDS[spec.type].loss(
+        prediction, target, arity=spec.arity, cap=MAGNITUDE_CAP,
+    )
 
 
 def per_entity_loss(
@@ -188,10 +150,10 @@ def per_entity_loss(
 def _gate_term(flat_outputs: torch.Tensor, targets: EntityTargetBatch) -> torch.Tensor:
     """The affected gate's BCE over every real entity, summed."""
     device = flat_outputs.device
-    real = targets.real.flatten().nonzero().squeeze(1)
-    affected = targets.gate.detach().cpu().flatten().index_select(0, real).float()
+    real = _Rows.of(targets.real, device)
+    affected = real.select(targets.gate.detach().cpu().flatten()).float()
     return functional.binary_cross_entropy_with_logits(
-        flat_outputs.index_select(0, real.to(device, non_blocking=True))[:, GATE_INDEX],
+        real.select(flat_outputs)[:, GATE_INDEX],
         affected.to(device, non_blocking=True),
         reduction="sum",
     )
@@ -205,18 +167,15 @@ def _field_term(
     target = targets.fields.values.get(spec.name)
     if target is None:
         return None
-    rows = targets.scored(spec.name).flatten().nonzero().squeeze(1)
-    if rows.numel() == 0:
-        return None
     device = flat_outputs.device
-    rows_device = rows.to(device, non_blocking=True)
+    rows = _Rows.of(targets.scored(spec.name), device)
+    if rows.empty:
+        return None
     start, end = FIELD_SLICES[spec.name]
     flat_target = target.reshape(-1, *target.shape[2:])
     return field_loss(
-        spec, flat_outputs.index_select(0, rows_device)[:, start:end],
-        flat_target.index_select(
-            0, rows if flat_target.device.type == "cpu" else rows_device,
-        ).to(device, non_blocking=True),
+        spec, rows.select(flat_outputs)[:, start:end],
+        rows.select(flat_target).to(device, non_blocking=True),
     )
 
 
@@ -229,12 +188,11 @@ def created_objects_loss(
     that supervise the head."""
     records = int(prediction.shape[0])
     if mask is not None:
-        rows = mask.detach().bool().cpu().nonzero().squeeze(1)
-        if rows.numel() == 0:
+        rows = _Rows.of(mask, prediction.device)
+        if rows.empty:
             return prediction.new_zeros(())
-        rows = rows.to(prediction.device, non_blocking=True)
-        prediction = prediction.index_select(0, rows)
-        target = target.to(prediction.device).index_select(0, rows)
+        prediction = rows.select(prediction)
+        target = rows.select(target).to(prediction.device)
     # Every slot at once, as ``(records, slots, slot width)``.
     slots = (-1, CREATED_OBJECT_SLOTS, CREATED_SLOT_WIDTH)
     predicted = prediction[:, :-1].reshape(slots)
@@ -245,7 +203,9 @@ def created_objects_loss(
     total = functional.binary_cross_entropy_with_logits(
         predicted[..., flags], wanted[..., flags], reduction="sum",
     )
-    total = total + _poisson(predicted[..., magnitudes], capped(wanted[..., magnitudes]))
+    total = total + poisson(
+        predicted[..., magnitudes], capped(wanted[..., magnitudes], MAGNITUDE_CAP),
+    )
     total = total + functional.binary_cross_entropy_with_logits(
         predicted[..., rest], wanted[..., rest], reduction="sum",
     )
@@ -290,33 +250,28 @@ def value_loss(
     prediction: torch.Tensor, target: torch.Tensor, mask: torch.Tensor,
 ) -> torch.Tensor:
     """The value head's loss, one row per unique text (FR-058, FR-058b): the
-    per-entity fields' losses by kind, plus each amount's at-least bits."""
+    per-entity fields' losses by type, plus each amount's at-least bits."""
     rows = int(prediction.shape[0])
     mask = mask.detach().bool().cpu()
+    target = target.to(prediction.device)
     total = prediction.new_zeros(())
-    for index, (name, kind) in enumerate(VALUE_TARGETS):
-        selected = mask[:, index].nonzero().squeeze(1)
-        if selected.numel() == 0:
+    for index, (name, field_type) in enumerate(VALUE_TARGETS):
+        selected = _Rows.of(mask[:, index], prediction.device)
+        if selected.empty:
             continue
-        selected = selected.to(prediction.device, non_blocking=True)
+        predicted = selected.select(prediction)
         start, end = VALUE_SLICES[name]
-        output = prediction.index_select(0, selected)[:, start:end]
-        wanted = target.to(prediction.device).index_select(0, selected)[:, index]
-        match kind:
-            case ValueKind.COUNT:
-                total = total + _poisson(output.squeeze(-1), wanted)
-            case ValueKind.SIGNED:
-                total = total + _signed_delta_loss(output, wanted)
-            case ValueKind.BINARY:
-                total = total + functional.binary_cross_entropy_with_logits(
-                    output.squeeze(-1), wanted, reduction="sum",
-                )
+        wanted = selected.select(target)[:, index]
+        # Uncapped: a stated amount is the text's own, which no game compounds.
+        total = total + FIELD_KINDS[field_type].loss(
+            predicted[:, start:end], wanted, arity=1, cap=None,
+        )
         if name in AT_LEAST_SLICES:
             # Averaged over the steps, so forty bits weigh what one binary
             # target does rather than dominating the encoder's gradient.
             start, end = AT_LEAST_SLICES[name]
             total = total + functional.binary_cross_entropy_with_logits(
-                prediction.index_select(0, selected)[:, start:end],
+                predicted[:, start:end],
                 at_least_targets(wanted.float()), reduction="sum",
             ) / AT_LEAST_STEPS
     return per_row(total, rows)
@@ -342,12 +297,11 @@ def api_loss(
     rows = int(type_logits.shape[0])
     total = None
     # A line with no API type carries -1 and is skipped.
-    known = (type_targets.detach().cpu() >= 0).nonzero().squeeze(1)
-    if known.numel():
-        known = known.to(type_logits.device, non_blocking=True)
+    known = _Rows.of(type_targets.detach().cpu() >= 0, type_logits.device)
+    if not known.empty:
         total = functional.cross_entropy(
-            type_logits.index_select(0, known),
-            type_targets.to(type_logits.device).index_select(0, known),
+            known.select(type_logits),
+            known.select(type_targets).to(type_logits.device),
             reduction="sum",
         )
     if key_logits is not None and key_targets is not None:

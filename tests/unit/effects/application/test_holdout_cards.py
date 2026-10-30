@@ -198,7 +198,7 @@ class TestTheTrainingCorpusFlag:
         config = self._config("--training-corpus", str(corpus))
 
         assert config.effect_records == corpus
-        assert config.exclude_cards == corpus / "holdout-cards.txt"
+        assert config.deck_holdout.exclude_cards == corpus / "holdout-cards.txt"
 
     def test_a_corpus_without_a_holdout_list_is_refused(self, tmp_path):
         """Silently running undepleted is the failure this whole area had."""
@@ -244,7 +244,7 @@ class TestTheTrainingCorpusFlag:
         config = self._config("--effect-records", str(tmp_path / "records"))
 
         assert config.effect_records == tmp_path / "records"
-        assert config.exclude_cards is None
+        assert config.deck_holdout.exclude_cards is None
 
 
 # ── the template unit (FR-040, FR-043; T040, T042) ──────────────────────
@@ -312,7 +312,7 @@ def test_the_cli_takes_the_repeatable_cards_folder_like_every_other_command():
 
 def test_a_real_gen1_checkpoint_split_reads_as_the_text_unit():
     """The 09.17f checkpoint's recorded split, as written, carries no unit."""
-    from effects.infrastructure.effect_model_store import SplitProvenance
+    from effects.domain.split_provenance import SplitProvenance
 
     recorded = {
         "held_out_cards": ["a-moss-pit skeleton"], "card_disjoint_games": [],

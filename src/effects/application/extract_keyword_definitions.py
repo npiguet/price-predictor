@@ -15,7 +15,9 @@ DEFAULT_OUTPUT = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
 
 @dataclass
 class ExtractKeywordDefinitionsConfig:
-    output: Path = field(default_factory=lambda: DEFAULT_OUTPUT)
+    output: Path = field(default=DEFAULT_OUTPUT, metadata={
+        "help": "Output path (default: %(default)s)",
+    })
 
 
 def run(config: ExtractKeywordDefinitionsConfig) -> int:

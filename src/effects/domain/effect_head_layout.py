@@ -20,9 +20,10 @@ from effects.domain.effect_head_input import (
     OVERLAY_KEYWORDS,
     THERMOMETER_STEPS,
 )
+from effects.domain.field_types import FieldType
 from effects.domain.sampling import SamplingClass
 from effects.domain.state_snapshot import COLORS
-from effects.domain.value_targets import VALUE_TARGETS, ValueKind
+from effects.domain.value_targets import VALUE_TARGETS
 
 
 class ZoneOutcome(StrEnum):
@@ -43,8 +44,30 @@ class ZoneOutcome(StrEnum):
 
 #: The zone outcomes in the head's column order, which a target stores as an index.
 ZONE_OUTCOMES: tuple[ZoneOutcome, ...] = tuple(ZoneOutcome)
-DURATIONS: tuple[str, ...] = ("instant", "end_of_turn", "permanent")
-LIBRARY_EVENTS: tuple[str, ...] = ("scry", "surveil", "tutor", "reveal", "reorder")
+
+
+class Duration(StrEnum):
+    """How long a lasting change lasts, in the record's spelling (FR-077)."""
+
+    INSTANT = "instant"
+    END_OF_TURN = "end_of_turn"
+    PERMANENT = "permanent"
+
+
+class LibraryEvent(StrEnum):
+    """What a player's library underwent, the library-events field's members."""
+
+    SCRY = "scry"
+    SURVEIL = "surveil"
+    TUTOR = "tutor"
+    REVEAL = "reveal"
+    REORDER = "reorder"
+
+
+#: The durations and library events in the head's column order. Append to
+#: the enums, never reorder: a target stores a position.
+DURATIONS: tuple[str, ...] = tuple(duration.value for duration in Duration)
+LIBRARY_EVENTS: tuple[str, ...] = tuple(event.value for event in LibraryEvent)
 
 
 #: Classes whose records list every outcome event of what they describe, so an
@@ -56,24 +79,6 @@ _EFFECTFUL = frozenset({
 #: The effectful classes plus ``continuous``, whose contribution names every
 #: P/T, keyword, type and colour change its static makes to the entity.
 _STATIC_CHANNELS = _EFFECTFUL | {SamplingClass.CONTINUOUS}
-
-
-#: A signed delta's direction classes, in the head's column order; a target's
-#: sign plus one is its class.
-DIRECTIONS: tuple[str, ...] = ("negative", "zero", "positive")
-#: A signed delta's columns: a logit per direction, then the magnitude's log
-#: rate under the count loss.
-SIGNED_DIRECTIONS = slice(0, len(DIRECTIONS))
-SIGNED_MAGNITUDE = len(DIRECTIONS)
-SIGNED_WIDTH = SIGNED_MAGNITUDE + 1
-
-
-class FieldType(StrEnum):
-    BINARY = "binary"
-    MULTI_BINARY = "multi_binary"
-    COUNT = "count"
-    SIGNED_DELTA = "signed_delta"
-    CATEGORICAL = "categorical"
 
 
 class HeadField(StrEnum):
@@ -144,24 +149,23 @@ class FieldSpec:
     #: multi-binary field. None for a field only a written value supervises.
     silent: float | None = None
 
+    def __post_init__(self) -> None:
+        # The type carries the field's width and target shape, so a spec that
+        # names no type would fail far from where it was written.
+        if not isinstance(self.type, FieldType):
+            raise ValueError(f"unhandled field type {self.type}")
+
     @property
     def arity(self) -> int:
         return len(self.classes) or 1
 
     @property
     def width(self) -> int:
-        match self.type:
-            case FieldType.BINARY | FieldType.COUNT:
-                return 1
-            case FieldType.MULTI_BINARY | FieldType.CATEGORICAL:
-                return self.arity
-            case FieldType.SIGNED_DELTA:
-                return SIGNED_WIDTH
-        raise ValueError(f"unhandled field type {self.type}")
+        return self.type.width(self.arity)
 
     def supervised_value(
         self, written: Mapping[str, object], unknown: frozenset[str] | set[str],
-        *, record_class: str | None, scope: FieldScope | None,
+        *, record_class: SamplingClass, scope: FieldScope,
     ):
         """This field's target for one affected entity, or None where it is absent.
 
@@ -176,9 +180,14 @@ class FieldSpec:
             or scope is not self.scope or record_class not in self.supervised_by
         ):
             return None
-        if self.type is FieldType.MULTI_BINARY:
+        if self.type.per_member:
             return [self.silent] * self.arity
         return self.silent
+
+
+#: The counter type named for the generated field every counter type the
+#: layout does not list lands in, :attr:`HeadField.COUNTERS_DELTA_OTHER`.
+OTHER_COUNTER = "OTHER"
 
 
 def counter_field(counter_type: str) -> str:
@@ -200,7 +209,7 @@ def _counter_fields() -> tuple[FieldSpec, ...]:
             group=FieldGroup.SPARSE,
             silent=0.0,
         )
-        for name in (*COUNTER_TYPES, "OTHER")
+        for name in (*COUNTER_TYPES, OTHER_COUNTER)
     )
 
 
@@ -312,16 +321,13 @@ CREATED_OBJECTS_WIDTH = CREATED_OBJECT_SLOTS * CREATED_SLOT_WIDTH + 1
 VERDICT_BITS: tuple[str, ...] = ("can_play", "affordable", "has_legal_target")
 VERDICT_WIDTH = len(VERDICT_BITS) + len(COLORS) + 1
 
-#: Value head (FR-058) widths per target kind.
-_VALUE_WIDTHS: dict[ValueKind, int] = {
-    ValueKind.COUNT: 1, ValueKind.BINARY: 1, ValueKind.SIGNED: SIGNED_WIDTH,
-}
-#: ``target -> (start, end)`` into the value head's output.
+#: ``target -> (start, end)`` into the value head's output (FR-058), each
+#: target as wide as a per-entity field of its type.
 VALUE_SLICES: dict[str, tuple[int, int]] = {}
 _value_offset = 0
-for _name, _kind in VALUE_TARGETS:
-    VALUE_SLICES[_name] = (_value_offset, _value_offset + _VALUE_WIDTHS[_kind])
-    _value_offset += _VALUE_WIDTHS[_kind]
+for _name, _type in VALUE_TARGETS:
+    VALUE_SLICES[_name] = (_value_offset, _value_offset + _type.width(1))
+    _value_offset += _type.width(1)
 
 #: Steps of the at-least targets (FR-058b): whether each stated amount is at
 #: least k for k = 1 … 40, the board's thermometer length, which pushes ``e``
@@ -330,8 +336,8 @@ AT_LEAST_STEPS = THERMOMETER_STEPS
 #: ``amount target -> (start, end)`` of its at-least block, after every
 #: :data:`VALUE_SLICES` block so the earlier layout of the head is a prefix.
 AT_LEAST_SLICES: dict[str, tuple[int, int]] = {}
-for _name, _kind in VALUE_TARGETS:
-    if _kind is not ValueKind.BINARY:
+for _name, _type in VALUE_TARGETS:
+    if _type.has_magnitude:
         AT_LEAST_SLICES[_name] = (_value_offset, _value_offset + AT_LEAST_STEPS)
         _value_offset += AT_LEAST_STEPS
 VALUE_WIDTH = _value_offset

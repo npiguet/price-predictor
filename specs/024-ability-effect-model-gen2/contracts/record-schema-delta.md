@@ -25,7 +25,8 @@ same change that implements it (FR-034).
 | `blockers` | controller of the candidate blockers | controller of the anchored attacker |
 | `decision` | controller of the candidate ability | active player |
 
-Both new fields join `COLLECTION_METADATA_FIELDS`; compatibility rule 4 applies.
+Both new fields are collection metadata; compatibility rule 4 applies, and
+`test_schema_compatibility.py` checks that flipping either leaves `SurfaceBuilder.build` unchanged.
 
 Envelope key order in `EffectRecord.toJson`: `random_seat` after `synthetic`; `what_if` after
 `random_seat`, written only on the two subkinds.

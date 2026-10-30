@@ -17,16 +17,18 @@ from typing import NamedTuple
 import torch
 
 from effects.application.ability_text import KeyResolver
+from effects.application.mlm_masking import MaskedTokens
 from effects.application.surface_batching import (
-    Materializer,
     PreparedBatch,
     SurfaceBatcher,
     SurfaceSpec,
 )
-from effects.application.text_staging import MaskedTokens, TextStager, pinned
-from effects.application.train_effect_model import TrainEffectModelConfig
-from effects.domain.ability_encoder import TruncationLog, surface_of
-from effects.domain.ability_tokenizer import INFERENCE_KEYWORD_EXPAND_P
+from effects.application.text_staging import TextStager
+from effects.application.train_effect_model import (
+    TrainEffectModelConfig,
+    ValidationGameInTrainingError,
+)
+from effects.domain.ability_encoder import TruncationLog
 from effects.domain.aux_head_targets import (
     created_objects_targets,
     supervises_created_objects,
@@ -40,7 +42,7 @@ from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.lethality_counterfactuals import counterfactual, qualify
 from effects.domain.provenance import SidecarLine
-from effects.domain.rarity import TextGames
+from effects.domain.rarity import RarityCoverage, TextGames
 from effects.domain.records import EffectRecord
 from effects.domain.rule_families import rule_family
 from effects.domain.sampling import (
@@ -54,8 +56,8 @@ from effects.domain.split import (
 )
 from effects.domain.surface_collation import entity_target_tensors
 from effects.domain.value_targets import value_targets
-from effects.infrastructure.sidecar_io import SidecarCache
 from effects.infrastructure.tokenizer_loading import load_tokenizer
+from effects.infrastructure.torch_device import pinned
 
 #: Rarity-bucket label for a record with no acting text (combat, legality).
 NO_TEXT_BUCKET = "no-text"
@@ -103,12 +105,7 @@ class DeviceStep:
 
     def pin(self) -> None:
         self.batch.pin()
-        targets = self.targets
-        self.targets = replace(
-            targets,
-            fields=replace(targets.fields, values=pinned(dict(targets.fields.values))),
-            index=targets.index.pin_memory(),
-        )
+        self.targets = self.targets.pinned()
         self.heads.pin()
 
 
@@ -137,10 +134,9 @@ class ShardOpened:
     """The first message of a shard: its split, before any step."""
 
     trainable: int
-    held_back: int
-    #: ``(found, distinct)``: how many of the trainable records' distinct
-    #: ability texts the rarity table names; None without a table.
-    rarity_coverage: tuple[int, int] | None
+    #: How many of the trainable records' distinct ability texts the rarity
+    #: table names; None without a table.
+    rarity_coverage: RarityCoverage | None
 
 
 @dataclass
@@ -196,7 +192,7 @@ class PreparerSettings:
     param_keys: tuple[str, ...]
     widths: dict[SlotKind, int]
     heads: frozenset[Head]
-    legality_mode_counts: Mapping[str, int] | None = None
+    legality_mode_counts: Mapping[str, int] = field(default_factory=dict)
 
 
 def training_heads(config: TrainEffectModelConfig, *, api_types) -> frozenset[Head]:
@@ -221,7 +217,7 @@ class StepPreparer:
     ) -> None:
         self.config = settings.config
         self.seed = settings.seed
-        self.surface = surface_of(settings.config.vocab_path)
+        self.surface = settings.config.tokenizer_files.surface
         self.surface_spec = SurfaceSpec.for_training(settings.config, settings.widths)
         self.split = settings.split
         self.rarity = settings.rarity
@@ -236,61 +232,56 @@ class StepPreparer:
             lambda text, keys: self.truncated.append((text, keys)),
         )
         self._api_targets: dict[str, tuple[int, tuple[int, ...]]] = {}
-        self.tokenizer = load_tokenizer(
-            self.config.vocab_path, self.config.keyword_definitions,
-        )
-        self.sidecars = SidecarCache.from_folders(
-            self.config.cards_folders, self.config.variant_scripts,
-        )
+        self.tokenizer = load_tokenizer(self.config.tokenizer_files)
+        self.sidecars = self.config.source_trees.sidecar_cache()
         #: One memoised join for the run, not per step.
         self.resolver = KeyResolver(self.sidecars, self.surface)
         self._keywords = KeywordResolver(self.sidecars)
 
-    def batcher(
-        self, *, training: bool = True, rng: random.Random | None = None,
-        materializer: Materializer | None = None,
-    ) -> SurfaceBatcher:
-        """The records-to-inputs pipeline, built the same way for every caller.
-
-        ``training=False`` turns keyword expansion and context dropout off;
-        the withheld keyword stays withheld, being a split rather than an
-        augmentation. Scoring draws from a stream of its own, never the
-        training step's ``rng``. ``materializer`` is for callers that build
-        batches whole.
-        """
+    def training_batcher(self, rng: random.Random) -> SurfaceBatcher:
+        """One training step's records-to-inputs pipeline, drawing keyword
+        expansion and context dropout from the step's ``rng``."""
         return SurfaceBatcher(
             stager=TextStager(
                 tokenizer=self.tokenizer,
                 surface=self.surface,
                 withhold_keyword=self.config.withhold_keyword,
-                keyword_expand_p=(
-                    self.config.keyword_expand_p if training
-                    else INFERENCE_KEYWORD_EXPAND_P
-                ),
+                keyword_expand_p=self.config.keyword_expand_p,
                 truncations=self.truncations,
             ),
             resolver=self.resolver,
             spec=self.surface_spec,
-            materializer=materializer,
-            context_dropout=self.config.context_dropout if training else 0.0,
-            rng=(
-                (rng or random.Random(f"{self.seed}:unplanned")) if training
-                else random.Random(f"{self.seed}:validation")
+            context_dropout=self.config.context_dropout,
+            rng=rng,
+        )
+
+    def scoring_batcher(self) -> SurfaceBatcher:
+        """Validation's pipeline: no expansion beyond inference's and no
+        context dropout, drawing from a stream of its own rather than any
+        training step's, so how many batches it scores moves no step."""
+        return SurfaceBatcher(
+            stager=TextStager.for_inference(
+                self.tokenizer, self.surface,
+                withhold_keyword=self.config.withhold_keyword,
+                truncations=self.truncations,
             ),
+            resolver=self.resolver,
+            spec=self.surface_spec,
+            rng=random.Random(f"{self.seed}:validation"),
         )
 
     def prepare_training_step(
-        self, plan, *, fields: tuple[FieldSpec, ...], rng: random.Random,
-        pin: bool = False,
+        self, records: Sequence[EffectRecord], *, fields: tuple[FieldSpec, ...],
+        rng: random.Random, pin: bool = False,
     ) -> tuple[DeviceStep, int]:
-        """One training step's host half, and how many counterfactual copies
-        it appended to the planned records (FR-063e).
+        """One training step's host half over its planned ``records``, and how
+        many counterfactual copies it appended to them (FR-063e).
 
         ``pin`` is for the training process only: page-locked memory does not
         survive a trip between processes.
         """
-        batcher = self.batcher(training=True, rng=rng)
-        records = plan.records
+        batcher = self.training_batcher(rng)
+        records = list(records)
         targets = [derive_targets(record) for record in records]
         copies = []
         if self.config.lethality_copies > 0:
@@ -302,13 +293,14 @@ class StepPreparer:
             step.pin()
         return step, len(copies)
 
-    def prepare_scoring_step(self, plan, fields: tuple[FieldSpec, ...]) -> DeviceStep:
+    def prepare_scoring_step(
+        self, records: Sequence[EffectRecord], fields: tuple[FieldSpec, ...],
+    ) -> DeviceStep:
         """One validation batch's host half: no augmentation, no copies, and
         only the shipped heads' targets."""
-        records = plan.records
         return self._build(
             records, [derive_targets(record) for record in records], fields,
-            self.batcher(training=False), heads=frozenset(),
+            self.scoring_batcher(), heads=frozenset(),
         )
 
     def _build(
@@ -344,10 +336,11 @@ class StepPreparer:
                     record, qualified, record_targets, line, batcher.text_of(key),
                     batcher.rng, number,
                 )
-                if copy.key is not None:
-                    batcher.stand_in(
-                        copy.key, copy.text, key,
-                        script=copy.script, role_spans=copy.role_spans,
+                edit = copy.edit
+                if edit.key is not None:
+                    batcher.override_text(
+                        edit.key, edit.text, key,
+                        script=edit.script, role_spans=edit.role_spans,
                     )
                 copies.append(copy)
         return copies
@@ -389,7 +382,7 @@ class StepPreparer:
             targets[Head.API] = self._api_batch(texts, batch.texts)
         if Head.MLM in heads:
             targets[Head.MLM] = batcher.draw_mlm_mask(
-                batch.staged.prepared, self.config.mlm_mask_prob,
+                batch.staged.encoder_inputs, self.config.mlm_mask_prob,
             )
         return targets
 
@@ -466,23 +459,23 @@ class StepPreparer:
     def shard_steps(
         self, task: ShardTask, records: list, *, pin: bool = False,
     ) -> Iterator[ShardOpened | StepReady]:
-        """One shard's messages: a ``ShardOpened``, then ``task.budget`` steps,
-        none from a game the manifest places in a validation stratum."""
-        excluded = self.split.validation_games
-        training = [r for r in records if r.game_id not in excluded]
-        texts = self._texts(training)
-        games = self._games(training, texts)
-        yield ShardOpened(
-            trainable=len(training), held_back=len(records) - len(training),
-            rarity_coverage=games.coverage(),
-        )
-        if not training:
+        """One shard's messages: a ``ShardOpened``, then ``task.budget`` steps.
+
+        Raises :class:`ValidationGameInTrainingError` for a shard holding a
+        game the manifest places in a validation stratum, rather than training
+        around it: the corpus and its manifest disagree.
+        """
+        self._refuse_validation_games(task, records)
+        texts = self._texts(records)
+        games = self._games(records, texts)
+        yield ShardOpened(trainable=len(records), rarity_coverage=games.coverage())
+        if not records:
             return
-        weights = self._weighted(training, texts, games)
-        labels = self._shard_labels(training, texts, games)
+        weights = self._weighted(records, texts, games)
+        labels = self._shard_labels(records, texts, games)
         del texts
         batches = batches_without_replacement(
-            training, weights, batch_size=self.config.batch_size,
+            records, weights, batch_size=self.config.batch_size,
             rng=plan_rng(self.seed, task.epoch, task.position),
         )
         for index in range(task.budget):
@@ -494,12 +487,26 @@ class StepPreparer:
                 buckets[counted.bucket] += 1
                 families[counted.family] += 1
             step, copies = self.prepare_training_step(
-                plan, fields=task.fields, pin=pin,
+                plan.records, fields=task.fields, pin=pin,
                 rng=step_rng(self.seed, task.epoch, task.position, index),
             )
             if copies:
                 families[COUNTERFACTUAL_FAMILY] += copies
             yield StepReady(step, dict(buckets), dict(families))
+
+    def _refuse_validation_games(self, task: ShardTask, records: list) -> None:
+        excluded = self.split.validation_games
+        leaked = Counter(r.game_id for r in records if r.game_id in excluded)
+        if not leaked:
+            return
+        game, count = leaked.most_common(1)[0]
+        raise ValidationGameInTrainingError(
+            f"training shard {task.shard} holds {sum(leaked.values())} record(s) "
+            f"of {len(leaked)} game(s) its corpus's manifest places in a "
+            f"validation stratum, e.g. {game} ({count} record(s)). build-corpus "
+            "writes no validation game into training/, so this shard and the "
+            "manifest come from different builds: rebuild the corpus."
+        )
 
     def steps(self, task: ShardTask, records: list) -> Iterator:
         """``shard_steps``, then a ``ShardClosed``: a worker's whole shard."""

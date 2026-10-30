@@ -118,9 +118,7 @@ class TestTheParsedDefaultsAreTheConfigsOwn:
 
     def test_build_corpus(self):
         args = build_parser().parse_args(["build-corpus"])
-        assert config_from_args(
-            BuildCorpusConfig, args, max_events=args.max_events_per_record,
-        ) == BuildCorpusConfig(records_dir=Path("output/effects/records/"))
+        assert config_from_args(BuildCorpusConfig, args) == BuildCorpusConfig()
 
     def test_train_effect_model(self):
         args = build_parser().parse_args(["train-effect-model", "--corpus", "c"])

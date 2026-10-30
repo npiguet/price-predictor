@@ -12,6 +12,7 @@ refusal rule, the held-out test and a record's cell cannot drift apart.
 
 from __future__ import annotations
 
+import functools
 import logging
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator, Mapping
@@ -58,9 +59,9 @@ logger = logging.getLogger(__name__)
 class ReadConfig:
     """How both passes read and judge a record; pickled into every worker."""
 
-    records_dir: str
+    records_dir: Path
     #: Roots rather than a ``SidecarCache``, which does not pickle.
-    sidecar_roots: dict[str, str]
+    sidecar_roots: dict[str, Path]
     #: ``--max-events-per-record``.
     max_events: int
     held_out: HeldOutCards
@@ -70,7 +71,9 @@ class ReadConfig:
 class WorkerContext:
     """One process's read side: its config, sidecar cache, resolver and memo,
     built lazily and kept for the context's life, so a process reads each
-    sidecar once rather than once per shard."""
+    sidecar once rather than once per shard. The cache is the process's own
+    (:func:`~effects.infrastructure.converted_trees.process_sidecars`), so every
+    context over the same roots in one process shares it."""
 
     def __init__(self, read: ReadConfig) -> None:
         self.read = read
@@ -81,11 +84,9 @@ class WorkerContext:
     @property
     def sidecars(self) -> SidecarCache:
         if self._sidecars is None:
-            from effects.infrastructure.sidecar_io import SidecarCache
+            from effects.infrastructure.converted_trees import process_sidecars
 
-            self._sidecars = SidecarCache({
-                name: Path(root) for name, root in self.read.sidecar_roots.items()
-            })
+            self._sidecars = process_sidecars(self.read.sidecar_roots)
         return self._sidecars
 
     @property
@@ -96,10 +97,10 @@ class WorkerContext:
             self._resolver = KeywordResolver(self.sidecars)
         return self._resolver
 
-    def records(self, relative: str) -> Iterator[EffectRecord]:
+    def records(self, shard: SourceShard) -> Iterator[EffectRecord]:
         from effects.infrastructure.shard_io import read_shard
 
-        return read_shard(Path(self.read.records_dir) / relative)
+        return read_shard(shard.path(self.read.records_dir))
 
     def refusal(self, record: EffectRecord) -> QualityDefect | None:
         """The one refusal rule both passes apply."""
@@ -197,8 +198,7 @@ class ShardSurvey:
     """One shard's contribution, or every shard's folded into
     :attr:`Survey.totals`. Plain data, so it pickles back cheaply."""
 
-    name: str = field(metadata=NOT_MERGED)
-    size: int = field(metadata=NOT_MERGED)
+    shard: SourceShard = field(metadata=NOT_MERGED)
     supply: TrainingSupply
     records: int = 0
     rarity: RarityTally = field(default_factory=RarityTally)
@@ -216,8 +216,9 @@ class Survey:
     """What the whole corpus holds: every shard's survey folded together, and
     what only the fold can see."""
 
-    #: Its ``name`` and ``size`` are blank; ``supply`` counts training-bound
-    #: records only, its legality cells resolved by the build.
+    #: Its ``shard`` is blank; ``supply`` counts training-bound records only,
+    #: its legality cells folded into their families, which only the whole
+    #: corpus's mode counts can decide (:func:`merge_surveys`).
     totals: ShardSurvey
     shards: tuple[SourceShard, ...]
     #: Per top-level source directory (FR-149): held-out games in a depleted
@@ -234,7 +235,7 @@ class Survey:
 
 @dataclass(frozen=True, slots=True)
 class SurveyConfig:
-    """What every survey worker needs, sent once through the pool initializer."""
+    """What every survey worker needs, sent once to each process."""
 
     read: ReadConfig
     #: How many smallest hashes the supply keeps per cell and key.
@@ -244,32 +245,22 @@ class SurveyConfig:
     game_disjoint_keywords: tuple[str, ...] = ()
 
 
-_SURVEY: tuple[SurveyConfig, WorkerContext] | None = None
+class SurveyWorker:
+    """One process's survey side: the config, and the read context every shard
+    it surveys shares. Built once per process by :func:`run_parallel`."""
 
+    def __init__(self, config: SurveyConfig) -> None:
+        self.config = config
+        self.context = WorkerContext(config.read)
 
-def init_survey_worker(config: SurveyConfig) -> None:
-    global _SURVEY
-    _SURVEY = (config, WorkerContext(config.read))
-
-
-def survey_shard(relative: str) -> ShardSurvey:
-    """Survey one shard. Module-level so a process pool can pickle it."""
-    assert _SURVEY is not None, "init_survey_worker was not run"
-    config, context = _SURVEY
-    return survey_shard_with(config, context, relative)
-
-
-def survey_shard_with(
-    config: SurveyConfig, context: WorkerContext, relative: str,
-) -> ShardSurvey:
-    """One shard's survey, its games routed at the end of the shard."""
-    path = Path(config.read.records_dir) / relative
-    surveyor = _ShardSurveyor(config, context, ShardSurvey(
-        name=relative, size=path.stat().st_size, supply=TrainingSupply(config.heap_cap),
-    ))
-    for record in context.records(relative):
-        surveyor.observe(record)
-    return surveyor.finish()
+    def survey(self, shard: SourceShard) -> ShardSurvey:
+        """One shard's survey, its games routed at the end of the shard."""
+        surveyor = _ShardSurveyor(self.config, self.context, ShardSurvey(
+            shard=shard, supply=TrainingSupply(self.config.heap_cap),
+        ))
+        for record in self.context.records(shard):
+            surveyor.observe(record)
+        return surveyor.finish()
 
 
 @dataclass(frozen=True, slots=True)
@@ -369,26 +360,23 @@ class _ShardSurveyor:
             self.out.supply.add(pending.cell, pending.keys, pending.value)
 
 
-def source_of(relative: str) -> str:
-    """The top-level directory a raw shard sits in, ``"."`` at the root."""
-    return relative.split("/", 1)[0] if "/" in relative else "."
-
-
 def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
-    """Combine shard surveys into one corpus-wide picture."""
-    total = ShardSurvey(name="", size=0, supply=TrainingSupply(heap_cap))
+    """Combine shard surveys into one corpus-wide picture, the supply's
+    legality cells folded once every shard's mode counts are in."""
+    total = ShardSurvey(shard=SourceShard(name="", size=0), supply=TrainingSupply(heap_cap))
     shards: list[SourceShard] = []
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
     split_games = 0
 
     for part in parts:
-        shards.append(SourceShard(name=part.name, size=part.size))
+        shards.append(part.shard)
         split_games += len(part.games.games & total.games.games)
         merge_into(total, part)
-        source = source_of(part.name)
+        source = part.shard.source
         games_by_source[source] |= part.games.games
         held_by_source[source] |= part.games.held_out
+    total.supply = total.supply.resolved(total.mode_counts)
 
     return Survey(
         totals=total,
@@ -399,14 +387,6 @@ def merge_surveys(parts: Iterable[ShardSurvey], *, heap_cap: int) -> Survey:
     )
 
 
-def shard_names(records_dir: Path) -> list[str]:
-    """Every shard under the corpus root, as posix paths relative to it."""
-    from effects.infrastructure.shard_io import iter_shards
-
-    root = Path(records_dir)
-    return [shard.relative_to(root).as_posix() for shard in iter_shards(root)]
-
-
 def run_survey(
     records_dir: Path,
     *,
@@ -415,14 +395,16 @@ def run_survey(
     progress_every: int = 50,
 ) -> Survey:
     """Survey every shard, in parallel, reporting progress as it goes."""
+    from effects.infrastructure.shard_io import list_shards
+
     root = Path(records_dir)
-    names = shard_names(root)
-    if not names:
+    shards = list_shards(root)
+    if not shards:
         raise BuildCorpusError(f"{root}: no shards to build a corpus from")
-    logger.info("Surveying %d shard(s) under %s", len(names), root)
+    logger.info("Surveying %d shard(s) under %s", len(shards), root)
     return merge_surveys(
         run_parallel(
-            names, survey_shard, initializer=init_survey_worker, initargs=(config,),
+            shards, SurveyWorker.survey, context=functools.partial(SurveyWorker, config),
             workers=workers, label="Surveyed", progress_every=progress_every,
         ),
         heap_cap=config.heap_cap,

@@ -24,9 +24,7 @@ from effects.application.step_preparation import (
 )
 from effects.application.train_effect_model import (
     CorpusFacts,
-    EpochResult,
     TrainEffectModelConfig,
-    check_holdout,
 )
 from effects.application.training_log import (
     format_norms,
@@ -34,9 +32,8 @@ from effects.application.training_log import (
     format_shares,
     format_terms,
 )
-from effects.application.validation_pass import ValidationSamples
+from effects.application.validation_pass import ValidationPass, ValidationSamples
 from effects.domain.ability_encoder import TruncationLog, log_truncation
-from effects.domain.gate_metrics import GateOneMetrics
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES
 
@@ -127,12 +124,6 @@ class RunReporter:
             len(present), len(SAMPLING_CLASSES), ", ".join(missing),
         )
 
-    def no_probe(self) -> None:
-        logger.error(
-            "The corpus's validation samples hold no records, so there is "
-            "nothing to measure feature widths from.",
-        )
-
     def run_start(self, seed: int, samples: ValidationSamples, *, shards: int) -> None:
         logger.info(
             "Seed %d (%s), %d of %d training shards per epoch, drawn across "
@@ -144,13 +135,8 @@ class RunReporter:
         )
         logger.info("Classes present: %s", ", ".join(sorted(samples.present)))
 
-    def thin_holdout(self, samples: ValidationSamples) -> None:
-        """Warn on a thin holdout, raise on an empty one (FR-088b); the gate-1
-        slice is the build's count, not this run's."""
-        warning = check_holdout(
-            card_disjoint_records=len(samples.card_disjoint),
-            unique_text_records=self.facts.gate_one_records,
-        )
+    def thin_holdout(self, warning: str | None) -> None:
+        """``check_holdout``'s warning on a thin holdout, if it gave one."""
         if warning:
             logger.warning("%s", warning)
 
@@ -175,13 +161,12 @@ class RunReporter:
         ):
             return
         self._rarity_reported = True
-        found, distinct = opened.rarity_coverage
-        share = 100.0 * found / distinct if distinct else 0.0
-        report = logger.info if found else logger.warning
+        coverage = opened.rarity_coverage
+        report = logger.info if coverage.named else logger.warning
         report(
             "Rarity table names %d of this shard's %d distinct ability "
             "text(s) (%.1f%%); the rest weigh by this shard's own game count.",
-            found, distinct, share,
+            coverage.named, coverage.distinct, coverage.percent,
         )
 
     def shard_closed(self, closed: ShardClosed) -> None:
@@ -191,24 +176,22 @@ class RunReporter:
             self.truncations.note(text, keys)
 
     def shard(
-        self, task: ShardTask, of: int, opened: ShardOpened | None,
+        self, task: ShardTask, of: int, opened: ShardOpened,
         stats: ShardStats, *, trained: float,
     ) -> None:
         name = Path(task.shard).name
-        trainable = opened.trainable if opened is not None else 0
-        held_back = opened.held_back if opened is not None else 0
+        trainable = opened.trainable
         if not trainable:
             logger.info(
-                "epoch %d | shard %d/%d %s | nothing trainable, all %d records "
-                "held back | skipped",
-                task.epoch, task.position, of, name, held_back,
+                "epoch %d | shard %d/%d %s | no records | skipped",
+                task.epoch, task.position, of, name,
             )
             return
         logger.info(
-            "epoch %d | shard %d/%d %s | %d records trainable, %d held back | "
+            "epoch %d | shard %d/%d %s | %d records | "
             "%d steps | loss %.4f | lr %.2e | %.1f steps/s | "
             "wait %.1fs, batch wait %.1fs, train %.1fs%s%s%s",
-            task.epoch, task.position, of, name, trainable, held_back, task.budget,
+            task.epoch, task.position, of, name, trainable, task.budget,
             float(stats.loss) / stats.steps if stats.steps else float("nan"),
             stats.learning_rate, task.budget / trained if trained > 0 else float("nan"),
             stats.waited, stats.batch_waited, trained, format_norms(stats.norms),
@@ -216,22 +199,24 @@ class RunReporter:
         )
 
     def epoch(
-        self, result: EpochResult, metrics: GateOneMetrics,
-        card_parts: dict[str, float], floor: dict[str, float], tally: EpochTally,
+        self, epoch: int, tally: EpochTally, card: ValidationPass,
+        game: ValidationPass, floor: dict[str, float],
     ) -> None:
+        """The epoch's two lines: its losses and gate 1's progress margins on
+        the card-disjoint pass, then what it trained on."""
+        metrics = card.progress()
         logger.info(
             "epoch %d | train %.4f | card-disjoint %.4f | "
             "game-disjoint %.4f | gate F1 %.3f | zone acc %.3f | "
             "deviance %.3f%s",
-            result.epoch, result.train_loss, result.card_disjoint_loss,
-            result.game_disjoint_loss, metrics.affected_gate_f1,
-            metrics.zone_outcome_accuracy, metrics.mean_poisson_deviance,
-            format_parts(card_parts, floor),
+            epoch, tally.train_loss, card.loss, game.loss,
+            metrics.affected_gate_f1, metrics.zone_outcome_accuracy,
+            metrics.mean_poisson_deviance, format_parts(card.parts, floor),
         )
         logger.info(
             "epoch %d | trained records by rarity bucket: %s%s\n"
             "  by rule family: %s",
-            result.epoch,
+            epoch,
             format_shares(tally.buckets, (*RARITY_BUCKETS, NO_TEXT_BUCKET)),
             format_terms(tally.mean_terms()),
             format_shares(tally.families),
@@ -249,7 +234,9 @@ class RunReporter:
             "is a token keyed to the wrong tree — it is the token's own "
             "cast-spell key, which maps to no text either way, while "
             "its ability lines are keyed under tokenscripts/ and do "
-            "resolve; a variant-scripts/ key needs --variant-scripts.",
+            "resolve; a variant-scripts/ key is a variant the tree this "
+            "run read has no sidecar for, so the tree is not the one the "
+            "corpus was built against.",
             len(unresolved),
             sum(unresolved.values()),
             ", ".join(f"{name} ({hits})" for name, hits in unresolved.most_common(3)),

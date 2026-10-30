@@ -18,6 +18,8 @@ distinct provenance key, which is why ``--limit`` exists.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
 
 from effects.application.corpus_validation.envelope_checks import (
     ActingLines,
@@ -46,20 +48,47 @@ from effects.application.corpus_validation.findings import (
 )
 from effects.application.corpus_validation.key_joins import KeyJoins
 from effects.application.corpus_validation.payload_checks import (
-    CostChannels,
-    Outcomes,
+    Activations,
     Rewrites,
     Triggers,
 )
 from effects.application.corpus_validation.presence import FieldPresence
+from effects.domain.provenance import SidecarLookup
 from effects.domain.records import EffectRecord
-from effects.infrastructure.sidecar_io import SidecarCache
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryReport:
+    """What :func:`validate_directory` read and found."""
+
+    shards: int
+    findings: Findings
+
+
+def validate_directory(
+    root: Path, *,
+    limit: int = 0,
+    thresholds: Thresholds = Thresholds(),
+    sidecars: SidecarLookup | None = None,
+) -> DirectoryReport:
+    """Every invariant over the first ``limit`` records under ``root`` (0
+    reading all), the shards listed once; raises ``NoShardsError`` on a
+    directory holding none."""
+    from effects.infrastructure.shard_io import read_window, require_shards
+
+    shards = require_shards(root)
+    presence = FieldPresence()
+    findings = validate_corpus(
+        read_window(root, limit, presence.observe, shards=shards),
+        thresholds, sidecars, presence,
+    )
+    return DirectoryReport(len(shards), findings)
 
 
 def validate_corpus(
     records: Iterable[EffectRecord],
-    thresholds: Thresholds | None = None,
-    sidecars: SidecarCache | None = None,
+    thresholds: Thresholds = Thresholds(),
+    sidecars: SidecarLookup | None = None,
     presence: FieldPresence | None = None,
 ) -> Findings:
     """Every invariant, measured over one pass of ``records``.
@@ -73,16 +102,15 @@ def validate_corpus(
     for record in records:
         for check in checks:
             check.add(record)
-    limits = thresholds or Thresholds()
     findings = Findings(
-        finding for check in checks for finding in check.findings(limits)
+        finding for check in checks for finding in check.findings(thresholds)
     )
     if presence is not None:
         findings.append(presence.finding())
     return findings
 
 
-def _checks(sidecars: SidecarCache | None) -> tuple[Check, ...]:
+def _checks(sidecars: SidecarLookup | None) -> tuple[Check, ...]:
     """Every invariant, in the order the report prints them."""
     record_ids = RecordIds()
     return (
@@ -92,8 +120,7 @@ def _checks(sidecars: SidecarCache | None) -> tuple[Check, ...]:
         ActingLines(),
         KeyJoins(sidecars),
         Modes(),
-        Outcomes(),
-        CostChannels(),
+        Activations(),
         Tiers(),
         Duplicates(),
         DuplicateEvents(),

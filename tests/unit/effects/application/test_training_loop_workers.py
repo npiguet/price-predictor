@@ -2,7 +2,7 @@
 
 The determinism tests train two real epochs end to end on the gen-1 fixture
 records — split into three shards, with every draw the host half takes switched
-on and a validation game the inherited split keeps out of training — once with
+on and a validation game the split names, which no training shard holds — once with
 the host half in this process and twice with it in worker processes. A step's
 draws are seeded by its place in the run, so where it was prepared, by how many
 workers, must not move a single parameter; and two runs with one seed must be
@@ -34,9 +34,8 @@ from effects.application.step_preparation import (
     StepPreparer,
     StepReady,
 )
-from effects.application.train_effect_model import (
-    fields_for_epoch,
-)
+from effects.application.train_effect_model import ValidationGameInTrainingError
+from effects.application.training_schedule import Curriculum
 from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.effect_head_input import feature_widths
 from effects.domain.effect_model import EffectModel
@@ -44,7 +43,7 @@ from effects.domain.sampling import sampling_class
 from effects.domain.split import (
     CorpusSplit,
 )
-from effects.infrastructure.step_workers import pack, unpack
+from effects.infrastructure.tensor_packing import pack, unpack
 from tests.unit.effects.builders import (
     GEN1_TRAINING_SEED,
     gen1_training_config,
@@ -158,7 +157,6 @@ def _run(
             for name, value in module.state_dict().items()
         },
         "shares": [m for m in caplog.messages if "by rarity bucket" in m],
-        "held back": [m.split("|")[2] for m in caplog.messages if "held back" in m],
         "workers": any("worker process" in m for m in caplog.messages),
         "initial": initial,
     }
@@ -167,7 +165,6 @@ def _run(
 def _assert_same(first: dict, second: dict) -> None:
     assert first["losses"] == second["losses"]
     assert first["shares"] == second["shares"]
-    assert first["held back"] == second["held back"]
     assert first["parameters"].keys() == second["parameters"].keys()
     for name, value in first["parameters"].items():
         assert torch.equal(value, second["parameters"][name]), name
@@ -221,10 +218,9 @@ class _ListHandler(logging.Handler):
 
 
 def test_the_fixture_run_exercises_what_it_claims(in_process):
-    """Steps trained, both epochs logged, and the held game held back."""
+    """Steps trained and both epochs logged."""
     assert len(in_process["losses"]) >= 14
     assert len(in_process["shares"]) == 2
-    assert all(" 0 held back" not in line for line in in_process["held back"])
 
 
 def test_worker_processes_train_exactly_what_the_in_process_path_trains(
@@ -280,6 +276,30 @@ def test_a_run_resumed_after_an_epoch_is_the_uninterrupted_run(
     assert not multiprocessing.active_children()
 
 
+def test_a_resume_file_holding_keys_no_longer_written_resumes_the_same_run(
+    monkeypatch, corpus, tmp_path, caplog, in_process,
+):
+    """Resume files on disk still carry the ``finished`` flag and the noise
+    state's ``step``, which nothing read; an interrupted run must continue
+    across their removal exactly as it would have."""
+    from effects.infrastructure.effect_model_store import (
+        load_resume_state,
+        save_resume_state,
+    )
+
+    out = tmp_path / "older"
+    first = _run(monkeypatch, corpus, out, caplog, workers=0, interrupt_after=1)
+    state = load_resume_state(out)
+    state["finished"] = False
+    state["noise"]["step"] = state["step"]
+    save_resume_state(out, state)
+    second = _run(monkeypatch, corpus, out, caplog, workers=0, resume=True)
+
+    assert first["losses"] + second["losses"] == in_process["losses"]
+    for name, value in in_process["parameters"].items():
+        assert torch.equal(value, second["parameters"][name]), name
+
+
 def test_a_run_resumed_for_more_epochs_warms_up_as_the_run_it_continues(
     monkeypatch, corpus, tmp_path, caplog, in_process,
 ):
@@ -323,7 +343,6 @@ def _stopped_early(out: Path) -> None:
     )
 
     state = load_resume_state(out)
-    state["finished"] = True
     state["stopper"]["since_best"] = 5
     save_resume_state(out, state)
 
@@ -414,8 +433,8 @@ def test_a_step_prepared_as_a_worker_prepares_it_equals_one_prepared_here(
     loop = make_training_loop(config, rarity={"x": 3})
     settings = preparer_settings(loop.spec, widths=feature_widths(records))
     assert settings.heads == frozenset({"value", "api", "mlm"})
-    fields = fields_for_epoch(
-        config, present=frozenset(sampling_class(r) for r in records), epoch=1,
+    fields = Curriculum(config.curriculum_epoch).fields_for(
+        1, frozenset(sampling_class(r) for r in records),
     )
     task = ShardTask(
         shard=Path("fixture"), epoch=1, position=2, budget=5, fields=fields,
@@ -456,20 +475,46 @@ def _assert_tensors_equal(left, right, path="step") -> None:
         assert left == right, path
 
 
+def _with_shards(corpus, shards):
+    return type("Corpus", (), {
+        **{k: v for k, v in vars(corpus).items() if not k.startswith("__")},
+        "shards": shards,
+    })
+
+
 def test_a_worker_exception_surfaces_with_its_traceback_and_no_process_survives(
     monkeypatch, corpus, tmp_path, caplog,
 ):
-    """An unreadable shard: raised at its own shard, in the training process."""
+    """An unreadable shard: raised at its own shard, in the training process,
+    as the exception the in-process path raises, the worker's traceback
+    attached."""
     missing = tmp_path / "missing.jsonl.gz"
-    corpus_with_hole = type("Corpus", (), {
-        **{k: v for k, v in vars(corpus).items() if not k.startswith("__")},
-        "shards": [missing],
-    })
-    with pytest.raises(RuntimeError) as raised:
-        _run(monkeypatch, corpus_with_hole, tmp_path / "out", caplog, workers=2)
-    assert "Traceback" in str(raised.value)
+    with pytest.raises(FileNotFoundError) as raised:
+        _run(monkeypatch, _with_shards(corpus, [missing]), tmp_path / "out", caplog, workers=2)
+    notes = "".join(getattr(raised.value, "__notes__", ()))
+    assert "Traceback" in notes and "step-preparation worker" in notes
     assert "missing.jsonl.gz" in str(raised.value)
     assert any("preparing it failed" in m for m in caplog.messages)
+    assert not multiprocessing.active_children()
+
+
+@pytest.mark.parametrize("workers", [0, 2])
+def test_a_training_shard_holding_a_validation_game_is_refused(
+    monkeypatch, corpus, records, tmp_path, caplog, workers,
+):
+    """The manifest places the game in a validation stratum, which build-corpus
+    never writes into training/: the shard and the manifest disagree, and
+    training around the game would hide it. Refused under any worker count,
+    as the exception the CLI maps to exit 1."""
+    from effects.infrastructure.shard_io import write_shard
+
+    tainted = tmp_path / "tainted.jsonl.gz"
+    write_shard(tainted, records)
+    with pytest.raises(ValidationGameInTrainingError, match=corpus.held):
+        _run(
+            monkeypatch, _with_shards(corpus, [tainted]), tmp_path / "out", caplog,
+            workers=workers,
+        )
     assert not multiprocessing.active_children()
 
 

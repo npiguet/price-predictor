@@ -1,4 +1,5 @@
-"""``ConvertedTrees``: which folder holds which tree, and what is read from them."""
+"""``SourceTrees`` and ``ConvertedTrees``: which folder holds which tree, and
+what is read from them."""
 
 from __future__ import annotations
 
@@ -7,7 +8,7 @@ from pathlib import Path
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine, SourceTree
 from effects.domain.split import HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
-from effects.infrastructure.converted_trees import ConvertedTrees
+from effects.infrastructure.converted_trees import SourceTrees, process_sidecars
 from effects.infrastructure.sidecar_io import sidecar_path_for
 from tests.unit.effects.builders import write_sidecar
 
@@ -31,10 +32,11 @@ def _convert(root: Path, script_file: str, name: str, text: str) -> None:
 
 
 def test_each_folder_is_keyed_by_the_tree_its_name_names(tmp_path) -> None:
-    trees = ConvertedTrees.from_folders(
+    source = SourceTrees.of(
         (tmp_path / "tokenscripts", tmp_path / "gen1-cardsfolder"),
         variant_scripts=tmp_path / "variants",
     )
+    trees = source.converted()
 
     assert trees.roots == {
         SourceTree.TOKENSCRIPTS: tmp_path / "tokenscripts",
@@ -42,17 +44,13 @@ def test_each_folder_is_keyed_by_the_tree_its_name_names(tmp_path) -> None:
         SourceTree.VARIANT_SCRIPTS: tmp_path / "variants",
     }
     assert trees.cards_folder == tmp_path / "gen1-cardsfolder"
-    assert trees.root_paths == {
-        "tokenscripts": str(tmp_path / "tokenscripts"),
-        "cardsfolder": str(tmp_path / "gen1-cardsfolder"),
-        "variant-scripts": str(tmp_path / "variants"),
-    }
+    assert source.sidecar_roots() == trees.roots
 
 
 def test_without_a_card_tree_there_are_no_cards(tmp_path) -> None:
     """A token tree alone is no card tree: a token is not a deckable card."""
     _convert(tmp_path, "tokenscripts/goblin.txt", "Goblin", "SP$ Bespoke")
-    trees = ConvertedTrees.from_folders((tmp_path / "tokenscripts",))
+    trees = SourceTrees.of((tmp_path / "tokenscripts",)).converted()
 
     assert trees.cards_folder is None
     assert trees.card_files == {}
@@ -62,7 +60,7 @@ def test_without_a_card_tree_there_are_no_cards(tmp_path) -> None:
 def test_cards_texts_and_tokens_are_read_through_one_sidecar_cache(tmp_path) -> None:
     _convert(tmp_path, "cardsfolder/s/shock.txt", "Shock", "SP$ DealDamage | NumDmg$ 2")
     _convert(tmp_path, "tokenscripts/goblin.txt", "Goblin", "SP$ Bespoke")
-    trees = ConvertedTrees.from_folders((tmp_path / "cardsfolder", tmp_path / "tokenscripts"))
+    trees = SourceTrees.of((tmp_path / "cardsfolder", tmp_path / "tokenscripts")).converted()
 
     assert trees.card_files == {"Shock": "cardsfolder/s/shock.txt"}
     assert trees.card_texts() == {"Shock": ["SP$ DealDamage | NumDmg$ 2"]}
@@ -75,9 +73,33 @@ _ONE_CARRIER = HoldoutRule(permille=1000, max_carriers=1, unit=HoldoutUnit.TEXT)
 
 def test_a_token_printing_a_text_is_a_carrier_of_it(tmp_path) -> None:
     _convert(tmp_path, "cardsfolder/s/shock.txt", "Shock", "SP$ Bespoke")
-    cards_only = ConvertedTrees.from_folders((tmp_path / "cardsfolder",))
+    cards_only = SourceTrees.of((tmp_path / "cardsfolder",)).converted()
     assert cards_only.holdout(_ONE_CARRIER).names == {"shock"}
 
     _convert(tmp_path, "tokenscripts/goblin.txt", "Goblin", "SP$ Bespoke")
-    with_tokens = ConvertedTrees.from_folders((tmp_path / "cardsfolder", tmp_path / "tokenscripts"))
+    with_tokens = SourceTrees.of((tmp_path / "cardsfolder", tmp_path / "tokenscripts")).converted()
     assert with_tokens.holdout(_ONE_CARRIER).names == set()
+
+
+def test_the_variant_tree_is_the_last_folder_and_absent_when_unnamed(tmp_path) -> None:
+    cards = (tmp_path / "cardsfolder", tmp_path / "tokenscripts")
+    assert SourceTrees.of(cards).folders() == list(cards)
+    assert SourceTrees.of(cards, tmp_path / "variants").folders() == [
+        *cards, tmp_path / "variants",
+    ]
+    # An empty flag value is unset, as omitting it is.
+    assert SourceTrees.of(cards, "").variant_scripts is None
+
+
+def test_a_converted_reading_can_share_a_cache_already_built(tmp_path) -> None:
+    source = SourceTrees.of((tmp_path / "cardsfolder",))
+    shared = process_sidecars(source.sidecar_roots())
+    assert source.converted(sidecars=shared).sidecars is shared
+    assert source.converted().sidecars is not shared
+
+
+def test_a_process_keeps_one_cache_per_roots(tmp_path) -> None:
+    roots = SourceTrees.of((tmp_path / "cardsfolder",)).sidecar_roots()
+    assert process_sidecars(roots) is process_sidecars(dict(roots))
+    other = SourceTrees.of((tmp_path / "other-cardsfolder",)).sidecar_roots()
+    assert process_sidecars(other) is not process_sidecars(roots)

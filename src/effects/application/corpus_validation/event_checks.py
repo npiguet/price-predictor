@@ -222,10 +222,8 @@ class EventTypes:
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         declared = {member.value for member in EventType}
         unseen = tuple(sorted(declared - self.seen))
-        yield Finding(
+        yield Finding.watch(
             name="declared event types are observed in the window",
-            ok=True,
-            watched=True,
             measured=(
                 f"{len(self.seen)}/{len(declared)} declared event types "
                 "appeared at least once"

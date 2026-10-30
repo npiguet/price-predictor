@@ -5,12 +5,16 @@ from __future__ import annotations
 from dataclasses import fields, replace
 
 from effects.application.resume_state import (
-    RECORDED_IN_TRAINING_SETTINGS,
     RESUME_MAY_CHANGE,
     compared_flags,
     resume_settings,
 )
-from effects.application.train_effect_model import CorpusFacts, RunSpec, TrainEffectModelConfig
+from effects.application.train_effect_model import (
+    RECORDED_IN_TRAINING_SETTINGS,
+    CorpusFacts,
+    RunSpec,
+    TrainEffectModelConfig,
+)
 from effects.infrastructure.effect_model_store import resume_mismatches
 
 FLAGS = {spec.name for spec in fields(TrainEffectModelConfig)}

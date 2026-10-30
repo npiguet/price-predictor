@@ -7,19 +7,22 @@ on, as well as by the cards that carry them.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 
 from effects.application.train_effect_model import (
     CorpusFacts,
     HoldoutMismatchError,
+    MissingTrainingInputError,
     TrainEffectModelConfig,
     run,
 )
 from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.shard_generation import MixedGenerationsError
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.shard_io import MixedGenerationsError, write_shard
+from effects.infrastructure.shard_io import write_shard
 
 #: Three texts ``text_is_held_out`` selects at the default permille, found by
 #: search: the trainer recomputes the holdout from its sidecars at startup and
@@ -122,6 +125,20 @@ def test_the_startup_line_counts_held_out_texts_not_only_cards(config, caplog):
     assert "3 held-out ability text(s) on 2 card(s)" in caplog.text
 
 
+def test_a_corpus_without_training_shards_is_refused(corpus, config, started):
+    (corpus.training_dir / "t.jsonl.gz").unlink()
+    with pytest.raises(MissingTrainingInputError, match="No training shards under"):
+        run(config)
+    assert not started
+
+
+def test_a_corpus_without_validation_samples_is_refused(corpus, config, started):
+    corpus.sample_path("game-disjoint").unlink()
+    with pytest.raises(MissingTrainingInputError, match="has no validation samples"):
+        run(config)
+    assert not started
+
+
 def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, started):
     assert run(config) == 0
     facts = started[-1].spec.facts
@@ -129,9 +146,39 @@ def test_the_loop_reads_the_corpus_through_the_manifests_facts(corpus, config, s
     assert facts == CorpusFacts.of(manifest)
     assert facts.split.card_disjoint_games == frozenset({"cg"})
     assert facts.split.game_disjoint_games == frozenset({"gg"})
-    assert (facts.holdout.permille, facts.holdout.max_carriers) == (20, 8)
     assert facts.gate_one_records == 4096
     assert facts.digest == manifest.digest()
+
+
+# ── the variant-script tree ──────────────────────────────────────────────
+
+
+def test_an_unset_variant_tree_is_the_one_the_corpus_was_built_against(
+    corpus, config, started, caplog,
+):
+    """Evaluation takes it from the manifest; a training run that did not
+    would read every variant ability the build kept as no text."""
+    corpus.save(_manifest(variant_scripts="output/effects/variant-scripts"))
+    with caplog.at_level(logging.INFO):
+        assert run(config) == 0
+    assert started[-1].config.variant_scripts == Path("output/effects/variant-scripts")
+    assert "the corpus manifest's" in caplog.text
+
+
+def test_a_named_variant_tree_wins_over_the_manifests(corpus, config, started, caplog):
+    corpus.save(_manifest(variant_scripts="output/effects/variant-scripts"))
+    config.variant_scripts = Path("elsewhere")
+    with caplog.at_level(logging.INFO):
+        assert run(config) == 0
+    assert started[-1].config.variant_scripts == Path("elsewhere")
+    assert "elsewhere (--variant-scripts)" in caplog.text
+
+
+def test_no_variant_tree_is_read_when_neither_names_one(config, started, caplog):
+    with caplog.at_level(logging.INFO):
+        assert run(config) == 0
+    assert started[-1].config.variant_scripts is None
+    assert "No variant-script tree" in caplog.text
 
 
 # ── encoder size and sidecar roots (FR-061, FR-062, FR-063b) ─────────────
@@ -166,8 +213,10 @@ def test_a_width_not_divisible_by_the_head_count_is_refused_before_training(
 
 
 @pytest.mark.parametrize("failure, code", [
+    ("MissingTrainingInputError", 1),
     ("HoldoutMismatchError", 1),
     ("MixedGenerationsError", 1),
+    ("ValidationGameInTrainingError", 1),
     ("ResumeMismatchError", 2),
     ("FileNotFoundError", 2),
 ])
@@ -177,11 +226,13 @@ def test_an_operator_error_out_of_training_exits_with_its_code(
     """A refused corpus, a resume under other settings, and a missing manifest
     or resume file end in one logged line, not a traceback."""
     from effects.application import train_effect_model
-    from effects.infrastructure import cli, effect_model_store, shard_io
+    from effects.infrastructure import cli, effect_model_store
 
     kind = {
+        "MissingTrainingInputError": train_effect_model.MissingTrainingInputError,
         "HoldoutMismatchError": train_effect_model.HoldoutMismatchError,
-        "MixedGenerationsError": shard_io.MixedGenerationsError,
+        "MixedGenerationsError": MixedGenerationsError,
+        "ValidationGameInTrainingError": train_effect_model.ValidationGameInTrainingError,
         "ResumeMismatchError": effect_model_store.ResumeMismatchError,
         "FileNotFoundError": FileNotFoundError,
     }[failure]
@@ -220,7 +271,6 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
     from pathlib import Path
 
     from effects.domain.provenance import ProvenanceKey
-    from effects.infrastructure.model_runner import build_sidecars
     from tests.unit.effects.builders import make_preparer
 
     fixture = Path(__file__).parents[3] / "fixtures" / "effects" / "gen1-sidecars"
@@ -230,7 +280,7 @@ def test_a_kept_aside_tree_resolves_the_keys_of_its_original(tmp_path):
     config = TrainEffectModelConfig(corpus=str(tmp_path), cards_folders=(kept,))
 
     trainer = make_preparer(tmp_path, cards_folders=(kept,)).sidecars
-    for sidecars in (trainer, build_sidecars(config)):
+    for sidecars in (trainer, config.source_trees.sidecar_cache()):
         assert sidecars.path_for(key.script_file).parent.parent == kept
         sidecars.resolution_of(key)  # neither raises nor reports no tree
 

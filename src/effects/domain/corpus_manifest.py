@@ -8,6 +8,7 @@ can refuse a dataset rebuilt since (FR-147).
 from __future__ import annotations
 
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields
+from pathlib import Path
 from typing import Any, NamedTuple
 
 from effects.domain.ability_tokenizer import Surface
@@ -29,10 +30,34 @@ class ManifestDrift(NamedTuple):
 class SourceShard:
     """One raw shard the dataset was built from, by path and size: a shard is
     append-only and uniquely named, so its length is what changes, and hashing
-    tens of gigabytes would cost more than the build."""
+    tens of gigabytes would cost more than the build.
+
+    ``name`` is the shard's posix path relative to the corpus root, the one
+    spelling the listing, both passes and the manifest share; the directory
+    it reports under and the part it writes are read off it here.
+    """
 
     name: str
     size: int
+
+    @property
+    def source(self) -> str:
+        """The top-level directory the shard sits in, ``"."`` at the root."""
+        return self.name.split("/", 1)[0] if "/" in self.name else "."
+
+    @property
+    def part_name(self) -> str:
+        """A flat, **injective** name for the shard's write-pass part.
+
+        Injective because ``write_shard`` truncates, so a collision is a silent
+        overwrite; escaping ``_`` first makes it so, where a plain ``/ -> __``
+        would map ``a_/b`` and ``a/_b`` alike.
+        """
+        return self.name.replace("_", "_u").replace("/", "_s")
+
+    def path(self, root: Path) -> Path:
+        """Where the shard is under ``root``, the corpus root it was listed from."""
+        return Path(root) / self.name
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,11 +79,29 @@ class FamilyRow:
 
     available: int
     share: int
-    planned: int
+    #: None on a manifest built before the column existed, which leaves it
+    #: out of the row again on the way back, so its digest does not move.
+    planned: int | None
     #: Copies included; ``repeats`` is how many of them are copies.
     written: int
     repeats: int
     shortfall: int
+
+    def as_dict(self) -> dict[str, int]:
+        row = asdict(self)
+        if self.planned is None:
+            del row["planned"]
+        return row
+
+    @classmethod
+    def from_dict(cls, values: dict) -> FamilyRow:
+        planned = values.get("planned")
+        return cls(
+            available=int(values["available"]), share=int(values["share"]),
+            planned=None if planned is None else int(planned),
+            written=int(values["written"]), repeats=int(values["repeats"]),
+            shortfall=int(values["shortfall"]),
+        )
 
 
 def _optional_float(value) -> float | None:
@@ -91,6 +134,13 @@ def _sources(values: list) -> tuple[SourceShard, ...]:
 
 def _class_counts(values: dict) -> dict[str, ClassCounts]:
     return {name: ClassCounts(**_int_map(counts)) for name, counts in values.items()}
+
+
+def _family_rows(values: dict) -> dict[str, dict[str, FamilyRow]]:
+    return {
+        klass: {family: FamilyRow.from_dict(row) for family, row in rows.items()}
+        for klass, rows in values.items()
+    }
 
 
 #: Field metadata: how ``from_dict`` reads the field's JSON value back.
@@ -222,11 +272,9 @@ class CorpusManifest:
     holdout_unit: HoldoutUnit = field(
         default=HoldoutUnit.TEXT, metadata=_gen1_implied(HoldoutUnit),
     )
-    #: ``class -> family ->`` a :class:`FamilyRow`'s fields. Stored as plain
-    #: numbers rather than rows: a manifest built before ``planned`` existed
-    #: lacks it, and reading one in as a row would change its digest.
-    families: dict[str, dict[str, dict[str, int]]] = field(
-        default_factory=dict, metadata=_gen1_implied(_doubly_nested_int_map),
+    #: ``class -> family -> FamilyRow``.
+    families: dict[str, dict[str, FamilyRow]] = field(
+        default_factory=dict, metadata=_gen1_implied(_family_rows),
     )
     #: ``class -> family -> {outcome signature: records written}``.
     signatures: dict[str, dict[str, dict[str, int]]] = field(
@@ -280,11 +328,23 @@ class CorpusManifest:
         the form every manifest so far was written in."""
         return HoldoutRule(self.holdout_permille, self.holdout_max_carriers, self.holdout_unit)
 
+    def variant_scripts_or(self, given: Path | None) -> Path | None:
+        """The variant-script tree a run over this dataset reads: ``given``,
+        else the one the build resolved keys against, else None.
+
+        Training and evaluation both take it, since a run reading no tree sees
+        every variant ability the build kept as no text.
+        """
+        if given is not None:
+            return Path(given)
+        return Path(self.variant_scripts) if self.variant_scripts else None
+
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["sources"] = [asdict(shard) for shard in self.sources]
-        data["per_class"] = {
-            name: asdict(counts) for name, counts in self.per_class.items()
+        data["families"] = {
+            klass: {family: row.as_dict() for family, row in rows.items()}
+            for klass, rows in self.families.items()
         }
         for name, default in _GEN1_DEFAULTS.items():
             if getattr(self, name) == default:

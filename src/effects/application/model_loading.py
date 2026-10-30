@@ -1,5 +1,12 @@
-"""Load a saved checkpoint back into something that can be run over records,
-through the same ``surface_batching`` the trainer uses."""
+"""Turn a loaded checkpoint into something that can be run over records,
+through the same ``surface_batching`` the trainer uses.
+
+The weights themselves come off disk in the infrastructure
+(:func:`effects.infrastructure.effect_model_store.load_weights`); what is
+assembled here around them — the batcher, its text stager and key resolver,
+the identity baseline's table, the evaluated fields — is the trainer's own
+pipeline, so it lives beside it.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +15,6 @@ import random
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import batched
-from pathlib import Path
 
 import torch
 
@@ -25,47 +31,25 @@ from effects.domain.ability_encoder import (
     AbilityEncoder,
     TruncationLog,
     log_truncation,
-    surface_of,
 )
-from effects.domain.ability_tokenizer import (
-    INFERENCE_KEYWORD_EXPAND_P,
-    AbilityTokenizer,
-    Surface,
-)
-from effects.domain.aux_heads import TRAINING_ONLY_MODULES
+from effects.domain.ability_tokenizer import AbilityTokenizer, Surface
 from effects.domain.baselines import baseline_masks
 from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.effect_head_layout import FieldSpec, active_fields
 from effects.domain.effect_model import EffectModel
+from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.sampling import sampling_class
-from effects.domain.surface_collation import entity_index
+from effects.domain.surface_collation import entity_index, per_entity_targets
+from effects.domain.tokenizer_files import TokenizerFiles
+from effects.infrastructure.effect_model_store import EffectCheckpoint, load_weights
 from effects.infrastructure.sidecar_io import SidecarCache
-from effects.infrastructure.tokenizer_loading import load_tokenizer
+from effects.infrastructure.tokenizer_loading import tokenizer_for
 from effects.infrastructure.torch_device import default_device
 
 logger = logging.getLogger(__name__)
 
 #: Seeds every evaluation batcher's generator, so evaluations repeat.
 EVALUATION_SEED = 42
-
-
-def build_sidecars(config) -> SidecarCache:
-    """The sidecar roots ``--cards-folder`` names (FR-063b), each keyed by the
-    tree its name ends in, so ``output/gen1-cardsfolder`` serves
-    ``cardsfolder/`` keys."""
-    return SidecarCache.from_folders(
-        config.cards_folders, getattr(config, "variant_scripts", None),
-    )
-
-
-def tokenizer_for(checkpoint, vocab_path: Path, keyword_path: Path) -> AbilityTokenizer:
-    """The tokenizer ``checkpoint`` trained with, under the rules it recorded
-    (a gen-1 checkpoint reads its script vocabulary with the prose grammar)."""
-    return load_tokenizer(
-        vocab_path, keyword_path,
-        training_settings=checkpoint.training_settings or {},
-    )
-
 
 #: Records per forward pass when gate 1 and the breakdowns score a checkpoint.
 BATCH_RECORDS = 32
@@ -111,13 +95,24 @@ class Runnable:
         return KeywordResolver(self.batcher.sidecars)
 
 
+def forward_chunks(
+    records, runnable: Runnable,
+) -> Iterator[tuple[list, torch.Tensor, EntityTargetBatch]]:
+    """``(chunk, gathered, targets)`` per chunk of ``records``, on the host,
+    ``gathered`` aligned column for column with the targets: gate 1's margins
+    and :mod:`effects.application.record_scoring` read one pass."""
+    for chunk in runnable.inference_chunks(records, BATCH_RECORDS):
+        gathered, surfaces = runnable.per_entity_outputs(chunk)
+        yield chunk, gathered, per_entity_targets(chunk, surfaces, runnable.fields)
+
+
 @dataclass(frozen=True, slots=True)
 class LoadedModel:
     """A checkpoint's weights on the device, before any record is seen; each
     record set gets a :class:`Runnable` with a batcher and generator of its
     own."""
 
-    checkpoint: object
+    checkpoint: EffectCheckpoint
     encoder: AbilityEncoder
     model: EffectModel
     tokenizer: AbilityTokenizer
@@ -136,11 +131,9 @@ class LoadedModel:
         checkpoint = self.checkpoint
         spec = SurfaceSpec.for_checkpoint(checkpoint, records)
         return SurfaceBatcher(
-            stager=TextStager(
-                tokenizer=self.tokenizer,
-                surface=self.surface,
+            stager=TextStager.for_inference(
+                self.tokenizer, self.surface,
                 withhold_keyword=checkpoint.provenance.withheld_keyword,
-                keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P,
                 truncations=TruncationLog(log_truncation(logger, "evaluation")),
             ),
             resolver=KeyResolver(self.sidecars, self.surface),
@@ -152,58 +145,31 @@ class LoadedModel:
 
 
 def load_model(
-    config, checkpoint, *, vocab_path: Path, keyword_path: Path,
-    sidecars: SidecarCache | None = None,
+    checkpoint, *, files: TokenizerFiles, sidecars: SidecarCache,
 ) -> LoadedModel:
-    """``checkpoint``'s weights on the device, with its tokenizer;
-    ``sidecars`` lets several loads share one cache."""
+    """``checkpoint``'s weights on the device, with its tokenizer over
+    ``files`` (:func:`~effects.infrastructure.effect_model_store.inference_files`), joining
+    keys through ``sidecars``, which several loads may share
+    (:meth:`SourceTrees.sidecar_cache`)."""
     device = default_device()
-    encoder, model = _load_weights(checkpoint, device)
+    encoder, model = load_weights(checkpoint, device)
     return LoadedModel(
         checkpoint=checkpoint,
         encoder=encoder,
         model=model,
-        tokenizer=tokenizer_for(checkpoint, vocab_path, keyword_path),
+        tokenizer=tokenizer_for(checkpoint, files),
         identity_table=_identity_table(checkpoint, device),
-        surface=surface_of(vocab_path),
+        surface=files.surface,
         device=device,
-        sidecars=sidecars if sidecars is not None else build_sidecars(config),
+        sidecars=sidecars,
     )
 
 
 def load_runnable(
-    config, checkpoint, *, vocab_path: Path, keyword_path: Path, records,
+    checkpoint, *, files: TokenizerFiles, sidecars: SidecarCache, records,
 ) -> Runnable:
     """One checkpoint, loaded and ready to run over ``records``."""
-    return load_model(
-        config, checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
-    ).runnable(records)
-
-
-#: Model state a shipped checkpoint may lack: the training-only heads (FR-076)
-#: and the zero-initialized option-kind embedding (FR-063a). Anything else
-#: missing is refused, or it would run at random initial weights.
-OPTIONAL_STATE_PREFIXES: tuple[str, ...] = (
-    *(f"{module}." for module in TRAINING_ONLY_MODULES),
-    "option_kind_embedding.",
-)
-
-
-def _load_weights(checkpoint, device) -> tuple[AbilityEncoder, EffectModel]:
-    """The checkpoint's encoder and model on ``device``, in evaluation mode,
-    at the size the checkpoint recorded (FR-061)."""
-    encoder = AbilityEncoder(checkpoint.encoder_config).to(device)
-    if checkpoint.encoder_state:
-        encoder.load_state_dict(checkpoint.encoder_state)
-    model = EffectModel(checkpoint.model_config).to(device)
-    missing, unexpected = model.load_state_dict(checkpoint.model_state, strict=False)
-    absent = [key for key in missing if not key.startswith(OPTIONAL_STATE_PREFIXES)]
-    if absent or unexpected:
-        raise RuntimeError(
-            f"the checkpoint's model state does not fit the model it declares: "
-            f"missing {absent}, unexpected {list(unexpected)}"
-        )
-    return encoder.eval(), model.eval()
+    return load_model(checkpoint, files=files, sidecars=sidecars).runnable(records)
 
 
 def _identity_table(checkpoint, device) -> IdentityTable | None:

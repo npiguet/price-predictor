@@ -8,16 +8,14 @@ stops anything from trying to resolve it against Forge's set table.
 
 from __future__ import annotations
 
-from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
+from effects.infrastructure.deck_file import write_deck_file
 
 
 class TestDeckFile:
     def test_one_line_per_deck_in_the_generated_decks_format(self, tmp_path):
         path = tmp_path / "decks.txt"
 
-        written = write_deck_file(
-            [["a", "b"], ["c"]], path, label="coverage", set_code=COVERAGE_SET_CODE,
-        )
+        written = write_deck_file([["a", "b"], ["c"]], path, label="coverage")
 
         assert written == 2
         lines = path.read_text(encoding="utf-8").splitlines()
@@ -27,14 +25,14 @@ class TestDeckFile:
     def test_it_overwrites_rather_than_appends(self, tmp_path):
         """Each round's decks replace the last round's, never join them."""
         path = tmp_path / "decks.txt"
-        write_deck_file([["a"]], path, label="coverage", set_code=COVERAGE_SET_CODE)
+        write_deck_file([["a"]], path, label="coverage")
 
-        write_deck_file([["b"]], path, label="coverage", set_code=COVERAGE_SET_CODE)
+        write_deck_file([["b"]], path, label="coverage")
 
         assert path.read_text(encoding="utf-8").splitlines() == ["coverage;COVERAGE;b"]
 
     def test_no_deck_writes_an_empty_file(self, tmp_path):
         path = tmp_path / "decks.txt"
 
-        assert write_deck_file([], path, label="coverage", set_code=COVERAGE_SET_CODE) == 0
+        assert write_deck_file([], path, label="coverage") == 0
         assert path.read_text(encoding="utf-8") == ""

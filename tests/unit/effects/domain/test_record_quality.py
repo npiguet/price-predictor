@@ -131,6 +131,14 @@ def test_an_unconverted_script_counts_as_no_text(make_record):
     ) == QualityDefect.NO_ACTING_TEXT
 
 
+def test_a_key_in_a_tree_the_run_was_not_given_counts_as_no_text(make_record):
+    """A variant key on a run without ``--variant-scripts`` resolves to no
+    text, as a script never converted does."""
+    assert acting_text_defect(
+        make_record(), _resolver(spell=KeyResolution.UNCONFIGURED_TREE)
+    ) == QualityDefect.NO_ACTING_TEXT
+
+
 def test_a_runtime_only_key_keeps_the_record(make_record):
     """Level up, bestow and scavenge add a spell the script never declared; its
     text sits on a keyword line the join does not reach yet, so the record stays."""

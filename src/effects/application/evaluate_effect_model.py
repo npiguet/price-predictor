@@ -1,7 +1,8 @@
 """``evaluate-effect-model``: the three gates and the reported checks.
 
 The orchestration only: each gate lives in its own module (``gate_one``,
-``gate_two``, ``geometry_checks``), the breakdowns in ``breakdowns``.
+``gate_two``, ``geometry_checks``), the UMAP picture in ``umap_check``, the
+breakdowns in ``breakdowns``.
 """
 
 from __future__ import annotations
@@ -17,19 +18,18 @@ from effects.application.evaluation_context import (
     load_context,
 )
 from effects.application.gate_one import run_gate_one
-from effects.application.gate_two import evaluate_gate_two, gate_two_records, run_gate_two
+from effects.application.gate_two import run_gate_two
 from effects.application.geometry_checks import (
     NEIGHBOUR_QUERIES,
     cached_vectors,
     check_baseline_geometry,
     check_decodability,
     check_nearest_neighbours,
-    check_umap,
     check_ward,
     run_gate_three,
 )
 from effects.application.record_scoring import score_records
-from effects.domain.ability_encoder import surface_of
+from effects.application.umap_check import check_umap
 from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
     CheckName,
@@ -92,15 +92,16 @@ def run_breakdowns(context: EvaluationContext) -> list[CheckResult]:
         )]
     runnable = context.main_runnable(everything)
     manifest = context.manifest
-    mode_counts = manifest.legality_mode_counts or None
     scored = {
         stratum: (
-            score_records(rows, runnable, legality_mode_counts=mode_counts)
+            score_records(
+                rows, runnable, legality_mode_counts=manifest.legality_mode_counts,
+            )
             if rows else []
         )
         for stratum, rows in strata.items()
     }
-    games_by_text: dict[str, float] = dict(manifest.rarity)
+    games_by_text: dict[str, int] = dict(manifest.rarity)
     return breakdown_checks(
         scored, games_by_text=games_by_text,
         withheld_keyword=context.main.provenance.withheld_keyword,
@@ -118,12 +119,9 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     report.add(run_gate_three(cached, config.abilities_root))
     report.add(_gate_one(context, variants))
 
-    logger.info("gate 2: scoring the damage-step keywords on the game-disjoint stratum")
-    report.keyword_verdicts = run_gate_two(
-        gate_two_records(context.main.provenance, corpus_path=context.corpus_path),
-        context.main_runnable,
-    )
-    report.add(evaluate_gate_two(report.keyword_verdicts))
+    gate_two = run_gate_two(context)
+    report.keyword_verdicts = gate_two.verdicts
+    report.add(gate_two.check)
 
     logger.info("breakdowns: scoring both validation strata")
     report.extend(run_breakdowns(context))
@@ -135,10 +133,12 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
 def _sidecar_index(context: EvaluationContext):
     """The card and token trees' sidecars (FR-123), keyed on the checkpoint's
     surface once for every variant's cache."""
-    return SidecarIndex(context.config.cards_folders, surface=surface_of(context.vocab_path))
+    return SidecarIndex(context.config.cards_folders, surface=context.tokenizer_files.surface)
 
 
-def _load_cache(context: EvaluationContext, sidecars, variant: str = "full"):
+def _load_cache(
+    context: EvaluationContext, sidecars, variant: Baseline = Baseline.FULL,
+):
     """One variant's cache: a vector per unique text on the checkpoint's surface."""
     root = context.config.abilities_root
     logger.info("loading the %s ability cache under %s", variant, root)
@@ -162,7 +162,7 @@ def _geometry_checks(context: EvaluationContext, cached, sidecars) -> list[Check
     checks = [
         check_ward(cached),
         check_nearest_neighbours(cached, NEIGHBOUR_QUERIES),
-        check_umap(cached),
+        check_umap(cached, context.config.output_dir),
         check_decodability(
             cached, Path(context.config.win_rates),
             held_out_cards=context.main.provenance.held_out_cards,

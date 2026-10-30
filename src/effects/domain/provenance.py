@@ -12,6 +12,49 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
 
+from effects.domain.keyword_names import display_name_of, normalize_keyword
+from effects.domain.script_text import is_bare_keyword
+
+#: The ``script_api_type`` the converter writes on a line a keyword produced.
+KEYWORD_API_TYPE = "Keyword"
+
+
+class TraitKind(StrEnum):
+    """The Forge trait a provenance key names, in the sidecar's spelling.
+
+    A key keeps its ``trait_kind`` as the string the record or sidecar
+    carries; the enum is what code compares it against.
+    """
+
+    KEYWORD = "keyword"
+    SPELL = "spell"
+    TRIGGER = "trigger"
+    STATIC = "static"
+    REPLACEMENT = "replacement"
+
+
+class LineKind(StrEnum):
+    """What a rendered line is, the prefix the converter writes before it.
+
+    A line keeps its ``line_kind`` as the string the sidecar carries; the
+    enum is what code compares it against.
+    """
+
+    ACTIVATED = "activated"
+    TRIGGERED = "triggered"
+    STATIC = "static"
+    REPLACEMENT = "replacement"
+    CHAPTER = "chapter"
+    LEVEL = "level"
+    ALTERNATE_COST = "alternate cost"
+    COST_REDUCTION = "cost reduction"
+    ADDITIONAL_COST = "additional cost"
+    DRAFT = "draft"
+    SPELL = "spell"
+    PLANESWALKER = "planeswalker"
+    OPTION = "option"
+    TEXT = "text"
+
 
 class SourceTree(StrEnum):
     """The tree a script file's first path segment names.
@@ -39,14 +82,17 @@ class KeyResolution(StrEnum):
     ``DROPPED`` has no text by design (Forge's implicit permanent spell, most
     often); ``RUNTIME_ONLY`` has text the join cannot reach
     (:meth:`ProvenanceSidecar.is_runtime_only`); ``UNCONVERTED`` is a script no
-    sidecar describes. A key inside a declared range and in neither list is not
-    a value: it raises.
+    sidecar describes; ``UNCONFIGURED_TREE`` names a source tree the run was
+    given no root for (a variant key without ``--variant-scripts``), so whether
+    it joins is unknown. A key inside a declared range and in neither list is
+    not a value: it raises.
     """
 
     LINE = "line"
     DROPPED = "dropped"
     RUNTIME_ONLY = "runtime-only"
     UNCONVERTED = "unconverted"
+    UNCONFIGURED_TREE = "unconfigured-tree"
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +238,30 @@ class SidecarLine:
         separator = line.find(": ")
         return line if separator < 0 else line[separator + 2:]
 
+    # Two answers to "which keyword is this line", which part company on a
+    # ``Keyword`` line whose script carries parameters (``Equip:2:::ReduceCost$
+    # Y``, a Class level, a conditional ``etbCounter``): the first names its
+    # keyword, the second does not.
+
+    @property
+    def keyword_display_name(self) -> str | None:
+        """The keyword a ``Keyword`` line names, as Forge displays it
+        (``Ward``, ``Protection from red``), whatever parameters follow the
+        name; None on a line no keyword produced."""
+        if self.script_api_type != KEYWORD_API_TYPE or not self.script_text:
+            return None
+        return display_name_of(self.script_text)
+
+    @property
+    def bare_keyword(self) -> str | None:
+        """The keyword this line *is* where its script is the keyword alone,
+        no ``$`` parameter and no ``|`` alternative (White Knight's ``First
+        Strike``), in the package's spelling (``first_strike``); None
+        otherwise, a ``Keyword`` line carrying parameters included."""
+        if not is_bare_keyword(self.script_text):
+            return None
+        return normalize_keyword(self.script_text)
+
 
 def _note_declared(
     declared: dict[tuple[int, str], int], key: ProvenanceKey,
@@ -300,7 +370,7 @@ class ProvenanceSidecar:
         rows: list[int] = []
         for following in range(row + 1, len(self.lines)):
             line = self.lines[following]
-            if line.line_kind != "option" or not any(
+            if line.line_kind != LineKind.OPTION or not any(
                 key.option is not None for key in line.provenance
             ):
                 break
@@ -354,14 +424,15 @@ class SidecarLookup(Protocol):
         ...
 
 
-def first_text(
-    keys: Iterable[ProvenanceKey], text_of: Callable[[ProvenanceKey], str | None],
-) -> str | None:
+def first_text[T](
+    keys: Iterable[ProvenanceKey], text_of: Callable[[ProvenanceKey], T | None],
+) -> T | None:
     """The text of the first key ``text_of`` names one for, or None.
 
     The acting line is the first acting key that resolves, so every reader of
     "the text this record acts through" folds a key tuple this way, whatever
-    ``text_of`` resolves to.
+    ``text_of`` resolves to — ``[ACT]``'s ``e`` included, which is why the
+    check is against None: row 0 of the encoded matrix is a valid hit.
     """
     for key in keys:
         text = text_of(key)

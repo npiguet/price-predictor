@@ -14,14 +14,14 @@ import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
-from effects.domain.corpus_manifest import CorpusManifest, SourceShard
+from effects.domain.corpus_manifest import CorpusManifest
+from effects.domain.corpus_plan import Keys
 from effects.domain.records import RecordKind, acting_keys
 from effects.domain.strata import OUTPUT_STRATA, Stratum
-from effects.infrastructure.record_codec import parse_record_line, record_from_dict
 from effects.infrastructure.shard_io import (
-    iter_shard_lines,
+    EnvelopeHead,
+    iter_shard_matching,
     iter_shards,
-    peek_envelope,
     read_records_matching,
 )
 
@@ -128,16 +128,7 @@ class CorpusStore:
         )
 
 
-def current_sources(records_dir: Path) -> tuple[SourceShard, ...]:
-    """Every raw shard under ``records_dir``, by relative path and size."""
-    root = Path(records_dir)
-    return tuple(
-        SourceShard(name=shard.relative_to(root).as_posix(), size=shard.stat().st_size)
-        for shard in iter_shards(root)
-    )
-
-
-def training_acting_keys(directory: Path) -> set[tuple]:
+def training_acting_keys(directory: Path) -> set[Keys]:
     """Every distinct ``acting_keys`` tuple among the records under ``directory``.
 
     ``directory`` is the curated corpus's ``training/``: what the checkpoint
@@ -147,18 +138,17 @@ def training_acting_keys(directory: Path) -> set[tuple]:
     """
     shards = iter_shards(directory)
     read: set[str] = set()
-    acting: set[tuple] = set()
+
+    def first_copy(head: EnvelopeHead) -> bool:
+        if head.record_id in read:
+            return False
+        read.add(head.record_id)
+        return True
+
+    acting: set[Keys] = set()
     for done, shard in enumerate(shards, start=1):
-        for line in iter_shard_lines(shard):
-            head = peek_envelope(line)
-            if head is not None:
-                if head.record_id in read:
-                    continue
-                read.add(head.record_id)
-            stripped = line.strip()
-            if not stripped:
-                continue
-            keys = acting_keys(record_from_dict(parse_record_line(stripped)))
+        for record in iter_shard_matching(shard, where=first_copy):
+            keys = acting_keys(record)
             if keys:
                 acting.add(keys)
         if done % 50 == 0:
@@ -177,5 +167,5 @@ def card_disjoint_resolutions(corpus_path: Path, games: frozenset[str]) -> Itera
     """
     return read_records_matching(
         CorpusStore(corpus_path).card_disjoint_dir,
-        game_ids=games, kinds={RecordKind.RESOLUTION.value},
+        game_ids=games, kinds={RecordKind.RESOLUTION},
     )

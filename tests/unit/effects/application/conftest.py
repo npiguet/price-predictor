@@ -29,18 +29,20 @@ def records():
 
 @pytest.fixture(scope="module")
 def corpus(tmp_path_factory, records):
-    """Three training shards, the validation sample, and a vocabulary file."""
+    """Three training shards, the validation sample, and a vocabulary file.
+
+    ``held`` is a validation game: its records are in the sample and in no
+    training shard, as build-corpus routes them.
+    """
     root = tmp_path_factory.mktemp("corpus")
     games = sorted({record.game_id for record in records})
     held = games[0]
     shards = []
     for index in range(GEN1_TRAINING_SHARDS):
         path = root / f"train{index}.jsonl.gz"
-        # Every shard keeps a few of the held game's records, which the
-        # inherited split must keep out of training wherever it lands.
         write_shard(path, [
             r for i, r in enumerate(records)
-            if i % GEN1_TRAINING_SHARDS == index or r.game_id == held
+            if i % GEN1_TRAINING_SHARDS == index and r.game_id != held
         ])
         shards.append(path)
     sample = root / "validation.jsonl.gz"

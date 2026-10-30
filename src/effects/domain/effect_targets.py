@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import partial
 
 from effects.domain.effect_head_input import (
     CARD_TYPES,
@@ -22,10 +23,12 @@ from effects.domain.effect_head_input import (
 from effects.domain.effect_head_layout import (
     DURATIONS,
     LIBRARY_EVENTS,
+    OTHER_COUNTER,
     ZONE_OUTCOMES,
     FieldScope,
     FieldSpec,
     HeadField,
+    LibraryEvent,
     ZoneOutcome,
     counter_field,
     mana_field,
@@ -41,8 +44,8 @@ from effects.domain.records import (
     TriggerPayload,
     events_of,
 )
-from effects.domain.sampling import sampling_class
-from effects.domain.state_snapshot import COLORS
+from effects.domain.sampling import SamplingClass, sampling_class
+from effects.domain.state_snapshot import COLORS, Zone
 
 #: The zone outcome each moving event implies; the record keeps destroy and
 #: sacrifice apart, the target collapses them.
@@ -54,20 +57,20 @@ _ZONE_BY_EVENT: dict[EventType, ZoneOutcome] = {
     EventType.SPELL_COUNTERED: ZoneOutcome.COUNTERED,
 }
 
-_ZONE_BY_DESTINATION: dict[str, ZoneOutcome] = {
-    "graveyard": ZoneOutcome.DIED,
-    "exile": ZoneOutcome.EXILED,
-    "hand": ZoneOutcome.TO_HAND,
-    "library": ZoneOutcome.LIBRARY_TOP,
-    "battlefield": ZoneOutcome.BLINKED,
+_ZONE_BY_DESTINATION: dict[Zone, ZoneOutcome] = {
+    Zone.GRAVEYARD: ZoneOutcome.DIED,
+    Zone.EXILE: ZoneOutcome.EXILED,
+    Zone.HAND: ZoneOutcome.TO_HAND,
+    Zone.LIBRARY: ZoneOutcome.LIBRARY_TOP,
+    Zone.BATTLEFIELD: ZoneOutcome.BLINKED,
 }
 #: The outcome of a ``zone_change`` to a destination the table does not name.
 _STAYED = ZoneOutcome.STAYED
 
-_LIBRARY_EVENT_BY_TYPE: dict[EventType, str] = {
-    EventType.CARD_LOOKED_AT: "scry",
-    EventType.LIBRARY_REORDERED: "reorder",
-    EventType.CARD_REVEALED: "reveal",
+_LIBRARY_EVENT_BY_TYPE: dict[EventType, LibraryEvent] = {
+    EventType.CARD_LOOKED_AT: LibraryEvent.SCRY,
+    EventType.LIBRARY_REORDERED: LibraryEvent.REORDER,
+    EventType.CARD_REVEALED: LibraryEvent.REVEAL,
 }
 
 #: ``type -> (field, parameter, default when absent, sign)``.
@@ -100,14 +103,14 @@ class EntityTargets:
     """One entity's targets for this record.
 
     ``fields`` holds what the record wrote and nothing else, ``unknown`` what
-    it declares it cannot say; without ``record_class`` and ``scope`` only
-    written values are scored.
+    it declares it cannot say; ``record_class`` and ``scope`` decide which
+    unwritten fields take their silent value.
     """
 
+    record_class: SamplingClass
+    scope: FieldScope
     affected: bool = False
     fields: dict[str, float | int | list[float]] = field(default_factory=dict)
-    record_class: str | None = None
-    scope: FieldScope | None = None
     unknown: set[str] = field(default_factory=set)
 
     def supervised(self, spec: FieldSpec):
@@ -169,31 +172,36 @@ def _target_events(record: EffectRecord) -> tuple[Event, ...]:
 
 
 def _apply_event(entry: EntityTargets, event: Event) -> None:
-    """Fold one event into an entity's targets."""
-    if not _apply_tabled_event(entry, event):
-        apply = _EVENT_APPLIERS.get(event.type)
-        if apply is not None:
-            apply(entry, event)
+    """Fold one event into an entity's targets; an event no applier names
+    writes nothing."""
+    apply = _EVENT_APPLIERS.get(event.type)
+    if apply is not None:
+        apply(entry, event)
 
 
-def _apply_tabled_event(entry: EntityTargets, event: Event) -> bool:
-    """An event whose whole target one table states; False for any other."""
-    if event.type in _ADDITIVE:
-        name, parameter, default, sign = _ADDITIVE[event.type]
-        entry.add(name, sign * float(event.params.get(parameter, default)))
-    elif event.type in _SETTERS:
-        entry.set(*_SETTERS[event.type])
-    elif event.type in _ZONE_BY_EVENT:
-        entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(_ZONE_BY_EVENT[event.type]))
-    elif event.type in _LIBRARY_EVENT_BY_TYPE:
-        entry.flag(
-            HeadField.LIBRARY_EVENTS,
-            LIBRARY_EVENTS.index(_LIBRARY_EVENT_BY_TYPE[event.type]),
-            len(LIBRARY_EVENTS),
-        )
-    else:
-        return False
-    return True
+def _apply_additive(
+    entry: EntityTargets, event: Event, *,
+    name: str, parameter: str, default: float, sign: float,
+) -> None:
+    entry.add(name, sign * float(event.params.get(parameter, default)))
+
+
+def _apply_setter(entry: EntityTargets, _event: Event, *, name: str, value: int) -> None:
+    entry.set(name, value)
+
+
+def _apply_zone_outcome(
+    entry: EntityTargets, _event: Event, *, outcome: ZoneOutcome,
+) -> None:
+    entry.set(HeadField.ZONE_OUTCOME, ZONE_OUTCOMES.index(outcome))
+
+
+def _apply_library_event(
+    entry: EntityTargets, _event: Event, *, library_event: LibraryEvent,
+) -> None:
+    entry.flag(
+        HeadField.LIBRARY_EVENTS, LIBRARY_EVENTS.index(library_event), len(LIBRARY_EVENTS),
+    )
 
 
 def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
@@ -205,7 +213,7 @@ def _apply_zone_change(entry: EntityTargets, event: Event) -> None:
 
 
 def _apply_counter_change(entry: EntityTargets, event: Event) -> None:
-    counter = str(event.params.get("counter_type", "OTHER")).upper()
+    counter = str(event.params.get("counter_type", OTHER_COUNTER)).upper()
     name = (
         counter_field(counter)
         if counter in COUNTER_TYPES
@@ -269,8 +277,29 @@ def _apply_mana(entry: EntityTargets, mana, *, sign: int) -> None:
             entry.add(mana_field(key), sign * float(amount))
 
 
+def _appliers() -> dict[EventType, Callable[[EntityTargets, Event], None]]:
+    """Every event's applier: the tables' events and the ones read off their
+    own parameters, each type named once."""
+    tabled: list[tuple[EventType, Callable[[EntityTargets, Event], None]]] = [
+        *((event_type, partial(
+            _apply_additive, name=name, parameter=parameter, default=default, sign=sign,
+        )) for event_type, (name, parameter, default, sign) in _ADDITIVE.items()),
+        *((event_type, partial(_apply_setter, name=name, value=value))
+          for event_type, (name, value) in _SETTERS.items()),
+        *((event_type, partial(_apply_zone_outcome, outcome=outcome))
+          for event_type, outcome in _ZONE_BY_EVENT.items()),
+        *((event_type, partial(_apply_library_event, library_event=library_event))
+          for event_type, library_event in _LIBRARY_EVENT_BY_TYPE.items()),
+        *_PARAMETER_APPLIERS.items(),
+    ]
+    appliers = dict(tabled)
+    if len(appliers) != len(tabled):
+        raise ValueError("an event type has two appliers")
+    return appliers
+
+
 #: The events no table above states, each read off its own parameters.
-_EVENT_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
+_PARAMETER_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
     EventType.ZONE_CHANGE: _apply_zone_change,
     EventType.COUNTER_CHANGE: _apply_counter_change,
     EventType.PT_CHANGE: _apply_pt_change,
@@ -284,6 +313,9 @@ _EVENT_APPLIERS: dict[EventType, Callable[[EntityTargets, Event], None]] = {
         entry, event.params.get("mana_by_color"), sign=-1,
     ),
 }
+
+#: ``event type -> how it folds into an entity's targets``.
+_EVENT_APPLIERS = _appliers()
 
 
 def _apply_playability(record: EffectRecord, slot) -> None:
@@ -326,40 +358,22 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
         if contribution.pt_boost != (0, 0):
             entry.add(HeadField.POWER_DELTA, float(contribution.pt_boost[0]))
             entry.add(HeadField.TOUGHNESS_DELTA, float(contribution.pt_boost[1]))
-        for keyword in contribution.keywords:
-            # The type and colour channels' "-" convention.
-            lost = keyword.startswith("-")
-            _flag_keyword(
-                entry, HeadField.KEYWORDS_LOST if lost else HeadField.KEYWORDS_GAINED,
-                keyword.lstrip("-"),
-            )
-        for channel, vocabulary, gained_field, lost_field in (
-            (contribution.types, CARD_TYPES, HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
-            (contribution.colors, COLORS, HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
+        keywords = contribution.keyword_changes
+        for keyword in keywords.gained:
+            _flag_keyword(entry, HeadField.KEYWORDS_GAINED, keyword)
+        for keyword in keywords.lost:
+            _flag_keyword(entry, HeadField.KEYWORDS_LOST, keyword)
+        # Whole-class tokens (``all-creature-types``) match no slot and drop.
+        for change, vocabulary, gained_field, lost_field in (
+            (contribution.type_changes, CARD_TYPES,
+             HeadField.TYPES_GAINED, HeadField.TYPES_LOST),
+            (contribution.color_changes, COLORS,
+             HeadField.COLORS_GAINED, HeadField.COLORS_LOST),
         ):
-            gained, lost = _split_contribution(channel)
-            _apply_multi(entry, gained_field, gained, vocabulary)
-            _apply_multi(entry, lost_field, lost, vocabulary)
-            if "=" in channel and lost_field not in entry.fields:
+            _apply_multi(entry, gained_field, change.gained, vocabulary)
+            _apply_multi(entry, lost_field, change.lost, vocabulary)
+            # The displaced values cannot be named, so the lost field is
+            # unknown rather than silently empty.
+            if change.sets_outright and lost_field not in entry.fields:
                 entry.unknown.add(lost_field)
-
-
-def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
-    """One contribution channel, split into what it grants and what it takes.
-
-    A removal carries a leading ``-``; a lone ``=`` marks a channel the static
-    sets outright, whose displaced values the record cannot name (the snapshot
-    is the board after the static), so the caller marks the lost field
-    unknown. Whole-class tokens (``all-creature-types``) match no slot and drop.
-    """
-    gained: list[str] = []
-    lost: list[str] = []
-    for token in tokens:
-        if token == "=":
-            continue
-        if token.startswith("-"):
-            lost.append(token[1:])
-        else:
-            gained.append(token)
-    return gained, lost
 

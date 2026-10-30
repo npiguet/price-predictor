@@ -27,16 +27,14 @@ import pytest
 import torch
 
 from effects.application.gate_two import (
-    KeywordResolver,
     KeywordScore,
     evaluate_gate_two,
     evaluate_keyword,
-    qualifying_observations,
     read_field,
     score_keywords,
     score_observation,
-    subject_id,
 )
+from effects.application.model_loading import Runnable
 from effects.application.surface_batching import IdentityTable, SurfaceBatcher
 from effects.domain.baselines import BaselineMasks
 from effects.domain.damage_step_keywords import (
@@ -49,6 +47,7 @@ from effects.domain.damage_step_keywords import (
     combat_participant,
 )
 from effects.domain.effect_head_input import (
+    NO_STRIP,
     OVERLAY_KEYWORDS_GEN2,
     THERMOMETER_STEPS,
     SlotKind,
@@ -73,7 +72,6 @@ from effects.domain.state_snapshot import (
     StateSnapshot,
 )
 from effects.domain.surface_collation import gather_entities
-from effects.infrastructure.model_runner import Runnable
 from tests.unit.effects.builders import keyword_score, make_batcher, slots_of_kind
 
 # ── a board: one first-striking attacker, one blocker ────────────────────
@@ -301,7 +299,7 @@ class TestBatchThreading:
         batcher = _batcher()
         _batch, surfaces, _encoded = batcher.build(
             [record, record], _NoEncoder(),
-            strip_per_record=[None, {"A": frozenset({"first_strike"})}],
+            strip_per_record=[NO_STRIP, {"A": frozenset({"first_strike"})}],
         )
         assert _ability_count(surfaces[0], "A") == 2
         assert _ability_count(surfaces[1], "A") == 1
@@ -608,141 +606,6 @@ def _zone_and_damage(*, damage: float, died_logit: float) -> torch.Tensor:
     return vector
 
 
-# ── qualification: the counter and the scorer read one population ────────
-
-
-class TestSubjectResolution:
-    def test_the_carrier_is_itself(self):
-        record = _printed_board()
-        participant = _participant(record, "A")
-        effect = KEYWORDS_BY_NAME["indestructible"].effects[0]
-        assert effect.subject is Subject.CARRIER
-        assert subject_id(effect, participant) == "A"
-
-    def test_the_opponent_is_the_first_creature_it_fights(self):
-        record = _printed_board()
-        participant = _participant(record, "A")
-        effect = next(
-            e for e in KEYWORDS_BY_NAME["double_strike"].effects
-            if e.subject is Subject.OPPONENT
-        )
-        assert subject_id(effect, participant) == "B0"
-
-    def test_the_controller_is_a_player(self):
-        record = _printed_board()
-        participant = _participant(record, "A")
-        effect = KEYWORDS_BY_NAME["lifelink"].effects[0]
-        assert subject_id(effect, participant) == "P0"
-
-    def test_the_defending_player_is_the_one_being_attacked(self):
-        record = _printed_board()
-        participant = _participant(record, "A")
-        effect = KEYWORDS_BY_NAME["trample"].effects[0]
-        assert subject_id(effect, participant) == "P1"
-
-
-class TestQualifyingObservations:
-    def test_a_printed_keyword_is_found_through_the_sidecar(self):
-        resolver = KeywordResolver(_Sidecars())
-        found = qualifying_observations(
-            _printed_board(), (KEYWORDS_BY_NAME["first_strike"],), resolver,
-        )
-        assert [(row.keyword, p.carrier.id) for row, p in found] == [
-            ("first_strike", "A"),
-        ]
-
-    def test_an_overlay_keyword_is_found_without_a_sidecar(self):
-        resolver = KeywordResolver(None)
-        found = qualifying_observations(
-            _overlay_board(), (KEYWORDS_BY_NAME["first_strike"],), resolver,
-        )
-        assert len(found) == 1
-
-    @pytest.mark.parametrize("keyword", ["first_strike", "double_strike"])
-    def test_a_regular_step_record_is_never_a_strike_first_observation(
-        self, keyword,
-    ):
-        """The first striker already struck; that step's own record is the one
-        the keyword changes, and the regular step's board starts after it."""
-        attacker = _creature(
-            "A", 2, 2, keywords=(keyword,),
-            combat=CombatStatus(attacking="P1", blocked_by=("B0",),
-                                became_blocked=True),
-        )
-        blocker = _creature(
-            "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
-        )
-        unblocked = _creature(
-            "A", 2, 2, keywords=(keyword,), combat=CombatStatus(attacking="P1"),
-        )
-        rows = (KEYWORDS_BY_NAME[keyword],)
-        for record in (
-            _combat_record(attacker, blocker),
-            _combat_record(unblocked),
-            _printed_board(substep="regular"),
-        ):
-            assert record.state.global_.combat_substep == "regular"
-            assert qualifying_observations(
-                record, rows, KeywordResolver(_Sidecars()),
-            ) == []
-
-    def test_a_carrier_the_predicate_rejects_is_not_an_observation(self):
-        """Trample on a 2/2 blocked by a 2/2 runs nothing over."""
-        attacker = _creature(
-            "A", 2, 2, keywords=("trample",),
-            combat=CombatStatus(attacking="P1", blocked_by=("B0",),
-                                became_blocked=True),
-        )
-        blocker = _creature(
-            "B0", 2, 2, controller="P1", combat=CombatStatus(blocking=("A",)),
-        )
-        record = _combat_record(attacker, blocker)
-        found = qualifying_observations(
-            record, (KEYWORDS_BY_NAME["trample"],), KeywordResolver(None),
-        )
-        assert found == []
-
-    def test_an_unblocked_double_striker_is_still_an_observation(self):
-        """Its first hit lands on the player, which the row reads as life."""
-        attacker = _creature(
-            "A", 2, 2, keywords=("double_strike",),
-            combat=CombatStatus(attacking="P1"),
-        )
-        record = _combat_record(attacker, substep="first_strike")
-        found = qualifying_observations(
-            record, (KEYWORDS_BY_NAME["double_strike"],), KeywordResolver(None),
-        )
-        assert len(found) == 1
-
-    def test_an_observation_with_nothing_readable_is_not_counted(self):
-        """A 0-power double striker deals no damage in either step."""
-        attacker = _creature(
-            "A", 0, 4, keywords=("double_strike",),
-            combat=CombatStatus(attacking="P1"),
-        )
-        record = _combat_record(attacker, substep="first_strike")
-        found = qualifying_observations(
-            record, (KEYWORDS_BY_NAME["double_strike"],), KeywordResolver(None),
-        )
-        assert found == []
-
-    def test_two_carriers_in_one_record_are_two_observations(self):
-        first = _creature(
-            "A", 2, 2, keywords=("lifelink",),
-            combat=CombatStatus(attacking="P1", blocked_by=("B0",),
-                                became_blocked=True),
-        )
-        second = _creature(
-            "B0", 2, 2, controller="P1", keywords=("lifelink",),
-            combat=CombatStatus(blocking=("A",)),
-        )
-        record = _combat_record(first, second)
-        found = qualifying_observations(
-            record, (KEYWORDS_BY_NAME["lifelink"],), KeywordResolver(None),
-        )
-        assert sorted(p.carrier.id for _row, p in found) == ["A", "B0"]
-
-
 # ── the whole scorer, against a model that reacts to the strip ───────────
 
 
@@ -828,34 +691,63 @@ class TestEvaluatorWiring:
         return _runnable()
 
     def test_it_scores_the_game_disjoint_combat_records(self):
-        from effects.application.gate_two import run_gate_two
+        from effects.application.gate_two import keyword_verdicts
 
-        verdicts = run_gate_two([_printed_board(game="gd-1")], self._load)
+        verdicts = keyword_verdicts([_printed_board(game="gd-1")], self._load)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert first_strike.qualifying_records == 1
         assert first_strike.direction_agreement == 1.0
 
     def test_the_reason_lists_agreement_per_field(self):
-        from effects.application.gate_two import run_gate_two
+        from effects.application.gate_two import keyword_verdicts
 
-        verdicts = run_gate_two([_printed_board(game="gd-1")], self._load)
+        verdicts = keyword_verdicts([_printed_board(game="gd-1")], self._load)
 
         first_strike = next(v for v in verdicts if v.keyword == "first_strike")
         assert "damage_taken 100%" in first_strike.reason
         assert "zone_outcome/died 100%" in first_strike.reason
 
     def test_no_game_disjoint_combat_record_leaves_every_keyword_at_zero(self):
-        from effects.application.gate_two import run_gate_two
+        from effects.application.gate_two import keyword_verdicts
 
         def _never(_records):
             raise AssertionError("no records: the model must not be loaded")
 
-        verdicts = run_gate_two([], _never)
+        verdicts = keyword_verdicts([], _never)
 
         assert len(verdicts) == 8
         assert all(v.qualifying_records == 0 for v in verdicts)
         assert all("under-sampled" in v.reason for v in verdicts)
+
+    def test_the_gate_reads_its_own_records_off_the_context(self, tmp_path):
+        """Like gate 1, gate 2 is handed the evaluation context and nothing
+        else: it reads the checkpoint's game-disjoint games itself."""
+        from types import SimpleNamespace
+
+        from effects.application.gate_two import run_gate_two
+        from effects.domain.split_provenance import SplitProvenance
+        from effects.infrastructure.corpus_store import CorpusStore
+        from effects.infrastructure.shard_io import write_shard
+
+        corpus = tmp_path / "corpus"
+        write_shard(
+            CorpusStore(corpus).game_disjoint_dir / "shard-00001.jsonl.gz",
+            [_printed_board(game="gd-1"), _printed_board(game="gd-2")],
+        )
+        context = SimpleNamespace(
+            main=SimpleNamespace(provenance=SplitProvenance(game_disjoint_games=("gd-1",))),
+            corpus_path=corpus, main_runnable=self._load,
+        )
+
+        outcome = run_gate_two(context)
+
+        first_strike = next(v for v in outcome.verdicts if v.keyword == "first_strike")
+        assert first_strike.qualifying_records == 1
+        assert outcome.check.status is CheckStatus.REPORTED
+        assert outcome.check.values == {
+            v.keyword: v.direction_agreement for v in outcome.verdicts
+        }
 
 
 # ── who is counted (FR-119, FR-120) ──────────────────────────────────────
@@ -925,8 +817,8 @@ class TestGateTwoRecords:
         self, tmp_path,
     ):
         from effects.application.gate_two import gate_two_records
+        from effects.domain.split_provenance import SplitProvenance
         from effects.infrastructure.corpus_store import CorpusStore
-        from effects.infrastructure.effect_model_store import SplitProvenance
 
         corpus = tmp_path / "corpus"
         recorded = _printed_board(game="gd-1")

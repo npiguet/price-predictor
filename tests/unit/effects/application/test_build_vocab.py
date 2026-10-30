@@ -15,8 +15,6 @@ from pathlib import Path
 import pytest
 
 from effects.application.build_vocab import (
-    DEFAULT_SCRIPT_VOCAB_PATH,
-    DEFAULT_VOCAB_PATH,
     SEEDED_SPECIALS,
     BuildVocabConfig,
     EmptyCardsFolderError,
@@ -263,12 +261,13 @@ class TestTargetSize:
 
 
 class TestSurfaces:
-    def test_the_two_surfaces_default_to_different_files(self):
-        assert DEFAULT_VOCAB_PATH != DEFAULT_SCRIPT_VOCAB_PATH
-        assert BuildVocabConfig().resolved_vocab_path() == DEFAULT_VOCAB_PATH
+    def test_the_two_surfaces_default_to_their_own_files(self):
+        """contracts/cli.md: a script rebuild never overwrites the vocabulary a
+        prose checkpoint recorded."""
+        assert BuildVocabConfig().resolved_vocab_path() == Path("models/effects/vocab.txt")
         assert BuildVocabConfig(
             surface=Surface.SCRIPT,
-        ).resolved_vocab_path() == DEFAULT_SCRIPT_VOCAB_PATH
+        ).resolved_vocab_path() == Path("models/effects/vocab-script.txt")
 
     def test_an_explicit_path_overrides_the_surface_default(self, tmp_path):
         chosen = tmp_path / "elsewhere.txt"

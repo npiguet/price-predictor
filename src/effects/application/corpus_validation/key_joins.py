@@ -14,12 +14,11 @@ from effects.application.corpus_validation.findings import (
     keep_example,
     share_of,
 )
-from effects.domain.provenance import KeyResolution, ProvenanceKey
+from effects.domain.provenance import KeyResolution, ProvenanceKey, SidecarLookup, TraitKind
 from effects.domain.records import (
     EffectRecord,
     key_sites,
 )
-from effects.infrastructure.sidecar_io import SidecarCache, UnconfiguredTree
 
 
 class JoinOutcome(Enum):
@@ -41,20 +40,18 @@ class _Join(NamedTuple):
     why: str = ""
 
 
-def _join_result(sidecars: SidecarCache, key: ProvenanceKey) -> _Join:
+def _join_result(sidecars: SidecarLookup, key: ProvenanceKey) -> _Join:
     """How ``key`` joins.
 
     ``resolution_of`` rather than ``row_for``, which answers ``None`` both to a
     dropped line (a join) and to a key outside every range (not one).
     """
     try:
-        sidecars.path_for(key.script_file)
-    except UnconfiguredTree:
-        return _Join(JoinOutcome.UNCHECKED)
-    try:
         resolution = sidecars.resolution_of(key)
     except KeyError as exc:
         return _Join(JoinOutcome.UNJOINABLE, f"{key.label}: {exc}")
+    if resolution is KeyResolution.UNCONFIGURED_TREE:
+        return _Join(JoinOutcome.UNCHECKED)
     if resolution is KeyResolution.UNCONVERTED:
         return _Join(
             JoinOutcome.UNJOINABLE, f"{key.script_file}: no sidecar beside the converted card",
@@ -85,7 +82,7 @@ class KeyJoins:
     of its face there, so the keyword finding names that count too.
     """
 
-    def __init__(self, sidecars: SidecarCache | None) -> None:
+    def __init__(self, sidecars: SidecarLookup | None) -> None:
         self.sidecars = sidecars
         #: Every distinct printed-line key the window named, joined once.
         self.keys: set[ProvenanceKey] = set()
@@ -95,8 +92,8 @@ class KeyJoins:
 
     def findings(self, limits: Thresholds) -> Iterator[Finding]:
         if self.sidecars is None:
-            unchecked = Finding(
-                name=_KEYWORD_JOIN, ok=True, watched=True,
+            unchecked = Finding.watch(
+                name=_KEYWORD_JOIN,
                 measured=(
                     f"{len(self.keys)} distinct keys, none checked: no converted "
                     "tree was readable (pass --cards-folder)"
@@ -150,7 +147,7 @@ class _JoinTally:
         if join.outcome is JoinOutcome.UNCHECKED:
             self.unchecked_by_tree[key.tree] += 1
         else:
-            (self.keyword if key.trait_kind == "keyword" else self.other).add(key, join)
+            (self.keyword if key.trait_kind == TraitKind.KEYWORD else self.other).add(key, join)
 
     def keyword_finding(self) -> Finding:
         broken = self.keyword.unjoinable.total()
@@ -174,10 +171,8 @@ class _JoinTally:
         other_checked = other.checked.total()
         other_broken = other.unjoinable.total()
         other_rate = share_of(other_broken, other_checked)
-        return Finding(
+        return Finding.watch(
             name=_OTHER_JOIN,
-            ok=True,
-            watched=True,
             measured=(
                 f"{other_broken}/{other_checked} keys of every other trait "
                 f"kind fail to join ({other_rate:.1%}, watched, no ceiling)"
@@ -194,10 +189,8 @@ class _JoinTally:
         total_checked = checked.total()
         outside = runtime_only.total()
         outside_rate = share_of(outside, total_checked)
-        return Finding(
+        return Finding.watch(
             name=_OUTSIDE_JOIN,
-            ok=True,
-            watched=True,
             measured=(
                 f"{outside}/{total_checked} keys resolve outside every "
                 f"(face, trait_kind) range their sidecar declares "

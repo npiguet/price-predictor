@@ -9,6 +9,7 @@ vocabulary has never seen.
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -350,6 +351,32 @@ class TestTokenizeCache:
             t.text for t in first
         ]
 
+    def test_an_expansion_is_split_once_and_takes_each_callers_role(
+        self, tokenizer, monkeypatch,
+    ):
+        calls: list[str] = []
+        original = AbilityTokenizer._split_with_offsets
+
+        def counting(self, text):
+            calls.append(text)
+            return original(self, text)
+
+        monkeypatch.setattr(AbilityTokenizer, "_split_with_offsets", counting)
+        flying = tokenizer.tokenize("flying")
+        spanned = tokenizer.tokenize("flying", (RoleSpan(0, 6, "effect"),))
+        calls.clear()
+
+        plain = tokenizer.expand_keywords(flying, probability=1.0)
+        roled = tokenizer.expand_keywords(spanned, probability=1.0)
+        again = tokenizer.expand_keywords(flying, probability=1.0)
+
+        assert len(calls) == 1
+        assert again == plain
+        assert {t.role for t in plain} == {None}
+        assert {t.role for t in roled} == {"effect"}
+        assert [replace(t, role=None) for t in roled] == plain
+        assert {t.expanded_from for t in plain} == {"flying"}
+
 
 class TestTokenShape:
     def test_a_token_is_immutable(self, tokenizer):
@@ -588,7 +615,7 @@ class TestKeywordLines:
     """Spec Story 1 scenarios 6, 7, 10."""
 
     def test_the_display_name_is_the_text_before_the_first_colon(self):
-        from effects.domain.ability_tokenizer import display_name_of
+        from effects.domain.keyword_names import display_name_of
 
         assert display_name_of("Ward:2") == "Ward"
         assert display_name_of("TypeCycling:Basic:1 B") == "TypeCycling"
@@ -667,7 +694,7 @@ class TestKeywordLines:
     def test_a_display_name_with_no_definition_stays_tokens(self):
         tokenizer = _open_tokenizer()
         tokens = tokenizer.tokenize("etbCounter:P1P1:2")
-        assert tokenizer.keyword_line_of("etbCounter:P1P1:2") is None
+        assert tokenizer.keywords.line_of("etbCounter:P1P1:2") is None
         assert tokenizer.expand_keywords(tokens, probability=1.0) == tokens
 
     def test_a_keyword_word_inside_another_line_takes_the_token_path(self):
@@ -680,12 +707,12 @@ class TestKeywordLines:
         assert "flying" not in [t.text for t in expanded if t.expanded_from is None]
 
     def test_the_match_is_case_insensitive(self):
-        assert _open_tokenizer().keyword_line_of("WARD:2").name == "Ward"
+        assert _open_tokenizer().keywords.line_of("WARD:2").name == "Ward"
 
     def test_a_chained_text_is_never_a_keyword_line(self):
         tokenizer = _open_tokenizer()
-        assert tokenizer.keyword_line_of("SV1: DB$ Draw") is None
-        assert tokenizer.keyword_line_of(
+        assert tokenizer.keywords.line_of("SV1: DB$ Draw") is None
+        assert tokenizer.keywords.line_of(
             "Execute$ SV1 | Mode$ Attacks [SEG] SV1: DB$ Pump",
         ) is None
 
@@ -772,13 +799,13 @@ def test_no_definition_expands_to_a_percent_or_unk(surface, source):
     tokenizer = AbilityTokenizer(vocab, definitions, surface=surface)
 
     texts = [
-        tokenizer.expansion_text(name)
+        tokenizer.keywords.line_text(name)
         for name, d in definitions.items() if d.reminder_template
     ]
     for line in staged:
-        keyword = tokenizer.keyword_line_of(line)
+        keyword = tokenizer.keywords.line_of(line)
         if keyword is not None and definitions[keyword.name].reminder_template:
-            texts.append(tokenizer.expansion_text(keyword.name, keyword.details))
+            texts.append(tokenizer.keywords.line_text(keyword.name, keyword.details))
     assert len(texts) > 150
     for text in texts:
         tokens = tokenizer.tokenize(text)

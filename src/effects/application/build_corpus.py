@@ -7,9 +7,10 @@ keys to ability texts and decides the split and the plan.
 
 from __future__ import annotations
 
-import dataclasses
 import logging
+import shutil
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -22,6 +23,8 @@ from effects.application.corpus_report import (
     report_write_pass,
 )
 from effects.application.corpus_survey import (
+    GameTally,
+    RarityTally,
     ReadConfig,
     Survey,
     SurveyConfig,
@@ -37,27 +40,29 @@ from effects.domain.corpus_plan import (
     GameStrata,
     Keys,
     SelectionPlan,
+    TrainingSupply,
     admit_card_disjoint,
     members_of,
     plan_selection,
 )
 from effects.domain.damage_step_keywords import KEYWORDS_BY_NAME
-from effects.domain.keyword_names import normalize_keyword
+from effects.domain.keyword_names import display_name_of, normalize_keyword
 from effects.domain.provenance import ProvenanceKey, SourceTree, first_text, split_script_file
 from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.records import acting_keys
 from effects.domain.sampling import DEFAULT_KIND_MIX
+from effects.domain.shard_generation import MixedGenerationsError
 from effects.domain.split import HeldOutCards, HoldoutRule
 from effects.domain.strata import OUTPUT_STRATA
 
 if TYPE_CHECKING:
-    from effects.infrastructure.converted_trees import ConvertedTrees
+    from effects.infrastructure.converted_trees import ConvertedTrees, SourceTrees
     from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.sidecar_io import SidecarCache
 
 __all__ = [
     "DEFAULT_GAME_DISJOINT_KEYWORDS", "BuildCorpusConfig", "BuildCorpusError",
-    "Decisions", "build", "decide",
+    "Decisions", "build", "decide", "parse_keyword_list",
 ]
 
 logger = logging.getLogger(__name__)
@@ -69,17 +74,38 @@ DEFAULT_GAME_DISJOINT_KEYWORDS: tuple[str, ...] = (
 )
 
 
+def parse_keyword_list(text: str) -> tuple[str, ...]:
+    """``--game-disjoint-keywords``: a comma list, blanks dropped."""
+    return tuple(part.strip() for part in text.split(",") if part.strip())
+
+
 @dataclass(frozen=True, slots=True)
 class BuildCorpusConfig:
     """The `build-corpus` flags (root spec § Curated corpus).
 
-    ``help`` metadata is the flag's help, so a default lives here alone.
+    ``help`` metadata is the flag's help, so a default lives here alone. A
+    directory's help names its default as an operator types it, trailing
+    slash and all, which the ``Path`` the flag parses to cannot spell.
     """
 
-    records_dir: Path
-    output: Path = Path(default_paths.DEFAULT_CORPUS_OUTPUT)
+    records_dir: Path = field(
+        default=Path(default_paths.DEFAULT_RECORDS_DIR), metadata={"help": (
+            "Raw corpus root; discovery recurses "
+            f"(default: {default_paths.DEFAULT_RECORDS_DIR})"
+        )},
+    )
+    output: Path = field(
+        default=Path(default_paths.DEFAULT_CORPUS_OUTPUT), metadata={"help": (
+            f"Curated dataset directory (default: {default_paths.DEFAULT_CORPUS_OUTPUT})"
+        )},
+    )
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
-    vocab_path: str = default_paths.DEFAULT_VOCAB_PATH
+    #: A string rather than a path: the manifest records it, and a Path would
+    #: rewrite its separators on Windows.
+    vocab_path: str = field(default=default_paths.DEFAULT_VOCAB_PATH, metadata={"help": (
+        "Decides the encoding surface the rarity table's text keys are built "
+        "on (default: %(default)s)"
+    )})
     variant_scripts: str | None = None
     holdout: HoldoutRule = HoldoutRule()
     text_cap: int = field(default=200, metadata={"help": (
@@ -104,7 +130,15 @@ class BuildCorpusConfig:
         "The threshold instead for a game holding a qualifying combat for one "
         "of --game-disjoint-keywords (default: %(default)s)"
     )})
-    game_disjoint_keywords: tuple[str, ...] = DEFAULT_GAME_DISJOINT_KEYWORDS
+    game_disjoint_keywords: tuple[str, ...] = field(
+        default=DEFAULT_GAME_DISJOINT_KEYWORDS, metadata={
+            "type": parse_keyword_list,
+            "help": (
+                "Comma list of damage-step keywords raising a game's threshold "
+                f"(default: {','.join(DEFAULT_GAME_DISJOINT_KEYWORDS)})"
+            ),
+        },
+    )
     #: Read by FR-015's check; None or a missing file skips it, since nothing
     #: can expand without a table.
     keyword_definitions: Path | None = field(
@@ -123,7 +157,11 @@ class BuildCorpusConfig:
         "hash of their game id; 0 keeps one output shard per source shard "
         "(default: %(default)s)"
     )})
-    max_events: int = MAX_EVENTS_PER_RECORD
+    max_events_per_record: int = field(default=MAX_EVENTS_PER_RECORD, metadata={"help": (
+        "A record carrying more events than this is refused as a game dump "
+        "rather than an ability; 0 disables the event-flood rule "
+        "(default: %(default)s)"
+    )})
     validation_sample: int = field(default=2048, metadata={"help": (
         "Records per stratum in validation/samples/, mixture-matched; 0 writes "
         "no sample (default: %(default)s)"
@@ -175,7 +213,7 @@ class BuildCorpusConfig:
             ("--card-disjoint-text-cap", self.card_disjoint_text_cap),
             ("--training-records", self.training_records),
             ("--shard-records", self.shard_records),
-            ("--max-events-per-record", self.max_events),
+            ("--max-events-per-record", self.max_events_per_record),
             ("--validation-sample", self.validation_sample),
         ):
             if value < 0:
@@ -198,6 +236,13 @@ class BuildCorpusConfig:
 
     def mix(self) -> dict[str, float]:
         return dict(self.class_mix or DEFAULT_KIND_MIX)
+
+    @property
+    def source_trees(self) -> SourceTrees:
+        """``--cards-folder`` and ``--variant-scripts`` as one value."""
+        from effects.infrastructure.converted_trees import SourceTrees
+
+        return SourceTrees.of(self.cards_folders, self.variant_scripts)
 
     @property
     def heap_cap(self) -> int:
@@ -235,7 +280,7 @@ class Decisions:
         """What the write pass applies: these decisions, its parts in ``store``."""
         return WritePlan(
             parts_dirs={
-                stratum: str(store.parts_dir_for(stratum)) for stratum in OUTPUT_STRATA
+                stratum: store.parts_dir_for(stratum) for stratum in OUTPUT_STRATA
             },
             strata=self.strata,
             plans=self.selection.plans,
@@ -251,8 +296,6 @@ def _keyword_misfires(
     (FR-015), replacing a script with a reminder template it does not carry."""
     if definitions is None or not Path(definitions).exists():
         return []
-    from effects.domain.ability_tokenizer import display_name_of
-    from effects.domain.rule_families import KEYWORD_API_TYPE
     from effects.infrastructure.tokenizer_loading import load_keyword_definitions
 
     names = {name.lower() for name in load_keyword_definitions(Path(definitions))}
@@ -262,7 +305,7 @@ def _keyword_misfires(
             line = sidecars.line_or_none(key)
             if line is None or not line.script_text:
                 continue
-            if line.script_api_type == KEYWORD_API_TYPE:
+            if line.keyword_display_name is not None:
                 continue
             if display_name_of(line.script_text).lower() in names:
                 found.append(f"{key.script_file}: {line.script_text!r}")
@@ -276,20 +319,9 @@ def decide(
     surface: Surface,
     config: BuildCorpusConfig,
 ) -> Decisions:
-    """Fold keys to texts, split the games, and plan every record's copies.
-
-    ``survey.totals.supply`` must already be legality-resolved, as
-    :func:`_survey` leaves it.
-    """
+    """Fold keys to texts, split the games, and plan every record's copies."""
     totals = survey.totals
-    if totals.supply.heap_cap != config.heap_cap:
-        raise ValueError(
-            f"the survey kept {totals.supply.heap_cap} hashes per cell and key, "
-            f"but config.text_cap {config.text_cap} keeps {config.heap_cap}. "
-            "decide() must be run against the Survey that this same "
-            "--text-cap produced, or the copy plans it writes would disagree "
-            "with what the manifest is about to record."
-        )
+    _refuse_another_heap_cap(totals.supply, config)
 
     from effects.application.ability_text import text_for_key
 
@@ -297,18 +329,59 @@ def decide(
         # The trainer's own key-to-text join, so the rarity table keys match.
         return text_for_key(key, sidecars, surface)
 
+    key_text, text_games = _fold_keys_to_texts(totals.rarity, text_of)
+    _refuse_keyword_misfires(key_text, sidecars, config.keyword_definitions)
+    strata = _split_games(totals.games, config)
+    return Decisions(
+        selection=plan_selection(
+            members_of(totals.supply, key_text), mix=config.mix(),
+            ceiling=config.training_records, text_cap=config.text_cap,
+            reuse_cap=config.reuse_cap,
+        ),
+        strata=strata,
+        keyword_threshold_games=frozenset(
+            game for game in strata.game_disjoint
+            if config.routing.under_keyword_threshold(game)
+        ),
+        rarity={text: len(games) for text, games in text_games.items()},
+        key_text=key_text,
+        mode_counts=dict(sorted(totals.mode_counts.items())),
+    )
+
+
+def _refuse_another_heap_cap(supply: TrainingSupply, config: BuildCorpusConfig) -> None:
+    if supply.heap_cap != config.heap_cap:
+        raise ValueError(
+            f"the survey kept {supply.heap_cap} hashes per cell and key, "
+            f"but config.text_cap {config.text_cap} keeps {config.heap_cap}. "
+            "decide() must be run against the Survey that this same "
+            "--text-cap produced, or the copy plans it writes would disagree "
+            "with what the manifest is about to record."
+        )
+
+
+def _fold_keys_to_texts(
+    rarity: RarityTally, text_of: Callable[[ProvenanceKey], str | None],
+) -> tuple[dict[Keys, str], dict[str, set[int]]]:
+    """``acting keys -> ability text``, and each text's games, over every key
+    tuple the survey saw; keys with no text are left out."""
     key_text: dict[Keys, str] = {}
     text_games: dict[str, set[int]] = {}
-    for keys in totals.rarity.key_records:
+    for keys in rarity.key_records:
         text = first_text(keys, text_of)
         if text is None:
             # A runtime-only trait or an unconverted script: no text to cap
             # against, so its records are sampled with the cell's keyless ones.
             continue
         key_text[keys] = text
-        text_games.setdefault(text, set()).update(totals.rarity.key_games.get(keys, ()))
+        text_games.setdefault(text, set()).update(rarity.key_games.get(keys, ()))
+    return key_text, text_games
 
-    misfires = _keyword_misfires(key_text, sidecars, config.keyword_definitions)
+
+def _refuse_keyword_misfires(
+    key_text: dict[Keys, str], sidecars: SidecarCache, definitions: Path | None,
+) -> None:
+    misfires = _keyword_misfires(key_text, sidecars, definitions)
     if misfires:
         raise BuildCorpusError(
             f"{len(misfires)} non-keyword line(s) would expand as a keyword by "
@@ -317,27 +390,18 @@ def decide(
             "Keyword. First: " + "; ".join(misfires[:5])
         )
 
-    held_out = frozenset(totals.games.held_out)
-    game_disjoint = frozenset(totals.games.game_disjoint) - held_out
-    card_disjoint = admit_card_disjoint(
-        held_out, totals.games.held_out_text_games,
-        cap=config.card_disjoint_text_cap, seed=config.seed,
-    )
-    members, keys_of = members_of(totals.supply, key_text)
-    return Decisions(
-        selection=plan_selection(
-            members, keys_of, mix=config.mix(), ceiling=config.training_records,
-            text_cap=config.text_cap, reuse_cap=config.reuse_cap,
+
+def _split_games(games: GameTally, config: BuildCorpusConfig) -> GameStrata:
+    """The validation strata from the survey's routing, the card-disjoint one
+    capped per held-out text."""
+    held_out = frozenset(games.held_out)
+    return GameStrata(
+        card_disjoint=admit_card_disjoint(
+            held_out, games.held_out_text_games,
+            cap=config.card_disjoint_text_cap, seed=config.seed,
         ),
-        strata=GameStrata(
-            card_disjoint=card_disjoint, game_disjoint=game_disjoint, held_out=held_out,
-        ),
-        keyword_threshold_games=frozenset(
-            game for game in game_disjoint if config.routing.under_keyword_threshold(game)
-        ),
-        rarity={text: len(games) for text, games in text_games.items()},
-        key_text=key_text,
-        mode_counts=dict(sorted(totals.mode_counts.items())),
+        game_disjoint=frozenset(games.game_disjoint) - held_out,
+        held_out=held_out,
     )
 
 
@@ -350,14 +414,15 @@ def build(config: BuildCorpusConfig) -> int:
     if config.verify:
         return _verify(config, store)
 
-    trees = _converted_trees(config)
+    roots = config.source_trees.sidecar_roots()
+    trees = _converted_trees(config, roots)
     held_out = _select_holdout(config, trees)
     surface = surface_of(config.vocab_path)
     _log_holdout(config, held_out, surface)
-    _refuse_mixed_generations(Path(config.records_dir))
+    _refuse_mixed_generations(config.records_dir)
     read = ReadConfig(
-        records_dir=str(config.records_dir), sidecar_roots=trees.root_paths,
-        max_events=config.max_events, held_out=held_out, seed=config.seed,
+        records_dir=config.records_dir, sidecar_roots=roots,
+        max_events=config.max_events_per_record, held_out=held_out, seed=config.seed,
     )
     survey = _survey(config, read)
     decisions = _decide_or_refuse(config, survey, trees, surface, held_out)
@@ -366,7 +431,7 @@ def build(config: BuildCorpusConfig) -> int:
     # replaces the dataset rather than layering over it (FR-144).
     store.clear_outputs()
     written = run_write_pass(
-        [shard.name for shard in survey.shards],
+        survey.shards,
         config=WriteConfig(read=read, plan=decisions.write_plan(store)),
         workers=config.workers,
     )
@@ -402,11 +467,11 @@ def _log_holdout(config: BuildCorpusConfig, held_out: HeldOutCards, surface: Sur
 
 def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
     """``--verify``: the manifest's drift against the corpus on disk; writes nothing."""
-    from effects.infrastructure.corpus_store import current_sources
+    from effects.infrastructure.shard_io import list_shards
 
-    records_dir = Path(config.records_dir)
+    records_dir = config.records_dir
     manifest = store.load()
-    added, removed, resized = manifest.drift(current_sources(records_dir))
+    added, removed, resized = manifest.drift(list_shards(records_dir))
     for label, names in (("added", added), ("removed", removed), ("resized", resized)):
         if names:
             logger.warning(
@@ -421,11 +486,17 @@ def _verify(config: BuildCorpusConfig, store: CorpusStore) -> int:
     return 0
 
 
-def _converted_trees(config: BuildCorpusConfig) -> ConvertedTrees:
-    """The converted trees, the variant tree among them when one is named."""
-    from effects.infrastructure.converted_trees import ConvertedTrees
+def _converted_trees(config: BuildCorpusConfig, roots: dict[str, Path]) -> ConvertedTrees:
+    """The converted trees, the variant tree among them when one is named.
 
-    return ConvertedTrees.from_folders(config.cards_folders, config.variant_scripts)
+    Read through this process's own cache over ``roots``, the one every
+    :class:`WorkerContext` here reads too: the holdout, the fold of keys to
+    texts, the validation samples and an in-process pass share one cache
+    rather than each reading every sidecar again.
+    """
+    from effects.infrastructure.converted_trees import process_sidecars
+
+    return config.source_trees.converted(sidecars=process_sidecars(roots))
 
 
 def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOutCards:
@@ -450,11 +521,7 @@ def _select_holdout(config: BuildCorpusConfig, trees: ConvertedTrees) -> HeldOut
 
 def _refuse_mixed_generations(records_dir: Path) -> None:
     """Before any record is read (FR-033)."""
-    from effects.infrastructure.shard_io import (
-        MixedGenerationsError,
-        iter_shards,
-        refuse_mixed_generations,
-    )
+    from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
 
     try:
         refuse_mixed_generations(iter_shards(records_dir))
@@ -463,9 +530,9 @@ def _refuse_mixed_generations(records_dir: Path) -> None:
 
 
 def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
-    """The parallel survey, its supply's legality cells folded into families."""
+    """The parallel survey, logged."""
     survey = run_survey(
-        Path(config.records_dir),
+        config.records_dir,
         config=SurveyConfig(
             read=read, heap_cap=config.heap_cap, routing=config.routing,
             game_disjoint_keywords=tuple(
@@ -485,9 +552,7 @@ def _survey(config: BuildCorpusConfig, read: ReadConfig) -> Survey:
         sum(supply.keyed.values()) + sum(supply.keyless.values()),
         sum(totals.held_out_text_dropped.values()),
     )
-    return dataclasses.replace(survey, totals=dataclasses.replace(
-        totals, supply=supply.resolved(totals.mode_counts),
-    ))
+    return survey
 
 
 def _decide_or_refuse(
@@ -542,8 +607,6 @@ def _repack_outputs(
     A part is one source shard, so unrepacked the trainer's per-shard step
     budget would be uneven and a shard's batches correlated by run.
     """
-    import shutil
-
     from effects.infrastructure.shard_io import iter_shards, repack_shards
 
     for stratum in OUTPUT_STRATA:

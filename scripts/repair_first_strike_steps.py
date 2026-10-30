@@ -159,10 +159,7 @@ def repair_shard(path: Path, keywords_of, *, write: bool) -> Counter:
 
     counts: Counter = Counter()
     lines: list[str] = []
-    for line in iter_shard_lines(path):
-        text = line.rstrip("\n")
-        if not text.strip():
-            continue
+    for text in iter_shard_lines(path):
         raw = parse_record_line(text)
         outcome, record = repair(raw, keywords_of)
         counts[outcome] += is_first_strike_step(raw)
@@ -192,13 +189,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     from effects.domain.damage_step_keywords import KeywordResolver
-    from effects.infrastructure.sidecar_io import SidecarCache
+    from effects.infrastructure.converted_trees import SourceTrees
 
     folders = args.cards_folder or [
         Path("output/cardsfolder"), Path("output/tokenscripts"),
     ]
     keywords_of = ResolvedKeywords(KeywordResolver(
-        SidecarCache.from_folders(folders, args.variant_scripts),
+        SourceTrees.of(folders, args.variant_scripts).sidecar_cache(),
     ))
     shards = sorted(args.corpus.rglob("*.jsonl.gz"))
     print(f"{len(shards)} shards under {args.corpus}", flush=True)

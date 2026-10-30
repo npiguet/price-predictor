@@ -23,6 +23,7 @@ from effects.domain.split import (
 )
 from effects.domain.text_holdout import HoldoutUnit
 from tests.unit.effects.builders import (
+    held_out_cards,
     make_entity,
     make_record,
     make_snapshot,
@@ -33,10 +34,7 @@ from tests.unit.effects.builders import (
 
 class TestRecordNamesHeldOutCard:
     def _held(self) -> HeldOutCards:
-        return HeldOutCards(
-            names=frozenset({"Serra Angel"}),
-            script_files=frozenset({"cardsfolder/s/serra_angel.txt"}),
-        )
+        return held_out_cards({"Serra Angel"}, {"cardsfolder/s/serra_angel.txt"})
 
     def test_a_record_whose_context_holds_the_card_names_it(self):
         record = record_on_board("g1", entities=(named_entity("Serra Angel"),))
@@ -116,10 +114,7 @@ def test_a_corpus_shaped_holdout_carries_its_texts_too() -> None:
     from tests.unit.effects.domain.test_corpus_manifest import manifest
 
     built = manifest(held_out_texts=("SP$ DealDamage | NumDmg$ 3",))
-    held = HeldOutCards(
-        names=frozenset(built.held_out_cards), script_files=frozenset(),
-        texts=frozenset(built.held_out_texts),
-    )
+    held = held_out_cards(built.held_out_cards, texts=built.held_out_texts)
 
     assert held.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
 
@@ -138,26 +133,20 @@ class TestTheConvertedToRuntimeNameBoundary:
     """
 
     def test_a_printed_case_record_matches_a_converted_case_holdout(self) -> None:
-        held = HeldOutCards(
-            names=frozenset({"soul echo"}), script_files=frozenset(),
-        )
+        held = held_out_cards({"soul echo"})
         record = record_on_board("g1", entities=(named_entity("Soul Echo"),))
 
         assert record_names_held_out_card(record, held) is True
 
     def test_a_card_outside_the_holdout_still_does_not_match(self) -> None:
-        held = HeldOutCards(
-            names=frozenset({"soul echo"}), script_files=frozenset(),
-        )
+        held = held_out_cards({"soul echo"})
         record = record_on_board("g1", entities=(named_entity("Grizzly Bears"),))
 
         assert record_names_held_out_card(record, held) is False
 
     def test_accented_names_fold_the_same_way_java_does(self) -> None:
         """`toLowerCase(Locale.ROOT)` on the Java side; these must agree."""
-        held = HeldOutCards(
-            names=frozenset({"lim-dûl's vault"}), script_files=frozenset(),
-        )
+        held = held_out_cards({"lim-dûl's vault"})
         record = record_on_board("g1", entities=(named_entity("Lim-Dûl's Vault"),))
 
         assert record_names_held_out_card(record, held) is True
@@ -243,7 +232,5 @@ def test_a_held_out_token_on_the_board_names_its_game_held_out():
     record = make_record(state=make_snapshot(entities=(
         make_entity("E1", "Goblin Token", printed=(token,)),
     )))
-    held = HeldOutCards(
-        names=frozenset(), script_files=frozenset({"tokenscripts/goblin.txt"}),
-    )
+    held = held_out_cards(script_files={"tokenscripts/goblin.txt"})
     assert record_names_held_out_card(record, held)

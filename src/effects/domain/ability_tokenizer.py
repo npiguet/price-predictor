@@ -23,6 +23,7 @@ from effects.domain.keyword_formatting import (
     java_format,
     strip_specifiers,
 )
+from effects.domain.keyword_names import display_name_of
 from effects.domain.provenance import Role, RoleSpan
 from effects.domain.recorded_version import recorded_version
 from effects.domain.script_text import CHAIN_KEYS, SEG
@@ -109,16 +110,6 @@ def withheld_keyword_tokens(withheld: str | None) -> frozenset[str]:
     return frozenset({keyword_token(withheld)}) if withheld else frozenset()
 
 
-_HOST_BODIED_TOKENS: frozenset[str] = frozenset(
-    keyword_token(name) for name in HOST_BODIED_KEYWORDS
-)
-
-
-def display_name_of(line_text: str) -> str:
-    """A keyword line's display name: its text before the first colon (FR-013)."""
-    return line_text.split(":", 1)[0].strip()
-
-
 @dataclass(frozen=True, slots=True)
 class KeywordLine:
     """The keyword a line names and its values.
@@ -130,6 +121,66 @@ class KeywordLine:
     name: str
     details: str
     name_end: int
+
+
+def bare_reminder(template: str | None) -> str:
+    """A template with every placeholder removed, since a bare keyword token
+    carries no values to fill them (FR-017)."""
+    if not template:
+        return ""
+    return strip_specifiers(java_format(template, []))
+
+
+class KeywordExpander:
+    """Which keywords expand, and to what text (FR-013, FR-014, FR-016, FR-017).
+
+    Both surfaces expand to the reminder template: the captured script holds
+    only root lines, never their effect (FR-020). Without definitions no
+    keyword expands.
+    """
+
+    def __init__(self, definitions: Mapping[str, KeywordDefinition] | None = None) -> None:
+        self._definitions = definitions or {}
+        self._name_by_token = {keyword_token(name): name for name in self._definitions}
+        self._name_by_display = {name.lower(): name for name in self._definitions}
+
+    def line_of(self, text: str) -> KeywordLine | None:
+        """The keyword a line names by its display name, case-insensitively,
+        or None. ``build-corpus`` audits that it fires only on ``Keyword``
+        lines (FR-015)."""
+        if not self._name_by_display:
+            return None
+        name = self._name_by_display.get(display_name_of(text).lower())
+        if name is None:
+            return None
+        colon = text.find(":")
+        details = text[colon + 1:] if colon >= 0 else ""
+        return KeywordLine(
+            name=name, details=details,
+            name_end=colon if colon >= 0 else len(text),
+        )
+
+    def name_of_token(self, token_text: str) -> str | None:
+        """The display name a keyword token spells, or None."""
+        return self._name_by_token.get(token_text)
+
+    def expands(self, name: str) -> bool:
+        """Whether a keyword, by display name, can expand, as a line or as a
+        token: it has a reminder template, and its body is not printed on the
+        host card (FR-016)."""
+        if name.lower() in HOST_BODIED_KEYWORDS:
+            return False
+        return bool(self._definitions[name].reminder_template)
+
+    def line_text(self, name: str, details: str = "") -> str:
+        """The reminder text one keyword instance expands to, ``details``
+        formatted by the definition's ``formatter``, specifiers removed."""
+        definition = self._definitions[name]
+        return format_reminder(definition.formatter, definition.reminder_template or "", details)
+
+    def bare_text(self, name: str) -> str:
+        """The reminder text a bare keyword token expands to (FR-014)."""
+        return bare_reminder(self._definitions[name].reminder_template)
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,15 +224,8 @@ class AbilityTokenizer:
             raise ValueError(f"unknown surface {surface!r}")
         self._vocab = vocab
         self._reverse = {i: t for t, i in vocab.items()}
-        self._definitions = keyword_definitions or {}
+        self.keywords = KeywordExpander(keyword_definitions)
         self.surface = surface
-        self._definition_by_token = {
-            keyword_token(name): definition
-            for name, definition in self._definitions.items()
-        }
-        self._name_by_display = {
-            name.lower(): name for name in self._definitions
-        }
         # Indexed by first word, longest first within a bucket, so "double
         # strike" is merged before "strike".
         multi_word = sorted(
@@ -197,6 +241,10 @@ class AbilityTokenizer:
         self._tokenize_cache: dict[
             tuple[str, tuple[RoleSpan, ...]], tuple[Token, ...]
         ] = {}
+        #: ``(display name, details or None for a bare token) -> tokens``,
+        #: before the role is applied: the batcher expands the same keywords
+        #: every batch.
+        self._expansion_cache: dict[tuple[str, str | None], tuple[Token, ...]] = {}
 
     # ── ids ─────────────────────────────────────────────────────────────
 
@@ -369,35 +417,14 @@ class AbilityTokenizer:
 
     # ── keyword lines (FR-013, FR-016) ──────────────────────────────────
 
-    def keyword_line_of(self, text: str) -> KeywordLine | None:
-        """The keyword a line names by its display name, case-insensitively,
-        or None. ``build-corpus`` audits that it fires only on ``Keyword``
-        lines (FR-015)."""
-        if not self._name_by_display:
-            return None
-        name = self._name_by_display.get(display_name_of(text).lower())
-        if name is None:
-            return None
-        colon = text.find(":")
-        details = text[colon + 1:] if colon >= 0 else ""
-        return KeywordLine(
-            name=name, details=details,
-            name_end=colon if colon >= 0 else len(text),
-        )
-
     def _tag_keyword_line(self, tokens: list[Token], text: str) -> list[Token]:
         if not tokens:
             return tokens
-        line = self.keyword_line_of(text)
+        line = self.keywords.line_of(text)
         if line is None:
             return tokens
         tokens[0] = replace(tokens[0], keyword_line=line)
         return tokens
-
-    def _line_expandable(self, line: KeywordLine) -> bool:
-        if line.name.lower() in HOST_BODIED_KEYWORDS:
-            return False
-        return bool(self._definition_text(self._definitions[line.name]))
 
     # ── keyword expansion (FR-070, FR-012–FR-018) ───────────────────────
 
@@ -406,12 +433,8 @@ class AbilityTokenizer:
         if token.expanded_from is not None:
             # Never recursively, which would bury the line under definitions.
             return False
-        if token.text in _HOST_BODIED_TOKENS:
-            return False
-        definition = self._definition_by_token.get(token.text)
-        return definition is not None and bool(
-            self._definition_text(definition)
-        )
+        name = self.keywords.name_of_token(token.text)
+        return name is not None and self.keywords.expands(name)
 
     def must_expand(self, token: Token) -> bool:
         """Keywords the vocabulary does not know are always expanded, so a set
@@ -485,7 +508,7 @@ class AbilityTokenizer:
         rng: random.Random,
         forced: frozenset[str] = frozenset(),
     ) -> list[Token]:
-        if not self._line_expandable(line):
+        if not self.keywords.expands(line.name):
             return list(tokens)
         name_tokens = [
             t for t in tokens if t.start is not None and t.start < line.name_end
@@ -496,44 +519,37 @@ class AbilityTokenizer:
         form = keyword_token(line.name)
         if not (unknown or form in forced or rng.random() < probability):
             return list(tokens)
-        text = self.expansion_text(line.name, line.details)
-        return self._as_expansion(text, role=tokens[0].role, keyword=form)
-
-    def expansion_text(self, name: str, details: str = "") -> str:
-        """The reminder text one keyword instance expands to, ``details``
-        formatted by the definition's ``formatter``, specifiers removed."""
-        definition = self._definitions[name]
-        template = self._definition_text(definition) or ""
-        return format_reminder(definition.formatter, template, details)
+        return self._as_expansion(line.name, line.details, role=tokens[0].role)
 
     def _expansion(self, token: Token) -> list[Token]:
-        definition = self._definition_by_token[token.text]
-        text = self._instantiate(self._definition_text(definition))
-        return self._as_expansion(text, role=token.role, keyword=token.text)
+        name = self.keywords.name_of_token(token.text)
+        if name is None:
+            raise ValueError(f"{token.text!r} names no keyword definition")
+        return self._as_expansion(name, None, role=token.role)
 
     def _as_expansion(
-        self, text: str, *, role: Role | None, keyword: str,
+        self, name: str, details: str | None, *, role: Role | None,
     ) -> list[Token]:
-        expanded = self._merge_multi_word(self._split_with_offsets(text))
-        return [
-            replace(part, start=None, end=None, role=role,
-                    expanded_from=keyword)
-            for part in expanded
-        ]
-
-    @staticmethod
-    def _definition_text(definition: KeywordDefinition) -> str | None:
-        """The reminder template, on both surfaces; the captured script holds
-        only root lines, never their effect (FR-020)."""
-        return definition.reminder_template
-
-    @staticmethod
-    def _instantiate(template: str | None) -> str:
-        """A template with every placeholder removed, since a bare keyword
-        token carries no values to fill them (FR-017)."""
-        if not template:
-            return ""
-        return strip_specifiers(java_format(template, []))
+        """The tokens keyword ``name`` expands to: filled with ``details`` on a
+        keyword line, its placeholders removed for a bare token (None)."""
+        key = (name, details)
+        expanded = self._expansion_cache.get(key)
+        if expanded is None:
+            text = (
+                self.keywords.bare_text(name) if details is None
+                else self.keywords.line_text(name, details)
+            )
+            keyword = keyword_token(name)
+            expanded = tuple(
+                replace(part, start=None, end=None, expanded_from=keyword)
+                for part in self._merge_multi_word(self._split_with_offsets(text))
+            )
+            if len(self._expansion_cache) >= self._TOKENIZE_CACHE_CAP:
+                self._expansion_cache.clear()
+            self._expansion_cache[key] = expanded
+        if role is None:
+            return list(expanded)
+        return [replace(part, role=role) for part in expanded]
 
 
 def camel_parts(word: str) -> list[tuple[int, int]]:

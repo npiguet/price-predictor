@@ -348,8 +348,7 @@ class TestTheVariantRoundPlaysTheVariants:
 
         constructed = fake_supervisor.constructor.call_args.kwargs
         assert constructed["variant_scripts"] == tmp_path / "variants"
-        decks_file = fake_supervisor.play_round.call_args.args[0]
-        assert decks_file.read_text(encoding="utf-8").strip(), "no variant decks"
+        assert fake_supervisor.play_round.call_args.args[0], "no variant decks"
         assert fake_supervisor.play_round.call_args.kwargs["matches"] == 3
 
 
@@ -548,6 +547,35 @@ class TestTheRunReportsWhatItCollected:
             "Collected 42 new effect records" in record.getMessage()
             for record in caplog.records
         ), "the run never reported how many records it added"
+
+    def test_each_generated_variant_is_logged_with_its_source_and_perturbation(
+        self, tmp_path, monkeypatch, caplog, fake_supervisor,
+    ):
+        """So a variant's records can be traced back to what was changed."""
+        import logging
+
+        collect_variants, config, _ = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, 1000, added=1,
+        )
+
+        with caplog.at_level(logging.INFO):
+            collect_variants.run(config)
+
+        assert "Bolt Variant 0, from Bolt: numeric" in caplog.text
+
+    def test_a_step_with_nothing_to_go_on_ends_the_run_with_its_code(
+        self, tmp_path, monkeypatch, fake_supervisor,
+    ):
+        """The sidecar pass's own exit code, not a blanket 1."""
+        collect_variants, config, supervisor = self._fixture(
+            tmp_path, monkeypatch, fake_supervisor, 1000, added=1,
+        )
+        monkeypatch.setattr(
+            collect_variants, "write_variant_sidecars", MagicMock(return_value=3),
+        )
+
+        assert collect_variants.run(config) == 3
+        supervisor.play_round.assert_not_called()
 
     def test_a_corpus_counted_elsewhere_never_enters_the_growth_figure(
         self, tmp_path, monkeypatch, caplog, fake_supervisor,

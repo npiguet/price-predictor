@@ -20,14 +20,15 @@ from effects.application.encode_abilities import (
 )
 from effects.domain.ability_cache_layout import ARRAY_KEY, cache_path_for
 from effects.domain.ability_encoder import AbilityEncoderConfig
+from effects.domain.baselines import Baseline
 from effects.domain.effect_model import EffectModel, EffectModelConfig
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+from effects.domain.split_provenance import SplitProvenance
 from effects.infrastructure.ability_cache_store import AbilityCacheStore
 from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
     EffectModelStore,
     HashMismatchError,
-    SplitProvenance,
     content_hash,
 )
 from effects.infrastructure.sidecar_io import sidecar_path_for
@@ -114,14 +115,14 @@ class TestRowAlignment:
     def test_a_source_gets_one_row_per_sidecar_line(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = AbilityCacheStore(config.output_root, variant="taxonomy")
+        store = AbilityCacheStore(config.output_root, variant=Baseline.TAXONOMY)
         assert store.read("cardsfolder/s/serra_angel.txt").shape == (3, E_DIM)
         assert store.read("tokenscripts/soldier.txt").shape == (1, E_DIM)
 
     def test_rows_are_float32(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = AbilityCacheStore(config.output_root, variant="taxonomy")
+        store = AbilityCacheStore(config.output_root, variant=Baseline.TAXONOMY)
         assert store.read("cardsfolder/s/serra_angel.txt").dtype == np.float32
 
 
@@ -139,11 +140,11 @@ class TestTreeSubtrees:
         run(config)
         card = cache_path_for(
             "cardsfolder/s/serra_angel.txt", root=config.output_root,
-            variant="taxonomy",
+            variant=Baseline.TAXONOMY,
         )
         token = cache_path_for(
             "tokenscripts/soldier.txt", root=config.output_root,
-            variant="taxonomy",
+            variant=Baseline.TAXONOMY,
         )
         assert card.parent.name == "s"
         assert token.parent.name == "tokenscripts"
@@ -170,27 +171,27 @@ class TestVariantIsolation:
         assert not (root / "cardsfolder" / "s" / "serra_angel.npz").exists()
 
     def test_the_variant_resolves_its_own_checkpoint(self, tmp_path):
-        config = EncodeAbilitiesConfig(variant="no-state")
+        config = EncodeAbilitiesConfig(variant=Baseline.NO_STATE)
         assert config.resolved_checkpoint().parent.name == "no-state"
 
     def test_full_resolves_the_shipping_checkpoint(self):
-        config = EncodeAbilitiesConfig(variant="full")
+        config = EncodeAbilitiesConfig(variant=Baseline.FULL)
         assert config.resolved_checkpoint().parent.name == "effect-model"
 
     def test_an_explicit_checkpoint_overrides(self, tmp_path):
         chosen = tmp_path / "elsewhere.pt"
         assert EncodeAbilitiesConfig(
-            variant="no-state", checkpoint=chosen,
+            variant=Baseline.NO_STATE, checkpoint=chosen,
         ).resolved_checkpoint() == chosen
 
     def test_clean_removes_only_this_variants_files(self, corpus, tmp_path):
         root = tmp_path / "abilities"
-        run(_config(corpus, tmp_path, variant="taxonomy", output_root=root))
+        run(_config(corpus, tmp_path, variant=Baseline.TAXONOMY, output_root=root))
         shipping = root / "cardsfolder" / "s" / "serra_angel.npz"
         shipping.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(shipping, **{ARRAY_KEY: np.zeros((3, E_DIM))})
 
-        removed = AbilityCacheStore(root, variant="taxonomy").clean()
+        removed = AbilityCacheStore(root, variant=Baseline.TAXONOMY).clean()
         assert removed == 2
         assert shipping.exists()
 
@@ -198,19 +199,19 @@ class TestVariantIsolation:
         self, corpus, tmp_path,
     ):
         root = tmp_path / "abilities"
-        run(_config(corpus, tmp_path, variant="taxonomy", output_root=root))
+        run(_config(corpus, tmp_path, variant=Baseline.TAXONOMY, output_root=root))
         shipping = root / "cardsfolder" / "s" / "serra_angel.npz"
         shipping.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(shipping, **{ARRAY_KEY: np.zeros((3, E_DIM))})
 
-        assert AbilityCacheStore(root, variant="full").clean() == 1
+        assert AbilityCacheStore(root, variant=Baseline.FULL).clean() == 1
         assert (root / "cardsfolder" / "s" / "serra_angel.taxonomy.npz").exists()
 
 
 class TestReadingTheCache:
     def test_a_variant_iterates_only_its_own_files(self, corpus, tmp_path):
         root = tmp_path / "abilities"
-        run(_config(corpus, tmp_path, variant="taxonomy", output_root=root))
+        run(_config(corpus, tmp_path, variant=Baseline.TAXONOMY, output_root=root))
         shipping = root / "cardsfolder" / "s" / "serra_angel.npz"
         np.savez_compressed(shipping, **{ARRAY_KEY: np.zeros((5, E_DIM))})
 
@@ -228,7 +229,7 @@ class TestIdempotence:
     def test_a_second_run_produces_the_same_rows(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
         run(config)
-        store = AbilityCacheStore(config.output_root, variant="taxonomy")
+        store = AbilityCacheStore(config.output_root, variant=Baseline.TAXONOMY)
         first = store.read("cardsfolder/s/serra_angel.txt").copy()
         run(config)
         second = store.read("cardsfolder/s/serra_angel.txt")
@@ -346,21 +347,21 @@ class TestTheRealEncoder:
             cards_folders=(cards,),
             checkpoint=store.latest_path(),
             output_root=tmp_path / "abilities",
-            variant="full",
+            variant=Baseline.FULL,
         )
 
     def test_the_shipping_variant_writes_a_cache(self, trained):
         summary = run(trained)
         assert summary.sources == 1
         assert summary.rows == 3
-        store = AbilityCacheStore(trained.output_root, variant="full")
+        store = AbilityCacheStore(trained.output_root, variant=Baseline.FULL)
         assert store.read("cardsfolder/s/serra_angel.txt").shape == (3, E_DIM)
 
     def test_the_rows_are_not_all_the_same(self, trained):
         """A cache of one repeated vector would pass every shape check and
         carry no information."""
         run(trained)
-        rows = AbilityCacheStore(trained.output_root, variant="full").read(
+        rows = AbilityCacheStore(trained.output_root, variant=Baseline.FULL).read(
             "cardsfolder/s/serra_angel.txt"
         )
         assert not np.allclose(rows[0], rows[1]) or not np.allclose(
@@ -420,10 +421,10 @@ class TestTheWithheldKeyword:
     with the token dropped, never a token training never updated (FR-070)."""
 
     def test_the_runner_encodes_the_keyword_as_its_expansion(self):
+        from effects.application.ability_encoder_runner import AbilityEncoderRunner
         from effects.domain.ability_encoder import AbilityEncoder
         from effects.domain.ability_tokenizer import AbilityTokenizer
         from effects.domain.keyword_definitions import KeywordDefinition
-        from effects.infrastructure.ability_encoder_runner import AbilityEncoderRunner
 
         words = ["[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "flying", "reach",
                  "cant", "be", "blocked", "except", "by", "creatures", "with", "or"]

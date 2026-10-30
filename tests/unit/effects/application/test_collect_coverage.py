@@ -16,6 +16,7 @@ from effects.application.collect_coverage import (
     CollectCoverageConfig,
     residues,
 )
+from effects.application.collector_common import DeckHoldout
 from effects.domain.coverage import (
     CardCoverage,
     ConsultVerdict,
@@ -29,8 +30,11 @@ from effects.domain.records import (
 )
 from tests.unit.effects.builders import (
     fresh_interpreter_env,
+    held_out_cards,
+    make_entity,
+    write_plain_shard,
 )
-from tests.unit.effects.domain.test_coverage import _entity, _record
+from tests.unit.effects.domain.test_coverage import _record
 
 
 class TestRetirement:
@@ -200,12 +204,10 @@ class TestExclusionsWithoutACheckpoint:
     """
 
     def test_the_depletion_list_is_read_and_folded(self, tmp_path) -> None:
-        from effects.application.collector_common import HoldoutSource
-
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\nLim-Dûl's Vault\n", encoding="utf-8")
 
-        excluded = HoldoutSource(exclude_cards=listed).exclusions()
+        excluded = DeckHoldout(exclude_cards=listed).exclusions()
 
         assert excluded == frozenset({"soul echo", "lim-dûl's vault"}), (
             "the file carries Forge's printed case; coverage decks are built "
@@ -213,19 +215,15 @@ class TestExclusionsWithoutACheckpoint:
         )
 
     def test_neither_source_means_no_exclusions(self) -> None:
-        from effects.application.collector_common import HoldoutSource
-
-        assert HoldoutSource().exclusions() == frozenset()
+        assert DeckHoldout().exclusions() == frozenset()
 
     def test_both_sources_at_once_is_refused(self, tmp_path) -> None:
         """Two spellings of the same holdout is the bug this feature just had."""
-        from effects.application.collector_common import HoldoutSource
-
         listed = tmp_path / "holdout-cards.txt"
         listed.write_text("Soul Echo\n", encoding="utf-8")
 
         with pytest.raises(ValueError, match="one source"):
-            HoldoutSource(split_from=tmp_path / "latest.pt", exclude_cards=listed)
+            DeckHoldout(split_from=tmp_path / "latest.pt", exclude_cards=listed)
 
     def test_both_sources_on_a_config_are_refused_when_it_runs(self, tmp_path) -> None:
         """A config built in code, not from flags, still names one holdout."""
@@ -242,7 +240,9 @@ class TestExclusionsWithoutACheckpoint:
         with pytest.raises(ValueError, match="one source"):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 cards_folders=(cards,), effect_records=tmp_path / "records",
-                split_from=tmp_path / "latest.pt", exclude_cards=listed,
+                deck_holdout=DeckHoldout(
+                    split_from=tmp_path / "latest.pt", exclude_cards=listed,
+                ),
             ))
 
 
@@ -286,21 +286,17 @@ class TestTheRoundPlaysTheComputedDecks:
         # the real counter learns anything: it reads shards it has not seen and
         # adds to a running total. Round 1 produces nothing, round 2 nine "aa"
         # records, round 3 the tenth.
-        from effects.infrastructure.record_codec import format_record_line
 
         records_dir = tmp_path / "records"
         records_dir.mkdir()
         produced = iter([0, 9, 1])
 
-        def _play(_decks_file, *, matches):
+        def _play(_decks, _decks_file, *, label, matches):
             count = next(produced, 0)
             if not count:
                 return
-            line = format_record_line(
-                _record([_entity("E1", "aa")], source="E1")
-            )
-            shard = records_dir / f"run.0-{matches}{count}.jsonl"
-            shard.write_text("\n".join([line] * count) + "\n", encoding="utf-8")
+            record = _record([make_entity("E1", "aa")], source="E1")
+            write_plain_shard(records_dir, f"{matches}{count}", [record] * count)
 
         supervisor.play_round.side_effect = _play
 
@@ -314,13 +310,12 @@ class TestTheRoundPlaysTheComputedDecks:
                 )
             )
 
-        decks_file = supervisor.play_round.call_args.args[0]
-        rows = decks_file.read_text(encoding="utf-8").splitlines()
-        assert rows, "no decks were written"
-        assert all(row.split(";")[2].count("|") == 39 for row in rows)
+        decks = supervisor.play_round.call_args.args[0]
+        assert decks, "no decks were played"
+        assert all(len(deck) == 40 for deck in decks)
         assert supervisor.play_round.call_args.kwargs["matches"] == 150
 
-        flat = [name for row in rows for name in row.split(";")[2].split("|")]
+        flat = [name for deck in decks for name in deck]
         assert flat.count("bb") > flat.count("aa") * 3, (
             "bb is 10 records short of target and aa is only 1 short after "
             "the round-2 recount, so the final round's decks must favour bb "
@@ -493,11 +488,8 @@ class TestOnlyDeckedCardsCountAStalledRound:
                 no_progress_rounds=1,
             ))
 
-        decks_file = supervisor.play_round.call_args.args[0]
         decked_names = {
-            name
-            for row in decks_file.read_text(encoding="utf-8").splitlines()
-            for name in row.split(";")[2].split("|")
+            name for deck in supervisor.play_round.call_args.args[0] for name in deck
         }
         assert seen, "retire_stalled was never called"
         assert len(seen[0] & set(names)) < len(names), (
@@ -523,26 +515,18 @@ class TestIncrementalCounting:
     A counted shard is therefore final.
     """
 
-    def _shard(self, directory: Path, name: str, cards: list[str]) -> Path:
+    def _shard(self, directory: Path, lifetime: str, cards: list[str]) -> Path:
         """One shard whose every record qualifies for the named card."""
-        from effects.infrastructure.record_codec import format_record_line
-
-        directory.mkdir(parents=True, exist_ok=True)
-        lines = [
-            format_record_line(
-                _record([_entity(f"E-{card}", card)], source=f"E-{card}")
-            )
+        return write_plain_shard(directory, lifetime, [
+            _record([make_entity(f"E-{card}", card)], source=f"E-{card}")
             for card in cards
-        ]
-        path = directory / f"{name}.jsonl"
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return path
+        ], run_id="a")
 
     def test_the_first_pass_counts_every_shard(self, tmp_path) -> None:
         from effects.application.collect_coverage import CoverageCounter
 
-        self._shard(tmp_path, "a.0-x", ["alpha", "beta"])
-        self._shard(tmp_path, "a.0-y", ["alpha"])
+        self._shard(tmp_path, "x", ["alpha", "beta"])
+        self._shard(tmp_path, "y", ["alpha"])
         coverage = {n: CardCoverage(n) for n in ("alpha", "beta")}
 
         CoverageCounter().update(coverage, tmp_path)
@@ -554,7 +538,7 @@ class TestIncrementalCounting:
         """The bug this replaces: every round re-counted the whole corpus."""
         from effects.application.collect_coverage import CoverageCounter
 
-        self._shard(tmp_path, "a.0-x", ["alpha"])
+        self._shard(tmp_path, "x", ["alpha"])
         coverage = {"alpha": CardCoverage("alpha")}
         counter = CoverageCounter()
 
@@ -566,12 +550,12 @@ class TestIncrementalCounting:
     def test_a_new_shard_adds_to_the_running_total(self, tmp_path) -> None:
         from effects.application.collect_coverage import CoverageCounter
 
-        self._shard(tmp_path, "a.0-x", ["alpha"])
+        self._shard(tmp_path, "x", ["alpha"])
         coverage = {"alpha": CardCoverage("alpha")}
         counter = CoverageCounter()
         counter.update(coverage, tmp_path)
 
-        self._shard(tmp_path, "a.0-y", ["alpha", "alpha"])
+        self._shard(tmp_path, "y", ["alpha", "alpha"])
         counter.update(coverage, tmp_path)
 
         assert coverage["alpha"].records == 3
@@ -580,7 +564,7 @@ class TestIncrementalCounting:
         """The operator needs to see the round cost fall, not infer it."""
         from effects.application.collect_coverage import CoverageCounter
 
-        self._shard(tmp_path, "a.0-x", ["alpha"])
+        self._shard(tmp_path, "x", ["alpha"])
         counter = CoverageCounter()
         coverage = {"alpha": CardCoverage("alpha")}
 
@@ -605,15 +589,8 @@ class TestCountingCrossesTheNameBoundary:
         self, tmp_path,
     ) -> None:
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_codec import format_record_line
 
-        shard = tmp_path / "run.0-x.jsonl"
-        shard.write_text(
-            format_record_line(
-                _record([_entity("E1", "Soul Echo")], source="E1")
-            ) + "\n",
-            encoding="utf-8",
-        )
+        write_plain_shard(tmp_path, "x", [_record([make_entity("E1", "Soul Echo")], source="E1")])
         coverage = {"soul echo": CardCoverage("soul echo")}
 
         CoverageCounter().update(coverage, tmp_path)
@@ -624,15 +601,8 @@ class TestCountingCrossesTheNameBoundary:
         self, tmp_path,
     ) -> None:
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_codec import format_record_line
 
-        shard = tmp_path / "run.0-x.jsonl"
-        shard.write_text(
-            format_record_line(
-                _record([_entity("E1", "Some Token")], source="E1")
-            ) + "\n",
-            encoding="utf-8",
-        )
+        write_plain_shard(tmp_path, "x", [_record([make_entity("E1", "Some Token")], source="E1")])
         coverage = {"soul echo": CardCoverage("soul echo")}
 
         CoverageCounter().update(coverage, tmp_path)
@@ -650,14 +620,9 @@ class TestCountingReportsProgress:
     """
 
     def _shards(self, directory: Path, count: int) -> None:
-        from effects.infrastructure.record_codec import format_record_line
-
-        directory.mkdir(parents=True, exist_ok=True)
-        line = format_record_line(_record([_entity("E1", "aa")], source="E1"))
+        record = _record([make_entity("E1", "aa")], source="E1")
         for n in range(count):
-            (directory / f"run.0-{n:03d}.jsonl").write_text(
-                line + "\n", encoding="utf-8",
-            )
+            write_plain_shard(directory, f"{n:03d}", [record])
 
     def test_it_reports_progress_while_reading(self, tmp_path, caplog) -> None:
         from effects.application.collect_coverage import CoverageCounter
@@ -735,16 +700,9 @@ class TestParallelCounting:
     """
 
     def _shards(self, directory: Path, spec: dict[str, int]) -> None:
-        from effects.infrastructure.record_codec import format_record_line
-
-        directory.mkdir(parents=True, exist_ok=True)
         for n, (card, count) in enumerate(spec.items()):
-            line = format_record_line(
-                _record([_entity("E1", card)], source="E1")
-            )
-            (directory / f"run.0-{n:03d}.jsonl").write_text(
-                "\n".join([line] * count) + "\n", encoding="utf-8",
-            )
+            record = _record([make_entity("E1", card)], source="E1")
+            write_plain_shard(directory, f"{n:03d}", [record] * count)
 
     def test_parallel_and_serial_agree(self, tmp_path) -> None:
         from effects.application.collect_coverage import CoverageCounter
@@ -764,14 +722,10 @@ class TestParallelCounting:
     def test_a_card_split_across_shards_sums(self, tmp_path) -> None:
         """The reduce step, which is where a parallel count goes wrong."""
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_codec import format_record_line
 
-        tmp_path.mkdir(parents=True, exist_ok=True)
-        line = format_record_line(_record([_entity("E1", "Soul Echo")], source="E1"))
+        record = _record([make_entity("E1", "Soul Echo")], source="E1")
         for n in range(6):
-            (tmp_path / f"run.0-{n}.jsonl").write_text(
-                "\n".join([line] * 5) + "\n", encoding="utf-8",
-            )
+            write_plain_shard(tmp_path, str(n), [record] * 5)
 
         coverage = {"soul echo": CardCoverage("soul echo")}
         CoverageCounter().update(coverage, tmp_path, workers=3)
@@ -894,7 +848,7 @@ class TestHeldOutTextUnit:
     def test_a_process_reads_each_sidecar_once_across_shards(self, monkeypatch):
         """A sidecar cache per shard re-read every sidecar the shard named."""
         from effects.application import collect_coverage
-        from effects.infrastructure import sidecar_io
+        from effects.infrastructure import converted_trees, sidecar_io
 
         reads: list[Path] = []
         real_read = sidecar_io.read_sidecar
@@ -904,7 +858,7 @@ class TestHeldOutTextUnit:
             return real_read(path)
 
         monkeypatch.setattr(sidecar_io, "read_sidecar", counting_read)
-        collect_coverage._sidecars.cache_clear()
+        converted_trees._process_sidecars.cache_clear()
         roots = {
             "cardsfolder": str(_FIXTURES / "gen1-sidecars" / "cardsfolder"),
             "tokenscripts": str(_FIXTURES / "gen1-sidecars" / "tokenscripts"),
@@ -913,7 +867,7 @@ class TestHeldOutTextUnit:
         first = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
         read_by_one = len(reads)
         second = collect_coverage.count_text_shard(shard, roots=roots, held_out=_holding(()))
-        collect_coverage._sidecars.cache_clear()
+        converted_trees._process_sidecars.cache_clear()
 
         assert read_by_one > 0
         assert len(reads) == read_by_one
@@ -978,14 +932,9 @@ _GEN1_ROOTS = {
 
 def _holding(texts, unit=None):
     """A holdout of exactly ``texts``, by ``unit`` (``text`` by default)."""
-    from effects.domain.split import HeldOutCards
-    from effects.domain.text_holdout import HoldoutUnit, holdout_key
+    from effects.domain.text_holdout import HoldoutUnit
 
-    unit = unit or HoldoutUnit.TEXT
-    return HeldOutCards(
-        names=frozenset(), script_files=frozenset(), texts=frozenset(texts),
-        keys=frozenset(holdout_key(text, unit) for text in texts), unit=unit,
-    )
+    return held_out_cards(texts=texts, unit=unit or HoldoutUnit.TEXT)
 
 
 def _texts_by_game(shard: Path) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
@@ -1047,7 +996,7 @@ class TestOnlyCardsRefusals:
         config = collector_config(CollectCoverageConfig, build_parser().parse_args(
             ["collect-coverage", "--only-cards", "holdout.txt", "--min-text-games", "7"],
         ))
-        assert config.only_cards == Path("holdout.txt")
+        assert config.deck_holdout.only_cards == Path("holdout.txt")
         assert config.min_text_games == 7
 
 
@@ -1107,8 +1056,8 @@ class TestNonDeckTypesLeaveTheUnit:
             ))
 
         assert consulted == [["aa"]]
-        decks = fake_supervisor.play_round.call_args.args[0].read_text(encoding="utf-8")
-        assert "my_plan" not in decks and "squee" not in decks
+        decked = {name for deck in fake_supervisor.play_round.call_args.args[0] for name in deck}
+        assert "my_plan" not in decked and "squee" not in decked
 
     def test_the_held_out_round_drops_non_deck_carriers_only(
         self, tmp_path, caplog, fake_supervisor,
@@ -1151,7 +1100,7 @@ class TestNonDeckTypesLeaveTheUnit:
              caplog.at_level(logging.INFO, logger=collect_coverage.__name__):
             collect_coverage.run(collect_coverage.CollectCoverageConfig(
                 effect_records=tmp_path / "records", cards_folders=(cards,),
-                only_cards=listed, min_text_games=0,
+                deck_holdout=DeckHoldout(only_cards=listed), min_text_games=0,
             ))
 
         assert consulted == [["alpha"]]

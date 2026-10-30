@@ -35,7 +35,7 @@ class AbilityCacheStore:
     """The ``.npz`` cache for one variant."""
 
     def __init__(
-        self, root: Path = DEFAULT_CACHE_ROOT, *, variant: str = Baseline.FULL,
+        self, root: Path = DEFAULT_CACHE_ROOT, *, variant: Baseline = Baseline.FULL,
     ) -> None:
         self.root = Path(root)
         self.variant = variant
@@ -93,10 +93,12 @@ def _load(path: Path) -> np.ndarray:
 @dataclass(frozen=True, slots=True)
 class CachedLine:
     """One sidecar line as its cache row is keyed: the text it encodes on the
-    checkpoint's surface, and its converted prose where it has any."""
+    checkpoint's surface, its converted prose where it has any, and the script
+    API type its sidecar line records."""
 
     text: str
     prose: str | None
+    api_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,14 +130,15 @@ class SidecarIndex:
         for root in roots:
             for path, sidecar in iter_sidecars(root):
                 lines = tuple(
-                    CachedLine(encoded.text, encoded.prose) if encoded.text else None
+                    CachedLine(encoded.text, encoded.prose, encoded.line.script_api_type)
+                    if encoded.text else None
                     for encoded in encoded_lines(path, sidecar, surface)
                 )
                 sources.append(IndexedSource(sidecar.script_file, sidecar.card, lines))
         self.sources: tuple[IndexedSource, ...] = tuple(sources)
 
     def matrices(
-        self, abilities_root: Path, *, variant: str = Baseline.FULL,
+        self, abilities_root: Path, *, variant: Baseline = Baseline.FULL,
     ) -> Iterator[tuple[IndexedSource, np.ndarray]]:
         """Each source this variant's cache holds rows for, beside them, in
         tree and path order; a cache whose rows do not match its sidecar is

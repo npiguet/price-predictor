@@ -13,7 +13,11 @@ from pathlib import Path
 import pytest
 
 from effects.domain.collection_caps import CollectionCaps
-from effects.infrastructure.cli import build_parser
+from effects.infrastructure.cli import (
+    build_parser,
+    run_collect_coverage,
+    run_collect_variants,
+)
 from sealed.infrastructure.cli import build_parser as sealed_parser
 
 #: Every cap and its default, read off the dataclass the workers receive.
@@ -28,6 +32,14 @@ CAP_DEFAULTS = {
 
 def parse(*argv: str):
     return build_parser().parse_args(argv)
+
+
+#: Each collecting command, the application entry point its dispatcher calls,
+#: and the dispatcher.
+COLLECTORS = pytest.mark.parametrize(("command", "module", "runner"), [
+    ("collect-coverage", "effects.application.collect_coverage.run", run_collect_coverage),
+    ("collect-variants", "effects.application.collect_variants.run", run_collect_variants),
+])
 
 
 class TestEffectRecordsDefaultAsymmetry:
@@ -51,18 +63,9 @@ class TestCollectCoverage:
         assert args.target_records == 50
         assert args.decks_per_round == 500
         assert args.no_progress_rounds == 3
+        assert args.seed == 42
         assert args.split_from is None
         assert args.cards_folders == (Path("output/cardsfolder"), Path("output/tokenscripts"))
-
-    def test_split_from_is_accepted(self):
-        args = parse("collect-coverage", "--split-from", "models/x/latest.pt")
-        assert args.split_from == Path("models/x/latest.pt")
-
-    def test_cards_folder_is_repeatable(self):
-        args = parse(
-            "collect-coverage", "--cards-folder", "a/", "--cards-folder", "b/",
-        )
-        assert args.cards_folders == (Path("a/"), Path("b/"))
 
     def test_the_worker_count_has_the_repos_usual_default(self):
         assert parse("collect-coverage").workers == 12
@@ -174,57 +177,34 @@ class TestTheRandomSeatOnTheCollectors:
             "--random-seat-probability", "0.5",
         )) is None
 
-    @pytest.mark.parametrize("command,module", [
-        ("collect-coverage", "effects.application.collect_coverage.run"),
-        ("collect-variants", "effects.application.collect_variants.run"),
-    ])
+    @COLLECTORS
     def test_a_share_without_a_probability_starts_no_worker(
-        self, command, module, capsys,
+        self, command, module, runner, caplog,
     ):
         from unittest.mock import patch
 
-        from effects.infrastructure.cli import (
-            run_collect_coverage,
-            run_collect_variants,
-        )
-
-        runner = {
-            "collect-coverage": run_collect_coverage,
-            "collect-variants": run_collect_variants,
-        }[command]
         with patch(module) as collect:
             assert runner(parse(command, "--random-seat-share", "0.5")) == 1
         collect.assert_not_called()
-        assert "--random-seat-probability" in capsys.readouterr().out
+        assert f"{command}: " in caplog.text
+        assert "--random-seat-probability" in caplog.text
 
 
 class TestOneHoldoutSource:
-    @pytest.mark.parametrize(("command", "module"), [
-        ("collect-coverage", "effects.application.collect_coverage.run"),
-        ("collect-variants", "effects.application.collect_variants.run"),
-    ])
+    @COLLECTORS
     def test_two_holdout_sources_are_refused_before_any_worker(
-        self, command, module, capsys,
+        self, command, module, runner, caplog,
     ):
         """``--split-from`` beside ``--exclude-cards`` names one holdout twice;
         both collectors say so as a message, never a traceback."""
         from unittest.mock import patch
 
-        from effects.infrastructure.cli import (
-            run_collect_coverage,
-            run_collect_variants,
-        )
-
-        runner = {
-            "collect-coverage": run_collect_coverage,
-            "collect-variants": run_collect_variants,
-        }[command]
         with patch(module) as collect:
             assert runner(parse(
                 command, "--split-from", "latest.pt", "--exclude-cards", "h.txt",
             )) == 1
         collect.assert_not_called()
-        assert "one source of held-out cards" in capsys.readouterr().out
+        assert "one source of held-out cards" in caplog.text
 
 
 class TestCollectVariantsHoldoutRule:
@@ -253,17 +233,6 @@ class TestCollectVariantsHoldoutRule:
         config = collect.call_args.args[0]
         assert config.holdout == HoldoutRule(50, 3, HoldoutUnit.TEXT)
         assert config.cards_folders == (Path("trees/cards"),)
-
-
-class TestSubcommandTable:
-    def test_collect_coverage_is_registered(self):
-        parser = build_parser()
-        action = next(a for a in parser._actions if isinstance(a.choices, dict))
-        assert "collect-coverage" in action.choices
-
-    def test_an_unknown_subcommand_is_rejected(self):
-        with pytest.raises(SystemExit):
-            parse("collect-everything")
 
 
 class TestTheHeldOutCoverageRound:

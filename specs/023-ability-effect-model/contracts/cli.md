@@ -60,6 +60,7 @@ Adding the flag must not change `match-outcomes.txt` or `cards-played.txt` in fo
 | `--target-records` | 50 | per-card satisfaction goal |
 | `--decks-per-round` | 500 | decks played as matches per round |
 | `--no-progress-rounds` | 3 | consecutive rounds without a new qualifying record before a card retires |
+| `--seed` | 42 | seeds the per-round deck draw, so which cards fill a round is reproducible |
 | cap/budget flags | see below | |
 
 Behaviour the flags do not convey:
@@ -281,7 +282,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 |---|---|
 | `--corpus` | **required** — a curated dataset built by `build-corpus`, and the trainer's only input: its manifest carries the split, both validation strata, the rarity table and the holdout, and a `--vocab-path` whose encoding surface is not the manifest's is refused |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
-| `--variant-scripts` | none (`output/effects/variant-scripts/`) |
+| `--variant-scripts` | the tree the corpus manifest records |
 | `--vocab-path` | `models/effects/vocab.txt` |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` |
 | `--model-output` | `models/effects/effect-model/` for `--variant full`, `models/effects/effect-model/{variant}/` otherwise |
@@ -346,6 +347,11 @@ records it alongside the split.
 
 Gate 1 reads its stratum from the curated corpus `--checkpoint` records. Matched real-vs-fork agreement, the probe-diff re-check and the role-polarity probe are
 not implemented and report `NOT_IMPLEMENTED` (`[todo]`) on every run (FR-111).
+
+The UMAP check (FR-110) writes two files into `<checkpoint stem>.evaluation/` beside `--checkpoint`,
+and its report line names both: `umap.png`, one panel per script API type (the twelve most frequent,
+the rest as `other`), and `umap.csv`, one row per unique cached text with columns
+`x,y,api_type,text`. The report itself is printed, not written.
 
 **Splits are never a flag.** The held-out card list and `game_id` set come from `--checkpoint`. The
 command fails fast when a `--variant-checkpoint` records a different split, or different vocabulary or

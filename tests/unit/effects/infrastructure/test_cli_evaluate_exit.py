@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -25,15 +24,12 @@ def test_a_failed_gate_still_exits_zero(monkeypatch, capsys) -> None:
 
 def test_a_checkpoint_that_recorded_no_corpus_exits_two(monkeypatch, caplog) -> None:
     """Every gate reads the curated strata; nothing else names its training games."""
+    from effects.domain.split_provenance import SplitProvenance
     from effects.infrastructure import effect_model_store
-    from effects.infrastructure.effect_model_store import SplitProvenance
 
     monkeypatch.setattr(
-        effect_model_store, "load_for_inference",
-        lambda path, **_: (
-            SimpleNamespace(provenance=SplitProvenance()),
-            Path("vocab.txt"), Path("keywords.json"),
-        ),
+        effect_model_store, "load_effect_checkpoint",
+        lambda path: SimpleNamespace(provenance=SplitProvenance()),
     )
     args = build_parser().parse_args(["evaluate-effect-model"])
 

@@ -22,7 +22,9 @@ from effects.domain.records import (
     REWRITE_RESULTS_WITHOUT_ABILITY,
     ActivationPayload,
     Candidate,
+    ChannelChange,
     CombatPayload,
+    Contribution,
     Costs,
     EffectRecord,
     Moment,
@@ -71,6 +73,14 @@ class TestFlagSignatures:
     def test_mirror_of_requires_the_fork_flag(self, make_record):
         with pytest.raises(ValueError, match="mirror_of"):
             make_record(kind=RecordKind.COMBAT, mirror_of="run.3.9")
+
+    def test_a_probe_names_the_combat_it_mirrors(self, make_record):
+        record = make_record(kind=RecordKind.COMBAT, fork=True, mirror_of="run.3.9")
+        assert record.mirror_of == "run.3.9"
+        assert record.is_probe
+
+    def test_an_unforked_combat_record_is_not_a_probe(self, make_record):
+        assert not make_record(kind=RecordKind.COMBAT).is_probe
 
     def test_variant_of_requires_the_synthetic_flag(self, make_record):
         with pytest.raises(ValueError, match="variant_of"):
@@ -459,3 +469,25 @@ class TestRewrite:
         assert payload.outgoing is None
         assert not payload.rewritten
         assert payload.replaced_by == (_REPLACED_BY,)
+
+
+class TestContributionChannels:
+    """The ``+x`` / ``-x`` / ``=`` token grammar, read in one place."""
+
+    def test_a_bare_token_is_gained_and_a_dashed_one_lost(self):
+        contribution = Contribution(entity="E1", types=("Creature", "-Land", "Elf"))
+        assert contribution.type_changes == ChannelChange(
+            gained=("Creature", "Elf"), lost=("Land",), sets_outright=False,
+        )
+
+    def test_a_lone_equals_sets_the_line_outright_and_names_nothing(self):
+        contribution = Contribution(entity="E1", colors=("=", "C"))
+        assert contribution.color_changes == ChannelChange(
+            gained=("C",), lost=(), sets_outright=True,
+        )
+
+    def test_the_keyword_channel_takes_the_dash_too(self):
+        contribution = Contribution(entity="E1", keywords=("flying", "-haste"))
+        assert contribution.keyword_changes == ChannelChange(
+            gained=("flying",), lost=("haste",),
+        )

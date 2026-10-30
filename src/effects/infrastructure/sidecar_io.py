@@ -10,7 +10,7 @@ import errno
 import json
 import logging
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -130,37 +130,36 @@ def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
         card=data["card"],
         script_file=script_file,
         lines=tuple(
-            SidecarLine(
-                line_index=line["line_index"],
-                line_kind=line["line_kind"],
-                provenance=tuple(
-                    ProvenanceKey.from_dict(key, script_file=script_file)
-                    for key in line.get("provenance", ())
-                ),
-                sub_ability_links=tuple(
-                    SubAbilityLink(
-                        path=tuple(link["path"]), label=link.get("label", ""),
-                    )
-                    for link in line.get("sub_ability_links", ())
-                ),
-                script_api_type=line.get("script_api_type"),
-                script_param_keys=tuple(line.get("script_param_keys", ())),
-                script_text=line.get("script_text"),
-                role_spans=tuple(
-                    RoleSpan(
-                        start=span["start"], end=span["end"], role=Role(span["role"]),
-                    )
-                    for span in line.get("role_spans", ())
-                ),
-                prose_offset=line.get("prose_offset"),
-            )
-            for line in data.get("lines", ())
+            _line_from_dict(line, script_file) for line in data.get("lines", ())
         ),
-        dropped_keys=tuple(
-            ProvenanceKey.from_dict(key, script_file=script_file)
-            for key in data.get("dropped_keys", ())
-        ),
+        dropped_keys=_keys_from_dict(data.get("dropped_keys", ()), script_file),
     )
+
+
+def _line_from_dict(data: dict, script_file: str) -> SidecarLine:
+    """One line as :func:`_line_to_dict` writes it; a key's script file
+    defaults to the sidecar's own."""
+    return SidecarLine(
+        line_index=data["line_index"],
+        line_kind=data["line_kind"],
+        provenance=_keys_from_dict(data.get("provenance", ()), script_file),
+        sub_ability_links=tuple(
+            SubAbilityLink(path=tuple(link["path"]), label=link.get("label", ""))
+            for link in data.get("sub_ability_links", ())
+        ),
+        script_api_type=data.get("script_api_type"),
+        script_param_keys=tuple(data.get("script_param_keys", ())),
+        script_text=data.get("script_text"),
+        role_spans=tuple(
+            RoleSpan(start=span["start"], end=span["end"], role=Role(span["role"]))
+            for span in data.get("role_spans", ())
+        ),
+        prose_offset=data.get("prose_offset"),
+    )
+
+
+def _keys_from_dict(data, script_file: str) -> tuple[ProvenanceKey, ...]:
+    return tuple(ProvenanceKey.from_dict(key, script_file=script_file) for key in data)
 
 
 #: Errnos Windows reports while an indexer or virus scanner briefly holds a
@@ -258,7 +257,7 @@ def rendered_prose(sidecar_path: Path, sidecar: ProvenanceSidecar) -> list[str]:
     return prose_lines(converted_text_path(sidecar_path))
 
 
-class EncodedLine(NamedTuple):
+class LineText(NamedTuple):
     """One sidecar line, its converted prose, and the text it is encoded from."""
 
     line: SidecarLine
@@ -268,7 +267,7 @@ class EncodedLine(NamedTuple):
 
 def encoded_lines(
     sidecar_path: Path, sidecar: ProvenanceSidecar, surface: Surface,
-) -> list[EncodedLine]:
+) -> list[LineText]:
     """Every line of one sidecar as ``surface`` encodes it, row-aligned with
     the ability cache: the one spelling of read the prose, cut the line's
     out, fall back to the other surface (``encoding_text``)."""
@@ -280,7 +279,7 @@ def encoded_lines(
     out = []
     for line in sidecar.lines:
         prose = line.prose_in(rendered)
-        out.append(EncodedLine(line, prose, encoding_text(line, prose, surface)))
+        out.append(LineText(line, prose, encoding_text(line, prose, surface)))
     return out
 
 
@@ -318,14 +317,6 @@ class SidecarCache:
         #: ``script_file -> times asked`` for keys :meth:`line_or_none` read as
         #: no line although the sidecar exists and does not describe them.
         self.undescribed: dict[str, int] = {}
-
-    @classmethod
-    def from_folders(
-        cls, folders: Iterable[Path], variant_scripts: Path | None = None,
-    ) -> SidecarCache:
-        """A cache over ``--cards-folder`` values, each keyed by the tree its
-        name ends in (FR-063b), plus the variant tree where one is given."""
-        return cls(sidecar_roots(folders, variant_scripts))
 
     def path_for(self, script_file: str) -> Path:
         tree, relative = split_script_file(script_file)
@@ -418,12 +409,13 @@ class SidecarCache:
         return line.prose_in(rendered)
 
     def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
-        """The join's answer for a key, with the two no-sidecar cases folded in.
-
-        An unconverted script and an unconfigured tree are both
-        ``UNCONVERTED``; a mismatch inside an existing sidecar still raises.
+        """The join's answer for a key, with the two no-sidecar cases folded in
+        as values: ``UNCONVERTED`` and ``UNCONFIGURED_TREE``. A mismatch inside
+        an existing sidecar still raises.
         """
         try:
             return self.get(key.script_file).resolution_of(key)
-        except (UnconvertedScript, UnconfiguredTree):
+        except UnconfiguredTree:
+            return KeyResolution.UNCONFIGURED_TREE
+        except UnconvertedScript:
             return KeyResolution.UNCONVERTED

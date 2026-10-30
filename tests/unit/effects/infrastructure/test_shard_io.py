@@ -7,6 +7,7 @@ found whatever its spelling.
 
 from __future__ import annotations
 
+import gzip
 import json
 from pathlib import Path
 
@@ -53,8 +54,6 @@ class TestCompressedShards:
 
     def _write_members(self, path, blocks: list[list[str]]) -> None:
         """One gzip member per block, concatenated, as the Java writer does."""
-        import gzip
-
         with path.open("wb") as handle:
             for block in blocks:
                 handle.write(gzip.compress(
@@ -88,8 +87,6 @@ class TestCompressedShards:
         assert [r.record_id for r in read_shard(path)] == ["run.0.1"]
 
     def test_a_half_written_line_inside_a_member_is_skipped(self, tmp_path):
-        import gzip
-
         path = tmp_path / "run.0.jsonl.gz"
         body = self._line("run.0.1") + "\n" + self._line("run.0.2")[:20]
         path.write_bytes(gzip.compress(body.encode("utf-8")))
@@ -169,6 +166,18 @@ class TestCompressedShards:
         line = format_record_line(_record())
         path.write_text(f"{line}\n\n{line}\n", encoding="utf-8")
         assert len(list(read_shard(path))) == 2
+        assert count_records(tmp_path) == 2
+
+    def test_both_spellings_yield_lines_of_one_shape(self, tmp_path):
+        """Stripped of the newline and blank-free, whichever spelling: a writer
+        copying lines back adds the newline itself."""
+        line = format_record_line(_record())
+        body = f"{line}\n\n{line}\n"
+        plain = tmp_path / "a.jsonl"
+        plain.write_text(body, encoding="utf-8")
+        packed = tmp_path / "b.jsonl.gz"
+        packed.write_bytes(gzip.compress(body.encode("utf-8")))
+        assert list(iter_shard_lines(plain)) == list(iter_shard_lines(packed)) == [line, line]
 
 
 class TestShardsInSubdirectories:
@@ -252,8 +261,6 @@ class TestShardGeneration:
     """FR-033: a shard's generation by its first record; mixed sets refused (T069)."""
 
     def _gen2_shard(self, path: Path) -> Path:
-        import gzip
-
         with gzip.open(path, "wt", encoding="utf-8") as out:
             for line in iter_shard_lines(_GEN1_FIXTURE):
                 data = json.loads(line)
@@ -264,12 +271,14 @@ class TestShardGeneration:
         return path
 
     def test_the_real_gen1_fixture_is_gen1(self):
-        from effects.infrastructure.shard_io import ShardGeneration, shard_generation
+        from effects.domain.shard_generation import ShardGeneration
+        from effects.infrastructure.shard_io import shard_generation
 
         assert shard_generation(_GEN1_FIXTURE) is ShardGeneration.GEN_1
 
     def test_a_shard_carrying_random_seat_is_gen2(self, tmp_path):
-        from effects.infrastructure.shard_io import ShardGeneration, shard_generation
+        from effects.domain.shard_generation import ShardGeneration
+        from effects.infrastructure.shard_io import shard_generation
 
         assert shard_generation(self._gen2_shard(tmp_path / "g2.jsonl.gz")) is ShardGeneration.GEN_2
 
@@ -281,7 +290,8 @@ class TestShardGeneration:
         assert shard_generation(empty) is None
 
     def test_a_set_holding_both_generations_is_refused(self, tmp_path):
-        from effects.infrastructure.shard_io import MixedGenerationsError, refuse_mixed_generations
+        from effects.domain.shard_generation import MixedGenerationsError
+        from effects.infrastructure.shard_io import refuse_mixed_generations
 
         gen2 = self._gen2_shard(tmp_path / "g2.jsonl.gz")
         with pytest.raises(MixedGenerationsError, match="gen-1"):
@@ -316,7 +326,7 @@ class TestReadRecordsMatching:
         ]
         got = [
             r.record_id for r in read_records_matching(
-                directory, game_ids=games, kinds={"combat"},
+                directory, game_ids=games, kinds={RecordKind.COMBAT},
             )
         ]
         assert got == expected and expected
@@ -339,9 +349,29 @@ class TestReadRecordsMatching:
         path = tmp_path / "x.jsonl"
         path.write_text(json.dumps(reordered) + "\n", encoding="utf-8")
         got = list(read_records_matching(
-            tmp_path, game_ids={record.game_id}, kinds={"playability"},
+            tmp_path, game_ids={record.game_id}, kinds={RecordKind.PLAYABILITY},
         ))
         assert [r.record_id for r in got] == [record.record_id]
+
+    def test_where_sees_each_head_once_after_the_other_filters(self, tmp_path):
+        """Once per line, so a predicate may keep state; parsed or peeked alike."""
+        from effects.infrastructure.shard_io import iter_shard_matching
+
+        directory = self._copy(tmp_path)
+        shard = directory / _GEN1_FIXTURE.name
+        combats = [r.record_id for r in read_records(directory) if r.kind is RecordKind.COMBAT]
+        seen: list[str] = []
+
+        def every_other(head) -> bool:
+            seen.append(head.record_id)
+            return len(seen) % 2 == 1
+
+        got = [
+            r.record_id
+            for r in iter_shard_matching(shard, kinds={RecordKind.COMBAT}, where=every_other)
+        ]
+        assert seen == combats and combats
+        assert got == combats[::2]
 
     def test_the_head_is_read_off_a_written_line(self):
         from effects.infrastructure.record_codec import format_record_line

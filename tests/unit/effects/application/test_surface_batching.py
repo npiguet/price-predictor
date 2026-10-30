@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 import torch
 
+from effects.application.mlm_masking import MlmMasker
 from effects.application.surface_batching import NoiseState, SurfaceBatcher
-from effects.application.text_staging import MlmMasker
 from effects.domain.baselines import BaselineMasks
 from effects.domain.effect_head_input import ACT_SLOT, SlotKind
 from effects.domain.provenance import ProvenanceKey, SidecarLine
@@ -239,6 +239,19 @@ def test_at_step_zero_nothing_is_added():
     assert torch.equal(noise.apply(matrix, step=0), matrix)
 
 
+def test_a_resume_file_holding_the_old_step_key_still_loads():
+    """Resume files written before the state dropped its unread ``step`` carry
+    it; an interrupted run must continue across the change."""
+    noise = NoiseState(ratio=0.1, ramp_steps=1)
+    noise.apply(_spread_matrix(rows=20), step=1)
+    saved = noise.state_dict()
+    restored = NoiseState(ratio=0.1, ramp_steps=1)
+    restored.load_state_dict({**saved, "step": 7}, torch.device("cpu"))
+    assert torch.equal(restored.sigma, noise.sigma)
+    assert torch.equal(restored._factor, noise._factor)
+    assert restored._draws_since_factor == noise._draws_since_factor
+
+
 def test_a_scoring_batcher_carries_no_noise(tmp_path):
     """Validation, evaluation and encoding never perturb e (scenario 4): the
     materializer a scoring batch is built with has none unless handed one."""
@@ -378,8 +391,14 @@ def _mlm_batcher() -> SurfaceBatcher:
     return make_batcher(tokenizer=_MaskTokens(), sidecars=_Sidecars())
 
 
+def _mlm_inputs(lines) -> dict:
+    from effects.domain.ability_encoder import collate_lines
+
+    return collate_lines(lines, _MaskTokens.pad_id)
+
+
 def _mlm_pass(batcher, lines, mask_prob):
-    masked = batcher.draw_mlm_mask(lines, mask_prob)
+    masked = batcher.draw_mlm_mask(_mlm_inputs(lines), mask_prob)
     if masked is None:
         return None
     return MlmMasker.forward(_EchoEncoder(), masked, torch.device("cpu"))
@@ -402,7 +421,7 @@ def test_the_mlm_pass_masks_nothing_at_probability_zero():
 
 def test_a_masked_number_carries_no_value():
     """The number embedding would otherwise hand the masked token's value back."""
-    masked = _mlm_batcher().draw_mlm_mask(_mlm_lines([6, 4], number=3.0), 0.5)
+    masked = _mlm_batcher().draw_mlm_mask(_mlm_inputs(_mlm_lines([6, 4], number=3.0)), 0.5)
     picks = masked.inputs["token_ids"] == _MaskTokens.mask_id
     assert picks.any()
     assert torch.all(masked.inputs["numbers"][picks] == 0.0)
@@ -413,14 +432,14 @@ def test_a_masked_number_carries_no_value():
     assert torch.all(masked.inputs["numbers"][kept] == 3.0)
 
 
-def test_a_stand_in_key_reads_its_text_with_the_real_line():
+def test_an_overridden_key_reads_its_text_with_the_real_line():
     """A counterfactual copy's acting key names no sidecar (FR-063e)."""
     batcher = _batcher()
-    stand = ProvenanceKey("counterfactual/5/cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
-    batcher.stand_in(stand, "deals 5 damage to any target", _ACT)
-    assert batcher.text_of(stand) == "deals 5 damage to any target"
-    assert batcher.line_of(stand) is _LINES[_ACT]
-    assert batcher.options_for(stand) == ()
+    copy = ProvenanceKey("counterfactual/5/cardsfolder/l/lightning_bolt.txt", 0, "spell", 0)
+    batcher.override_text(copy, "deals 5 damage to any target", _ACT)
+    assert batcher.text_of(copy) == "deals 5 damage to any target"
+    assert batcher.line_of(copy) is _LINES[_ACT]
+    assert batcher.options_for(copy) == ()
 
 
 def test_a_withheld_keyword_is_read_as_its_definition_never_its_token():

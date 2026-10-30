@@ -8,15 +8,11 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Callable, Iterator
-from functools import partial
-
-import torch
+from collections.abc import Callable
 
 from effects.application.ability_text import KeyResolver
 from effects.application.evaluation_context import EvaluationContext
-from effects.domain.ability_encoder import surface_of
-from effects.domain.entity_field_targets import EntityTargetBatch
+from effects.application.model_loading import Runnable, forward_chunks
 from effects.domain.evaluation_report import (
     Bound,
     CheckName,
@@ -34,13 +30,11 @@ from effects.domain.gate_metrics import (
 )
 from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.records import RecordKind, acting_keys
-from effects.domain.surface_collation import per_entity_targets
 from effects.infrastructure.corpus_store import (
     CorpusStore,
     card_disjoint_resolutions,
     training_acting_keys,
 )
-from effects.infrastructure.model_runner import BATCH_RECORDS, Runnable
 
 logger = logging.getLogger(__name__)
 
@@ -90,28 +84,12 @@ def unique_text_stratum(corpus_path, card_disjoint_games, text_of: TextOf) -> li
     )
 
 
-def forward_chunks(
-    records, runnable: Runnable,
-) -> Iterator[tuple[list, torch.Tensor, EntityTargetBatch]]:
-    """``(chunk, gathered, targets)`` per chunk of ``records``, shared by the
-    margins and :mod:`effects.application.record_scoring`."""
-    for chunk in runnable.inference_chunks(records, BATCH_RECORDS):
-        yield chunk, *_forward(chunk, runnable)
-
-
 def measure(records, runnable: Runnable) -> GateOneMetrics:
     """Run the model over ``records`` and score the three margins."""
     margins = MarginAccumulator(runnable.fields)
     for _chunk, gathered, targets in forward_chunks(records, runnable):
         margins.add(gathered, targets)
     return margins.metrics()
-
-
-def _forward(chunk, runnable: Runnable) -> tuple[torch.Tensor, EntityTargetBatch]:
-    """``(gathered, targets)`` for one chunk, on the host, ``gathered``
-    aligned column for column with the targets."""
-    gathered, surfaces = runnable.per_entity_outputs(chunk)
-    return gathered, per_entity_targets(chunk, surfaces, runnable.fields)
 
 
 def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
@@ -125,7 +103,7 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
         )
     # Both checkpoints read one vocabulary (require_same_split), so one
     # surface's texts decide the stratum for both: the batcher's own join.
-    texts = KeyResolver(context.sidecars, surface_of(context.vocab_path))
+    texts = KeyResolver(context.sidecars, context.tokenizer_files.surface)
     stratum = unique_text_stratum(context.corpus_path, games, texts.text_of)
     if not stratum:
         return CheckResult(
@@ -137,14 +115,9 @@ def run_gate_one(context: EvaluationContext, identity) -> CheckResult:
         )
     logger.info("gate 1: %d records in the unique-text stratum", len(stratum))
 
-    scores = {}
-    loaders = {
-        "model": context.main_runnable,
-        "identity": partial(context.runnable_of, identity),
-    }
-    for name, load in loaders.items():
-        scores[name] = measure(stratum, load(stratum))
-    return evaluate_gate_one(scores["model"], scores["identity"])
+    model = measure(stratum, context.main_runnable(stratum))
+    baseline = measure(stratum, context.runnable_of(identity, stratum))
+    return evaluate_gate_one(model, baseline)
 
 
 def _relative_reduction(baseline: float, value: float) -> float:

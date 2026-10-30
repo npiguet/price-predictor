@@ -47,8 +47,8 @@ from effects.application.build_corpus import (
 )
 from effects.application.corpus_report import check_refusals as _check_refusals
 from effects.application.corpus_report import check_samples as _check_samples
-from effects.application.corpus_survey import RefusalTally, source_of
-from effects.application.corpus_write import output_name as _output_name
+from effects.application.corpus_survey import RefusalTally
+from effects.domain.corpus_manifest import SourceShard
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (
@@ -63,9 +63,21 @@ from effects.domain.state_snapshot import StateSnapshot
 from effects.domain.strata import Stratum
 from effects.domain.text_holdout import HoldoutUnit
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.shard_io import iter_shards, read_records, read_shard, write_shard
+from effects.infrastructure.shard_io import (
+    iter_shards,
+    list_shards,
+    read_records,
+    read_shard,
+    write_shard,
+)
 from effects.infrastructure.sidecar_io import sidecar_path_for
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
+from tests.unit.effects.builders import (
+    held_out_cards,
+    make_entity,
+    make_record,
+    make_snapshot,
+    write_sidecar,
+)
 
 _HELD_OUT_CARD = "Held Out Bears"
 #: Found by brute force over ``text_is_held_out(..., permille=20)`` (the
@@ -266,8 +278,7 @@ class CorpusFixture:
     def source_dirs(self) -> set[str]:
         """The top-level directory of every raw shard currently on disk."""
         return {
-            source_of(shard.relative_to(self.records).as_posix())
-            for shard in iter_shards(self.records)
+            shard.source for shard in list_shards(self.records)
         }
 
     @property
@@ -382,15 +393,10 @@ def test_no_training_record_belongs_to_a_withheld_game(default_build):
 
 def test_no_training_record_names_a_held_out_card(default_build):
     """FR-088: the exclusion is by game, and every held-out game is dropped."""
-    from effects.domain.split import (
-        HeldOutCards,
-        record_names_held_out_card,
-    )
+    from effects.domain.split import record_names_held_out_card
 
     manifest = default_build.load()
-    held_out = HeldOutCards(
-        names=frozenset(manifest.held_out_cards), script_files=frozenset(),
-    )
+    held_out = held_out_cards(manifest.held_out_cards)
     for record in read_records(default_build.training_dir):
         assert not record_names_held_out_card(record, held_out)
 
@@ -542,11 +548,15 @@ def test_output_name_is_injective_on_the_reviewers_counterexample():
     ``"a___b"``. Two source shards writing the same output filename is a
     silent overwrite (``write_shard`` truncates), so this has to hold.
     """
-    assert _output_name("a_/b") != _output_name("a/_b")
+    assert _part_name("a_/b") != _part_name("a/_b")
 
 
 def test_output_name_flattens_a_subdirectory_path():
-    assert _output_name("depleted/run.0-a.jsonl.gz") == "depleted_srun.0-a.jsonl.gz"
+    assert _part_name("depleted/run.0-a.jsonl.gz") == "depleted_srun.0-a.jsonl.gz"
+
+
+def _part_name(name: str) -> str:
+    return SourceShard(name=name, size=0).part_name
 
 
 # ── fix round 1: per-stratum counts and unique texts (review Finding 2) ─
@@ -881,33 +891,12 @@ def test_the_manifest_records_the_variant_tree_it_read(a_corpus_with_variants, v
     assert variant_build.load().variant_scripts == variant_root
 
 
-def test_the_store_names_the_new_outputs(tmp_path):
-    store = CorpusStore(tmp_path / "corpus")
-    assert store.gate_one_dir == tmp_path / "corpus" / "validation" / "gate-one"
-    assert store.samples_dir == tmp_path / "corpus" / "validation" / "samples"
-    assert store.sample_path("card-disjoint") == (
-        tmp_path / "corpus" / "validation" / "samples" / "card-disjoint.jsonl.gz"
-    )
-    assert store.parts_dir_for("training") == tmp_path / "corpus" / ".parts" / "training"
-
-
-def test_clear_outputs_removes_the_new_outputs_too(tmp_path):
-    store = CorpusStore(tmp_path / "corpus")
-    for directory in (store.gate_one_dir, store.samples_dir, store.parts_dir_for("training")):
-        directory.mkdir(parents=True)
-        (directory / "x").write_text("x")
-    store.clear_outputs()
-    assert not store.gate_one_dir.exists()
-    assert not store.samples_dir.exists()
-    assert not store.parts_dir.exists()
-
-
 # ── quality, the gate-one slice, per-source reporting, repacking ───────
 
 
 def test_source_of_is_the_first_path_component():
-    assert source_of("depleted/run.0-a.jsonl.gz") == "depleted"
-    assert source_of("run.0-a.jsonl.gz") == "."
+    assert SourceShard(name="depleted/run.0-a.jsonl.gz", size=0).source == "depleted"
+    assert SourceShard(name="run.0-a.jsonl.gz", size=0).source == "."
 
 
 def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
@@ -1389,10 +1378,12 @@ def test_the_manifest_records_families_policy_and_the_flags(tmp_path, shared_cor
     assert manifest.game_disjoint_target is None
     effect = manifest.families["resolution-effect"]
     assert all(
-        set(row) == {"available", "share", "planned", "written", "repeats", "shortfall"}
+        set(row.as_dict()) == {
+            "available", "share", "planned", "written", "repeats", "shortfall",
+        }
         for row in effect.values()
     )
-    written = sum(row["written"] for row in effect.values())
+    written = sum(row.written for row in effect.values())
     assert written == manifest.per_class["resolution-effect"].kept
     assert manifest.signatures["resolution-effect"]
     assert manifest.policy_counts["resolution-effect"]["on_policy"] == written
@@ -1420,11 +1411,11 @@ def test_a_short_family_is_repeated_up_to_the_reuse_cap(tmp_path, a_corpus):
     # half's share; its two records can supply at most 8 with four copies
     # each, and the what-if half is planned the 14 left over.
     families = manifest.families["playability-legality"]
-    assert families["real:none"]["written"] == 8
-    assert families["real:none"]["repeats"] == 6
-    assert families["real:none"]["shortfall"] == 3
+    assert families["real:none"].written == 8
+    assert families["real:none"].repeats == 6
+    assert families["real:none"].shortfall == 3
     # Records with no acting text are sampled by hash rate: 14 in expectation.
-    what_if = families["what-if:none"]["written"]
+    what_if = families["what-if:none"].written
     assert 8 <= what_if <= 20
     assert manifest.legality_counts["blockers"] == {"real": 8, "what-if": what_if}
 

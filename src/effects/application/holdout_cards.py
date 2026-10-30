@@ -65,9 +65,9 @@ def run(config: HoldoutCardsConfig) -> HoldoutReport:
     Raises ``HoldoutCardsError`` when no tree holds a converted card.
     """
     from effects.infrastructure.card_sources import load_first_printings
-    from effects.infrastructure.converted_trees import ConvertedTrees
+    from effects.infrastructure.converted_trees import SourceTrees
 
-    trees = ConvertedTrees.from_folders(config.cards_folders)
+    trees = SourceTrees.of(config.cards_folders).converted()
     if not trees.card_files:
         where = trees.cards_folder or ", ".join(str(f) for f in config.cards_folders)
         raise HoldoutCardsError(f"no converted cards under {where}")

@@ -20,20 +20,23 @@ from effects.domain.baselines import (
     Baseline,
 )
 from effects.domain.effect_model import EffectModel, EffectModelConfig
+from effects.domain.split_provenance import SplitProvenance
 from effects.domain.text_holdout import HoldoutUnit
+from effects.domain.tokenizer_files import TokenizerFiles
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
     EffectCheckpoint,
     EffectModelStore,
     HashMismatchError,
     SplitMismatchError,
-    SplitProvenance,
     content_hash,
     filter_training_only,
-    load_for_inference,
+    inference_files,
+    load_effect_checkpoint,
     model_output_for,
     require_same_split,
-    resolve_inference_paths,
+    tokenizer_hashes,
+    verify_hashes,
 )
 
 _MODEL_CONFIG = EffectModelConfig(
@@ -182,30 +185,28 @@ class TestCorpusProvenance:
 class TestHashChecking:
     def test_matching_hashes_pass(self, files):
         vocab, keywords = files
-        _provenance(files).verify_hashes(
-            vocab_path=vocab, keyword_path=keywords,
-        )
+        verify_hashes(_provenance(files), TokenizerFiles(vocab, keywords))
 
     def test_a_changed_vocabulary_fails_fast(self, files):
         vocab, keywords = files
         provenance = _provenance(files)
         vocab.write_text("[PAD]\n[UNK]\ndifferent\n", encoding="utf-8")
         with pytest.raises(HashMismatchError, match="vocabulary"):
-            provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
+            verify_hashes(provenance, TokenizerFiles(vocab, keywords))
 
     def test_a_changed_keyword_file_fails_fast(self, files):
         vocab, keywords = files
         provenance = _provenance(files)
         keywords.write_text('{"Flying": {}}', encoding="utf-8")
         with pytest.raises(HashMismatchError, match="keyword definitions"):
-            provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
+            verify_hashes(provenance, TokenizerFiles(vocab, keywords))
 
     def test_the_error_names_both_hashes(self, files):
         vocab, keywords = files
         provenance = _provenance(files)
         vocab.write_text("changed", encoding="utf-8")
         with pytest.raises(HashMismatchError) as excinfo:
-            provenance.verify_hashes(vocab_path=vocab, keyword_path=keywords)
+            verify_hashes(provenance, TokenizerFiles(vocab, keywords))
         assert provenance.vocab_hash[:12] in str(excinfo.value)
 
     def test_a_missing_file_hashes_as_empty_rather_than_raising(self, tmp_path):
@@ -214,8 +215,9 @@ class TestHashChecking:
     def test_an_unrecorded_hash_is_not_checked(self, files):
         """A run with no keyword file is degraded, not broken."""
         vocab, keywords = files
-        SplitProvenance(vocab_hash=content_hash(vocab)).verify_hashes(
-            vocab_path=vocab, keyword_path=keywords,
+        verify_hashes(
+            SplitProvenance(vocab_hash=content_hash(vocab)),
+            TokenizerFiles(vocab, keywords),
         )
 
 
@@ -231,7 +233,7 @@ class TestVariantIsolation:
 
     def test_a_matching_variant_checkpoint_is_accepted(self, tmp_path, files):
         main = _checkpoint(files)
-        variant = _checkpoint(files, variant="identity")
+        variant = _checkpoint(files, variant=Baseline.IDENTITY)
         require_same_split(
             main, variant, main_path=tmp_path / "a.pt", baseline_path=tmp_path / "b.pt",
         )
@@ -239,7 +241,7 @@ class TestVariantIsolation:
     def test_a_different_split_fails_fast_naming_both(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(
-            files, variant="identity",
+            files, variant=Baseline.IDENTITY,
             provenance=_provenance(files, game_disjoint_games=("g9",)),
         )
         with pytest.raises(SplitMismatchError) as excinfo:
@@ -253,7 +255,7 @@ class TestVariantIsolation:
     def test_a_different_vocabulary_hash_fails_fast(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(
-            files, variant="identity",
+            files, variant=Baseline.IDENTITY,
             provenance=_provenance(files, vocab_hash="deadbeef"),
         )
         with pytest.raises(SplitMismatchError, match="vocabulary"):
@@ -265,7 +267,7 @@ class TestVariantIsolation:
     def test_a_different_keyword_definition_hash_fails_fast(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(
-            files, variant="identity",
+            files, variant=Baseline.IDENTITY,
             provenance=_provenance(files, keyword_definitions_hash="deadbeef"),
         )
         with pytest.raises(SplitMismatchError, match="keyword definitions"):
@@ -277,7 +279,7 @@ class TestVariantIsolation:
     def test_a_different_held_out_card_list_fails_fast(self, tmp_path, files):
         main = _checkpoint(files)
         variant = _checkpoint(
-            files, variant="identity",
+            files, variant=Baseline.IDENTITY,
             provenance=_provenance(files, held_out_cards=("Shock",)),
         )
         with pytest.raises(SplitMismatchError):
@@ -350,7 +352,7 @@ class TestExtraRoundTrip:
         store = EffectModelStore(tmp_path / "effect-model")
         store.save(replace(
             _checkpoint(files),
-            variant="identity",
+            variant=Baseline.IDENTITY,
             extra={"identity_table": table.state()},
         ))
         loaded = IdentityTable.from_state(store.load().extra["identity_table"])
@@ -365,69 +367,46 @@ class TestExtraRoundTrip:
         assert store.load().extra == {}
 
 
-class TestInferencePathResolution:
-    def test_the_paths_default_to_what_the_checkpoint_recorded(self, files):
-        vocab, keywords = files
-        resolved = resolve_inference_paths(
-            _provenance(files), vocab_path=None, keyword_path=None,
-        )
-        assert resolved == (vocab, keywords)
+class TestInferenceFiles:
+    """Resolving an inference command's files and hash-checking them is one
+    call, so no inference command can resolve its files and forget to verify
+    them (FR-097)."""
 
-    def test_the_resolved_paths_pass_the_hash_check(self, files):
-        provenance = _provenance(files)
-        vocab_path, keyword_path = resolve_inference_paths(
-            provenance, vocab_path=None, keyword_path=None,
-        )
-        provenance.verify_hashes(vocab_path=vocab_path, keyword_path=keyword_path)
+    def _saved(self, tmp_path, files):
+        store = EffectModelStore(tmp_path / "effect-model")
+        return load_effect_checkpoint(store.save(_checkpoint(files)))
 
-    def test_an_explicit_path_overrides(self, tmp_path, files):
+    def test_the_files_default_to_what_the_checkpoint_recorded(self, tmp_path, files):
+        checkpoint = self._saved(tmp_path, files)
+        assert inference_files(checkpoint) == TokenizerFiles(*files)
+        assert checkpoint.provenance.withheld_keyword == "cascade"
+
+    def test_an_explicit_path_overrides_the_recorded_one(self, tmp_path, files):
         _vocab, keywords = files
-        chosen = tmp_path / "other-vocab.txt"
-        vocab_path, keyword_path = resolve_inference_paths(
-            _provenance(files), vocab_path=chosen, keyword_path=None,
-        )
-        assert vocab_path == chosen
-        assert keyword_path == keywords
+        chosen = tmp_path / "copy-vocab.txt"
+        chosen.write_bytes(files[0].read_bytes())
+        resolved = inference_files(self._saved(tmp_path, files), vocab=chosen)
+        assert resolved == TokenizerFiles(chosen, keywords)
+
+    def test_a_file_that_moved_since_training_is_refused(self, tmp_path, files):
+        checkpoint = self._saved(tmp_path, files)
+        files[0].write_text("[PAD]\nextra\n", encoding="utf-8")
+        with pytest.raises(HashMismatchError):
+            inference_files(checkpoint)
 
     def test_an_override_is_still_hash_checked(self, tmp_path, files):
         """Overriding to a different file must fail, not silently re-encode."""
-        other = tmp_path / "other-vocab.txt"
-        other.write_text("[PAD]\n[UNK]\nextra\n", encoding="utf-8")
-        provenance = _provenance(files)
-        vocab_path, keyword_path = resolve_inference_paths(
-            provenance, vocab_path=other, keyword_path=None,
-        )
-        with pytest.raises(HashMismatchError):
-            provenance.verify_hashes(
-                vocab_path=vocab_path, keyword_path=keyword_path,
-            )
-
-
-class TestLoadForInference:
-    """Loading for inference resolves and hash-checks in one step, so no
-    inference command can resolve its files and forget to verify them."""
-
-    def test_it_returns_the_checkpoint_and_its_verified_paths(self, tmp_path, files):
-        store = EffectModelStore(tmp_path / "effect-model")
-        path = store.save(_checkpoint(files))
-        loaded = load_for_inference(path)
-        assert (loaded.vocab_path, loaded.keyword_path) == files
-        assert loaded.checkpoint.provenance.withheld_keyword == "cascade"
-
-    def test_a_file_that_moved_since_training_fails_the_load(self, tmp_path, files):
-        store = EffectModelStore(tmp_path / "effect-model")
-        path = store.save(_checkpoint(files))
-        files[0].write_text("[PAD]\nextra\n", encoding="utf-8")
-        with pytest.raises(HashMismatchError):
-            load_for_inference(path)
-
-    def test_an_override_is_verified_too(self, tmp_path, files):
-        store = EffectModelStore(tmp_path / "effect-model")
-        path = store.save(_checkpoint(files))
         other = tmp_path / "other-keywords.json"
         other.write_text('{"flying": "x"}', encoding="utf-8")
         with pytest.raises(HashMismatchError):
-            load_for_inference(path, keyword_path=other)
+            inference_files(self._saved(tmp_path, files), keywords=other)
+
+    def test_the_hashes_a_run_records_are_the_ones_it_is_checked_against(self, files):
+        hashes = tokenizer_hashes(TokenizerFiles(*files))
+        provenance = replace(_provenance(files), **hashes)
+        assert provenance == _provenance(files)
+        verify_hashes(provenance, TokenizerFiles(*files))
+
 
 _GEN1_CHECKPOINT = (
     __import__("pathlib").Path(__file__).parents[4]

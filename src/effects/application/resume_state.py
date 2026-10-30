@@ -14,15 +14,19 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from effects.application.train_effect_model import SWEEP_FLAGS, RunSpec, TrainEffectModelConfig
+from effects.application.train_effect_model import (
+    RECORDED_IN_TRAINING_SETTINGS,
+    RunSpec,
+    TrainEffectModelConfig,
+)
 from effects.infrastructure.effect_model_store import (
     RESUME_BEST_NAME,
     RESUME_NAME,
     ResumeMismatchError,
-    content_hash,
     load_resume_state,
     resume_mismatches,
     save_resume_state,
+    tokenizer_hashes,
 )
 
 if TYPE_CHECKING:
@@ -37,12 +41,6 @@ RESUME_MAY_CHANGE: frozenset[str] = frozenset({
     "epochs", "patience", "lr_scale", "save_every_epoch", "model_output",
     "prefetch_workers", "resume", "corpus", "cards_folders", "variant_scripts",
     "holdout_unit", "vocab_path", "keyword_definitions",
-})
-#: Flags the checkpoint's training settings record, and the resume file
-#: compares there as recorded: ``seed`` as the value the run drew, and
-#: ``lethality_copies`` only when set.
-RECORDED_IN_TRAINING_SETTINGS: frozenset[str] = frozenset({
-    "seed", "lethality_copies", *SWEEP_FLAGS,
 })
 
 
@@ -63,8 +61,7 @@ def resume_settings(spec: RunSpec, *, training_settings: dict) -> dict:
     return {
         "seed": spec.seed,
         "corpus_digest": spec.facts.digest,
-        "vocab_hash": content_hash(config.vocab_path),
-        "keyword_definitions_hash": content_hash(config.keyword_definitions),
+        **tokenizer_hashes(config.tokenizer_files),
         **{name: getattr(config, name) for name in compared_flags()},
         **training_settings,
     }
@@ -74,9 +71,7 @@ def _settings_of(run: RunContext) -> dict:
     return resume_settings(run.spec, training_settings=run.training_settings)
 
 
-def save_resume(
-    run: RunContext, epoch: int, *, finished: bool, best: bool = False,
-) -> None:
+def save_resume(run: RunContext, epoch: int, *, best: bool = False) -> None:
     """Everything the next epoch needs, written once the epoch is scored,
     training-only heads included."""
     directory = run.spec.config.resolved_model_output()
@@ -84,7 +79,6 @@ def save_resume(
         "epoch": epoch,
         "step": run.step,
         "warmup": run.warmup,
-        "finished": finished,
         "settings": _settings_of(run),
         "encoder": run.encoder.state_dict(),
         "model": run.model.state_dict(),

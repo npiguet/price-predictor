@@ -21,7 +21,6 @@ import zlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 
@@ -68,9 +67,9 @@ def load_checkpoint(path: Path):
 
 
 def sidecar_cache(cards_folders: Iterable[Path], variant_scripts: Path | None = None):
-    from effects.infrastructure.sidecar_io import SidecarCache
+    from effects.infrastructure.converted_trees import SourceTrees
 
-    return SidecarCache.from_folders(cards_folders, variant_scripts)
+    return SourceTrees.of(cards_folders, variant_scripts).sidecar_cache()
 
 
 def sidecar_paths(cards_folders: Iterable[Path]) -> list[Path]:
@@ -235,26 +234,21 @@ def load_probe_model(
     the inference constant, the variant masks applied, and the sidecars read
     over the same trees, the variant-script tree among them.
     """
-    from effects.domain.ability_encoder import surface_of
-    from effects.infrastructure.effect_model_store import verified_inference_paths
-    from effects.infrastructure.model_runner import load_runnable
+    from effects.application.model_loading import load_runnable
+    from effects.infrastructure.effect_model_store import inference_files
 
     checkpoint = checkpoint or load_checkpoint(checkpoint_path)
     # Hash-checked like every inference command: a probe over a vocabulary
     # that moved since training reads vectors that look valid and mean nothing.
-    vocab, keywords = verified_inference_paths(
-        checkpoint, vocab_path=vocab_path, keyword_path=keyword_path,
-    )
-    config = SimpleNamespace(
-        cards_folders=list(cards_folders), variant_scripts=variant_scripts,
-    )
+    files = inference_files(checkpoint, vocab=vocab_path, keywords=keyword_path)
     runnable = load_runnable(
-        config, checkpoint, vocab_path=vocab, keyword_path=keywords, records=records,
+        checkpoint, files=files,
+        sidecars=sidecar_cache(cards_folders, variant_scripts), records=records,
     )
     return ProbeModel(
         checkpoint=checkpoint, encoder=runnable.encoder, model=runnable.model,
         batcher=runnable.batcher, fields=runnable.fields,
-        device=runnable.batcher.materializer.device, surface=surface_of(vocab),
+        device=runnable.batcher.materializer.device, surface=files.surface,
         e_dim=checkpoint.encoder_config.e_dim,
     )
 

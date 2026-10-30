@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from effects.application.train_effect_model import (
-    EarlyStopper,
-    TrainEffectModelConfig,
-    fields_for_epoch,
-)
+from effects.application.training_schedule import Curriculum, EarlyStopper
 from effects.domain.effect_head_layout import PER_ENTITY_FIELDS, FieldGroup
 from effects.domain.sampling import SamplingClass
 
@@ -18,17 +14,16 @@ def _sparse(fields):
 
 
 def test_sparse_fields_are_off_before_the_curriculum_epoch_and_on_from_it():
-    config = TrainEffectModelConfig(steps_per_epoch=5000, curriculum_epoch=3)
-    assert _sparse(fields_for_epoch(config, present=PRESENT, epoch=2)) == []
-    on = _sparse(fields_for_epoch(config, present=PRESENT, epoch=3))
+    curriculum = Curriculum(3)
+    assert _sparse(curriculum.fields_for(2, PRESENT)) == []
+    on = _sparse(curriculum.fields_for(3, PRESENT))
     assert on and all(f in PER_ENTITY_FIELDS for f in on)
-    assert _sparse(fields_for_epoch(config, present=PRESENT, epoch=4)) == on
+    assert _sparse(curriculum.fields_for(4, PRESENT)) == on
 
 
 def test_a_first_epoch_curriculum_enables_the_sparse_group_from_the_first_step():
     for epoch in (0, 1):
-        config = TrainEffectModelConfig(curriculum_epoch=epoch)
-        assert _sparse(fields_for_epoch(config, present=PRESENT, epoch=1))
+        assert _sparse(Curriculum(epoch).fields_for(1, PRESENT))
 
 
 def test_the_stopper_resets():
@@ -47,14 +42,8 @@ def test_the_loop_resets_the_stopper_when_the_curriculum_switches():
     ``--curriculum-epoch 1`` run enables the sparse group from its first step,
     so there is no earlier best measuring a different objective to forget.
     """
-    from effects.application import training_loop
-
-    config = TrainEffectModelConfig(
-        corpus="x", steps_per_epoch=10, curriculum_epoch=2, epochs=3,
-    )
-    assert training_loop.resets_at(config, epoch=1) is False
-    assert training_loop.resets_at(config, epoch=2) is True
-    assert training_loop.resets_at(config, epoch=3) is False
-    assert training_loop.resets_at(
-        TrainEffectModelConfig(corpus="x", curriculum_epoch=1), epoch=1,
-    ) is False
+    curriculum = Curriculum(2)
+    assert curriculum.resets_at(1) is False
+    assert curriculum.resets_at(2) is True
+    assert curriculum.resets_at(3) is False
+    assert Curriculum(1).resets_at(1) is False

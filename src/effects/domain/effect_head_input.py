@@ -12,13 +12,15 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum
 from functools import lru_cache
+from types import MappingProxyType
 from typing import Protocol
 
 from effects.domain.keyword_names import overlay_keyword
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, first_text
 from effects.domain.recorded_version import recorded_version
 from effects.domain.records import (
     ActivationPayload,
@@ -26,12 +28,19 @@ from effects.domain.records import (
     ContinuousPayload,
     EffectRecord,
     Moment,
-    PlayabilityDecisionPayload,
     PlayabilitySubkind,
     RecordKind,
     ResolutionOutcome,
+    acting_keys,
 )
-from effects.domain.state_snapshot import COLORS, EntityState, PlayerState, normalize_counter_type
+from effects.domain.state_snapshot import (
+    COLORS,
+    CombatSubstep,
+    EntityState,
+    PlayerState,
+    Zone,
+    normalize_counter_type,
+)
 
 
 class SlotKind(IntEnum):
@@ -42,19 +51,17 @@ class SlotKind(IntEnum):
     ABILITY = 4
 
 
-# Each vocabulary's one-hot ends in an "other" slot. Never edit these tuples:
-# a checkpoint trained on them reads them bit for bit; a new spelling goes in a
-# new InputLayout instead.
+# Each vocabulary's one-hot ends in an "other" slot. Never edit these tuples,
+# nor the enums two of them are read off: a checkpoint trained on them reads
+# them bit for bit; a new spelling goes in a new InputLayout instead.
 
 PHASES: tuple[str, ...] = (
     "untap", "upkeep", "draw", "main1", "begin_combat", "declare_attackers",
     "declare_blockers", "first_strike_damage", "combat_damage", "end_combat",
     "main2", "end_of_turn", "cleanup",
 )
-COMBAT_SUBSTEPS: tuple[str, ...] = ("first_strike", "regular")
-ZONES: tuple[str, ...] = (
-    "battlefield", "stack", "hand", "graveyard", "library", "exile", "command",
-)
+COMBAT_SUBSTEPS: tuple[str, ...] = tuple(substep.value for substep in CombatSubstep)
+ZONES: tuple[str, ...] = tuple(zone.value for zone in Zone)
 CARD_TYPES: tuple[str, ...] = (
     "artifact", "battle", "creature", "enchantment", "instant", "land",
     "planeswalker", "sorcery", "kindred", "emblem",
@@ -509,6 +516,10 @@ class LineLookup(Protocol):
         """The charm-mode keys whose slots follow the key's (FR-063a)."""
 
 
+#: The ``stripped`` map of a record built as collected: no entity loses a keyword.
+NO_STRIP: Mapping[str, frozenset[str]] = MappingProxyType({})
+
+
 class SurfaceBuilder:
     """Lays records out as the token surface, under one batch's constants.
 
@@ -529,7 +540,7 @@ class SurfaceBuilder:
         self._zero = tuple([0.0] * e_dim)
 
     def build(
-        self, record: EffectRecord, stripped: dict[str, frozenset[str]] | None = None,
+        self, record: EffectRecord, stripped: Mapping[str, frozenset[str]] = NO_STRIP,
     ) -> EffectHeadInput:
         """One record's surface.
 
@@ -562,7 +573,6 @@ class SurfaceBuilder:
             ))
 
         masked = continuous_masked_keywords(record)
-        stripped = stripped or {}
         source_id = record.state.refs.source
         for entity in record.state.entities:
             gone = stripped.get(entity.id, frozenset())
@@ -613,25 +623,13 @@ class SurfaceBuilder:
         return not (dropout > 0.0 and self.rng.random() < dropout)
 
     def _act_vector(self, record: EffectRecord):
+        """The acting line's ``e``: the first of :func:`acting_keys` that
+        resolves, so ``[ACT]`` reads exactly the line rarity and gate 1 key on.
+        A merged line's keys all name the same row."""
         if not record.has_act_line:
             return self._zero
-        payload = record.payload
-        if isinstance(payload, PlayabilityDecisionPayload):
-            if not payload.candidates:
-                return self._zero
-            return self._first_vector(payload.candidates[0].ability)
-        if record.ability:
-            return self._first_vector(record.ability)
-        return self._zero
-
-    def _first_vector(self, keys):
-        """The first key that resolves; zeros if none do. A merged line's keys
-        all name the same row."""
-        for key in keys:
-            vector = self.lines.e_for(key)
-            if vector is not None:
-                return vector
-        return self._zero
+        vector = first_text(acting_keys(record), self.lines.e_for)
+        return self._zero if vector is None else vector
 
 
 def continuous_masked_keywords(record: EffectRecord) -> dict[str, frozenset[str]]:

@@ -18,10 +18,9 @@ from sealed.infrastructure.pool_file_reader import format_generated_deck
 COVERAGE_SET_CODE = "COVERAGE"
 
 
-def write_deck_file(
-    decks: list[list[str]], path: Path, *, label: str, set_code: str,
-) -> int:
-    """Write one deck per line, replacing whatever was there. Returns the count.
+def write_deck_file(decks: list[list[str]], path: Path, *, label: str) -> int:
+    """Write one deck per line under :data:`COVERAGE_SET_CODE`, replacing
+    whatever was there. Returns the count.
 
     Replacing rather than appending: a round's decks are built for that round's
     weights, and last round's decks would pull play back toward cards that have
@@ -29,6 +28,6 @@ def write_deck_file(
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows = [format_generated_deck(label, set_code, deck) for deck in decks]
+    rows = [format_generated_deck(label, COVERAGE_SET_CODE, deck) for deck in decks]
     path.write_text("\n".join(rows) + ("\n" if rows else ""), encoding="utf-8")
     return len(rows)

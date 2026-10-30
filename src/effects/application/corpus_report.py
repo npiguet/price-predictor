@@ -9,23 +9,22 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict
 from typing import TYPE_CHECKING
 
 from effects.application.corpus_survey import RefusalTally, Survey
 from effects.application.corpus_write import WriteResult
 from effects.domain.ability_tokenizer import Surface
-from effects.domain.corpus_manifest import FamilyRow
+from effects.domain.corpus_manifest import ClassCounts, CorpusManifest, FamilyRow
 from effects.domain.corpus_plan import BuildCorpusError, Keys
 from effects.domain.coverage import HELD_OUT_GAME_FLOOR
 from effects.domain.record_quality import QualityDefect
 from effects.domain.records import LegalityDecision
 from effects.domain.sampling import SamplingClass
 from effects.domain.strata import DROPPED_STRATA, OUTPUT_STRATA, Stratum
+from effects.domain.text_holdout import normalize_script_text
 
 if TYPE_CHECKING:
     from effects.application.build_corpus import BuildCorpusConfig, Decisions
-    from effects.domain.corpus_manifest import CorpusManifest
     from effects.domain.split import HeldOutCards
 
 logger = logging.getLogger(__name__)
@@ -154,21 +153,21 @@ def _nested(counts: Counter[tuple[str, str]]) -> dict[str, dict[str, int]]:
 
 def family_tables(
     decisions: Decisions, written: WriteResult,
-) -> tuple[dict[str, dict[str, dict[str, int]]], dict[str, dict[str, dict[str, int]]]]:
+) -> tuple[dict[str, dict[str, FamilyRow]], dict[str, dict[str, dict[str, int]]]]:
     """The manifest's per-family and per-signature tables (FR-053)."""
-    families: dict[str, dict[str, dict[str, int]]] = {}
+    families: dict[str, dict[str, FamilyRow]] = {}
     for klass, per_family in decisions.selection.families.items():
         for label, row in per_family.items():
             wrote = written.families.written.get((klass, label), 0)
             distinct = written.families.distinct.get((klass, label), 0)
-            families.setdefault(klass, {})[label] = asdict(FamilyRow(
+            families.setdefault(klass, {})[label] = FamilyRow(
                 available=row.available,
                 share=row.share,
                 planned=row.planned,
                 written=wrote,
                 repeats=wrote - distinct,
                 shortfall=max(0, row.share - wrote),
-            ))
+            )
     signatures: dict[str, dict[str, dict[str, int]]] = {}
     for (klass, label, signature), count in sorted(written.families.signatures.items()):
         if signature:
@@ -180,8 +179,6 @@ def held_out_text_report(
     survey: Survey, written: WriteResult, held_out_texts: Iterable[str],
 ) -> tuple[tuple[str, ...], dict[str, int]]:
     """Held-out texts with no gate-one record, and those resolved in under five games."""
-    from effects.domain.text_holdout import normalize_script_text
-
     held_games = survey.totals.games.held_out
     texts = {normalize_script_text(text) for text in held_out_texts}
     without = tuple(sorted(texts - written.strata.gate_one_texts))
@@ -203,8 +200,6 @@ def build_manifest(
     decisions: Decisions, written: WriteResult,
 ) -> CorpusManifest:
     """Everything the build decided and wrote, as the manifest records it."""
-    from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
-
     training = written.training
     per_class = {
         name: ClassCounts(
@@ -256,7 +251,7 @@ def build_manifest(
         held_out_games_by_source=survey.held_out_games_by_source,
         shard_records=config.shard_records,
         validation_sample=config.validation_sample,
-        max_events_per_record=config.max_events,
+        max_events_per_record=config.max_events_per_record,
         unattributed_records=written.unattributed,
         holdout_unit=config.holdout.unit,
         families=families,
@@ -366,8 +361,7 @@ def _log_mixture(manifest: CorpusManifest) -> None:
             "more than the corpus can supply at this mixture.", name, missing,
         )
     for klass, per_family in sorted(manifest.families.items()):
-        for family, counts in sorted(per_family.items()):
-            row = FamilyRow(**counts)
+        for family, row in sorted(per_family.items()):
             if row.shortfall:
                 logger.warning(
                     "%-22s family %-28s short %7d of its share %d (%d available, "

@@ -98,14 +98,6 @@ PARTNERLESS_OUTCOMES: frozenset[ResolutionOutcome] = frozenset({
     ResolutionOutcome.COUNTERED,
 })
 
-#: Envelope fields that describe how a record was collected, never model inputs
-#: (FR-018): a model that can see ``fork`` learns to predict differently on
-#: forks, the confound forks exist to avoid.
-COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
-    "mode", "interventional", "fork", "synthetic", "ability_unresolved",
-    "random_seat", "what_if",
-})
-
 #: The legality subkinds, the ones that carry ``what_if`` (FR-031); a
 #: ``decision`` is always a real evaluation.
 LEGALITY_SUBKINDS: frozenset[PlayabilitySubkind] = frozenset({
@@ -283,6 +275,32 @@ class RewritePayload(_PayloadQueries):
 
 
 @dataclass(frozen=True, slots=True)
+class ChannelChange:
+    """One contribution channel, read through the token grammar
+    :class:`Contribution` describes."""
+
+    gained: tuple[str, ...] = ()
+    #: Each removed value, its leading ``-`` dropped.
+    lost: tuple[str, ...] = ()
+    #: A lone ``=``: the static sets the line outright, so what it displaced is
+    #: not named (the snapshot is the board after the static).
+    sets_outright: bool = False
+
+    @classmethod
+    def parse(cls, tokens: tuple[str, ...]) -> ChannelChange:
+        gained: list[str] = []
+        lost: list[str] = []
+        for token in tokens:
+            if token == "=":
+                continue
+            if token.startswith("-"):
+                lost.append(token[1:])
+            else:
+                gained.append(token)
+        return cls(gained=tuple(gained), lost=tuple(lost), sets_outright="=" in tokens)
+
+
+@dataclass(frozen=True, slots=True)
 class Contribution:
     """One entity's share of a continuous effect, per layer channel.
 
@@ -308,6 +326,19 @@ class Contribution:
     types: tuple[str, ...] = ()
     colors: tuple[str, ...] = ()
     name: str | None = None
+
+    @property
+    def keyword_changes(self) -> ChannelChange:
+        """The keywords granted and removed; the channel takes the ``-`` too."""
+        return ChannelChange.parse(self.keywords)
+
+    @property
+    def type_changes(self) -> ChannelChange:
+        return ChannelChange.parse(self.types)
+
+    @property
+    def color_changes(self) -> ChannelChange:
+        return ChannelChange.parse(self.colors)
 
 
 @dataclass(frozen=True, slots=True)
@@ -623,11 +654,7 @@ class EffectRecord:
 
 
 def events_of(record: EffectRecord) -> tuple[Event, ...]:
-    """The events that happened in a record, whatever its kind.
-
-    Here rather than beside target derivation, which imports torch, because
-    the coverage counter's pool workers read it.
-    """
+    """The events that happened in a record, whatever its kind."""
     return record.payload.happened_events()
 
 

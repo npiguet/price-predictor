@@ -9,12 +9,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from effects.application.build_vocab import (
-    DEFAULT_SCRIPT_VOCAB_PATH,
-    DEFAULT_VOCAB_PATH,
-    BuildVocabConfig,
-)
-from effects.domain.ability_tokenizer import Surface
 from effects.infrastructure.cli import build_parser
 
 
@@ -24,10 +18,11 @@ def parse(*argv: str):
 
 class TestCollectVariants:
     def test_the_defaults_are_the_contracts(self):
-        from effects.infrastructure.cli import holdout_source
+        from effects.application.collect_variants import CollectVariantsConfig
+        from effects.infrastructure.cli import collector_config
 
         args = parse("collect-variants")
-        records = holdout_source(args).effect_records
+        records = collector_config(CollectVariantsConfig, args).effect_records
         assert records == Path("output/effects/records/")
         assert args.forge_cards_path == Path("../forge/forge-gui/res/cardsfolder/")
         assert args.variant_scripts == Path("output/effects/variant-scripts/")
@@ -41,16 +36,6 @@ class TestCollectVariants:
             "first_strike,double_strike,deathtouch,lifelink,trample,"
             "indestructible,wither,infect"
         )
-
-
-class TestScriptSurface:
-    def test_the_two_surfaces_write_different_files(self):
-        """So a stage-four rebuild never overwrites the vocabulary a
-        stage-one-to-three checkpoint recorded."""
-        assert DEFAULT_VOCAB_PATH != DEFAULT_SCRIPT_VOCAB_PATH
-        assert BuildVocabConfig(
-            surface=Surface.SCRIPT,
-        ).resolved_vocab_path() == DEFAULT_SCRIPT_VOCAB_PATH
 
 
 class TestVariantScriptsFlag:

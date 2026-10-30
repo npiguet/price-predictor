@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 
 import torch
 
@@ -19,33 +18,34 @@ from effects.application.step_preparation import (
     StepPreparer,
     training_heads,
 )
+from effects.application.step_workers import StepWorkerPool
 from effects.application.surface_batching import (
     IdentityTable,
     Materializer,
     NoiseState,
 )
 from effects.application.train_effect_model import (
-    LEARNING_RATE,
-    SWEEP_FLAGS,
-    WEIGHT_DECAY,
-    EarlyStopper,
     RunSpec,
     TrainEffectModelConfig,
-    fields_for_epoch,
+    recorded_flags,
+)
+from effects.application.training_schedule import (
+    LEARNING_RATE,
+    WEIGHT_DECAY,
+    Curriculum,
+    EarlyStopper,
     warmup_steps,
 )
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     AbilityEncoderConfig,
-    surface_of,
 )
 from effects.domain.ability_tokenizer import TOKENIZER_RULES, TOKENIZER_RULES_KEY
 from effects.domain.baselines import baseline_masks
 from effects.domain.effect_head_input import INPUT_LAYOUT, INPUT_LAYOUT_KEY, SlotKind
 from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_model import EffectModel, EffectModelConfig
-from effects.infrastructure.sidecar_io import script_vocabularies, sidecar_roots
-from effects.infrastructure.step_workers import StepWorkerPool
+from effects.infrastructure.sidecar_io import script_vocabularies
 
 logger = logging.getLogger(__name__)
 
@@ -104,10 +104,7 @@ def api_vocabularies(config: TrainEffectModelConfig) -> tuple[list[str], list[st
     since the read is every sidecar of every tree."""
     if config.api_weight <= 0.0:
         return [], []
-    folders = list(config.cards_folders)
-    if config.variant_scripts:
-        folders.append(Path(config.variant_scripts))
-    return script_vocabularies(folders)
+    return script_vocabularies(config.source_trees.folders())
 
 
 def preparer_settings(spec: RunSpec, *, widths: dict[SlotKind, int]) -> PreparerSettings:
@@ -129,18 +126,10 @@ def preparer_settings(spec: RunSpec, *, widths: dict[SlotKind, int]) -> Preparer
 
 
 def training_settings(spec: RunSpec, *, api_types, param_keys) -> dict:
-    """The flags a sweep arm differs by, the seed, and the script-API
-    vocabularies (FR-063). ``lethality_copies`` is written only when set, so a
-    run without copies resumes against the settings it always had."""
-    config = spec.config
-    copies = (
-        {"lethality_copies": config.lethality_copies}
-        if config.lethality_copies else {}
-    )
+    """The recorded flags (``recorded_flags``), the script-API vocabularies,
+    and the tokenizer rules and input layout the run trained under (FR-063)."""
     return {
-        **copies,
-        "seed": spec.seed,
-        **{name: getattr(config, name) for name in SWEEP_FLAGS},
+        **recorded_flags(spec.config, seed=spec.seed),
         "api_types": list(api_types),
         "param_keys": list(param_keys),
         TOKENIZER_RULES_KEY: TOKENIZER_RULES,
@@ -155,6 +144,7 @@ def build_run(
     """The encoder, the model, the optimizer and both device halves, sized by
     ``preparer``."""
     config = spec.config
+    curriculum = Curriculum(config.curriculum_epoch)
     vocab_size = preparer.tokenizer.vocab_size
     widths = preparer.surface_spec.widths
     encoder_config = AbilityEncoderConfig(
@@ -203,7 +193,7 @@ def build_run(
             spec, api_types=preparer.api_types, param_keys=preparer.param_keys,
         ),
         fields={
-            epoch: fields_for_epoch(config, present=present, epoch=epoch)
+            epoch: curriculum.fields_for(epoch, present)
             for epoch in range(1, config.epochs + 1)
         },
         stopper=EarlyStopper(config.patience),
@@ -213,8 +203,8 @@ def build_run(
 def _identity_table(config: TrainEffectModelConfig, device: torch.device) -> IdentityTable:
     """The identity baseline's table, one row per text the sidecars hold."""
     texts = known_texts(
-        sidecar_roots(config.cards_folders, config.variant_scripts),
-        surface_of(config.vocab_path),
+        config.source_trees.sidecar_roots(),
+        config.tokenizer_files.surface,
     )
     logger.info("Identity table over %d ability texts.", len(texts))
     return IdentityTable(texts, config.e_dim).to(device)

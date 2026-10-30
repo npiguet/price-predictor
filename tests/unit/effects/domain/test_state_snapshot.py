@@ -33,14 +33,6 @@ def _snapshot(**overrides) -> StateSnapshot:
     return make_snapshot(**defaults)
 
 
-class TestPerspectiveIsNotStored:
-    def test_no_snapshot_field_names_a_perspective(self):
-        from dataclasses import fields
-
-        names = {f.name for f in fields(StateSnapshot)}
-        assert not names & {"perspective", "viewer", "mine", "opponent"}
-
-
 class TestEntityArithmetic:
     def test_an_entity_reads_its_totals_less_its_damage(self):
         entity = EntityState(

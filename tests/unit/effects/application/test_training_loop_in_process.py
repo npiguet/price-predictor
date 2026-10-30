@@ -26,11 +26,9 @@ from effects.application.step_preparation import (
     StepPreparer,
     StepReady,
 )
-from effects.application.train_effect_model import (
-    TrainEffectModelConfig,
-    epoch_shards,
-)
+from effects.application.train_effect_model import TrainEffectModelConfig
 from effects.application.training_loop import local_steps
+from effects.application.training_schedule import epoch_shards
 from effects.domain.records import CombatPayload, RecordKind
 from tests.unit.effects.builders import (
     EFFECTS_FIXTURES,
@@ -101,7 +99,7 @@ def epoch(tmp_path, make_record, monkeypatch):
         monkeypatch.setattr(
             StepPreparer, "shard_steps",
             lambda self, task, records, pin=False: iter([
-                ShardOpened(trainable=1, held_back=0, rarity_coverage=None),
+                ShardOpened(trainable=1, rarity_coverage=None),
                 StepReady(
                     prepared=(task.shard.name, records), buckets={}, families={},
                 ),

@@ -16,6 +16,7 @@ from effects.domain.records import (
     LEGALITY_SUBKINDS,
     RecordKind,
 )
+from effects.domain.shard_generation import ShardGeneration
 
 
 @dataclass(slots=True)
@@ -44,7 +45,7 @@ class FieldPresence:
     def observe(self, shard: str, data: dict) -> None:
         counts = self.shards.setdefault(shard, _ShardPresence())
         counts.records += 1
-        counts.with_random_seat += "random_seat" in data
+        counts.with_random_seat += ShardGeneration.of(data) is ShardGeneration.GEN_2
         legality = (
             data.get("kind") == RecordKind.PLAYABILITY.value
             and data.get("subkind") in LEGALITY_SUBKINDS

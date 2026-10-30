@@ -15,7 +15,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import partial
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from effects.domain.budget_allocation import allocate
 from effects.domain.corpus_curation import (
@@ -30,13 +30,17 @@ from effects.domain.corpus_curation import (
     signature_label,
     text_capacity,
 )
+from effects.domain.damage_step_keywords import KeywordResolver
 from effects.domain.provenance import ProvenanceKey, SidecarLookup
 from effects.domain.records import EffectRecord, LegalityDecision
+from effects.domain.rule_families import (
+    FamilySentinel,
+    legality_family,
+    legality_modes,
+    rule_family,
+)
 from effects.domain.sampling import SamplingClass, sampling_class
 from effects.domain.strata import Stratum
-
-if TYPE_CHECKING:
-    from effects.domain.damage_step_keywords import KeywordResolver
 
 #: A record's acting keys: the whole tuple, hashable and picklable as it is.
 Keys = tuple[ProvenanceKey, ...]
@@ -73,8 +77,6 @@ class Cell:
         """This cell with its legality modes folded into their rarest mode's family."""
         if not self.modes:
             return self
-        from effects.domain.rule_families import legality_family
-
         return dataclasses.replace(
             self, family=legality_family(self.modes, mode_counts), modes=frozenset(),
         )
@@ -91,8 +93,6 @@ class Cell:
         ``legality_mode_counts`` (the survey) its cell carries the modes for
         :meth:`resolved` to fold later.
         """
-        from effects.domain.rule_families import FamilySentinel, legality_modes, rule_family
-
         klass = sampling_class(record)
         half = _selection_half(record, klass)
         if klass == SamplingClass.PLAYABILITY_LEGALITY:
@@ -193,36 +193,57 @@ KEYLESS = ""
 
 @dataclass(slots=True)
 class Member:
-    """What one ability text supplies to one cell (FR-049); the keyless member
-    has no heap."""
+    """What one ability text supplies to one cell (FR-049), and the acting
+    keys folding to it.
+
+    The keyless member has no heap and no keys: its records are sampled by
+    hash rate rather than per key, and no text cap applies to it.
+    """
 
     distinct: int = 0
     heap: CapHeap | None = None
+    #: Every acting-key tuple whose text this member is, in survey order.
+    keys: list[Keys] = field(default_factory=list)
+
+    @property
+    def is_keyless(self) -> bool:
+        return self.heap is None
+
+    def take(self, keys: Keys, count: int, hashes: CapHeap) -> None:
+        """One acting-key tuple's records, folded into this text's member."""
+        if self.heap is None:
+            raise ValueError("the keyless member takes no acting keys")
+        self.distinct += count
+        self.heap.merge(hashes)
+        self.keys.append(keys)
+
+    def hashes(self) -> tuple[int, ...]:
+        """The smallest record hashes kept for this text; none when keyless."""
+        return () if self.heap is None else self.heap.values()
 
     def once(self, text_cap: int) -> int:
         """Records this member can supply once each: the text cap, or all of
         them, which the keyless member always can."""
-        if self.heap is None or text_cap <= 0:
+        if self.is_keyless or text_cap <= 0:
             return self.distinct
         return min(self.distinct, text_cap)
 
     def capacity(self, *, text_cap: int, reuse_cap: int) -> int:
         """Records this member can supply with repeats."""
         return text_capacity(
-            self.distinct, text_cap=0 if self.heap is None else text_cap,
+            self.distinct, text_cap=0 if self.is_keyless else text_cap,
             reuse_cap=reuse_cap,
         )
 
 
 def members_of(
     supply: TrainingSupply, key_text: Mapping[Keys, str],
-) -> tuple[dict[Cell, dict[str, Member]], dict[tuple[Cell, str], list[Keys]]]:
-    """``cell -> member name -> Member``, and each member's acting keys.
+) -> dict[Cell, dict[str, Member]]:
+    """``cell -> member name -> Member``.
 
     Keys folding to one text share its member and its cap.
     """
     members: dict[Cell, dict[str, Member]] = defaultdict(dict)
-    keys_of: dict[tuple[Cell, str], list[Keys]] = defaultdict(list)
     for (cell, keys), count in supply.keyed.items():
         text = key_text.get(keys)
         if text is None:
@@ -231,12 +252,10 @@ def members_of(
         member = members[cell].get(text)
         if member is None:
             member = members[cell][text] = Member(heap=CapHeap(supply.heap_cap))
-        member.distinct += count
-        member.heap.merge(supply.heaps[cell, keys])
-        keys_of[cell, text].append(keys)
+        member.take(keys, count, supply.heaps[cell, keys])
     for cell, count in supply.keyless.items():
         members[cell].setdefault(KEYLESS, Member()).distinct += count
-    return dict(members), dict(keys_of)
+    return dict(members)
 
 
 # ── the allocation tree ─────────────────────────────────────────────────
@@ -247,15 +266,21 @@ class AllocationNode:
     """One level of the selection hierarchy, and what it was given.
 
     A leaf is one member of one cell: ``supply`` is what it can write with
-    repeats, ``once`` without. ``share`` is the equal split before
-    redistribution, so ``share - written`` is a shortfall.
+    repeats, ``once`` without; neither is read above the leaves. ``share`` is
+    the equal split before redistribution, so ``share - written`` is a
+    shortfall.
     """
 
     children: dict[Any, AllocationNode] = field(default_factory=dict)
     supply: int = 0
-    once: int | None = None
+    once: int = 0
     share: int = 0
     planned: int = 0
+
+    @property
+    def is_leaf(self) -> bool:
+        """One member of one cell: every level above the members has children."""
+        return not self.children
 
     @property
     def capacity(self) -> int:
@@ -284,14 +309,19 @@ class AllocationNode:
     def allocate(self, budget: int, *, share: int | None = None) -> int:
         """Split ``budget`` down the tree; return what this node plans to write.
 
-        Over a cell's members it runs in two rounds — first what each supplies
-        once, then repeats — so no record repeats while another goes unused.
+        Over a cell's members it runs in two rounds (:func:`_split_in_rounds`),
+        and over every level above them by capacity alone.
         """
         self.share = budget if share is None else share
-        if not self.children:
+        if self.is_leaf:
             self.planned = min(max(0, budget), self.capacity)
             return self.planned
-        split = _split(budget, self.children)
+        if all(child.is_leaf for child in self.children.values()):
+            split = _split_in_rounds(budget, self.children)
+        else:
+            split = allocate(
+                budget, {key: child.capacity for key, child in self.children.items()},
+            )
         fair = self.share // len(self.children)
         self.planned = sum(
             child.allocate(split[key], share=fair) for key, child in self.children.items()
@@ -299,17 +329,17 @@ class AllocationNode:
         return self.planned
 
 
-def _split(budget: int, children: Mapping[Any, AllocationNode]) -> dict[Any, int]:
-    if any(child.once is None for child in children.values()):
-        return allocate(budget, {key: child.capacity for key, child in children.items()})
-    first = allocate(budget, {key: child.once for key, child in children.items()})
+def _split_in_rounds(budget: int, members: Mapping[Any, AllocationNode]) -> dict[Any, int]:
+    """A cell's budget over its members: first what each supplies once, then
+    repeats, so no record repeats while another goes unused."""
+    first = allocate(budget, {key: member.once for key, member in members.items()})
     left = budget - sum(first.values())
     if left <= 0:
         return first
     second = allocate(left, {
-        key: child.capacity - first[key] for key, child in children.items()
+        key: member.capacity - first[key] for key, member in members.items()
     })
-    return {key: first[key] + second.get(key, 0) for key in children}
+    return {key: first[key] + second.get(key, 0) for key in members}
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,7 +375,6 @@ class SelectionPlan:
 
 def plan_selection(
     members: Mapping[Cell, Mapping[str, Member]],
-    keys_of: Mapping[tuple[Cell, str], list[Keys]],
     *,
     mix: Mapping[str, float],
     ceiling: int,
@@ -367,7 +396,7 @@ def plan_selection(
     # The class level is split by the mixture, not equally.
     for klass, root in tree.children.items():
         root.allocate(targets.get(klass, 0))
-    plans, keyless = _copy_plans(tree, members, keys_of)
+    plans, keyless = _copy_plans(tree, members)
     return SelectionPlan(
         plans=plans, keyless=keyless, families=_family_shares(tree, members),
         targets=targets, shortfall=shortfall, available=available,
@@ -422,7 +451,6 @@ def _family_shares(
 def _copy_plans(
     tree: AllocationNode,
     members: Mapping[Cell, Mapping[str, Member]],
-    keys_of: Mapping[tuple[Cell, str], list[Keys]],
 ) -> tuple[dict[tuple[Cell, Keys], CopyPlan], dict[Cell, CopyPlan]]:
     """Each member's planned count as copies: per acting key, or by rate when keyless.
 
@@ -433,11 +461,11 @@ def _copy_plans(
     for (*_, cell), cell_node in tree.walk(_CELL_DEPTH):
         for name, leaf in cell_node.children.items():
             member = members[cell][name]
-            if name == KEYLESS:
+            if member.is_keyless:
                 keyless[cell] = rate_plan(member.distinct, leaf.planned)
                 continue
-            plan = copy_plan(member.heap.values(), member.distinct, leaf.planned)
-            plans.update(((cell, keys), plan) for keys in keys_of[cell, name])
+            plan = copy_plan(member.hashes(), member.distinct, leaf.planned)
+            plans.update(((cell, keys), plan) for keys in member.keys)
     return plans, keyless
 
 

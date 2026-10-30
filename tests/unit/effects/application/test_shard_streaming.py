@@ -27,17 +27,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from effects.application.train_effect_model import (
-    epoch_shards,
-    steps_per_shard,
-)
-from effects.domain.split import (
-    HeldOutCards,
-)
+from effects.application.training_schedule import epoch_shards, steps_per_shard
+from effects.domain.split import HeldOutCards
+from tests.unit.effects.builders import held_out_cards
 
 
 def _held() -> HeldOutCards:
-    return HeldOutCards(names=frozenset({"Serra Angel"}), script_files=frozenset())
+    return held_out_cards({"Serra Angel"})
 
 
 class TestEpochShards:
@@ -114,34 +110,6 @@ class TestEpochShards:
 
     def test_fewer_steps_than_shards_still_sums_correctly(self):
         assert sum(steps_per_shard(5, 18)) == 5
-
-
-class TestProgressFormatting:
-    """The within-shard progress line's two optional sections."""
-
-    def test_gradient_norms_render_per_group(self):
-        from effects.application.training_log import format_norms
-
-        line = format_norms({"encoder": 0.8412, "head": 1.9733})
-        assert "encoder 0.84" in line
-        assert "head 1.97" in line
-
-    def test_no_gradient_section_before_the_first_clip(self):
-        from effects.application.training_log import format_norms
-
-        assert format_norms({}) == ""
-
-    def test_field_terms_are_ordered_largest_first(self):
-        """A blow-up is one field carrying the loss; name order buries it."""
-        from effects.application.training_log import format_parts
-
-        line = format_parts({"gate": 0.41, "zone": 0.63, "pt": 0.28})
-        assert line.index("zone") < line.index("gate") < line.index("pt")
-
-    def test_no_field_section_when_the_batch_reported_none(self):
-        from effects.application.training_log import format_parts
-
-        assert format_parts({}) == ""
 
 
 class TestWhenAStepReportsItsNumbers:

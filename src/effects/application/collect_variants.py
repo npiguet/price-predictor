@@ -14,12 +14,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.application.collector_common import (
+    RANDOM_SEED,
     CollectorConfig,
     build_coverage_decks,
     collector_supervisor,
-    play_decks,
 )
 from effects.domain import default_paths
+from effects.domain.card_names import fold_card_name
 from effects.domain.coverage import DeckCandidate
 from effects.domain.script_variants import (
     is_multi_face,
@@ -37,16 +38,21 @@ logger = logging.getLogger(__name__)
 
 #: Cap on variant records as a fraction of the real records already present.
 DEFAULT_VARIANT_VOLUME = 0.2
-RANDOM_SEED = 42
 
 
 @dataclass
 class CollectVariantsConfig(CollectorConfig):
     forge_cards_path: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_FORGE_CARDS_PATH),
+        default=Path(default_paths.DEFAULT_FORGE_CARDS_PATH), metadata={"help": (
+            "Forge's source card scripts: a variant is a script Forge must load"
+        )},
     )
+    #: The help names the default as typed, trailing slash and all.
     variant_scripts: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_VARIANT_SCRIPTS),
+        default=Path(default_paths.DEFAULT_VARIANT_SCRIPTS), metadata={"help": (
+            "Where perturbed scripts are written "
+            f"(default: {default_paths.DEFAULT_VARIANT_SCRIPTS})"
+        )},
     )
     variant_volume: float = field(default=DEFAULT_VARIANT_VOLUME, metadata={
         "help": (
@@ -54,9 +60,15 @@ class CollectVariantsConfig(CollectorConfig):
             "already present, so it scales with the corpus (default: %(default)s)"
         ),
     })
-    #: The real records ``--variant-volume`` is measured against; defaults to
-    #: the destination, which caps a run writing to its own directory at zero.
-    corpus_records: Path | None = None
+    #: Unset, the destination, which caps a run writing to its own directory
+    #: at zero.
+    corpus_records: Path | None = field(default=None, metadata={"help": (
+        "The real records --variant-volume is measured against (default: "
+        "--effect-records); name the corpus when variants go to their own "
+        "directory, or the cap allows nothing"
+    )})
+    #: The base field, with the help a variant round needs: it seeds the
+    #: perturbation as well as the decks.
     seed: int = field(default=RANDOM_SEED, metadata={
         "help": (
             "Seeds the perturbation and the deck build; a repeat run with the "
@@ -64,6 +76,7 @@ class CollectVariantsConfig(CollectorConfig):
             "(default: %(default)s)"
         ),
     })
+
     def volume_source(self) -> Path:
         """The directory the volume cap counts records in."""
         return self.corpus_records or self.effect_records
@@ -149,6 +162,11 @@ def perturb_script(
     return None
 
 
+def source_scripts(forge_cards_path: Path) -> list[Path]:
+    """Every Forge source script under ``forge_cards_path``, in path order."""
+    return sorted(Path(forge_cards_path).rglob("*.txt"))
+
+
 def generate_variants(
     forge_cards_path: Path,
     output_path: Path,
@@ -156,22 +174,23 @@ def generate_variants(
     held_out: frozenset[str],
     limit: int,
     seed: int = RANDOM_SEED,
+    sources: list[Path] | None = None,
 ) -> list[GeneratedVariant]:
     """Write perturbed scripts into the variant tree.
 
     No variant is generated from a held-out card (FR-057): its changed text
     would not be held out, and generation is the only point where the rule
     can be enforced. Names are folded first, since a script's ``Name:`` is
-    printed case and the holdout is lowercase.
+    printed case and the holdout is lowercase. ``sources`` is
+    :func:`source_scripts` of ``forge_cards_path`` when the caller already
+    listed them: the walk is over all of Forge.
     """
-    from effects.domain.card_names import fold_card_name
-
     held_out = frozenset(fold_card_name(name) for name in held_out)
     rng = random.Random(seed)
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    sources = sorted(Path(forge_cards_path).rglob("*.txt"))
+    sources = list(source_scripts(forge_cards_path) if sources is None else sources)
     rng.shuffle(sources)
 
     generated: list[GeneratedVariant] = []
@@ -202,41 +221,49 @@ def generate_variants(
     return generated
 
 
+class CollectorAbort(Exception):
+    """A step found nothing to go on with and has logged why; the run exits
+    with ``code``."""
+
+    def __init__(self, code: int = 1) -> None:
+        super().__init__(code)
+        self.code = code
+
+
 def run(config: CollectVariantsConfig) -> int:
     """Generate variants, then play them through the records-only worker."""
-    if not Path(config.forge_cards_path).is_dir():
+    try:
+        return _collect(config)
+    except CollectorAbort as abort:
+        return abort.code
+
+
+def _collect(config: CollectVariantsConfig) -> int:
+    """:func:`run`'s steps, each raising :class:`CollectorAbort` once there
+    is nothing left to play."""
+    if not config.forge_cards_path.is_dir():
         logger.error(
             "No Forge card scripts at %s. This command reads the *source* "
             "scripts, not the converted ones.", config.forge_cards_path,
         )
-        return 1
-    budget = _size_budget(config)
-    if budget <= 0:
-        return 1
-    variants = _generate(config, budget)
-    if not variants:
-        return 1
-    code = _write_sidecars(Path(config.variant_scripts))
-    if code != 0:
-        return code
-    variants = _keep_loadable(variants, Path(config.variant_scripts))
-    if not variants:
-        return 1
-    variants = _keep_unheld(config, variants)
-    if not variants:
-        return 1
+        raise CollectorAbort
+    sources = source_scripts(config.forge_cards_path)
+    budget = _size_budget(config, len(sources))
+    variants = _generate(config, budget, sources)
+    _write_sidecars(config.variant_scripts)
+    variants = _keep_unheld(config, _keep_loadable(variants, config.variant_scripts))
     return _play_and_check_growth(config, variants, budget)
 
 
-def _size_budget(config: CollectVariantsConfig) -> int:
-    """How many variant scripts this run may generate; says why when none."""
+def _size_budget(config: CollectVariantsConfig, scripts: int) -> int:
+    """How many variant scripts this run may generate; aborts, saying why,
+    when none."""
     from effects.infrastructure.shard_io import count_records
 
-    source_scripts = sum(1 for _ in Path(config.forge_cards_path).rglob("*.txt"))
     source = config.volume_source()
     existing = count_records(
         source,
-        ceiling=volume_ceiling(source_scripts, config.variant_volume),
+        ceiling=volume_ceiling(scripts, config.variant_volume),
     )
     budget = variant_budget(existing, config.variant_volume)
     if budget <= 0:
@@ -246,42 +273,48 @@ def _size_budget(config: CollectVariantsConfig) -> int:
             "the corpus when variants are written to a directory of their own.",
             source, existing, config.variant_volume, budget,
         )
+        raise CollectorAbort
     return budget
 
 
-def _generate(config: CollectVariantsConfig, budget: int) -> list[GeneratedVariant]:
-    held_out = config.holdout_source().exclusions()
+def _generate(
+    config: CollectVariantsConfig, budget: int, sources: list[Path],
+) -> list[GeneratedVariant]:
+    held_out = config.deck_holdout.exclusions()
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
-        held_out=held_out, limit=budget, seed=config.seed,
+        held_out=held_out, limit=budget, seed=config.seed, sources=sources,
     )
     logger.info(
         "Generated %d variant scripts into %s (%d cards held out with their "
         "sources)",
         len(variants), config.variant_scripts, len(held_out),
     )
+    for variant in variants:
+        logger.info("  %s, from %s: %s", variant.name, variant.source_card, variant.perturbation)
     if not variants:
         logger.error("No script had a perturbable parameter")
+        raise CollectorAbort
     return variants
 
 
-def _write_sidecars(variant_scripts: Path) -> int:
+def _write_sidecars(variant_scripts: Path) -> None:
     """Write every variant's sidecar before the first game: a variant without
-    one produces records nothing can join."""
+    one produces records nothing can join. Aborts with the worker's code."""
     code = write_variant_sidecars(variant_scripts)
     if code != 0:
         logger.error(
             "VariantSidecarMain exited %d; variant records would have no "
             "sidecar to join against", code,
         )
-    return code
+        raise CollectorAbort(code)
 
 
 def _keep_loadable(
     variants: list[GeneratedVariant], variant_scripts: Path,
 ) -> list[GeneratedVariant]:
     """The variants Forge loaded, per the sidecar pass's list, saying how many
-    it rejected."""
+    it rejected; aborts when it loaded none."""
     deckable = loadable_variants(variants, variant_scripts)
     rejected = len(variants) - len(deckable)
     if rejected:
@@ -297,6 +330,7 @@ def _keep_loadable(
             "Forge loaded none of the %d perturbed scripts, so there is "
             "nothing to deck.", len(variants),
         )
+        raise CollectorAbort
     return deckable
 
 
@@ -333,10 +367,9 @@ def drop_held_out_variants(
 def _keep_unheld(
     config: CollectVariantsConfig, variants: list[GeneratedVariant],
 ) -> list[GeneratedVariant]:
-    """:func:`drop_held_out_variants` under the holdout ``build-corpus`` chooses."""
-    from effects.infrastructure.converted_trees import ConvertedTrees
-
-    trees = ConvertedTrees.from_folders(config.cards_folders)
+    """:func:`drop_held_out_variants` under the holdout ``build-corpus``
+    chooses; aborts when it drops every variant."""
+    trees = config.source_trees.converted()
     if trees.cards_folder is None or not trees.cards_folder.is_dir():
         logger.warning(
             "No converted card tree among %s, so no variant is checked against "
@@ -354,6 +387,7 @@ def _keep_unheld(
         )
     if not kept:
         logger.error("Every variant printed a held-out text; there is nothing to deck.")
+        raise CollectorAbort
     return kept
 
 
@@ -364,7 +398,7 @@ def _play_and_check_growth(
     from effects.infrastructure.shard_io import count_records, count_shard_records, iter_shards
 
     # Equal weights: a fresh variant has no records to balance against.
-    decks_file = Path(config.effect_records) / "variant-decks.txt"
+    decks_file = config.effect_records / "variant-decks.txt"
     decks = build_coverage_decks(
         {variant.name: 1.0 for variant in variants},
         {variant.name: variant.deck_candidate() for variant in variants},
@@ -373,14 +407,13 @@ def _play_and_check_growth(
     )
     with collector_supervisor(
         workers=config.workers, effect_records=config.effect_records,
-        caps=config.caps, variant_scripts=Path(config.variant_scripts),
+        caps=config.caps, variant_scripts=config.variant_scripts,
     ) as supervisor:
         # Listed rather than counted: a shard is never reopened, so what the
         # round wrote is exactly the shards it added.
         before = set(iter_shards(config.effect_records))
-        play_decks(
-            supervisor, decks, decks_file,
-            label="variant", matches=config.decks_per_round,
+        supervisor.play_round(
+            decks, decks_file, label="variant", matches=config.decks_per_round,
         )
 
     # Counted rather than assumed: scripts that never reach Forge's card

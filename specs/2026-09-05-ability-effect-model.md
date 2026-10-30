@@ -405,7 +405,7 @@ Flags:
 | `--corpus` | _(required)_ | a curated dataset; the trainer's only input |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted text and provenance sidecars; repeatable |
 | `--holdout-unit` | the manifest's | `template` \| `text`; a value differing from the manifest's is refused |
-| `--variant-scripts` | _(none; `output/effects/variant-scripts/` once variants are collected)_ | the perturbed-script tree and its sidecars |
+| `--variant-scripts` | the tree the corpus manifest records | the perturbed-script tree and its sidecars |
 | `--vocab-path` | `models/effects/vocab.txt` | tokenizer vocabulary; a script-surface run points it at `models/effects/vocab-script.txt` |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` | keyword definitions for expansion dropout |
 | `--model-output` | per variant (above) | checkpoint directory |

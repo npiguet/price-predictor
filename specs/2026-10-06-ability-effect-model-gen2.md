@@ -792,6 +792,7 @@ python -m effects build-corpus
 python -m effects train-effect-model
     [--holdout-unit template|text]       default the manifest's unit
     [--cards-folder DIR ...]             default output/cardsfolder/, output/tokenscripts/
+    [--variant-scripts DIR]              default the tree the corpus manifest records
     [--e-noise R]                        default 0.1; noise ratio
     [--value-weight W]                   default 0.05
     [--api-weight W]                     default 0.003

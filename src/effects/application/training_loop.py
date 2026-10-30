@@ -1,7 +1,7 @@
 """The training loop: the optimizer, the epochs and the shards between steps.
 
-The schedule and corpus reading are pure functions in ``train_effect_model``;
-each step's host half is a ``StepPreparer``'s and its device half a
+The schedule is ``training_schedule``'s pure functions and corpus reading
+``train_effect_model``'s; each step's host half is a ``StepPreparer``'s and its device half a
 ``StepLossComputer``'s, validation is a ``Validator``'s and every line between
 steps a ``RunReporter``'s. An epoch is a step count, not a pass over the
 corpus, and walks ``--shards-per-epoch`` shards one at a time. The best
@@ -34,14 +34,20 @@ from effects.application.step_preparation import (
     ShardOpened,
     ShardTask,
     StepPreparer,
+    StepReady,
 )
+from effects.application.step_workers import StepWorkerPool
 from effects.application.surface_batching import IDENTITY_TABLE_KEY
 from effects.application.train_effect_model import (
-    MAX_GRAD_NORM,
     CorpusFacts,
-    EpochResult,
+    MissingTrainingInputError,
     RunSpec,
     TrainEffectModelConfig,
+    check_holdout,
+)
+from effects.application.training_schedule import (
+    MAX_GRAD_NORM,
+    Curriculum,
     epoch_shards,
     learning_rate_at,
     steps_per_shard,
@@ -54,11 +60,13 @@ from effects.infrastructure.effect_model_store import (
     EffectModelStore,
 )
 from effects.infrastructure.shard_io import load_shard
-from effects.infrastructure.step_workers import StepWorkerPool
 from effects.infrastructure.torch_device import default_device
 from price_predictor.infrastructure.torch_training import clip_per_group
 
 logger = logging.getLogger(__name__)
+
+#: What a shard that never opened reports: no records, so no line of steps.
+UNOPENED = ShardOpened(trainable=0, rarity_coverage=None)
 
 #: The most prepared steps one worker process may hold queued: room for one
 #: shard's steps, capped to bound the shared memory of a run with long shards.
@@ -83,12 +91,6 @@ def reports_now(*, index: int, budget: int) -> bool:
     """Whether the step at zero-based ``index`` reads its numbers back: only a
     shard's last, since each read is a device synchronization."""
     return index + 1 >= budget
-
-
-def resets_at(config, *, epoch: int) -> bool:
-    """Whether the early stopper forgets its best at the start of ``epoch``:
-    at the curriculum epoch, where the objective gains the sparse fields."""
-    return config.curriculum_epoch > 1 and epoch == config.curriculum_epoch
 
 
 def local_steps(task: ShardTask, preparer: StepPreparer, *, pin: bool) -> Iterator:
@@ -153,6 +155,7 @@ class TrainingLoop:
         self.losses = StepLossComputer(config, self.device)
         self.validator = Validator(config, self.device, self.losses)
         self.reporter = RunReporter(config, facts)
+        self.curriculum = Curriculum(config.curriculum_epoch)
 
     @property
     def is_cuda(self) -> bool:
@@ -162,10 +165,17 @@ class TrainingLoop:
         samples = ValidationSamples.load(self.validation_samples)
         self.reporter.missing_classes(samples.present)
         if not samples.probe:
-            self.reporter.no_probe()
-            return 1
+            raise MissingTrainingInputError(
+                "The corpus's validation samples hold no records, so there is "
+                "nothing to measure feature widths from."
+            )
         self.reporter.run_start(self.spec.seed, samples, shards=len(self.training_shards))
-        self.reporter.thin_holdout(samples)
+        # Raises on an empty card-disjoint stratum (FR-088b); the gate-1 slice
+        # is the build's count, not this run's.
+        self.reporter.thin_holdout(check_holdout(
+            card_disjoint_records=len(samples.card_disjoint),
+            unique_text_records=self.spec.facts.gate_one_records,
+        ))
         self._cap_cuda_memory()
         settings = preparer_settings(self.spec, widths=feature_widths(samples.probe))
         run = build_run(
@@ -200,20 +210,14 @@ class TrainingLoop:
         # so it never crosses into a different objective.
         run.optimizer.zero_grad(set_to_none=True)
         tally = EpochTally(running=torch.zeros((), device=self.device))
-        if resets_at(self.config, epoch=epoch):
+        if self.curriculum.resets_at(epoch):
             run.stopper.reset()
             self.reporter.curriculum(epoch, len(run.fields[epoch]))
         self._train_epoch(epoch, run, tally)
         card, game = self.validator.epoch(run, samples, run.fields[epoch])
-        result = EpochResult(
-            epoch=epoch, train_loss=tally.train_loss,
-            card_disjoint_loss=card.loss, game_disjoint_loss=game.loss,
-        )
-        self.reporter.epoch(
-            result, card.progress(), card.parts, self.validator.floor.floor, tally,
-        )
+        self.reporter.epoch(epoch, tally, card, game, self.validator.floor.floor)
         self.reporter.unresolved(run.preparer)
-        return self._close_epoch(epoch, run, result)
+        return self._close_epoch(epoch, run, card.loss)
 
     def _train_epoch(self, epoch: int, run: RunContext, tally: EpochTally) -> None:
         plan = self._epoch_plan(epoch, run)
@@ -230,10 +234,10 @@ class TrainingLoop:
             for task in self._epoch_plan(epoch + 1, run).tasks:
                 run.pool.submit(task)
 
-    def _close_epoch(self, epoch: int, run: RunContext, result: EpochResult) -> bool:
+    def _close_epoch(self, epoch: int, run: RunContext, card_disjoint_loss: float) -> bool:
         """Save what the epoch earned and its resume state; True to stop early."""
         stopper = run.stopper
-        best = stopper.update(result.card_disjoint_loss)
+        best = stopper.update(card_disjoint_loss)
         if best or self.config.save_every_epoch:
             checkpoint = self._checkpoint(epoch, run)
             output = self.config.resolved_model_output()
@@ -241,7 +245,7 @@ class TrainingLoop:
                 EffectModelStore(output).save(checkpoint)
             if self.config.save_every_epoch:
                 EffectModelStore(output / EPOCHS_DIR).save(checkpoint)
-        save_resume(run, epoch, finished=stopper.should_stop, best=best)
+        save_resume(run, epoch, best=best)
         if stopper.should_stop:
             self.reporter.early_stop()
         return stopper.should_stop
@@ -328,33 +332,35 @@ class TrainingLoop:
         """
         stats = ShardStats(loss=torch.zeros((), device=self.device))
         started = time.perf_counter()
-        opened: ShardOpened | None = None
+        opened = UNOPENED
         index = 0
         try:
             for message, elapsed in _timed(steps, task, of):
-                if isinstance(message, ShardOpened):
-                    stats.waited += elapsed
-                    started = time.perf_counter()
-                    opened = message
-                    self.reporter.shard_opened(message)
-                    continue
-                if isinstance(message, ShardClosed):
-                    self.reporter.shard_closed(message)
-                    continue
-                stats.batch_waited += elapsed
-                stats.learning_rate = self._set_learning_rate(run)
-                tally.add_shares(message)
-                # Decided before the forward pass, which is when the per-field
-                # decomposition has to be asked for.
-                due = reports_now(index=index, budget=task.budget)
-                index += 1
-                self._train_step(message.prepared, run, tally, stats, due)
+                match message:
+                    case ShardOpened():
+                        stats.waited += elapsed
+                        started = time.perf_counter()
+                        opened = message
+                        self.reporter.shard_opened(message)
+                    case ShardClosed():
+                        self.reporter.shard_closed(message)
+                    case StepReady():
+                        stats.batch_waited += elapsed
+                        stats.learning_rate = self._set_learning_rate(run)
+                        tally.add_shares(message)
+                        # Decided before the forward pass, which is when the
+                        # per-field decomposition has to be asked for.
+                        due = reports_now(index=index, budget=task.budget)
+                        index += 1
+                        self._train_step(message.prepared, run, tally, stats, due)
+                    case _:
+                        raise TypeError(f"unexpected shard message {type(message).__name__}")
         finally:
             steps.close()
         self.reporter.shard(task, of, opened, stats, trained=time.perf_counter() - started)
 
     def _set_learning_rate(self, run: RunContext) -> float:
-        rate = learning_rate_at(run.step, warmup=run.warmup) * self.config.lr_scale
+        rate = learning_rate_at(run.step, warmup=run.warmup, scale=self.config.lr_scale)
         for group in run.optimizer.param_groups:
             group["lr"] = rate
         return rate

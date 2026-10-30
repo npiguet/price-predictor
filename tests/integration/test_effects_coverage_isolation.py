@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
+from effects.infrastructure.deck_file import write_deck_file
 from effects.infrastructure.shard_io import read_records
 from price_predictor.infrastructure.forge_jvm import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
@@ -139,7 +139,7 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
             _deck_of("Llanowar Elves", lands=("Forest",) * 16 + ("Plains",)),
         ],
         decks_file,
-        label="coverage", set_code=COVERAGE_SET_CODE,
+        label="coverage",
     )
     progress_file = tmp_path / "progress.txt"
     run_id = str(uuid.uuid4())

@@ -1,7 +1,8 @@
-"""Ability texts to the encoder's inputs, and the MLM pass's mask over them.
+"""Ability texts to the encoder's inputs, and the encoder pass over them.
 
-Both collaborators draw only from the generator they are handed, so a step's
-draws follow its place in the run wherever it is prepared.
+The stager draws only from the generator it is handed, so a step's draws
+follow its place in the run wherever it is prepared. The MLM pass over the
+same inputs is ``mlm_masking``'s.
 """
 
 from __future__ import annotations
@@ -21,9 +22,15 @@ from effects.domain.ability_encoder import (
     encoding_role_spans,
     prepare_line,
 )
-from effects.domain.ability_tokenizer import AbilityTokenizer, Surface, withheld_keyword_tokens
+from effects.domain.ability_tokenizer import (
+    INFERENCE_KEYWORD_EXPAND_P,
+    AbilityTokenizer,
+    Surface,
+    withheld_keyword_tokens,
+)
 from effects.domain.baselines import BaselineMasks
 from effects.domain.provenance import SidecarLine
+from effects.infrastructure.torch_device import pinned
 
 #: Texts per length-sorted encoder pass. Padded to the batch's longest instead,
 #: one 512-token chain makes every line cost 512 positions and the saved
@@ -80,18 +87,6 @@ def encode_by_length(
     return vectors, full
 
 
-def pinned(value):
-    """``value`` with every tensor in it copied to page-locked host memory, so
-    a ``non_blocking`` copy does not hold the host."""
-    if isinstance(value, torch.Tensor):
-        return value.pin_memory()
-    if isinstance(value, dict):
-        return {key: pinned(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return type(value)(pinned(item) for item in value)
-    return value
-
-
 # ── the encoder's inputs ────────────────────────────────────────────────
 
 
@@ -99,8 +94,8 @@ def pinned(value):
 class StagedTexts:
     """A batch's unique texts, staged for whatever produces their ``e``.
 
-    At most one of ``encoder_inputs`` and ``stand_in`` (the ``taxonomy``
-    baseline's vectors) is set; neither, for the ``identity`` baseline.
+    At most one of ``encoder_inputs`` and ``taxonomy_vectors`` is set;
+    neither, for the ``identity`` baseline.
     """
 
     #: Each text's row of the batch's ``e`` matrix.
@@ -109,7 +104,8 @@ class StagedTexts:
     prepared: list[EncodedLine]
     #: None when the encoder is not called.
     encoder_inputs: dict[str, torch.Tensor] | None
-    stand_in: torch.Tensor | None
+    #: The ``taxonomy`` baseline's hashed ``e``, which no encoder computes.
+    taxonomy_vectors: torch.Tensor | None
 
     @property
     def ordered(self) -> list[str]:
@@ -118,7 +114,7 @@ class StagedTexts:
 
     def pin(self) -> None:
         self.encoder_inputs = pinned(self.encoder_inputs)
-        self.stand_in = pinned(self.stand_in)
+        self.taxonomy_vectors = pinned(self.taxonomy_vectors)
 
 
 @dataclass(frozen=True)
@@ -130,6 +126,20 @@ class TextStager:
     withhold_keyword: str | None = None
     keyword_expand_p: float = 0.0
     truncations: TruncationLog | None = None
+
+    @classmethod
+    def for_inference(
+        cls, tokenizer: AbilityTokenizer, surface: Surface, *,
+        withhold_keyword: str | None, truncations: TruncationLog | None = None,
+    ) -> TextStager:
+        """The stager every pass outside a training step encodes through:
+        validation, evaluation and the cache. Expansion at the inference
+        probability, so two passes read one text alike; the withheld keyword
+        stays withheld, being a split rather than an augmentation."""
+        return cls(
+            tokenizer, surface, withhold_keyword=withhold_keyword,
+            keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P, truncations=truncations,
+        )
 
     def stage(
         self, texts: Mapping[str, SidecarLine], *, masks: BaselineMasks, e_dim: int,
@@ -189,72 +199,3 @@ def _taxonomy_vectors(
 
     rows = np.stack([taxonomy_vector(lines[text], e_dim) for text in ordered])
     return torch.from_numpy(rows)
-
-
-# ── the MLM pass (FR-060b) ──────────────────────────────────────────────
-
-
-@dataclass
-class MaskedTokens:
-    """The MLM pass's inputs, drawn on the host: ``positions`` are the
-    flattened indices of the masked tokens, ``targets`` the ids that stood
-    there."""
-
-    inputs: dict[str, torch.Tensor]
-    positions: torch.Tensor
-    targets: torch.Tensor
-
-    @property
-    def rows(self) -> int:
-        """The texts the pass masked tokens in: the MLM term's rows."""
-        return int(self.inputs["token_ids"].shape[0])
-
-    def pin(self) -> None:
-        self.inputs = pinned(self.inputs)
-        self.positions = pinned(self.positions)
-        self.targets = pinned(self.targets)
-
-
-@dataclass(frozen=True)
-class MlmMasker:
-    """The MLM pass: a second encoder forward over a batch's prepared lines,
-    so the effect head keeps reading the unmasked ``e``. The mask is drawn on
-    the host, so the device never has to report which positions it picked."""
-
-    pad_id: int
-    mask_id: int
-
-    def draw(
-        self, prepared: list[EncodedLine], mask_prob: float, rng: random.Random,
-    ) -> MaskedTokens | None:
-        """Which tokens the pass masks, or None when it masks none. Draws from
-        ``rng`` after the build's own draws."""
-        if not prepared or mask_prob <= 0.0:
-            return None
-        batch = collate_lines(prepared, self.pad_id)
-        ids = batch["token_ids"]
-        generator = torch.Generator().manual_seed(rng.getrandbits(63))
-        picks = (torch.rand(ids.shape, generator=generator) < mask_prob)
-        picks &= batch["attention_mask"].bool()
-        picks[:, 0] = False  # never [CLS]
-        positions = picks.flatten().nonzero().squeeze(1)
-        if positions.numel() == 0:
-            return None
-        targets = ids.flatten().index_select(0, positions)
-        batch["token_ids"] = ids.masked_fill(picks, self.mask_id)
-        # A masked number's value goes too, or its embedding hands it back.
-        batch["numbers"] = batch["numbers"].masked_fill(picks, 0.0)
-        batch["number_mask"] = batch["number_mask"].masked_fill(picks, 0)
-        return MaskedTokens(inputs=batch, positions=positions, targets=targets)
-
-    @staticmethod
-    def forward(
-        encoder: AbilityEncoder, masked: MaskedTokens, device,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """The device half: the encoder's outputs at the masked positions, and
-        the ids that stood there."""
-        _e, hidden = encode_by_length(encoder, masked.inputs, device, hidden=True)
-        selected = hidden.reshape(-1, hidden.shape[-1]).index_select(
-            0, masked.positions.to(device, non_blocking=True),
-        )
-        return selected, masked.targets.to(device, non_blocking=True)

@@ -34,6 +34,14 @@ class EntityFieldTargets:
             self.present,
         )
 
+    def pinned(self) -> EntityFieldTargets:
+        """The values in page-locked host memory, ready for a ``non_blocking``
+        :meth:`to`; ``present`` stays where it is, never leaving the host."""
+        return EntityFieldTargets(
+            {name: value.pin_memory() for name, value in self.values.items()},
+            self.present,
+        )
+
     def select(self, rows) -> EntityFieldTargets:
         return EntityFieldTargets(
             {name: value[rows] for name, value in self.values.items()},
@@ -81,6 +89,12 @@ class EntityTargetBatch:
         index stay where they are: the loss picks its rows on the host, so
         picking them never waits on the device."""
         return replace(self, fields=self.fields.to(device, non_blocking=non_blocking))
+
+    def pinned(self) -> EntityTargetBatch:
+        """The batch with what reaches the device, the field values and
+        ``index``, in page-locked host memory; the gate and mask stay host
+        tensors, since the loss picks its rows from them on the host."""
+        return replace(self, fields=self.fields.pinned(), index=self.index.pin_memory())
 
     def select(self, rows) -> EntityTargetBatch:
         return EntityTargetBatch(

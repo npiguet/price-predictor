@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 from effects.domain.effect_head_input import SlotKind
-from effects.domain.effect_head_layout import FieldSpec, FieldType
+from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.effect_targets import derive_targets
 from effects.domain.entity_field_targets import EntityFieldTargets, EntityTargetBatch
 
@@ -169,13 +169,7 @@ def entity_target_tensors(
     present: dict[str, np.ndarray] = {}
 
     for spec in fields:
-        # A categorical's target stays one class index: cross-entropy takes
-        # indices, not one-hots.
-        shape = (
-            (batch, width, spec.arity)
-            if spec.type is FieldType.MULTI_BINARY
-            else (batch, width)
-        )
+        shape = (batch, width, spec.arity) if spec.type.per_member else (batch, width)
         collected[spec.name] = np.zeros(shape, dtype=np.float32)
         present[spec.name] = np.zeros((batch, width), dtype=np.bool_)
 

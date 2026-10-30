@@ -74,13 +74,14 @@ from effects.domain.ability_tokenizer import (  # noqa: E402
     HOST_BODIED_KEYWORDS,
     AbilityTokenizer,
     Surface,
+    bare_reminder,
     keyword_token,
     tokenizer_surface,
 )
 from effects.infrastructure.ability_cache_store import AbilityCacheStore  # noqa: E402
 from effects.infrastructure.effect_model_store import (  # noqa: E402
+    inference_files,
     load_effect_checkpoint,
-    verified_inference_paths,
 )
 from effects.infrastructure.sidecar_io import sidecar_paths, tree_of_folder  # noqa: E402
 from effects.infrastructure.tokenizer_loading import (  # noqa: E402
@@ -199,16 +200,16 @@ def load_encoder(checkpoint_path: Path):
     provenance = checkpoint.provenance
     # The recorded paths are repository-relative and this script may run from
     # anywhere, so they are anchored at the repository root.
-    vocab_path, keyword_path = verified_inference_paths(
+    files = inference_files(
         checkpoint,
-        vocab_path=ROOT / provenance.vocab_path,
-        keyword_path=ROOT / provenance.keyword_definitions_path,
+        vocab=ROOT / provenance.vocab_path,
+        keywords=ROOT / provenance.keyword_definitions_path,
     )
     encoder = AbilityEncoder(checkpoint.encoder_config)
     encoder.load_state_dict(checkpoint.encoder_state)
     encoder.eval()
     return (
-        encoder, load_vocabulary(vocab_path), provenance, keyword_path,
+        encoder, load_vocabulary(files.vocab), provenance, files.keywords,
         checkpoint.training_settings,
     )
 
@@ -343,7 +344,7 @@ def report(paths: ProbePaths) -> None:  # noqa: C901, PLR0912, PLR0915 — one l
     for name, definition in definitions.items():
         token = keyword_token(name)
         template = definition.reminder_template or ""
-        expanded = tok._instantiate(template)  # noqa: SLF001
+        expanded = bare_reminder(template)
         parts = tok.tokenize(expanded)
         def_rows.append({
             "keyword": name,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import random
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -10,7 +11,7 @@ import pytest
 
 from effects.domain.corpus_curation import record_hash
 from effects.infrastructure import shard_io
-from effects.infrastructure.record_codec import parse_record_line
+from effects.infrastructure.record_codec import format_record_line, parse_record_line
 from effects.infrastructure.shard_io import (
     iter_shard_lines,
     read_records,
@@ -117,6 +118,46 @@ def test_zero_means_one_shard_per_part(tmp_path, parts):
     written = repack_shards(parts, tmp_path / "out", shard_records=0)
     assert len(written) == 3
     assert [sum(1 for _ in read_shard(p)) for p in written] == [3, 7, 2]
+
+
+def _plain_part(path: Path, records) -> Path:
+    """A part in the uncompressed spelling, with a blank line among its records."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [format_record_line(record) for record in records]
+    path.write_text("\n".join(lines[:1] + [""] + lines[1:]) + "\n", encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize("shard_records", [0, 2])
+def test_a_plain_part_repacks_one_record_per_line(tmp_path, make_record, shard_records):
+    """A plain part's lines arrive without their newline; written back as they
+    came, its records would run together into one unparseable line."""
+    records = [make_record(record_id=f"g{n}.0", game_id=f"g{n}") for n in range(4)]
+    part = _plain_part(tmp_path / "parts" / "old.jsonl", records)
+
+    written = repack_shards([part], tmp_path / "out", shard_records=shard_records)
+
+    lines = [line for path in written for line in _decompressed(path).splitlines()]
+    assert sorted(lines) == sorted(format_record_line(record) for record in records)
+
+
+def _decompressed(path: Path) -> str:
+    return gzip.decompress(path.read_bytes()).decode("utf-8")
+
+
+@pytest.mark.parametrize("shard_records", [0, 10])
+def test_a_compressed_part_repacks_to_the_same_lines(tmp_path, runs, shard_records):
+    """Every line comes out byte for byte as it went in, newline included."""
+    written = repack_shards(runs, tmp_path / "out", shard_records=shard_records)
+
+    before = sorted(_decompressed(part) for part in runs)
+    after = [_decompressed(path) for path in written]
+    assert all(text.endswith("\n") for text in after)
+    assert sorted("".join(after).splitlines(keepends=True)) == sorted(
+        "".join(before).splitlines(keepends=True)
+    )
+    if shard_records <= 0:
+        assert sorted(after) == before
 
 
 def test_names_are_zero_padded_and_sequential(tmp_path, runs):

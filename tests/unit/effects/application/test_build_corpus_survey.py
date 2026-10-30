@@ -13,6 +13,7 @@ write pass will route to training alone.
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
@@ -20,13 +21,13 @@ from effects.application.corpus_survey import (
     ReadConfig,
     ShardSurvey,
     SurveyConfig,
-    init_survey_worker,
+    SurveyWorker,
     merge_surveys,
     run_survey,
-    survey_shard,
 )
 from effects.application.parallel_map import progress_line
 from effects.domain.corpus_curation import game_disjoint_draw
+from effects.domain.corpus_manifest import SourceShard
 from effects.domain.corpus_plan import Cell, GameRouting, TrainingSupply
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
@@ -40,9 +41,15 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.split import HeldOutCards
-from effects.infrastructure.shard_io import write_shard
+from effects.infrastructure.shard_io import list_shards, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for
-from tests.unit.effects.builders import make_entity, make_record, make_snapshot, write_sidecar
+from tests.unit.effects.builders import (
+    held_out_cards,
+    make_entity,
+    make_record,
+    make_snapshot,
+    write_sidecar,
+)
 
 _PAYLOAD_BY_KIND: dict[RecordKind, tuple[Moment | None, object]] = {
     RecordKind.RESOLUTION: (Moment.RESOLUTION, ResolutionPayload()),
@@ -82,7 +89,7 @@ def a_record(
     )
 
 
-def converted_tree(tmp_path, *keys: ProvenanceKey, text=None) -> dict[str, str]:
+def converted_tree(tmp_path, *keys: ProvenanceKey, text=None) -> dict[str, Path]:
     """A converted tree whose sidecars render one line for each of ``keys``.
 
     ``sidecar_roots`` for a survey config. The survey refuses a resolution
@@ -114,17 +121,16 @@ def converted_tree(tmp_path, *keys: ProvenanceKey, text=None) -> dict[str, str]:
             sidecar_path_for(path),
         )
     return {
-        tree: str(root / tree)
+        tree: root / tree
         for tree in {key.script_file.split("/", 1)[0] for key in keys}
     }
 
 
 #: The text ``_SECRET`` and ``_GOBLIN`` both print, and the holdout that names it.
 _SECRET_TEXT = "SP$ DealDamage | NumDmg$ 9"
-_HOLDOUT = HeldOutCards(
-    names=frozenset({"secret card"}),
-    script_files=frozenset({_SECRET[0].script_file, _GOBLIN[0].script_file}),
-    texts=frozenset({_SECRET_TEXT}), keys=frozenset({_SECRET_TEXT}), unit="text",
+_HOLDOUT = held_out_cards(
+    {"secret card"}, {_SECRET[0].script_file, _GOBLIN[0].script_file},
+    texts={_SECRET_TEXT},
 )
 
 
@@ -134,9 +140,9 @@ def a_config(
 ) -> SurveyConfig:
     return SurveyConfig(
         read=ReadConfig(
-            records_dir=str(records_dir), sidecar_roots=dict(sidecar_roots or {}),
+            records_dir=Path(records_dir), sidecar_roots=dict(sidecar_roots or {}),
             max_events=64,
-            held_out=held_out or HeldOutCards(names=frozenset(), script_files=frozenset()),
+            held_out=held_out or held_out_cards(),
             seed=42,
         ),
         heap_cap=heap_cap,
@@ -146,8 +152,8 @@ def a_config(
 
 def _survey_one(tmp_path, records, **config):
     write_shard(tmp_path / "records" / "run.0-a.jsonl.gz", records)
-    init_survey_worker(a_config(tmp_path / "records", **config))
-    return survey_shard("run.0-a.jsonl.gz")
+    worker = SurveyWorker(a_config(tmp_path / "records", **config))
+    return worker.survey(list_shards(tmp_path / "records")[0])
 
 
 def test_survey_counts_records_classes_and_games(tmp_path):
@@ -179,9 +185,7 @@ def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
 
     survey = run_survey(
         tmp_path,
-        config=a_config(tmp_path, held_out=HeldOutCards(
-            names=frozenset({"soul echo"}), script_files=frozenset(),
-        )),
+        config=a_config(tmp_path, held_out=held_out_cards({"soul echo"})),
         workers=1,
     )
 
@@ -219,7 +223,9 @@ def _part(name: str, games: set[str], hashes: tuple[int, ...], *, heap_cap: int 
     supply = TrainingSupply(heap_cap)
     for value in hashes:
         supply.add(_CELL, _BOLT, value)
-    part = ShardSurvey(name=name, size=0, supply=supply, records=len(hashes))
+    part = ShardSurvey(
+        shard=SourceShard(name=name, size=0), supply=supply, records=len(hashes),
+    )
     part.games.games = set(games)
     for game in games:
         part.rarity.note(_BOLT, game)
@@ -293,7 +299,7 @@ def test_a_refused_record_still_routes_its_game_to_the_card_disjoint_stratum(tmp
     """
     out = _survey_one(tmp_path, [
         a_record(record_id="junk", game_id="g1", ability=(), entity_names=("Soul Echo",)),
-    ], held_out=HeldOutCards(names=frozenset({"soul echo"}), script_files=frozenset()))
+    ], held_out=held_out_cards({"soul echo"}))
 
     assert out.games.held_out == {"g1"}
     assert out.games.games == set()
@@ -318,7 +324,7 @@ def test_the_supply_counts_only_records_the_write_pass_trains_on(tmp_path):
         a_record(record_id="d", game_id=disjoint, kind="rewrite", ability=_BOLT),
         a_record(record_id="h", game_id=held, kind="rewrite", ability=_BOLT,
                  entity_names=("Soul Echo",)),
-    ], held_out=HeldOutCards(names=frozenset({"soul echo"}), script_files=frozenset()),
+    ], held_out=held_out_cards({"soul echo"}),
         sidecar_roots=converted_tree(tmp_path, *_BOLT), share=0.05)
 
     assert sum(out.supply.keyed.values()) == 1

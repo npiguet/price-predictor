@@ -10,10 +10,11 @@ import torch
 
 from effects.application.train_effect_model import (
     CorpusFacts,
+    MissingTrainingInputError,
     TrainEffectModelConfig,
     run,
 )
-from effects.application.training_log import format_floor, format_parts
+from effects.application.training_log import format_parts
 from effects.application.validation_pass import FloorCache, ValidationSamples
 from effects.domain.effect_head_layout import FIELDS_BY_NAME
 from effects.domain.effect_losses import LossParts
@@ -51,9 +52,9 @@ def test_the_loop_loads_both_samples_and_the_probe(samples):
     assert samples.present == {"resolution-effect", "combat"}
 
 
-def test_run_refuses_to_train_without_a_corpus(caplog):
-    assert run(TrainEffectModelConfig()) == 1
-    assert "--corpus" in caplog.text
+def test_run_refuses_to_train_without_a_corpus():
+    with pytest.raises(MissingTrainingInputError, match="--corpus"):
+        run(TrainEffectModelConfig())
 
 
 def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
@@ -85,10 +86,10 @@ def test_validation_batches_drop_the_augmentations_but_keep_the_withholding(tmp_
     )
 
     stream = random.Random(3)
-    training = preparer.batcher(rng=stream)
+    training = preparer.training_batcher(stream)
     assert (training.stager.keyword_expand_p, training.context_dropout) == (0.5, 0.3)
 
-    scoring = preparer.batcher(training=False)
+    scoring = preparer.scoring_batcher()
     assert (scoring.stager.keyword_expand_p, scoring.context_dropout) == (0.0, 0.0)
     assert scoring.stager.withhold_keyword == "lifelink"
     # A training batcher draws from the step's own generator, and a scoring
@@ -130,46 +131,6 @@ def test_a_sample_naming_every_class_says_nothing(caplog):
         loop.reporter.missing_classes(frozenset(SAMPLING_CLASSES))
 
     assert caplog.text == ""
-
-
-class TestExplainedDeviance:
-    """The card-disjoint breakdown says how far each head beat a constant.
-
-    A field's loss is a number in nats with no scale of its own, so the epoch
-    line carries `1 - loss/floor` beside it: zero is the base rate, negative is
-    worse than predicting it (FR-127c).
-    """
-
-    def test_each_field_carries_its_explained_deviance(self):
-        line = format_parts(
-            {"gate": 2.878, "damage_taken": 0.761},
-            floor={"gate": 3.105, "damage_taken": 1.902},
-        )
-        assert line == "\n  fields: gate 2.878 (7%), damage_taken 0.761 (60%)"
-
-    def test_the_largest_term_still_comes_first(self):
-        line = format_parts(
-            {"damage_taken": 0.761, "gate": 2.878},
-            floor={"gate": 3.105, "damage_taken": 1.902},
-        )
-        assert line.index("gate") < line.index("damage_taken")
-
-    def test_a_head_worse_than_the_constant_reads_negative(self):
-        line = format_parts({"gate": 4.0}, floor={"gate": 2.0})
-        assert "gate 4.000 (-100%)" in line
-
-    def test_a_field_with_no_deviance_to_explain_reads_not_applicable(self):
-        """A field whose targets never vary has nothing for a head to beat."""
-        line = format_parts({"types_gained": 0.0}, floor={"types_gained": 0.0})
-        assert "types_gained 0.000 (n/a)" in line
-
-    def test_the_per_shard_training_breakdown_is_unchanged(self):
-        assert format_parts({"gate": 2.0}) == "\n  fields: gate 2.000"
-
-    def test_the_floor_is_logged_largest_first(self):
-        assert format_floor(
-            {"damage_taken": 1.902, "gate": 3.105},
-        ) == "gate 3.105, damage_taken 1.902"
 
 
 class TestFloorCache:

@@ -7,7 +7,6 @@ moves only with the model.
 from __future__ import annotations
 
 import logging
-from collections import defaultdict
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -24,7 +23,7 @@ from effects.domain.effect_head_layout import FieldSpec
 from effects.domain.entity_field_targets import EntityTargetBatch
 from effects.domain.gate_metrics import GateOneMetrics, MarginAccumulator
 from effects.domain.loss_floor import PartsMean, constant_predictor_floor
-from effects.domain.sampling import BatchPlan, sampling_class
+from effects.domain.sampling import sampling_class
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.infrastructure.shard_io import load_shard
 
@@ -273,8 +272,10 @@ class Validator:
 
         ``fields`` is the epoch's set, so validation and training score one
         objective. Each of ``collectors`` gathers its own number off the same
-        batches, so none needs a second pass. Records are grouped by game
-        within a batch, so one encode of a text serves the whole game.
+        batches, so none needs a second pass. A batch keeps the sample's
+        order: its texts are encoded once whichever records share them
+        (``SurfaceBatcher.batch_texts``), so grouping by game would save
+        nothing.
         """
         if not records:
             return float("nan")
@@ -284,11 +285,8 @@ class Validator:
         batches = 0
         with evaluating(run), torch.no_grad():
             for start in range(0, len(records), size):
-                grouped: dict[str, list] = defaultdict(list)
-                for record in records[start:start + size]:
-                    grouped[record.game_id].append(record)
                 prepared = run.preparer.prepare_scoring_step(
-                    BatchPlan(dict(grouped)), fields,
+                    records[start:start + size], fields,
                 )
                 computed = self.losses.device_loss(
                     prepared, run, run.scoring, report_parts=report_parts,

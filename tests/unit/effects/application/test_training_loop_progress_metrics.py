@@ -17,9 +17,9 @@ import torch
 
 from effects.application import run_context
 from effects.application.gate_one import measure
+from effects.application.model_loading import Runnable
 from effects.application.validation_pass import FieldParts, Validator
 from effects.domain.effect_model import EffectModel
-from effects.infrastructure.model_runner import Runnable
 from effects.infrastructure.shard_io import write_shard
 from tests.unit.effects.builders import gen1_training_config, make_training_loop
 
@@ -43,11 +43,11 @@ def scored(corpus, records, tmp_path_factory):
         def epoch(self, run, samples, fields):
             card, game = super().epoch(run, samples, fields)
             seen["fed"] = card.progress()
-            seen["measured"] = measure(samples.card_disjoint, Runnable(
-                run.encoder, run.model,
-                run.preparer.batcher(training=False, materializer=run.scoring),
-                fields,
-            ))
+            batcher = run.preparer.scoring_batcher()
+            batcher.materializer = run.scoring
+            seen["measured"] = measure(
+                samples.card_disjoint, Runnable(run.encoder, run.model, batcher, fields),
+            )
             seen["loss"] = card.loss
             seen["loss without margins"] = self.score(
                 samples.card_disjoint, run, fields, (FieldParts(),),

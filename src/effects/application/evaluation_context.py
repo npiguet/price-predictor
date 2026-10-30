@@ -14,12 +14,12 @@ from effects.domain import default_paths
 from effects.domain.baselines import Baseline
 
 if TYPE_CHECKING:
+    from effects.application.model_loading import LoadedModel, Runnable
     from effects.domain.corpus_manifest import CorpusManifest
-    from effects.infrastructure.effect_model_store import (
-        EffectCheckpoint,
-        SplitProvenance,
-    )
-    from effects.infrastructure.model_runner import LoadedModel, Runnable
+    from effects.domain.split_provenance import SplitProvenance
+    from effects.domain.tokenizer_files import TokenizerFiles
+    from effects.infrastructure.converted_trees import SourceTrees
+    from effects.infrastructure.effect_model_store import EffectCheckpoint
     from effects.infrastructure.sidecar_io import SidecarCache
 
 
@@ -34,8 +34,9 @@ class EvaluationContext:
 
     config: EvaluateEffectModelConfig
     main: EffectCheckpoint
-    vocab_path: Path
-    keyword_path: Path
+    #: The vocabulary and keyword files every loaded checkpoint reads with,
+    #: hash-checked against ``main``; a baseline must record the same hashes.
+    tokenizer_files: TokenizerFiles
     corpus_path: Path
     manifest: CorpusManifest
     _main_model: LoadedModel | None = field(default=None, repr=False)
@@ -55,26 +56,18 @@ class EvaluationContext:
     def sidecars(self) -> SidecarCache:
         """The run's one sidecar cache, which every loaded checkpoint shares."""
         if self._sidecars is None:
-            from effects.infrastructure.model_runner import build_sidecars
-
-            self._sidecars = build_sidecars(self.config)
+            self._sidecars = self.config.source_trees.sidecar_cache()
         return self._sidecars
 
     def _load(self, checkpoint) -> LoadedModel:
-        from effects.infrastructure.model_runner import load_model
+        from effects.application.model_loading import load_model
 
-        return load_model(
-            self.config, checkpoint,
-            vocab_path=self.vocab_path, keyword_path=self.keyword_path,
-            sidecars=self.sidecars,
-        )
+        return load_model(checkpoint, files=self.tokenizer_files, sidecars=self.sidecars)
 
 
 @dataclass
 class EvaluateEffectModelConfig:
-    checkpoint: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_CHECKPOINT),
-    )
+    checkpoint: Path = Path(default_paths.DEFAULT_CHECKPOINT)
     baseline_checkpoints: dict[str, Path] = field(default_factory=dict)
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
     variant_scripts: Path | None = None
@@ -83,13 +76,24 @@ class EvaluateEffectModelConfig:
     #: A curated dataset directory (`build-corpus`); defaults to the one
     #: `--checkpoint` recorded (FR-147).
     corpus: Path | None = None
-    abilities_root: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_ABILITIES_ROOT),
-    )
+    abilities_root: Path = Path(default_paths.DEFAULT_ABILITIES_ROOT)
     #: The per-card win-rate table the decodability battery reads (FR-070).
-    win_rates: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_WIN_RATES),
-    )
+    win_rates: Path = Path(default_paths.DEFAULT_WIN_RATES)
+
+    @property
+    def source_trees(self) -> SourceTrees:
+        """``--cards-folder`` and ``--variant-scripts`` as one value."""
+        from effects.infrastructure.converted_trees import SourceTrees
+
+        return SourceTrees.of(self.cards_folders, self.variant_scripts)
+
+    @property
+    def output_dir(self) -> Path:
+        """Where the files the report names are written: a directory beside
+        ``--checkpoint`` named for it, since the report itself is printed and
+        two checkpoints in one directory must not overwrite each other's."""
+        checkpoint = Path(self.checkpoint)
+        return checkpoint.parent / f"{checkpoint.stem}.evaluation"
 
 
 def parse_baseline_checkpoint(value: str) -> tuple[Baseline, Path]:
@@ -147,23 +151,26 @@ def resolve_corpus_path(
 def with_corpus_defaults(
     config: EvaluateEffectModelConfig, manifest: CorpusManifest,
 ) -> EvaluateEffectModelConfig:
-    """``config`` with an unset variant-script tree taken from the manifest;
-    without it every variant ability reads as no text."""
-    if config.variant_scripts is not None or not manifest.variant_scripts:
-        return config
-    return replace(config, variant_scripts=Path(manifest.variant_scripts))
+    """``config`` with an unset variant-script tree taken from the manifest
+    (:meth:`CorpusManifest.variant_scripts_or`)."""
+    return replace(
+        config, variant_scripts=manifest.variant_scripts_or(config.variant_scripts),
+    )
 
 
 def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     """The main checkpoint, hash-checked, with its corpus verified (FR-147)."""
     from effects.infrastructure.corpus_store import CorpusStore
-    from effects.infrastructure.effect_model_store import load_for_inference
+    from effects.infrastructure.effect_model_store import (
+        inference_files,
+        load_effect_checkpoint,
+    )
     from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
 
     main_path = Path(config.checkpoint)
-    main, vocab_path, keyword_path = load_for_inference(
-        main_path,
-        vocab_path=config.vocab_path, keyword_path=config.keyword_definitions,
+    main = load_effect_checkpoint(main_path)
+    files = inference_files(
+        main, vocab=config.vocab_path, keywords=config.keyword_definitions,
     )
     corpus_path = resolve_corpus_path(
         main.provenance, corpus=config.corpus, checkpoint=main_path,
@@ -173,7 +180,7 @@ def load_context(config: EvaluateEffectModelConfig) -> EvaluationContext:
     # Before any record is read (FR-033).
     refuse_mixed_generations(iter_shards(Path(corpus_path)))
     return EvaluationContext(
-        with_corpus_defaults(config, manifest), main, vocab_path, keyword_path,
+        with_corpus_defaults(config, manifest), main, files,
         corpus_path=corpus_path, manifest=manifest,
     )
 

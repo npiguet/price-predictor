@@ -24,12 +24,14 @@ from effects.domain.effect_head_input import (
     COUNTER_TYPES,
     EARLIER_LAYOUT,
     INPUT_LAYOUT,
+    NO_STRIP,
     OVERLAY_KEYWORDS,
     OVERLAY_KEYWORDS_GEN2,
     PHASES,
     SUPERTYPES,
     THERMOMETER_STEPS,
     ZONES,
+    InputLayout,
     SlotKind,
     SurfaceBuilder,
     _multi_hot,
@@ -38,11 +40,13 @@ from effects.domain.effect_head_input import (
     act_features,
     card_features,
     continuous_masked_keywords,
+    feature_widths,
     global_features,
     player_features,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
+from effects.domain.recorded_version import UnknownRecordedVersion
 from effects.domain.records import (
     ActivationPayload,
     Candidate,
@@ -150,7 +154,7 @@ def _record(**overrides) -> EffectRecord:
 
 def _build(
     record, *, rng=None, e_for=_e_for, has_line=None, options_for=None,
-    context_dropout=0.0, stripped=None,
+    context_dropout=0.0, stripped=NO_STRIP,
 ):
     lines = _Lines(e_for=e_for)
     if has_line is not None:
@@ -844,3 +848,36 @@ class TestGen2Layout:
         record = _record(state=_snapshot(players=players))
         features = player_features(players[0], record, layout=INPUT_LAYOUT)
         assert sum(features[-THERMOMETER_STEPS:]) == 33
+
+
+class TestTheRecordedLayout:
+    """A loaded checkpoint is run on the input layout it trained on (FR-063c).
+
+    The layout changes what the model's input vectors mean and how wide they
+    are, so a checkpoint has to be fed the one it learned: gen-1, and gen-2 arms
+    trained before the layout was recorded, record none and read the earlier
+    layout.
+    """
+
+    def test_a_checkpoint_recording_no_layout_reads_the_earlier_one(self):
+        assert InputLayout.of({}) is EARLIER_LAYOUT
+        assert InputLayout.of(None) is EARLIER_LAYOUT
+
+    def test_a_checkpoint_recording_the_layout_reads_it(self):
+        assert InputLayout.of({"input_layout": "gen-2"}) is INPUT_LAYOUT
+
+    def test_a_layout_this_code_does_not_know_is_refused(self):
+        with pytest.raises(UnknownRecordedVersion, match="gen-3"):
+            InputLayout.of({"input_layout": "gen-3"})
+
+    def test_a_run_records_its_layout_under_the_value_checkpoints_on_disk_hold(self):
+        assert INPUT_LAYOUT.name == "gen-2"
+        assert EARLIER_LAYOUT.name is None
+
+    def test_the_widths_follow_the_layout(self):
+        records = [_record()]
+        earlier = feature_widths(records, layout=EARLIER_LAYOUT)
+        gen2 = feature_widths(records, layout=INPUT_LAYOUT)
+        assert gen2[SlotKind.GLOBAL] == earlier[SlotKind.GLOBAL]
+        assert gen2[SlotKind.PLAYER] == earlier[SlotKind.PLAYER] + THERMOMETER_STEPS
+        assert gen2[SlotKind.CARD] == earlier[SlotKind.CARD] + 3 * THERMOMETER_STEPS + 1

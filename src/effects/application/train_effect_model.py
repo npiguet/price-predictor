@@ -1,4 +1,4 @@
-"""``train-effect-model``: reading a curated corpus, and the schedule it trains on.
+"""``train-effect-model``: its flags, and reading the curated corpus it trains on.
 
 The trainer derives nothing about the corpus (FR-125 withdrawn): the manifest
 ``build-corpus`` writes decides the split, the holdout, the validation
@@ -8,20 +8,20 @@ samples, the gate-1 slice and the rarity table.
 from __future__ import annotations
 
 import logging
-import random
 import time
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from effects.domain import default_paths
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import Baseline
-from effects.domain.effect_head_layout import active_fields
+from effects.domain.corpus_manifest import CorpusManifest
 from effects.domain.split import CorpusSplit, HoldoutRule
 from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.text_holdout import HoldoutUnit, normalize_script_text
-from effects.infrastructure.converted_trees import ConvertedTrees
+from effects.domain.tokenizer_files import TokenizerFiles
+from effects.infrastructure.converted_trees import SourceTrees
 from effects.infrastructure.corpus_store import CorpusStore
 from effects.infrastructure.shard_io import iter_shards, refuse_mixed_generations
 
@@ -43,39 +43,14 @@ DEFAULT_SHARDS_PER_EPOCH = 256
 DEFAULT_PREFETCH_WORKERS = 3
 
 
-def epoch_shards(
-    shards: Sequence[Path], *, epoch: int, per_epoch: int, seed: int,
-) -> list[Path]:
-    """The shards epoch ``epoch`` (1-based) reads, drawn across the corpus.
-
-    Drawn at random, not as a contiguous block: the list is in path order, so
-    a block is one collection run's correlated games and never reaches the
-    families that sort last. Seeded by ``(seed, epoch)`` alone rather than the
-    training RNG, so an epoch's shards do not depend on what earlier epochs
-    drew.
-    """
-    if not shards or per_epoch <= 0:
-        return []
-    # A string, because 3.14's Random rejects a tuple seed.
-    draw = random.Random(f"{seed}:{epoch}")
-    if per_epoch >= len(shards):
-        picks = list(shards)
-        draw.shuffle(picks)
-        return picks
-    return draw.sample(list(shards), per_epoch)
-
-
-def steps_per_shard(total: int, count: int) -> list[int]:
-    """``total`` training steps (batches, not optimizer steps) divided as
-    evenly as possible over ``count`` shards."""
-    if count <= 0:
-        return []
-    base, remainder = divmod(max(total, 0), count)
-    return [base + (1 if index < remainder else 0) for index in range(count)]
-
-
 class EmptyHoldoutError(RuntimeError):
     """The card-disjoint stratum holds no records."""
+
+
+class MissingTrainingInputError(RuntimeError):
+    """Something a run reads before its first step is not there: ``--corpus``
+    itself, its training shards, its validation samples, or any record in
+    them. Refused before a model is built, rather than training on nothing."""
 
 
 def check_holdout(
@@ -121,23 +96,19 @@ class TrainEffectModelConfig:
     variant_scripts: Path | None = None
     #: ``--holdout-unit``: None takes the manifest's recorded unit (FR-041).
     holdout_unit: HoldoutUnit | None = None
-    vocab_path: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_VOCAB_PATH),
-    )
+    vocab_path: Path = Path(default_paths.DEFAULT_VOCAB_PATH)
     #: ``None`` draws one, so runs do not all measure one arrangement of the
     #: corpus; the checkpoint records the drawn value.
     seed: int | None = field(default=None, metadata={"help": (
         "Seeds weight init, batch planning and each epoch's shard draw; drawn "
         "from the OS and logged when omitted, so any run can be repeated"
     )})
-    keyword_definitions: Path = field(
-        default_factory=lambda: Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS),
-    )
+    keyword_definitions: Path = Path(default_paths.DEFAULT_KEYWORD_DEFINITIONS)
     model_output: Path | None = field(default=None, metadata={"help": (
         "Checkpoint directory (default: models/effects/effect-model/, under "
         "{variant}/ for a baseline)"
     )})
-    variant: str = Baseline.FULL
+    variant: Baseline = Baseline.FULL
     e_dim: int = 64
     e_noise: float = field(default=0.1, metadata={"help": (
         "Noise ratio on e relative to e's running covariance (FR-056), ramped "
@@ -218,6 +189,16 @@ class TrainEffectModelConfig:
                 f"--encoder-layers must be at least 1, got {self.encoder_layers}."
             )
 
+    @property
+    def source_trees(self) -> SourceTrees:
+        """``--cards-folder`` and ``--variant-scripts`` as one value."""
+        return SourceTrees.of(self.cards_folders, self.variant_scripts)
+
+    @property
+    def tokenizer_files(self) -> TokenizerFiles:
+        """``--vocab-path`` and ``--keyword-definitions`` as one value."""
+        return TokenizerFiles.of(self.vocab_path, self.keyword_definitions)
+
     def resolved_model_output(self) -> Path:
         from effects.infrastructure.effect_model_store import model_output_for
 
@@ -231,6 +212,26 @@ class TrainEffectModelConfig:
 SWEEP_FLAGS: tuple[str, ...] = (
     "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob", "api_weight",
 )
+#: Flags the training settings record only when set, so a run without one
+#: resumes against the settings it always had.
+RECORDED_WHEN_SET: tuple[str, ...] = ("lethality_copies",)
+#: Every flag the checkpoint's training settings record, which a resume
+#: compares there as recorded rather than off the config: ``seed`` as the
+#: value the run drew, and :data:`RECORDED_WHEN_SET` only when set.
+RECORDED_IN_TRAINING_SETTINGS: frozenset[str] = frozenset({
+    "seed", *RECORDED_WHEN_SET, *SWEEP_FLAGS,
+})
+
+
+def recorded_flags(config: TrainEffectModelConfig, *, seed: int) -> dict:
+    """:data:`RECORDED_IN_TRAINING_SETTINGS` as the training settings write
+    them, in the order they always have (FR-063): ``seed`` is the one the run
+    drew, which ``config`` may not hold."""
+    return {
+        **{name: getattr(config, name) for name in RECORDED_WHEN_SET if getattr(config, name)},
+        "seed": seed,
+        **{name: getattr(config, name) for name in SWEEP_FLAGS},
+    }
 
 
 @dataclass(frozen=True)
@@ -247,8 +248,8 @@ class CorpusFacts:
     #: The corpus-wide ``text -> games`` table (FR-146).
     rarity: Mapping[str, int] | None = None
     #: Records per legality mode, so the epoch line places a legality record
-    #: in the family the build balanced it in; None without one.
-    legality_mode_counts: Mapping[str, int] | None = None
+    #: in the family the build balanced it in; empty without one.
+    legality_mode_counts: Mapping[str, int] = field(default_factory=dict)
     #: The manifest's digest at read time (FR-147).
     digest: str = ""
 
@@ -263,16 +264,14 @@ class CorpusFacts:
             holdout=manifest.holdout,
             gate_one_records=manifest.per_stratum.get(Stratum.GATE_ONE, 0),
             rarity=manifest.rarity,
-            legality_mode_counts=manifest.legality_mode_counts or None,
+            legality_mode_counts=manifest.legality_mode_counts,
             digest=manifest.digest(),
         )
 
     def provenance(self, config: TrainEffectModelConfig):
         """What a checkpoint of this run records about the data it saw."""
-        from effects.infrastructure.effect_model_store import (
-            SplitProvenance,
-            content_hash,
-        )
+        from effects.domain.split_provenance import SplitProvenance
+        from effects.infrastructure.effect_model_store import tokenizer_hashes
 
         return SplitProvenance(
             held_out_cards=self.split.held_out_cards,
@@ -280,8 +279,7 @@ class CorpusFacts:
             game_disjoint_games=tuple(sorted(self.split.game_disjoint_games)),
             vocab_path=str(config.vocab_path),
             keyword_definitions_path=str(config.keyword_definitions),
-            vocab_hash=content_hash(Path(config.vocab_path)),
-            keyword_definitions_hash=content_hash(Path(config.keyword_definitions)),
+            **tokenizer_hashes(config.tokenizer_files),
             withheld_keyword=config.withhold_keyword,
             holdout_permille=self.holdout.permille,
             holdout_max_carriers=self.holdout.max_carriers,
@@ -329,82 +327,18 @@ def require_matching_surface(
         )
 
 
-# Hardcoded, not flags (FR-095).
-LEARNING_RATE = 1e-4
-WARMUP_FRACTION = 0.05
-MAX_GRAD_NORM = 1.0
-WEIGHT_DECAY = 0.01
-
-
-def warmup_steps(*, epochs: int, steps_per_epoch: int) -> int:
-    """Linear warmup over the first 5% of the scheduled steps."""
-    return max(1, int(epochs * steps_per_epoch * WARMUP_FRACTION))
-
-
-def fields_for_epoch(config: TrainEffectModelConfig, *, present: frozenset[str], epoch: int):
-    """The field set every step of ``epoch`` trains with, and validation scores.
-
-    The sparse group is on from the first step of ``--curriculum-epoch``; at 1
-    or below, from the run's first step.
-    """
-    return active_fields(present, sparse=epoch >= config.curriculum_epoch)
-
-
-def learning_rate_at(step: int, *, warmup: int) -> float:
-    """Linear warmup, then constant: early stopping ends the run, and a decay
-    would make patience measure the schedule instead of the model."""
-    if step >= warmup:
-        return LEARNING_RATE
-    return LEARNING_RATE * (step + 1) / warmup
-
-
-@dataclass
-class EpochResult:
-    """One epoch's validation, on both strata."""
-
-    epoch: int
-    train_loss: float
-    card_disjoint_loss: float
-    game_disjoint_loss: float
-
-
-class EarlyStopper:
-    """Stops after ``patience`` epochs with no new card-disjoint best."""
-
-    def __init__(self, patience: int) -> None:
-        self.patience = patience
-        self.best = float("inf")
-        self.since_best = 0
-
-    def update(self, card_disjoint_loss: float) -> bool:
-        """Record an epoch; return True when it set a new best."""
-        if card_disjoint_loss < self.best:
-            self.best = card_disjoint_loss
-            self.since_best = 0
-            return True
-        self.since_best += 1
-        return False
-
-    def state_dict(self) -> dict:
-        return {"best": self.best, "since_best": self.since_best}
-
-    def load_state_dict(self, state: dict) -> None:
-        self.best = state["best"]
-        self.since_best = state["since_best"]
-
-    def reset(self) -> None:
-        """Forget the best: the objective changed, so no earlier number compares."""
-        self.best = float("inf")
-        self.since_best = 0
-
-    @property
-    def should_stop(self) -> bool:
-        """Never with ``patience`` 0: that run trains every epoch it is given."""
-        return self.patience > 0 and self.since_best >= self.patience
-
-
 class HoldoutMismatchError(ValueError):
     """The trainer's own holdout disagrees with the one its corpus recorded."""
+
+
+class ValidationGameInTrainingError(ValueError):
+    """A training shard holds a game its corpus's manifest places in a
+    validation stratum.
+
+    ``build-corpus`` routes each game to one stratum, so the shard and the
+    manifest describe different builds; training on it would score the
+    validation strata partly on games the model trained on.
+    """
 
 
 def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
@@ -419,7 +353,7 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
             "the corpus's; rebuild it with build-corpus --holdout-unit "
             f"{config.holdout_unit}, or drop the flag."
         )
-    trees = ConvertedTrees.from_folders(config.cards_folders)
+    trees = SourceTrees.of(config.cards_folders).converted()
     cards_folder = trees.cards_folder
     if cards_folder is None or not cards_folder.is_dir():
         raise HoldoutMismatchError(
@@ -452,38 +386,60 @@ def check_manifest_holdout(manifest, config: TrainEffectModelConfig) -> None:
         )
 
 
+def with_variant_scripts(
+    config: TrainEffectModelConfig, manifest: CorpusManifest,
+) -> TrainEffectModelConfig:
+    """``config`` reading the variant-script tree ``--variant-scripts`` names,
+    else the one the corpus was built against, as evaluation does; logged,
+    because a run reading none trains every variant ability as no text."""
+    tree = manifest.variant_scripts_or(config.variant_scripts)
+    if tree is None:
+        logger.info(
+            "No variant-script tree: neither --variant-scripts nor the corpus "
+            "manifest names one."
+        )
+    else:
+        source = (
+            "--variant-scripts" if config.variant_scripts is not None
+            else "the corpus manifest's"
+        )
+        logger.info("Variant scripts: %s (%s).", tree, source)
+    return replace(config, variant_scripts=tree)
+
+
 def run(config: TrainEffectModelConfig) -> int:
-    """Train the encoder and effect head jointly. Returns an exit code.
+    """Train the encoder and effect head jointly. Returns an exit code; a
+    corpus it cannot train on is refused by exception, which the CLI maps to
+    one.
 
     Torch is imported only here, so ``python -m effects --help`` stays fast.
     """
     if config.corpus is None:
-        logger.error(
+        raise MissingTrainingInputError(
             "train-effect-model reads a curated corpus: pass --corpus DIR, built "
             "with `python -m effects build-corpus`. Training straight from raw "
             "shards was withdrawn with FR-125."
         )
-        return 1
     store = CorpusStore(Path(config.corpus))
     manifest = store.load()
+    config = with_variant_scripts(config, manifest)
     require_matching_surface(
         manifest_surface=manifest.surface, vocab_path=Path(config.vocab_path),
         corpus=config.corpus,
     )
     training_shards = iter_shards(store.training_dir)
     if not training_shards:
-        logger.error("No training shards under %s.", store.training_dir)
-        return 1
+        raise MissingTrainingInputError(f"No training shards under {store.training_dir}.")
     validation_samples = {
         stratum: store.sample_path(stratum) for stratum in VALIDATION_STRATA
     }
     missing = [str(p) for p in validation_samples.values() if not p.exists()]
     if missing:
-        logger.error(
-            "The corpus at %s has no validation samples (%s). Rebuild it with a "
-            "build-corpus that writes validation/samples/.", config.corpus, ", ".join(missing),
+        raise MissingTrainingInputError(
+            f"The corpus at {config.corpus} has no validation samples "
+            f"({', '.join(missing)}). Rebuild it with a build-corpus that writes "
+            "validation/samples/."
         )
-        return 1
     # Before any record is read (FR-033).
     refuse_mixed_generations(iter_shards(Path(config.corpus)))
     check_manifest_holdout(manifest, config)

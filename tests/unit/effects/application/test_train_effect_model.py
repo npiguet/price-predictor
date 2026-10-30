@@ -11,13 +11,14 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.train_effect_model import (
+from effects.application.train_effect_model import TrainEffectModelConfig
+from effects.application.training_schedule import (
     LEARNING_RATE,
     EarlyStopper,
-    TrainEffectModelConfig,
     learning_rate_at,
     warmup_steps,
 )
+from effects.domain.baselines import Baseline
 from effects.infrastructure.effect_model_store import (
     DEFAULT_MODEL_OUTPUT,
 )
@@ -40,6 +41,12 @@ class TestScheduleConstants:
         )
         assert learning_rate_at(warmup, warmup=warmup) == LEARNING_RATE
         assert learning_rate_at(10_000, warmup=warmup) == LEARNING_RATE
+
+    def test_lr_scale_multiplies_the_whole_schedule(self):
+        for step in (0, 49, 100, 10_000):
+            assert learning_rate_at(step, warmup=100, scale=0.5) == (
+                learning_rate_at(step, warmup=100) * 0.5
+            )
 
 
 class TestEarlyStopping:
@@ -65,11 +72,11 @@ class TestModelOutput:
         )
 
     def test_a_variant_writes_under_its_own_name(self):
-        config = TrainEffectModelConfig(variant="identity")
+        config = TrainEffectModelConfig(variant=Baseline.IDENTITY)
         assert config.resolved_model_output() == DEFAULT_MODEL_OUTPUT / "identity"
 
     def test_an_explicit_model_output_wins(self, tmp_path):
-        config = TrainEffectModelConfig(variant="identity", model_output=tmp_path)
+        config = TrainEffectModelConfig(variant=Baseline.IDENTITY, model_output=tmp_path)
         assert config.resolved_model_output() == tmp_path
 
 
@@ -182,8 +189,6 @@ class TestProvenanceRecordsTheCorpus:
 
 
 def test_early_stopping_with_no_patience_never_stops():
-    from effects.application.train_effect_model import EarlyStopper
-
     stopper = EarlyStopper(0)
     stopper.update(1.0)
     for _ in range(50):

@@ -11,6 +11,7 @@ from pathlib import Path
 from effects.application.evaluation_context import EvaluateEffectModelConfig
 from effects.domain.evaluation_report import EvaluationReport
 from effects.infrastructure.cli import build_parser
+from tests.unit.effects.domain.test_corpus_manifest import manifest
 
 
 def _config_from(argv, monkeypatch) -> EvaluateEffectModelConfig:
@@ -44,22 +45,18 @@ def test_the_default_is_the_sealed_pipeline_s_table(monkeypatch):
 
 def test_the_variant_tree_defaults_to_the_one_the_corpus_recorded():
     """Without it every variant card's ability key resolves to no text."""
-    from types import SimpleNamespace
-
     from effects.application.evaluation_context import with_corpus_defaults
 
-    manifest = SimpleNamespace(variant_scripts="output/effects/variant-scripts/")
-    config = with_corpus_defaults(EvaluateEffectModelConfig(), manifest)
+    recorded = manifest(variant_scripts="output/effects/variant-scripts/")
+    config = with_corpus_defaults(EvaluateEffectModelConfig(), recorded)
     assert config.variant_scripts == Path("output/effects/variant-scripts/")
 
 
 def test_an_explicit_variant_tree_or_none_recorded_is_kept():
-    from types import SimpleNamespace
-
     from effects.application.evaluation_context import with_corpus_defaults
 
     chosen = EvaluateEffectModelConfig(variant_scripts=Path("elsewhere"))
-    recorded = SimpleNamespace(variant_scripts="output/effects/variant-scripts/")
+    recorded = manifest(variant_scripts="output/effects/variant-scripts/")
     assert with_corpus_defaults(chosen, recorded).variant_scripts == Path("elsewhere")
-    blank = SimpleNamespace(variant_scripts="")
+    blank = manifest(variant_scripts="")
     assert with_corpus_defaults(EvaluateEffectModelConfig(), blank).variant_scripts is None

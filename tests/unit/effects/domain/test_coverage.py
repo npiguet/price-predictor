@@ -21,16 +21,12 @@ from effects.domain.records import (
     EffectRecord,
     ResolutionPayload,
 )
-from effects.domain.state_snapshot import EntityState, Refs
+from effects.domain.state_snapshot import Refs
 from tests.unit.effects.builders import (
     make_entity,
     make_record,
     make_snapshot,
 )
-
-
-def _entity(entity_id: str, name: str) -> EntityState:
-    return make_entity(entity_id, name)
 
 
 def _record(entities, *, source=None, targets=(), events=()) -> EffectRecord:
@@ -46,19 +42,19 @@ def _record(entities, *, source=None, targets=(), events=()) -> EffectRecord:
 
 class TestSatisfactionCounting:
     def test_the_acting_lines_host_counts(self):
-        record = _record([_entity("E1", "Shock")], source="E1")
+        record = _record([make_entity("E1", "Shock")], source="E1")
         assert qualifying_cards(record) == {"Shock"}
 
     def test_a_referenced_ref_counts(self):
         record = _record(
-            [_entity("E1", "Shock"), _entity("E2", "Grizzly Bears")],
+            [make_entity("E1", "Shock"), make_entity("E2", "Grizzly Bears")],
             source="E1", targets=("E2",),
         )
         assert qualifying_cards(record) == {"Shock", "Grizzly Bears"}
 
     def test_an_event_subject_counts(self):
         record = _record(
-            [_entity("E1", "Shock"), _entity("E2", "Grizzly Bears")],
+            [make_entity("E1", "Shock"), make_entity("E2", "Grizzly Bears")],
             source="E1",
             events=(Event(
                 type=EventType.DAMAGE_DEALT, subjects=("E2",),
@@ -71,7 +67,7 @@ class TestSatisfactionCounting:
         """A card on the battlefield while something else resolves teaches
         the model nothing about that card."""
         record = _record(
-            [_entity("E1", "Shock"), _entity("E9", "Bystander")], source="E1",
+            [make_entity("E1", "Shock"), make_entity("E9", "Bystander")], source="E1",
         )
         assert "Bystander" not in qualifying_cards(record)
 
@@ -79,7 +75,7 @@ class TestSatisfactionCounting:
         """The unit is not resolution records: a vanilla creature has no
         acting line and is still coverable through combat."""
         record = _record(
-            [_entity("E1", "Grizzly Bears")],
+            [make_entity("E1", "Grizzly Bears")],
             events=(Event(
                 type=EventType.DAMAGE_DEALT, subjects=("E1",),
                 params={"amount": 3, "combat": True},

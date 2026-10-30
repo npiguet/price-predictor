@@ -182,10 +182,10 @@ def test_the_selection_plan_is_pinned_level_by_level_and_in_order():
         for _ in range(records):
             value = (value * 37 + 11) % 1000
             supply.add(cell, () if key is None else _keys(key), value)
-    members, keys_of = members_of(supply, _TEXTS)
+    members = members_of(supply, _TEXTS)
 
     plan = plan_selection(
-        members, keys_of, mix={EFFECT: 0.4, COMBAT: 0.2, LEGALITY: 0.3, REWRITE: 0.1},
+        members, mix={EFFECT: 0.4, COMBAT: 0.2, LEGALITY: 0.3, REWRITE: 0.1},
         ceiling=60, text_cap=6, reuse_cap=2,
     )
 

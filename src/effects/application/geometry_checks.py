@@ -2,7 +2,8 @@
 
 They ask about the geometry of ``e`` rather than a prediction, which catches
 what the loss cannot: a collapsed space passes every average-case metric.
-Only gate 3 is a verdict; the rest are reported.
+Only gate 3 is a verdict; the rest are reported. The UMAP projection, which
+draws a picture rather than measuring a number, is ``umap_check``'s.
 """
 
 from __future__ import annotations
@@ -40,6 +41,13 @@ if TYPE_CHECKING:
     from effects.infrastructure.ability_cache_store import SidecarIndex
 
 logger = logging.getLogger(__name__)
+
+#: A cached text whose sidecar line records no script API type.
+NO_API_TYPE = "none"
+
+#: Cached cards with a win rate the decodability battery needs before it fits
+#: a probe: fewer, and a held-out R² measures the split rather than ``e``.
+MIN_DECODABILITY_CARDS = 50
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +89,8 @@ class CachedVectors:
     by_card: dict[str, np.ndarray] = field(default_factory=dict)
     display: dict[str, str] = field(default_factory=dict)
     by_prose: dict[str, dict[str, set[str]]] = field(default_factory=dict)
+    #: Each text's script API type, where its sidecar line records one.
+    api_types: dict[str, str] = field(default_factory=dict)
 
     @cached_property
     def matrix(self) -> np.ndarray:
@@ -105,6 +115,11 @@ class CachedVectors:
     def label(self, key: str) -> str:
         """``key`` as a person reads it: its prose, where it has any."""
         return self.display.get(key, key)
+
+    def api_type_of(self, key: str) -> str:
+        """``key``'s script API type, or :data:`NO_API_TYPE` where its line
+        records none."""
+        return self.api_types.get(key, NO_API_TYPE)
 
     def resolve(self, query: LineQuery) -> Resolution:
         """The cache key ``query`` names, or the reason it names none. Several
@@ -132,7 +147,7 @@ class CachedVectors:
 
 
 def cached_vectors(
-    index: SidecarIndex, abilities_root: Path, *, variant: str = Baseline.FULL,
+    index: SidecarIndex, abilities_root: Path, *, variant: Baseline = Baseline.FULL,
 ) -> CachedVectors:
     """One variant's cache over sidecars already read. Only a ``cardsfolder``
     source contributes a pooled per-card vector."""
@@ -144,6 +159,8 @@ def cached_vectors(
                 continue
             cached.by_text.setdefault(line.text, row)
             cached.display.setdefault(line.text, line.prose or line.text)
+            if line.api_type:
+                cached.api_types.setdefault(line.text, line.api_type)
             if line.prose:
                 cached.by_prose.setdefault(
                     normalize_prose(line.prose), {},
@@ -178,7 +195,9 @@ def gate_three_verdict(geometry: CacheGeometry) -> CheckResult:
     )
 
 
-def _uncached(check: CheckName, missing: str, *, variant: str | None = None) -> CheckResult:
+def _uncached(
+    check: CheckName, missing: str, *, variant: Baseline | None = None,
+) -> CheckResult:
     """The skip a check reading the ability cache reports when there is none
     to read, naming the command that writes it."""
     command = "encode-abilities" + (f" --variant {variant}" if variant else "")
@@ -229,21 +248,6 @@ def nearest_neighbours(
     return out
 
 
-def umap_projection(matrix: np.ndarray, *, seed: int = 42) -> np.ndarray | None:
-    """A 2-D UMAP projection, or None when the library or the data is absent:
-    a run that cannot draw the picture has not failed."""
-    if matrix.shape[0] < 10:
-        return None
-    try:
-        import umap
-    except ImportError:
-        logger.warning("umap-learn is not installed; skipping the projection")
-        return None
-    # A seed forces UMAP single-threaded; saying so keeps it from warning.
-    reducer = umap.UMAP(n_components=2, random_state=seed, n_jobs=1)
-    return reducer.fit_transform(matrix)
-
-
 def check_nearest_neighbours(
     cached: CachedVectors, queries: tuple[LineQuery, ...],
 ) -> CheckResult:
@@ -268,19 +272,6 @@ def check_nearest_neighbours(
     return CheckResult(
         CheckName.NEAREST_NEIGHBOUR, CheckStatus.REPORTED, "; ".join(lines),
         {"unresolved_queries": float(unresolved)},
-    )
-
-
-def check_umap(cached: CachedVectors) -> CheckResult:
-    projection = umap_projection(cached.matrix)
-    if projection is None:
-        return CheckResult(
-            CheckName.UMAP, CheckStatus.SKIPPED,
-            "too few vectors, or umap-learn is not installed",
-        )
-    return CheckResult(
-        CheckName.UMAP, CheckStatus.REPORTED,
-        f"projected {projection.shape[0]} unique ability texts to 2-D",
     )
 
 
@@ -392,7 +383,7 @@ def check_decodability(
     canonical = {name.casefold(): name for name in load_labels(Path(win_rates_path))}
     labelled = [canonical.get(name.casefold(), name) for name in shared]
     with_rate = sum(name.casefold() in canonical for name in shared)
-    if with_rate < 50:
+    if with_rate < MIN_DECODABILITY_CARDS:
         return CheckResult(
             CheckName.DECODABILITY, CheckStatus.SKIPPED,
             f"only {with_rate} of {len(shared)} cached cards have a win rate, "

@@ -16,27 +16,22 @@ from typing import NamedTuple
 import torch
 
 from effects.application.ability_text import KeyResolver
-from effects.application.text_staging import (
-    MaskedTokens,
-    MlmMasker,
-    StagedTexts,
-    TextStager,
-    encode_by_length,
-)
-from effects.domain.ability_encoder import AbilityEncoder, EncodedLine
+from effects.application.mlm_masking import MaskedTokens, MlmMasker
+from effects.application.text_staging import StagedTexts, TextStager, encode_by_length
+from effects.domain.ability_encoder import AbilityEncoder
 from effects.domain.ability_tokenizer import Surface
 from effects.domain.baselines import BaselineMasks, baseline_masks
-from effects.domain.damage_step_keywords import keyword_of_line
 from effects.domain.effect_head_input import (
     ACT_SLOT,
     INPUT_LAYOUT,
     KIND_FLAG_WIDTH,
+    NO_STRIP,
     InputLayout,
     SlotKind,
     SurfaceBuilder,
     feature_widths,
 )
-from effects.domain.provenance import SidecarLookup
+from effects.domain.provenance import ProvenanceKey, SidecarLine, SidecarLookup
 from effects.domain.records import acting_keys
 from effects.domain.surface_collation import TrunkInputs, collate_surfaces
 
@@ -69,8 +64,6 @@ class NoiseState:
         self.ramp_steps = max(int(ramp_steps), 1)
         self.decay = decay
         self.sigma: torch.Tensor | None = None
-        #: The training step of the last batch, kept for the resume file.
-        self.step = 0
         self.refactor_every = max(int(refactor_every), 1)
         #: ``V √Λ`` of the last factorized ``Σ`` and the draw it was taken at.
         self._factor: torch.Tensor | None = None
@@ -78,16 +71,17 @@ class NoiseState:
 
     def state_dict(self) -> dict:
         return {
-            "sigma": self.sigma, "step": self.step,
+            "sigma": self.sigma,
             "factor": self._factor, "draws_since_factor": self._draws_since_factor,
         }
 
     def load_state_dict(self, state: dict, device: torch.device) -> None:
+        """Restore :meth:`state_dict`'s keys and ignore any other, so a resume
+        file still holding the ``step`` the state once saved continues."""
         def on(tensor):
             return tensor.to(device) if tensor is not None else None
 
         self.sigma = on(state["sigma"])
-        self.step = state["step"]
         self._factor = on(state["factor"])
         self._draws_since_factor = state["draws_since_factor"]
 
@@ -113,12 +107,11 @@ class NoiseState:
 
     def apply(self, matrix: torch.Tensor | None, *, step: int) -> torch.Tensor | None:
         """``matrix`` plus ``L z``, where ``L Lᵀ = r²Σ``, at training step
-        ``step``; a batch with no ``e`` still records its step.
+        ``step``; a batch with no ``e`` stays None.
 
         ``L = V √Λ`` with eigenvalues clamped at zero, so a singular ``Σ``
         (a batch narrower than ``e_dim``) never fails to factorize.
         """
-        self.step = step
         if matrix is None:
             return None
         self.update(matrix)
@@ -152,7 +145,7 @@ class EncodedBatch:
     """
 
     texts: list[str]
-    lines: dict[str, object]
+    lines: Mapping[str, SidecarLine | None]
     matrix: torch.Tensor | None
 
 
@@ -165,8 +158,9 @@ class PreparedBatch:
     the step would carry no gradient.
     """
 
-    #: Each unique ability text to its sidecar line.
-    texts: dict[str, object]
+    #: Each unique ability text to its sidecar line; None for a text no line
+    #: carries.
+    texts: dict[str, SidecarLine | None]
     #: The same texts staged for whatever produces their ``e``.
     staged: StagedTexts
     surfaces: list
@@ -254,8 +248,8 @@ class Materializer:
             return self.identity_table(
                 self.identity_table.rows(staged.ordered).to(self.device, non_blocking=True),
             )
-        if staged.stand_in is not None:
-            return staged.stand_in.to(self.device, non_blocking=True)
+        if staged.taxonomy_vectors is not None:
+            return staged.taxonomy_vectors.to(self.device, non_blocking=True)
         if staged.encoder_inputs is None:
             return None
         vectors, _hidden = encode_by_length(encoder, staged.encoder_inputs, self.device)
@@ -336,9 +330,9 @@ class SurfaceBatcher:
         #: The step's generator: keyword expansion, context dropout and the MLM
         #: mask draw from it, in that order.
         self.rng = rng or random.Random(0)
-        #: ``key -> (text, line)`` for :meth:`stand_in` keys, apart from the
-        #: resolver's memo because a copy's text belongs to its step alone.
-        self._staged: dict[object, tuple[str, object]] = {}
+        #: ``key -> (text, line)`` for :meth:`override_text` keys, apart from
+        #: the resolver's memo because a copy's text belongs to its step alone.
+        self._overrides: dict[ProvenanceKey, tuple[str, SidecarLine | None]] = {}
 
     @property
     def sidecars(self) -> SidecarLookup:
@@ -348,10 +342,10 @@ class SurfaceBatcher:
     def surface(self) -> Surface:
         return self.stager.surface
 
-    def _resolve(self, key) -> tuple[str | None, object]:
-        """``(text, line)`` for one key: a staged stand-in, else the join."""
-        staged = self._staged.get(key)
-        return staged if staged is not None else self.resolver.resolve(key)
+    def _resolve(self, key) -> tuple[str | None, SidecarLine | None]:
+        """``(text, line)`` for one key: its override, else the join."""
+        override = self._overrides.get(key)
+        return override if override is not None else self.resolver.resolve(key)
 
     def text_of(self, key) -> str | None:
         """The text one ability key is encoded from, on this run's surface:
@@ -361,7 +355,7 @@ class SurfaceBatcher:
     def line_of(self, key):
         return self._resolve(key)[1]
 
-    def stand_in(
+    def override_text(
         self, key, text: str, like, *, script: str | None = None,
         role_spans: tuple | None = None,
     ) -> None:
@@ -374,27 +368,27 @@ class SurfaceBatcher:
                 script_text=line.script_text if script is None else script,
                 role_spans=line.role_spans if role_spans is None else role_spans,
             )
-        self._staged[key] = (text, line)
+        self._overrides[key] = (text, line)
 
     @contextmanager
     def reading_as(self, key, text: str) -> Iterator[None]:
         """Inside the block ``key`` reads ``text``, keeping its own line: how a
         probe has the encoder read one edited script."""
-        previous = self._staged.get(key)
-        self.stand_in(key, text, like=key)
+        previous = self._overrides.get(key)
+        self.override_text(key, text, like=key)
         try:
             yield
         finally:
             if previous is None:
-                del self._staged[key]
+                del self._overrides[key]
             else:
-                self._staged[key] = previous
+                self._overrides[key] = previous
 
-    def batch_texts(self, records) -> dict[str, object]:
+    def batch_texts(self, records) -> dict[str, SidecarLine | None]:
         """Every ability text this batch's surfaces reference, to its line:
         the acting line of each record and every ability on every entity, since
         a text left out reaches the model as a zero vector."""
-        texts: dict[str, object] = {}
+        texts: dict[str, SidecarLine | None] = {}
 
         def note(key) -> str | None:
             text, line = self._resolve(key)
@@ -415,40 +409,42 @@ class SurfaceBatcher:
 
     def options_for(self, key) -> tuple:
         """The keys of the charm-mode lines that follow ``key``'s line
-        (FR-063a); none for a stood-in key."""
-        return () if key in self._staged else self.resolver.options_for(key)
+        (FR-063a); none for an overridden key."""
+        return () if key in self._overrides else self.resolver.options_for(key)
 
     def _keys_of(self, text: str) -> list:
         """The keys resolved to ``text`` so far: how a truncation is named."""
-        staged = [key for key, (known, _) in self._staged.items() if known == text]
-        return self.resolver.keys_of(text) + staged
+        overridden = [key for key, (known, _) in self._overrides.items() if known == text]
+        return self.resolver.keys_of(text) + overridden
 
-    def stage(self, texts: Mapping[str, object]) -> StagedTexts:
+    def stage(self, texts: Mapping[str, SidecarLine | None]) -> StagedTexts:
         return self.stager.stage(
             texts, masks=self.spec.masks, e_dim=self.spec.e_dim, rng=self.rng,
             keys_of=self._keys_of,
         )
 
     def encode_texts(
-        self, texts: dict[str, object], encoder: AbilityEncoder,
+        self, texts: Mapping[str, SidecarLine | None], encoder: AbilityEncoder,
     ) -> tuple[dict[str, int], torch.Tensor | None]:
         """Encode each unique ability text once: ``(row_of_text, matrix)``."""
         staged = self.stage(texts)
         return staged.rows, self.materializer.encode(staged, encoder)
 
     def draw_mlm_mask(
-        self, prepared: list[EncodedLine], mask_prob: float,
+        self, inputs: dict[str, torch.Tensor] | None, mask_prob: float,
     ) -> MaskedTokens | None:
-        """Which of ``prepared``'s tokens the MLM pass masks, from this step's
-        generator after the build's own draws (``MlmMasker.draw``)."""
+        """Which of a batch's collated encoder ``inputs`` the MLM pass masks,
+        from this step's generator after the build's own draws
+        (``MlmMasker.draw``)."""
         tokenizer = self.stager.tokenizer
         return MlmMasker(tokenizer.pad_id, tokenizer.mask_id).draw(
-            prepared, mask_prob, self.rng,
+            inputs, mask_prob, self.rng,
         )
 
     def keyword_of_key(self, key) -> str | None:
-        """Which damage-step keyword one ability key's line *is*, if any."""
-        return keyword_of_line(self._resolve(key)[1])
+        """Which keyword one ability key's line *is*, if any."""
+        line = self._resolve(key)[1]
+        return line.bare_keyword if line is not None else None
 
     def surface_builder(self, rows: dict[str, int]) -> SurfaceBuilder:
         """The builder of one batch's surfaces, each ``e`` a row of ``rows``;
@@ -461,8 +457,9 @@ class SurfaceBatcher:
     def build(self, records, encoder: AbilityEncoder, strip_per_record=None) -> Materialized:
         """One batch of records on the device: ``prepare`` then ``materialize``.
 
-        ``strip_per_record`` holds one ``strip_keywords`` map (or None) per
-        record, because gate 2 batches a record with its perturbed twin.
+        ``strip_per_record`` holds one ``stripped`` map per record
+        (``NO_STRIP`` for one built as collected), because gate 2 batches a
+        record with its perturbed twin.
         """
         return self.materializer.materialize(
             self.prepare(records, strip_per_record), encoder,
@@ -473,7 +470,7 @@ class SurfaceBatcher:
         dropout, from the batcher's generator, in that order."""
         texts = self.batch_texts(records)
         staged = self.stage(texts)
-        strips = strip_per_record or [None] * len(records)
+        strips = strip_per_record or [NO_STRIP] * len(records)
         builder = self.surface_builder(staged.rows)
         surfaces = [builder.build(record, strip) for record, strip in zip(records, strips)]
         inputs = self._masked(collate_surfaces(

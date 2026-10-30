@@ -16,12 +16,13 @@ import shutil
 import zlib
 from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
-from enum import StrEnum
 from pathlib import Path
 from typing import IO, NamedTuple
 
 from effects.domain.corpus_curation import record_hash
-from effects.domain.records import EffectRecord
+from effects.domain.corpus_manifest import SourceShard
+from effects.domain.records import EffectRecord, RecordKind
+from effects.domain.shard_generation import MixedGenerationsError, ShardGeneration
 from effects.infrastructure.record_codec import (
     format_record_line,
     parse_record_line,
@@ -111,6 +112,7 @@ def _copy_parts_unshuffled(parts: list[Path], out_dir: Path, prefix: str) -> lis
         with gzip.open(path, "wt", encoding="utf-8") as handle:
             for line in iter_shard_lines(part):
                 handle.write(line)
+                handle.write("\n")
         written.append(path)
     return written
 
@@ -118,6 +120,11 @@ def _copy_parts_unshuffled(parts: list[Path], out_dir: Path, prefix: str) -> lis
 def _bucket_of(line: str, *, seed: int, count: int) -> int:
     """The index of the output shard a line's game is dealt to."""
     return record_hash(_game_of_line(line), seed=seed) % count
+
+
+#: Between a group line's shard index and its record: no digit, so the first
+#: one on the line is always this.
+_INDEX_SEPARATOR = ":"
 
 
 def _group_path(scratch: Path, group: int) -> Path:
@@ -130,6 +137,8 @@ def _deal_into_buckets(
     """Deal every line into the group of its shard's index; return the indices.
 
     A group keeps the parts' order, so each shuffle sees a fixed input order.
+    Each group line carries its shard's index ahead of the record (``index:``),
+    so the split that follows does not hash the line a second time.
     """
     groups = min(count, _GROUPS)
     filled: set[int] = set()
@@ -140,11 +149,10 @@ def _deal_into_buckets(
     try:
         for part in parts:
             for line in iter_shard_lines(part):
-                if not line.strip():
-                    continue
                 index = _bucket_of(line, seed=seed, count=count)
                 filled.add(index)
-                handles[index % groups].write(line)
+                group = handles[index % groups]
+                group.write(f"{index}{_INDEX_SEPARATOR}{line}\n")
     finally:
         for handle in handles:
             handle.close()
@@ -154,19 +162,22 @@ def _deal_into_buckets(
 def _write_shuffled_buckets(
     scratch: Path, names: dict[int, Path], *, seed: int, count: int,
 ) -> None:
-    """Split each group into its shards, shuffle each under ``seed``, write it.
+    """Split each group into its shards by the index each line carries,
+    shuffle each under ``seed``, write it.
 
     A group is held whole, which is about ``count / _GROUPS`` shards' lines.
     """
     for group in range(min(count, _GROUPS)):
         buckets: dict[int, list[str]] = defaultdict(list)
-        with gzip.open(_group_path(scratch, group), "rt", encoding="utf-8") as handle:
-            for line in handle:
-                buckets[_bucket_of(line, seed=seed, count=count)].append(line)
+        for tagged in iter_shard_lines(_group_path(scratch, group)):
+            index, _, line = tagged.partition(_INDEX_SEPARATOR)
+            buckets[int(index)].append(line)
         for index, lines in buckets.items():
             random.Random(f"{seed}:{index}").shuffle(lines)
             with gzip.open(names[index], "wt", encoding="utf-8") as handle:
-                handle.writelines(lines)
+                for line in lines:
+                    handle.write(line)
+                    handle.write("\n")
 
 
 def _game_of_line(line: str) -> str:
@@ -174,7 +185,7 @@ def _game_of_line(line: str) -> str:
     head = peek_envelope(line)
     if head is not None:
         return head.game_id
-    return parse_record_line(line.strip())["game_id"]
+    return parse_record_line(line)["game_id"]
 
 
 #: Both shard spellings: plain `.jsonl` predates compression.
@@ -182,22 +193,27 @@ SHARD_GLOBS: tuple[str, ...] = ("*.jsonl.gz", "*.jsonl")
 
 
 def iter_shard_lines(path: Path) -> Iterator[str]:
-    """Every complete line of a shard, compressed or not.
+    """Every complete, non-blank line of a shard, its terminator stripped.
 
-    A truncated final gzip member, or a trailing partial line, ends the
-    stream.
+    One shape for both spellings, so a caller that writes lines back adds the
+    newline itself whichever spelling it read. Blank lines are skipped: every
+    reader ignores them, and a copy that kept them would be the one place
+    they survived. A truncated final gzip member, or a trailing partial line,
+    ends the stream.
     """
     path = Path(path)
     if path.suffix != ".gz":
-        yield from iter_complete_lines(path)
+        for line in iter_complete_lines(path):
+            if line.strip():
+                yield line
         return
 
     try:
         with gzip.open(path, "rt", encoding="utf-8") as handle:
             for line in handle:
                 # A line without its newline can only be a member cut short.
-                if line.endswith("\n"):
-                    yield line
+                if line.endswith("\n") and line.strip():
+                    yield line[:-1]
     except (EOFError, gzip.BadGzipFile, zlib.error):
         return
 
@@ -205,32 +221,30 @@ def iter_shard_lines(path: Path) -> Iterator[str]:
 def iter_record_dicts(path: Path) -> Iterator[dict]:
     """Every complete record of one shard, as the dict its line parses to.
 
-    For a caller that needs the raw JSON, such as a generation check. Blank
-    lines are skipped.
+    For a caller that needs the raw JSON, such as a generation check.
     """
     for line in iter_shard_lines(Path(path)):
-        stripped = line.strip()
-        if stripped:
-            yield parse_record_line(stripped)
+        yield parse_record_line(line)
 
 
 def read_window(
     directory: Path, limit: int = 0,
     observe: Callable[[str, dict], None] | None = None,
+    *, shards: Sequence[SourceShard] | None = None,
 ) -> Iterator[EffectRecord]:
     """The first ``limit`` records under ``directory``; 0 reads all of them.
 
     ``observe``, when given, sees each record's raw dict, with its shard's
     path relative to ``directory``, before it is parsed: a parsed record
-    cannot say whether a field was on the wire.
+    cannot say whether a field was on the wire. ``shards`` is the directory's
+    :func:`list_shards` when the caller already holds it.
     """
     root = Path(directory)
     seen = 0
-    for shard in iter_shards(root):
-        name = shard.relative_to(root).as_posix()
-        for data in iter_record_dicts(shard):
+    for shard in list_shards(root) if shards is None else shards:
+        for data in iter_record_dicts(shard.path(root)):
             if observe is not None:
-                observe(name, data)
+                observe(shard.name, data)
             yield record_from_dict(data)
             seen += 1
             if limit and seen >= limit:
@@ -261,6 +275,29 @@ def iter_shards(directory: Path) -> list[Path]:
     return sorted(
         path for pattern in SHARD_GLOBS for path in directory.rglob(pattern)
     )
+
+
+def list_shards(directory: Path) -> tuple[SourceShard, ...]:
+    """Every shard :func:`iter_shards` finds under ``directory``, in its order,
+    by posix path relative to ``directory`` and size."""
+    root = Path(directory)
+    return tuple(
+        SourceShard(name=shard.relative_to(root).as_posix(), size=shard.stat().st_size)
+        for shard in iter_shards(root)
+    )
+
+
+class NoShardsError(ValueError):
+    """A reader was pointed at a directory holding no shard."""
+
+
+def require_shards(directory: Path) -> tuple[SourceShard, ...]:
+    """:func:`list_shards`, refusing an empty listing: for a command whose
+    whole job is reading the directory, where nothing to read is a mistake."""
+    shards = list_shards(directory)
+    if not shards:
+        raise NoShardsError(f"no shards under {directory}")
+    return shards
 
 
 def read_records(directory: Path) -> Iterator[EffectRecord]:
@@ -303,7 +340,7 @@ def read_records_matching(
     directory: Path,
     *,
     game_ids: Collection[str] | None = None,
-    kinds: Collection[str] | None = None,
+    kinds: Collection[RecordKind] | None = None,
 ) -> Iterator[EffectRecord]:
     """The records under ``directory`` of the named games and kinds.
 
@@ -322,28 +359,40 @@ def iter_shard_matching(
     shard: Path,
     *,
     game_ids: Collection[str] | None = None,
-    kinds: Collection[str] | None = None,
+    kinds: Collection[RecordKind] | None = None,
+    where: Callable[[EnvelopeHead], bool] | None = None,
 ) -> Iterator[EffectRecord]:
-    """The records of one shard of the named games and kinds, the rest
-    skipped unparsed; :func:`read_records_matching` for one shard."""
+    """The records of one shard of the named games and kinds that ``where``
+    keeps, the rest skipped unparsed; :func:`read_records_matching` for one
+    shard.
+
+    ``where`` sees each line's head once, and only once the two filters pass,
+    so it may keep state, such as the record ids it has already let through.
+    """
     for line in iter_shard_lines(shard):
         head = peek_envelope(line)
-        if head is not None and not _wanted(head.game_id, head.kind, game_ids, kinds):
+        if head is not None and not _wanted(head, game_ids, kinds, where):
             continue
-        stripped = line.strip()
-        if not stripped:
-            continue
-        record = record_from_dict(parse_record_line(stripped))
-        if head is None and not _wanted(record.game_id, record.kind.value, game_ids, kinds):
+        record = record_from_dict(parse_record_line(line))
+        if head is None and not _wanted(
+            EnvelopeHead(record.record_id, record.game_id, record.kind.value),
+            game_ids, kinds, where,
+        ):
             continue
         yield record
 
 
 def _wanted(
-    game_id: str, kind: str, game_ids: Collection[str] | None, kinds: Collection[str] | None,
+    head: EnvelopeHead, game_ids: Collection[str] | None,
+    kinds: Collection[RecordKind] | None, where: Callable[[EnvelopeHead], bool] | None,
 ) -> bool:
-    """Whether a record of ``game_id`` and ``kind`` passes both filters."""
-    return (game_ids is None or game_id in game_ids) and (kinds is None or kind in kinds)
+    """Whether a record with this head passes every filter: a
+    :class:`RecordKind` hashes as its value, so the envelope's string finds it."""
+    return (
+        (game_ids is None or head.game_id in game_ids)
+        and (kinds is None or head.kind in kinds)
+        and (where is None or where(head))
+    )
 
 
 def count_records(directory: Path, *, ceiling: int = 0) -> int:
@@ -362,29 +411,14 @@ def count_records(directory: Path, *, ceiling: int = 0) -> int:
 
 
 def count_shard_records(shard: Path) -> int:
-    """Complete records in one shard, counted as :func:`count_records` does."""
+    """Complete records in one shard, counted as :func:`count_records` does:
+    blank lines are not records, in either spelling."""
     if shard.suffix == ".gz":
-        return sum(1 for line in iter_shard_lines(shard) if line.strip())
-    return count_complete_lines(shard)
+        return sum(1 for _ in iter_shard_lines(shard))
+    return count_complete_lines(shard, skip_blank=True)
 
 
 # ── shard generation (FR-033) ───────────────────────────────────────────
-
-class ShardGeneration(StrEnum):
-    """The two record generations a shard can hold.
-
-    A gen-2 record always carries ``random_seat``; a gen-1 one never does, and
-    on gen-1 ``playability`` records ``actor_player`` keeps feature 023's
-    meaning rather than naming the deciding player (FR-030a).
-    """
-
-    GEN_1 = "gen-1"
-    GEN_2 = "gen-2"
-
-
-class MixedGenerationsError(ValueError):
-    """A records set holds both gen-1 and gen-2 shards."""
-
 
 def shard_generation(path: Path) -> ShardGeneration | None:
     """The shard's generation by its first complete record; None if empty.
@@ -393,7 +427,7 @@ def shard_generation(path: Path) -> ShardGeneration | None:
     records disagree.
     """
     for data in iter_record_dicts(path):
-        return ShardGeneration.GEN_2 if "random_seat" in data else ShardGeneration.GEN_1
+        return ShardGeneration.of(data)
     return None
 
 

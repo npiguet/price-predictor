@@ -597,6 +597,7 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
     from effects.domain.effect_head_layout import (
         DURATIONS,
         ZONE_OUTCOMES,
+        Duration,
         HeadField,
         ZoneOutcome,
     )
@@ -624,7 +625,7 @@ def record_items(record, sidecars, join: JoinResult, acting_text) -> list[Record
     if record.kind is RecordKind.RESOLUTION and record.moment is Moment.RESOLUTION:
         targets = derive_targets(record)
         died = ZONE_OUTCOMES.index(ZoneOutcome.DIED)
-        eot = DURATIONS.index("end_of_turn")
+        eot = DURATIONS.index(Duration.END_OF_TURN)
         for entity in record.state.entities:
             if entity.zone != "battlefield":
                 continue

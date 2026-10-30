@@ -23,13 +23,8 @@ from effects.domain.ability_encoder import (
     collate_lines,
     encoding_role_spans,
     encoding_text,
-    surface_of,
 )
-from effects.domain.ability_tokenizer import (
-    INFERENCE_KEYWORD_EXPAND_P,
-    AbilityTokenizer,
-    Surface,
-)
+from effects.domain.ability_tokenizer import AbilityTokenizer, Surface
 from effects.domain.provenance import SidecarLine
 from effects.infrastructure.torch_device import default_device
 
@@ -61,9 +56,9 @@ class AbilityEncoderRunner:
         self.encoder.eval()
         # Inference probability zero, so two runs write the same cache; the
         # withheld keyword expands as it did in training.
-        self.stager = TextStager(
+        self.stager = TextStager.for_inference(
             tokenizer, surface, withhold_keyword=withheld_keyword,
-            keyword_expand_p=INFERENCE_KEYWORD_EXPAND_P, truncations=truncations,
+            truncations=truncations,
         )
         self.e_dim = config.e_dim
 
@@ -73,15 +68,17 @@ class AbilityEncoderRunner:
         checkpoint,
         tokenizer: AbilityTokenizer,
         *,
-        vocab_path,
+        surface: Surface,
         device: torch.device | None = None,
         truncations: TruncationLog | None = None,
     ) -> AbilityEncoderRunner:
+        """``surface`` is the checkpoint's vocabulary's, which the tokenizer's
+        own grammar may not be (``tokenizer_surface``)."""
         return cls(
             checkpoint.encoder_config,
             checkpoint.encoder_state,
             tokenizer,
-            surface=surface_of(vocab_path),
+            surface=surface,
             device=device,
             withheld_keyword=checkpoint.provenance.withheld_keyword,
             truncations=truncations,

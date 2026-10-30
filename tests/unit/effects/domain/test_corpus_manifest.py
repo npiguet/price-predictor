@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from effects.domain.corpus_manifest import _GEN1_DEFAULTS, ClassCounts, CorpusManifest, SourceShard
+from effects.domain.corpus_manifest import (
+    _GEN1_DEFAULTS,
+    ClassCounts,
+    CorpusManifest,
+    FamilyRow,
+    SourceShard,
+)
 
 
 def manifest(**overrides) -> CorpusManifest:
@@ -202,6 +208,30 @@ def test_a_real_gen1_manifest_keeps_its_digest():
     assert set(loaded.as_dict()) == set(raw)
 
 
+def _as_written(data: dict) -> str:
+    """A manifest's JSON as ``CorpusStore`` writes it."""
+    return json.dumps(data, indent=2, sort_keys=True)
+
+
+def test_a_real_gen1_manifest_is_written_back_byte_for_byte():
+    raw = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    assert _as_written(CorpusManifest.from_dict(raw).as_dict()) == _as_written(raw)
+
+
+def test_a_family_row_keeps_the_columns_its_manifest_was_written_with():
+    """A manifest built before ``planned`` existed lacks it in every row, and
+    writing it back must not add one: its digest is pinned by checkpoints."""
+    rows = {"rewrite": {
+        "Moved": {"available": 10, "share": 5, "written": 8, "repeats": 3, "shortfall": 0},
+    }}
+    planned = {"rewrite": {"Moved": {**rows["rewrite"]["Moved"], "planned": 6}}}
+    for families in (rows, planned):
+        raw = manifest(game_disjoint_target=None).as_dict() | {"families": families}
+        loaded = CorpusManifest.from_dict(raw)
+        assert isinstance(loaded.families["rewrite"]["Moved"], FamilyRow)
+        assert _as_written(loaded.as_dict()) == _as_written(raw)
+
+
 @pytest.mark.skipif(not _REAL_GEN1.exists(), reason="the gen-1 corpus is not on this machine")
 def test_the_gen1_corpus_still_matches_the_digest_its_checkpoint_recorded():
     raw = json.loads(_REAL_GEN1.read_text(encoding="utf-8"))
@@ -225,9 +255,9 @@ def test_the_gen2_fields_round_trip_and_move_the_digest():
     gen2 = manifest(
         game_disjoint_target=None,
         holdout_unit="template",
-        families={"rewrite": {"Moved": {
-            "available": 10, "share": 5, "written": 8, "repeats": 3, "shortfall": 0,
-        }}},
+        families={"rewrite": {"Moved": FamilyRow(
+            available=10, share=5, planned=None, written=8, repeats=3, shortfall=0,
+        )}},
         signatures={"rewrite": {"Moved": {"died:changed": 8}}},
         policy_counts={"rewrite": {"on_policy": 6, "off_policy": 2}},
         legality_counts={"blockers": {"real": 4, "what_if": 9}},

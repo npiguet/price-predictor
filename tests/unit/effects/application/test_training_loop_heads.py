@@ -9,22 +9,23 @@ computed at all.
 
 from __future__ import annotations
 
+import random
 from types import SimpleNamespace
 
 import pytest
 import torch
 
+from effects.application.mlm_masking import MlmMasker
 from effects.application.run_context import build_run, training_settings
 from effects.application.step_loss import StepLoss
 from effects.application.step_preparation import NO_TEXT_BUCKET, training_heads
 from effects.application.surface_batching import EncodedBatch, PreparedBatch
-from effects.application.text_staging import MlmMasker, StagedTexts
+from effects.application.text_staging import StagedTexts
 from effects.application.train_effect_model import (
     CorpusFacts,
     RunSpec,
     TrainEffectModelConfig,
 )
-from effects.application.training_log import format_shares
 from effects.domain.aux_head_targets import (
     created_objects_targets,
     supervises_created_objects,
@@ -85,12 +86,12 @@ class _Batcher:
             texts=dict(self.encoded.lines),
             staged=StagedTexts(
                 rows={text: row for row, text in enumerate(texts)},
-                prepared=[object()] * len(texts), encoder_inputs=None, stand_in=None,
+                prepared=[object()] * len(texts), encoder_inputs=None, taxonomy_vectors=None,
             ),
             surfaces=[], inputs=None,
         )
 
-    def draw_mlm_mask(self, prepared, mask_prob):
+    def draw_mlm_mask(self, inputs, mask_prob):
         self.mlm_calls += 1
         return SimpleNamespace(rows=len(self.encoded.texts))
 
@@ -177,8 +178,7 @@ class TestTheTargets:
             r for r in records if supervises_created_objects(r)
             and any(e.type is EventType.TOKEN_CREATED for e in events_of(r))
         ]
-        if not made:
-            pytest.skip("the fixture holds no token-making effect half")
+        assert made, "the fixture holds no token-making effect half"
         target = created_objects_targets(made[0])
         assert target[0] == 1.0 and target[2] >= 1.0
 
@@ -256,12 +256,6 @@ class TestEpochShares:
         labels = preparer._shard_labels([record], texts, preparer._games([record], texts))
         assert labels[record.record_id][0] == "20+"
 
-    def test_shares_are_reported_in_bucket_order(self):
-        line = format_shares(
-            {"20+": 1, "1": 3, NO_TEXT_BUCKET: 4}, (*RARITY_BUCKETS, NO_TEXT_BUCKET),
-        )
-        assert line == "1 37.5%, 20+ 12.5%, no-text 50.0%"
-
 
 def _built_run(monkeypatch, **config):
     """The run a loop builds over a stand-in preparer, at the smallest encoder."""
@@ -288,8 +282,8 @@ class TestTheBatchersTheLoopBuilds:
         assert run.training.noise is run.noise and run.noise.ratio == 0.2
         assert run.scoring.noise is None
         preparer = make_preparer(tmp_path, keyword_expand_p=0.25)
-        assert preparer.batcher(training=True).stager.keyword_expand_p == 0.25
-        assert preparer.batcher(training=False).stager.keyword_expand_p == (
+        assert preparer.training_batcher(random.Random(0)).stager.keyword_expand_p == 0.25
+        assert preparer.scoring_batcher().stager.keyword_expand_p == (
             INFERENCE_KEYWORD_EXPAND_P
         ) == 0.0
 
@@ -312,6 +306,22 @@ class TestTheBatchersTheLoopBuilds:
         # Likewise the input layout (FR-063c): a loader builds the inputs the
         # checkpoint recorded, and one recording none reads the earlier layout.
         assert settings["input_layout"] == "gen-2"
+
+    def test_the_recorded_settings_keep_their_keys_and_order(self):
+        """A checkpoint's ``training_settings`` is part of its bytes, and
+        ``lethality_copies`` appears only when set."""
+        def keys(**flags):
+            return list(training_settings(
+                RunSpec(TrainEffectModelConfig(corpus="unused", **flags), CorpusFacts(), seed=7),
+                api_types=[], param_keys=[],
+            ))
+
+        rest = [
+            "seed", "e_noise", "value_weight", "mlm_weight", "mlm_mask_prob",
+            "api_weight", "api_types", "param_keys", "tokenizer_rules", "input_layout",
+        ]
+        assert keys() == rest
+        assert keys(lethality_copies=2) == ["lethality_copies", *rest]
 
     def test_the_checkpoint_records_the_seed_the_run_drew(self, monkeypatch):
         """A run with no --seed is reproducible only through the one it drew."""

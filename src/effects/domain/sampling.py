@@ -171,8 +171,11 @@ def sample_weights(
 class BatchPlan:
     """Which records a batch draws, grouped by the game they came from.
 
-    For cost only: records from one game share context texts, so one encode
-    serves many records.
+    The grouping saves no encoding, since a batch's texts are deduplicated
+    whatever order its records come in. It stays because it fixes that order:
+    :attr:`records` is the order every seeded draw of the step (keyword
+    expansion, context dropout, the MLM mask) walks, so regrouping would
+    change what a seeded run trains on.
     """
 
     by_game: dict[str, list[EffectRecord]] = field(default_factory=dict)

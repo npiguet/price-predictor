@@ -58,8 +58,8 @@ def qualifying_records(
         if line is None:
             return None
         qualified = qualify(record, line, derive_targets(record), resolver.keywords_of)
-        if (qualified is None or qualified.kind != "damage" or qualified.stated != "text"
-                or len(qualified.hit) != 1):
+        if (qualified is None or qualified.effect.kind != "damage"
+                or qualified.effect.stated != "text" or len(qualified.hit) != 1):
             return None
         return record, qualified.hit[0]
 
