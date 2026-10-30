@@ -8,50 +8,25 @@ with the probe scripts if absent) and writes ``2026-08-28-encoder-*.png`` /
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _lib.paths import OUTPUT  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import probe_lib as pl  # noqa: E402
 from _lib.style import BLUE, GRAY, ORANGE, RED, figure_saver, plt, use_probe_style  # noqa: E402
 
-OUT = OUTPUT / "encoder-probes"
-LABEL_SD = 0.06181
+OUT = pl.SCRATCH
+LABEL_SD = pl.SD["score_play"]
 
 use_probe_style()
 save = figure_saver("2026-08-28-encoder")
 
 
-def _report_table(path: Path, header_frag: str) -> list[list[str]]:
-    """Rows of the first markdown table after the line containing header_frag."""
-    lines = path.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, ln in enumerate(lines) if header_frag in ln)
-    rows = []
-    in_table = False
-    for ln in lines[start:]:
-        if ln.startswith("|"):
-            in_table = True
-            cells = [c.strip() for c in ln.strip("|").split("|")]
-            if not set("".join(cells)) <= set("-: "):
-                rows.append(cells)
-        elif in_table:
-            break
-    return rows
-
-
-_NUM = re.compile(r"[-+]?\d*\.?\d+")
-
-
-def _f(cell: str) -> float:
-    return float(_NUM.search(cell.replace("−", "-")).group())
-
-
 def fig_channels():
-    rows = _report_table(OUT / "l_report.md", "feature | n cards")[1:]
+    ch = pd.read_csv(OUT / "l_channels.csv")
     names = {
         "creature (vs noncreature)": "creature",
         "combat trick (instant +N/+N eot)": "combat trick",
@@ -60,11 +35,11 @@ def fig_channels():
         "MV 3-4 (base 0-2)": "MV 3–4", "MV 5-6 (base 0-2)": "MV 5–6",
         "MV 7+ (base 0-2)": "MV 7+",
     }
-    feats = [names.get(r[0], r[0]) for r in rows]
-    w = np.array([_f(r[7]) for r in rows]) / LABEL_SD
-    m = np.array([_f(r[8]) for r in rows]) / LABEL_SD
-    d = np.array([_f(r[9]) for r in rows]) / LABEL_SD
-    score = np.array([_f(r[5]) for r in rows]) / LABEL_SD
+    feats = [names.get(f, f) for f in ch["feature"]]
+    w = ch["w_term"].to_numpy() / LABEL_SD
+    m = ch["m_term"].to_numpy() / LABEL_SD
+    d = ch["d_term"].to_numpy() / LABEL_SD
+    score = ch["d_score_overall"].to_numpy() / LABEL_SD
     order = np.argsort(score)
     y = np.arange(len(order))
 
@@ -389,15 +364,9 @@ def _hue_scale():
 
 
 def fig_on_curve():
-    df = pd.read_csv(OUT / "c12_on_curve.csv")
-    powers = sorted(df["power"].unique())
-    toughs = sorted(df["toughness"].unique())
-    best = np.full((len(powers), len(toughs)), np.nan)
-    for pi, p in enumerate(powers):
-        for ti, t in enumerate(toughs):
-            s = df[(df.power == p) & (df.toughness == t)].set_index("mv")[
-                "score_play_sd"]
-            best[pi, ti] = s.idxmax()
+    table = pd.read_csv(OUT / "c12_best_mv.csv", index_col="power")
+    powers, toughs = list(table.index), list(table.columns)
+    best = table.to_numpy(float)
     fig, ax = plt.subplots(figsize=(4.4, 4.0))
     im = ax.imshow(best, cmap=_hue_scale(), vmin=np.nanmin(best),
                    vmax=np.nanmax(best), aspect="equal")
