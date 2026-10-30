@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DEFAULT_GAME_DISJOINT_KEYWORDS", "BuildCorpusConfig", "BuildCorpusError",
-    "Decisions", "build", "decide",
+    "Decisions", "build", "decide", "parse_keyword_list",
 ]
 
 logger = logging.getLogger(__name__)
@@ -69,17 +69,38 @@ DEFAULT_GAME_DISJOINT_KEYWORDS: tuple[str, ...] = (
 )
 
 
+def parse_keyword_list(text: str) -> tuple[str, ...]:
+    """``--game-disjoint-keywords``: a comma list, blanks dropped."""
+    return tuple(part.strip() for part in text.split(",") if part.strip())
+
+
 @dataclass(frozen=True, slots=True)
 class BuildCorpusConfig:
     """The `build-corpus` flags (root spec § Curated corpus).
 
-    ``help`` metadata is the flag's help, so a default lives here alone.
+    ``help`` metadata is the flag's help, so a default lives here alone. A
+    directory's help names its default as an operator types it, trailing
+    slash and all, which the ``Path`` the flag parses to cannot spell.
     """
 
-    records_dir: Path
-    output: Path = Path(default_paths.DEFAULT_CORPUS_OUTPUT)
+    records_dir: Path = field(
+        default=Path(default_paths.DEFAULT_RECORDS_DIR), metadata={"help": (
+            "Raw corpus root; discovery recurses "
+            f"(default: {default_paths.DEFAULT_RECORDS_DIR})"
+        )},
+    )
+    output: Path = field(
+        default=Path(default_paths.DEFAULT_CORPUS_OUTPUT), metadata={"help": (
+            f"Curated dataset directory (default: {default_paths.DEFAULT_CORPUS_OUTPUT})"
+        )},
+    )
     cards_folders: tuple[Path, ...] = default_paths.DEFAULT_CARDS_FOLDER_PATHS
-    vocab_path: str = default_paths.DEFAULT_VOCAB_PATH
+    #: A string rather than a path: the manifest records it, and a Path would
+    #: rewrite its separators on Windows.
+    vocab_path: str = field(default=default_paths.DEFAULT_VOCAB_PATH, metadata={"help": (
+        "Decides the encoding surface the rarity table's text keys are built "
+        "on (default: %(default)s)"
+    )})
     variant_scripts: str | None = None
     holdout: HoldoutRule = HoldoutRule()
     text_cap: int = field(default=200, metadata={"help": (
@@ -104,7 +125,15 @@ class BuildCorpusConfig:
         "The threshold instead for a game holding a qualifying combat for one "
         "of --game-disjoint-keywords (default: %(default)s)"
     )})
-    game_disjoint_keywords: tuple[str, ...] = DEFAULT_GAME_DISJOINT_KEYWORDS
+    game_disjoint_keywords: tuple[str, ...] = field(
+        default=DEFAULT_GAME_DISJOINT_KEYWORDS, metadata={
+            "type": parse_keyword_list,
+            "help": (
+                "Comma list of damage-step keywords raising a game's threshold "
+                f"(default: {','.join(DEFAULT_GAME_DISJOINT_KEYWORDS)})"
+            ),
+        },
+    )
     #: Read by FR-015's check; None or a missing file skips it, since nothing
     #: can expand without a table.
     keyword_definitions: Path | None = field(
@@ -123,7 +152,11 @@ class BuildCorpusConfig:
         "hash of their game id; 0 keeps one output shard per source shard "
         "(default: %(default)s)"
     )})
-    max_events: int = MAX_EVENTS_PER_RECORD
+    max_events_per_record: int = field(default=MAX_EVENTS_PER_RECORD, metadata={"help": (
+        "A record carrying more events than this is refused as a game dump "
+        "rather than an ability; 0 disables the event-flood rule "
+        "(default: %(default)s)"
+    )})
     validation_sample: int = field(default=2048, metadata={"help": (
         "Records per stratum in validation/samples/, mixture-matched; 0 writes "
         "no sample (default: %(default)s)"
@@ -175,7 +208,7 @@ class BuildCorpusConfig:
             ("--card-disjoint-text-cap", self.card_disjoint_text_cap),
             ("--training-records", self.training_records),
             ("--shard-records", self.shard_records),
-            ("--max-events-per-record", self.max_events),
+            ("--max-events-per-record", self.max_events_per_record),
             ("--validation-sample", self.validation_sample),
         ):
             if value < 0:
@@ -363,7 +396,7 @@ def build(config: BuildCorpusConfig) -> int:
     _refuse_mixed_generations(Path(config.records_dir))
     read = ReadConfig(
         records_dir=str(config.records_dir), sidecar_roots=roots,
-        max_events=config.max_events, held_out=held_out, seed=config.seed,
+        max_events=config.max_events_per_record, held_out=held_out, seed=config.seed,
     )
     survey = _survey(config, read)
     decisions = _decide_or_refuse(config, survey, trees, surface, held_out)

@@ -42,17 +42,31 @@ DEFAULT_VARIANT_VOLUME = 0.2
 
 @dataclass
 class CollectVariantsConfig(CollectorConfig):
-    forge_cards_path: Path = Path(default_paths.DEFAULT_FORGE_CARDS_PATH)
-    variant_scripts: Path = Path(default_paths.DEFAULT_VARIANT_SCRIPTS)
+    forge_cards_path: Path = field(
+        default=Path(default_paths.DEFAULT_FORGE_CARDS_PATH), metadata={"help": (
+            "Forge's source card scripts: a variant is a script Forge must load"
+        )},
+    )
+    #: The help names the default as typed, trailing slash and all.
+    variant_scripts: Path = field(
+        default=Path(default_paths.DEFAULT_VARIANT_SCRIPTS), metadata={"help": (
+            "Where perturbed scripts are written "
+            f"(default: {default_paths.DEFAULT_VARIANT_SCRIPTS})"
+        )},
+    )
     variant_volume: float = field(default=DEFAULT_VARIANT_VOLUME, metadata={
         "help": (
             "Cap on generated variant scripts, as a fraction of the real records "
             "already present, so it scales with the corpus (default: %(default)s)"
         ),
     })
-    #: The real records ``--variant-volume`` is measured against; defaults to
-    #: the destination, which caps a run writing to its own directory at zero.
-    corpus_records: Path | None = None
+    #: Unset, the destination, which caps a run writing to its own directory
+    #: at zero.
+    corpus_records: Path | None = field(default=None, metadata={"help": (
+        "The real records --variant-volume is measured against (default: "
+        "--effect-records); name the corpus when variants go to their own "
+        "directory, or the cap allows nothing"
+    )})
     #: The base field, with the help a variant round needs: it seeds the
     #: perturbation as well as the decks.
     seed: int = field(default=RANDOM_SEED, metadata={

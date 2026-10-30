@@ -255,7 +255,7 @@ def build_manifest(
         held_out_games_by_source=survey.held_out_games_by_source,
         shard_records=config.shard_records,
         validation_sample=config.validation_sample,
-        max_events_per_record=config.max_events,
+        max_events_per_record=config.max_events_per_record,
         unattributed_records=written.unattributed,
         holdout_unit=config.holdout.unit,
         families=families,

@@ -20,17 +20,14 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any, TypeVar
 
-from effects.application.build_corpus import (
-    DEFAULT_GAME_DISJOINT_KEYWORDS,
-    BuildCorpusConfig,
-    BuildCorpusError,
-)
+from effects.application.build_corpus import BuildCorpusConfig, BuildCorpusError
 from effects.application.build_vocab import DEFAULT_TARGET_SIZE, EmptyCardsFolderError
 from effects.application.collect_coverage import CollectCoverageConfig
 from effects.application.collect_variants import CollectVariantsConfig
 from effects.application.collector_common import HOLDOUT_LIST_NAME, collection_target
 from effects.application.corpus_validation.findings import Thresholds
 from effects.application.evaluation_context import CorpusMismatchError
+from effects.application.extract_keyword_definitions import ExtractKeywordDefinitionsConfig
 from effects.application.holdout_cards import HoldoutCardsConfig, HoldoutCardsError
 from effects.application.train_effect_model import (
     EmptyHoldoutError,
@@ -48,8 +45,6 @@ from effects.domain.default_paths import (
     DEFAULT_CARDS_FOLDER_PATHS,
     DEFAULT_CARDS_FOLDERS,
     DEFAULT_CHECKPOINT,
-    DEFAULT_CORPUS_OUTPUT,
-    DEFAULT_FORGE_CARDS_PATH,
     DEFAULT_KEYWORD_DEFINITIONS,
     DEFAULT_RECORDS_DIR,
     DEFAULT_SCRIPT_VOCAB_PATH,
@@ -57,7 +52,6 @@ from effects.domain.default_paths import (
     DEFAULT_VOCAB_PATH,
     DEFAULT_WIN_RATES,
 )
-from effects.domain.record_quality import MAX_EVENTS_PER_RECORD
 from effects.domain.shard_generation import MixedGenerationsError
 from effects.domain.split import HOLDOUT_MAX_CARRIERS, HOLDOUT_PERMILLE, HoldoutRule
 from effects.domain.text_holdout import HoldoutUnit
@@ -97,17 +91,18 @@ def add_config_flags(
     """A ``--field-name`` flag per field of ``config``, with the field's own default.
 
     ``only`` picks the fields, in order; without it, every field no flag on
-    ``parser`` claims yet. The type comes from the annotation and the help from
-    ``metadata["help"]``; a bool field is a ``store_true`` switch, and any other
-    non-scalar is refused, because its flag needs declaring by hand. Reads the
-    class and never builds one: a config's ``__post_init__`` may load torch.
+    ``parser`` claims yet. The type comes from ``metadata["type"]``, else the
+    annotation, and the help from ``metadata["help"]``; a bool field is a
+    ``store_true`` switch, and any other non-scalar without a ``type`` is
+    refused, because its flag needs declaring by hand. Reads the class and
+    never builds one: a config's ``__post_init__`` may load torch.
     """
     specs = {spec.name: spec for spec in fields(config)}
     hints = typing.get_type_hints(config)
     claimed = {action.dest for action in parser._actions}
     for name in only if only is not None else [n for n in specs if n not in claimed]:
         spec = specs[name]
-        kind = _flag_type(config, name, hints[name])
+        kind = spec.metadata.get("type") or _flag_type(config, name, hints[name])
         default = field_default(spec)
         if isinstance(default, Path):
             # Spelled as typed in --help; argparse parses a string default too.
@@ -363,19 +358,11 @@ def _extract_keyword_definitions_parser(subparsers) -> None:
         help="Write Forge's keyword table (reminder-text templates) as JSON",
     )
     parser.set_defaults(func=run_extract_keyword_definitions)
-    parser.add_argument(
-        "--output", type=Path, default=DEFAULT_KEYWORD_DEFINITIONS,
-        help="Output path (default: %(default)s)",
-    )
+    add_config_flags(parser, ExtractKeywordDefinitionsConfig)
 
 
 def run_extract_keyword_definitions(args: argparse.Namespace) -> int:
-    from effects.application.extract_keyword_definitions import (
-        ExtractKeywordDefinitionsConfig,
-    )
-    from effects.application.extract_keyword_definitions import (
-        run as extract,
-    )
+    from effects.application.extract_keyword_definitions import run as extract
 
     return extract(config_from_args(ExtractKeywordDefinitionsConfig, args))
 
@@ -429,23 +416,9 @@ def _collect_variants_parser(subparsers) -> None:
         parser, default=None,
         help_text=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
     )
-    parser.add_argument(
-        "--forge-cards-path", type=Path, default=DEFAULT_FORGE_CARDS_PATH,
-        help="Forge's source card scripts: a variant is a script Forge must load",
-    )
-    parser.add_argument(
-        "--variant-scripts", type=Path, default=DEFAULT_VARIANT_SCRIPTS,
-        help="Where perturbed scripts are written (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--corpus-records", type=_optional_path, default=None,
-        help=(
-            "The real records --variant-volume is measured against (default: "
-            "--effect-records); name the corpus when variants go to their own "
-            "directory, or the cap allows nothing"
-        ),
-    )
-    add_config_flags(parser, CollectVariantsConfig, only=("variant_volume", "seed"))
+    add_config_flags(parser, CollectVariantsConfig, only=(
+        "forge_cards_path", "variant_scripts", "corpus_records", "variant_volume", "seed",
+    ))
     _add_holdout_sources(parser, excluded="held-out cards, and their variants,")
     # A variant printing a held-out text is dropped under this rule, so it has
     # to be the one build-corpus is given.
@@ -537,10 +510,6 @@ def _class_mix(text: str) -> dict[str, float]:
         raise argparse.ArgumentTypeError(str(exc)) from None
 
 
-def _keyword_list(text: str) -> tuple[str, ...]:
-    return tuple(part.strip() for part in text.split(",") if part.strip())
-
-
 def _build_corpus_parser(subparsers) -> None:
     parser = subparsers.add_parser(
         "build-corpus",
@@ -556,23 +525,8 @@ def _build_corpus_parser(subparsers) -> None:
         "--class-mix", type=_class_mix, default=None,
         help="class=share,… on-disk class proportions (default: the training mixture)",
     )
-    parser.add_argument(
-        "--max-events-per-record", type=int, default=MAX_EVENTS_PER_RECORD,
-        help=(
-            "A record carrying more events than this is refused as a game dump "
-            "rather than an ability; 0 disables the event-flood rule "
-            "(default: %(default)s)"
-        ),
-    )
-    parser.add_argument(
-        "--game-disjoint-keywords", type=_keyword_list,
-        default=DEFAULT_GAME_DISJOINT_KEYWORDS,
-        help=(
-            "Comma list of damage-step keywords raising a game's threshold "
-            f"(default: {','.join(DEFAULT_GAME_DISJOINT_KEYWORDS)})"
-        ),
-    )
     add_config_flags(parser, BuildCorpusConfig, only=(
+        "max_events_per_record", "game_disjoint_keywords",
         "text_cap", "reuse_cap", "training_records", "card_disjoint_text_cap",
         "validation_sample", "game_disjoint_share", "game_disjoint_keyword_share",
         "shard_records", "seed", "workers", "verify",
@@ -580,24 +534,10 @@ def _build_corpus_parser(subparsers) -> None:
 
 
 def _add_corpus_inputs(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--records-dir", type=Path, default=DEFAULT_RECORDS_DIR,
-        help="Raw corpus root; discovery recurses (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--output", type=Path, default=DEFAULT_CORPUS_OUTPUT,
-        help="Curated dataset directory (default: %(default)s)",
-    )
+    add_config_flags(parser, BuildCorpusConfig, only=("records_dir", "output"))
     _add_cards_folder(parser)
-    # Strings rather than paths: the manifest records them, and a Path would
-    # rewrite their separators on Windows.
-    parser.add_argument(
-        "--vocab-path", type=str, default=DEFAULT_VOCAB_PATH,
-        help=(
-            "Decides the encoding surface the rarity table's text keys are "
-            "built on (default: %(default)s)"
-        ),
-    )
+    add_config_flags(parser, BuildCorpusConfig, only=("vocab_path",))
+    # A string rather than a path, as --vocab-path: the manifest records it.
     _add_variant_scripts(parser, path_type=str, without=(
         "a variant line resolves to no ability text, so it escapes the rarity "
         "table and the per-text cap"
@@ -612,8 +552,7 @@ def run_build_corpus(args: argparse.Namespace) -> int:
     from effects.application import build_corpus as build_corpus_module
 
     return build_corpus_module.build(config_from_args(
-        BuildCorpusConfig, args, max_events=args.max_events_per_record,
-        holdout=holdout_rule(args),
+        BuildCorpusConfig, args, holdout=holdout_rule(args),
     ))
 
 
