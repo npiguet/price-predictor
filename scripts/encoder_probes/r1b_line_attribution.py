@@ -43,6 +43,9 @@ N_SAMPLE = 300
 SEED = 4242
 BATCH = 96
 SD_SCORE_PLAY = pl.SD["score_play"]
+# Family A's own variants: the wide table also carries family C's
+# ``ii_added`` column, NaN on every family-A row, which no gate may read.
+FAMILY_A_VARIANTS = ("i_original", "ii_deleted", "iii_grant_spell", "iv_negated_static")
 
 
 def mana_value(lines: list[str]) -> float:
@@ -183,7 +186,7 @@ def main() -> None:
     for excl, tag in ((False, "all"), (True, "on_manifold")):
         sub = A
         if excl:
-            cols = [c for c in A.columns if c.startswith("manifold_dist__")]
+            cols = [f"manifold_dist__{v}" for v in FAMILY_A_VARIANTS]
             sub = A[(A[cols] <= GATE).all(axis=1)]
         if len(sub) < 5:
             continue

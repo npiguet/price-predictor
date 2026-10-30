@@ -32,6 +32,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from _lib.paths import REPO
 from scorer_probes import probe_lib as pl
 
 OUT_DEFAULT = pl.SCRATCH / "t2_card_values.csv"
@@ -372,12 +373,13 @@ def load_rarity_map():
     try:
         from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
         metadata, _prices = build_metadata_map(
-            pl.REPO / "resources/AllPrintings.json",
-            pl.REPO / "resources/AllPricesToday.json",
+            REPO / "resources/AllPrintings.json",
+            REPO / "resources/AllPricesToday.json",
         )
         print(f"rarity metadata: {len(metadata)} names", flush=True)
         return metadata
-    except Exception as exc:  # missing files, schema change, OOM -- blanks are fine
+    # Missing files, a schema change, OOM: blank columns are fine.
+    except (OSError, KeyError, ValueError, MemoryError) as exc:
         print(f"rarity metadata unavailable ({type(exc).__name__}: {exc})", flush=True)
         return {}
 

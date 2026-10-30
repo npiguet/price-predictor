@@ -7,7 +7,8 @@ export const meta = {
   ],
 }
 
-const WT = 'C:/Users/nicol/IdeaProjects/price-predictor/.claude/worktrees/gen3-rules-coverage'
+// The checkout the agents work in; pass args.root to run against a worktree.
+const WT = args.root || 'C:/Users/nicol/IdeaProjects/price-predictor'
 const VERIFY_MODEL = args.verifyModel || 'opus'
 
 function limiter(n) {
@@ -28,7 +29,7 @@ const run = (prompt, opts) => {
   return slot(() => (opts.model === 'opus' ? opusSlot(go) : go()))
 }
 
-const COMMON = `Working directory: ${WT} (a git worktree). All paths are relative to it. Do not cd elsewhere, do not write outside rules/heads/, do not commit.`
+const COMMON = `Working directory: ${WT} (a checkout). All paths are relative to it. Do not cd elsewhere, do not write outside rules/heads/, do not commit.`
 
 const SCHEMA_TEXT = `
 ## The question

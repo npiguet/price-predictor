@@ -227,20 +227,7 @@ def resolve_paths(args: argparse.Namespace) -> ProbePaths:
 
 # ── script parsing ──────────────────────────────────────────────────────
 
-_PAIR_RE = re.compile(r"^\s*([A-Za-z0-9_]+)\$\s?(.*)$")
 _INT_RE = re.compile(r"^[+-]?\d+$")
-
-
-def parse_script(text: str) -> dict[str, str]:
-    """``Key$ Value | Key$ Value`` into a dict; a keyword line gives ``{}``."""
-    pairs: dict[str, str] = {}
-    if "$" not in text:
-        return pairs
-    for part in text.split(" | "):
-        match = _PAIR_RE.match(part)
-        if match:
-            pairs.setdefault(match.group(1), match.group(2).strip())
-    return pairs
 
 
 def as_int(value: str | None) -> float:

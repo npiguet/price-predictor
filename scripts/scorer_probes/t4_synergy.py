@@ -976,7 +976,7 @@ def main() -> None:
     probe = pl.Probe(device=device)
     print(f"device={probe.device} d_model={probe.d_model}", flush=True)
     book = SynergyBook(probe, pl.load_win_rates(), q_fallback="median")
-    print(f"label fallback (corpus median shrunk_score_play): {book.q_median:+.5f}")
+    print(f"label fallback (corpus median shrunk_score_play): {book.q_fallback:+.5f}")
 
     entries, dropped = prepare_entries(raw, book)
     print(f"entries: {len(raw)} in file, {len(entries)} usable, "

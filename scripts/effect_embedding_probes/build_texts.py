@@ -47,12 +47,12 @@ from effect_embedding_probes.common import (  # noqa: E402
     cost_features,
     count_amounts,
     load_manifest_sets,
-    parse_script,
     resolve_paths,
     target_type,
 )
 from effects.domain.ability_encoder import encoding_text  # noqa: E402
 from effects.domain.baselines import Baseline  # noqa: E402
+from effects.domain.script_text import params, root  # noqa: E402
 from effects.infrastructure.ability_cache_store import AbilityCacheStore  # noqa: E402
 from effects.infrastructure.sidecar_io import (  # noqa: E402
     converted_text_path,
@@ -150,7 +150,9 @@ def build(paths: ProbePaths) -> pd.DataFrame:
     table = table.drop(columns=["carriers"])
     table["held_out"] = table.text.isin(held_out).astype(int)
     table["rarity_games"] = table.text.map(lambda t: rarity.get(t, 0))
-    table["pairs"] = table.text.map(parse_script)
+    # The root segment's parameters only: a chained text's later [SEG]
+    # segments are its sub-abilities, not the trait's own line.
+    table["pairs"] = table.text.map(lambda text: params(root(text)))
     table = add_features(table)
     paths.cache.mkdir(parents=True, exist_ok=True)
     table.to_pickle(paths.text_table)
