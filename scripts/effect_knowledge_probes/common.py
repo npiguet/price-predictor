@@ -184,11 +184,8 @@ def read_games(
     asked for, and parsing them would cost most of the read. ``record_ids``
     narrows it further to the records a probing run actually reads.
     """
-    from effects.infrastructure.record_io import (
-        iter_shard_lines,
-        record_from_dict,
-        refuse_mixed_generations,
-    )
+    from effects.infrastructure.record_codec import record_from_dict
+    from effects.infrastructure.record_io import iter_shard_lines, refuse_mixed_generations
 
     shards = list(shards)
     refuse_mixed_generations(shards)

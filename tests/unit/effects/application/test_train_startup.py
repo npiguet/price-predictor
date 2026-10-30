@@ -287,7 +287,7 @@ def test_a_real_gen1_manifest_is_accepted_under_its_text_unit(
 
 def test_a_records_set_mixing_generations_is_refused(corpus, config, make_record):
     """FR-033: refused before any record is read."""
-    from effects.infrastructure.record_io import record_to_dict
+    from effects.infrastructure.record_codec import record_to_dict
 
     gen1 = record_to_dict(make_record(record_id="old", game_id="og"))
     del gen1["random_seat"]

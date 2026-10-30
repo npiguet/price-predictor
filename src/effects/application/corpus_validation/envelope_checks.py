@@ -64,7 +64,7 @@ def _labels_of(*kinds: RecordKind) -> tuple[str, ...]:
 def _digest(record: EffectRecord) -> bytes:
     """A record's content, identity stripped, as 16 bytes. Rendered through the
     writer, so a field added later is covered without being added here."""
-    from effects.infrastructure.record_io import record_to_dict
+    from effects.infrastructure.record_codec import record_to_dict
 
     data = record_to_dict(record)
     for name in _IDENTITY_FIELDS:

@@ -179,7 +179,7 @@ class RawShardWriter:
         self.close()
 
     def write(self, record: EffectRecord) -> None:
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         self._block.append(format_record_line(record) + "\n")
         if len(self._block) >= RAW_BLOCK_RECORDS:

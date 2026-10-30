@@ -1934,7 +1934,7 @@ class TestGen2FieldPresence:
         path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
 
     def _rows(self, *, seat: bool, what_if: bool | None) -> list[dict]:
-        from effects.infrastructure.record_io import record_to_dict
+        from effects.infrastructure.record_codec import record_to_dict
 
         blockers = _resolution("run.0-L1.1")
         rows = [record_to_dict(_resolution("run.0-L1.0")), record_to_dict(blockers)]

@@ -286,7 +286,7 @@ class TestTheRoundPlaysTheComputedDecks:
         # the real counter learns anything: it reads shards it has not seen and
         # adds to a running total. Round 1 produces nothing, round 2 nine "aa"
         # records, round 3 the tenth.
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         records_dir = tmp_path / "records"
         records_dir.mkdir()
@@ -525,7 +525,7 @@ class TestIncrementalCounting:
 
     def _shard(self, directory: Path, name: str, cards: list[str]) -> Path:
         """One shard whose every record qualifies for the named card."""
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         directory.mkdir(parents=True, exist_ok=True)
         lines = [
@@ -605,7 +605,7 @@ class TestCountingCrossesTheNameBoundary:
         self, tmp_path,
     ) -> None:
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         shard = tmp_path / "run.0-x.jsonl"
         shard.write_text(
@@ -624,7 +624,7 @@ class TestCountingCrossesTheNameBoundary:
         self, tmp_path,
     ) -> None:
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         shard = tmp_path / "run.0-x.jsonl"
         shard.write_text(
@@ -650,7 +650,7 @@ class TestCountingReportsProgress:
     """
 
     def _shards(self, directory: Path, count: int) -> None:
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         directory.mkdir(parents=True, exist_ok=True)
         line = format_record_line(_record([_entity("E1", "aa")], source="E1"))
@@ -735,7 +735,7 @@ class TestParallelCounting:
     """
 
     def _shards(self, directory: Path, spec: dict[str, int]) -> None:
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         directory.mkdir(parents=True, exist_ok=True)
         for n, (card, count) in enumerate(spec.items()):
@@ -764,7 +764,7 @@ class TestParallelCounting:
     def test_a_card_split_across_shards_sums(self, tmp_path) -> None:
         """The reduce step, which is where a parallel count goes wrong."""
         from effects.application.collect_coverage import CoverageCounter
-        from effects.infrastructure.record_io import format_record_line
+        from effects.infrastructure.record_codec import format_record_line
 
         tmp_path.mkdir(parents=True, exist_ok=True)
         line = format_record_line(_record([_entity("E1", "Soul Echo")], source="E1"))

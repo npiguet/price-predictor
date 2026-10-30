@@ -135,7 +135,7 @@ class ResolvedKeywords:
     """
 
     def __init__(self, resolver) -> None:
-        from effects.infrastructure.record_io import record_from_dict
+        from effects.infrastructure.record_codec import record_from_dict
 
         self._resolver = resolver
         self._parse = record_from_dict
@@ -154,7 +154,8 @@ class ResolvedKeywords:
 
 def repair_shard(path: Path, keywords_of, *, write: bool) -> Counter:
     """Repair one shard; rewrite it only when something changed."""
-    from effects.infrastructure.record_io import iter_shard_lines, parse_record_line
+    from effects.infrastructure.record_codec import parse_record_line
+    from effects.infrastructure.record_io import iter_shard_lines
 
     counts: Counter = Counter()
     lines: list[str] = []

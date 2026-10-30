@@ -22,7 +22,8 @@ from effects.domain.state_snapshot import (
     GrantedTemporary,
     PlayerState,
 )
-from effects.infrastructure.record_io import format_record_line, read_shard
+from effects.infrastructure.record_codec import format_record_line
+from effects.infrastructure.record_io import read_shard
 from tests.unit.effects.domain.test_effect_head_input import _entity, _record, _snapshot
 
 _SCRIPT = Path(__file__).parents[3] / "scripts" / "repair_first_strike_steps.py"

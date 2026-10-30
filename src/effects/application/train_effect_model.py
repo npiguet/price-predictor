@@ -23,10 +23,7 @@ from effects.domain.strata import VALIDATION_STRATA, Stratum
 from effects.domain.text_holdout import HoldoutUnit, normalize_script_text
 from effects.infrastructure.converted_trees import ConvertedTrees
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import (
-    iter_shards,
-    refuse_mixed_generations,
-)
+from effects.infrastructure.record_io import iter_shards, refuse_mixed_generations
 
 logger = logging.getLogger(__name__)
 

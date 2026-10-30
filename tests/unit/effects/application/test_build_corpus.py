@@ -1296,7 +1296,7 @@ def test_a_records_set_mixing_generations_is_refused(tmp_path, a_corpus):
     import gzip
     import json
 
-    from effects.infrastructure.record_io import record_to_dict
+    from effects.infrastructure.record_codec import record_to_dict
 
     gen1 = record_to_dict(_resolution("old.1", "g-old", ability=(_BOLT_KEY,)))
     del gen1["random_seat"]

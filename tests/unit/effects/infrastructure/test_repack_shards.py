@@ -10,9 +10,9 @@ import pytest
 
 from effects.domain.corpus_curation import record_hash
 from effects.infrastructure import record_io
+from effects.infrastructure.record_codec import parse_record_line
 from effects.infrastructure.record_io import (
     iter_shard_lines,
-    parse_record_line,
     read_records,
     read_shard,
     repack_shards,
