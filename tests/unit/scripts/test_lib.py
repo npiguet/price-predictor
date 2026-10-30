@@ -43,6 +43,30 @@ def test_pairwise_correct_counts_a_tie_as_half():
     assert stats.pairwise_correct([0.2, -0.1, 0.0]).tolist() == [1.0, 0.0, 0.5]
 
 
+class TestParticipationRatio:
+    """``(Σλ)² / Σλ²``."""
+
+    def test_an_even_spectrum_uses_every_dimension(self):
+        assert stats.participation_ratio(np.full(8, 0.125)) == pytest.approx(8.0)
+
+    def test_one_dominant_direction_uses_one(self):
+        assert stats.participation_ratio(
+            np.array([1.0, 0.0, 0.0]),
+        ) == pytest.approx(1.0)
+
+    def test_a_known_spectrum(self):
+        # (4 + 2 + 1 + 1)² / (16 + 4 + 1 + 1) = 64 / 22.
+        assert stats.participation_ratio(
+            np.array([4.0, 2.0, 1.0, 1.0]),
+        ) == pytest.approx(64 / 22)
+
+    def test_it_reads_the_same_from_shares_as_from_eigenvalues(self):
+        eigenvalues = np.array([5.0, 3.0, 2.0])
+        assert stats.participation_ratio(eigenvalues) == pytest.approx(
+            stats.participation_ratio(eigenvalues / eigenvalues.sum()),
+        )
+
+
 class TestJson:
     def test_non_finite_floats_become_null_and_numpy_unwraps(self, tmp_path):
         path = tmp_path / "out" / "r.json"

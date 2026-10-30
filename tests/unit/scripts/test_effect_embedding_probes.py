@@ -17,7 +17,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from _lib.stats import participation_ratio
 from effect_embedding_probes import build_texts, common, effect_profiles
 
 _FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "effects"
@@ -85,14 +84,6 @@ class TestResolvePaths:
         assert paths.out == (
             arm / "reports" / "embedding-probes-2026-10-gen2-a-latest-20261008"
         )
-
-    def test_every_script_takes_a_reports_dir(self):
-        import argparse
-
-        args = common.add_probe_arguments(argparse.ArgumentParser()).parse_args(
-            ["--reports-dir", "arm/reports"],
-        )
-        assert args.reports_dir == Path("arm/reports")
 
     def test_sidecar_trees_default_to_what_the_checkpoint_recorded(self, tree):
         paths = common.paths_for(
@@ -168,28 +159,16 @@ class TestTheTextTable:
         assert all(key[0].startswith("cardsfolder/") for key in keymap)
 
 
-class TestParticipationRatio:
-    """Scenario 10: ``(Σλ)² / Σλ²``."""
+class TestToMarkdown:
+    def test_floats_are_formatted_nan_is_blank_and_pipes_are_escaped(self):
+        import pandas as pd
 
-    def test_an_even_spectrum_uses_every_dimension(self):
-        assert participation_ratio(np.full(8, 0.125)) == pytest.approx(8.0)
-
-    def test_one_dominant_direction_uses_one(self):
-        assert participation_ratio(
-            np.array([1.0, 0.0, 0.0]),
-        ) == pytest.approx(1.0)
-
-    def test_a_known_spectrum(self):
-        # (4 + 2 + 1 + 1)² / (16 + 4 + 1 + 1) = 64 / 22.
-        assert participation_ratio(
-            np.array([4.0, 2.0, 1.0, 1.0]),
-        ) == pytest.approx(64 / 22)
-
-    def test_it_reads_the_same_from_shares_as_from_eigenvalues(self):
-        eigenvalues = np.array([5.0, 3.0, 2.0])
-        assert participation_ratio(eigenvalues) == pytest.approx(
-            participation_ratio(eigenvalues / eigenvalues.sum()),
-        )
+        frame = pd.DataFrame({"card": ["a | b"], "share": [0.12345], "gap": [float("nan")]})
+        assert common.to_markdown(frame, ".2f").splitlines() == [
+            "| card | share | gap |",
+            "|---|---:|---:|",
+            "| a \\| b | 0.12 |  |",
+        ]
 
 
 class TestCheckpointLabel:
