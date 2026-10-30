@@ -24,7 +24,6 @@ from effects.application.step_preparation import (
 )
 from effects.application.train_effect_model import (
     CorpusFacts,
-    EpochResult,
     TrainEffectModelConfig,
 )
 from effects.application.training_log import (
@@ -33,9 +32,8 @@ from effects.application.training_log import (
     format_shares,
     format_terms,
 )
-from effects.application.validation_pass import ValidationSamples
+from effects.application.validation_pass import ValidationPass, ValidationSamples
 from effects.domain.ability_encoder import TruncationLog, log_truncation
-from effects.domain.gate_metrics import GateOneMetrics
 from effects.domain.rarity import RARITY_BUCKETS
 from effects.domain.sampling import SAMPLING_CLASSES
 
@@ -202,22 +200,24 @@ class RunReporter:
         )
 
     def epoch(
-        self, result: EpochResult, metrics: GateOneMetrics,
-        card_parts: dict[str, float], floor: dict[str, float], tally: EpochTally,
+        self, epoch: int, tally: EpochTally, card: ValidationPass,
+        game: ValidationPass, floor: dict[str, float],
     ) -> None:
+        """The epoch's two lines: its losses and gate 1's progress margins on
+        the card-disjoint pass, then what it trained on."""
+        metrics = card.progress()
         logger.info(
             "epoch %d | train %.4f | card-disjoint %.4f | "
             "game-disjoint %.4f | gate F1 %.3f | zone acc %.3f | "
             "deviance %.3f%s",
-            result.epoch, result.train_loss, result.card_disjoint_loss,
-            result.game_disjoint_loss, metrics.affected_gate_f1,
-            metrics.zone_outcome_accuracy, metrics.mean_poisson_deviance,
-            format_parts(card_parts, floor),
+            epoch, tally.train_loss, card.loss, game.loss,
+            metrics.affected_gate_f1, metrics.zone_outcome_accuracy,
+            metrics.mean_poisson_deviance, format_parts(card.parts, floor),
         )
         logger.info(
             "epoch %d | trained records by rarity bucket: %s%s\n"
             "  by rule family: %s",
-            result.epoch,
+            epoch,
             format_shares(tally.buckets, (*RARITY_BUCKETS, NO_TEXT_BUCKET)),
             format_terms(tally.mean_terms()),
             format_shares(tally.families),

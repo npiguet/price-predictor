@@ -39,7 +39,6 @@ from effects.application.step_workers import StepWorkerPool
 from effects.application.surface_batching import IDENTITY_TABLE_KEY
 from effects.application.train_effect_model import (
     CorpusFacts,
-    EpochResult,
     MissingTrainingInputError,
     RunSpec,
     TrainEffectModelConfig,
@@ -212,15 +211,9 @@ class TrainingLoop:
             self.reporter.curriculum(epoch, len(run.fields[epoch]))
         self._train_epoch(epoch, run, tally)
         card, game = self.validator.epoch(run, samples, run.fields[epoch])
-        result = EpochResult(
-            epoch=epoch, train_loss=tally.train_loss,
-            card_disjoint_loss=card.loss, game_disjoint_loss=game.loss,
-        )
-        self.reporter.epoch(
-            result, card.progress(), card.parts, self.validator.floor.floor, tally,
-        )
+        self.reporter.epoch(epoch, tally, card, game, self.validator.floor.floor)
         self.reporter.unresolved(run.preparer)
-        return self._close_epoch(epoch, run, result)
+        return self._close_epoch(epoch, run, card.loss)
 
     def _train_epoch(self, epoch: int, run: RunContext, tally: EpochTally) -> None:
         plan = self._epoch_plan(epoch, run)
@@ -237,10 +230,10 @@ class TrainingLoop:
             for task in self._epoch_plan(epoch + 1, run).tasks:
                 run.pool.submit(task)
 
-    def _close_epoch(self, epoch: int, run: RunContext, result: EpochResult) -> bool:
+    def _close_epoch(self, epoch: int, run: RunContext, card_disjoint_loss: float) -> bool:
         """Save what the epoch earned and its resume state; True to stop early."""
         stopper = run.stopper
-        best = stopper.update(result.card_disjoint_loss)
+        best = stopper.update(card_disjoint_loss)
         if best or self.config.save_every_epoch:
             checkpoint = self._checkpoint(epoch, run)
             output = self.config.resolved_model_output()

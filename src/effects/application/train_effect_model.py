@@ -331,16 +331,6 @@ def require_matching_surface(
         )
 
 
-@dataclass
-class EpochResult:
-    """One epoch's validation, on both strata."""
-
-    epoch: int
-    train_loss: float
-    card_disjoint_loss: float
-    game_disjoint_loss: float
-
-
 class HoldoutMismatchError(ValueError):
     """The trainer's own holdout disagrees with the one its corpus recorded."""
 
