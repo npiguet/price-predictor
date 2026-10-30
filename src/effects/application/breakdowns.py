@@ -28,17 +28,16 @@ WITHHELD, TRAINED = "withheld", "trained"
 
 @dataclass(frozen=True, slots=True)
 class RecordResult:
-    """One scored record: what identifies it, what groups it, what it scored.
+    """One scored record: what groups it and what it scored.
 
+    ``game_id`` is what a text the rarity table never counted is bucketed by.
     ``losses`` holds :data:`TOTAL` and every field the record supervised; an
     unsupervised field is absent rather than zero. ``keywords`` is every
     keyword on the acting line or the board, in the gate's spelling
     (``first_strike``).
     """
 
-    record_id: str
     game_id: str
-    kind: str
     losses: Mapping[str, float]
     subkind: str | None = None
     text: str | None = None

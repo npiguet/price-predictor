@@ -75,9 +75,7 @@ def _record_result(
         # The sidecar does not describe the card the record names.
         family = None
     return RecordResult(
-        record_id=record.record_id,
         game_id=record.game_id,
-        kind=record.kind.value,
         subkind=record.subkind.value if record.subkind else None,
         text=first_text(acting_keys(record), batcher.text_of),
         family=family,

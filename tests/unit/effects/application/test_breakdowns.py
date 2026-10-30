@@ -43,9 +43,7 @@ def rows() -> list[RecordResult]:
                 text = line.script_text
                 break
         out.append(RecordResult(
-            record_id=record.record_id,
             game_id=record.game_id,
-            kind=record.kind.value,
             subkind=record.subkind.value if record.subkind else None,
             text=text,
             family=rule_family(record, sidecars),
@@ -56,12 +54,12 @@ def rows() -> list[RecordResult]:
     return out
 
 
-def _row(record_id, *, text="t", game="g1", total=1.0, **fields) -> RecordResult:
+def _row(*, text="t", game="g1", total=1.0, **fields) -> RecordResult:
     losses = {bd.TOTAL: total}
     losses.update({k: v for k, v in fields.items() if k in ("gate", "zone_outcome")})
     rest = {k: v for k, v in fields.items() if k not in losses}
     return RecordResult(
-        record_id=record_id, game_id=game, kind="resolution", text=text,
+        game_id=game, text=text,
         losses=losses, **rest,
     )
 
@@ -70,33 +68,33 @@ class TestPerText:
     """Scenario 1: per record and as a per-text mean."""
 
     def test_a_text_with_many_records_weighs_once_in_the_per_text_mean(self):
-        rows = [_row(f"a{i}", text="common", total=1.0) for i in range(9)]
-        rows.append(_row("b", text="rare", total=11.0))
+        rows = [_row(text="common", total=1.0) for _ in range(9)]
+        rows.append(_row(text="rare", total=11.0))
         overall = bd.overall(rows)
         assert overall.per_record.means[bd.TOTAL] == pytest.approx(2.0)
         assert overall.per_text.means[bd.TOTAL] == pytest.approx(6.0)
         assert overall.per_text.counts[bd.TOTAL] == 2
 
     def test_a_field_is_averaged_over_the_records_that_supervise_it(self):
-        rows = [_row("a", zone_outcome=2.0), _row("b")]
+        rows = [_row(zone_outcome=2.0), _row()]
         assert bd.field_means(rows).means["zone_outcome"] == pytest.approx(2.0)
         assert bd.field_means(rows).counts["zone_outcome"] == 1
 
     def test_records_with_no_text_are_left_out_of_the_per_text_mean(self):
-        rows = [_row("a", text=None, total=9.0), _row("b", text="x", total=1.0)]
+        rows = [_row(text=None, total=9.0), _row(text="x", total=1.0)]
         assert bd.overall(rows).per_text.means[bd.TOTAL] == pytest.approx(1.0)
         assert bd.overall(rows).per_record.means[bd.TOTAL] == pytest.approx(5.0)
 
 
 class TestRarityAndFamily:
     def test_texts_bucket_by_the_corpus_rarity_table(self):
-        rows = [_row("a", text="seen-once"), _row("b", text="common")]
+        rows = [_row(text="seen-once"), _row(text="common")]
         groups = bd.by_rarity_bucket(rows, {"seen-once": 1, "common": 40})
         assert list(groups) == ["1", "20+"]
 
     def test_a_text_the_table_never_counted_buckets_by_its_own_games(self):
-        rows = [_row("a", text="new", game="g1"), _row("b", text="new", game="g2"),
-                _row("c", text="new", game="g3")]
+        rows = [_row(text="new", game="g1"), _row(text="new", game="g2"),
+                _row(text="new", game="g3")]
         assert list(bd.by_rarity_bucket(rows, {})) == ["2-4"]
 
     def test_real_records_group_by_their_rule_family(self, rows):
@@ -105,8 +103,8 @@ class TestRarityAndFamily:
         assert sum(g.per_record.records for g in families.values()) == len(rows)
 
     def test_the_mean_over_families_weighs_each_family_once(self):
-        rows = [_row(f"a{i}", family="Draw", total=1.0) for i in range(9)]
-        rows.append(_row("b", family="Pump", total=11.0))
+        rows = [_row(family="Draw", total=1.0) for _ in range(9)]
+        rows.append(_row(family="Pump", total=11.0))
         mean = bd.mean_over_families(bd.by_family(rows))
         assert mean.per_record.means[bd.TOTAL] == pytest.approx(6.0)
 
@@ -115,14 +113,14 @@ class TestMemorizationGap:
     """Scenario 2: per family, game-disjoint minus card-disjoint."""
 
     def test_the_gap_is_game_disjoint_minus_card_disjoint_on_shared_fields(self):
-        card = bd.by_family([_row("a", family="Draw", total=3.0, gate=1.0)])
-        game = bd.by_family([_row("b", family="Draw", total=1.0)])
+        card = bd.by_family([_row(family="Draw", total=3.0, gate=1.0)])
+        game = bd.by_family([_row(family="Draw", total=1.0)])
         gap = bd.memorization_gap(game, card)
         assert gap == {"Draw": {bd.TOTAL: pytest.approx(-2.0)}}
 
     def test_a_family_in_one_stratum_alone_has_no_gap(self):
-        card = bd.by_family([_row("a", family="Draw")])
-        game = bd.by_family([_row("b", family="Pump")])
+        card = bd.by_family([_row(family="Draw")])
+        game = bd.by_family([_row(family="Pump")])
         assert bd.memorization_gap(game, card) == {}
 
 
@@ -159,9 +157,9 @@ class TestWithheldKeyword:
 
     def test_records_split_by_whether_they_carry_the_withheld_keyword(self):
         rows = [
-            _row("a", keywords=frozenset({"first_strike"})),
-            _row("b", keywords=frozenset({"flying"})),
-            _row("c"),
+            _row(keywords=frozenset({"first_strike"})),
+            _row(keywords=frozenset({"flying"})),
+            _row(),
         ]
         groups = bd.keyword_slice(rows, "First Strike")
         assert groups[bd.WITHHELD].per_record.records == 1
