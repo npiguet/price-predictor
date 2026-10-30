@@ -328,10 +328,10 @@ def decide(
         held_out, totals.games.held_out_text_games,
         cap=config.card_disjoint_text_cap, seed=config.seed,
     )
-    members, keys_of = members_of(totals.supply, key_text)
+    members = members_of(totals.supply, key_text)
     return Decisions(
         selection=plan_selection(
-            members, keys_of, mix=config.mix(), ceiling=config.training_records,
+            members, mix=config.mix(), ceiling=config.training_records,
             text_cap=config.text_cap, reuse_cap=config.reuse_cap,
         ),
         strata=GameStrata(

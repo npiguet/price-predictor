@@ -193,36 +193,57 @@ KEYLESS = ""
 
 @dataclass(slots=True)
 class Member:
-    """What one ability text supplies to one cell (FR-049); the keyless member
-    has no heap."""
+    """What one ability text supplies to one cell (FR-049), and the acting
+    keys folding to it.
+
+    The keyless member has no heap and no keys: its records are sampled by
+    hash rate rather than per key, and no text cap applies to it.
+    """
 
     distinct: int = 0
     heap: CapHeap | None = None
+    #: Every acting-key tuple whose text this member is, in survey order.
+    keys: list[Keys] = field(default_factory=list)
+
+    @property
+    def is_keyless(self) -> bool:
+        return self.heap is None
+
+    def take(self, keys: Keys, count: int, hashes: CapHeap) -> None:
+        """One acting-key tuple's records, folded into this text's member."""
+        if self.heap is None:
+            raise ValueError("the keyless member takes no acting keys")
+        self.distinct += count
+        self.heap.merge(hashes)
+        self.keys.append(keys)
+
+    def hashes(self) -> tuple[int, ...]:
+        """The smallest record hashes kept for this text; none when keyless."""
+        return () if self.heap is None else self.heap.values()
 
     def once(self, text_cap: int) -> int:
         """Records this member can supply once each: the text cap, or all of
         them, which the keyless member always can."""
-        if self.heap is None or text_cap <= 0:
+        if self.is_keyless or text_cap <= 0:
             return self.distinct
         return min(self.distinct, text_cap)
 
     def capacity(self, *, text_cap: int, reuse_cap: int) -> int:
         """Records this member can supply with repeats."""
         return text_capacity(
-            self.distinct, text_cap=0 if self.heap is None else text_cap,
+            self.distinct, text_cap=0 if self.is_keyless else text_cap,
             reuse_cap=reuse_cap,
         )
 
 
 def members_of(
     supply: TrainingSupply, key_text: Mapping[Keys, str],
-) -> tuple[dict[Cell, dict[str, Member]], dict[tuple[Cell, str], list[Keys]]]:
-    """``cell -> member name -> Member``, and each member's acting keys.
+) -> dict[Cell, dict[str, Member]]:
+    """``cell -> member name -> Member``.
 
     Keys folding to one text share its member and its cap.
     """
     members: dict[Cell, dict[str, Member]] = defaultdict(dict)
-    keys_of: dict[tuple[Cell, str], list[Keys]] = defaultdict(list)
     for (cell, keys), count in supply.keyed.items():
         text = key_text.get(keys)
         if text is None:
@@ -231,12 +252,10 @@ def members_of(
         member = members[cell].get(text)
         if member is None:
             member = members[cell][text] = Member(heap=CapHeap(supply.heap_cap))
-        member.distinct += count
-        member.heap.merge(supply.heaps[cell, keys])
-        keys_of[cell, text].append(keys)
+        member.take(keys, count, supply.heaps[cell, keys])
     for cell, count in supply.keyless.items():
         members[cell].setdefault(KEYLESS, Member()).distinct += count
-    return dict(members), dict(keys_of)
+    return dict(members)
 
 
 # ── the allocation tree ─────────────────────────────────────────────────
@@ -345,7 +364,6 @@ class SelectionPlan:
 
 def plan_selection(
     members: Mapping[Cell, Mapping[str, Member]],
-    keys_of: Mapping[tuple[Cell, str], list[Keys]],
     *,
     mix: Mapping[str, float],
     ceiling: int,
@@ -367,7 +385,7 @@ def plan_selection(
     # The class level is split by the mixture, not equally.
     for klass, root in tree.children.items():
         root.allocate(targets.get(klass, 0))
-    plans, keyless = _copy_plans(tree, members, keys_of)
+    plans, keyless = _copy_plans(tree, members)
     return SelectionPlan(
         plans=plans, keyless=keyless, families=_family_shares(tree, members),
         targets=targets, shortfall=shortfall, available=available,
@@ -422,7 +440,6 @@ def _family_shares(
 def _copy_plans(
     tree: AllocationNode,
     members: Mapping[Cell, Mapping[str, Member]],
-    keys_of: Mapping[tuple[Cell, str], list[Keys]],
 ) -> tuple[dict[tuple[Cell, Keys], CopyPlan], dict[Cell, CopyPlan]]:
     """Each member's planned count as copies: per acting key, or by rate when keyless.
 
@@ -433,11 +450,11 @@ def _copy_plans(
     for (*_, cell), cell_node in tree.walk(_CELL_DEPTH):
         for name, leaf in cell_node.children.items():
             member = members[cell][name]
-            if name == KEYLESS:
+            if member.is_keyless:
                 keyless[cell] = rate_plan(member.distinct, leaf.planned)
                 continue
-            plan = copy_plan(member.heap.values(), member.distinct, leaf.planned)
-            plans.update(((cell, keys), plan) for keys in keys_of[cell, name])
+            plan = copy_plan(member.hashes(), member.distinct, leaf.planned)
+            plans.update(((cell, keys), plan) for keys in member.keys)
     return plans, keyless
 
 
