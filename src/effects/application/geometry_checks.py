@@ -2,7 +2,8 @@
 
 They ask about the geometry of ``e`` rather than a prediction, which catches
 what the loss cannot: a collapsed space passes every average-case metric.
-Only gate 3 is a verdict; the rest are reported.
+Only gate 3 is a verdict; the rest are reported. The UMAP projection, which
+draws a picture rather than measuring a number, is ``umap_check``'s.
 """
 
 from __future__ import annotations
@@ -235,21 +236,6 @@ def nearest_neighbours(
     return out
 
 
-def umap_projection(matrix: np.ndarray, *, seed: int = 42) -> np.ndarray | None:
-    """A 2-D UMAP projection, or None when the library or the data is absent:
-    a run that cannot draw the picture has not failed."""
-    if matrix.shape[0] < 10:
-        return None
-    try:
-        import umap
-    except ImportError:
-        logger.warning("umap-learn is not installed; skipping the projection")
-        return None
-    # A seed forces UMAP single-threaded; saying so keeps it from warning.
-    reducer = umap.UMAP(n_components=2, random_state=seed, n_jobs=1)
-    return reducer.fit_transform(matrix)
-
-
 def check_nearest_neighbours(
     cached: CachedVectors, queries: tuple[LineQuery, ...],
 ) -> CheckResult:
@@ -274,19 +260,6 @@ def check_nearest_neighbours(
     return CheckResult(
         CheckName.NEAREST_NEIGHBOUR, CheckStatus.REPORTED, "; ".join(lines),
         {"unresolved_queries": float(unresolved)},
-    )
-
-
-def check_umap(cached: CachedVectors) -> CheckResult:
-    projection = umap_projection(cached.matrix)
-    if projection is None:
-        return CheckResult(
-            CheckName.UMAP, CheckStatus.SKIPPED,
-            "too few vectors, or umap-learn is not installed",
-        )
-    return CheckResult(
-        CheckName.UMAP, CheckStatus.REPORTED,
-        f"projected {projection.shape[0]} unique ability texts to 2-D",
     )
 
 

@@ -24,12 +24,12 @@ from effects.application.geometry_checks import (
     check_baseline_geometry,
     check_decodability,
     check_nearest_neighbours,
-    check_umap,
     check_ward,
     evaluate_ward_canary,
     gate_three_verdict,
     nearest_neighbours,
 )
+from effects.application.umap_check import check_umap
 from effects.domain.ability_cache_layout import ARRAY_KEY
 from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import CheckStatus

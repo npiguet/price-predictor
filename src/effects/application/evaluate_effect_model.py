@@ -1,7 +1,8 @@
 """``evaluate-effect-model``: the three gates and the reported checks.
 
 The orchestration only: each gate lives in its own module (``gate_one``,
-``gate_two``, ``geometry_checks``), the breakdowns in ``breakdowns``.
+``gate_two``, ``geometry_checks``), the UMAP picture in ``umap_check``, the
+breakdowns in ``breakdowns``.
 """
 
 from __future__ import annotations
@@ -24,11 +25,11 @@ from effects.application.geometry_checks import (
     check_baseline_geometry,
     check_decodability,
     check_nearest_neighbours,
-    check_umap,
     check_ward,
     run_gate_three,
 )
 from effects.application.record_scoring import score_records
+from effects.application.umap_check import check_umap
 from effects.domain.baselines import Baseline
 from effects.domain.evaluation_report import (
     CheckName,
