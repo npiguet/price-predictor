@@ -78,11 +78,13 @@ record p99 195 on gen-2 records, more in gen-3
 Full findings: [research.md § Codebase Survey](research.md#codebase-survey).
 
 - **Overlapping vocabulary**: 50 existing concepts surveyed. Most are extended in place, 9 replaced,
-  1 removed. 9 new concepts, each citing its nearest prior art. 3 renames: `rule_families` →
+  1 removed. 12 new concepts, each citing its nearest prior art. 3 renames: `rule_families` →
   `effect_families`, `_selection_half` → `_what_if_half`, `PROBE_TYPES` → `PROBE_MODELS`.
 - **Adjacent prior art**: reuse of `Forks.copyAndVerify`, `mainLoopStep`, Forge's public card and
   player mutators, live trait lists, per-check restriction methods, `run_parallel`/`merge_into`, the
-  water-filling allocator for the natural share, and lethality copies. Patched in Forge: the
+  water-filling allocator for the natural share, and lethality copies, whose qualify-then-copy shape
+  protection copies follow in a module of their own (Decision R5). `FloatingEffects` extends the
+  layer-table walk of `LayerContributions` (Decision C4). Patched in Forge: the
   delayed-trigger accessor and the `GameCopier` copy. One documented reimplementation: a
   collector-side `MustBlock` predicate, because Forge has none per (blocker, attacker).
 - **Convention alignment**: features 023 and 024's `src/effects/` layout and `FE/` collectors. One

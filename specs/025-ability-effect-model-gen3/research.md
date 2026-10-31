@@ -79,7 +79,7 @@ Model, curation and evaluation (Python):
 | Sampling classes, outcome signature | `E/domain/sampling.py:20,41`; `E/domain/corpus_curation.py:167-173` (`SIGNATURE_CLASSES`) | **Reuse** the classes. **Extend** the signature with the condition bit, and give decision and legality records a signature level (FR-056). |
 | Water-filling allocator | `E/domain/budget_allocation.py:15 allocate`; `corpus_plan.py:264 AllocationNode`, `_split_in_rounds :332` | **Reuse** for the natural share. Rule copies are a new step after it (Decision R2). |
 | `text_capacity`, `CopyPlan` | `corpus_curation.py:197-206` | **Reuse** for the natural share. Rule copies are per record (Decision R2). |
-| Lethality copies | `E/domain/lethality_counterfactuals.py` (`qualify :301`, `lethal :197`); `StepPreparer._counterfactuals` (`step_preparation.py:286-346`) | **Reuse.** `lethal` moves into `E/domain/rule_outcomes.py` (Third-instance check). |
+| Lethality copies | `E/domain/lethality_counterfactuals.py` (`qualify :301`, `lethal :197`); `StepPreparer._counterfactuals` (`step_preparation.py:286-346`) | **Reuse.** `lethal` moves into `E/domain/rule_outcomes.py` (Third-instance check). Protection copies follow its qualify-then-copy shape in a module of their own (Decision R5). |
 | `GameRouting`, `admit_card_disjoint`, `_split_games` | `corpus_plan.py:484-558`; `corpus_curation.game_disjoint_draw :252`; `build_corpus.py:394` | **Replace** with a global placement step after the survey (Decision R3). |
 | Survey and write passes | `E/application/corpus_survey.py:279 _ShardSurveyor` (`_route_games :339`, supply fold `:353`); `E/application/corpus_write.py:145 _ShardWriter`, `_hold :176` | **Restructure.** The survey returns per-game rule inventories, and placement runs before the training supply is final. The validation strata are written under the rule budgets. |
 | `CorpusManifest`, `FamilyRow` | `E/domain/corpus_manifest.py:186-321` | **Extend** with a `RuleRow` modelled on `FamilyRow`, split by polarity and source, and the map snapshot. |
@@ -94,12 +94,15 @@ Concepts gen-3 adds, none colliding with an existing name once the renames below
 | `RuleTag`, rule detectors | `E/domain/rule_detectors/` | `rule_families.rule_family`, `damage_step_keywords.qualifying_observations`, `lethality_counterfactuals.qualify` |
 | `ScenarioCatalogue` (read-only view of scenarios and heads) | `E/domain/rule_catalogue.py`, `E/infrastructure/rules_catalogue_io.py` | `rules_catalogue.py` validators |
 | `RelationEncoderLayer`, `RelationType` | `E/domain/relation_attention.py`, `E/domain/relation_types.py` | `nn.TransformerEncoderLayer` |
-| `WeightAverage` | `E/application/weight_average.py` | the `e`-noise running covariance (`surface_batching.py:38-110`) |
+| `WeightAverage` | `E/application/weight_average.py` | the `e`-noise running covariance `NoiseState` (`E/application/surface_batching.py:46-111`; decayed update `:92-105`, `state_dict`/`load_state_dict :72-87`, kept in `resume.pt` by `resume_state.py:91, 123`) |
 | `SelectionSet` (frozen probes, grids, rule tests, halves) | `E/domain/selection_set.py`, `E/application/freeze_selection_set.py` | `scripts/effect_knowledge_probes/probe_set.py` |
-| `ControlScore`, `StratumScore` | `E/application/control_score.py` | `Validator.epoch` |
+| `ControlScore`, `StratumScore` | `E/application/control_score.py` | `Validator.epoch` (`E/application/validation_pass.py:241-263`) and its compute-once `FloorCache :181-199`; the probe runner scoring a frozen set against one checkpoint, `scripts/effect_knowledge_probes/run.py:678 probe` with `ladder.score :89-110` |
 | `DirectedRule`, `BoardPrecondition`, fork operations | `FE/directed/` | `InterventionFork`, `DamageStepProbe`, `VariantRegistry` |
+| `DirectedForkScheduler` | `FE/directed/DirectedForkScheduler.java` | `InterventionScheduler.collect` (`FE/InterventionScheduler.java:43-60`, once per line per game through `interveneSeen :34`); `ProbeScheduler.collect :45-81` and its rotation over a flag's list, `probeFocus :89-96`; both called from `GameRecording.PhaseBridge.onPhase` (`FE/GameRecording.java:141-149`); per-game seeded `Random` as `InterventionFork :44` builds it; spend-when-taken in `ForkBudget` (`:52`, `:81`) |
 | `PriorityCandidates` | `FE/PriorityCandidates.java` | `RandomSeatController.playableCandidates`, the AI playability hook |
 | `ForkPlayForward` | `FE/ForkPlayForward.java` | `InterventionFork.forceResolution`; Forge's `AITest` driving `mainLoopStep` |
+| `FloatingEffects` (floating effects as command-zone objects) | `FE/FloatingEffects.java` | `LayerContributions.addCard` (`FE/LayerContributions.java:43-69`) over the same timestamp-keyed layer tables; `ContinuousChannel.record` skipping static id 0 (`FE/ContinuousChannel.java:79-83`); `ClauseOutcomeRouter.clauseResolving` (`FE/ClauseOutcomeRouter.java:87-103`); `EventAttribution.declaredDuration :203-215`; `SnapshotBuilder.emblems :209-217`; `ProvenanceResolver.effectSource :331-334` (Decision C4) |
+| Protection copies | `E/application/protection_copies.py` | `lethality_counterfactuals.qualify :301` and `counterfactual :448`; `evasion_grid.edited :106` granting protection through `BoardEdit.grant_keyword` (`scripts/effect_knowledge_probes/board_edits.py:81`) and deciding the block by `may_block :63`; copies written by `_ShardWriter._train` (`E/application/corpus_write.py:186-205`) (Decision R5) |
 
 Renames, required by Principle VII(c) because the names would read as the same thing:
 
@@ -113,7 +116,7 @@ Renames, required by Principle VII(c) because the names would read as the same t
 Summary: 50 existing concepts surveyed. Most are extended or reused in place, 9 are replaced (the
 generation check, the trunk, the input layout, the face-down flag and keyword multi-hot, the
 playability targets, the Poisson, gate 1's deviance, `HEAD_OUTPUTS`, game routing) and 1 is removed
-(the resolution-outcome input). 9 concepts are new, and 3 renames are required.
+(the resolution-outcome input). 12 concepts are new, and 3 renames are required.
 
 ### Adjacent prior art
 
@@ -275,6 +278,44 @@ lines.
 **Rationale**: 182 trained lines mix existing outputs with tagged future ones. The mask and the rule
 tests can only read outputs that exist.
 
+#### R5. Protection copies are written by `build-corpus`, in the lethality copies' shape but not through their code
+
+**Decision**: `E/application/protection_copies.py` follows `lethality_counterfactuals`' two steps: a
+pure qualifier (`qualify :301`) deciding whether a real record can carry the copy, then a copy function
+(`counterfactual :448`) editing the record from a seeded generator. What it reuses and extends:
+
+- the outcomes come from `rule_outcomes`, extended with rule 702.16's: damage prevented, a block or
+  target made illegal, an Aura put into the graveyard. The block outcome extends `may_block`'s
+  protection clause (`scripts/effect_knowledge_probes/evasion_grid.py:63`, moved by the
+  third-instance extraction), which knows only protection from a colour, to a creature type, a card
+  type, a condition and everything;
+- the grant is the edit `evasion_grid.edited :106` makes through `BoardEdit.grant_keyword`
+  (`board_edits.py:81`), written as a granted keyword line plus its kept flag (Decision M5);
+- the copies are written by the write pass beside the record's natural copies
+  (`_ShardWriter._train`, `E/application/corpus_write.py:186-205`), as many as `rule_budgets` draws for
+  the protection rules, each with `synthetic = true`, its `drawn_rule` and its `curation` (Decision T1).
+
+**Rationale**: two behaviour gaps keep `counterfactual` and `StepPreparer._counterfactuals` from
+serving.
+
+- Lethality copies exist only in memory. `StepPreparer._counterfactuals`
+  (`E/application/step_preparation.py:321-346`) draws them afresh at each training step and relabels
+  the derived `EntityTargets`, which never reach a shard. A protection copy is written into the
+  corpus, counted by the rule budgets and the manifest's `RuleRow`, and enters the validation strata
+  (root spec § 12.4). Its labels must come out of `derive_targets` (`E/domain/effect_targets.py:139`),
+  which reads the payload's events, so the copy rewrites the payload rather than the targets.
+- The edits differ. A lethality copy changes an amount in the acting text, under a `counterfactual/`
+  source-tree key the batcher memo carries for one step (`_edited_text :402-423`), and one toughness
+  (`_with_toughness :426`). A protection copy leaves the acting line's text alone and grants a keyword
+  line to an entity, so neither edit applies.
+
+The two names do not collide, so Principle VII(c) asks for no rename.
+
+**Alternatives considered**: drawing protection copies per training step inside
+`StepPreparer._counterfactuals`, beside lethality copies (rejected: the per-rule amounts, the
+`drawn_rule` the hard mask reads and the validation strata's copies are all fixed by `build-corpus`,
+Decision T1).
+
 ### Collection
 
 #### C1. Three engine hooks are added on `effect-record-hooks`
@@ -334,6 +375,27 @@ of turn" changes that live only as timestamped rows on a card, the clause handle
 `ON_CLAUSE_RESOLVING`, the timestamp Forge assigns, the line resolving and the clause's `Duration$`.
 A snapshot builds one command-zone object per (line, timestamp) still present on some card. A
 counting-down shield's amount reads the per-API SVar the effect card carries.
+
+`FE/FloatingEffects.java` extends three existing pieces rather than walking the board a second way:
+
+- The layer tables are the ones `LayerContributions.addCard` (`FE/LayerContributions.java:43-69`)
+  already reads, Forge's `(timestamp, static id)` tables (`FG/card/Card.java`: `getPTBoostTable :4692`,
+  `getChangedCardKeywords :4141`, `getChangedCardTraits :5066`) plus the patched type, colour and name
+  accessors. `LayerContributions` files a row by its static id, and `ContinuousChannel.record`
+  (`FE/ContinuousChannel.java:79-83`) drops static id 0, the rows a resolving ability writes.
+  `FloatingEffects` files exactly those rows by their timestamp. Granted lines come from the same
+  `getChangedCardTraits` walk `EntityJson.grantedTemporaryAbilities :166` makes.
+- The timestamp is noted in `ClauseOutcomeRouter.clauseResolving` (`FE/ClauseOutcomeRouter.java:87-103`),
+  the `ON_CLAUSE_RESOLVING` handler that already pushes one observation per clause. Forge draws it from
+  `Game.getNextTimestamp` (`FG/Game.java:539`) as the effect runs (`PumpEffect.resolve`,
+  `FG/ability/effects/PumpEffect.java:278`; `SpellAbilityEffect.createEffect :630` for an effect card).
+  The duration reads the clause's `Duration$` and falls back to the root line's, as
+  `EventAttribution.declaredDuration` (`FE/EventAttribution.java:203-215`) does. It is bucketed into a
+  vocabulary of its own, because `EventDuration` has `instant` and no `until_leaves`.
+- An effect card already in the command zone is an entity of the snapshot
+  (`SnapshotBuilder.collectEntities :173-184`) and resolves to its line through
+  `ProvenanceResolver.effectSource` (`FE/ProvenanceResolver.java:331-334`). `SnapshotBuilder.emblems`
+  (`:209-217`) is the command-zone list the new one sits beside.
 
 **Rationale**: the `GameCommand` closures in `game.getEndOfTurn()` are opaque, and `staticId = 0`
 names no line. The timestamp is the only join.
