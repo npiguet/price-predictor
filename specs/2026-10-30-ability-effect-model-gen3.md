@@ -247,7 +247,8 @@ from a real game.
 - From the fork on, each seat keeps its live controller, Forge AI or random seat, and
   decides afresh, as in interventional forks. A fork is kept whether or not its decisions
   match the ones the live game goes on to make.
-- Each variant's change is classified into one fork operation:
+- Each variant's change is classified into one fork operation, or marked unclassifiable
+  with a reason:
 
   | operation |
   |---|
@@ -259,8 +260,8 @@ from a real game.
   | change a life total |
   | replace one card with another |
 
-- An operation is available to directed forks once it is built. The damage-step probe is
-  the existing "remove a keyword" operation.
+- All seven operations are built. The damage-step probe is the existing "remove a keyword"
+  operation. A variant marked unclassifiable has no operation.
 - The collector runs each enabled rule's detector on the board at every phase boundary.
   When the board meets the precondition, it forks, applies the operation and plays the
   fork on to the end of the current turn, recording it. The fork is then discarded, and the
@@ -1043,8 +1044,8 @@ Startup validation
 - `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the knowledge probes
   check that every record carries `generation: 3`.
 - `train-effect-model` checks that the corpus manifest carries per-rule counts.
-- `match-outcomes` checks that every rule in `--directed-fork-rules` has a detector and a
-  built fork operation.
+- `match-outcomes` checks that every rule in `--directed-fork-rules` has a detector and at
+  least one contrasting variant classified into a fork operation.
 
 Exit codes
 
@@ -1073,7 +1074,7 @@ Printed output
 | `rules/heads/<unit>.jsonl` | by the map | per-rule verdict, missing facts, gen-3 fields, learnable after gen-3 |
 | `rules/gen3-fields.json`, `rules/GEN3-FIELDS.md` | by the map's merge | gen-3's inputs, outputs, extensions and fixes |
 | effect-record shards | by collection | gen-3 records, `generation: 3` (§ 8.1) |
-| `manifest.json` | by `build-corpus` | adds per-rule counts (§ 5.2), per-rule budgets per polarity and one-sided rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half (§ 12.4), and the closed subtype and keyword lists (§ 11.2, § 11.3) |
+| `manifest.json` | by `build-corpus` | adds per-rule counts (§ 5.2), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), and the closed subtype and keyword lists (§ 11.2, § 11.3) |
 | `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts over a records set (§ 5.2) |
 | frozen rule tests | with the knowledge-probe set | the rule tests' records and their selection and reporting halves, with a content digest; the balance ratio r and the items left out by the precision target (§ 14.2) |
 | checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight` and `--relation-values` |
