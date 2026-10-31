@@ -540,6 +540,14 @@ does not. They also show which rules self-play reaches on one side only, and whi
 reaches. The order in which to fill those can follow how often each rule's mechanic appears in the
 sets collection draws from.
 
+**The counts keep aimed records apart from natural ones.** Each rule's count is split three ways:
+random-seat games, games between two Forge AIs, and records from collection aimed at a rule. On
+gen-2's corpus the third column is empty. On a gen-3 corpus, directed forks and coverage rounds add
+records for exactly the rules self-play misses. Counted with the natural records, they would make a
+rule look covered by self-play when no natural game shows it. Aimed records also never become rule
+tests, so a rule with only aimed records has nothing to test it on, and the third column shows
+that.
+
 **Illustrating a rule draws on three sources, in order of preference.** A situation found in a
 real game comes with real decks and real decisions around it. A situation built on purpose comes
 with whatever the builder chose.
@@ -581,8 +589,9 @@ record the rules it exercises, which is the same index that sampling by field ne
 #### A directed fork needs an operation and a trigger on the live board
 
 **Each scenario says what to look for in a game and which single fact to change.** The base variant
-is the situation a detector searches for, in the corpus or on a live board during collection. Each
-other variant's change is the perturbation a directed fork applies to that board. The decisions are
+is the situation a detector searches for in the corpus, and the situation a board precondition
+watches for on a live board during collection. Each other variant's change is the perturbation a
+directed fork applies to that board. The decisions are
 the ones the game made, so they need no conversion.
 
 **The variants' changes have to become fork operations.** Each change is an English sentence. A
@@ -592,13 +601,40 @@ permanent, change a life total, or replace one card with another. The counts per
 which few operations reach the most rules, and so which to build first. Gen-2's damage-step probe is
 already one of them.
 
-**The collector runs the rule's detector on the board at each phase boundary, the moment
-interventional forks already use.** When the board meets the rule's precondition, it forks, applies
-the operation and plays the fork on. The score check every fork makes before any change still
-applies.
+**The collector checks each enabled rule's board precondition at each phase boundary, the moment
+interventional forks already use.** When the board meets the precondition, it forks, applies the
+operation and plays the fork on. The score check every fork makes before any change still applies.
 Gen-2's cap of two forks per real resolution does not fit, because a directed fork is not tied to
 a resolution. Directed forks take a budget of their own instead, two per game like the other fork
 kinds.
+
+**A board precondition is a Java predicate written by hand for each rule enabled for directed
+forks, separate from the rule's detector.** A detector is Python code in `effects` that reads a
+finished record. The fork has to decide inside the Java worker, on a live game, before any record
+exists. The precondition only decides when to fork. The fork's records are then tagged by the
+detectors like any other record, so counts, budgets, the mask and the rule tests still read one
+source. Only the few rules enabled for directed forks need a precondition, so the extra code stays
+small.
+
+**Three other ways to judge the live board are rejected.** Asking the Python supervisor at every
+phase boundary would need a channel from the worker back to Python, which the worker protocol does
+not have. Every game would also wait for a reply at every phase boundary. A small predicate language in the scenario
+files would need an interpreter in both Java and Python for a handful of rules. Porting every
+detector to Java would write each detector twice and let the two copies drift apart.
+
+**Each rule forks at most once per game, at a boundary drawn at random.** At a boundary where a
+rule's precondition holds, the fork is taken with a fixed probability, drawn from a seed per game.
+A common precondition holds at many boundaries of one game. Forking at the first match would spend
+the budget in the opening turns, so fork records would show mostly early boards. When several rules
+match at one boundary, the rule with the fewest directed forks so far goes first. Trying rules in a
+fixed order would let the earliest-matching rule take every fork and starve the others.
+
+**A directed-fork record says so on the record itself.** It carries the envelope field `aimed_at`
+naming its rule, the variant and operation applied, and a pointer to its live twin. Every record of
+a coverage or variant run carries `aimed_at` too, because those runs also collect situations chosen
+on purpose rather than met in ordinary play. The mark travels with the record through the append-only corpus. A list of aimed run ids,
+or a separate directory for aimed shards, would depend on the operator keeping it, and a corpus
+rebuilt months later would lose it.
 
 **A puzzle needs the scenario's decisions written as an action list as well**: cast, activate,
 target, pay, attack, block, assign damage, pass. Whether a collecting worker can load a puzzle has
@@ -733,6 +769,15 @@ output. Gen-2 already has the mechanism: the loss skips a field the record says 
 the verdict head takes a mask per column. Fine-tuning a language model uses the same technique when
 it leaves the prompt out of the loss.
 
+**The corpus build reads the map once and freezes each rule's outputs into the corpus manifest.**
+The map reruns after every change to the input layout or the output heads. If the corpus build,
+training and the freeze of the rule tests each read the map when they start, a rerun between them
+would give one corpus its rule budgets from one map and its mask from another. A resumed run could
+also change its mask partway. The manifest therefore holds each tagged rule's verdict and outputs
+with the map's content hash. Budgets, the mask, the rule tests and evaluation read only the
+manifest, and the checkpoint records the hash. A new map reaches training only through a new
+corpus build.
+
 **The gate stays on for the rule's own entities.** When a rule's effect does not happen, the model
 usually learns it as an entity left unaffected. A creature that survives Shock has no event, and
 its only label is the gate at zero. Masking the gate would remove the negative half of every
@@ -762,7 +807,7 @@ The hard mask is the soft mask with that weight at zero.
 **A record from a directed fork is a natural record, so the mask never applies to it.** The fork plays
 a real board on under Forge's rules, so every label it carries is a correct outcome. Its copies
 within its natural share train every output, as any collected record's do. Only the copies that
-rule budgets add to it carry a rule. Being aimed at a rule keeps the record out of the rule tests
+rule budgets add to it carry a rule. The record's `aimed_at` field keeps it out of the rule tests
 and changes nothing else.
 
 **The cost to look for is in the outputs the mask switches off on added copies.** A rule with few
@@ -2028,10 +2073,12 @@ line gives every field's card-disjoint explained deviance, and each run's "Const
 
 - **Rerun the map against master's targets**, then make the input and output changes in the order
   the Description sets, rerunning the map after each to count what it made learnable.
-- **Run the per-rule detectors over gen-2's corpus.** The counts say which rules self-play covers,
+- **Run the per-rule detectors over gen-2's corpus.** The counts, split by random-seat games, games
+  between two Forge AIs and aimed records, say which rules self-play covers,
   which need directed forks, and how large a share of matches the random seat should get.
-- **Classify the scenarios' variant changes into fork operations**, build the few that reach the
-  most rules, and leave puzzle-style setups for the rules that remain.
+- **Classify the scenarios' variant changes into fork operations**, build all seven operations and
+  a board precondition for each rule enabled for directed forks, and leave puzzle-style setups for
+  the rules that remain.
 - **Compare the scenarios with Forge**, starting with the ten suspected Forge departures in
   `rules/FINDINGS.md`.
 - **Build the collection items not yet in**: every line of a permanent, the timing bit and failed
