@@ -116,7 +116,7 @@ Comprehensive Rules ──► catalogue: units, triage, scenarios (§ 4)
                               gen-3 collection, new record schema (§ 8)
                                                         │
                                                         ▼
-                              build-corpus: rule budgets, rule tags (§ 12)
+                              build-corpus: rule budgets, drawn rules (§ 12)
                                                         │
                                                         ▼
                               training: rule mask, one loss scale, averaged weights (§ 13)
@@ -853,8 +853,9 @@ The verdict head gains a column for `timing` and one for each identifier of
   their own.
 - A record tagged with several rules counts toward each. Each added copy is drawn for the
   rule furthest below its share. A record with no tag keeps its natural share.
-- An added copy carries the rule it was drawn for. A copy within the natural share carries
-  none.
+- An added copy carries the rule it was drawn for, its drawn rule. A copy within the natural
+  share carries none. A rule tag is a detector's output on a record; a drawn rule is the rule
+  one added copy was drawn for.
 - The manifest records, per class, rule and polarity, the records available, the share,
   the records written and the shortfall, each split by the three sources of § 5.2, and
   names every rule whose two sides stay unequal in a class.
@@ -917,7 +918,7 @@ added.
   full weight on each copy of that record.
 - A gen-2 lethality copy trains every output at full weight.
 - A record from a directed fork or from collection aimed at a rule is a natural record. It
-  carries no rule tag of its own, and its copies within the natural share train every
+  carries no drawn rule of its own, and its copies within the natural share train every
   output at full weight under both masks. Its `aimed_at` only excludes it from the rule
   tests (§ 14.4).
 
@@ -936,8 +937,9 @@ spec's Poisson. Gate 1's deviance margin reads the negative binomial deviance.
 ## 13.4 Averaged weights
 
 - Training keeps an exponential moving average of the weights, spanning `--ema-epochs`
-  epochs: each step moves the average toward the current weights by
-  1 / (`--steps-per-epoch` × `--ema-epochs`).
+  epochs: each optimizer step moves the average toward the current weights by
+  `--grad-accum` / (`--steps-per-epoch` × `--ema-epochs`), with `--steps-per-epoch`
+  counting micro-batches.
 - The average starts from the weights at the end of the learning-rate warmup.
 - Validation, stopping and the saved checkpoints use the averaged weights. An epoch that
   ends before the warmup does is validated on the current weights, and is neither a best
@@ -977,6 +979,7 @@ and the gen-2 spec's patience and `resume-best.pt` rules, which read that loss.
   and heads are saved together from that epoch.
 - `--patience` counts epochs without a new best control score. A new best copies
   `resume.pt` to `resume-best.pt`.
+- A curriculum switch resets the best control score and the patience count.
 - Calibration stays a reported number.
 
 ## 14.2 Selection and reporting halves
@@ -1007,7 +1010,7 @@ Precision target, in each half of each stratum:
 - Standard errors are computed at the freeze, before any model exists, from the records
   and their labels alone, at the worst case the labels allow. An AUC's is Hanley–McNeil's
   at an AUC of 0.5: a rule with n test records of each polarity has a rescaled standard
-  error close to 2 · √(1 / (6n)), which needs n ≥ 67.
+  error of 2 · √((2n + 1) / (12n²)), which needs n ≥ 68.
 - A grid whose rule outcome is the same in every cell has no error baseline. Its standard
   error is unbounded, and it is left out.
 - The freeze, and `build-corpus` where it can already tell, exit 1 when a component misses
@@ -1031,6 +1034,8 @@ Gate 1 reads the negative binomial deviance (§ 13.3). Its other margins are unc
 - Records from probe forks and interventional resolutions, and aimed records (every record
   carrying `aimed_at`, § 5.3), are not rule-test records.
 - Records matching a variant of polarity `other` are not rule-test records.
+- Records whose outcome differs from their scenario's expected outcome, the records that
+  send a scenario to review (§ 4.4), are not rule-test records.
 - For each output the manifest's map snapshot (§ 12.1) names for the rule, a rule test reads the model's prediction at
   the entity the scenario's outcome names, or at the record for an output on the acting
   ability: the probability of the scenario's outcome for a binary or categorical output,
@@ -1092,15 +1097,18 @@ python -m effects train-effect-model
 `collect-variants` takes `--directed-fork-rules`, `--directed-forks-per-game` and
 `--directed-fork-probability` as `match-outcomes` does.
 
+`collect-coverage` takes `--directed-fork-rules` as a label only: it runs no directed fork,
+and the listed rules go to every record's `aimed_at` (§ 8.1).
+
 Startup validation
 
 - `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the knowledge probes
   check that every record carries `generation: 3`.
 - `train-effect-model` checks that the corpus manifest carries per-rule counts, and that
   the knowledge-probe set and rule tests are frozen for the corpus.
-- `match-outcomes` checks that every rule in `--directed-fork-rules` has a detector, a
-  board precondition (§ 6) and at least one contrasting variant classified into a fork
-  operation.
+- `match-outcomes` and `collect-variants` check that every rule in
+  `--directed-fork-rules` has a detector, a board precondition (§ 6) and at least one
+  contrasting variant classified into a fork operation.
 
 Exit codes
 
@@ -1132,7 +1140,7 @@ Printed output
 | `manifest.json` | by `build-corpus` | adds per-rule counts by source (§ 5.2), the map snapshot: each tagged rule's verdict and outputs, with the map's content hash (§ 12.1), per-rule budgets per polarity, one-sided rules and unbudgeted rules (§ 12.1), one-sided conditions (§ 12.2), rules left out of a validation half and `turn_action` records left out by subkind (§ 12.4), and the closed subtype and keyword lists (§ 11.2, § 11.3) |
 | `output/effects/rule-counts.json` | by `rule-counts` | per-rule counts by source over a records set (§ 5.2) |
 | frozen rule tests | with the knowledge-probe set | the rule tests' records and their selection and reporting halves, with a content digest; the balance ratio r and the items left out by the precision target (§ 14.2) |
-| checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values` and the manifest's map content hash |
+| checkpoints | by `train-effect-model` | add the relation tables, the averaged weights, `--rule-mask`, `--deviance-floor`, `--ema-epochs`, `--stratum-weight`, `--relation-values` and the manifest's map content hash; record the input layout `gen-3`, and every loader refuses a checkpoint of any other layout, gen-1 and gen-2 included |
 | `resume.pt` | every epoch | adds the averaged weights |
 | knowledge-probe scorecards | per checkpoint | add the probes of § 14.5 and the rule tests, per half |
 

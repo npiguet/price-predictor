@@ -77,7 +77,7 @@ State on master when this feature starts (the gen-3 record's Result):
   afresh, as interventional forks do; every fork is kept, whether or not its decisions match the
   live game's (FR-010).
 - Q: Does the rule mask treat directed-fork records as natural records or as copies drawn for
-  their rule? → A: As natural records: they carry no rule tag, and their natural copies train every
+  their rule? → A: As natural records: they carry no drawn rule, and their natural copies train every
   output at full weight under both masks; their aim only excludes them from the rule tests
   (FR-061).
 - Q: Does a tagged rule whose map verdict is not `trained` get a share of the class budget? → A:
@@ -433,10 +433,10 @@ and that the reporting half never enters the control score.
 7. **Given** a curated corpus whose game-disjoint selection half holds no rule with test records of
    both polarities, **When** the probe set and rule tests are frozen, **Then** the freeze exits 1
    naming the stratum, the half and the rule-test component.
-8. **Given** a half whose rule tests hold three rules with exactly 67 records of each polarity and
+8. **Given** a half whose rule tests hold three rules with exactly 68 records of each polarity and
    others with fewer, **When** the rule tests are frozen, **Then** the smaller rules are left out
-   and named, and the freeze exits 1, because three items at a rescaled standard error near 0.1
-   give the component a standard error near 0.058, above 0.05.
+   and named, and the freeze exits 1, because three items at a rescaled standard error of 0.0994
+   give the component a standard error near 0.057, above 0.05.
 9. **Given** a rule with 400 `fires` and 100 `does_not_fire` test records in a half and r = 2,
    **When** the rule tests are frozen, **Then** 200 `fires` records are kept by a seeded draw.
 
@@ -574,9 +574,11 @@ and that the reporting half never enters the control score.
   (default none), `--directed-forks-per-game N` (default 2), a budget of its own beside the
   existing fork budgets, and `--directed-fork-probability P` (default 0.25, in (0, 1]), the chance
   that a matching boundary forks (FR-010a). A discarded fork still counts against the budget.
+  `collect-coverage` MUST take `--directed-fork-rules` as a label only: it runs no directed fork,
+  and the listed rules go to every record's `aimed_at` (FR-009a).
 - **FR-013**: Every directed fork MUST be score-checked against the live game before any change, as
   the base spec's forks are.
-- **FR-014**: `match-outcomes` MUST exit 1 at startup when a rule in `--directed-fork-rules` has no
+- **FR-014**: `match-outcomes` and `collect-variants` MUST exit 1 at startup when a rule in `--directed-fork-rules` has no
   detector, no board precondition, or none of its contrasting variants is classified into an
   operation.
 - **FR-014a**: A rule's board precondition MUST be a hand-written Java predicate over the live
@@ -699,7 +701,7 @@ and that the reporting half never enters the control score.
   `collect-variants`; default off), the collector MUST count each event that arrives while no
   record is open, by event type and engine phase, and print the counts when the run ends.
 - **FR-042**: `validate-corpus` and `field-coverage` MUST cover every new field of root § 8.13,
-  each new number published watched first.
+  and a field's coverage MUST be checked before any figure computed from that field is published.
 
 #### Model input (root § 9)
 
@@ -722,7 +724,8 @@ and that the reporting half never enters the control score.
   keyword line and every other named counter gets its own scalar input. The kept-flag list MUST be
   derived by a scan of Forge's card scripts and engine code and checked in.
 - **FR-045**: A checkpoint MUST record `training_settings["input_layout"] = "gen-3"`, and every
-  loader MUST feed the layout it records.
+  loader MUST feed the layout it records. Every loader MUST refuse a checkpoint of any other
+  layout, gen-1 and gen-2 included, with exit 1.
 
 #### Relation-aware trunk (root § 10)
 
@@ -791,7 +794,7 @@ and that the reporting half never enters the control score.
   polarity `other` count toward the rule's written records and draw no half of their own. Every
   rule whose two sides stay unequal in a class MUST be named in the manifest.
 - **FR-055**: A record tagged with several rules MUST count toward each; each added copy MUST be
-  drawn for the rule furthest below its share and carry that rule. A copy within the natural share
+  drawn for the rule furthest below its share and carry that rule as its drawn rule. A copy within the natural share
   MUST carry none. A record with no tag keeps its natural share.
 - **FR-056**: For a record whose acting line, candidate or listed static carries a turn or step
   condition, the outcome signature MUST gain whether the condition held, read from `failed_checks`,
@@ -831,8 +834,8 @@ and that the reporting half never enters the control score.
   both, the outputs of every rule an added copy of the record was drawn for MUST train at full
   weight on each copy. A gen-2 lethality copy trains every output at full weight. A record from a
   directed fork or from collection aimed at a rule is a natural record like any other: it carries
-  no rule tag of its own, its natural copies train every output at full weight under both masks,
-  and only the copies rule budgets add to it carry a rule. Its `aimed_at` marks it only for
+  no drawn rule of its own, its natural copies train every output at full weight under both masks,
+  and only the copies rule budgets add to it carry a drawn rule. Its `aimed_at` marks it only for
   exclusion from the rule tests (FR-009, FR-072).
 - **FR-062**: Each output field's loss MUST be divided by the loss of its constant prediction on the
   same records under the same distribution, clamped below at `--deviance-floor` (default 0.04 nats).
@@ -840,8 +843,9 @@ and that the reporting half never enters the control score.
   the Poisson. Gate 1's deviance margin MUST read the negative binomial deviance; its other margins
   are unchanged.
 - **FR-064**: Training MUST keep an exponential moving average of the weights over `--ema-epochs`
-  (default 1) epochs, each step moving it toward the current weights by 1 / (`--steps-per-epoch` ×
-  `--ema-epochs`), starting from the weights at the end of warmup. Validation, stopping and saved
+  (default 1) epochs, each optimizer step moving it toward the current weights by `--grad-accum` /
+  (`--steps-per-epoch` × `--ema-epochs`), `--steps-per-epoch` counting micro-batches, starting from
+  the weights at the end of warmup. Validation, stopping and saved
   checkpoints MUST use it. An epoch ending before warmup does is validated on the current weights
   and is neither a best candidate nor counted by `--patience`.
 - **FR-065**: `resume.pt` MUST carry the averaged weights and the step they started from. A resume
@@ -889,7 +893,7 @@ and that the reporting half never enters the control score.
   MUST be at most 0.05. Standard errors are computed when the rule tests and probe set are frozen,
   before any model exists, from the records and their labels alone, and at the worst case the
   labels allow: an AUC's by Hanley–McNeil at an AUC of 0.5, so a rule with n test records of each
-  polarity has a rescaled standard error close to 2·√(1 / (6n)), which needs n ≥ 67. A grid whose
+  polarity has a rescaled standard error of 2·√((2n + 1) / (12n²)), which needs n ≥ 68. A grid whose
   rule outcome is the same in every cell has no error baseline; its standard error is unbounded and
   it is left out. The worst-case estimator for a grid and for an output field's explained deviance
   is settled in planning ([research.md](research.md), Decision E4). The freeze, and `build-corpus`
@@ -904,7 +908,8 @@ and that the reporting half never enters the control score.
   checkpoint, encoder, trunk and heads together, from the epoch with the best control score,
   replacing selection by card-disjoint validation loss. `--patience` (default 5) MUST count epochs
   without a new best control score, and a new best MUST copy `resume.pt` to `resume-best.pt`.
-  Calibration stays a reported number.
+  A curriculum switch MUST reset the best control score and the patience count, since scores
+  before and after it are not comparable. Calibration stays a reported number.
 - **FR-070**: Each probe set and the rule tests MUST be split in two by game: the selection half
   feeds the control score, the reporting half scores the selected checkpoint. Each half of a probe
   set MUST be at least as large as gen-2's whole probe set. A probe that selects training records
@@ -915,8 +920,9 @@ and that the reporting half never enters the control score.
   nor accepted (FR-005), and every rule the map does not mark `trained` (FR-054). Neither kind
   constrains game placement under FR-068a.
 - **FR-072**: Records from probe forks, interventional resolutions, directed forks and collection
-  aimed at a rule (every record carrying `aimed_at`, FR-009a), and records matching a variant of
-  polarity `other`, MUST NOT be rule-test records.
+  aimed at a rule (every record carrying `aimed_at`, FR-009a), records matching a variant of
+  polarity `other`, and records on the review list (FR-004), whose observed outcome differs from
+  the expected outcome of their polarity, MUST NOT be rule-test records.
 - **FR-073**: For each output the map names for a rule, a rule test MUST read the model's prediction
   at the entity the scenario's outcome names, or at the record for an acting-ability output: the
   probability of the scenario's outcome for a binary or categorical output, the expected value for a
@@ -939,7 +945,7 @@ and that the reporting half never enters the control score.
   (`build-corpus`, `train-effect-model`, `evaluate-effect-model`, the knowledge probes); the corpus
   manifest carries per-rule counts, and the knowledge-probe set and rule tests are frozen for the
   corpus (`train-effect-model`); every directed-fork rule has a detector,
-  a board precondition and a built operation (`match-outcomes`). A failed startup check MUST exit 1. Gates still exit 0
+  a board precondition and a built operation (`match-outcomes`, `collect-variants`). A failed startup check MUST exit 1. Gates still exit 0
   after any verdict.
 
 #### Records and artifacts (root § 16)
@@ -982,7 +988,10 @@ and that the reporting half never enters the control score.
   variant's change; its records carry `aimed_at` and `directed` and never become rule-test records.
 - **Aimed record**: a record carrying `aimed_at`, from a directed fork or a `collect-coverage` or
   `collect-variants` run; natural in training, excluded from the rule tests.
-- **Rule tag**: the rule an added copy was drawn for; absent on natural copies.
+- **Rule tag**: a detector's output on one record: a rule, its polarity and the entities its
+  outcome names. Any record may carry several.
+- **Drawn rule**: the rule an added copy was drawn for, carried in the copy's `curation` member;
+  absent on natural copies.
 - **Natural share / added copy**: the copies gen-2's budgets give a record, and the copies beyond
   them that rule budgets add.
 - **Relation**: a directed, typed (from slot, to slot, type) triple acting only inside attention,
