@@ -733,10 +733,16 @@ the soft mask, a record drawn k times keeps its other outputs at weight 1/k on e
 copies then add up to one natural example for those outputs, and no correct label is thrown away.
 The hard mask is the soft mask with that weight at zero.
 
-**The cost to look for is in records that exist only for one rule.** A record from a directed fork
-is collected for its rule alone, so under the hard mask its other labels never train anything. The
-sign is an output the mask switches off on many records staying weak. The test is two arms on the
-same corpus, one per mask. If the soft-mask arm scores the switched-off outputs better on the
+**A record from a directed fork is a natural record, so the mask never applies to it.** The fork plays
+a real board on under Forge's rules, so every label it carries is a correct outcome. Its copies
+within its natural share train every output, as any collected record's do. Only the copies that
+rule budgets add to it carry a rule. Being aimed at a rule keeps the record out of the rule tests
+and changes nothing else.
+
+**The cost to look for is in the outputs the mask switches off on added copies.** A rule with few
+natural records gets many added copies, and under the hard mask each of them trains that rule's
+outputs alone. The sign is an output the mask switches off on many records staying weak. The test
+is two arms on the same corpus, one per mask. If the soft-mask arm scores the switched-off outputs better on the
 card-disjoint validation while the rule tests score the same, the hard mask is costing them data,
 and the soft mask replaces it.
 
@@ -752,8 +758,9 @@ probability the model gives the correct answer.
 **The threshold applies to the extra copies only.** The natural copy of each record keeps the full
 loss, so the other outputs' calibration is still set by records at their natural share. A dead
 zone on a probability would otherwise teach the model to stop at the threshold, and focal loss is
-known to shift calibration. A record collected for one rule alone has no natural copy. Whether its
-other outputs get the threshold or one pass at full loss is left to this stage.
+known to shift calibration. A record whose natural share is zero, written only because a rule
+budget drew it, has no natural copy. Whether its other outputs get the threshold or one pass at
+full loss is left to this stage.
 
 **The thresholded loss has settings the soft mask does not.** Each output type needs its own
 meaning of clearly wrong: a probability for binary and categorical outputs, a tolerance for counts
