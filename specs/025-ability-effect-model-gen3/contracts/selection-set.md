@@ -12,16 +12,17 @@ everything but itself. Fields as [data-model.md](../data-model.md#selectionset-n
 
 ## Freeze
 
-1. Read the manifest's halves, map snapshot and rule budgets.
-2. Per stratum, assign games to halves by `stable_order(game_id, seed)`; at least 300 games per half.
-3. Collect probe records, grid records, rule-test records (detector tags; not aimed, not probe fork, not
+1. Read the manifest's halves (placement's, research Decision R3), map snapshot and rule budgets. The
+   freeze assigns no game to a half. Exit 1 naming stratum and half when a half holds fewer than 300
+   games.
+2. Collect probe records, grid records, rule-test records (detector tags; not aimed, not probe fork, not
    interventional, not polarity `other`, not on the review list, rule `trained`, no unpatched confirmed
    departure) and the deviance sample.
-4. Balance with r = 4 by seeded draw: rule-test polarities, probe types, record-drawn grid cells.
-5. Compute each item's worst-case standard error (research Decision E4). Leave out items above 0.1 and
+3. Balance with r = 4 by seeded draw: rule-test polarities, probe types, record-drawn grid cells.
+4. Compute each item's worst-case standard error (research Decision E4). Leave out items above 0.1 and
    name them.
-6. Check every component's `√(Σ SEᵢ²) / m ≤ 0.05`; otherwise exit 1 naming stratum, half and component.
-7. Write the file.
+5. Check every component's `√(Σ SEᵢ²) / m ≤ 0.05`; otherwise exit 1 naming stratum, half and component.
+6. Write the file.
 
 ## Score
 

@@ -64,13 +64,13 @@ Startup, exit 1 naming the rule when a listed rule:
 |---|---|---|
 | `--wording-cards PATH` | none | one card name per line; a coverage round over them |
 | `--count-dropped-events` | off | as `match-outcomes` |
-| `--directed-fork-rules LIST` | none | rule ids written to every record's `aimed_at` |
+| `--directed-fork-rules LIST` | none | a label only: rule ids written to every record's `aimed_at`; no directed fork runs, and no startup check applies |
 
 ## `python -m effects collect-variants` (existing)
 
 Takes `--count-dropped-events`, `--directed-fork-rules`, `--directed-forks-per-game` and
-`--directed-fork-probability` as `match-outcomes` does. Every record carries `aimed_at` (the listed
-rules, or `[]`).
+`--directed-fork-probability` as `match-outcomes` does, with the same startup checks and exits.
+Every record carries `aimed_at` (the listed rules, or `[]`).
 
 ## `python -m effects build-corpus` (existing)
 

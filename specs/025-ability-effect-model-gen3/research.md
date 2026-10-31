@@ -246,14 +246,16 @@ A pure `E/domain/stratum_placement.py` runs after `merge_surveys`:
   target's record count, promote unplaced games carrying it, smallest game hash first.
 - Card-disjoint: games are fixed by the text holdout; placement orders admission so under-filled
   (rule, polarity) cells go first, under the per-text cap and the held-out-resolution requirement.
-- Halves are assigned per game within each stratum, greedily balancing every (rule, polarity) count.
+- Halves are assigned per game within each stratum, greedily balancing every (rule, polarity) count,
+  with at least 300 games in each half (Decision E5); ties go to the half with fewer games, in
+  `stable_order(game_id, seed)` order. The manifest records the halves, and the freeze reads them.
 - A rule left out of a half is named in the manifest.
 
 The training supply is kept per game for a candidate pool (games whose game-disjoint draw is below
 ten times the share, plus every card-disjoint candidate), and folded after placement. Games outside
 the pool fold in the shard worker as today.
 
-A game counts as a random-seat game when any of its records carries `random_seat`; games never span
+A game counts as a random-seat game when any of its records carries `random_seat = true`; games never span
 shards, so the survey decides this per shard.
 
 **Rationale**: FR-068a's goal needs a global view. A per-game inventory is small. A pool avoids a
@@ -704,8 +706,9 @@ training reads the one for its `--rule-mask`.
 #### E5. Halves and gen-2's set size
 
 **Decision**: each half of a stratum's probe set holds at least as many games as gen-2's whole set
-(300 games per stratum), so the freeze draws at least 600 games per stratum. Halves are assigned by
-`stable_order(game_id, seed)`. Line probes (`items`, `pairs`) read training records, are reported
+(300 games per stratum), so each stratum holds at least 600 games. Halves are assigned by placement
+(Decision R3) and recorded in the manifest; the freeze reads them and assigns none, and exits 1 naming
+the stratum and half when a half holds fewer than 300 games. Line probes (`items`, `pairs`) read training records, are reported
 only, and never feed a stratum score.
 
 #### E6. Rule-test entity and output readout
